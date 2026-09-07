@@ -181,7 +181,7 @@ class LintVisitor : AstVisitor {
     lint021_poison_depth : int = 0
     lint021_closure_depth : int = 0
     lint023_deferred_depth : int = 0
-    lint023_jumps : bool = false
+    flow_jumps : bool = false
     lint022_refs : RefIndex
     @do_not_delete lint022_self_struct : Structure const? = null
     lint022_generic_sweep : bool = false
@@ -346,7 +346,7 @@ class LintVisitor : AstVisitor {
         lint021_poison_depth = 0
         lint021_closure_depth = 0
         lint023_deferred_depth = 0
-        lint023_jumps = false
+        flow_jumps = false
         if (fun.moreFlags.isTemplate) {
             noLint = true
             return
@@ -381,7 +381,7 @@ class LintVisitor : AstVisitor {
         lint014_candidates |> clear()
         if (!noLint && genericDepth == 0) {
             for (c in lint023_candidates) {
-                if (!c.disqualified && c.stores > 0 && !lint023_jumps) {
+                if (!c.disqualified && c.stores > 0 && !flow_jumps) {
                     lint_error("LINT023: mutable by-value argument {c.v.name}: {describe(c.v._type, false, false, false)} is written but never read - the caller never sees a write to a by-value copy; declare it `{describe(c.v._type, false, false, false)}&` if it is an out-parameter, otherwise the write is dead", c.v.at)
                 }
             }
@@ -472,9 +472,7 @@ class LintVisitor : AstVisitor {
             exprForTerminator |> pop()
         }
         exprForTerminator |> push(0ul)
-        if (!noLint && genericDepth == 0) {
-            lint023_jumps = true
-        }
+        note_flow_jump()
     }
 
     def override preVisitExprCast(expr : ExprCast?) : void {
@@ -1094,6 +1092,17 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
 
+    //! A label or a goto puts control flow beyond what the source order describes - a backward
+    //! jump reads after a store that appears above it, a forward one skips the apparent overwrite -
+    //! so the order tests (LINT010, LINT023) cannot judge this function and stand down for all of it.
+    def private note_flow_jump() : void {
+        if (noLint || genericDepth > 0) return
+        flow_jumps = true
+        for (e in ds_entries) {
+            e.skip = true
+        }
+    }
+
     def private ds_find(v : VariablePtr) : int {
         let vc : Variable const? = v
         for (i in range(length(ds_entries))) {
@@ -1129,7 +1138,7 @@ class LintVisitor : AstVisitor {
         ds_entries |> emplace(DeadStoreEntry(
             v = v,
             pending_expr = v.init,
-            skip = false,
+            skip = flow_jumps,
             has_pending = has_init,
             pending_pure = init_pure
         ))
@@ -1205,13 +1214,8 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
 
-    //! A label or a goto puts control flow beyond what the source order describes - a backward
-    //! jump can place a read after a store that appears above it - so the order test cannot judge
-    //! this function and LINT023 stands down for all of it.
     def override preVisitExprGoto(_expr : ExprGoto?) : void {
-        if (!noLint && genericDepth == 0) {
-            lint023_jumps = true
-        }
+        note_flow_jump()
     }
     def override preVisitExprFor(_expr : ExprFor?) : void {
         if (!noLint && genericDepth == 0) {
