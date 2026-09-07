@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Benchmarks — cross-language · daslang</title>
-    <meta name="description" content="The dasProfile suite: 16 benchmarks, das vs Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono and .NET — interpreter, JIT and AOT lanes, per platform." />
+    <meta name="description" content="The dasProfile suite: 16 benchmarks, das vs Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono, .NET and Zig — interpreter, JIT and AOT lanes, per platform." />
     <link rel="canonical" href="https://daslang.io/benchmarks.html" />
     <link rel="icon" type="image/svg+xml" href="files/daslang-favicon.svg" />
     <link rel="alternate icon" type="image/x-icon" href="files/daslang.ico" />
@@ -141,11 +141,11 @@
         <div class="forge-container forge-hero__grid">
             <div>
                 <span class="bm-hero__badge"><span class="dot"></span>dasProfile · cross-language</span>
-                <h1>Sixteen benchmarks. Seven runtimes. <em>Every lane measured.</em></h1>
+                <h1>Sixteen benchmarks. Eight runtimes. <em>Every lane measured.</em></h1>
                 <p class="forge-hero__lede">
                     The dasProfile suite runs the same programs across daslang and the scripting
                     runtimes it competes with — Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono and .NET —
-                    plus C++ as the floor. Two boards per platform: pure interpreters, and
+                    plus C++ and Zig as the native floor. Two boards per platform: pure interpreters, and
                     everything with a JIT or AOT compiler behind it. Absolute seconds, lower is
                     better; the fastest lane in each row is highlighted.
                 </p>
@@ -257,6 +257,7 @@
             { key: "DAS AOT", label: "DAS AOT", das: true },
             { key: "DAS JIT", label: "DAS JIT", das: true },
             { key: "C++", label: "C++", das: false },
+            { key: "ZIG", label: "Zig", das: false },
             { key: "LUAU --codegen", label: "Luau codegen", das: false },
             { key: "LUAJIT", label: "LuaJIT", das: false },
             { key: "MONO", label: "Mono", das: false },
@@ -427,7 +428,7 @@
             "<div><span class='prompt'>$</span> daslang dasProfile/main.das -- --json</div>",
             "<div class='dim'>  " + escapeHtml(p.cpu) + "</div>",
             "<div><span class='metric'>daslang </span><span class='amber'>" + escapeHtml(p.das_version) + "</span><span class='dim'> \u00b7 LLVM " + escapeHtml(shortVersion(v.llvm)) + " \u00b7 " + escapeHtml(v.cpp_compiler || "?") + "</span></div>",
-            "<div class='dim'>  LuaJIT " + escapeHtml(shortVersion(v.luajit)) + " \u00b7 Luau " + escapeHtml(shortVersion(v.luau)) + " \u00b7 QuickJS " + escapeHtml(shortVersion(v.quickjs)) + " \u00b7 Mono " + escapeHtml(shortVersion(v.mono)) + " \u00b7 .NET " + escapeHtml(shortVersion(v.dotnet)) + " \u00b7 Quirrel " + escapeHtml(shortVersion(v.quirrel)) + "</div>",
+            "<div class='dim'>  LuaJIT " + escapeHtml(shortVersion(v.luajit)) + " \u00b7 Luau " + escapeHtml(shortVersion(v.luau)) + " \u00b7 QuickJS " + escapeHtml(shortVersion(v.quickjs)) + " \u00b7 Mono " + escapeHtml(shortVersion(v.mono)) + " \u00b7 .NET " + escapeHtml(shortVersion(v.dotnet)) + " \u00b7 Quirrel " + escapeHtml(shortVersion(v.quirrel)) + (v.zig ? " \u00b7 Zig " + escapeHtml(shortVersion(v.zig)) : "") + "</div>",
             "<div class='ok'>  \u2713 " + tests + " benchmarks \u00b7 " + boards + " boards \u00b7 captured " + escapeHtml(p.das_capture) + "</div>"
         ];
         document.getElementById("bm-hero-receipt").innerHTML = lines.join("");

@@ -266,6 +266,7 @@ def main() {
             { id: 'DAS AOT',             label: 'Daslang · AOT',     group: 'das' },
             { id: 'DAS JIT',             label: 'Daslang · JIT',     group: 'das' },
             { id: 'C++',                 label: 'C++ · -O2',         group: 'native' },
+            { id: 'ZIG',                 label: 'Zig · ReleaseFast', group: 'native' },
             { id: 'LUAU --codegen',      label: 'Luau --codegen',    group: 'rival' },
             { id: 'LUAJIT',              label: 'LuaJIT',            group: 'rival' },
             { id: 'MONO',                label: 'Mono',              group: 'rival' },
