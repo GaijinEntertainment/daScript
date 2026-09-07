@@ -293,11 +293,3 @@ a global written on one branch is looked up on that branch only. Every access to
 function therefore shares one base pointer, which is what lets LLVM see `xs[j]` and `xs[j + 1]` as
 adjacent. Under `options solid_context` the address is instead `context->globals + stackTop`,
 computed once per function in the entry block.
-
-## 12. What a test's child leaves beside the tree's descriptors
-
-A daslang child a test here spawns runs the module scan over this tree before it compiles
-anything, and the scan keeps a manifest, `.das_module.manifest`, beside every `.das_module`
-descriptor it compiles, replaying it on later starts. Those sidecars are the scan's steady
-state and are gitignored: they are the one write a child makes outside the directory its test
-created, and they stay.
