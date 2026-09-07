@@ -68,6 +68,30 @@ test('a failed benchmark shows its log and the failure note', async ({ page }) =
     await expect(page.locator('#b-bench')).toBeEnabled();
 });
 
+test('an in-process result shows the served row, the comparison line, and no ratio', async ({ page }) => {
+    // the bundle's mode: no daslang to spawn, no llama-bench - the server measured itself
+    const b = fx('bench_done');
+    await openControl(page, { bench: b });
+    await expect(page.locator('#b-bench')).toHaveText('measure this box (pp512 / tg128)');
+    await expect(page.locator('#bench-note')).toHaveText('done');
+    await expect(page.locator('#bench-table')).toBeVisible();
+    await expect(page.locator('#bench-body tr')).toHaveCount(1);
+    await expect(page.locator('#bench-body')).toContainText(b.result.ours_pp.toFixed(1));
+    await expect(page.locator('#bench-body')).toContainText(b.result.ours_tg.toFixed(1));
+    await expect(page.locator('#bench-body')).not.toContainText('ratio');
+    await expect(page.locator('#bench-meta')).toContainText(b.result.model);
+    await expect(page.locator('#bench-meta')).toContainText('compare: ' + b.result.ref_cmd);
+    await expect(page.locator('#bench-log')).toContainText(b.log[b.log.length - 1]);
+    await expect(page.locator('#bench-record-row')).toBeHidden();   // no record: nothing to submit from a self-measure
+});
+
+test('the idle panel names the mode the server would run', async ({ page }) => {
+    const b = fx('bench_idle');   // captured in the in-process mode
+    await openControl(page, { bench: b });
+    await expect(page.locator('#b-bench')).toHaveText(b.mode === 'inprocess' ? 'measure this box (pp512 / tg128)' : 'run llama.cpp A/B');
+    await expect(page.locator('#bench-note')).toContainText('quiesced only');
+});
+
 test('a refused bench start surfaces the reason', async ({ page }) => {
     await openControl(page, {
         responses: { '/bench': { status: 409, json: { error: { message: 'streams are active — quiesce first' } } } },

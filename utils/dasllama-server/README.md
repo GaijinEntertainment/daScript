@@ -42,10 +42,31 @@ The exe is a fat build (`daspkg release --fat`): plain code for the platform's b
 class - `x86-avx2` on x86, `arm-neon` on arm64 - with one clone of every `[tune]` kernel per
 class the engine ships a profile for (`x86-vnni512`, `x86-amx`, `arm-i8mm`), picked from cpuid
 at start. On a Mac the Metal crowns are raced once at the first start and kept beside the exe.
-That is the good default. The advanced path is the JIT from a daslang SDK, tuned on the box
-itself - `bin/daslang -jit utils/dasllama-server/main.das` below, or a `daspkg release` of this
-package run on that box, which mints its own sidecar: every kernel is raced on your own
+That is the good default, and it is as far as a solid executable goes: **a fat build cannot
+tune**. Its kernels are baked, there is no tuner in it, and `--tune`, the sidecar exchange
+and a re-tune have nothing to act on (the control page's exchange levers refuse). To tune
+every kernel for this box, install daslang with dasLLAMA - the SDK - and run the server
+through the JIT, `bin/daslang -jit utils/dasllama-server/main.das` below, or `daspkg release`
+this package on that box: either mints the box's own sidecar, every kernel raced on your own
 hardware instead of picked from a class profile.
+
+## Measure your box
+
+The control page's *benchmark* button runs the llama-bench rows on the served model right in
+the server - pp512 and tg128, three timed reps each after an untimed warmup - and shows tokens
+per second beside the hardware line; the text routes answer 503 for the run's duration (under
+a minute on a small model), so nothing contends with it. The same rows from a shell, and the
+comparison the page cannot run itself, come from `dasllama-bench` (`dasllama-bench.exe`)
+beside the server:
+
+```sh
+./dasllama-bench.exe -m ~/.dasllama/models/<model>.gguf           # pp512/tg128, five reps
+./dasllama-bench.exe -m <model.gguf> --ref /path/to/llama-bench   # and llama.cpp on the same GGUF
+```
+
+It is `modules/dasLLAMA/benchmarks/lcpp_bench.das` baked with the server's class; `--help`
+lists the rest (`-p`, `-n`, `-r`, `-t`, `-o md`). Its first start on a Mac races the Metal
+crowns like the server's does.
 
 The bundles are not code-signed. macOS quarantines a downloaded app, and an app started from
 the download folder runs from a read-only copy where nothing it writes beside itself survives -
@@ -232,7 +253,8 @@ Full watchdog reference - config keys, discovery rules, the log: `utils/watchdog
 
 `daspkg release --root utils/dasllama-server --out <dir>` bakes the server into a standalone
 bundle: the exe, the shared modules and runtime libraries it needs, `watchdog` beside it,
-`watchdog.json`, `control.html` and `tray.ico`. Plain `release` tunes the kernels on the build
+`dasllama-bench` (the `release_program` companion - lcpp_bench baked under the same class,
+sharing the bundle's libraries), `watchdog.json`, `control.html` and `tray.ico`. Plain `release` tunes the kernels on the build
 box and ships that box's sidecar - the bundle for a machine you own. `release --fat x86-avx2`
 (`arm-neon` on arm64) is what the public download is built from: no mint, no sidecar, one
 clone of every kernel per shipped class profile, the runtime section minted at the first start
@@ -266,8 +288,8 @@ server first; Windows locks the DLLs.
 | `POST` | `/vad` | Silero speech spans over an uploaded clip (the control page's waveform overlay; in-handler, <=120 s, needs the in-repo `silero_vad.bin`) |
 | `GET`  | `/catalog` | The curated model list with local presence, the `asr` tower row, the `tts` list (the three speech GGUFs and the two front-end packs, each `file`/`bytes`/`pack`/`present`/`path`), the `box` memory facts + the download state machine (`idle | downloading | verifying | done | failed`, byte progress) |
 | `POST` | `/catalog/download` | `{"name": <entry>}` - start one catalog download; `{"name", "tower": "vision"}` / `{"tower": "asr"}` pull a tower, `{"tower": "tts", "file": <file>}` one file of the speech set (409 while one runs or the file exists; sha-verified, never waived) |
-| `POST` | `/bench` | Loopback-only: start the quiesced A/B benchmark - our engine then the configured `lcpp_bin` - spawned as a child process (needs a source-tree daslang + `lcpp_bin` in the config; 409 while a bench runs or streams are active) |
-| `GET`  | `/bench` | Bench state (`idle | running | done | failed`), live log lines, the result JSON, and the hardware line |
+| `POST` | `/bench` | Loopback-only: start the benchmark, quiesced. In process by default: pp512 and tg128 on the served model, an untimed warmup then three timed reps each, one rep per tick, the text routes and the model-switching routes holding (503 / 409) until it finishes; with `lcpp_bin` in the config on a source-tree daslang, the A/B child instead - our lcpp_bench then llama-bench on the same GGUF. 400 in setup mode, 409 while a bench runs or streams are active |
+| `GET`  | `/bench` | Bench state (`idle | running | done | failed`), `mode` (`inprocess` | `ab`: what a `POST` runs), live log lines, the result JSON - `ours_pp`, `ours_tg`, `threads`, `elapsed_s`, `ts`; in process also `mode`, `pp_sd`, `tg_sd`, `reps`, `model`, `gguf`, `backend` and `ref_cmd` (the llama-bench line for the comparison); the A/B also `theirs_pp`, `theirs_tg`, `pp_ratio`, `tg_ratio` and `record` - and the hardware line |
 | `POST` | `/bake` | `{"model"?: name}` loopback-only: bake the slot's prepared `.dlim` image by spawning `dasllama-convert` (empty body bakes the default slot; 409 while a bake or bench runs or streams are active; the dlim GC of never-loadable images runs on completion) |
 | `GET`  | `/bake` | Bake state (`idle | running | done | failed`), the slot it runs for, log lines, the result JSON |
 | `GET`  | `/v1/images` | Per-slot prepared-image inventory: source GGUF path, the flavor THIS process mapped (planar/vulkan/metal, or raw gguf), the trimmed flag, and each on-disk `.dlim`'s info - plus the slot name a bake is currently running for |

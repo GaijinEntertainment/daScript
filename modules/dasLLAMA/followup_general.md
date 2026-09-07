@@ -1363,3 +1363,10 @@
    re-mint on an AMX box at the served lane count with the confirm; and the AMX class must never
    inherit the vnni class's `bias128` perm (-15% on AMX). Both land as profile files the fat exe
    picks up with no plumbing change; the AWS SPR AMI (`dasbox-spr-20260710`) is the AMX box.
+
+119. **The bundle's second exe carries its own runtime.** The watchdog ships as a standalone
+   exe (18-31 MB per platform) because `bin/watchdog` links the runtime statically, while the
+   server beside it is baked against the shared `libDaScriptDyn` dylibs; a watchdog baked the
+   same way would be a few MB. Same nature: `dasModuleVulkan` (11-17 MB) ships in every bundle,
+   the macOS one included, where it only backs the tier probe. Neither is a priority - the
+   bundles are peanuts beside a gguf - but both are where the archive shrinks if it ever has to.

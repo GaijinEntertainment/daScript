@@ -42,10 +42,10 @@ def test_allowed_set_admits_the_entry_modules(t : T?) {
         t |> equal(0, r.rc, "facade require is allowed: {r.out}")
         t |> success(find(r.out, "DASLLAMA001") < 0, "no lint finding on the facade")
     }
-    t |> run("the scheduler and exchange entries are allowed too") @(t : T?) {
+    t |> run("the scheduler, exchange and bench entries are allowed too") @(t : T?) {
         let r = spawn_compile(["require dasllama/dasllama", "require dasllama/dasllama_scheduler",
-                               "require dasllama/dasllama_exchange_schema"], "entries")
-        t |> equal(0, r.rc, "scheduler + exchange_schema allowed: {r.out}")
+                               "require dasllama/dasllama_exchange_schema", "require dasllama/dasllama_bench"], "entries")
+        t |> equal(0, r.rc, "scheduler + exchange_schema + bench allowed: {r.out}")
     }
     t |> run("an engine internal with no escape does not compile") @(t : T?) {
         let r = spawn_compile(["require dasllama/dasllama_gguf"], "internal")

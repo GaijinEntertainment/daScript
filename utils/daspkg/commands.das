@@ -1463,6 +1463,78 @@ def private sidecar_provenance_line(manifest : string) : string {
     return line
 }
 
+//! a companion's shared modules and das modules join the main program's, each once: the ship
+//! loops below key on the bundle-relative path and the module name
+def private merge_release_deps(var deps : ReleaseDeps; extra : ReleaseDeps) {
+    for (e in extra.shared_modules) {
+        var seen = false
+        for (h in deps.shared_modules) {
+            seen = seen || (h.rel == e.rel && h.das_name == e.das_name)
+        }
+        if (!seen) {
+            deps.shared_modules |> push(SharedModuleEntry(rel = e.rel, abs = e.abs, das_name = e.das_name))
+        }
+    }
+    for (dm in extra.das_modules) {
+        var seen = false
+        for (h in deps.das_modules) {
+            seen = seen || h.name == dm.name
+        }
+        if (!seen) {
+            deps.das_modules |> push(DasModuleEntry(name = dm.name, file = dm.file, package_dir = dm.package_dir))
+        }
+    }
+}
+
+//! Bake one release_program companion: `<bundle_dir>/<name>.exe` (extensionless inside a macOS
+//! .app, like the main exe) under the same fat class and mode, its `.o` dropped, its rpaths
+//! scrubbed, the MSVC `.lib` recorded, and the fat gate run on its own deps JSON - a companion
+//! whose kernels the baseline class has no profile for refuses the release the way the main exe
+//! does. Returns 0, or 1 with the reason logged; `deps_file` is left for the caller to merge.
+def private release_build_program(daslang, main_path, bundle_dir, name, deps_file, fat, force_args : string; is_mac_app : bool; var shipped : array<string>) : int {
+    let exe_path = path_join(bundle_dir, name)
+    let cmd = "{release_fat_env(fat)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args} \"{main_path}\""
+    let mode_note = empty(fat) ? "" : " ({fat} class, fat)"
+    log("  build: companion {name} from {base_name(main_path)}{mode_note}\n")
+    let t0 = ref_time_ticks()
+    var output : string
+    let rc = run_cmd(cmd, output)
+    if (rc != 0) {
+        to_log(LOG_ERROR, "release: daslang -exe failed for companion {name} (rc={rc}):\n{output}\n")
+        return 1
+    }
+    log("  build: companion {name} in {release_elapsed(t0)}s\n")
+    if (!empty(fat)) {
+        var pdeps : ReleaseDeps
+        if (!read_release_deps(deps_file, pdeps)) {
+            to_log(LOG_ERROR, "release --fat {fat}: the companion {name}'s deps JSON {deps_file} cannot be read, so its fat gate never ran\n")
+            return 1
+        }
+        let refusal = release_fat_gate(pdeps, fat)
+        if (!empty(refusal)) {
+            to_log(LOG_ERROR, "{refusal}\n")
+            return 1
+        }
+    }
+    let obj_path = "{exe_path}.o"
+    if (fexist(obj_path)) {
+        remove(obj_path)
+    }
+    shipped |> push(is_mac_app ? name : "{name}.exe")
+    if (fexist("{exe_path}.lib")) {
+        shipped |> push("{name}.lib")
+    }
+    if (is_mac_app) {
+        var rerr : string
+        if (!rename("{exe_path}.exe", exe_path, rerr)) {
+            to_log(LOG_ERROR, "release: cannot rename {exe_path}.exe -> {exe_path}: {rerr}\n")
+            return 1
+        }
+    }
+    scrub_external_rpaths(is_mac_app ? exe_path : "{exe_path}.exe")
+    return 0
+}
+
 // the env prefix a fat release builds its exe under: the baseline class and the fat tune mode
 def private release_fat_env(fat : string) : string {
     return empty(fat) ? "" : (get_platform_name() == "windows" ?
@@ -2235,6 +2307,24 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
         to_log(LOG_ERROR, "release: release_launcher(\"{spec.launcher}\") names no shipped tool - add release_include_tool(\"{spec.launcher}\") beside it\n")
         return 1
     }
+    // release_program() companions are checked before anything builds: the name lands in the
+    // bundle as a file name, and a script that is not there would fail minutes into the release
+    var programs : array<tuple<name : string; script : string>>
+    programs |> reserve(length(spec.programs))
+    for (p in spec.programs) {
+        let at = find(p, "@")
+        let pname = at > 0 ? slice(p, 0, at) : ""
+        let pscript = at > 0 ? slice(p, at + 1, length(p)) : ""
+        if (empty(pname) || !is_safe_pkg_name(pname) || pname == bundle_name) {
+            to_log(LOG_ERROR, "release: release_program(\"{pname}\", ...) - the name is the companion's file name: letters, digits, `_`, `-` and `.` only, and not the bundle's own `{bundle_name}`\n")
+            return 1
+        }
+        if (empty(pscript) || !fexist(path_join(root, pscript))) {
+            to_log(LOG_ERROR, "release: release_program(\"{pname}\", \"{pscript}\") names no script under {root}\n")
+            return 1
+        }
+        programs |> push((name = pname, script = pscript))
+    }
     // macOS: emit a clickable .app bundle. The exe + dylibs + modules go into
     // Contents/MacOS/, so all subsequent ship logic uses bundle_dir unchanged
     // and the rpath / module resolver still see the same <exe_dir> layout.
@@ -2438,6 +2528,25 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     // everywhere except a mac .app, where the rename above already dropped it.
     scrub_external_rpaths(is_mac_app ? exe_path : "{exe_path}.exe")
 
+    // 1.8 Companion programs (release_program): each bakes beside the main exe under the same
+    //     class and mode, and its deps JSON joins the main one below, so a shared module only
+    //     the companion requires still ships.
+    var program_deps : array<string>
+    program_deps |> reserve(length(programs))
+    for (p in programs) {
+        run_cmd_counter ++
+        let pdeps = "{get_das_root()}/_daspkg_release_deps_{run_cmd_counter}.json"
+        let rc_p = release_build_program(daslang, path_join(root, p.script), bundle_dir, p.name, pdeps, fat, force_args, is_mac_app, shipped)
+        if (rc_p != 0) {
+            for (d in program_deps) {
+                remove(d)
+            }
+            remove(deps_file)
+            return rc_p
+        }
+        program_deps |> push(pdeps)
+    }
+
     // 2. Parse deps JSON, ship dylibs at the relative path the exe expects.
     //    The writer has already merged force-included modules into shared_modules,
     //    so we just iterate.
@@ -2448,6 +2557,16 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
         return 1
     }
     remove(deps_file)
+    for (d in program_deps) {
+        var pd : ReleaseDeps
+        let ok = read_release_deps(d, pd)
+        remove(d)
+        if (!ok) {
+            to_log(LOG_ERROR, "release: cannot read a companion program's deps file at {d}\n")
+            return 1
+        }
+        merge_release_deps(deps, pd)
+    }
     for (e in deps.shared_modules) {
         if (empty(e.rel)) {
             to_log(LOG_WARNING, "release: skipping module `{e.das_name}` (no /modules/ in `{e.abs}`)\n")

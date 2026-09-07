@@ -163,14 +163,17 @@ jobs:
         run: |
           set -eux
           case "${{ runner.os }}" in
-            macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog" ;;
-            Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe" ;;
-            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog" ;;
+            macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench" ;;
+            Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe"; BENCH="$APP/dasllama-bench.exe" ;;
+            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench.exe" ;;
           esac
           test -f "$APP/control.html"
           test -f "$APP/tray.ico"
           test -f "$APP/watchdog.json"
           "$WATCHDOG" --help
+          # the companion loads the same runtime and modules the server does; -m is required, so
+          # the help form carries a placeholder
+          "$BENCH" -m none.gguf --help
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             grep -A1 CFBundleExecutable dist/dasllama-server.app/Contents/Info.plist | grep -q '<string>watchdog</string>'
             grep -A1 LSUIElement dist/dasllama-server.app/Contents/Info.plist | grep -q '<true'

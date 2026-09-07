@@ -2644,8 +2644,23 @@ $("b-drain").addEventListener("click", async () => {
 let benchPolling = false;
 let benchRecord = null;
 
+// the button and its idle note follow the mode GET /bench reports: a bundle (no daslang to spawn,
+// no llama-bench configured) measures the served model in process; a source tree with lcpp_bin
+// set runs the llama.cpp A/B child
+function benchIdleNote(mode) {
+    if (mode === "inprocess") {
+        $("b-bench").textContent = "measure this box (pp512 / tg128)";
+        return "quiesced only — refuses while streams are active · pp512 and tg128 on the served model, three reps each, the text routes holding meanwhile (under a minute on a small model)";
+    }
+    if (mode === "ab") {
+        $("b-bench").textContent = "run llama.cpp A/B";
+    }
+    return "quiesced only — refuses while streams are active · runs our lcpp_bench then llama-bench on the same GGUF (minutes-class)";
+}
+
 function renderBench(b) {
     const log = $("bench-log");
+    const idleNote = benchIdleNote(b.mode);
     if (b.state === "running" || !(b.result && b.result.record)) {
         // never leave a prior run's record copyable — a stale copy is a wrong submission
         benchRecord = null;
@@ -2659,22 +2674,30 @@ function renderBench(b) {
         const r = b.result;
         $("bench-table").style.display = "table";
         const body = $("bench-body");
-        body.innerHTML =
-            "<tr><td class=\"pv\">dasllama (this server)</td><td>" + r.ours_pp.toFixed(1) + "</td><td>" + r.ours_tg.toFixed(1) + "</td></tr>" +
-            "<tr><td class=\"pv\">llama.cpp (llama-bench)</td><td>" + r.theirs_pp.toFixed(1) + "</td><td>" + r.theirs_tg.toFixed(1) + "</td></tr>" +
-            "<tr><td class=\"pv\">ratio</td><td class=\"" + (r.pp_ratio >= 1 ? "hit" : "") + "\">" + r.pp_ratio.toFixed(2) + "x</td>" +
-            "<td class=\"" + (r.tg_ratio >= 1 ? "hit" : "") + "\">" + r.tg_ratio.toFixed(2) + "x</td></tr>";
-        $("bench-meta").textContent = (b.hardware || "") + " · " + r.threads + " threads · " +
+        let rows = "<tr><td class=\"pv\">dasllama (this server)</td><td>" + r.ours_pp.toFixed(1) + "</td><td>" + r.ours_tg.toFixed(1) + "</td></tr>";
+        if (r.theirs_pp !== undefined) {
+            rows += "<tr><td class=\"pv\">llama.cpp (llama-bench)</td><td>" + r.theirs_pp.toFixed(1) + "</td><td>" + r.theirs_tg.toFixed(1) + "</td></tr>" +
+                "<tr><td class=\"pv\">ratio</td><td class=\"" + (r.pp_ratio >= 1 ? "hit" : "") + "\">" + r.pp_ratio.toFixed(2) + "x</td>" +
+                "<td class=\"" + (r.tg_ratio >= 1 ? "hit" : "") + "\">" + r.tg_ratio.toFixed(2) + "x</td></tr>";
+        }
+        body.innerHTML = rows;
+        const served = r.model ? " · " + r.model + " (" + r.gguf + ", " + r.backend + ")" : "";
+        let meta = (b.hardware || "") + served + " · " + r.threads + " threads · " +
             new Date(r.ts * 1000).toLocaleString() + " · " + r.elapsed_s + "s run";
+        if (r.ref_cmd) {
+            // the comparison a bundle cannot run itself: the same GGUF, the same shapes, on llama.cpp
+            meta += "\ncompare: " + r.ref_cmd;
+        }
+        $("bench-meta").textContent = meta;
         if (r.record) {
             $("bench-record-row").style.display = "flex";
             benchRecord = r.record;
         }
     }
-    $("bench-note").textContent = b.state === "running" ? "running — both benches finish before results appear"
+    $("bench-note").textContent = b.state === "running" ? (b.mode === "inprocess" ? "running — one rep per tick, the log fills as they land" : "running — both benches finish before results appear")
         : b.state === "failed" ? "failed — see the log above"
         : b.state === "done" ? "done"
-        : $("bench-note").textContent;
+        : idleNote;
     $("b-bench").disabled = b.state === "running";
     if (b.state === "running" && !benchPolling) {
         benchPolling = true;
@@ -2710,6 +2733,7 @@ $("b-bench").addEventListener("click", async () => {
             return;
         }
         renderBench({ state: "running", log: [] });
+        setTimeout(() => fetch("/bench", { cache: "no-store" }).then(r => r.json()).then(renderBench).catch(() => {}), 500);
     } catch (_e) {
         $("bench-note").textContent = "bench request failed";
     }

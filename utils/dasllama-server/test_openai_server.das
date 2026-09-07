@@ -611,6 +611,104 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
     }
 }
 
+let TEST_PORT_BENCH = 18137   // 18097/18098/18099/18101/18102/18120/18121/18131/18135/18136 are the other server suites'
+
+//! the state GET /bench reports, "" on any failure
+def private bench_state(base_url : string) : string {
+    var state = ""
+    GET("{base_url}/bench") $(resp) {
+        if (resp != null && resp.status_code == http_status.OK) {
+            var err : string
+            var js = read_json(string(resp.body), err)
+            state = js?["state"] ?? ""
+            unsafe {
+                delete js
+            }
+        }
+    }
+    return state
+}
+
+[test]
+def test_bench_inprocess(t : T?) {
+    t |> run("the in-process bench: pp512 and tg128 on the served model, the text routes holding meanwhile (needs tinyllama q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA server test is JIT-only)")
+            return
+        }
+        if (!stat(MODEL_PATH).is_valid) {
+            t |> skip("{base_name(MODEL_PATH)} not present (set DASLLAMA_MODELS_DIR)")
+            return
+        }
+        with_llama_server(MODEL_PATH, TEST_PORT_BENCH) $(base_url) {
+            GET("{base_url}/bench") $(resp) {   // no daslang and no lcpp_bin registered: the in-process mode
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> equal(js?["state"] ?? "", "idle")
+                t |> equal(js?["mode"] ?? "", "inprocess", "a server with nothing to spawn benches in process")
+                unsafe {
+                    delete js
+                }
+            }
+            POST("{base_url}/bench", "") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.ACCEPTED), "the run starts")
+            }
+            var saw_running = false
+            var held = false
+            var state = "running"
+            let started = ref_time_ticks()
+            while (state == "running" && int64(get_time_usec(started)) < 240000000l) {
+                saw_running = true
+                if (!held) {   // one chat during the run: the text routes hold with a 503, they never contend
+                    POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":4}") $(resp) {
+                        if (resp != null) {
+                            t |> equal(int(resp.status_code), int(http_status.SERVICE_UNAVAILABLE), "a chat during the run is held")
+                            t |> success(find(string(resp.body), "benchmark is running") >= 0, "and the reply says why: {resp.body}")
+                        }
+                    }
+                    held = true
+                }
+                sleep(500u)
+                state = bench_state(base_url)
+            }
+            t |> success(saw_running, "the run was observed running")
+            t |> equal(state, "done", "the run finished")
+            GET("{base_url}/bench") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                let r = js?["result"]
+                t |> success(r != null, "a result is reported")
+                if (r != null) {
+                    t |> equal(r?["mode"] ?? "", "inprocess")
+                    let pp : double = r?["ours_pp"] ?? 0.0lf
+                    let tg : double = r?["ours_tg"] ?? 0.0lf
+                    t |> success(pp > 0.0lf, "pp512 measured: {pp} tok/s")
+                    t |> success(tg > 0.0lf, "tg128 measured: {tg} tok/s")
+                    t |> equal(int(r?["reps"] ?? 0l), 3, "three reps per row")
+                    t |> success(find(r?["ref_cmd"] ?? "", "llama-bench") >= 0, "the llama-bench comparison line rides along")
+                    t |> equal(r?["model"] ?? "", "test-llm", "the row names the slot it ran on")
+                }
+                let logs = js?["log"]
+                var sanity = false
+                if (logs != null && logs is _array) {
+                    for (lv in logs as _array) {
+                        let line : string = lv ?? ""
+                        sanity = sanity || find(line, "sanity (pp512)") >= 0
+                    }
+                }
+                t |> success(sanity, "the pp warmup passed the logit sanity check and said so")
+                unsafe {
+                    delete js
+                }
+            }
+            POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":4}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "the text routes serve again once the run is done")
+            }
+        }
+    }
+}
+
 [test]
 def test_same_model_path(t : T?) {
     t |> run("path identity: separators, dot-dot, and (windows) case") @(t : T?) {

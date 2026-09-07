@@ -6,6 +6,7 @@ module openai_server
 
 require dasllama/dasllama       // the public facade — the main dasLLAMA surface this tool touches
 require dasllama/dasllama_scheduler   // continuous-batching scheduler (layer 3 over the facade)
+require dasllama/dasllama_bench       // the llama-bench rows the in-process /bench runs on the served model
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
@@ -233,6 +234,9 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
 //! is the id reported by ``/v1/models`` and echoed back in responses. Single-model compatibility
 //! wrapper over ``add_model``; multi-model hosts call ``add_model`` per entry instead.
 def set_model(var m : Model; name : string) {
+    if (ibench_running()) {
+        ibench_stop("idle")   // the rows ran on the slots being dropped
+    }
     unsafe {
         delete g_slots
     }
@@ -733,14 +737,18 @@ def private drain_bench_events() {
     }
 }
 
+//! `ab` when POST /bench spawns the lcpp_bench + llama-bench child (a source-tree daslang and
+//! `lcpp_bin` both configured), else `inprocess`: the rows run on the served model right here.
+def private bench_mode() : string {
+    return (!empty(g_lcpp_bin) && !empty(g_daslang_bin)) ? "ab" : "inprocess"
+}
+
 def private handle_bench_start(var resp : HttpResponse?) : http_status {
     if (g_bench_state == "running") {
         return resp |> JSON(error_body("a benchmark is already running", "invalid_request_error"), http_status.CONFLICT)
     }
-    if (empty(g_lcpp_bin) || empty(g_daslang_bin)) {
-        return resp |> JSON(
-            error_body(empty(g_lcpp_bin) ? "set lcpp_bin in the config to enable benchmarking" : "benchmarking needs a source-tree daslang (standalone exe cannot spawn the bench child)", "invalid_request_error"),
-            http_status.BAD_REQUEST)
+    if (bench_mode() == "inprocess") {
+        return ibench_start(resp)
     }
     if (streams_busy()) {
         return resp |> JSON(
@@ -770,8 +778,147 @@ def private handle_bench_get(var resp : HttpResponse?) : http_status {
     }
     let result = empty(g_bench_result_json) ? "null" : g_bench_result_json
     return resp |> JSON(
-        "\{\"state\":{json_str(g_bench_state)},\"log\":{log_json},\"result\":{result},\"hardware\":{json_str(g_hardware_line)}}",
+        "\{\"state\":{json_str(g_bench_state)},\"mode\":{json_str(bench_mode())},\"log\":{log_json},\"result\":{result},\"hardware\":{json_str(g_hardware_line)}}",
         http_status.OK)
+}
+
+// ===== the in-process benchmark =====
+// A bundle carries no daslang to spawn and no llama-bench to compare against, so /bench runs the
+// llama-bench rows itself on the served model: pp512 and tg128, an untimed warmup then three
+// timed reps each, one rep per tick so the HTTP surface stays live between them. The text
+// routes hold with a 503 for the run's duration - a stream admitted mid-row would share the
+// cores with it and the numbers would measure the contention.
+
+let private IBENCH_REPS = 3
+
+var private g_ibench_phase = 0   // 0 idle | 1 pp warmup | 2 pp reps | 3 tg warmup | 4 tg reps
+var private g_ibench_rep = 0
+var private g_ibench_slot = 0
+var private g_ibench_threads = 0
+var private g_ibench_t0 : int64
+var private g_ibench_pp : array<double>
+var private g_ibench_tg : array<double>
+var private g_ibench_session : Session
+
+//! True while the in-process rows run - the text routes and the model-switching routes hold.
+def ibench_running() : bool {
+    return g_ibench_phase != 0
+}
+
+def private ibench_hold_text() : string {
+    return "a benchmark is running on this server - retry when GET /bench reports it done"
+}
+
+//! the llama-bench line that measures the same GGUF with the same shapes on the same device,
+//! for the comparison a bundle cannot run itself: `-ngl 99` where Metal served the rows, `-ngl 0`
+//! where the CPU did (lcpp_bench's own --ref spelling)
+def private ibench_ref_cmd(gguf : string; threads : int; backend : string) : string {
+    let ngl = backend == "metal" ? 99 : 0
+    return "llama-bench -m \"{gguf}\" -ngl {ngl} -p {BENCH_PP_TOKENS} -n {BENCH_TG_TOKENS} -r {IBENCH_REPS} -t {threads}"
+}
+
+//! what served the rows: `metal` when the slot maps the Metal flavor (the tier's `backend_effective`
+//! speaks only of the Vulkan tier and reads `cpu` under Metal), else the tier's own word
+def private ibench_backend(si : int) : string {
+    return slot_flavor(g_slots[si]) == "metal" ? "metal" : g_slots[si].backend_effective
+}
+
+def private ibench_log(text : string) {
+    g_bench_log |> push(text)
+    to_log(LOG_INFO, "dasllama-server: bench: {text}\n")
+}
+
+def private ibench_start(var resp : HttpResponse?) : http_status {
+    if (empty(g_slots)) {
+        return resp |> JSON(error_body("no model is loaded - setup mode: pick one from the catalog first", "invalid_request_error"), http_status.BAD_REQUEST)
+    }
+    if (streams_busy()) {
+        return resp |> JSON(
+            error_body("streams are active — contended numbers are misleading; drain first, then bench", "invalid_request_error"),
+            http_status.CONFLICT)
+    }
+    g_bench_state = "running"
+    delete g_bench_log
+    g_bench_result_json = ""
+    g_ibench_slot = g_default_slot
+    g_ibench_threads = served_lanes()
+    g_ibench_t0 = ref_time_ticks()
+    delete g_ibench_pp
+    delete g_ibench_tg
+    g_ibench_rep = 0
+    g_ibench_phase = 1
+    ibench_log("in-process: pp{BENCH_PP_TOKENS}/tg{BENCH_TG_TOKENS} x {IBENCH_REPS} reps on {g_slots[g_ibench_slot].name} ({ibench_backend(g_ibench_slot)}, {g_ibench_threads} lanes), llama-bench shape - the text routes hold until it finishes")
+    return resp |> JSON("\{\"ok\":true,\"state\":\"running\"}", http_status.ACCEPTED)
+}
+
+def private ibench_stop(state : string) {
+    delete g_ibench_session
+    g_ibench_phase = 0
+    g_bench_state = state
+}
+
+def private ibench_finish() {
+    let pp = bench_row("pp{BENCH_PP_TOKENS}", g_ibench_pp)
+    let tg = bench_row("tg{BENCH_TG_TOKENS}", g_ibench_tg)
+    let name = g_slots[g_ibench_slot].name
+    let path = g_slots[g_ibench_slot].path
+    let backend = ibench_backend(g_ibench_slot)
+    let elapsed = int64(get_time_usec(g_ibench_t0)) / 1000000l
+    ibench_log("ours: pp{BENCH_PP_TOKENS} {pp.mean:.1f} ± {pp.sd:.1f} tok/s · tg{BENCH_TG_TOKENS} {tg.mean:.1f} ± {tg.sd:.1f} tok/s ({IBENCH_REPS} reps, {elapsed}s)")
+    g_bench_result_json = "\{\"mode\":\"inprocess\",\"ours_pp\":{pp.mean},\"ours_tg\":{tg.mean},\"pp_sd\":{pp.sd},\"tg_sd\":{tg.sd},\"reps\":{IBENCH_REPS},\"model\":{json_str(name)},\"gguf\":{json_str(base_name(path))},\"backend\":{json_str(backend)},\"threads\":{g_ibench_threads},\"elapsed_s\":{elapsed},\"ts\":{created_ts()},\"ref_cmd\":{json_str(ibench_ref_cmd(path, g_ibench_threads, backend))}}"
+    ibench_stop("done")
+    to_log(LOG_INFO, "dasllama-server: bench complete\n")
+}
+
+//! one step of the rows per tick: a warmup, or a timed rep, on the default slot's model
+def private ibench_tick() {
+    return if (g_ibench_phase == 0)
+    let si = g_ibench_slot
+    install_slot_marks(si)
+    maybe_bind_gpu(si)
+    g_cur = si
+    let m & = cur_model()
+    if (g_ibench_phase == 1) {
+        delete g_ibench_session   // the previous run's cache, when a run ended without its stop
+        g_ibench_session <- bench_session(m)
+        bench_pp_warm(m, g_ibench_session, BENCH_PP_TOKENS)
+        let sane = bench_warm_sanity(m, g_ibench_session)
+        if (!sane.ok) {
+            ibench_log("REFUSED (pp{BENCH_PP_TOKENS}): {sane.detail}; the serving pipeline is broken and its timings would be meaningless")
+            ibench_stop("failed")
+            return
+        }
+        ibench_log("sanity (pp{BENCH_PP_TOKENS}): {sane.detail}")
+        g_ibench_phase = 2
+        g_ibench_rep = 0
+    } elif (g_ibench_phase == 2) {
+        let tps = bench_pp_rep(m, g_ibench_session, BENCH_PP_TOKENS, int64(g_ibench_rep))
+        g_ibench_pp |> push(tps)
+        ibench_log("pp{BENCH_PP_TOKENS} rep {g_ibench_rep + 1}/{IBENCH_REPS}: {tps:.1f} tok/s")
+        g_ibench_rep ++
+        if (g_ibench_rep >= IBENCH_REPS) {
+            g_ibench_phase = 3
+        }
+    } elif (g_ibench_phase == 3) {
+        bench_tg_warm(m, g_ibench_session)
+        let sane = bench_warm_sanity(m, g_ibench_session)
+        if (!sane.ok) {
+            ibench_log("REFUSED (tg{BENCH_TG_TOKENS}): {sane.detail}; the serving pipeline is broken and its timings would be meaningless")
+            ibench_stop("failed")
+            return
+        }
+        ibench_log("sanity (tg{BENCH_TG_TOKENS}): {sane.detail}")
+        g_ibench_phase = 4
+        g_ibench_rep = 0
+    } else {
+        let tps = bench_tg_rep(m, g_ibench_session, BENCH_TG_TOKENS, int64(g_ibench_rep))
+        g_ibench_tg |> push(tps)
+        ibench_log("tg{BENCH_TG_TOKENS} rep {g_ibench_rep + 1}/{IBENCH_REPS}: {tps:.1f} tok/s")
+        g_ibench_rep ++
+        if (g_ibench_rep >= IBENCH_REPS) {
+            ibench_finish()
+        }
+    }
 }
 
 // ===== bake button (the .dlim converter) =====
@@ -895,9 +1042,9 @@ def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) 
             error_body("baking needs a source-tree daslang (standalone exe cannot spawn the converter child)", "invalid_request_error"),
             http_status.BAD_REQUEST)
     }
-    if (streams_busy()) {
+    if (streams_busy() || ibench_running()) {
         return resp |> JSON(
-            error_body("streams are active — the converter competes for cores and RAM; drain first, then bake", "invalid_request_error"),
+            error_body(ibench_running() ? ibench_hold_text() : "streams are active — the converter competes for cores and RAM; drain first, then bake", "invalid_request_error"),
             http_status.CONFLICT)
     }
     var model_field = ""
@@ -1154,6 +1301,14 @@ def private box_ram_gb() : int {
     return ram_gb_from_meminfo(fread("/proc/meminfo"))
 }
 
+//! the lanes the kernels actually dispatch on: the jobque workers plus the calling thread,
+//! narrowed by the dispatch cap when one is set (the cap sentinel 0 means all of them)
+def private served_lanes() : int {
+    let lanes = is_job_que_available() ? get_total_hw_jobs() + 1 : 1
+    let cap = get_dispatch_worker_limit()
+    return (cap > 0 && cap < lanes) ? cap : lanes
+}
+
 def private compose_hardware_line {
     var cpu = cpu_brand()
     if (empty(cpu)) {
@@ -1163,8 +1318,8 @@ def private compose_hardware_line {
     // narrows it. The old rendering printed the cap sentinel 0 as "all", which next to a
     // 64-core brand string read as "uses all 64 cores" on a 16-lane run.
     let lanes = is_job_que_available() ? get_total_hw_jobs() + 1 : 1
-    let cap = get_dispatch_worker_limit()
-    let lanes_desc = (cap > 0 && cap < lanes) ? "{cap} of {lanes}" : "{lanes}"
+    let served = served_lanes()
+    let lanes_desc = served < lanes ? "{served} of {lanes}" : "{lanes}"
     let aff = get_jobque_affinity()
     let aff_desc = aff == 1 ? " · affinity: ideal-cpu hint" : (aff == 2 ? " · affinity: hard mask" : "")
     let tier = gpu_tier_status()
@@ -1875,6 +2030,9 @@ def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) 
     if (mi < 0) {
         return resp_error(resp, http_status.NOT_FOUND, "model '{want_model}' not found — GET /v1/models lists the served ids{empty(g_slots) ? " (setup mode: no model loaded yet — download one from /catalog)" : ""}")
     }
+    if (ibench_running()) {
+        return resp_error(resp, http_status.SERVICE_UNAVAILABLE, ibench_hold_text())
+    }
     g_cur = mi
     install_slot_marks(mi)   // this handler evals IN-handler — the embed forward needs ITS marks
     let iv = js?["input"]
@@ -1997,7 +2155,7 @@ def private runtime_load_conflict(id, rpath : string) : string {
 
 // POST /v1/models/load. Contract: the README's route row. In-code precondition: streams must
 // be idle (the busy gate) because the load blocks the tick thread for its duration.
-def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) : http_status {   // nolint:STYLE038 — one guard + one client-facing message per validation
+def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) : http_status {   // nolint:STYLE037,STYLE038 — one guard + one client-facing message per validation
     if (!is_loopback_req(req)) {
         return deny_operator(resp)
     }
@@ -2030,8 +2188,8 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
     if (!empty(conflict)) {
         return resp |> JSON(error_body(conflict, "conflict"), http_status.CONFLICT)
     }
-    if (streams_busy()) {
-        return resp |> JSON(error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
+    if (streams_busy() || ibench_running()) {
+        return resp |> JSON(error_body(ibench_running() ? ibench_hold_text() : "streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
     }
     let backend = js?["backend"] ?? "auto"
     if (backend != "auto" && backend != "cpu") {
@@ -2124,8 +2282,8 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
     if (mi == g_default_slot) {
         return resp |> JSON(error_body("'{want}' is the default slot — activate another model first (POST /v1/models/activate)", "invalid_request_error"), http_status.BAD_REQUEST)
     }
-    if (streams_busy()) {
-        return resp |> JSON(error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
+    if (streams_busy() || ibench_running()) {
+        return resp |> JSON(error_body(ibench_running() ? ibench_hold_text() : "streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
     }
     if (g_gpu_owner == mi) {
         install_slot_marks(mi)
@@ -2198,9 +2356,9 @@ def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : 
             error_body("model '{want}' not found — GET /v1/models lists the served ids{empty(g_slots) ? " (setup mode: no model loaded yet — download one from /catalog)" : ""}", "model_not_found"),
             http_status.NOT_FOUND)
     }
-    if (streams_busy()) {
+    if (streams_busy() || ibench_running()) {
         return resp |> JSON(
-            error_body("streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"),
+            error_body(ibench_running() ? ibench_hold_text() : "streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"),
             http_status.CONFLICT)
     }
     let t0 = ref_time_ticks()
@@ -2243,6 +2401,10 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              seed : int = 0; think : ThinkStream = ThinkStream();
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
                              media_is_audio : bool = false; media_grid : int2 = int2(0)) {
+    if (ibench_running()) {
+        service_unavailable(srv, writer, ibench_hold_text())
+        return
+    }
     let np = long_length(prompt) + n_media
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
@@ -5181,6 +5343,7 @@ def update_server() : bool {
     drain_tts_events(g_server.server)
     drain_media_events(g_server.server)
     drain_bench_events()
+    ibench_tick()
     drain_bake_events()
     catalog_download_tick()
     let t_reap = ref_time_ticks()

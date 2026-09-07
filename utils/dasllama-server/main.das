@@ -20,7 +20,8 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // explicit exchange_accept key in the config consults it); a tune exits so the watchdog can restart
 // with the winners (missing = "restart"); `--tune` forces a local re-tune. Set DAS_TUNE_POLICY=error
 // while developing to skip per-start tuning (it prints the tuner command instead). The winners live
-// at <das_root>/dasllama.tune.json, shared by every dasLLAMA app on this box.
+// at <das_root>/dasllama.tune.json, shared by every dasLLAMA app on this box. A fat build (the
+// download) carries no tuner: its kernels are the class clones, and `--tune` is ignored.
 
 require openai_server           // the server + route handlers (this directory)
 require model_catalog           // catalog_models_dir — the models-dir resolution
@@ -146,7 +147,7 @@ struct ServerArgs {
     @clarg_doc = "Directory the model catalog downloads into (default ~/.dasllama/models; DASLLAMA_MODELS_DIR overrides)"
     models_dir : string
 
-    @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch (handled before arg parsing)"
+    @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch (handled before arg parsing; a fat build carries no tuner and ignores it)"
     tune : bool
 
     @clarg_short = "?"

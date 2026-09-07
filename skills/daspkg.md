@@ -203,6 +203,7 @@ def release() {
     release_include_from("dastest/dastest.das", "tools/dastest.das")  // ... with an explicit dest
     release_include_tool("watchdog")    // a built tool from the build's bin/, .exe added per platform
     release_launcher("watchdog")        // macOS: the .app opens this shipped tool, not the exe (a supervisor)
+    release_program("my-bench", "tools/bench.das")   // a companion exe baked beside the main one under the same class, sharing the bundle's runtime libraries and modules
     release_exclude("data/secret/**")
     release_shared_module("dasSQLITE")  // force-include a dylib not auto-detected
     release_include_symbols()           // ship debug symbols into <bundle>/symbols/
