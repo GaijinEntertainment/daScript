@@ -26,8 +26,6 @@
 #ifdef _WIN32
 #include <direct.h>
 #include <stdlib.h>
-#else
-extern char ** environ;
 #endif
 #include <stdexcept>
 #include <type_traits>
@@ -3408,11 +3406,7 @@ namespace das {
             host[0] = 0;
         }
         vector<string> envs;
-#ifdef _WIN32
-        for ( char ** e = _environ; e && *e; ++e ) {
-#else
-        for ( char ** e = environ; e && *e; ++e ) {
-#endif
+        for ( char * const * e = das_environ(); e && *e; ++e ) {
             // the cache's own size cap is a policy on the directory, not a compile input
             if ( strncmp(*e, "DAS", 3) == 0 && strncmp(*e, "DAS_MODULE_CACHE_LIMIT=", 23) != 0 ) envs.push_back(*e);
         }
