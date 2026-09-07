@@ -15,6 +15,7 @@ require daslib/regex_boost
 require dashv/dashv_boost
 require daslib/strings_convert
 require stddlg
+require stbimage
 
 //! Supervise a daslang program (`daslang -jit main.das`) or a standalone executable: restart it with
 //! bounded backoff, capture crashes into bundles, report startup stages, poll health. Exit 0 is an
@@ -92,12 +93,21 @@ struct public WatchdogConfig {
     tray : bool
     @clarg_doc = "Page the tray icon opens; defaults to the health URL's origin"
     tray_url : string
+    @clarg_doc = "Image the tray icon shows - a .png, or an .ico with PNG frames - relative to --cwd; the plain disc when unset"
+    tray_icon : string
     @clarg_skip
     server_args : array<string>
 }
 
 def private resolve_from(path, base : string) : string {
     return get_full_file_name(is_absolute(path) ? path : path_join(base, path))
+}
+
+//! An unset path stays unset; a set one resolves against `base`.
+def private resolve_optional(var path : string&; base : string) {
+    if (!empty(path)) {
+        path = resolve_from(path, base)
+    }
 }
 
 //! The config keys are the flag names with underscores; a key sets that flag's default, so a flag
@@ -178,7 +188,9 @@ def private load_config(folder : string) : LoadedConfig {
 
 //! What to supervise, from the layout: `main.das` means script mode when a daslang sits beside it
 //! (`bin/Release/daslang(.exe)`) or beside the watchdog itself (a source tree keeps both in `bin/`);
-//! exactly one `*.exe` means that program. Ambiguity is an error, never a guess.
+//! exactly one program - a `*.exe` file, or on a Unix layout an executable file with no extension,
+//! the watchdog's own executable aside - means that program. A `main.das` with no daslang in reach
+//! is refused, never traded for a program. Ambiguity is an error, never a guess.
 def private discover_target(var cfg : WatchdogConfig; folder, program_dir : string) : string {
     let script = path_join(folder, "main.das")
     if (fexist(script)) {
@@ -192,10 +204,11 @@ def private discover_target(var cfg : WatchdogConfig; folder, program_dir : stri
             cfg.daslang = exe
             return ""
         }
+        return "watchdog: nothing to supervise in {folder} - main.das is there but no daslang sits beside it or beside the watchdog (bin/Release/daslang, bin/daslang, build/daslang). Pass --daslang, or --program for a standalone exe."
     }
     var exes : array<string>
     dir(folder) $(fname) {
-        if (ends_with(fname, ".exe")) {
+        if (is_program_candidate(path_join(folder, fname), fname)) {
             exes |> push(path_join(folder, fname))
         }
     }
@@ -209,7 +222,18 @@ def private discover_target(var cfg : WatchdogConfig; folder, program_dir : stri
     if (length(exes) > 1) {
         return "watchdog: {folder} holds {length(exes)} executables; pick one with --program or {CONFIG_NAME}"
     }
-    return "watchdog: nothing to supervise in {folder} - expected a single *.exe, or main.das with a daslang beside it or beside the watchdog. Use --program/--script or ship {CONFIG_NAME}."
+    return "watchdog: nothing to supervise in {folder} - expected a single program (*.exe, or a file with no extension), or main.das with a daslang beside it or beside the watchdog. Use --program/--script or ship {CONFIG_NAME}."
+}
+
+//! A regular `*.exe` file anywhere - a flat daspkg bundle keeps the suffix on Linux too - and on
+//! a Unix layout also an executable regular file with no extension, which is how the macOS `.app`
+//! names its exe. The watchdog's own executable is never a candidate.
+def private is_program_candidate(path, fname : string) : bool {
+    if (stem(fname) == "watchdog") return false
+    let is_exe = ends_with(fname, ".exe")
+    if (!is_exe && (get_platform_name() == "windows" || find(fname, ".") >= 0)) return false
+    let st = stat(path)
+    return st.is_valid && st.is_reg && (is_exe || st.is_exec)
 }
 
 //! Where a daslang may sit, nearest first: beside the script, beside the watchdog, and one level
@@ -288,15 +312,10 @@ def public resolve_config(args : array<string>; program_dir : string) : Resolved
     cfg.dump_dir = resolve_from(cfg.dump_dir, cfg.cwd)
     cfg.crash_dir = resolve_from(cfg.crash_dir, cfg.cwd)
     cfg.jit_dir = resolve_from(cfg.jit_dir, cfg.cwd)
-    if (!empty(cfg.script)) {
-        cfg.script = resolve_from(cfg.script, cfg.cwd)
-    }
-    if (!empty(cfg.program)) {
-        cfg.program = resolve_from(cfg.program, cfg.cwd)
-    }
-    if (!empty(cfg.stop_file)) {
-        cfg.stop_file = resolve_from(cfg.stop_file, cfg.cwd)
-    }
+    resolve_optional(cfg.script, cfg.cwd)
+    resolve_optional(cfg.program, cfg.cwd)
+    resolve_optional(cfg.stop_file, cfg.cwd)
+    resolve_optional(cfg.tray_icon, cfg.cwd)
     let daslang_candidate = resolve_from(cfg.daslang, cfg.cwd)
     if (fexist(daslang_candidate)) {
         cfg.daslang = daslang_candidate
@@ -971,39 +990,25 @@ def private inside_triangle(px, py, ax, ay, bx, by, cx, cy : float) : bool {
     return !(has_neg && has_pos)
 }
 
-//! The icon: a filled disc, and for `amber` or `red` a badge in a cleared moat at the lower
-//! right - a triangle while working, a square in trouble. `side` x `side` RGBA8, row-major.
-def public tray_mark(side : int; badge : string) : array<uint8> {
-    var px : array<uint8>
-    px |> resize(side * side * 4)
+//! The badge for `amber` or `red` in a cleared moat at the lower right of `side` x `side` RGBA8
+//! pixels - a triangle while working, a square in trouble; `base` leaves the pixels alone.
+def public tray_badge(var px : array<uint8>; side : int; badge : string) {
+    if (badge == "base") return
     let u = float(side) / 64.0
-    let center = float(side) / 2.0
-    let radius = float(side) * 0.44
     let moat_r = 16.5 * u
     let badge_color = badge == "amber" ? int3(242, 183, 61) : int3(217, 109, 79)
     for (y in range(side)) {
         for (x in range(side)) {
             let fx = float(x) + 0.5
             let fy = float(y) + 0.5
-            var color = int4(0, 0, 0, 0)
-            let dx = fx - center
-            let dy = fy - center
-            if (dx * dx + dy * dy <= radius * radius) {
-                color = int4(70, 130, 200, 255)
-            }
-            if (badge != "base") {
-                let mx = fx - 49.0 * u
-                let my = fy - 49.0 * u
-                if (mx * mx + my * my <= moat_r * moat_r) {
-                    color = int4(0, 0, 0, 0)
-                }
-                let on_badge = (badge == "amber"
-                    ? inside_triangle(fx, fy, 49.0 * u, 35.5 * u, 62.5 * u, 59.2 * u, 35.5 * u, 59.2 * u)
-                    : (fx >= 37.5 * u && fx <= 60.5 * u && fy >= 37.5 * u && fy <= 60.5 * u))
-                if (on_badge) {
-                    color = int4(badge_color.x, badge_color.y, badge_color.z, 255)
-                }
-            }
+            let mx = fx - 49.0 * u
+            let my = fy - 49.0 * u
+            let in_moat = mx * mx + my * my <= moat_r * moat_r
+            let on_badge = (badge == "amber"
+                ? inside_triangle(fx, fy, 49.0 * u, 35.5 * u, 62.5 * u, 59.2 * u, 35.5 * u, 59.2 * u)
+                : (fx >= 37.5 * u && fx <= 60.5 * u && fy >= 37.5 * u && fy <= 60.5 * u))
+            if (!in_moat && !on_badge) continue
+            let color = on_badge ? int4(badge_color.x, badge_color.y, badge_color.z, 255) : int4(0, 0, 0, 0)
             let i = (y * side + x) * 4
             px[i] = uint8(color.x)
             px[i + 1] = uint8(color.y)
@@ -1011,7 +1016,142 @@ def public tray_mark(side : int; badge : string) : array<uint8> {
             px[i + 3] = uint8(color.w)
         }
     }
+}
+
+//! The stock icon: a filled disc wearing the badge. `side` x `side` RGBA8, row-major.
+def public tray_mark(side : int; badge : string) : array<uint8> {
+    var px : array<uint8>
+    px |> resize(side * side * 4)
+    let center = float(side) / 2.0
+    let radius = float(side) * 0.44
+    for (y in range(side)) {
+        for (x in range(side)) {
+            let dx = float(x) + 0.5 - center
+            let dy = float(y) + 0.5 - center
+            if (dx * dx + dy * dy > radius * radius) continue
+            let i = (y * side + x) * 4
+            px[i] = 70u8
+            px[i + 1] = 130u8
+            px[i + 2] = 200u8
+            px[i + 3] = 255u8
+        }
+    }
+    tray_badge(px, side, badge)
     return <- px
+}
+
+//! An icon read from a file for the tray: `rgba` is `side` x `side` RGBA8, or `error` says why
+//! the file gives none.
+struct public TrayIcon {
+    rgba : array<uint8>
+    side : int
+    error : string
+}
+
+//! The icon is square, up to this many pixels a side - a PNG, or the ICO frame chosen
+let public TRAY_ICON_MAX = 256
+//! An icon file past this size is refused before it is read: the whole file is copied into memory
+let public TRAY_ICON_FILE_MAX = 4l * 1024l * 1024l
+
+def private read_u16(bytes : array<uint8>; at : int) : int {
+    return int(bytes[at]) | (int(bytes[at + 1]) << 8)
+}
+
+def private read_u32(bytes : array<uint8>; at : int) : int {
+    return read_u16(bytes, at) | (read_u16(bytes, at + 2) << 16)
+}
+
+def private is_png(bytes : array<uint8>; at, len : int) : bool {
+    return len >= 8 && bytes[at] == 0x89u8 && bytes[at + 1] == uint8('P') && bytes[at + 2] == uint8('N') && bytes[at + 3] == uint8('G')
+}
+
+def private is_ico(bytes : array<uint8>) : bool {
+    return length(bytes) >= 6 && read_u16(bytes, 0) == 0 && read_u16(bytes, 2) == 1
+}
+
+//! The ICO directory: six header bytes, then sixteen per frame - width, height (0 reads 256),
+//! two reserved, planes, bit depth, byte size, byte offset. The chosen frame is the largest the
+//! directory declares square and within `TRAY_ICON_MAX`, among the PNG-compressed ones whose
+//! byte range lies inside the file; the decoded pixels are the truth the caller re-checks. `side`
+//! 0 and the reason when none qualifies.
+def private ico_frame(bytes : array<uint8>) : tuple<at : int; len : int; side : int; reason : string> {
+    let count = read_u16(bytes, 4)
+    var best = (at = 0, len = 0, side = 0, reason = "")
+    var listed = 0
+    var in_range = 0
+    var bmp_frames = 0
+    for (i in range(count)) {
+        let entry = 6 + 16 * i
+        if (entry + 16 > length(bytes)) break
+        listed++
+        let w = bytes[entry] == 0u8 ? 256 : int(bytes[entry])
+        let h = bytes[entry + 1] == 0u8 ? 256 : int(bytes[entry + 1])
+        let len = read_u32(bytes, entry + 8)
+        let at = read_u32(bytes, entry + 12)
+        if (at < 0 || len <= 0 || at > length(bytes) || len > length(bytes) - at) continue
+        in_range++
+        if (!is_png(bytes, at, len)) {
+            bmp_frames++
+            continue
+        }
+        if (w != h || w > TRAY_ICON_MAX || w <= best.side) continue
+        best = (at = at, len = len, side = w, reason = "")
+    }
+    if (best.side == 0) {
+        best.reason = (count == 0 ? "the ICO directory lists no frame"
+            : (listed < count ? "the ICO directory is truncated"
+                : (in_range == 0 ? "every ICO frame's byte range lies outside the file"
+                    : (bmp_frames == in_range ? "no ICO frame is PNG-compressed; the tray reads PNG frames only, never BMP"
+                        : "no square PNG frame of {TRAY_ICON_MAX} px or less"))))
+    }
+    return best
+}
+
+//! The tray icon a file supplies: a PNG, or an ICO whose frames are PNG-compressed (the largest
+//! square frame within `TRAY_ICON_MAX`), decoded to `side` x `side` RGBA8. PNG is the one codec
+//! the static binary carries, so a BMP-framed ICO is refused by name; so is anything that is not
+//! a regular file of at most `TRAY_ICON_FILE_MAX` bytes, before it is read. `error` carries the
+//! reason and `side` is 0 when no icon comes back.
+def public tray_icon_load(path : string) : TrayIcon {
+    let st = stat(path)
+    if (!st.is_valid) return TrayIcon(error = "cannot read {path}")
+    if (!st.is_reg) return TrayIcon(error = "{path} is not a regular file")
+    if (st.size > uint64(TRAY_ICON_FILE_MAX)) return TrayIcon(error = "{path} is {st.size} bytes; a tray icon is at most {TRAY_ICON_FILE_MAX}")
+    var bytes : array<uint8>
+    var loaded = false
+    fopen(path, "rb") $(f) {
+        if (f == null) return
+        fmap(f) $(var data : array<uint8>#) {
+            bytes := data
+            loaded = true
+        }
+    }
+    if (!loaded) return TrayIcon(error = "cannot read {path}")
+    var at = 0
+    var len = length(bytes)
+    if (is_ico(bytes)) {
+        let frame = ico_frame(bytes)
+        if (frame.side == 0) return TrayIcon(error = "{path}: {frame.reason}")
+        at = frame.at
+        len = frame.len
+    } elif (!is_png(bytes, 0, len)) {
+        return TrayIcon(error = "{path} is neither a PNG nor an ICO")
+    }
+    var w, h, comp : int
+    var pixels = stbi_load_from_memory(unsafe(addr(bytes[at])), len, unsafe(addr(w)), unsafe(addr(h)), unsafe(addr(comp)), 4)
+    if (pixels == null) return TrayIcon(error = "{path}: {stbi_failure_reason()}")
+    var icon = TrayIcon(side = w)
+    if (w != h || w <= 0 || w > TRAY_ICON_MAX) {
+        icon.error = "{path}: {w}x{h} decoded - the tray icon is square, up to {TRAY_ICON_MAX} px"
+        icon.side = 0
+    } else {
+        icon.rgba |> resize(w * h * 4)
+        unsafe {
+            memcpy(addr(icon.rgba[0]), pixels, w * h * 4)
+        }
+    }
+    stbi_image_free(pixels)
+    return <- icon
 }
 
 //! The platform's opener, spawned and never waited for.
@@ -1033,6 +1173,8 @@ class public WatchdogTray {
     name : string
     url : string
     @do_not_delete log : Emitter?
+    icon : array<uint8>
+    icon_side : int = 0
     shown : bool = false
     last_status : TrayStatus = TrayStatus()
     last_badge : string
@@ -1079,9 +1221,18 @@ class public WatchdogTray {
         tray_menu_commit()
         last_open_enabled = open_enabled
         if (line.badge != last_badge) {
-            tray_set_icon(tray_mark(TRAY_MARK_SIDE, line.badge), TRAY_MARK_SIDE, TRAY_MARK_SIDE)
+            let side = icon_side > 0 ? icon_side : TRAY_MARK_SIDE
+            tray_set_icon(badged_icon(line.badge), side, side)
             last_badge = line.badge
         }
+    }
+
+    //! The configured image wearing the badge, or the stock disc.
+    def badged_icon(badge : string) : array<uint8> {
+        if (icon_side <= 0) return <- tray_mark(TRAY_MARK_SIDE, badge)
+        var px := icon
+        tray_badge(px, icon_side, badge)
+        return <- px
     }
 
     //! Drain the platform's events into the request flags. A left click opens the page while
@@ -1555,11 +1706,24 @@ def private wants_help(args : array<string>) : bool {
     return false
 }
 
-//! The icon when a notification area can show one, else null with the reason on the log.
+//! The icon when a notification area can show one, else null with the reason on the log. A
+//! `--tray-icon` the file cannot supply is logged as `tray_icon_unavailable` and the stock disc
+//! shows instead.
 def private create_tray(cfg : WatchdogConfig; var log : Emitter?) : WatchdogTray? {
     let url = tray_page_url(cfg.tray_url, cfg.health_url, !cfg.no_health)
     var tray = new WatchdogTray(cfg.name, url, log)
-    if (tray->create()) return tray
+    if (tray->create()) {
+        if (!empty(cfg.tray_icon)) {
+            var img <- tray_icon_load(cfg.tray_icon)
+            if (empty(img.error)) {
+                tray.icon <- img.rgba
+                tray.icon_side = img.side
+            } else {
+                log->emit("tray_icon_unavailable", JV((path = cfg.tray_icon, reason = img.error)))
+            }
+        }
+        return tray
+    }
     unsafe {
         delete tray
     }
@@ -1576,6 +1740,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
     var resolved <- resolve_config(args, program_dir)
     if (!empty(resolved.error)) {
         print("{resolved.error}\n")
+        notify("watchdog not started", resolved.error, true)
         exit_code = 2
         return null
     }
@@ -1624,7 +1789,9 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
         }
         if (prior != 0 && prior != self_pid && unsafe(process_alive(prior))) {
             log->emit("watchdog_already_running", JV((pid = prior, pid_file = cfg.pid_file)))
-            print("watchdog: {cfg.name} is already supervised by pid {prior} (per {cfg.pid_file}). Stop it first, or delete the pid file if it is stale.\n")
+            let why = "watchdog: {cfg.name} is already supervised by pid {prior} (per {cfg.pid_file}). Stop it first, or delete the pid file if it is stale."
+            print("{why}\n")
+            notify("{cfg.name} watchdog not started", why, true)
             exit_code = 2
             return null
         }

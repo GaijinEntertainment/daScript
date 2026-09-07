@@ -1,4 +1,5 @@
 {
   "name": "dasllama",
-  "tray": true
+  "tray": true,
+  "tray_icon": "tray.ico"
 }

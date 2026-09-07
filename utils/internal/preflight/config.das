@@ -50,6 +50,18 @@ def public reach_hit(changed : array<string>; reach : array<string>) : bool {
     return has_path_under_any(changed, reach) || has_path_under_any(changed, CORE_REACH)
 }
 
+//! the review-md discovery suites' reach: the tools they test, the framework they run on, and a REVIEW.das anywhere -
+//! test_walkers copies utils/REVIEW.das into its fixture, so a gate edit is red only there
+let public REVIEW_MD_TESTS_REACH <- ["utils/internal/review-md/", "utils/internal/make-pr/", "utils/internal/preflight/", "dastest/"]
+
+def public review_md_tests_reach(changed : array<string>) : bool {
+    return true if (reach_hit(changed, REVIEW_MD_TESTS_REACH))
+    for (p in changed) {   // git names paths with forward slashes on every host
+        return true if (p == "REVIEW.das" || (p |> ends_with("/REVIEW.das")))
+    }
+    return false
+}
+
 //! The pure half of the compile sweep's root filter: a `.das` under the swept trees that is not a test,
 //! not generated, and not a module tree reached through a junction inside an example.
 def public is_sweep_root_path(path : string) : bool {

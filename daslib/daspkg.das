@@ -138,6 +138,7 @@ struct ReleaseSpec {
     include_symbols : bool              //!< ship debug symbols for every shipped binary into `<bundle>/symbols/`
     external_files : array<string>      //!< "src@dst" pairs shipped from outside the package; src is relative to <das_root>, dst to the bundle root
     tools : array<string>               //!< built tools shipped by bare name from <das_root>/bin/ (bin/Release/ in an MSVC tree) to the bundle root; the platform adds .exe
+    launcher : string                   //!< macOS .app: the shipped tool (one of `tools`) the .app opens in place of the exe - a supervisor that starts the exe itself
 }
 
 var _release_spec : ReleaseSpec
@@ -190,6 +191,11 @@ def release_include_from(source : string) {
 //! Ship a tool the daslang build produced - `bin/<name>` (`bin/<name>.exe` on Windows, also looked for under `bin/Release/` in an MSVC tree) - to the bundle root, so a manifest names it once for every platform. A build without it fails the release rather than shipping a bundle short a tool. The supervisor is the worked example: `release_include_tool("watchdog")`.
 def release_include_tool(name : string) {
     _release_spec.tools |> push(name)
+}
+
+//! Name the shipped tool a macOS `.app` opens in place of the exe - a supervisor that starts the exe itself, so a double click on the app supervises. The name must be one `release_include_tool` ships, or the release refuses before it builds. The flat Linux/Windows bundle is unaffected: the tool sits beside the exe either way.
+def release_launcher(tool : string) {
+    _release_spec.launcher = tool
 }
 
 def release_exclude(pattern : string) {

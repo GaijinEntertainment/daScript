@@ -4,9 +4,10 @@
 `README.md`. **A Playwright spec (`*.spec.js`), wherever the diff puts it, answers to the
 `tests/playground/` checklist.** A page is an `.html` or `.md` file under this folder that a
 visitor navigates to, together with what the scripts it loads render into it - not a
-machine-only harness document (`playground/run-frame.html`), and not editor content - what a
+machine-only harness document (`playground/run-frame.html`), not editor content - what a
 visitor types into the playground or hero editor, and the sample bundles the playground loads
-into that editor.
+into that editor - and not the generated Sphinx output under `doc/` (this folder), whose
+`.rst` sources answer to `doc/REVIEW.md` (repo root).
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
 illustration - show only a command the run actually executed, with every home directory
@@ -94,4 +95,8 @@ selector body defined in BOTH `files/dasllama-table.css` and `dasllama.html`'s i
 or `files/dasllama.js` uses that no selector of the page's inline `<style>` or of
 `files/dasllama-table.css` defines and no `id="..."` declares - is a defect.**
 
-**An entry in `_news/*.md` for something not shipped at publish time is a defect.**
+**An entry in `_news/*.md` for something not shipped at publish time is a defect.** Publish time
+is the deploy that follows the merge landing the change.
+
+**A PR that adds an entry to `_news/*.md` states, in the PR body, that what the entry announces
+is available at publish time, and where that was checked.**

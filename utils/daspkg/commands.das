@@ -1544,8 +1544,10 @@ def private sanitize_bundle_id_part(s : string) : string {
 // Minimal macOS .app Info.plist. Built with dasPUGIXML so values are
 // XML-escaped automatically — inputs (bundle_name, exe, bundle_id) are
 // otherwise unrestricted on the XML side. CFPropertyList accepts plist
-// without a DOCTYPE, so we omit it.
-def private build_info_plist(name, exe, bundle_id : string) : string {
+// without a DOCTYPE, so we omit it. `ui_element` marks a menu-bar-only app
+// (LSUIElement): no Dock tile, no application menu - the shape of a
+// supervisor launcher, whose only surface is its tray icon.
+def private build_info_plist(name, exe, bundle_id : string; ui_element : bool) : string {
     var out = ""
     with_doc() $(doc) {
         doc |> tag("plist") $(var pl) {
@@ -1555,6 +1557,10 @@ def private build_info_plist(name, exe, bundle_id : string) : string {
                 d |> tag("string", name)
                 d |> tag("key", "CFBundleExecutable")
                 d |> tag("string", exe)
+                if (ui_element) {
+                    d |> tag("key", "LSUIElement")
+                    d |> tag("true")
+                }
                 d |> tag("key", "CFBundleIdentifier")
                 d |> tag("string", bundle_id)
                 d |> tag("key", "CFBundlePackageType")
@@ -2223,6 +2229,12 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
         to_log(LOG_ERROR, "Error: unsafe bundle name `{bundle_name}` (letters, digits, `_`, `-` and `.` only; not `.` or `..`)\n")
         return 1
     }
+    // release_launcher() names the tool the macOS .app opens; checked on every platform so a
+    // typo fails the Linux and Windows releases too, not only the one that writes the plist
+    if (!empty(spec.launcher) && find_index(spec.tools, spec.launcher) < 0) {
+        to_log(LOG_ERROR, "release: release_launcher(\"{spec.launcher}\") names no shipped tool - add release_include_tool(\"{spec.launcher}\") beside it\n")
+        return 1
+    }
     // macOS: emit a clickable .app bundle. The exe + dylibs + modules go into
     // Contents/MacOS/, so all subsequent ship logic uses bundle_dir unchanged
     // and the rpath / module resolver still see the same <exe_dir> layout.
@@ -2622,11 +2634,12 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             bundle_id = "com.{sanitize_bundle_id_part(author_raw)}.{sanitize_bundle_id_part(bundle_name)}"
         }
         let plist_path = path_join(app_root, "Contents/Info.plist")
-        if (!fwrite(plist_path, build_info_plist(bundle_name, bundle_name, bundle_id))) {
+        let launcher = empty(spec.launcher) ? bundle_name : spec.launcher
+        if (!fwrite(plist_path, build_info_plist(bundle_name, launcher, bundle_id, !empty(spec.launcher)))) {
             to_log(LOG_ERROR, "release: cannot write {plist_path}\n")
             return 1
         }
-        log("  wrote: Contents/Info.plist (CFBundleIdentifier={bundle_id})\n")
+        log("  wrote: Contents/Info.plist (CFBundleIdentifier={bundle_id}, CFBundleExecutable={launcher})\n")
     }
     // every release writes the ownership manifest — the .app too: the wipe path does not
     // consult it, but tooling and the migration semantics read one record everywhere

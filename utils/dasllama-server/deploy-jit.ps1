@@ -1,12 +1,12 @@
-# Deploy dasllama-server as a self-contained JIT bundle.
+# Deploy dasllama-server as a self-contained JIT bundle - the per-box-tuned alternative to the
+# baked `daspkg release` bundle.
 #
-# dasllama-server is JIT-only (per-box [tune]/[llvm_code] kernels), so it cannot be a baked
-# daspkg -exe — it needs the live daslang toolchain to JIT-compile + lld-link its kernels at
-# startup. This mirrors the minimal SDK layout the JIT expects (daslang under bin/Release,
-# lld-link under bin/, the runtime import libs under lib/Release, LLVM.dll under lib/) plus the
-# daslib/modules the server requires and the server sources. Launched from the bundle root,
-# getDasRoot() resolves to the bundle (daslang lives in bin/Release), so daslib/modules/lib/bin
-# all resolve.
+# The JIT compiles and lld-links the server's [tune]/[llvm_code] kernels for this box at
+# startup, so the bundle carries the live daslang toolchain. This mirrors the minimal SDK layout
+# the JIT expects (daslang under bin/Release, lld-link under bin/, the runtime import libs under
+# lib/Release, LLVM.dll under lib/) plus the daslib/modules the server requires and the server
+# sources. Launched from the bundle root, getDasRoot() resolves to the bundle (daslang lives in
+# bin/Release), so daslib/modules/lib/bin all resolve.
 #
 # Run:  powershell -File utils/dasllama-server/deploy-jit.ps1 [-Dest E:\dasllama-server]
 # Then, from the bundle:  .\watchdog.exe    (finds bin/Release/daslang.exe, runs -jit main.das)

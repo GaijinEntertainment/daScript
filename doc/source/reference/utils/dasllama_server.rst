@@ -27,10 +27,44 @@ facade is complete.
    :depth: 2
 
 
-Run
-===
+Get it
+======
 
-Run under ``-jit`` --- interpreted inference is far too slow for model work::
+The server ships as a standalone download from the rolling
+``dasllama-server`` release,
+https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server,
+refreshed with every daslang release: ``dasllama-server-darwin-arm64.zip``
+(macOS, Apple silicon), ``dasllama-server-windows-x64.zip``,
+``dasllama-server-linux-x86_64.tar.gz`` and ``dasllama-server-linux-arm64.tar.gz``
+(the Linux bundles need glibc 2.35 or newer - Debian 12, Ubuntu 22.04 and
+later - plus the system OpenSSL 3 and ``curl``; the others carry their own
+OpenSSL).  Unpack it and start the supervisor beside the server - ``watchdog``
+(``watchdog.exe``), or on macOS the ``dasllama-server.app`` itself, whose
+launcher is the watchdog; the server binary beside it is
+``dasllama-server.exe`` on Linux and Windows alike.  The watchdog keeps the
+server up, puts the dasllama mark in the notification area, and a click on it
+opens the control page at ``http://127.0.0.1:8080/``.  With no model configured
+the server starts in setup mode: pick a model from the catalog, it downloads
+into ``~/.dasllama/models``, and *serve this model* restarts into it.
+
+The exe is a fat build (``daspkg release --fat``): plain code for the
+platform's baseline CPU class - ``x86-avx2`` on x86, ``arm-neon`` on arm64 -
+with one clone of every ``[tune]`` kernel per class the engine ships a profile
+for, picked from cpuid at start; on a Mac the Metal kernel choices are raced
+once at the first start and kept beside the exe.  That is the good default.
+The advanced path is the JIT from a daslang SDK, tuned on the box itself - the
+command below, or a ``daspkg release`` of the package run on that box: every
+kernel is raced on your own hardware instead of picked from a class profile.
+The bundles are not code-signed: on macOS drag the app out of Downloads with
+the Finder first (an app started from the download folder runs from a
+read-only copy), then allow it once under Privacy & Security or clear the
+flag with ``xattr -dr com.apple.quarantine dasllama-server.app``; Windows
+SmartScreen asks once.
+
+Run from the source tree
+========================
+
+Run under ``-jit`` --- the interpreter is refused, it is far too slow for inference::
 
    bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> \
        [--port 8080] [--quant q8] [--asr <asr.bin>] [--mmproj <mmproj.gguf>] \

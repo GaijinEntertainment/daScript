@@ -7,6 +7,7 @@ require daslib/json_boost
 require daslib/strings_boost
 require ../../utils/watchdog/watchdog.das
 require ../stddlg/_tray_rig.das
+require stbimage   // stbi_write_png_to_memory - the crafted icon fixtures
 
 // argv[0] is the daslang running dastest; the supervised "program" is that binary running the
 // fixture, so program mode and script mode both spawn a real daslang child. Absolute, because a
@@ -266,11 +267,15 @@ def tray_stop_file(root : string) : string {
     return path_join(root, "stop")
 }
 
+// the dasllama mark rides along as the icon file, by a path relative to --cwd, the way a bundle's
+// watchdog.json names it
 def spawn_tray_watchdog(root, url, mode : string; env : array<string>) : process {
     let state_dir = path_join(root, "state")
     mkdir(state_dir)
+    var copy_err = ""
+    copy_file(path_join(get_das_root(), "utils/dasllama-server/tray.ico"), path_join(root, "tray.ico"), true, copy_err)
     var argv <- [das_exe(), "-dasroot", get_das_root(), path_join(get_das_root(), "utils/watchdog/main.das"), "--",
-        "--tray", "--tray-url", url, "--program", das_exe(), "--name", "wdtray", "--cwd", root,
+        "--tray", "--tray-url", url, "--tray-icon", "tray.ico", "--program", das_exe(), "--name", "wdtray", "--cwd", root,
         "--no-health", "--stop-file", tray_stop_file(root), "--stable-seconds", "0.1", "--max-restart-delay", "0.5", "--"]
     argv |> push_from(child_args(state_dir, mode))
     return unsafe(spawn_process(argv, root, env))
@@ -462,6 +467,7 @@ def test_tray_supervision_completes(t : T?) {
             t |> equal(count_event(events, "crash"), 1)
             t |> equal(count_event(events, "watchdog_stopped"), 1)
             t |> equal(count_event(events, "tray_started") + count_event(events, "tray_unavailable"), 1, "the icon came up or said why not: {event_names(events)}")
+            t |> equal(count_event(events, "tray_icon_unavailable"), 0, "the mark named relative to --cwd loaded: {event_names(events)}")
         }
     }
 }
@@ -531,7 +537,7 @@ def test_config_layering(t : T?) {
 }
 
 [test]
-def test_discovery(t : T?) {
+def test_discovery(t : T?) {   // nolint:STYLE038 — one layout fixture per arm, each a straight list of assertions
     t |> run("main.das beside bin/Release/daslang means script mode; two exes are ambiguous; nothing is an error") @(t : T?) {
         let root = make_temp(t, "wd discover ")
         if (empty(root)) return
@@ -562,14 +568,245 @@ def test_discovery(t : T?) {
         let ambiguous <- resolve_config([], root)
         t |> success(find(ambiguous.error, "2 executables") >= 0, "two exes are refused: {ambiguous.error}")
         remove(path_join(root, "two.exe"))
+        fwrite(path_join(root, "watchdog.exe"), "")
+        mkdir(path_join(root, "dir.exe"))
         let program_mode <- resolve_config([], root)
         t |> equal(program_mode.error, "")
-        t |> equal(program_mode.cfg.name, "one", "an executable names itself")
+        t |> equal(program_mode.cfg.name, "one", "an executable names itself; the watchdog's own exe and a directory named .exe are never candidates")
         remove(path_join(root, "one.exe"))
+        remove(path_join(root, "watchdog.exe"))
+        rmdir_rec_result(path_join(root, "dir.exe"))
+        fwrite(path_join(root, "main.das"), "")
+        let script_only <- resolve_config([], root)
+        t |> success(find(script_only.error, "no daslang") >= 0, "main.das with no daslang in reach is refused, never traded for a program: {script_only.error}")
+        remove(path_join(root, "main.das"))
         let nothing <- resolve_config([], root)
         t |> success(find(nothing.error, "nothing to supervise") >= 0, "an empty directory is an error: {nothing.error}")
         let cleanup = rmdir_rec_result(root)
         t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+    t |> run("a daspkg bundle on a Unix layout: the extensionless exe beside the watchdog, its config, its assets and a README") @(t : T?) {
+        let root = make_temp(t, "wd bundle ")
+        if (empty(root)) return
+        let windows = get_platform_name() == "windows"
+        for (exe in ["dasllama-server", "watchdog"]) {
+            fwrite(path_join(root, exe), "")
+            if (!windows) {
+                var out = ""
+                t |> equal(0, run_and_capture(["chmod", "755", path_join(root, exe)], out, 10.0), "chmod runs")
+            }
+        }
+        fwrite(path_join(root, "watchdog.json"), "\{\"no_health\": true\}")
+        fwrite(path_join(root, "control.html"), "")
+        fwrite(path_join(root, "README"), "")
+        fwrite(path_join(root, "run.sh"), "#!/bin/sh\n")
+        if (!windows) {
+            var out = ""
+            t |> equal(0, run_and_capture(["chmod", "755", path_join(root, "run.sh")], out, 10.0), "chmod runs")
+        }
+        fwrite(path_join(root, ".daspkg_release.manifest"), "")
+        mkdir(path_join(root, "modules"))
+        let bundle <- resolve_config([], root)
+        if (windows) {
+            t |> success(find(bundle.error, "nothing to supervise") >= 0, "an extensionless file is not a program on Windows: {bundle.error}")
+        } else {
+            t |> equal(bundle.error, "")
+            t |> success(ends_with(bundle.cfg.program, "dasllama-server"), "the extensionless executable is the program; the README and the run.sh beside it are not: {bundle.cfg.program}")
+            t |> equal(bundle.cfg.name, "dasllama-server", "and names the supervision")
+            fwrite(path_join(root, "dasllama-bench"), "")
+            var out = ""
+            t |> equal(0, run_and_capture(["chmod", "755", path_join(root, "dasllama-bench")], out, 10.0), "chmod runs")
+            let two <- resolve_config([], root)
+            t |> success(find(two.error, "2 executables") >= 0, "two extensionless executables are ambiguous: {two.error}")
+            remove(path_join(root, "dasllama-bench"))
+            remove(path_join(root, "dasllama-server"))
+            fwrite(path_join(root, "dasllama-server.exe"), "")
+            let flat <- resolve_config([], root)
+            t |> equal(flat.error, "")
+            t |> success(ends_with(flat.cfg.program, "dasllama-server.exe"), "the Linux flat bundle: the .exe beside an extensionless watchdog is the program: {flat.cfg.program}")
+            t |> equal(flat.cfg.name, "dasllama-server", "named without the suffix")
+        }
+        let cleanup = rmdir_rec_result(root)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
+def test_tray_icon(t : T?) {
+    t |> run("the dasllama mark's ICO decodes to its largest PNG frame, and the badge lands on it") @(t : T?) {
+        let path = path_join(get_das_root(), "utils/dasllama-server/tray.ico")
+        var icon <- tray_icon_load(path)
+        t |> equal(icon.error, "", "the ICO loads")
+        t |> equal(icon.side, 48, "the largest frame within {TRAY_ICON_MAX} px is the 48")
+        t |> equal(length(icon.rgba), 48 * 48 * 4)
+        var opaque = 0
+        for (i in range(48 * 48)) {
+            if (icon.rgba[i * 4 + 3] == 255u8) {
+                opaque++
+            }
+        }
+        t |> success(opaque > 0 && opaque < 48 * 48, "the mark has opaque pixels and transparent ones: {opaque}")
+        var red := icon.rgba
+        tray_badge(red, 48, "red")
+        t |> success(pixel(red, 48, 36, 36) == int4(217, 109, 79, 255), "the square sits at the lower right: {pixel(red, 48, 36, 36)}")
+        t |> equal(pixel(red, 48, 25, 36).w, 0, "the moat clears the mark around the badge")
+        t |> success(pixel(red, 48, 10, 10) == pixel(icon.rgba, 48, 10, 10), "the mark stays outside the moat")
+        var base := icon.rgba
+        tray_badge(base, 48, "base")
+        var changed = 0
+        for (b, o in base, icon.rgba) {
+            if (b != o) {
+                changed++
+            }
+        }
+        t |> equal(changed, 0, "the base badge leaves the mark alone")
+    }
+    t |> run("a file that is not an image, and a file that is not there, name the reason") @(t : T?) {
+        let text <- tray_icon_load(path_join(get_das_root(), "utils/dasllama-server/watchdog.json"))
+        t |> success(find(text.error, "neither a PNG nor an ICO") >= 0, "{text.error}")
+        t |> equal(text.side, 0)
+        let missing <- tray_icon_load(path_join(get_das_root(), "utils/dasllama-server/no-such.ico"))
+        t |> success(find(missing.error, "cannot read") >= 0, "{missing.error}")
+    }
+}
+
+// crafted icon files: a solid PNG of any size, and an ICO directory around any payloads
+def png_bytes(w, h : int) : array<uint8> {
+    var px : array<uint8>
+    px |> resize(w * h * 4)
+    for (i in range(w * h)) {
+        px[i * 4] = 200u8
+        px[i * 4 + 1] = 40u8
+        px[i * 4 + 2] = 40u8
+        px[i * 4 + 3] = 255u8
+    }
+    var out : array<uint8>
+    stbi_write_png_to_memory(w, h, 4, unsafe(addr(px[0])), w * 4) $(data : array<uint8>#) {
+        out := data
+    }
+    return <- out
+}
+
+def put_u16(var b : array<uint8>; v : int) {
+    b |> push(uint8(v & 0xff))
+    b |> push(uint8((v >> 8) & 0xff))
+}
+
+def put_u32(var b : array<uint8>; v : int) {
+    put_u16(b, v & 0xffff)
+    put_u16(b, (v >> 16) & 0xffff)
+}
+
+struct IcoFrame {
+    w : int
+    h : int
+    payload : array<uint8>
+}
+
+//! a directory entry per frame - the declared side, or 256 as the 0 byte - then the payloads
+def ico_bytes(frames : array<IcoFrame>) : array<uint8> {
+    var b : array<uint8>
+    b |> reserve(6 + 16 * length(frames))
+    put_u16(b, 0)
+    put_u16(b, 1)
+    put_u16(b, length(frames))
+    var offset = 6 + 16 * length(frames)
+    for (f in frames) {
+        b |> push(uint8(f.w == 256 ? 0 : f.w))
+        b |> push(uint8(f.h == 256 ? 0 : f.h))
+        b |> push(0u8)
+        b |> push(0u8)
+        put_u16(b, 1)
+        put_u16(b, 32)
+        put_u32(b, length(f.payload))
+        put_u32(b, offset)
+        offset += length(f.payload)
+    }
+    for (f in frames) {
+        b |> push_from(f.payload)
+    }
+    return <- b
+}
+
+//! one directory entry with the byte range spelled by hand
+def ico_raw_entry(w, h, len, at : int) : array<uint8> {
+    var b : array<uint8>
+    put_u16(b, 0)
+    put_u16(b, 1)
+    put_u16(b, 1)
+    b |> push(uint8(w))
+    b |> push(uint8(h))
+    b |> push(0u8)
+    b |> push(0u8)
+    put_u16(b, 1)
+    put_u16(b, 32)
+    put_u32(b, len)
+    put_u32(b, at)
+    return <- b
+}
+
+def write_bytes(path : string; bytes : array<uint8>) {
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            fwrite(f, bytes)
+        }
+    }
+}
+
+def load_crafted(dir, name : string; bytes : array<uint8>) : TrayIcon {
+    let path = path_join(dir, name)
+    write_bytes(path, bytes)
+    return <- tray_icon_load(path)
+}
+
+[test]
+def test_tray_icon_refusals(t : T?) {
+    t |> run("every malformed or oversize icon file is refused by name, never mapped or decoded blind") @(tt : T?) {
+        let dir = make_temp(tt, "wd icons ")
+        if (empty(dir)) return
+        let overflow <- load_crafted(dir, "overflow.ico", ico_raw_entry(32, 32, 1073741824, 1073741824))
+        tt |> success(find(overflow.error, "lies outside the file") >= 0, "a frame whose offset and size sum past int is out of range, not in: {overflow.error}")
+        var truncated : array<uint8>
+        put_u16(truncated, 0)
+        put_u16(truncated, 1)
+        put_u16(truncated, 1)
+        let short <- load_crafted(dir, "short.ico", truncated)
+        tt |> success(find(short.error, "truncated") >= 0, "a directory that ends before its entry: {short.error}")
+        var raw : array<uint8>
+        raw |> resize(40)
+        let bmp <- load_crafted(dir, "bmp.ico", ico_bytes([IcoFrame(w = 16, h = 16, payload <- raw)]))
+        tt |> success(find(bmp.error, "PNG") >= 0, "a frame that is not PNG-compressed: {bmp.error}")
+        let lying <- load_crafted(dir, "lying.ico", ico_bytes([IcoFrame(w = 32, h = 32, payload <- png_bytes(300, 300))]))
+        tt |> success(find(lying.error, "decoded") >= 0, "the directory byte says 32 but the pixels say 300 - the pixels rule: {lying.error}")
+        let big <- load_crafted(dir, "big.png", png_bytes(300, 300))
+        tt |> success(find(big.error, "up to {TRAY_ICON_MAX}") >= 0, "a PNG past the cap: {big.error}")
+        let wide <- load_crafted(dir, "wide.png", png_bytes(40, 20))
+        tt |> success(find(wide.error, "square") >= 0, "a PNG that is not square: {wide.error}")
+        let folder <- tray_icon_load(dir)
+        tt |> success(find(folder.error, "not a regular file") >= 0, "a directory is refused before fopen would succeed on it: {folder.error}")
+        var fat : array<uint8>
+        fat |> resize(int(TRAY_ICON_FILE_MAX) + 1)
+        fat[0] = 0x89u8
+        let huge <- load_crafted(dir, "huge.png", fat)
+        tt |> success(find(huge.error, "at most") >= 0, "a file past the size cap is refused before it is read: {huge.error}")
+        let cleanup = rmdir_rec_result(dir)
+        tt |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+    t |> run("a PNG and an ICO carrying the same pixels are both accepted, and the largest frame wins") @(tt : T?) {
+        let dir = make_temp(tt, "wd icons ok ")
+        if (empty(dir)) return
+        let plain <- load_crafted(dir, "plain.png", png_bytes(24, 24))
+        tt |> equal(plain.error, "")
+        tt |> equal(plain.side, 24, "a bare PNG loads at its own size")
+        tt |> equal(length(plain.rgba), 24 * 24 * 4)
+        let full <- load_crafted(dir, "full.ico", ico_bytes([IcoFrame(w = 256, h = 256, payload <- png_bytes(256, 256))]))
+        tt |> equal(full.error, "")
+        tt |> equal(full.side, 256, "a 256 px ICO frame (the 0 byte) is within the cap, like the same PNG")
+        let two <- load_crafted(dir, "two.ico", ico_bytes([IcoFrame(w = 16, h = 16, payload <- png_bytes(16, 16)), IcoFrame(w = 48, h = 48, payload <- png_bytes(48, 48))]))
+        tt |> equal(two.error, "")
+        tt |> equal(two.side, 48, "the larger of two frames is the one shown")
+        let cleanup = rmdir_rec_result(dir)
+        tt |> success(cleanup is value && cleanup as value, "temp dir removed")
     }
 }
 

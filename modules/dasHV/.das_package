@@ -1,0 +1,24 @@
+options gen2
+
+require daslib/daspkg
+require daslib/fio
+
+[export]
+def package() {
+    package_name("dasHV")
+}
+
+//! A `daspkg release` bundle of a program that requires dasHV carries the OpenSSL runtime the
+//! module links against, where that runtime is a shared library beside daslang: the Windows
+//! build with vcpkg OpenSSL lands `libssl-3-x64.dll` + `libcrypto-3-x64.dll` in `bin/`, and a
+//! build that linked OpenSSL statically (the from-source MSVC build) has nothing to ship.
+[export]
+def release() {
+    if (get_platform_name() == "windows") {
+        for (dll in ["libssl-3-x64.dll", "libcrypto-3-x64.dll"]) {
+            if (fexist(path_join(get_das_root(), "bin/{dll}"))) {
+                release_include_dll(dll)
+            }
+        }
+    }
+}

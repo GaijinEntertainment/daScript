@@ -12,6 +12,15 @@ or the nightly cron.**
 
 **A per-PR check the diff adds fails the lane when it finds a defect.**
 
+**A workflow the diff adds declares `timeout-minutes` on every job, a `concurrency` group, and
+`permissions` naming only the scopes its own steps use.** A job with no timeout holds its
+runners until GitHub's six-hour ceiling on one hung step.
+
+**A workflow the diff adds gets its row in sec."What CI runs (per-PR + nightly)" of
+`skills/internal/preflight.md` (repo root) in the same change - its trigger, and its local
+mirror or the words that it has none.** A lane the table does not list is one nobody mirrors
+before a push.
+
 **A per-PR check leaves the per-PR path only to the nightly cron (`github.event_name ==
 'schedule' || github.event_name == 'workflow_dispatch'`), and the diff either names the
 preflight gate - a check `preflight` runs locally before a push - that keeps it per PR

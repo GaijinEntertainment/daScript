@@ -15,9 +15,11 @@ wherever it lives, answers to this folder's `benchmarks/REVIEW.md` in addition t
 folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
-code comment, or a PR body - or adds or changes a serving path, one that serves a weight
-format, modality, family, or backend, or changes what a measured or served run with no flags and
-no environment overrides computes, applies `REVIEW_MEASUREMENT.md`.**
+code comment, or a PR body - or adds a serving path or moves an existing one onto other code,
+or changes what a measured or served run with no flags and no environment overrides computes,
+applies `REVIEW_MEASUREMENT.md`.** A serving path is the end-to-end route a run takes from
+prompt to tokens; its compile tier (interpreted, JIT, AOT) and its cross target (a build for
+another platform) are part of it.
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -179,9 +181,9 @@ depend on - what it calls, types, requires, or parses (facade functions, CLI fla
 knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
 rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
 
-**A diff that makes a statement in an `ARCHITECTURE_*.md` companion, a module-root document, or
-a `//!` docstring false updates it in the same change** - a section no `[arch]` cites is the
-reviewer's alone.
+**A diff that makes a statement in an `ARCHITECTURE_*.md` companion, a module-root document, a
+`//!` docstring, or a document outside this folder whose own checklist routed this diff here,
+false updates it in the same change** - a section no `[arch]` cites is the reviewer's alone.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's

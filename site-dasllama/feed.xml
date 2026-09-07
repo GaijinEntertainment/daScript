@@ -4,8 +4,20 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-09-05T00:00:00Z</updated>
+<updated>2026-09-07T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>dasllama-server is a download now - one archive per platform.</title>
+<link href="https://dasllama.io/#n-2026-09-07-download-dasllama-server"/>
+<id>https://dasllama.io/#n-2026-09-07-download-dasllama-server</id>
+<updated>2026-09-07T00:00:00Z</updated>
+<content type="html">&lt;p&gt;The OpenAI-compatible server ships as a standalone bundle for macOS (Apple silicon), Windows
+x64, Linux x86_64 and Linux arm64, from the rolling
+&lt;a href=&quot;https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server&quot;&gt;dasllama-server release&lt;/a&gt;
+on GitHub. Unpack it, start the watchdog (on a Mac, the app), and open the control page at
+&lt;code&gt;127.0.0.1:8080&lt;/code&gt;. The daslang SDK&#x27;s &lt;code&gt;bin/daslang -jit&lt;/code&gt; runs the same server and tunes every
+kernel on your own box for optimal performance.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>dasLLAMA runs in the browser - the storyteller, compiled to wasm64, opens the new examples page.</title>
 <link href="https://dasllama.io/#n-2026-09-05-storyteller-in-the-browser"/>

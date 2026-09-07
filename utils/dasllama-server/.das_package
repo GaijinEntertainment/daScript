@@ -12,10 +12,8 @@ def package() {
 def release() {
     release_main("main.das")
     release_name("dasllama-server")
-    // JIT-only: per-box [tune]/[llvm_code] kernels + a shared-module [init] global (the vulkan
-    // GPU-tier arm probe) that a baked -exe mis-wires. daspkg release refuses; deploy via -jit.
-    release_requires_jit()
     release_include_tool("watchdog")
+    release_launcher("watchdog")   // the macOS .app opens the supervisor, which starts the server
     release_include("watchdog.json")
     release_include("control.html")
     release_include("tray.ico")   // the forge dasllama mark, served as the control page's favicon

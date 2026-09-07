@@ -50,6 +50,7 @@ struct PackageReleaseInfo {
     include_symbols : bool
     external_files : array<string>
     tools : array<string>
+    launcher : string
 }
 
 
@@ -163,6 +164,7 @@ def run_das_package_release(das_package_path : string; var info : PackageRelease
             for (tool in src.tools) {
                 info.tools |> push(clone_string(tool))
             }
+            info.launcher = clone_string(src.launcher)
         }
     }
     return ok

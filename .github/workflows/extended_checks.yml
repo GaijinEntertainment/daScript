@@ -357,7 +357,7 @@ jobs:
         # daslang-live which extended_checks doesn't build.
         cmake --build ./build --config Release --target \
           dasModuleGlfw dasModuleLiveHost dasModuleHV dasModuleAudio \
-          dasModulePUGIXML dasModuleStbImage --parallel
+          dasModulePUGIXML dasModuleStbImage watchdog --parallel
         case "${{ matrix.target }}" in
           windows)
             pwsh examples/games/sequence/ci_smoke_test.ps1 "$(pwd)"

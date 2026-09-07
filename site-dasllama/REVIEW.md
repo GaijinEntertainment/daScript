@@ -3,8 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`. Planned work: `plans/dasllama_io_site.md`.
 
-In this checklist "a page" means every served `.html` page under this directory, the generated
-news region inside index.html included.
+In this checklist "a page" means a served `.html` file under this directory, the generated news
+region inside index.html, `feed.xml`, and `sitemap.xml`. Publish time is the deploy that
+follows the merge of the change under review.
 
 **A shell command, flag, or output line shown on a page is a defect unless the command runs
 verbatim and produces the result the page shows.**
@@ -18,8 +19,9 @@ that run: the live endpoint the page renders it from, the checked-in measurement
 comment or prose clause names, the box and date and what was measured, or the word
 placeholder.
 
-**A comparative superiority claim made in words rather than as side-by-side figures, on any
-page, is a defect** - the arithmetic a reader does over two figures is not the page's claim.
+**A claim on any page that one engine, build, or way of running beats another on anything a run
+measures - speed, error rate, footprint, size - made in words rather than as side-by-side
+figures, is a defect** - the arithmetic a reader does over two figures is not the page's claim.
 
 **Copy or rendering that lets a row with no reference engine's figure imply parity is a
 defect - an empty ratio cell means the comparison was never run.**
@@ -47,8 +49,12 @@ that tool's current code, and a claim about what a page here renders against the
 and `files/dasllama-io.js`.
 
 **A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.** Shipped
-means a reader can have it now: the code the entry describes is merged to this repository's
-`master`, and any artifact the entry points a reader at is downloadable from where it points.
+means a reader can have it at publish time: the code the entry describes is merged to this
+repository's `master`, and any artifact the entry points a reader at is downloadable from where
+it points.
+
+**A PR that adds a `_news/*.md` or `_stories/*.md` entry names, in the PR body, the URL it
+fetched for each artifact the entry points at and that the fetch returned the artifact.**
 
 **A figure in a `_stories/*.md` entry that names no date and build sha for the run it came
 from - in the entry's own text or its `<!-- figures: ... -->` comment - is a defect** - a
@@ -59,11 +65,12 @@ context-correct escape is a defect: `esc()` (which escapes `< > & " '`) for text
 quoted-attribute values, `Number(...)` for anything numeric, and `safeApiHref()` (an
 `^/api/...` allow-list) for anything landing in `href`/`src` or fed to `fetch`.**
 
-**Weakening `test_metadata.py`'s per-page assertions - the test that fails a page without a
-`<title>`, a meta description, the OpenGraph tags, or the Atom `<link>` - is a defect.**
+**Weakening `test_metadata.py`'s per-page assertions - the test that fails an `.html` page
+without a `<title>`, a meta description, the OpenGraph tags, or the Atom `<link>` - is a
+defect.**
 
-**Weakening `REVIEW.das`'s page census - the gate that reports a served page, or the `stories/`
+**Weakening `REVIEW.das`'s page census - the gate that reports a served file, or the `stories/`
 directory, missing from the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root),
-from `build_news.py`'s sitemap list or `sitemap.xml`, or from `test_metadata.py`'s page list -
-is a defect.** Local preview serves the tree directly, so no miss shows there: the page deploys
+or an `.html` page missing from `build_news.py`'s sitemap list or `sitemap.xml` or from
+`test_metadata.py`'s page list - is a defect.** Local preview serves the tree directly, so no miss shows there: the page deploys
 unlisted, uncrawled, or unchecked.

@@ -680,11 +680,11 @@ def parse_args() {
     g_args_parsed = true
     g_args_ready = false
     g_exit_code = 0
-    // JIT is mandatory: the kernels are per-box JIT-tuned [llvm_code], the tune framework needs
-    // a live JIT, and a baked standalone -exe additionally mis-wires shared-module [init] globals
-    // (the vulkan GPU-tier arm probe bakes null -> crash). There is no correct non-JIT path here.
-    if (!jit_enabled()) {
-        to_log(LOG_ERROR, "dasllama-server requires the JIT — run: daslang -jit main.das -- ... (a baked -exe is unsupported)\n")
+    // compiled code only: the kernels are [llvm_code] - JIT-tuned on this box under -jit, or the
+    // baked per-class clones of a daspkg release exe. The interpreter would run them far too
+    // slowly to serve, so it is refused rather than run.
+    if (!jit_enabled() && !is_standalone_exe()) {
+        to_log(LOG_ERROR, "dasllama-server needs compiled kernels — run: daslang -jit main.das -- ... or the released dasllama-server executable\n")
         g_exit_code = 1
         request_exit()
         return
@@ -856,8 +856,13 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     log_tune_status("dasllama-server")
     // a fresh local tune that has not been shared: submit now (always) or surface the offer
     // (ask — the watchdog balloon + the control page's exchange card); quiet otherwise
-    static_if (typeinfo module_exists(dasllama_exchange)) {
-        exchange_boot_submit_check(exchange_policy_from_config(g_cfg.config))
+    static_if (typeinfo module_exists(llvm_tune)) {
+        // a fat release has no tune of its own to offer - its kernels are the shipped class clones
+        if (!tune_fat_built()) {
+            static_if (typeinfo module_exists(dasllama_exchange)) {
+                exchange_boot_submit_check(exchange_policy_from_config(g_cfg.config))
+            }
+        }
     }
     // GPU backend lands BEFORE the load: the metal mode pins the row-major backend the GPU
     // kernels read, and the vulkan tier want must be armed before the load walk uploads stacks
@@ -1075,7 +1080,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     set_setup_mode(g_setup_mode)
     // the bench button runs OUR bench as a child daslang process (lcpp_bench.das) — a
-    // standalone-exe deployment has no script runner, so the button stays disabled there
+    // standalone-exe deployment has no script runner, so /bench and /bake refuse there
     var daslang_bin = ""
     if (!is_standalone_exe()) {
         for (a in get_command_line_arguments()) {   // argv[0] = the running daslang binary (locked temp — no delete)
@@ -1111,8 +1116,9 @@ def shutdown() {
     logger_flush()
 }
 
-// missing = "restart": an untuned first start writes the tune sidecar and returns 3 before
-// parse_args/init can create the JobQue, load the model, or bind the port. The watchdog relaunches.
+// missing = "restart": under -jit an untuned first start writes the tune sidecar and returns 3
+// before parse_args/init can create the JobQue, load the model, or bind the port; the watchdog
+// relaunches. A standalone exe carries no policy rail - a fat release serves its baked clones.
 [export, tune_policy(missing = "restart")]
 def main : int {
     parse_args()

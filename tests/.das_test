@@ -13,12 +13,12 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("dashv")
         return
     }
-    // the supervisor polls health over dasHV's client and shows its tray through dasStdDlg; its
-    // tests are no_aot (they spawn and time children), and the utils/watchdog module they
-    // require is not in the AOT set, so the AOT sweep would still fail the link on that module -
-    // interp and JIT only
+    // the supervisor polls health over dasHV's client, shows its tray through dasStdDlg and
+    // decodes the tray icon file through dasStbImage; its tests are no_aot (they spawn and time
+    // children), and the utils/watchdog module they require is not in the AOT set, so the AOT
+    // sweep would still fail the link on that module - interp and JIT only
     if (folder_name == "watchdog") {
-        *result = has_module("dashv") && has_module("stddlg")
+        *result = has_module("dashv") && has_module("stddlg") && has_module("stbimage")
         if (*result) {
             let args <- get_command_line_arguments()
             for (arg in args) {

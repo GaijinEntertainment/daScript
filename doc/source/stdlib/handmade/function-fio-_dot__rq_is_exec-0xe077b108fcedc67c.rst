@@ -1,0 +1,1 @@
+Returns true if the file status carries an execute permission - any of the owner, group or other execute bits on POSIX; on Windows, an executable extension (``.exe``, ``.cmd``, ``.bat``, ``.com``). A directory reports true on both, so a test for a program pairs it with ``is_reg``.

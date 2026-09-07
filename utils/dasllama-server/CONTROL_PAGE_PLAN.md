@@ -249,8 +249,10 @@ scheduler 12/12, server 17/17 live (post-work stats assertions), page via mock+p
 
 ## Deferred - recorded gates
 
-- **V2 (GATED on the 0.6.4 release):** the 30-second try-it - copy-paste serve + demo
-  commands on the page/README. Needs **shippable daslang for `[tune]`** (per-box tuning from a
-  release binary). Add when 0.6.4 is out.
+- **V2 - gate lifted:** the 30-second try-it is the README's *Get it* section - download the
+  fat bundle for the platform, start the watchdog, pick a model on the page. The gate was a
+  shippable `[tune]` story from a release binary; `daspkg release --fat` is that story. What is
+  still open: the same try-it on the control page itself, and the per-box tune from a release
+  binary (today the fat clones serve; a per-box mint needs the SDK).
 - **V3 (if ever):** multi-LLM serving (jobque = one model at a time today; easier over
   `.dlim`); per-model stats restructure rides it.

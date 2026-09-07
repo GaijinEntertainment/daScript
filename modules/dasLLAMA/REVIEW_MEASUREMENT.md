@@ -3,9 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `PERF_LEDGER.md`.
 
-Figure rules here bind the surfaces this module owns - its code comments, the PR body of a diff
-under it, and a checked-in doc under this module. A number on a served page answers to
-`site/REVIEW.md` or `site-dasllama/REVIEW.md` (repo root) instead.
+Figure rules here bind every surface the diff under review writes a figure on - this module's
+code comments and checked-in docs, the PR body, and any file another checklist routed to this
+one. A number on a served page answers to `site/REVIEW.md` or `site-dasllama/REVIEW.md` (repo
+root) instead.
 
 **A `PERF_LEDGER.md` entry never states a tok/s figure or a turn wall that the `-jit` script
 produced - a `-jit` A/B pair enters as its ratio, with the arms' absolute rates left in the
