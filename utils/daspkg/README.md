@@ -1,5 +1,8 @@
 # daspkg - daslang package manager
 
+daspkg ships in the SDK as a prebuilt exe - the `DAS_UTILS_SHIPPED_EXES` entry in `utils/CMakeLists.txt`
+(repo root); `utils/REVIEW.das` reads this line as the record of that decision.
+
 Package manager for [daslang](https://daslang.io/). Installs, updates, builds, and manages daslang modules from git repositories or a central package index.
 
 ## Quick start

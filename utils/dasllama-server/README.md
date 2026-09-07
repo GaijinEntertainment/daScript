@@ -12,7 +12,7 @@ reach into engine internals, the facade is complete.
 
 ## Get it
 
-The server ships as a standalone download - no daslang install, no Python - from the rolling
+The server ships as a standalone download from the rolling
 `dasllama-server` release, refreshed with every daslang release:
 <https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server>
 
@@ -277,7 +277,7 @@ server first; Windows locks the DLLs.
 | `POST` | `/exchange/apply` | `{"sha": ...}`: download + validate (content sha, schema, `DASLLAMA_RELEASE`) + adopt that sidecar, then drain and exit **4** so the relaunch stamps its winners |
 | `POST` | `/exchange/submit` | Privacy-strip and submit this box's own tune to the exchange (refuses exchange-sourced or foreign-box sidecars) |
 | `POST` | `/exchange/retune` | Arm a local re-tune: removes the sidecar, skips the exchange once, restarts - the next boot races this box (~12 min, quiet machine) |
-| `POST` | `/exchange/consent` | `{"accept": true\|false}`: record the first-contact choice (the GDPR gate below); replies `{ok, accepted, restarting?}`. Accept on an untuned/stale box drains and exits **4** so the relaunch runs the lookup |
+| `POST` | `/exchange/consent` | `{"accept": true\|false}`: record the first-contact choice; replies `{ok, accepted, restarting?}`. Accept on an untuned/stale box drains and exits **4** so the relaunch runs the lookup |
 | `POST` | `/gc` | Schedule a validated collection at the next lifecycle safe point; concurrent requests coalesce |
 | `POST` | `/shutdown` | Stop admitting new LLM/ASR work, drain accepted work, then exit |
 
@@ -287,30 +287,16 @@ authoritative TOML`.
 
 ### The sidecar exchange {#exchange-policy}
 
-The sidecar exchange rides three config-only keys (no CLI flags - one code path). **The
-exchange is closed: both policies default to off, and only an explicit key turns them on** -
-a box its shipped class profile covers stamps its kernels at compile time and never needed the
-exchange, and the residue races locally. `exchange_accept = verified | any | off` (default
-`off`; `verified` - at an untuned boot a verified match downloads and applies instead of racing;
-unverified NEVER auto-applies), `exchange_submit = ask | always | never` (default `never`;
-`ask` - a fresh local tune surfaces as an offer on the control page and the watchdog balloon;
-`always` shares it automatically), and `exchange_url` (baked default `https://dasllama.io`).
-`DASLLAMA_EXCHANGE_URL` / `DASLLAMA_EXCHANGE_ACCEPT` env override for tests and one-shot
-watchdog relaunches. Lookup failure is never fatal - the boot falls through to the local tuner.
-Every `/exchange*` route resolves its policy from `g_config_save_path`, the path a `POST /config`
-writes. That path covers every start shape - `--config`, auto-discovered, and config-less, where
-the file may not exist yet and the baked defaults stand.
-The exchange client rides the tune framework, so a build without dasLLVM carries none of it: the
-boot resolver and submit check are never registered and every `/exchange*` route answers 404.
+Closed by default: the three config-only keys `exchange_accept` (`verified | any | off`, default
+`off`), `exchange_submit` (`ask | always | never`, default `never`) and `exchange_url` are the
+only way in, and every `/exchange*` route resolves them from `g_config_save_path`, the path a
+`POST /config` writes, whether or not that file exists yet. The client rides the tune framework:
+a build without dasLLVM registers none of it and every `/exchange*` route answers 404, and a fat
+release refuses the levers (its kernels are the shipped class clones).
 
-**First-contact consent (GDPR):** nothing is sent to the exchange until a choice is
-expressed. Setting any `exchange_*` key (TOML or env) IS that choice; on the zero-config
-path the recorded choice lives in `<app>.tune.consent` beside the sidecar
-(`accepted`/`declined`, one word). With no recorded choice: an interactive terminal asks
-inline (Enter = Accept); a supervised boot emits `@sidecar consent state=needed`, and this
-page's exchange card carries the banner (`POST /exchange/consent`). Until one of those
-answers, the box tunes locally
-and no request leaves. The `gpu` key (`auto | off | metal | metal-required | vulkan`) is the first-class
+### The gpu key
+
+The `gpu` key (`auto | off | metal | metal-required | vulkan`) is the first-class
 backend selector, and **defaults-first: unset (with no legacy `--metal` flag) behaves as
 `auto`** - the boot probes the box and serves on the best detected backend (the Metal rails
 where the box has them, else the Vulkan tier when a device answers, else the CPU), logging

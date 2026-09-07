@@ -30,8 +30,8 @@ facade is complete.
 Get it
 ======
 
-The server ships as a standalone download - no daslang install, no Python -
-from the rolling ``dasllama-server`` release,
+The server ships as a standalone download from the rolling
+``dasllama-server`` release,
 https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server,
 refreshed with every daslang release: ``dasllama-server-darwin-arm64.zip``
 (macOS, Apple silicon), ``dasllama-server-windows-x64.zip``,

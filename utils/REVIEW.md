@@ -25,8 +25,8 @@ walks, or rewriting a finding text so it no longer names what failed.**
 
 **A diff that drops a tool from `DAS_UTILS_SHIPPED_EXES` (`CMakeLists.txt`, beside this file)
 while keeping that tool's directory records the decision to stop shipping it in that tool's
-own `REVIEW.md`, wherever that directory is, in the same change** - `REVIEW.das` cannot see a
-removed entry.
+own `README.md`, wherever that directory is, in the same change** - `REVIEW.das` cannot see a
+removed entry, and it reads each shipped tool's `README.md` for the standing decision.
 
 **A diff that deletes a tool named in `DAS_UTILS_SHIPPED_EXES` outright removes its entry and
 leaves a comment line beside the list naming the removed exe, in the same change.** A tool the

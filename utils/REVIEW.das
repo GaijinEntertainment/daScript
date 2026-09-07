@@ -182,9 +182,9 @@ def private check_shipped_exes(externals : array<string>) {
             gate_finding("utils/CMakeLists.txt", "DAS_UTILS_SHIPPED_EXES entry {e} is a path — shipped exes are external-tool basenames, and utils/internal/ never ships")
             continue
         }
-        let review_md = e == "dastest" ? "dastest/REVIEW.md" : "utils/{e}/REVIEW.md"
-        if (!fexist(review_md) || find(fread(review_md), "DAS_UTILS_SHIPPED_EXES") < 0) {
-            gate_finding(review_md, "shipped exe {e}: its own REVIEW.md must record the DAS_UTILS_SHIPPED_EXES decision")
+        let readme_md = e == "dastest" ? "dastest/README.md" : "utils/{e}/README.md"
+        if (!fexist(readme_md) || find(fread(readme_md), "DAS_UTILS_SHIPPED_EXES") < 0) {
+            gate_finding(readme_md, "shipped exe {e}: its own README.md must record the DAS_UTILS_SHIPPED_EXES decision")
         }
         if (find(iclaude, "{e}.exe") < 0) {
             gate_finding("install/CLAUDE.md", "bin/ line does not name {e}.exe — shipped exes are listed there")

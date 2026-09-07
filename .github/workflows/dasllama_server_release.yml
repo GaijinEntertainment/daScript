@@ -217,6 +217,6 @@ jobs:
           gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
             || gh release create dasllama-server --repo "$GITHUB_REPOSITORY" --latest=false \
               --title "dasllama-server - standalone downloads (rolling)" \
-              --notes "The OpenAI-compatible dasLLAMA server as a standalone download per platform, no daslang install needed. Rolling: every asset is replaced in place when a daslang release is cut. Unpack, start watchdog (the .app on macOS), open http://127.0.0.1:8080/ - utils/dasllama-server/README.md." \
+              --notes "The OpenAI-compatible dasLLAMA server as a standalone download per platform. Rolling: every asset is replaced in place when a daslang release is cut. Unpack, start watchdog (the .app on macOS), open http://127.0.0.1:8080/ - utils/dasllama-server/README.md." \
             || gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null
           gh release upload dasllama-server --repo "$GITHUB_REPOSITORY" artifacts/* --clobber

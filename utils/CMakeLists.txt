@@ -187,8 +187,8 @@ add_dependencies(all_utils_exe dastest_exe)
 
 # Single-config generators only: UTIL_BIN_DIR embeds CMAKE_CFG_INTDIR on
 # multi-config, which install() cannot resolve — and release bundles are cut on
-# single-config (Ninja) lanes. Each tool's exe-or-not decision is recorded in
-# that tool's REVIEW.md.
+# single-config (Ninja) lanes. Each shipped tool's decision is recorded in that
+# tool's README.md, where utils/REVIEW.das reads it.
 if(NOT _DAS_UTILS_MULTI_CONFIG)
     set(DAS_UTILS_SHIPPED_EXES lint daspkg dascov detect-dupe das-fmt dastest)
     if(NOT DAS_SQLITE_DISABLED)

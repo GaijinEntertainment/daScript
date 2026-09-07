@@ -1,5 +1,8 @@
 # lint
 
+lint ships in the SDK as a prebuilt exe - the `DAS_UTILS_SHIPPED_EXES` entry in `utils/CMakeLists.txt`
+(repo root); `utils/REVIEW.das` reads this line as the record of that decision.
+
 The lint suite runner: compiles each target file and applies the rule modules
 (`daslib/perf_lint.das`, `daslib/style_lint.das`, `daslib/lint.das`) over its AST.
 

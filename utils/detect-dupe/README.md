@@ -1,5 +1,8 @@
 # detect-dupe - cross-file similar-function detector
 
+detect-dupe ships in the SDK as a prebuilt exe - the `DAS_UTILS_SHIPPED_EXES` entry in
+`utils/CMakeLists.txt` (repo root); `utils/REVIEW.das` reads this line as the record of that decision.
+
 Walks a directory tree of `.das` files, normalises each user function into
 an alpha-renamed token stream (identifiers, types, and literals all
 collapsed), and reports:

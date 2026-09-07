@@ -1,5 +1,9 @@
 # benchctl
 
+benchctl ships in the SDK as a prebuilt exe when sqlite is enabled - the `DAS_UTILS` and
+`DAS_UTILS_SHIPPED_EXES` entries in `utils/CMakeLists.txt` (repo root); `utils/REVIEW.das` reads this
+line as the record of that decision.
+
 A command-line tool for storing, querying, and comparing daslang benchmark results across commits.
 
 Can also be handy to do some incremental tests of performance by measuring the changes one after another (e.g. try algorithm 1, then compare it against algorithm 2 results).
