@@ -21,7 +21,9 @@ require strings
 
 // Storyteller. A tiny story model (Karpathy's stories15M, Q8) writes a children's story on
 // screen a few tokens per frame, and KittenTTS reads each finished sentence aloud in a kid's
-// voice while the next one is still being written. Space starts a new story, Escape quits.
+// voice while the next one is still being written. Space starts a new story at any moment - the
+// clip being read stops, and the sentences of the old story still queued for speech are skipped,
+// so the new one is heard at once. Escape quits.
 //
 //   bin/daslang -jit examples/dasLLAMA/storyteller/main.das -- --models <dir>
 //
@@ -57,6 +59,12 @@ struct StoryArgs {
     @clarg_doc = "Stop after this many frames (0 = never) - the smoke rail"
     max_frames : int
 
+    @clarg_doc = "Start another story at this frame, as a space press would (0 = never) - the smoke rail's restart-while-writing check"
+    restart_at : int
+
+    @clarg_doc = "Start another story when this many clips have begun playing, as a space press would (0 = never) - the smoke rail's restart-while-reading check"
+    restart_on_clip : int
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -82,7 +90,7 @@ enum Phase {
 
 struct Line {
     text : string   //! a sentence for the speech thread; "" asks it to stop
-    story : int     //! which story it belongs to: a clip from an older story is dropped unheard
+    story : int     //! which story it belongs to: the speech thread skips a sentence of a replaced story, and a clip of one that slipped through is dropped unheard
 }
 
 struct Speech {
@@ -103,8 +111,10 @@ var g_stories = 0
 
 var g_say : Stream?               // frame thread -> speech thread: sentences
 var g_speech : Stream?            // speech thread -> frame thread: clips
+var g_story_now : SeqBox?         // frame thread -> speech thread: the story being told, so a queued sentence of an older one is skipped
 var g_speech_done : Channel?
 var g_clips : array<Speech>
+var g_playing_sid = INVALID_SID   // the clip being read; a new story stops it
 var g_elapsed_s = 0.0
 var g_speaking_until = 0.0
 var g_unplayed_sentences = 0
@@ -112,12 +122,14 @@ var g_audio_initialized = false
 var g_asch : AudioSystemChannels
 var g_font : Font?
 var g_frames = 0
+var g_clips_played = 0
+var g_rail_restarted = false      // the smoke rail's restart fires once
 var g_space_was = false
 var display_w = 0
 var display_h = 0
 
-def start_speech_thread(tts_path, voice_pick : string; var say, speech : Stream?; var done : Channel?) {
-    new_thread() <| @capture(= tts_path, = voice_pick, = say, = speech, = done) {
+def start_speech_thread(tts_path, voice_pick : string; var say, speech : Stream?; var now : SeqBox?; var done : Channel?) {
+    new_thread() <| @capture(= tts_path, = voice_pick, = say, = speech, = now, = done) {
         setup_dasllama_jobque()   // the fork-context pool is per context: without it every parallel kernel clones the program
         var inscope m <- load_tts_model(tts_path)
         var inscope c <- caps(m)
@@ -129,6 +141,14 @@ def start_speech_thread(tts_path, voice_pick : string; var say, speech : Stream?
                     running = false
                     return
                 }
+                var current = l.story
+                now |> read() $(story : int) {
+                    current = story
+                }
+                if (l.story < current) {   // a sentence of a story space already replaced: its clip would be dropped unheard, and the synthesis would keep the new story waiting
+                    to_log(LOG_INFO, "storyteller: a sentence of story {l.story} is skipped, story {current} is being told\n")
+                    return
+                }
                 var inscope a <- synthesize(m, l.text, voice, 1.0)
                 var clip = Speech(pcm := a.pcm, rate = a.sample_rate, story = l.story)
                 speech |> push_archive(clip)
@@ -136,6 +156,7 @@ def start_speech_thread(tts_path, voice_pick : string; var say, speech : Stream?
         }
         say |> release()
         speech |> release()
+        now |> seq_box_release()
         done |> notify_and_release()
     }
 }
@@ -154,17 +175,26 @@ def poll_speech() {
             g_clips |> emplace(clip)
         }
     }
-    if (g_elapsed_s >= g_speaking_until && !empty(g_clips)) {
+    return if (g_elapsed_s < g_speaking_until)
+    g_playing_sid = INVALID_SID   // the clip has played out: a restart now has nothing to stop
+    if (!empty(g_clips)) {
         let seconds = float(length(g_clips[0].pcm)) / float(max(g_clips[0].rate, 1))
         var pcm <- g_clips[0].pcm
-        play_sound_from_pcm(g_clips[0].rate, 1, pcm)
+        g_playing_sid = play_sound_from_pcm(g_clips[0].rate, 1, pcm)
         g_clips |> erase(0)
         g_speaking_until = g_elapsed_s + seconds
         g_unplayed_sentences--
+        g_clips_played++
     }
 }
 
 def start_story() {
+    if (g_playing_sid != INVALID_SID) {
+        //! the smoke rail's witness lines, here and below: modules/dasLLAMA/tests/test_storyteller_restart.das reads them word for word
+        to_log(LOG_INFO, "storyteller: the clip of story {g_stories} stops, {g_unplayed_sentences} sentences of it go unheard\n")
+        stop(g_playing_sid, 0.05)
+        g_playing_sid = INVALID_SID
+    }
     delete g_session
     g_session <- create_session(g_model)
     set_seed(g_session, int(ref_time_ticks() % 2147483647l))   // a fresh session samples the same story every time otherwise
@@ -174,6 +204,8 @@ def start_story() {
     g_sentence_pieces |> reserve(64)
     g_ntokens = 0
     g_stories++
+    g_story_now |> publish(g_stories)
+    to_log(LOG_INFO, "storyteller: story {g_stories} starts at frame {g_frames}\n")
     g_clips |> clear()
     g_unplayed_sentences = 0
     g_speaking_until = g_elapsed_s
@@ -315,9 +347,11 @@ def init() {
     allow_cpu_prefill()
     g_say = unsafe(stream_create())
     g_speech = unsafe(stream_create())
+    g_story_now = seq_box_create()
+    g_story_now |> publish(g_stories)
     g_speech_done = unsafe(channel_create())
     g_speech_done |> append(1)
-    start_speech_thread(path_join(g_args.models, g_args.tts_model), g_args.voice, g_say, g_speech, g_speech_done)
+    start_speech_thread(path_join(g_args.models, g_args.tts_model), g_args.voice, g_say, g_speech, g_story_now, g_speech_done)
     if (g_args.autoplay || g_args.smoke) {
         start_story()
     }
@@ -344,7 +378,11 @@ def update() {
     if (glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(live_window, 1)
     }
-    if (space_just && g_phase != Phase.writing) {
+    let rail_due = (!g_rail_restarted
+        && ((g_args.restart_at > 0 && g_frames == g_args.restart_at)
+            || (g_args.restart_on_clip > 0 && g_clips_played == g_args.restart_on_clip)))
+    if (space_just || rail_due) {
+        g_rail_restarted ||= rail_due
         start_story()
     }
     if (g_phase == Phase.writing) {
@@ -359,6 +397,7 @@ def update() {
 def shutdown() {
     say("")
     g_speech_done |> join()
+    g_story_now |> seq_box_release()
     unsafe {
         channel_remove(g_speech_done)
         stream_remove(g_say)
@@ -374,9 +413,13 @@ def shutdown() {
     live_destroy_window()
 }
 
+def story_read_out() : bool {
+    return g_phase == Phase.told && g_unplayed_sentences == 0 && g_elapsed_s >= g_speaking_until
+}
+
 def done_for_smoke() : bool {
     return true if (g_args.max_frames > 0 && g_frames >= g_args.max_frames)
-    return g_args.smoke && g_phase == Phase.told && g_unplayed_sentences == 0 && g_elapsed_s >= g_speaking_until
+    return g_args.smoke && story_read_out()
 }
 
 // eval_main_loop drives the block once per frame: a blocking while-loop natively, the
@@ -389,8 +432,12 @@ def main() {
         return false if (done_for_smoke())
         return !exit_requested()
     }
+    let read_out = story_read_out()   // before shutdown: its stop sentinel goes through say(), which counts it as unplayed
     shutdown()
     if (g_args.smoke) {
+        to_log(LOG_INFO, read_out
+            ? "storyteller: story {g_stories} written and read out after {g_frames} frames\n"
+            : "storyteller: the frame cap stopped story {g_stories} after {g_frames} frames\n")
         print("{join(g_wrapped_lines, "\n")}\n")
     }
 }

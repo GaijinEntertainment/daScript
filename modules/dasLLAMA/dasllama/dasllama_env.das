@@ -694,6 +694,14 @@ struct public TestEnv {
     @clarg_doc = "Directory of whisper models for the audio tests."
     whisper_dir : string = ""
 
+    @clarg_env = "DISPLAY"
+    @clarg_doc = "Ambient platform variable; read only by the storyteller restart test to tell whether a Linux box has a window server for the example's window."
+    display : string = ""
+
+    @clarg_env = "WAYLAND_DISPLAY"
+    @clarg_doc = "Ambient platform variable (the Wayland twin of DISPLAY); read only by the storyteller restart test."
+    wayland_display : string = ""
+
     @clarg_path
     @clarg_doc = "Directory of audio corpus files for the transcription tests."
     corpus_dir : string = ""

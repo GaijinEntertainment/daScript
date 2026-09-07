@@ -16,8 +16,8 @@ folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, or a PR body - or adds or changes a serving path, one that serves a weight
-format, modality, family, or backend, or changes what a run with no flags and no environment
-overrides does, applies `REVIEW_MEASUREMENT.md`.**
+format, modality, family, or backend, or changes what a measured or served run with no flags and
+no environment overrides computes, applies `REVIEW_MEASUREMENT.md`.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -82,11 +82,8 @@ front-end file - one stage of the pass that turns text into phonemes (`dasllama/
 codec, transform, tokenizer, tool-wire, media-IO or registration concern in a new place
 applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
 
-**A routed file applies BOTH the checklist it routes to and this one; every other file under
-`modules/dasLLAMA/` applies this one.**
-
-**A diff that puts a `[test]` file requiring any `dasllama/*` module outside `tests/` (beside
-this file) is a defect.**
+**A `[test]` file that requires any `dasllama/*` module and sits under `modules/dasLLAMA/`
+outside `tests/` (beside this file) is a defect - move it into `tests/`.**
 
 **`DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) is bumped only on a declared release -
 a maintainer ruling that bench comparability is broken.** Recorded performance rows and tune
@@ -215,13 +212,13 @@ finding text states its own rule.
 `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The line names the check and the names it licenses. A licensed name is one that check does not
 flag. When the check licenses no names, the line says so.
 
-**Checked-in prose this module owns - docs and comments, any language - that is not locating,
-patching, or reproducing work against the reference build describes an upstream mechanism in
-our own terms: no "lifted/ported verbatim from", and no name belonging to the reference build -
-symbol, header, constant, binary, project or organization - write "the reference exe" or
-"upstream" instead.** The reference build is the third-party engine this module measures
-itself against - the checkout `benchmarks/setup_lcpp_ref.das` pins. A symbol the file
-carrying that prose calls or holds as a value is its own name, not attribution.
+**Checked-in text under `modules/dasLLAMA/` - docs, comments, and string data, any language -
+that is not locating, patching, or reproducing work against the reference build describes an
+upstream mechanism in our own terms: no "lifted/ported verbatim from", and no name belonging
+to the reference build - symbol, header, constant, binary, project or organization - write
+"the reference exe" or "upstream" instead.** The reference build is the third-party engine
+this module measures itself against - the checkout `benchmarks/setup_lcpp_ref.das` pins. A
+symbol the file carrying that text calls or holds as a value is its own name, not attribution.
 
 **Prose whose job is to locate, patch, or reproduce work against the reference build names
 that build's binaries and symbols outright, and keeps that naming inside the sentences doing

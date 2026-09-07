@@ -223,7 +223,7 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 
 The `kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - model-less
 per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has no arms;
-remember it exists (the hand-bound-gate sync obligation is `REVIEW.md`'s). The misc file also
+remember it exists (the hand-bound-gate sync obligation is `REVIEW_KERNEL_CELLS.md`'s). The misc file also
 carries `test_lens_tgmem_gate` - not a CPU-oracle unit: it spawns two `daslang -compile-only`
 child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` class with
 `@workgroup` members and no `tgmem=`, twin fixture as the must-compile control. Shared fixtures
@@ -233,7 +233,8 @@ compares local - a same-arity twin would collide with the shared tagged one. `_m
 is the `[metal_dispatch]` multi-kernel (kernel=) fixture; its gate in the misc file
 dispatches through the GENERATED builders (kn_ rail), not hand binds.
 
-The control obligation for a new gate or bar is `REVIEW.md`'s. Size a poison as a value ADDED
+The control obligation for a new gate is `REVIEW_KERNEL_CELLS.md`'s, for a new or loosened bar
+`REVIEW.md`'s. Size a poison as a value ADDED
 to the expected result, not as a multiple of the tolerance. A tolerance that scales with the
 accumulation length swallows a scaled poison at the kernel's longest dot product, which is
 exactly where a bug hides. Every compare against a derived truth gets its own poison. A

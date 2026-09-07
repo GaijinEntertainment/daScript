@@ -285,12 +285,16 @@ let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.da
 let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the terms"
 let TTS_PACKS_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/build_g2p_data.py (misaki 0.9.4 gold/silver + CMUdict 0.7a + the g2p_en 2.1.0 GRU + harness/g2p_local_additions.json into tts_g2p.bin) and harness/train_postag.py (UD English-EWT + spaCy-labelled silver prose into tts_postag.bin)"
 let TTS_ORACLE_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs the PyTorch / ONNX reference per model over the bring-up sentences and dumps every stage the parity rail (tests/_tts_parity.das) compares"
+//! the storyteller example's story model: converted on-box from the llama2.c checkpoint - no registry
+//! serves the gguf, and the converter's output bytes move with its version, so it is presence-gated
+let STORIES15M_RECIPE = "convert: the reference build's llama-convert-llama2c-to-ggml --copy-vocab-from-model tokenizer.bin --llama2c-model stories15M.bin over karpathy/tinyllamas ({HF}/karpathy/tinyllamas: stories15M.bin + tokenizer.bin, the llama2.c checkpoint), then its llama-quantize to Q8_0; bytes are per-converter-version - the gate is the storyteller's smoke rail (tests/test_storyteller_restart.das), which writes and reads a story out of it: a smoke, not a parity check, the toy model pins no reference output"
 
 // The text-model set, ascending size. Absent files skip at run time, so one table serves every
 // box; each view measures/verifies the subset it actually has. Audio models live in
 // [[asr_catalog]] (their provenance rides those specs into [[models_provenance]]).
 def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set table, one entry per carrier
     return <- [
+        ModelSpec(file = "stories15M-Q8_0.gguf", recipe = STORIES15M_RECIPE),   // llama2.c's TinyStories writer behind examples/dasLLAMA/storyteller; profiled nowhere
         ModelSpec(file = "SmolLM2-135M-Instruct-Q8_0.gguf", display = "SmolLM2-135M"),
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q8_0.gguf", display = "Qwen2.5-0.5B"),
         ModelSpec(file = "Qwen3-0.6B-Q8_0.gguf", display = "Qwen3-0.6B",

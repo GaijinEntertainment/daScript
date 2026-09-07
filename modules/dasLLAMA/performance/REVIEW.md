@@ -106,11 +106,15 @@ defect - `--fetch` downloads only.** Each has its own home: a conversion recipe 
 `--convert`, a timing runs in a board cell (`gen_bench_records.das` or a
 `../benchmarks/lcpp_bench.das` cell), and a tune sidecar is written under a `--tune` run.
 
-**A change to a model row's provenance that alters which bytes verify - `bytes`, `sha256`,
-`recipe`, a new row or a new `companions` entry in `model_specs.das` or
-`profile_common.das` - or a change to `fetch_models.das` other than its comments, records
-its settling evidence in the PR description: a `fetch_models.das --` run ending
-`0 pending, 0 failed` on a box that already has the pinned files on disk.**
+**A diff that adds a row or a `companions` entry, or changes a `bytes`, `sha256` or `recipe`
+value, in `model_specs.das` or `profile_common.das` records its settling evidence in the PR
+description: one `fetch_models.das -- -o <name>` run per changed row, on a box holding that
+row's model file, ending `0 pending, 0 failed` with the row reported `ok`, plus one unscoped
+`fetch_models.das --` run in which no row the diff touched is `pending`.** A box stocks only
+some of the rows, so an unscoped run's `pending` count is the box's.
+
+**A diff that changes `fetch_models.das` beyond its comments records its settling evidence in
+the PR description: one unscoped `fetch_models.das --` run ending `0 failed`.**
 
 **A url-only re-pin - a row's `url` changed with its `bytes` and `sha256` unchanged -
 records its settling evidence in the PR description: a fetch through the new url into a
