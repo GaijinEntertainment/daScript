@@ -18,8 +18,16 @@ and the `ship_*` / `release_*` helpers they call in `commands.das` - states in t
 the release was run on macOS.** The release layout differs per platform (`.app` bundle vs flat
 directory).
 
-**A diff that adds a command or a flag also adds its `print_usage` line and its `README.md`
-table row, in the same change.**
+**A diff that adds a command also adds its `print_usage` line and its row in the `README.md`
+Commands table, in the same change.**
+
+**A diff that adds a flag also adds its `@clarg_doc` on the new `DaspkgArgs` field and its row
+in the `README.md` Options table, in the same change** - the help text renders the annotation,
+so a field without one is a blank help line.
+
+**A diff that adds a `.das_package` manifest function - a function `daslib/daspkg.das` (repo
+root) exports for a manifest body to call - also adds it to the `README.md` `.das_package`
+manifest section, in the same change.**
 
 **A `cmd_release` bundle built without `--fat` whose main exe ships without a tune sidecar
 beside it is a defect** - the tune sidecar is the `<bundle>.tune.json` file of measured kernel

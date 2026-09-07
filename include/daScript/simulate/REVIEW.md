@@ -27,7 +27,7 @@ checklist on its own.
   ships is a defect.** The hot path is a `SimNode::eval*` method, any helper such a method
   calls on every evaluation, the dispatchers `Context::callOrFastcall` /
   `callWithCopyOnReturn` / `invoke` / `invokeEx` (`simulate.h`), or an AOT-side function or
-  template under this folder that generated code executes per evaluated expression. An added
+  template under this folder that generated code runs for every evaluated expression. An added
   load, branch, call, copy, or counter, a direct call becoming indirect, a static dispatch
   becoming virtual, or an unboxed value becoming a boxed round-trip is that defect unless the
   PR names the check showing the shipped build's codegen unchanged - the burden is the

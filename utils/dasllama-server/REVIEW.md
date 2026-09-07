@@ -4,11 +4,13 @@
 doc: `README.md`. Planned work: `CONTROL_PAGE_PLAN.md`.
 
 **A diff to a file that requires - directly or through another file in this folder - a
-`dasllama/*` module, or to a `README.md` row stating dasLLAMA engine behavior or a measured
+`dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
 **A diff that changes a flag's row in `README.md` also updates that flag's `@clarg_doc` in
-`main.das`, in the same change - `--help` is the other copy a user reads.**
+`main.das`, and gives that flag a row in `doc/source/reference/utils/dasllama_server.rst` (repo
+root), adding the row when the page carries none, in the same change - `--help` and the
+reference page are the other copies a user reads.**
 
 **A Playwright `.spec.js` or a captured fixture, wherever the diff puts it, applies the
 `tests/` subfolder's `REVIEW.md` (beside this file) too.**
