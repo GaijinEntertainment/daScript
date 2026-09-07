@@ -265,7 +265,7 @@ def main() {
         'AOT or JIT': [
             { id: 'DAS AOT',             label: 'Daslang · AOT',     group: 'das' },
             { id: 'DAS JIT',             label: 'Daslang · JIT',     group: 'das' },
-            { id: 'C++',                 label: 'C++ · -O2',         group: 'native' },
+            { id: 'C++',                 label: 'C++',               group: 'native' },
             { id: 'ZIG',                 label: 'Zig · ReleaseFast', group: 'native' },
             { id: 'LUAU --codegen',      label: 'Luau --codegen',    group: 'rival' },
             { id: 'LUAJIT',              label: 'LuaJIT',            group: 'rival' },
