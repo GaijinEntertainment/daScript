@@ -281,7 +281,9 @@ Manifest functions
    dylibs (``release_shared_module``), built tools shipped beside the exe
    (``release_include_tool("watchdog")``), the tool a macOS ``.app`` opens in
    place of the exe (``release_launcher("watchdog")`` - a supervisor that
-   starts the exe itself), and the wasm-specific hooks used by
+   starts the exe itself), companion programs baked beside the main exe under
+   the same class and sharing its runtime (``release_program("my-bench",
+   "tools/bench.das")``), and the wasm-specific hooks used by
    ``release wasm``.  See ``daslib/daspkg.das`` for the full set.
 
 

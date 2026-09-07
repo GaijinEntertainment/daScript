@@ -438,15 +438,15 @@ button:disabled { opacity: 0.45; cursor: default; }
     <div class="sec"><span>§ 12</span><span class="rule"></span><span>benchmark</span></div>
     <div class="panel">
         <div class="controls" style="margin-bottom:10px">
-            <button id="b-bench" type="button">run llama.cpp A/B</button>
-            <span class="ctl-note" id="bench-note">quiesced only — refuses while streams are active · runs our lcpp_bench then llama-bench on the same GGUF (minutes-class)</span>
+            <button id="b-bench" type="button">measure this box (pp512 / tg128)</button>
+            <span class="ctl-note" id="bench-note">quiesced only — refuses while streams are active · pp512 and tg128 on the served model, three reps each, the text, audio and speech routes holding meanwhile (seconds on a small model)</span>
         </div>
         <div class="cfg" id="bench-log" style="display:none"></div>
         <table class="ctable" id="bench-table" style="display:none">
             <thead><tr><th></th><th>pp512 tok/s</th><th>tg128 tok/s</th></tr></thead>
             <tbody id="bench-body"></tbody>
         </table>
-        <div class="cfg-file" id="bench-meta"></div>
+        <div class="cfg-file" id="bench-meta" style="white-space:pre-line"></div>
         <div class="controls" id="bench-record-row" style="display:none;margin-top:8px">
             <button id="b-bench-copy" type="button">copy record</button>
             <span class="ctl-note">the full bench record (hardware, command lines, shas) — paste into a benchmark submission</span>
@@ -2643,9 +2643,26 @@ $("b-drain").addEventListener("click", async () => {
 // ===== benchmark panel =====
 let benchPolling = false;
 let benchRecord = null;
+let benchMode = null;   // the last mode GET /bench reported - a click's optimistic render carries it
+
+// the button and its idle note follow the mode GET /bench reports: a bundle (no daslang to spawn,
+// no llama-bench configured) measures the served model in process; a source tree with lcpp_bin
+// set runs the llama.cpp A/B child
+function benchIdleNote(mode) {
+    if (mode === "ab") {
+        $("b-bench").textContent = "run llama.cpp A/B";
+        return "quiesced only — refuses while streams are active · runs our lcpp_bench then llama-bench on the same GGUF (minutes-class)";
+    }
+    // the in-process wording is the markup's default: the download, where the page cannot spawn
+    // anything, is the common case, and a source tree with lcpp_bin set relabels on its first GET
+    $("b-bench").textContent = "measure this box (pp512 / tg128)";
+    return "quiesced only — refuses while streams are active · pp512 and tg128 on the served model, three reps each, the text, audio and speech routes holding meanwhile (seconds on a small model)";
+}
 
 function renderBench(b) {
     const log = $("bench-log");
+    if (b.mode) benchMode = b.mode;
+    const idleNote = benchIdleNote(benchMode);
     if (b.state === "running" || !(b.result && b.result.record)) {
         // never leave a prior run's record copyable — a stale copy is a wrong submission
         benchRecord = null;
@@ -2655,26 +2672,41 @@ function renderBench(b) {
         log.style.display = "block";
         log.innerHTML = b.log.map(l => esc(l)).join("<br>");
     }
+    if (!b.result) {
+        // a run in flight, or one that failed, must not leave the previous run's numbers on screen
+        $("bench-table").style.display = "none";
+        $("bench-meta").textContent = "";
+    }
     if (b.result) {
         const r = b.result;
         $("bench-table").style.display = "table";
         const body = $("bench-body");
-        body.innerHTML =
-            "<tr><td class=\"pv\">dasllama (this server)</td><td>" + r.ours_pp.toFixed(1) + "</td><td>" + r.ours_tg.toFixed(1) + "</td></tr>" +
-            "<tr><td class=\"pv\">llama.cpp (llama-bench)</td><td>" + r.theirs_pp.toFixed(1) + "</td><td>" + r.theirs_tg.toFixed(1) + "</td></tr>" +
-            "<tr><td class=\"pv\">ratio</td><td class=\"" + (r.pp_ratio >= 1 ? "hit" : "") + "\">" + r.pp_ratio.toFixed(2) + "x</td>" +
-            "<td class=\"" + (r.tg_ratio >= 1 ? "hit" : "") + "\">" + r.tg_ratio.toFixed(2) + "x</td></tr>";
-        $("bench-meta").textContent = (b.hardware || "") + " · " + r.threads + " threads · " +
+        let rows = "<tr><td class=\"pv\">dasllama (this server)</td><td>" + r.ours_pp.toFixed(1) + "</td><td>" + r.ours_tg.toFixed(1) + "</td></tr>";
+        if (r.theirs_pp !== undefined) {
+            rows += "<tr><td class=\"pv\">llama.cpp (llama-bench)</td><td>" + r.theirs_pp.toFixed(1) + "</td><td>" + r.theirs_tg.toFixed(1) + "</td></tr>" +
+                "<tr><td class=\"pv\">ratio</td><td class=\"" + (r.pp_ratio >= 1 ? "hit" : "") + "\">" + r.pp_ratio.toFixed(2) + "x</td>" +
+                "<td class=\"" + (r.tg_ratio >= 1 ? "hit" : "") + "\">" + r.tg_ratio.toFixed(2) + "x</td></tr>";
+        }
+        body.innerHTML = rows;
+        // an in-process row names what produced it: the slot, its file, the device, the KV codec,
+        // the exec tier and the tune state - a number never travels without them
+        const served = r.model ? " · " + r.model + " (" + r.gguf + ", " + r.backend + (r.kv ? ", kv " + r.kv : "") + (r.exec ? ", " + r.exec : "") + (r.tune ? ", tune " + r.tune : "") + ")" : "";
+        let meta = (b.hardware || "") + served + " · " + r.threads + " threads · " +
             new Date(r.ts * 1000).toLocaleString() + " · " + r.elapsed_s + "s run";
+        if (r.ref_cmd) {
+            // the comparison a bundle cannot run itself: the same GGUF, the same shapes, on llama.cpp
+            meta += "\ncompare: " + r.ref_cmd;
+        }
+        $("bench-meta").textContent = meta;
         if (r.record) {
             $("bench-record-row").style.display = "flex";
             benchRecord = r.record;
         }
     }
-    $("bench-note").textContent = b.state === "running" ? "running — both benches finish before results appear"
+    $("bench-note").textContent = b.state === "running" ? (benchMode === "ab" ? "running — both benches finish before results appear" : "running — one rep per tick, the log fills as they land")
         : b.state === "failed" ? "failed — see the log above"
         : b.state === "done" ? "done"
-        : $("bench-note").textContent;
+        : idleNote;
     $("b-bench").disabled = b.state === "running";
     if (b.state === "running" && !benchPolling) {
         benchPolling = true;
@@ -2687,7 +2719,7 @@ function renderBench(b) {
             } catch (_e) { /* server may be gone */ }
             benchPolling = false;
         };
-        setTimeout(tickB, 2000);
+        setTimeout(tickB, 500);   // the first poll soon: an in-process run on a small model is over in seconds
     }
 }
 
@@ -2709,7 +2741,7 @@ $("b-bench").addEventListener("click", async () => {
             $("bench-note").textContent = j.error ? j.error.message : ("failed: " + r.status);
             return;
         }
-        renderBench({ state: "running", log: [] });
+        renderBench({ state: "running", log: [] });   // the poller it arms fetches the real document
     } catch (_e) {
         $("bench-note").textContent = "bench request failed";
     }

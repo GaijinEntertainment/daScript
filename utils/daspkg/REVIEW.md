@@ -29,35 +29,41 @@ so a field without one is a blank help line.
 root) exports for a manifest body to call - also adds it to the `README.md` `.das_package`
 manifest section, in the same change.**
 
-**A `cmd_release` bundle built without `--fat` whose main exe ships without a tune sidecar
-beside it is a defect** - the tune sidecar is the `<bundle>.tune.json` file of measured kernel
-choices the exe reads at run time.
+**A `cmd_release` bundle built without `--fat` carries a `<stem>.tune.json` sidecar beside every
+exe it ships - the main exe, and each companion the package's `release()` declares with
+`release_program`; a missing one is a defect** - the sidecar holds the measured kernel choices
+an exe reads at run time, under that exe's own file name.
 
-**A diff that lets a `--fat` release finish while any scope's `fat_unprofiled` list in the deps
-JSON is non-empty, or while the deps JSON cannot be read, is a defect** - `release_fat_gate`
+**A diff that lets a `--fat` release finish while any scope's `fat_unprofiled` list is non-empty
+in any deps JSON the release wrote - the file `daslang -exe --list-shared-modules` writes beside
+a built exe - or while one of those files cannot be read, is a defect** - `release_fat_gate`
 refuses; a fat exe never tunes.
 
 **A diff that lets a release path other than `--quick` reuse a sidecar from an earlier run is a
 defect.**
 
 **A diff that lets `--quick` accept an incomplete sidecar is a defect** - incomplete means
-missing a scope key, that is, an entry of the `tune_scopes` list in the deps JSON that
-`daslang -exe --list-shared-modules` writes.
+missing a scope key, that is, an entry of the `tune_scopes` list in any deps JSON the release
+wrote.
+
+**A diff that lets a release finish while a `release_program` companion's deps JSON declares a
+tune scope the main program's deps JSON does not is a defect** - the release refuses that
+companion.
 
 **A release path that overwrites or deletes a `release_include_if_missing` file is a defect** -
 one the package's `release()` declares that way: a starter file deployed once, then owned by
 the user.
 
 **A `cmd_release` bundle that finishes without writing `.daspkg_release.manifest` is a
-defect.** `release wasm` is out: it wipes its output directory first, so it has no stale file to
-account for.
+defect.**
 
 **A test in `test_daspkg.das` that reaches the network is a defect** - network coverage belongs
 in `test_daspkg_git.das`.
 
-**A shell command or filesystem path built from any name this tool did not produce itself - a
-`.das_package` package, bundle, app, module or tool name, or a command-line value that names
-one, a CPU class included - outside `commands.das`, or without an
-`is_safe_pkg_name` check on that string first, is a defect** - `is_safe_pkg_name` is private to
-`commands.das`, and a string carrying a space, a quote, a separator or `..` splits the command
-or reads outside the directory the path was built for.
+**A shell command or filesystem path built from any string this tool did not produce itself -
+a name a `.das_package` or the command line supplied, a CPU class, a companion's script path -
+outside `commands.das`, or without an `is_safe_pkg_name` check first - on the whole string,
+or on each `/`-separated segment when the string is a path declared to reach another tree,
+where a `..` segment passes - is a defect** - `is_safe_pkg_name` is private to `commands.das`,
+and a string carrying a space, a quote, a separator or `..` splits the command or reads
+outside the directory the path was built for.

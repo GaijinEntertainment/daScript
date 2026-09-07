@@ -1463,6 +1463,116 @@ def private sidecar_provenance_line(manifest : string) : string {
     return line
 }
 
+//! a companion's shared modules and das modules join the main program's, each once: the ship
+//! loops below key on the bundle-relative path and the module name, the dep walk on the package
+//! directory (a root script's module is named "", so the name cannot key it). Tune scopes do not
+//! merge: the mint ran on the main program's before any companion built, and a companion is
+//! refused a scope the main program lacks
+def private merge_release_deps(var deps : ReleaseDeps; extra : ReleaseDeps) {
+    for (e in extra.shared_modules) {
+        var seen = false
+        for (h in deps.shared_modules) {
+            seen = seen || (h.rel == e.rel && h.das_name == e.das_name)
+        }
+        if (!seen) {
+            deps.shared_modules |> push(SharedModuleEntry(rel = e.rel, abs = e.abs, das_name = e.das_name))
+        }
+    }
+    for (dm in extra.das_modules) {
+        var seen = false
+        for (h in deps.das_modules) {
+            seen = seen || h.package_dir == dm.package_dir
+        }
+        if (!seen) {
+            deps.das_modules |> push(DasModuleEntry(name = dm.name, file = dm.file, package_dir = dm.package_dir))
+        }
+    }
+}
+
+//! the env prefix that pins the tune manifest a build reads - the main program's minted sidecar,
+//! so a companion bakes the winners the main exe bakes instead of whatever sits beside its script
+def private release_manifest_env(manifest : string) : string {
+    return empty(manifest) ? "" : (get_platform_name() == "windows" ?
+        "set \"DAS_TUNE_MANIFEST={manifest}\"&& " :
+        "DAS_TUNE_MANIFEST=\"{manifest}\" ")
+}
+
+//! Bake one release_program companion: `<bundle_dir>/<name>.exe` (extensionless inside a macOS
+//! .app, like the main exe) under the same fat class and mode - or, in a plain release, under
+//! the main program's freshly minted manifest - its `.o` dropped, its rpaths scrubbed, the MSVC
+//! `.lib` recorded, and its deps JSON gated: every tune scope it declares is one the main
+//! program declared (that is the scope the mint measured; a scope only the companion carries
+//! was never measured on this box), and under `--fat` the fat gate refuses the release the way
+//! the main exe's does. Returns 0, or 1 with the reason logged and the half-built files removed;
+//! `deps_file` is left for the caller to merge.
+def private release_build_program(daslang, main_path, bundle_dir, name, deps_file, fat, manifest, force_args : string; main_scopes : array<string>; is_mac_app : bool; var shipped : array<string>) : int {
+    let exe_path = path_join(bundle_dir, name)
+    let cmd = "{release_fat_env(fat)}{release_manifest_env(manifest)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args} \"{main_path}\""
+    let mode_note = empty(fat) ? "" : " ({fat} class, fat)"
+    log("  build: companion {name} from {base_name(main_path)}{mode_note}\n")
+    let t0 = ref_time_ticks()
+    var output : string
+    let rc = run_cmd(cmd, output)
+    if (rc != 0) {
+        to_log(LOG_ERROR, "release: daslang -exe failed for companion {name} (rc={rc}):\n{output}\n")
+        release_drop_program_files(exe_path)
+        return 1
+    }
+    log("  build: companion {name} in {release_elapsed(t0)}s\n")
+    var pdeps : ReleaseDeps
+    if (!read_release_deps(deps_file, pdeps)) {
+        to_log(LOG_ERROR, "release: the companion {name}'s deps JSON {deps_file} cannot be read, so its tune scopes and its fat gate were never checked\n")
+        release_drop_program_files(exe_path)
+        return 1
+    }
+    for (ts in pdeps.tune_scopes) {
+        if (find_index(main_scopes, ts.name) < 0) {
+            to_log(LOG_ERROR, "release: companion {name} declares the tune scope `{ts.name}`, which the main program does not - the mint measured the main program's scopes only; release the companion from its own package, or give the main program that scope\n")
+            release_drop_program_files(exe_path)
+            return 1
+        }
+    }
+    if (!empty(fat)) {
+        let refusal = release_fat_gate(pdeps, fat)
+        if (!empty(refusal)) {
+            to_log(LOG_ERROR, "companion {name}: {refusal}\n")
+            release_drop_program_files(exe_path)
+            return 1
+        }
+        for (ts in pdeps.tune_scopes) {
+            log("  tune: companion {name} ships scope `{ts.name}`'s {fat}-and-up profile clones\n")
+        }
+    }
+    let obj_path = "{exe_path}.o"
+    if (fexist(obj_path)) {
+        remove(obj_path)
+    }
+    shipped |> push(is_mac_app ? name : "{name}.exe")
+    if (fexist("{exe_path}.lib")) {
+        shipped |> push("{name}.lib")
+    }
+    if (is_mac_app) {
+        var rerr : string
+        if (!rename("{exe_path}.exe", exe_path, rerr)) {
+            to_log(LOG_ERROR, "release: cannot rename {exe_path}.exe -> {exe_path}: {rerr}\n")
+            release_drop_program_files(exe_path)
+            return 1
+        }
+    }
+    scrub_external_rpaths(is_mac_app ? exe_path : "{exe_path}.exe")
+    return 0
+}
+
+//! a companion that failed after its build leaves nothing behind: the exe, its object file and
+//! the MSVC side artifacts are outside every manifest, so a later release would never sweep them
+def private release_drop_program_files(exe_path : string) {
+    for (suffix in [".exe", ".o", ".lib", ".map", ".pdb"]) {
+        if (fexist("{exe_path}{suffix}")) {
+            remove("{exe_path}{suffix}")
+        }
+    }
+}
+
 // the env prefix a fat release builds its exe under: the baseline class and the fat tune mode
 def private release_fat_env(fat : string) : string {
     return empty(fat) ? "" : (get_platform_name() == "windows" ?
@@ -2235,6 +2345,46 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
         to_log(LOG_ERROR, "release: release_launcher(\"{spec.launcher}\") names no shipped tool - add release_include_tool(\"{spec.launcher}\") beside it\n")
         return 1
     }
+    // release_program() companions are checked before anything builds: the name lands in the
+    // bundle as a file name, and a script that is not there would fail minutes into the release
+    var programs : array<tuple<name : string; script : string>>
+    programs |> reserve(length(spec.programs))
+    for (p in spec.programs) {
+        let at = find(p, "@")
+        if (at <= 0) {   // release_program() writes `name@script`; only an edit to daslib/daspkg.das breaks that
+            to_log(LOG_ERROR, "release: malformed companion entry `{p}` - release_program(name, script) records `name@script`\n")
+            return 1
+        }
+        let pname = slice(p, 0, at)
+        let pscript = slice(p, at + 1, length(p))
+        // the name is a file name the platform suffixes itself (`foo.exe.exe` otherwise), and one
+        // clean_previous_release never sweeps when it carries `..`
+        if (empty(pname) || !is_safe_pkg_name(pname) || pname == bundle_name || (pname |> ends_with(".exe")) || find(pname, "..") >= 0) {
+            to_log(LOG_ERROR, "release: release_program(\"{pname}\", ...) - the name is the companion's file name: letters, digits, `_`, `-` and `.` only, no `.exe` suffix, no `..`, and not the bundle's own `{bundle_name}`\n")
+            return 1
+        }
+        // the script path reaches the build command line quoted: every segment is a name, or `..`
+        // (a companion may live in another tree), so a quote or a shell character cannot ride in
+        var path_ok = !empty(pscript)
+        for (seg in split(replace(pscript, "\\", "/"), "/")) {
+            path_ok = path_ok && (seg == ".." || is_safe_pkg_name(seg))
+        }
+        if (!path_ok || !fexist(path_join(root, pscript))) {
+            to_log(LOG_ERROR, "release: release_program(\"{pname}\", \"{pscript}\") names no script under {root} (the path is `/`-separated segments of letters, digits, `_`, `-` and `.`, or `..`)\n")
+            return 1
+        }
+        // a shipped tool of the same name would land on the companion later and silently replace
+        // it; two companions of one name would build over each other
+        var taken = find_index(spec.tools, pname) >= 0
+        for (q in programs) {
+            taken = taken || q.name == pname
+        }
+        if (taken) {
+            to_log(LOG_ERROR, "release: release_program(\"{pname}\", ...) - the name is already a shipped tool's or another companion's\n")
+            return 1
+        }
+        programs |> push((name = pname, script = pscript))
+    }
     // macOS: emit a clickable .app bundle. The exe + dylibs + modules go into
     // Contents/MacOS/, so all subsequent ship logic uses bundle_dir unchanged
     // and the rpath / module resolver still see the same <exe_dir> layout.
@@ -2438,6 +2588,32 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     // everywhere except a mac .app, where the rename above already dropped it.
     scrub_external_rpaths(is_mac_app ? exe_path : "{exe_path}.exe")
 
+    // 1.8 Companion programs (release_program): each bakes beside the main exe under the same
+    //     class and mode - and, after a mint, under the main program's manifest, so both exes
+    //     bake the winners this box measured - and its deps JSON joins the main one below, so a
+    //     shared module only the companion requires still ships.
+    var program_deps : array<string>
+    program_deps |> reserve(length(programs))
+    var main_deps : ReleaseDeps
+    let main_read = !empty(programs) && read_release_deps(deps_file, main_deps)
+    let main_scopes <- [for (ts in main_deps.tune_scopes); ts.name; where main_read]
+    for (p in programs) {
+        run_cmd_counter ++
+        let pdeps = "{get_das_root()}/_daspkg_release_deps_{run_cmd_counter}.json"
+        let rc_p = release_build_program(daslang, path_join(root, p.script), bundle_dir, p.name, pdeps, fat, ship_manifest, force_args, main_scopes, is_mac_app, shipped)
+        if (rc_p != 0) {
+            for (d in program_deps) {
+                remove(d)
+            }
+            if (fexist(pdeps)) {
+                remove(pdeps)
+            }
+            remove(deps_file)
+            return rc_p
+        }
+        program_deps |> push(pdeps)
+    }
+
     // 2. Parse deps JSON, ship dylibs at the relative path the exe expects.
     //    The writer has already merged force-included modules into shared_modules,
     //    so we just iterate.
@@ -2448,6 +2624,16 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
         return 1
     }
     remove(deps_file)
+    for (d in program_deps) {
+        var pd : ReleaseDeps
+        let ok = read_release_deps(d, pd)
+        remove(d)
+        if (!ok) {
+            to_log(LOG_ERROR, "release: cannot read a companion program's deps file at {d}\n")
+            return 1
+        }
+        merge_release_deps(deps, pd)
+    }
     for (e in deps.shared_modules) {
         if (empty(e.rel)) {
             to_log(LOG_WARNING, "release: skipping module `{e.das_name}` (no /modules/ in `{e.abs}`)\n")
@@ -2539,6 +2725,23 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
         }
         log("  ship: {sidecar_rel} (tune sidecar)\n")
         shipped |> push(sidecar_rel)
+        // each companion resolves `<its stem>.tune.json` beside itself: the same sidecar, under
+        // its name, so its runtime section is the one the main exe reads
+        shipped |> reserve(length(shipped) + length(programs))
+        for (p in programs) {
+            let prel = "{p.name}.tune.json"
+            let pdst = path_join(bundle_dir, prel)
+            var perr : string
+            if (!copy_file(sidecar_dst, pdst, true, perr)) {
+                to_log(LOG_ERROR, "release: copy_file({sidecar_dst} -> {pdst}) failed: {perr}\n")
+                return 1
+            }
+            if (!set_mtime(pdst, ahead, terr)) {
+                to_log(LOG_WARNING, "release: cannot touch {pdst}: {terr} — the companion's sidecar may read as stale\n")
+            }
+            log("  ship: {prel} (tune sidecar, the companion's copy)\n")
+            shipped |> push(prel)
+        }
     }
     if (runtime_copies == 0) {
         to_log(LOG_ERROR, "release: no daslang runtime libs matched `{runtime_glob}` under `{runtime_lib_dir}`; bundle would not load on a relocated machine\n")

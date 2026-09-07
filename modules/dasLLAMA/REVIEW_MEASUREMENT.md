@@ -4,9 +4,11 @@
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `PERF_LEDGER.md`.
 
 Figure rules here bind every surface the diff under review writes a figure on - this module's
-code comments and checked-in docs, the PR body, and any file another checklist routed to this
-one. A number on a served page answers to `site/REVIEW.md` or `site-dasllama/REVIEW.md` (repo
-root) instead.
+code comments and checked-in docs, checked-in data whose contents a run produced (a captured
+response fixture, a record), the PR body, and any file another checklist routed to this one. A
+number on a page under `site/` or `site-dasllama/` (repo root) answers to that folder's
+checklist instead, and a number on a page a tool under `utils/` (repo root) ships answers to
+that tool's folder checklist.
 
 **A `PERF_LEDGER.md` entry never states a tok/s figure or a turn wall that the `-jit` script
 produced - a `-jit` A/B pair enters as its ratio, with the arms' absolute rates left in the
@@ -47,13 +49,14 @@ that picks a winner between candidate kernel forms.** That timing settles its ad
 decision in the report of the run that took it and in the PR that lands the kernel. The
 winner enters the ledger only through a re-measured board cell.
 
-**A diff that makes the engine serve tokens by a route no board cell exercises mints that cell
-in the same change; a route the board cannot carry names, in the same change, the artifact that
-stands in for the cell - the record or gate output that proves it served.** A route is anything
-that changes which code serves the tokens end to end - the format, modality, family, backend,
-serving lane, GPU tower, sampler class, compile tier, cross target, or the path a run with no
-flags and no environment overrides takes. The fat exe's stand-in is `tune_gate`'s fat-world
-report (`performance/profile_common.das`) plus the `sanity:` lines of its `lcpp_bench` run.
+**A diff that makes the engine run end to end - serving a client, or measuring - by a route no
+board cell exercises mints that cell in the same change; a route the board cannot carry names,
+in the same change, the artifact that stands in for the cell - the record or gate output that
+proves the route ran end to end.** A route is anything that changes which code runs a whole
+prefill-plus-decode pass end to end - the format, modality, family, backend, serving lane, GPU tower, sampler class, compile tier,
+cross target, or the path a run with no flags and no environment overrides takes. The fat
+exe's stand-in is `tune_gate`'s fat-world report (`performance/profile_common.das`) plus the
+`sanity:` lines of its `lcpp_bench` run.
 
 **A diff that claims to make an already-served path faster, from an author whose box mints
 that path, re-mints a board row (`performance/records/<box>.json`) that exercises that path, in
@@ -71,11 +74,10 @@ that ran it.** The board cell states its quant mode and stamps box and engine pr
 number can never silently describe a format nobody serves or a kernel set nobody ships. A
 figure labeled as a prediction is not a reading, and this rule does not reach it.
 
-**A measured figure that is not a whole served-turn reading - a stage wall or share, a
-kernel-form delta, an acceptance rate, a tokens-per-round count, a gate knee (the input size at
-which a gate flips) - names the harness and flags that produced it.** A figure a committed
-board cell or ruler record produced names the record and row instead of the harness and flags.
-The naming sits in the figure's own sentence, in a table heading that covers the table's rows, in a
+**A number this module writes down that is not a whole served-turn reading - any figure a run
+or a build produced, timing or not - names the harness, the flags and the box that produced
+it.** A figure a committed board cell or ruler record produced names the record and row
+instead. The naming sits in the figure's own sentence, in a table heading that covers the table's rows, in a
 section-level provenance line that covers the paragraphs under it, or in a citation of the
 `PERF_LEDGER.md` entry whose provenance line covers it.
 

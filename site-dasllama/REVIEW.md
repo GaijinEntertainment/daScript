@@ -5,10 +5,11 @@
 
 In this checklist "a page" means a served `.html` file under this directory, the generated news
 region inside index.html, `feed.xml`, and `sitemap.xml`. Publish time is the deploy that
-follows the merge of the change under review.
+follows the merge of the change under review; copy about a linked download is judged against
+the artifact reachable at that link at that moment.
 
-**A shell command, flag, or output line shown on a page is a defect unless the command runs
-verbatim and produces the result the page shows.**
+**A program name, flag, command line, or output line shown on a page must match what the
+download that page links accepts or emits, verbatim, for every platform that page offers.**
 
 **A code sample shown on a page that does not compile and run with the current toolchain is
 a defect.**
@@ -41,20 +42,25 @@ is a defect.**
 
 **A claim in any text under this folder a reader or an operator reads as fact - a page, a
 `_news/*.md` or `_stories/*.md` entry, `README.md`, a tool's docstring - that is not true at
-publish time is a defect.** A dated
-`_news` or `_stories` entry is read as a claim about its own date; standing page copy - a
-masthead, section prose, a meta tag - is read as a claim about now, and a diff that falsifies
-standing copy fixes it in the same change. Check a claim about what a shipped tool does against
-that tool's current code, and a claim about what a page here renders against the page's markup
-and `files/dasllama-io.js`.
+publish time is a defect.** A dated `_news` or `_stories` entry is read as a claim about its own
+date; standing page copy - a masthead, section prose, a meta tag - is read as a claim about
+now. `README.md`'s copy rules say how a claim is checked.
+
+**A diff that falsifies standing page copy - a masthead, section prose, a meta tag - fixes it
+in the same change.**
+
+**A PR whose copy describes what a linked download contains refreshes that download's release
+before the PR merges, or holds the copy until it does.** The rolling release republishes on its
+own trigger, never on a page's merge.
 
 **A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.** Shipped
 means a reader can have it at publish time: the code the entry describes is merged to this
 repository's `master`, and any artifact the entry points a reader at is downloadable from where
 it points.
 
-**A PR that adds a `_news/*.md` or `_stories/*.md` entry names, in the PR body, the URL it
-fetched for each artifact the entry points at and that the fetch returned the artifact.**
+**A PR that adds or changes copy describing what a downloadable artifact contains names, in
+the PR body, the URL it fetched for each artifact the copy points at and what the fetch
+returned.**
 
 **A figure in a `_stories/*.md` entry that names no date and build sha for the run it came
 from - in the entry's own text or its `<!-- figures: ... -->` comment - is a defect** - a
@@ -72,5 +78,5 @@ defect.**
 **Weakening `REVIEW.das`'s page census - the gate that reports a served file, or the `stories/`
 directory, missing from the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root),
 or an `.html` page missing from `build_news.py`'s sitemap list or `sitemap.xml` or from
-`test_metadata.py`'s page list - is a defect.** Local preview serves the tree directly, so no miss shows there: the page deploys
-unlisted, uncrawled, or unchecked.
+`test_metadata.py`'s page list - is a defect.** Local preview serves the tree directly, so no
+miss shows there: the page deploys unlisted, uncrawled, or unchecked.

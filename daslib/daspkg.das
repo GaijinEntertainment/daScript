@@ -139,6 +139,7 @@ struct ReleaseSpec {
     external_files : array<string>      //!< "src@dst" pairs shipped from outside the package; src is relative to <das_root>, dst to the bundle root
     tools : array<string>               //!< built tools shipped by bare name from <das_root>/bin/ (bin/Release/ in an MSVC tree) to the bundle root; the platform adds .exe
     launcher : string                   //!< macOS .app: the shipped tool (one of `tools`) the .app opens in place of the exe - a supervisor that starts the exe itself
+    programs : array<string>            //!< "name@script" companions baked beside the main exe under the same class and mode, sharing the bundle's runtime libraries and modules
 }
 
 var _release_spec : ReleaseSpec
@@ -196,6 +197,11 @@ def release_include_tool(name : string) {
 //! Name the shipped tool a macOS `.app` opens in place of the exe - a supervisor that starts the exe itself, so a double click on the app supervises. The name must be one `release_include_tool` ships, or the release refuses before it builds. The flat Linux/Windows bundle is unaffected: the tool sits beside the exe either way.
 def release_launcher(tool : string) {
     _release_spec.launcher = tool
+}
+
+//! Bake a companion program into the same bundle: `script` (relative to the package root; `..` may reach another tree) becomes `<name>.exe` beside the main exe (extensionless inside a macOS .app), built under the same CPU class and tune mode - after a mint, under the main program's manifest, with that sidecar shipped under the companion's name too - and sharing the runtime libraries and shared modules the bundle already carries: a companion costs one exe, nothing else. The shared modules it alone requires ship too; a tune scope only it declares refuses the release. `release wasm` ignores companions. The benchmark beside dasllama-server is the worked example: `release_program("dasllama-bench", "../../modules/dasLLAMA/benchmarks/lcpp_bench.das")`.
+def release_program(name, script : string) {
+    _release_spec.programs |> push("{name}@{script}")
 }
 
 def release_exclude(pattern : string) {

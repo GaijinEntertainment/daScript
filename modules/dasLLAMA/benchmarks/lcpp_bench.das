@@ -8,6 +8,7 @@ options log_compile_time = true   // front-end compile wall + the jit backend's 
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
+require dasllama/dasllama_bench   // the pp/tg rows one rep at a time, the warmup sanity check and the row statistic - shared with dasllama-server's in-process bench
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
 require dasllama/dasllama_load   // --parity: load_model_ — the planar rail the parity fixtures were frozen on
@@ -66,11 +67,11 @@ struct Args {
 
     @clarg_short = "p"
     @clarg_doc = "Prompt tokens per pp rep (default: 512, llama-bench -p)"
-    plen : int = 512
+    plen : int = int(BENCH_PP_TOKENS)
 
     @clarg_short = "n"
     @clarg_doc = "Generated tokens per tg rep (default: 128, llama-bench -n)"
-    ngen : int = 128
+    ngen : int = int(BENCH_TG_TOKENS)
 
     @clarg_short = "r"
     @clarg_doc = "Timed repetitions per row (default: 5, llama-bench -r)"
@@ -794,7 +795,7 @@ def private tok_enc_row(tk : Tokenizer; corpus, text : string; reps : int; fmt :
             mbs |> push(bytes * double(iters) / double(us))
         }
     }
-    let st = row_stat("enc", mbs)
+    let st = bench_row("enc", mbs)
     let tok_s = st.mean * 1.0e6lf * double(ntok) / max(bytes, 1.0lf)
     say(fmt, "tok enc {corpus} {length(text)} B: {st.mean:.3f} ± {st.sd:.3f} MB/s ({tok_s / 1000.0lf:.0f} Ktok/s, {ntok} tok, {length(mbs)} reps x {iters})\n")
     delete mbs
@@ -831,7 +832,7 @@ def private tok_dec_row(tk : Tokenizer; corpus, text : string; reps : int; fmt :
             mbs |> push(double(out_bytes) * double(iters) / double(us))
         }
     }
-    let st = row_stat("dec", mbs)
+    let st = bench_row("dec", mbs)
     say(fmt, "tok dec {corpus} {out_bytes} B: {st.mean:.3f} ± {st.sd:.3f} MB/s ({np} tok, {length(mbs)} reps x {iters})\n")
     delete mbs
     var psink = 0
@@ -967,14 +968,6 @@ def private tok_cell_main(cfg : Args; reps : int; fmt : OutFmt) : bool {
     return ok && any
 }
 
-// deterministic synthetic ids (vocab-safe low range, the decode_prof convention); llama-bench
-// feeds std::rand() — token content doesn't affect speed, determinism keeps runs comparable
-def private synth_id(i, seed : int64) : int64 => 1000l + ((i * 17l + seed * 131l) % 5000l)
-
-def private build_prompt(n : int64; seed : int64) : array<int64> {
-    return <- [for (i in range64(n)); synth_id(i, seed)]
-}
-
 // One in-process A/B lever: both arms run under a SINGLE model load, so cross-run drift cancels and
 // the pair is directly comparable. Arms ride the test name (" dense=off" / " dense=on"), which keeps
 // both inside one BenchRun and leaves the (box, engine, backend, flavor) upsert identity intact.
@@ -1024,30 +1017,12 @@ def private levers_of(cfg : Args) : array<Lever> {
 // non-degenerate argmax, or the run REFUSES — the timed windows never read output (llama-bench
 // parity), so a broken pipeline would otherwise post clean-looking numbers.
 def private bench_output_gate(t : Model; s : Session; fmt : OutFmt; tag : string) : bool {
-    let vocab = t.config.vocab_size
-    var bi = 0l
-    var bv = -3.0e38
-    var mn = 3.0e38
-    var bad = 0l
-    for (v in range64(vocab)) {
-        let x = s.logits[v]
-        if (is_nan(x) || abs(x) > 3.0e38) {
-            bad++
-        } else {
-            if (x > bv) {
-                bv = x
-                bi = v
-            }
-            if (x < mn) {
-                mn = x
-            }
-        }
-    }
-    if (bad > 0l || bv <= mn) {
-        say(fmt, "REFUSED ({tag}): warmup logits unusable - {bad} non-finite of {vocab}, max {bv} min {mn}; the serving pipeline is broken and its timings would be meaningless\n")
+    let sane = bench_warm_sanity(t, s)
+    if (!sane.ok) {
+        say(fmt, "REFUSED ({tag}): {sane.detail}; the serving pipeline is broken and its timings would be meaningless\n")
         return false
     }
-    say(fmt, "sanity ({tag}): warmup argmax {bi} \"{piece_(t, bi)}\" (logit {bv})\n")
+    say(fmt, "sanity ({tag}): {sane.detail}\n")
     return true
 }
 
@@ -1284,28 +1259,7 @@ def private dispatch_census(t : Model; fmt : OutFmt) {
     }
 }
 
-struct private RowStat {
-    test : string
-    mean : double
-    sd : double
-}
-
-def private row_stat(tag : string; tps : array<double>) : RowStat {
-    var sum = 0.0lf
-    for (v in tps) {
-        sum += v
-    }
-    let n = length(tps)
-    let mean = sum / double(n)
-    var vsum = 0.0lf
-    for (v in tps) {
-        vsum += (v - mean) * (v - mean)
-    }
-    let sd = n > 1 ? double(sqrt(float(vsum / double(n - 1)))) : 0.0lf
-    return RowStat(test = tag, mean = mean, sd = sd)
-}
-
-def private tests_of(rows : array<RowStat>) : table<string; BenchTest> {
+def private tests_of(rows : array<BenchRow>) : table<string; BenchTest> {
     return <- { for (r in rows); r.test => BenchTest(tok_s = r.mean, stddev = r.sd) }
 }
 
@@ -1502,6 +1456,7 @@ def main() : int {
     var model_list <- [for (m in split(cfg.model, ",")); strip(m)]
     var mdRows : array<array<string>>
     var jsonModels : array<BenchModel>
+    var no_rows = false   // a model that produced no row ends the run non-zero, below the que scope
     with_job_que() {
         setup_dasllama_jobque_()
         //! the regime line above prints the INTENT; this is the que that actually spawned
@@ -1509,7 +1464,7 @@ def main() : int {
         for (mpath in model_list) {
         continue if (empty(mpath))
         say(fmt, "loading {mpath}\n")
-        var results : array<RowStat>
+        var results : array<BenchRow>
         var modelArch = ""
         var activeB = 0.0lf
         var execFmt = ""
@@ -1575,7 +1530,7 @@ def main() : int {
         if (cfg.prof) {
             dispatch_census(t, fmt)
         }
-        var s <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+        var s <- bench_session(t, plen, ngen, KVDtype.f16, KVDtype.f16)   // the cap above already bounds t.config at the rows' size; nothing serves this model afterwards, so nothing restores it
         var pp_off : array<double>
         pp_off |> resize(length(toks))
         for (arm in range(ab ? 2 : 1)) {
@@ -1635,7 +1590,7 @@ def main() : int {
                             }
                         }
                         rep_gen += p_gen
-                        let p_us = int64(get_time_usec(t0))
+                        let p_us = get_time_nsec(t0) / 1000l   // the 64-bit clock: a real continuation on a slow box outlives the 32-bit microsecond one
                         total_us += p_us
                         pp_us[pi] += p_us
                         pp_gen[pi] += p_gen
@@ -1650,7 +1605,7 @@ def main() : int {
                 if (mtp_on && sp.temp > 0.0 && parked == 0l) {
                     panic("lcpp_bench: --mtp-temp {sp.temp} is set but the accept walk never parked a draw - the lever did not engage")
                 }
-                let st = row_stat("tg-real{ngen}{dtag}", tps)
+                let st = bench_row("tg-real{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps, {length(toks)} prompts)\n")
                 if (!mtp_on) {
                     for (pi in range(length(toks))) {
@@ -1726,20 +1681,12 @@ def main() : int {
                 continue
             }
             if (plen > 0l) {
-                let warm <- build_prompt(plen, 999l)
-                forward_prefill(t, s, warm, plen, 0l)   // warmup — untimed full-size run, as llama-bench does
+                bench_pp_warm(t, s, plen)   // untimed full-size run, as llama-bench does
                 if (!bench_output_gate(t, s, fmt, "pp{plen}{dtag}")) {
                     panic("lcpp_bench: output sanity gate refused pp{plen}{dtag} - see the REFUSED line")
                 }
-                var tps : array<double>
-                for (rep in range(reps)) {
-                    let prompt <- build_prompt(plen, int64(rep))
-                    let t0 = ref_time_ticks()
-                    forward_prefill(t, s, prompt, plen, 0l)
-                    let us = get_time_usec(t0)
-                    tps |> push(double(plen) * 1.0e6lf / double(us))
-                }
-                let st = row_stat("pp{plen}{dtag}", tps)
+                var tps <- [for (rep in range(reps)); bench_pp_rep(t, s, plen, int64(rep))]
+                let st = bench_row("pp{plen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps)\n")
                 if (g_env_bench.bench_verbose) {
                     say(fmt, "  reps: {tps}\n")
@@ -1749,7 +1696,7 @@ def main() : int {
                 if (cfg.prof) {
                     // untimed bucket window for the pp row — reset FIRST, so the report is pure prefill
                     forward_profile_reset()
-                    var inscope pprof <- build_prompt(plen, 998l)
+                    var inscope pprof <- bench_prompt(plen, 998l)
                     let ts_wall = ref_time_ticks()
                     forward_prefill(t, s, pprof, plen, 0l)
                     let wall_us = get_time_usec(ts_wall)
@@ -1758,20 +1705,12 @@ def main() : int {
                 }
             }
             if (ngen > 0l) {
-                forward(t, s, synth_id(0l, 999l), 0l)   // warmup — one untimed token, llama-bench's test_gen(ctx, 1)
+                bench_tg_warm(t, s)   // one untimed token, llama-bench's test_gen(ctx, 1)
                 if (!bench_output_gate(t, s, fmt, "tg{ngen}{dtag}")) {
                     panic("lcpp_bench: output sanity gate refused tg{ngen}{dtag} - see the REFUSED line")
                 }
-                var tps : array<double>
-                for (rep in range(reps)) {
-                    let t0 = ref_time_ticks()
-                    for (i in range64(ngen)) {
-                        forward(t, s, synth_id(i, int64(rep)), i)
-                    }
-                    let us = get_time_usec(t0)
-                    tps |> push(double(ngen) * 1.0e6lf / double(us))
-                }
-                let st = row_stat("tg{ngen}{dtag}", tps)
+                var tps <- [for (rep in range(reps)); bench_tg_rep(t, s, ngen, int64(rep))]
+                let st = bench_row("tg{ngen}{dtag}", tps)
                 say(fmt, "{st.test}: {st.mean:.2f} ± {st.sd:.2f} tok/s ({reps} reps)\n")
                 if (g_env_bench.bench_verbose) {
                     say(fmt, "  reps: {tps}\n")
@@ -1782,6 +1721,11 @@ def main() : int {
         }
         delete s
         delete t
+        if (empty(results)) {   // a run that measured nothing must not report success (-p 0 -n 0)
+            say(fmt, "lcpp_bench: no rows measured for {mpath} - nothing to report\n")
+            no_rows = true
+            break
+        }
         // the reference runs AFTER our model is freed — one model in memory at a time
         var refRows : array<LlamaBenchRow>
         var refCmd = ""
@@ -1886,6 +1830,9 @@ def main() : int {
     delete refRows
     }   // model loop
     }   // with_job_que
+    if (no_rows) {
+        return 1
+    }
     if (fmt == OutFmt.md) {
         let headers <- ["engine", "model", "backend", "ngl", "threads", "test", "t/s"]
         let aligns <- [ColAlign.left, ColAlign.left, ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.left, ColAlign.right]

@@ -1987,6 +1987,111 @@ def test_cmd_release_launcher(t : T?) {
 }
 
 [test]
+def test_cmd_release_program(t : T?) {
+    t |> run("release_program bakes a companion exe beside the main one, in the manifest, sharing the runtime") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_program"
+        let out_dir = "{get_das_root()}/_test_release_program_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+        }
+        // the companion alone requires a shared module (stbimage): the bundle must ship it for the
+        // companion's sake, where the main program never asked for it
+        let stb_module = path_join(get_das_root(), "modules/dasStbImage/dasModuleStbImage.shared_module")
+        let stb_built = fexist(stb_module)
+        let tool_require = stb_built ? "require stbimage\n" : ""
+        fopen("{tmp_root}/tool.das", "wb") $(f) {
+            fwrite(f, "options gen2\n{tool_require}[export]\ndef main() \{\n    print(\"companion\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"withtool\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n    release_program(\"side-tool\", \"tool.das\")\n\}\n")
+        }
+        tt |> equal(0, cmd_release(tmp_root, out_dir), "cmd_release returns 0 with a companion")
+        let artifacts = bundle_artifacts_dir(out_dir, "withtool")
+        let companion_rel = get_platform_name() == "darwin" ? "side-tool" : "side-tool.exe"
+        tt |> success(fexist(bundle_exe_path(out_dir, "withtool")), "the main exe ships")
+        tt |> success(fexist(path_join(artifacts, companion_rel)), "the companion exe sits beside it as {companion_rel}")
+        tt |> success(!fexist(path_join(artifacts, "side-tool.o")), "the companion's object file is dropped")
+        let manifest = fread(path_join(artifacts, ".daspkg_release.manifest"))
+        tt |> success(find(manifest, companion_rel) >= 0, "the manifest records the companion, so a re-release cleans it:\n{manifest}")
+        if (stb_built) {
+            tt |> success(fexist(path_join(artifacts, "modules/dasStbImage/dasModuleStbImage.shared_module")), "the shared module only the companion requires ships")
+        } else {
+            tt |> success(true, "not covered here: the companion-only shared module needs a built dasStbImage")
+        }
+        tt |> success(fexist(path_join(artifacts, "side-tool.tune.json")) == fexist(path_join(artifacts, "withtool.tune.json")), "the companion carries the sidecar exactly when the main exe does")
+        var runtime_names : table<string>
+        var runtime_dupes = 0
+        fio::dir(artifacts) $(name) {
+            if (find(name, "libDaScriptDyn") >= 0) {
+                runtime_dupes += key_exists(runtime_names, name) ? 1 : 0
+                runtime_names |> insert(name)
+            }
+        }
+        tt |> success(!empty(runtime_names) && runtime_dupes == 0, "one set of runtime libraries serves both exes, none twice")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
+[test]
+def test_cmd_release_program_refusals(t : T?) {
+    t |> run("a companion that fails to build ends the release with nothing of it left behind") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_program_broken"
+        let out_dir = "{get_das_root()}/_test_release_program_broken_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/tool.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    this is not daslang\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"withbroken\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n    release_program(\"side-tool\", \"tool.das\")\n\}\n")
+        }
+        tt |> equal(1, cmd_release(tmp_root, out_dir), "a companion that does not compile fails the release")
+        let artifacts = bundle_artifacts_dir(out_dir, "withbroken")
+        tt |> success(!fexist(path_join(artifacts, "side-tool.exe")) && !fexist(path_join(artifacts, "side-tool")) && !fexist(path_join(artifacts, "side-tool.o")), "no half-built companion stays in the bundle")
+        var leftover = 0
+        fio::dir(get_das_root()) $(name) {
+            if (name |> starts_with("_daspkg_release_deps_")) {
+                leftover ++
+            }
+        }
+        tt |> equal(0, leftover, "no deps JSON is left in the tree")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+    t |> run("a companion with an unsafe name, the bundle's own name, a shipped tool's name, a twin's name, or a missing script is refused before the build") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_program_bad"
+        let out_dir = "{get_das_root()}/_test_release_program_bad_out"
+        for (bad in ["release_program(\"bad name\", \"main.das\")", "release_program(\"withtool\", \"main.das\")", "release_program(\"side-tool\", \"absent.das\")",
+                     "release_program(\"\", \"main.das\")", "release_program(\"side-tool.exe\", \"main.das\")", "release_program(\"a..b\", \"main.das\")",
+                     "release_program(\"side-tool\", \"main.das; rm -rf x\")",
+                     "release_include_tool(\"watchdog\")\n    release_program(\"watchdog\", \"main.das\")",
+                     "release_program(\"side-tool\", \"main.das\")\n    release_program(\"side-tool\", \"main.das\")"]) {
+            force_rmdir(tmp_root)
+            force_rmdir(out_dir)
+            mkdir(tmp_root)
+            fopen("{tmp_root}/main.das", "wb") $(f) {
+                fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+            }
+            fopen("{tmp_root}/.das_package", "wb") $(f) {
+                fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"withtool\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n    {bad}\n\}\n")
+            }
+            tt |> equal(1, cmd_release(tmp_root, out_dir), "refused: {bad}")
+            tt |> success(!fexist(bundle_exe_path(out_dir, "withtool")), "and nothing was built for {bad}")
+        }
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
+[test]
 def test_cmd_release_refuses_jit_only(t : T?) {
     t |> run("release_requires_jit() refuses the release before anything builds") @(tt : T?) {
         let tmp_root = "{get_das_root()}/_test_release_jitonly"

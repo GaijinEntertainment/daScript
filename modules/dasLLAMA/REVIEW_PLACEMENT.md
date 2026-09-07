@@ -13,8 +13,9 @@ checklist's own.
 
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
-**A disk-order -> compute-order transform lands per scope: kernel-layout in
-`dasllama/dasllama_repack.das`, load-scope in `dasllama/dasllama_layout.das`.**
+**A disk-order -> compute-order transform lands per scope: a transform a kernel's layout needs
+in `dasllama/dasllama_repack.das`, a transform run while the model loads in
+`dasllama/dasllama_layout.das`.**
 
 **A CPU KV-cache store, read, score dot, or V-accumulate OVER CACHE BYTES - a codec primitive
 that knows the K/V element format - lands in `dasllama/dasllama_kv_codec.das`, its format
@@ -24,19 +25,24 @@ land in their backend kernel file.
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its
 backend file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
-**A kernel body lands in its owner's backend file.** A GPU kernel body lands in the file where
-its pipeline state object (PSO) is compiled and released. A CPU-tier kernel body lands in that
-tier's `dasllama/dasllama_math_<tier>.das`. A kernel body never lands in
-`dasllama/dasllama_math.das` or in a file whose job is declaring kernels and routing dispatch. A
-class stamped from a template declared elsewhere is not a kernel body: it compiles and releases
-its own PSO where it is stamped.
+**A kernel body - the arithmetic loop itself, the one a `[tune]` family or a dispatch class (a
+class a `[metal_dispatch]` or `[vk_dispatch]` declares) picks one variant of - lands in its
+owner's backend file.** A GPU kernel body lands in the file where its pipeline state object
+(PSO) is compiled and released. A CPU-tier kernel body lands in that tier's
+`dasllama/dasllama_math_<tier>.das`. A kernel body never lands in `dasllama/dasllama_math.das`
+or in a file whose job is declaring kernels and routing dispatch. A class stamped from a
+template declared elsewhere is not a kernel body: it compiles and releases its own PSO where it
+is stamped.
 
 **A quirk of one family - one model architecture's file, or one backend driver's - lands in that
 file, never sideways into a sibling.**
 
 **A piece two files need lands in their nearest shared file (its own file when none exists) -
 never a second copy.** A predicate, a constant, or a helper spelled twice drifts on the first
-edit to one copy.
+edit to one copy. A piece two folders outside each other both need lands in the folder that
+owns the concern; one landing under `dasllama/` that code outside `modules/dasLLAMA/` drives
+lands as a public entry module - one `dasllama/dasllama_lint.das` licenses a consumer to
+require directly.
 
 **A family gaining an arm for a media kind adds that kind's span markers to that family's chat
 template, never to a second renderer.** Span markers are the template text that opens and
@@ -64,8 +70,9 @@ in `dasllama/dasllama_tools.das`.**
 **No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires
 `stbimage`.** Benchmarks, harnesses, and tests decode their own fixtures.
 
-**Engine, HTTP, or writer logic never lands in `dasllama/dasllama_scheduler.das`** - engine
-logic in engine files, HTTP in the server, writer logic in the writer's own file.
+**Engine, HTTP, or response-writing logic never lands in `dasllama/dasllama_scheduler.das`** -
+engine logic in engine files; HTTP, and the code that turns a step's output into the wire text
+a client reads, in `utils/dasllama-server` (repo root).
 
 **An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
 `dasllama/dasllama_transformer.das`** - arch registrations, GPU tiers, every module requiring
@@ -78,9 +85,6 @@ module it needs directly.
 **A `dasllama/` module whose `[init]` registers a hook the engine dispatches through is
 required from `dasllama/dasllama_transformer.das` in the same change that adds it** - a
 registration no umbrella reaches never fires for a consumer of the `dasllama.das` facade.
-
-**A diff that adds a file under `dasllama/` adds that file's charter line to the
-`ARCHITECTURE_*.md` sec.1 that owns its concern in the same change.**
 
 **An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
 family name on a shared path, is a defect - it carries declarative registration only.**

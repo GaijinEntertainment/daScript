@@ -28,11 +28,11 @@ These gates mirror no CI lane:
 
 - **dasllama-model-free / dasllama-stocked** - `<daslang> -jit modules/dasLLAMA/tests/run.das
   -- --suite model-free` and `--suite stocked` (the module's per-PR gates,
-  `modules/dasLLAMA/tests/CLAUDE.md`), full tier, each SKIPs unless `git diff --name-only
-  <base>..HEAD` has a path under `modules/dasLLAMA/`. `model-free` is tens of minutes;
-  `stocked` is tens of minutes on a box with models and a run of skips without them. On a
-  failure (or under `--verbose`) the gate prints the runner's output; each file's log path is
-  on its `DONE` line.
+  `modules/dasLLAMA/tests/CLAUDE.md`), module tier: no tier runs them, `--only
+  dasllama-model-free` / `--only dasllama-stocked` does, one at a time (two dasLLAMA suites
+  never share a box). `model-free` is tens of minutes; `stocked` is tens of minutes on a box
+  with models and a run of skips without them. On a failure (or under `--verbose`) the gate
+  prints the runner's output; each file's log path is on its `DONE` line.
 - **untracked** - `git ls-files --others --exclude-standard` must print nothing:
   commit, delete, or ignore each leftover (`.gitignore` when every clone mints
   it, `.git/info/exclude` for box-local keeps).
@@ -70,7 +70,7 @@ working-tree copy.
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
-| `dasllama_server_release.yml` | `release: prereleased`, `workflow_dispatch` (`publish` input), and a branch push that edits the file itself | four cells (linux x86_64, linux arm64, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server`, smoke, package; a release or a `publish` dispatch uploads to the rolling `dasllama-server` release (and the daslang release being cut). Local mirror: `bin/daslang utils/daspkg/main.das -- release --fat <class> --root utils/dasllama-server --out <dir>` on the box, then run the bundle |
+| `dasllama_server_release.yml` | `release: prereleased`, `workflow_dispatch` (`publish` input), and a branch push that edits the file itself or what the bundle carries (`utils/dasllama-server/**`, `utils/watchdog/**`, `utils/daspkg/**`, `daslib/daspkg.das`, `modules/dasHV/**`, `modules/dasLLAMA/benchmarks/lcpp_bench.das`, `modules/dasLLAMA/dasllama/dasllama_bench.das`; `.md` edits excepted) | four cells (linux x86_64 and arm64 on ubuntu-22.04, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server` (the server, the watchdog, the `dasllama-bench` companion), smoke, package; a release or a `publish` dispatch uploads to the rolling `dasllama-server` release (and the daslang release being cut). Local mirror: `bin/daslang utils/daspkg/main.das -- release --fat <class> --root utils/dasllama-server --out <dir>` on the box, then the smoke by hand - the server on a spare port answering `/v1/stats` in setup mode, `dasllama-bench -m none.gguf --help` exiting 0 |
 
 > A manual **`workflow_dispatch`** of `build.yml` runs the **whole** workflow - every per-PR job, both nightly toolchains, *and* the full AOT sweep. The cron `schedule` runs the two toolchains, the full build matrix and `bundle_smoke` (the cron run is what seeds its sccache slot); `build_linux_gcc` is gated off `schedule`.
 

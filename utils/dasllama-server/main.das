@@ -20,7 +20,8 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // explicit exchange_accept key in the config consults it); a tune exits so the watchdog can restart
 // with the winners (missing = "restart"); `--tune` forces a local re-tune. Set DAS_TUNE_POLICY=error
 // while developing to skip per-start tuning (it prints the tuner command instead). The winners live
-// at <das_root>/dasllama.tune.json, shared by every dasLLAMA app on this box.
+// at <das_root>/dasllama.tune.json, shared by every dasLLAMA app on this box. A fat build (the
+// download) carries no tuner: its kernels are the class clones, and `--tune` is ignored.
 
 require openai_server           // the server + route handlers (this directory)
 require model_catalog           // catalog_models_dir — the models-dir resolution
@@ -146,7 +147,7 @@ struct ServerArgs {
     @clarg_doc = "Directory the model catalog downloads into (default ~/.dasllama/models; DASLLAMA_MODELS_DIR overrides)"
     models_dir : string
 
-    @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch (handled before arg parsing)"
+    @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch (handled before arg parsing; a fat build carries no tuner and ignores it)"
     tune : bool
 
     @clarg_short = "?"
@@ -1079,8 +1080,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         to_log(LOG_INFO, "dasllama-server: models dir {catalog_dir} (DASLLAMA_MODELS_DIR overrides the models_dir config key)\n")
     }
     set_setup_mode(g_setup_mode)
-    // the bench button runs OUR bench as a child daslang process (lcpp_bench.das) — a
-    // standalone-exe deployment has no script runner, so /bench and /bake refuse there
+    // the A/B bench and the bake spawn a child daslang process (lcpp_bench.das, the converter) — a
+    // standalone-exe deployment has no script runner, so /bake refuses there and /bench measures
+    // in process instead
     var daslang_bin = ""
     if (!is_standalone_exe()) {
         for (a in get_command_line_arguments()) {   // argv[0] = the running daslang binary (locked temp — no delete)

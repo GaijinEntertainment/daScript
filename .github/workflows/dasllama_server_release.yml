@@ -11,8 +11,10 @@ name: dasllama-server release
 #   * workflow_dispatch - full matrix build + smoke; uploads to the rolling release only when
 #     the `publish` input is set. A dispatch without it is a build check, nothing moves.
 #   * push on a branch of this file or of what the bundle carries (the server, the watchdog,
-#     daspkg, dasHV) - the same build check, as workflow artifacts, so an edit proves itself
-#     before it reaches master (a dispatch needs the file on master).
+#     daspkg, dasHV, the benchmark companion's script and the rows it drives) - the same build
+#     check, as workflow artifacts, so an edit proves itself before it reaches master (a
+#     dispatch needs the file on master). The engine itself is not on the list: every dasLLAMA
+#     push rebuilding four fat bundles is the price a release cut pays once.
 #
 # The matrix is the SDK's: linux x86_64, linux arm64, darwin arm64, windows x64. A fat build
 # needs no target hardware - the clones compile from the shipped profiles - so every class ships
@@ -30,6 +32,8 @@ on:
       - 'utils/daspkg/**'
       - 'daslib/daspkg.das'
       - 'modules/dasHV/**'
+      - 'modules/dasLLAMA/benchmarks/lcpp_bench.das'
+      - 'modules/dasLLAMA/dasllama/dasllama_bench.das'
       - '!**/*.md'
   workflow_dispatch:
     inputs:
@@ -163,14 +167,17 @@ jobs:
         run: |
           set -eux
           case "${{ runner.os }}" in
-            macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog" ;;
-            Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe" ;;
-            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog" ;;
+            macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench" ;;
+            Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe"; BENCH="$APP/dasllama-bench.exe" ;;
+            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench.exe" ;;
           esac
           test -f "$APP/control.html"
           test -f "$APP/tray.ico"
           test -f "$APP/watchdog.json"
           "$WATCHDOG" --help
+          # the companion loads the same runtime and modules the server does; -m is required, so
+          # the help form carries a placeholder
+          "$BENCH" -m none.gguf --help
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             grep -A1 CFBundleExecutable dist/dasllama-server.app/Contents/Info.plist | grep -q '<string>watchdog</string>'
             grep -A1 LSUIElement dist/dasllama-server.app/Contents/Info.plist | grep -q '<true'

@@ -4,11 +4,17 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
 
 ### 2.5 There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 
-`benchmarks/lcpp_bench.das` is the only thing that measures performance. It is a *mirror* of
-the upstream `llama-bench` - the same test shapes, rep counts and timing boundaries, applied to
-our engine - so `pp` is one batched prefill of `-p` tokens from an empty cache per rep and `tg`
-is `-n` single-token forwards with no logit read, each row one untimed warmup plus `-r` timed
-reps. The real `llama-bench` runs only when `--ref <path>` is passed; that is how the upstream
+`benchmarks/lcpp_bench.das` is the only thing that produces a recorded measurement. It is a
+*mirror* of the upstream `llama-bench` - the same test shapes, rep counts and timing
+boundaries, applied to our engine - so `pp` is one batched prefill of `-p` tokens from an empty
+cache per rep and `tg` is `-n` single-token forwards with no logit read, each row one untimed
+warmup plus `-r` timed reps. The rows' protocol lives in one place, `dasllama/dasllama_bench.das`
+(the synthetic ids, the warmups, the timed reps, the warmup logit check, the row statistic), and
+two drivers run it: `lcpp_bench` from its loop, and dasllama-server's in-process `/bench` one
+step per tick on the model it serves. Only `lcpp_bench`'s rows become records: the server's are
+a self-measure the operator reads on the control page, stamped with the device, the KV codec,
+the exec tier and the tune state they ran under, and they enter no board, ledger or exchange.
+The real `llama-bench` runs only when `--ref <path>` is passed; that is how the upstream
 columns were produced, and they are pinned, not re-measured.
 
 `performance/gen_bench_records.das` sweeps a board by spawning that rig once per cell, and
@@ -26,7 +32,9 @@ its stored mean (fail past 5%, warn past 3%, gains flagged as suspicious). Upstr
 the store is never written, and a text cell's timed child runs `--frozen` - a prepare pass bakes
 and warms its image first (the batch starts wiped), so the timed cell never converts; ASR and
 image-chat cells bake what they need mid-cell, like their publishing legs. A second
-harness would produce numbers that cannot be compared to any of this.
+harness with its own protocol would produce numbers that cannot be compared to any of this;
+the server's self-measure shares the protocol and is still not a record, because its session,
+its device and its tune state are whatever the operator's box serves.
 
 **The tune stamp gates the comparison.** A manifest older than the binary fails every cell, and
 an untuned invocation stamps the shipped class profile (a box the profile does not cover

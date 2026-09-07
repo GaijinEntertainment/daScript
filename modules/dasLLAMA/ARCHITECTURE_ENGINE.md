@@ -213,9 +213,16 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
   tuner's kernel half also writes, the Metal twin crown race (synthetic, no model), and the
   first-start hook it registers with the box-profile apply (`ARCHITECTURE_MEASUREMENT.md`
   sec.2.42a).
+- **`dasllama_bench.das`** - the benchmark rows as one-rep steps over a `Model` and a
+  `Session`: the pp warmup and timed prefill, the tg warmup and timed single-token forwards
+  (whole-rep, or one token at a time for a driver that keeps its tick loop live), the warmup
+  logit sanity check, the row-sized session under a caller's KV codec, and the row statistic.
+  A sanctioned public entry point, like the exchange: the fourth door in `dasllama_lint`'s
+  allowed table. `benchmarks/lcpp_bench.das` drives it from its loop; dasllama-server's
+  in-process `/bench` runs one step per tick (`ARCHITECTURE_MEASUREMENT.md` sec.2.5).
 - **`dasllama_lint.das`** - the facade boundary as a compile-time lint (DASLLAMA001): every
   engine module carries it, so a consumer requiring anything under `modules/dasLLAMA/` but the
-  entry modules (facade, scheduler, exchange pair) fails to compile. Escape:
+  entry modules (facade, scheduler, exchange pair, bench) fails to compile. Escape:
   `options _dasllama_internal = true` - engine files, this module's own tests/harnesses/
   benchmarks/rigs, and the ruled consumers: `utils/dasllama-convert` (the bake tool reads
   the mint rail), `utils/dasllama-server/model_catalog.das` (the env rail + the model-set

@@ -51,10 +51,18 @@ The exe is a fat build (``daspkg release --fat``): plain code for the
 platform's baseline CPU class - ``x86-avx2`` on x86, ``arm-neon`` on arm64 -
 with one clone of every ``[tune]`` kernel per class the engine ships a profile
 for, picked from cpuid at start; on a Mac the Metal kernel choices are raced
-once at the first start and kept beside the exe.  That is the good default.
-The advanced path is the JIT from a daslang SDK, tuned on the box itself - the
-command below, or a ``daspkg release`` of the package run on that box: every
-kernel is raced on your own hardware instead of picked from a class profile.
+once at the first start and kept beside the exe.  That is the good default,
+and as far as a solid executable goes: a fat build cannot tune - its kernels
+are baked, it carries no tuner, and ``--tune``, the sidecar exchange and a
+re-tune have nothing to act on.  To tune every kernel for this box, install
+daslang with dasLLAMA (the SDK) and run the server through the JIT - the
+command below - or ``daspkg release`` the package on that box: either mints
+the box's own sidecar, every kernel raced on your own hardware instead of
+picked from a class profile.  The control page's benchmark button measures
+the box - pp512 and tg128 on the served model, seconds on a small one - and
+``dasllama-bench.exe`` beside the server (``dasllama-bench`` inside the Mac
+app) runs the same rows from a shell; ``--ref <llama-bench>`` adds the
+llama.cpp comparison.
 The bundles are not code-signed: on macOS drag the app out of Downloads with
 the Finder first (an app started from the download folder runs from a
 read-only copy), then allow it once under Privacy & Security or clear the
@@ -114,7 +122,8 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--tune``
      -
      - ---
-     - Re-tune this box's dasLLAMA kernels, then relaunch (see *Per-box tuning*)
+     - Re-tune this box's dasLLAMA kernels, then relaunch (see *Per-box tuning*;
+       a fat build carries no tuner and ignores it)
    * - ``--help``
      - ``-?``
      - ---
@@ -128,6 +137,12 @@ client resends the full transcript each turn.
 
 Per-box tuning
 ==============
+
+This section is the JIT run's - the SDK path.  The standalone download is a
+fat build: one baked clone of every kernel per CPU class, picked at start, no
+tuner, no sidecar of its own (only the runtime section its first start
+writes beside the exe); nothing below applies to it, and ``--tune`` is
+ignored there.
 
 The server declares ``[tune_policy(missing = "auto")]``, so the **first start
 on an untuned box** runs the dasLLAMA kernel tuner (``gen_tune_probe``), writes
@@ -213,7 +228,7 @@ Endpoints
      - ``{"name": <entry>}`` — start one catalog download (sha-verified; ``"tower"`` pulls a vision/asr companion, and ``{"tower": "tts", "file": <file>}`` one file of the speech set)
    * - ``GET`` / ``POST``
      - ``/bench``
-     - Read bench state and log / start the quiesced A/B benchmark against the configured llama.cpp binary (``POST`` is loopback-only)
+     - Read bench state, mode, log and result / start the quiesced benchmark: in process by default (pp512 and tg128 on the served model, three reps each, every route that could contend holding meanwhile; the result names the device, the KV codec, the exec tier and the tune state the rows ran under), or the llama.cpp A/B child when ``lcpp_bin`` is configured on a source-tree daslang (``POST`` is loopback-only)
    * - ``GET`` / ``POST``
      - ``/bake``
      - Read bake state and log / bake the slot's prepared ``.dlim`` image via ``dasllama-convert`` (``POST`` is loopback-only)
