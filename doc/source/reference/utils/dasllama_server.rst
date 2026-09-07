@@ -35,8 +35,9 @@ The server ships as a standalone download from the rolling
 https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server,
 refreshed with every daslang release: ``dasllama-server-darwin-arm64.zip``
 (macOS, Apple silicon), ``dasllama-server-windows-x64.zip``,
-``dasllama-server-linux-x86_64.tar.gz`` and ``dasllama-server-linux-arm64.tar.gz``.
-Unpack it and start the supervisor beside the server - ``watchdog``
+``dasllama-server-linux-x86_64.tar.gz`` and ``dasllama-server-linux-arm64.tar.gz``
+(the Linux bundles need the system OpenSSL 3 and ``curl``; the others carry
+their own OpenSSL).  Unpack it and start the supervisor beside the server - ``watchdog``
 (``watchdog.exe``), or on macOS the ``dasllama-server.app`` itself, whose
 launcher is the watchdog; the server binary beside it is
 ``dasllama-server.exe`` on Linux and Windows alike.  The watchdog keeps the
