@@ -23,8 +23,9 @@ The server ships as a standalone download from the rolling
 | Linux x86_64 | `dasllama-server-linux-x86_64.tar.gz` |
 | Linux arm64 | `dasllama-server-linux-arm64.tar.gz` |
 
-The Linux bundles need the system OpenSSL 3 (`libssl3` on Debian and Ubuntu, `openssl-libs` on
-Fedora) and `curl` for the catalog downloads; the macOS and Windows bundles carry their own.
+The Linux bundles need glibc 2.35 or newer (Debian 12, Ubuntu 22.04 and later), the system
+OpenSSL 3 (`libssl3` on Debian and Ubuntu, `openssl-libs` on Fedora) and `curl` for the catalog
+downloads; the macOS and Windows bundles carry their own OpenSSL.
 
 Unpack it and start the supervisor beside the server - `watchdog` (`watchdog.exe`), or on
 macOS the `dasllama-server.app` itself, whose launcher is the watchdog. The server binary
