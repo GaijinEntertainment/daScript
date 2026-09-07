@@ -10,7 +10,7 @@ require math
 // xs[j] and xs[j + 1] as adjacent (vectorizable, alias-analyzable) and the runtime pays one hash
 // lookup per global per call instead of one per access.
 
-def private self_daslang() : string {
+def private das_exe() : string {
     let argv <- get_command_line_arguments()
     return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
 }
@@ -19,7 +19,7 @@ def private tail(s : string) : string {
     return slice(s, max(0, length(s) - 400))
 }
 
-//! the dumped IR of the fixture's exported function `name` (its implementation inlines into it), signature to closing brace
+//! the dumped IR of one function, by its dumped name - mangled (`branchy Cb`) unless the signature is nullary; signature to closing brace
 def private function_ir(dump : string; name : string) : string {
     let start = find(dump, "`{name}\"(")
     if (start < 0) {
@@ -52,7 +52,7 @@ def test_global_lookup_once_per_function(t : T?) {
         let root = "modules/dasLLVM/tests/_global_lookup_root.das"
         var out = ""
         //! -jit-no-cache: the dump only exists when codegen runs; -no-module-cache: nothing is written beside the fixture
-        let rc = run_and_capture([self_daslang(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
+        let rc = run_and_capture([das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
         t |> equal(0, rc, "the fixture runs under -jit: {tail(out)}")
         t |> success(find(out, "FOUR_SUMS ") >= 0, "the fixture printed its sum: {tail(out)}")
         let ir = function_ir(out, "four_sums")
@@ -73,7 +73,7 @@ def test_global_lookup_once_per_function(t : T?) {
     t |> run("a solid-context global is one base load per function and no lookup") @(t : T?) {
         let root = "modules/dasLLVM/tests/_global_lookup_solid_root.das"
         var out = ""
-        let rc = run_and_capture([self_daslang(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
+        let rc = run_and_capture([das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
         t |> equal(0, rc, "the solid fixture runs under -jit: {tail(out)}")
         t |> success(find(out, "FOUR_SUMS ") >= 0, "the solid fixture printed its sum: {tail(out)}")
         let ir = function_ir(out, "four_sums")

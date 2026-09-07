@@ -1092,9 +1092,7 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
 
-    //! A label or a goto puts control flow beyond what the source order describes - a backward
-    //! jump reads after a store that appears above it, a forward one skips the apparent overwrite -
-    //! so the order tests (LINT010, LINT023) cannot judge this function and stand down for all of it.
+    //! stands LINT010 and LINT023 down for the rest of this function (ARCHITECTURE_LINT.md, LINT023)
     def private note_flow_jump() : void {
         if (noLint || genericDepth > 0) return
         flow_jumps = true

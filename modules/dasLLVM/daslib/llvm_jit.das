@@ -301,7 +301,7 @@ class public LlvmJitVisitor : AstVisitor {
     // LIFO matches visitor recursion, so nested `[[..],[..]]` just push/pop (no per-expr bookkeeping).
     heapMkaData : array<LLVMOpaqueValue?>
     v2v : table<Variable?; LLVMOpaqueValue?>
-    g2v : table<Variable?; LLVMOpaqueValue?>    //! a global's entry-block pointer, per LLVM function: every access shares one base
+    g2v : table<Variable?; LLVMOpaqueValue?>    //! a solid-context global's entry-block pointer, cleared per LLVM function
     v2t : table<LLVMOpaqueValue?; LLVMOpaqueType?>
     call2cmres : table<Expression?; LLVMOpaqueValue?>
     ffunc, wfunc : LLVMOpaqueValue?
@@ -6057,8 +6057,6 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             }
             if (tryV == null && !isSolidContext) {
-                // at the use site: the lookup is memory(none), so LLVM places it - one per dominating
-                // use, hoisted out of loops, never executed on a branch the call does not take
                 let mnh = hash(get_mangled_name(expr.variable))
                 let vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
                 tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")

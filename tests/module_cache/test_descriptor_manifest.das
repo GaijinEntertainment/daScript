@@ -66,7 +66,14 @@ def count_of(text : string; needle : string) : int {
     return n
 }
 
-//! the good manifest's lines: header, stamp, dll, root, dasroot, target, the dep lines, the np row, end
+//! the key lines every manifest opens with; dep lines, rows and the end line follow
+let LINE_HEADER = 0
+let LINE_STAMP = 1
+let LINE_DLL = 2
+let LINE_ROOT = 3
+let LINE_DASROOT = 4
+let LINE_TARGET = 5
+
 def manifest_lines(manifest : string) : array<string> {
     var lines <- split(fread(manifest), "\n")
     if (!empty(lines) && empty(lines[length(lines) - 1])) {
@@ -127,26 +134,30 @@ struct Fixture {
 //! not compile, and a driver that requires through the first
 def make_fixture(tmp : string) : Fixture {
     let modules = path_join(tmp, "modules")
-    var fx = Fixture(
-        tmp = tmp,
-        modDir = path_join(modules, "manifest_probe"),
-        dmDir = path_join(modules, "dm_probe"),
-        brokenDir = path_join(modules, "broken_probe")
-    )
+    let modDir = path_join(modules, "manifest_probe")
+    let dmDir = path_join(modules, "dm_probe")
+    let brokenDir = path_join(modules, "broken_probe")
     var merr : string
-    mkdir_rec(fx.modDir, merr)
-    mkdir_rec(fx.dmDir, merr)
-    mkdir_rec(fx.brokenDir, merr)
-    fx.descriptor = path_join(fx.modDir, ".das_module")
-    fx.manifest = path_join(fx.modDir, ".das_module.manifest")
-    fx.manifestTmp = "{fx.manifest}.tmp"
-    fx.dmManifest = path_join(fx.dmDir, ".das_module.manifest")
+    mkdir_rec(modDir, merr)
+    mkdir_rec(dmDir, merr)
+    mkdir_rec(brokenDir, merr)
+    let manifest = path_join(modDir, ".das_module.manifest")
+    let fx = Fixture(
+        tmp = tmp,
+        modDir = modDir,
+        dmDir = dmDir,
+        brokenDir = brokenDir,
+        descriptor = path_join(modDir, ".das_module"),
+        manifest = manifest,
+        manifestTmp = "{manifest}.tmp",
+        dmManifest = path_join(dmDir, ".das_module.manifest"),
+        cmd = "{das_exe()} -dasroot {get_das_root()} -no-module-cache -project_root {tmp} {path_join(tmp, "use.das")}"
+    )
     fwrite(fx.descriptor, DESCRIPTOR)
     fwrite(path_join(fx.modDir, "hello.das"), "options gen2\nmodule hello\ndef hello_value() : int \{\n    return 42\n\}\n")
     fwrite(path_join(fx.dmDir, ".das_module"), DESCRIPTOR_DM)
     fwrite(path_join(fx.brokenDir, ".das_module"), DESCRIPTOR_BROKEN)
     fwrite(path_join(tmp, "use.das"), "options gen2\nrequire manifest_probe/hello\n[export]\ndef main \{\n    print(\"PROBE \{hello_value()\}\\n\")\n\}\n")
-    fx.cmd = "{das_exe()} -dasroot {get_das_root()} -no-module-cache -project_root {tmp} {path_join(tmp, "use.das")}"
     return fx
 }
 
@@ -212,15 +223,15 @@ def arms_rejections(t : T?; fx : Fixture) {
         let end = length(lines) - 1
         t |> success(np > 6 && dep > 5 && dep < np && (lines[end] |> starts_with("end\t")), "the good manifest is six key lines, dep lines, the np row and end: {join(lines, " | ")}")
         return if (np < 0 || dep < 0)
-        expect_rewrite(t, cmd, manifest, join([for (i in range(4)); lines[i]], "\n") + "\n", "fewer than 7 lines")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 0, "das_module_manifest\t9"), "format version")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 1, "stamp\t1"), "stamp line")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 2, lines[2] == "dll\t0" ? "dll\t1" : "dll\t0"), "binary kind")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 3, "rooted\t{fx.modDir}"), "root line")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 3, "root\t{fx.modDir}/elsewhere"), "module folder moved")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 4, "dasroot"), "dasroot line")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 4, "dasroot\t{fx.tmp}"), "das root moved")
-        expect_rewrite(t, cmd, manifest, with_line(lines, 5, "target"), "target line")
+        expect_rewrite(t, cmd, manifest, join([for (i in range(LINE_DASROOT)); lines[i]], "\n") + "\n", "fewer than 7 lines")
+        expect_rewrite(t, cmd, manifest, with_line(lines, LINE_HEADER, "das_module_manifest\t9"), "format version")
+        expect_rewrite(t, cmd, manifest, with_line(lines, LINE_STAMP, "stamp\t1"), "stamp line")
+        expect_rewrite(t, cmd, manifest, with_line(lines, LINE_DLL, lines[LINE_DLL] == "dll\t0" ? "dll\t1" : "dll\t0"), "binary kind")
+        expect_rewrite(t, cmd, manifest, with_line(lines, LINE_ROOT, "rooted\t{fx.modDir}"), "root line")
+        expect_rewrite(t, cmd, manifest, with_line(lines, LINE_ROOT, "root\t{fx.modDir}/elsewhere"), "module folder moved")
+        expect_rewrite(t, cmd, manifest, with_line(lines, LINE_DASROOT, "dasroot"), "dasroot line")
+        expect_rewrite(t, cmd, manifest, with_line(lines, LINE_DASROOT, "dasroot\t{fx.tmp}"), "das root moved")
+        expect_rewrite(t, cmd, manifest, with_line(lines, LINE_TARGET, "target"), "target line")
         expect_rewrite(t, cmd, manifest, with_line_inserted(lines, np, ""), "empty line")
         expect_rewrite(t, cmd, manifest, with_line(lines, dep, "dep\t{fx.modDir}/nope.das\t1"), "dep field count")
         expect_rewrite(t, cmd, manifest, with_line(lines, dep, "dep\t{fx.modDir}/nope.das\t1\t0000000000000000"), "dependency missing")

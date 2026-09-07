@@ -33,10 +33,9 @@ initializer reports the variable.
 state scoped to that construct.** State an early return leaves set poisons the next
 construct's visit.
 
-**Visitor state whose value must be restored when its construct exits lives in a stack, never
-in a bare scalar; a monotone depth counter, or a flag reset once per function, may stay a
-scalar.** A restored value kept in a scalar survives into the sibling construct's exit path and
-unbalances it.
+**Visitor state that must be restored to a value saved when its construct was entered lives in
+a stack, never in a bare scalar.** A saved value kept in a scalar survives into the sibling
+construct's exit path and unbalances it.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
 decided by a C++-side definition, with no test, lint, or compile error failing when the two

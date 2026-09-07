@@ -10,7 +10,7 @@ require math
 // no compiler, so it registers none; a --jit-register-all-modules exe (the dastest.exe shape,
 // which compiles at run time) still carries every row.
 
-def private self_daslang() : string {
+def private das_exe() : string {
     let argv <- get_command_line_arguments()
     return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
 }
@@ -32,7 +32,7 @@ def private build_and_run(t : T?; dir : string; tag : string; extra_args : strin
     let root = "modules/dasLLVM/tests/_exe_native_paths_root.das"
     let exe = path_join(dir, "{tag}.exe")   //! daslang -exe appends `.exe` to -output itself
     var bout = ""
-    let brc = run_capture("\"{self_daslang()}\" -jit -exe -output \"{path_join(dir, tag)}\" {root} {extra_args} 2>&1", bout)
+    let brc = run_capture("\"{das_exe()}\" -jit -exe -output \"{path_join(dir, tag)}\" {root} {extra_args} 2>&1", bout)
     t |> equal(0, brc, "the -exe build ({tag}) succeeds: {tail(bout)}")
     if (brc != 0 || !stat(exe).is_valid) {
         t |> success(stat(exe).is_valid, "the exe artifact exists at -output ({tag})")
@@ -40,7 +40,7 @@ def private build_and_run(t : T?; dir : string; tag : string; extra_args : strin
     }
     //! the artifact links the producing daslang's runtime DLLs, which resolve through PATH on Windows; the
     //! command opens with `set` or an assignment, never a quote, which cmd.exe would strip
-    let bin_dir = dir_name(self_daslang())
+    let bin_dir = dir_name(das_exe())
     var cmd = "PATH=\"{bin_dir}:$PATH\" \"{exe}\" 2>&1"
     if (get_platform_name() == "windows") {
         cmd = "set \"PATH={bin_dir};%PATH%\"&& \"{exe}\" 2>&1"
@@ -76,7 +76,7 @@ def test_exe_native_paths(t : T?) {
     t |> run("a whole-lib exe (--jit-register-all-modules) carries the host's rows, each once") @(t : T?) {
         let out = build_and_run(t, dir, "whole", "-- --jit-register-all-modules")
         var hout = ""
-        let hrc = run_capture("\"{self_daslang()}\" -no-module-cache modules/dasLLVM/tests/_exe_native_paths_root.das 2>&1", hout)
+        let hrc = run_capture("\"{das_exe()}\" -no-module-cache modules/dasLLVM/tests/_exe_native_paths_root.das 2>&1", hout)
         t |> equal(0, hrc, "the fixture runs interpreted on the host: {tail(hout)}")
         t |> success(native_path_rows(hout) > 0, "the host scan registered rows: {tail(hout)}")
         t |> equal(native_path_rows(hout), native_path_rows(out), "the exe registers the host's row count - two emission sites would double it: {tail(out)}")

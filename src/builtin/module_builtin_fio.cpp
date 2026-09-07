@@ -15,7 +15,7 @@
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/string_writer.h"   // LOG / LogLevel — env-gated module-load trace
 #include "daScript/misc/env_cfg.h"
-#include "daScript/ast/dyn_modules.h"       // the descriptor manifest recorder
+#include "daScript/ast/dyn_modules.h"
 
 #include <sstream>
 #include <chrono>
@@ -2282,8 +2282,7 @@ namespace das {
     // after the folder scan, so module enumeration order stops mattering.
     static vector<tuple<string,string,string>> g_pending_dynamic_modules; // path, cpp_class_name, last dlopen error
 
-    // the descriptor manifest recorder (dyn_modules.h), armed by the scan around one descriptor run;
-    // thread-local like the environment a scan binds, so two hosts scanning on two threads never mix rows
+    // the descriptor manifest recorder (dyn_modules.h, src/ast/ARCHITECTURE.md sec.2)
     static thread_local bool                         g_manifest_recording = false;
     static thread_local bool                         g_manifest_opt_out = false;
     static thread_local vector<DynModuleManifestRow> g_manifest_rows;
@@ -2302,7 +2301,7 @@ namespace das {
         g_manifest_rows.clear();
     }
 
-    void builtin_no_manifest ( Context *, LineInfoArg * ) {   // the descriptor runs on every start
+    void builtin_no_manifest ( Context *, LineInfoArg * ) {
         if ( g_manifest_recording ) g_manifest_opt_out = true;
     }
 
@@ -2322,10 +2321,9 @@ namespace das {
     // ordering). A loadable-but-broken artifact (registrator missing, build-id
     // mismatch) always reports — to the context if any, else LOG(error) (#2580).
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
-        size_t manifestRow = size_t(-1);    // recorded whatever the outcome: a replay retries a Quiet failure the same way
-
+        size_t recordedRowIndex = size_t(-1);
         if ( g_manifest_recording ) {
-            manifestRow = g_manifest_rows.size();
+            recordedRowIndex = g_manifest_rows.size();
             DynModuleManifestRow row;
             row.dynamic = true;
             row.a = path ? path : "";
@@ -2406,7 +2404,7 @@ namespace das {
         }
         *ModuleKarma += unsigned(intptr_t(mod));
         g_registered_dynamic_modules.emplace_back(path, mod_name, mod->name);
-        if ( manifestRow != size_t(-1) ) g_manifest_rows[manifestRow].c = mod->name;
+        if ( recordedRowIndex != size_t(-1) ) g_manifest_rows[recordedRowIndex].c = mod->name;
         return lib;
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {

@@ -1,7 +1,7 @@
 options gen2
 options solid_context
 
-//! the solid-context twin of _global_lookup_root.das: a global is a fixed offset from the context's globals base
+// the solid-context twin of _global_lookup_root.das: a global is a fixed offset from the context's globals base
 let N = 64
 var xs : double[N]
 var ys : double[N]

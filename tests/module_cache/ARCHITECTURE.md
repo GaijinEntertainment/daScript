@@ -19,8 +19,9 @@ this document states what the folder is and why its tests take the shape they do
   serves the record, a changed file re-parses from that module on and says so.
 - `test_generic_instance_origin.das` - a generic instance restored from the cache keeps its
   origin generic, so a fresh program compiled in the same process after the restore resolves it.
-- `test_descriptor_manifest.das` - the module scan's descriptor manifest (`src/ast/ARCHITECTURE.md`
-  sec.2) on a project root the test writes, three modules in it: one whose descriptor registers
+- `test_descriptor_manifest.das` - the manifest the module scan keeps beside each `.das_module`
+  descriptor, replaying its registrations instead of compiling the descriptor, on a project root
+  the test writes, three modules in it: one whose descriptor registers
   a require path, one whose descriptor registers an absent C++ artifact (the `dm` row, replayed
   and retried), one whose descriptor does not compile (no manifest, the run goes on). Over the
   first: the first start compiles the descriptor and writes the manifest beside it, the second

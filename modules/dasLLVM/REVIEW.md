@@ -15,17 +15,15 @@
 - **A test under `tests/` (beside this file) never creates, overwrites, or deletes a
   git-tracked path.**
 
-- **A test under `tests/` here that writes at all - its own filesystem calls, which `REVIEW.das`
-  scans - writes only under a directory it created for this process, and removes it** - a shared
-  path under `build/` is one two concurrent runs collide on.
+- **A test under `tests/` here that writes at all - through its own filesystem calls, not a
+  child process's - writes only under a directory it created for this process, and removes it**
+  - a shared path under `build/` is one two concurrent runs collide on.
 
 - **A test under `tests/` here that spawns a daslang child keeps the child's artifacts inside
-  that same directory: `-output <dir>/...` for a `-exe` build, `-no-module-cache` or
-  `-module-cache <dir>/...` for a run that compiles through the front-end cache, and
-  `-jit-no-cache` or a pinned `jit_output_path` for a `-jit` run.** A child writes its caches
-  relative to the cwd otherwise, which is the tree two concurrent runs share; the
-  `.das_module.manifest` sidecars a child's module scan warms beside the tree's descriptors are
-  the scan's own, gitignored, and stay.
+  the directory it created for this process: `-output <dir>/...` for a `-exe` build,
+  `-no-module-cache` or `-module-cache <dir>/...` for a run that compiles through the front-end
+  cache, and `-jit-no-cache` or a pinned `jit_output_path` for a `-jit` run.** A child writes
+  its caches relative to the cwd otherwise, which is the tree two concurrent runs share.
 
 - **A diff that adds or changes a branch on the target triple records in its PR body the
   cross-compile (`write_exe`) for that target that exercised the behavior.** The suite runs on
@@ -37,13 +35,11 @@
   it, while that phase's line still prints** (phase inventory: `ARCHITECTURE.md` sec.1).
   Option resolution before the first timer, and log lines, are not work.
 
-- **A change that can alter the machine code the JIT's DLL or partition-object cache serves
-  back for identical inputs bumps `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`;
-  what counts as emitting: `ARCHITECTURE.md` sec.1.2). The constant folds only into those two
-  keys, so a change confined to `-exe` or wasm emission, which is rebuilt per invocation and
-  never cached, owes no bump. Selecting among existing generators' `[llvm_code]` arguments -
-  the `[tune]` stamping - is not such a change either: stamped arguments fold into the cache
-  keys per function.
+- **A change that can alter the machine code the JIT's DLL or split-obj cache serves back for
+  identical inputs bumps `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`; what counts
+  as emitting: `ARCHITECTURE.md` sec.1.2). The constant folds only into those two keys;
+  selecting among existing generators' `[llvm_code]` arguments - the `[tune]` stamping - is not
+  such a change, because stamped arguments fold into the cache keys per function.
 
 - **A diff that adds an environment or config input to a JIT cache key folds it inside
   `jit_env_salt` (`daslib/llvm_jit_run.das`), never directly into either JIT key - the DLL
@@ -66,10 +62,11 @@
   line a macro prints at compile time, or its absence, spawns that child with
   `-no-module-cache`; a test whose subject is the cache itself pins its own file with
   `-module-cache <temp>` instead and never takes the flag.** The default cache replays the
-  cached AST without re-running a macro, so such a line lands on the first run and never again,
-  and a silence assertion passes vacuously; a line the backend or the runtime guard prints past
-  the cache is re-produced every run and needs no flag (which lines are which:
-  `ARCHITECTURE.md` sec.5).
+  cached AST without re-running a macro, so a macro-time line - the `llvm_tune:` apply lines, a
+  `[tune]`-family compile error - lands on the first run and never again and a silence
+  assertion passes vacuously, while a line the backend or the runtime guard prints past the
+  cache - the `LLVM JIT:` announce, the covered-box announce, `re-tuning (--tune)` - is
+  re-produced every run and needs no flag.
 
 - **A diff that adds a top-level section to the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`) updates `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in

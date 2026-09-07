@@ -1214,9 +1214,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         needs_whole_lib = true
     }
 
-    // The register_native_path rows feed the compile-time require resolver, which lives in the compiler
-    // lib: only a whole-lib exe can compile at run time and reach them, so a runtime-only exe carries none.
-    // jit_register_native_path_resolve (module_jit.cpp) re-roots each destination the way dynamic modules do.
+    // the rows feed the compile-time require resolver, which only a whole-lib exe links (ARCHITECTURE.md sec.10)
     if (needs_whole_lib) {
         let reg_native_path_type = LLVMFunctionType(types.t_void,
             fixed_array<LLVMTypeRef>(

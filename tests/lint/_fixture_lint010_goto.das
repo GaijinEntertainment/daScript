@@ -2,8 +2,7 @@ options gen2
 
 // LINT010 fixture: every store below a goto or a label is read at the jump target, so none is
 // dead - the overwrite under a label, and the one on a variable declared under it, would both
-// report without the stand-down; the last function has no jumps and its first store is the one
-// genuine finding.
+// report without the stand-down.
 
 def forward_goto(n : int) : int {
     var res = 1
@@ -40,7 +39,7 @@ def store_before_backward_label(n : int) : int {
     return acc
 }
 
-def declared_after_jump(n : int) : int {
+def declared_under_label(n : int) : int {
     var acc = 0
     label 0:
     var late = 1

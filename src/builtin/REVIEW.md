@@ -3,23 +3,20 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-- **A plain-value bind - one returning nothing, or a value that is neither a reference nor
-  written into the caller's result slot - registers through `addExternInline` or
-  `addExternInlineEx` in an Inline module and through `addExtern` in every other module.**
-  The Inline modules are `$` (builtin), `math`, `strings` and `jit`. `review_nttp.das`'s scan
-  reports the wrong flavor, and fixing a report means switching the bind.
-
-- **Weakening `review_nttp.das`'s bind-flavor scan, which `REVIEW.das` runs, is a defect.**
+- **Weakening `review_nttp.das`'s bind-flavor scan, which `REVIEW.das` runs, is a defect - fix a
+  bind the scan reports by switching the bind.** The Inline modules are `$` (builtin), `math`,
+  `strings` and `jit`. In those, a plain-value bind - one returning nothing, or a value that is
+  neither a reference nor written into the caller's result slot - registers through
+  `addExternInline` or `addExternInlineEx`; in every other module it registers through
+  `addExtern`.
 
 - **A diff that adds or changes a bind in a module the scan covers rebuilds the binary from
   that diff before the folder's gate runs** - the scan reads the binds compiled into the running
   binary, so a stale binary is a false green.
 
-- **`review_nttp.das`'s `require` list pulls in, directly or transitively, every module this
-  folder registers: a diff that adds a module under this folder adds it to the list in the same
-  change, and never drops one** - a C++ module with a daslib wrapper is spelled by the wrapper
-  (`daslib/fio` covers `fio_core`), and a module the list does not reach is a module the scan
-  never sees.
+- **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require` list in
+  the same change - directly, or through the daslib wrapper that requires it - and never drops a
+  module from the list.** A module the list does not reach is a module the scan never sees.
 
 - **A diff that changes what `module_builtin_ast_serialize.cpp` streams - a field added,
   removed, reordered, re-typed, or given a new meaning - bumps the version `getVersion()`

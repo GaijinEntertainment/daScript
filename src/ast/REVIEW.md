@@ -14,12 +14,13 @@
   sees.
 
 - **A diff that changes what a manifest row means - a field added, removed, reordered or
-  re-typed in `read_manifest` or `write_manifest`, or a key line added to either
-  (`dyn_modules.cpp`) - bumps the version in `MANIFEST_HEADER` in the same change.** A reader
+  re-typed in `read_manifest` or `write_manifest`, or a line added to the manifest's key - its
+  `stamp`, `dll`, `root`, `dasroot`, `target` and `dep` lines - in either (`dyn_modules.cpp`) -
+  bumps the version in `MANIFEST_HEADER` in the same change.** A reader
   accepts a manifest whose first line equals `MANIFEST_HEADER`, so without the bump an older
   manifest decodes the changed bytes as a wrong registration with no diagnostic.
 
-- **A diff that gives `read_manifest` a new row kind gives the replay loop in
-  `init_dyn_modules` (`dyn_modules.cpp`) a branch for it in the same change.** The loop
+- **A diff that gives `read_manifest` a new kind of row - one it pushes into `rows` - gives the
+  replay loop in `init_dyn_modules` (`dyn_modules.cpp`) a branch for it in the same change.** The loop
   dispatches on one flag with `replay_native_path` as the other arm, so a kind it does not know
   replays as a native path.

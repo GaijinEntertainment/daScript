@@ -274,8 +274,8 @@ or reaches a compiler-lib module - and emits the `register_native_path` rows the
 scan loaded only under the whole-lib link, once, after that decision. The rows feed the
 compile-time require resolver (`FsFileAccess::getModuleInfo`), which lives in the compiler
 library: a runtime-only exe has no compiler and can never reach them, and every row it would
-carry is a startup `jit_register_native_path_resolve` call - an exe-file lookup plus a stat each,
-several hundred for a hello world - and a build-machine path baked into the binary. A whole-lib
+carry is a startup `jit_register_native_path_resolve` call - one exe-file lookup and one stat per
+row, for every row the host scan loaded - and a build-machine path baked into the binary. A whole-lib
 exe (`dastest.exe`, which compiles test files at run time) still carries every row, re-rooted at
 run time the way dynamic modules are.
 
@@ -293,3 +293,11 @@ a global written on one branch is looked up on that branch only. Every access to
 function therefore shares one base pointer, which is what lets LLVM see `xs[j]` and `xs[j + 1]` as
 adjacent. Under `options solid_context` the address is instead `context->globals + stackTop`,
 computed once per function in the entry block.
+
+## 12. What a test's child leaves beside the tree's descriptors
+
+A daslang child a test here spawns runs the module scan over this tree before it compiles
+anything, and the scan keeps a manifest, `.das_module.manifest`, beside every `.das_module`
+descriptor it compiles, replaying it on later starts. Those sidecars are the scan's steady
+state and are gitignored: they are the one write a child makes outside the directory its test
+created, and they stay.

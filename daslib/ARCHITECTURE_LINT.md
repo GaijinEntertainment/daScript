@@ -115,8 +115,8 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   or a `goto` anywhere in the function sets `flow_jumps`, shared with LINT010, and both rules
   report nothing there at all: a forward jump skips the store that read as an overwrite and a
   backward one places a read after a store above it, so neither source-order test has ground
-  to stand on. It is
-  deliberately NOT `branch_depth`, which also counts `if` and `try/catch`: a conditional
+  to stand on. `lint023_deferred_depth` is deliberately NOT `branch_depth`, which also counts
+  `if` and `try/catch`: a conditional
   reorders nothing, and the read that exposes the dead write sits inside one - folding the
   two counters together makes the rule silent on the shape it exists to catch.
 - **LINT029 ships default-off and is advisory.** `seed_default_disabled` carries it beside

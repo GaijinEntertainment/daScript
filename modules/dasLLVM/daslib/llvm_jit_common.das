@@ -127,8 +127,7 @@ class public Attributes {
     // memory(argmem: readwrite, inaccessiblemem: readwrite) — for deallocator-style runtime calls
     // 3 | (3 << 2) = 15
     memory_arg_inaccessible_rw : LLVMOpaqueAttributeRef?
-    // memory(none) — a pure function of its arguments (the global-offset lookups: mnh is static, the
-    // context's globals base is fixed for its lifetime), so LLVM dedups and hoists the call freely
+    // memory(none) — a pure function of its arguments; the global-offset lookups
     memory_none : LLVMOpaqueAttributeRef?
 
     def Attributes(ctx : LLVMContextRef) {
@@ -812,9 +811,6 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
     jit_add_extern(FN_JIT_STRING_BUILDER_TEMP,
         jit_fn_type($(ctx : void?; nArgs : int; types, at, args : void?) : void? {}),
         get_jit_string_builder_temp(), fixed_array(nounwind, willreturn))
-    // memory(none): the offset is a static function of mnh and the base is the context's for its whole
-    // lifetime, so a lookup emitted at its use site is CSE'd where one dominates another and hoisted
-    // out of loops by LLVM, while a branch that never runs never pays it (no speculatable: never hoisted past a branch)
     jit_add_extern(FN_JIT_GET_GLOBAL_MNH, jit_fn_type($(mnh : int64; ctx : void?) : void? {}),
         get_jit_get_global_mnh(), fixed_array(nounwind, willreturn, memory_none), (nocapture, [1]))
     jit_add_extern(FN_JIT_GET_SHARED_MNH, jit_fn_type($(mnh : int64; ctx : void?) : void? {}),

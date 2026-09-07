@@ -52,8 +52,7 @@ under `ignore_shared_modules`: the shared daslib modules it requires neither com
 the environment's promoted set, so the program compiled after the scan has the same module set -
 and the same module-cache records, `daslib/builtin` first - whether the scan compiled, replayed
 or was skipped with `-no-dynamic-modules`. Compiling and running the descriptors is the scan's
-cost - a third of an interpreter hello world's start with the two dozen descriptors in this tree -
-so the scan keeps a manifest beside each descriptor, `.das_module.manifest`, holding the rows the
+cost, and it grows with the number of descriptors in the tree, so the scan keeps a manifest beside each descriptor, `.das_module.manifest`, holding the rows the
 registry received from it.
 
 The manifest is a property of the module tree, not of the script or the cwd: the rows depend on
@@ -73,9 +72,9 @@ requires recompiles when that module changes. The file is line-oriented, tab-sep
 format version (`MANIFEST_HEADER`) on its first line and an `end` line carrying the row count
 (`dep` lines are key, not rows); a missing `end`, a count mismatch, an unknown row kind, a wrong
 field count or a `dm` row whose `on_error` is not one of `RegisterOnError`'s three values is
-damage, and the reader answers damage with a recompile and a rewrite, not a partial replay. The writer (`field_ok`) writes no manifest for a descriptor whose recorded string holds a
-tab or newline, rather than an escaped form the reader would have to decode. The writer goes
-through a `.tmp` and a rename.
+damage, and the reader answers damage with a recompile and a rewrite, not a partial replay. The
+writer refuses a descriptor whose recorded string holds a tab or newline (`field_ok`), rather
+than an escaped form the reader would have to decode, and goes through a `.tmp` and a rename.
 
 Recording is armed around one descriptor run: each builtin appends the arguments it actually
 received, in order, and `register_dynamic_module` records its call whatever the outcome and adds

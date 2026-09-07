@@ -3,14 +3,13 @@
 #include <daScript/misc/das_common.h>          // SimulateWithErrReport
 #include <daScript/ast/ast.h>                  // ModuleGroup, CompileDaScript
 #include <daScript/simulate/aot_builtin_fio.h> // dirent, DIR, readdir
-#include <daScript/simulate/aot_builtin.h>     // das_get_cross_platform_name - a manifest key input
+#include <daScript/simulate/aot_builtin.h>     // das_get_cross_platform_name, das_is_dll_build
 #include <daScript/misc/sysos.h>
 #include <daScript/misc/string_writer.h>       // TextWriter, LOG (the env-gated scan trace)
-#include <daScript/misc/anyhash.h>             // hash_block64 - the descriptor's content stamp
+#include <daScript/misc/anyhash.h>             // hash_block64
 #include <daScript/misc/env_cfg.h>             // get_dasenv_trace_module_load
 #include <cctype>                              // tolower (case-insensitive basename normalize)
 #include <cstdio>                              // fprintf(stderr) for the shadow-shadows-global diagnostic
-#include <cstdlib>                             // atoi - the manifest's on_error field
 
 das::FileAccessPtr get_file_access( char * pak );
 
@@ -36,7 +35,7 @@ static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filena
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     policies.no_init_check = true;
-    policies.ignore_shared_modules = true;  // ARCHITECTURE.md sec.2: the scan leaves no promoted module behind
+    policies.ignore_shared_modules = true;  // ARCHITECTURE.md sec.2
     auto program = compileDaScript(mod_filename, fa, tout, dummyGroup, policies);
     if ( program->failed() ) {
         for ( auto & err : program->errors ) {
@@ -97,14 +96,6 @@ static bool trace_scan() {
         return e && e[0] && e[0] != '0';
     }();
     return on;
-}
-
-static bool is_dll_build() {
-#if DAS_ENABLE_DLL
-    return true;
-#else
-    return false;
-#endif
 }
 
 enum class ManifestVerdict { Missing, Stale, Damaged, OptOut, Replay };
@@ -230,7 +221,7 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
     if ( stamp[1] != to_string(descSize) || stamp[2] != hex64(descHash) ) return stale("descriptor changed");
     auto dll = split_tabs(lines[2]);
     if ( dll.size() != 2 || dll[0] != "dll" ) return damaged("dll line");
-    if ( dll[1] != (is_dll_build() ? "1" : "0") ) return stale("binary kind");
+    if ( dll[1] != (das_is_dll_build() ? "1" : "0") ) return stale("binary kind");
     auto rootLine = split_tabs(lines[3]);
     if ( rootLine.size() != 2 || rootLine[0] != "root" ) return damaged("root line");
     if ( rootLine[1] != key.root ) return stale("module folder moved");
@@ -293,7 +284,7 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
     if ( !field_ok(key.root) || !field_ok(key.dasRoot) || !field_ok(key.target) ) { why = "a key path contains a tab or newline"; return false; }
     string text = string(MANIFEST_HEADER) + "\n";
     text += "stamp\t" + to_string(descSize) + "\t" + hex64(descHash) + "\n";
-    text += string("dll\t") + (is_dll_build() ? "1" : "0") + "\n";
+    text += string("dll\t") + (das_is_dll_build() ? "1" : "0") + "\n";
     text += "root\t" + key.root + "\n";
     text += "dasroot\t" + key.dasRoot + "\n";
     text += "target\t" + key.target + "\n";

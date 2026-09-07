@@ -30,7 +30,7 @@ DAS_CC_API bool require_dynamic_modules(smart_ptr<FileAccess> file_access,
                                      const vector<string> &disabled_modules,
                                      TextWriter &tout);
 
-// the descriptor manifest recorder (module_builtin_fio.cpp) - src/ast/ARCHITECTURE.md sec.2
+// src/ast/ARCHITECTURE.md sec.2
 struct DynModuleManifestRow {
     bool    dynamic = false;    // false: native path (a=mod_name, b=src, c=dst); true: dynamic module (a=path, b=cpp class, c=das name)
     string  a, b, c;
