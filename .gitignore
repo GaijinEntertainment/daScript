@@ -126,6 +126,8 @@ utils/**/modules/
 # that -project_root flows through correctly).
 !utils/mcp/tests/_pretend_root/modules/
 !utils/mcp/tests/_pretend_root/modules/**
+utils/mcp/tests/_pretend_root/modules/**/.das_module.manifest
+utils/mcp/tests/_pretend_root/modules/**/.das_module.manifest.tmp
 
 # Claude Code (local settings + runtime state). Exceptions: .claude/skills/
 # carries the checked-in daslang LSP plugin manifest — it must travel with the
