@@ -145,8 +145,9 @@
                 <p class="forge-hero__lede">
                     The dasProfile suite runs the same programs across daslang and the scripting
                     runtimes it competes with — Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono and .NET —
-                    plus C++ and Zig as the native floor. Two boards per platform: pure interpreters, and
-                    everything with a JIT or AOT compiler behind it. Absolute seconds, lower is
+                    plus C++ and Zig as the native floor. Three boards per platform: pure interpreters,
+                    everything with a JIT or AOT compiler behind it, and startup - the wall time of one
+                    launch of each program as a script, under the JIT, and as a standalone exe. Absolute seconds, lower is
                     better; the fastest lane in each row is highlighted.
                 </p>
                 <div class="forge-hero__ctas">
@@ -181,7 +182,7 @@
                     <button class="is-on" data-p="windows">Threadripper 3990X</button><button data-p="darwin">Apple M1 Max</button>
                 </div>
                 <div class="bm-seg" id="bm-board">
-                    <button class="is-on" data-b="Interpreted">interpreted</button><button data-b="AOT or JIT">AOT / JIT</button>
+                    <button class="is-on" data-b="Interpreted">interpreted</button><button data-b="AOT or JIT">AOT / JIT</button><button data-b="Startup">startup</button>
                 </div>
                 <div class="bm-seg" id="bm-view">
                     <button class="is-on" data-v="bars">bars</button><button data-v="table">table</button>
@@ -262,7 +263,16 @@
             { key: "LUAJIT", label: "LuaJIT", das: false },
             { key: "MONO", label: "Mono", das: false },
             { key: ".NET", label: ".NET", das: false }
+        ],
+        "Startup": [
+            { key: "DAS INTERPRETER", label: "DAS interp", das: true },
+            { key: "DAS JIT", label: "DAS JIT", das: true },
+            { key: "DAS EXE", label: "DAS exe", das: true },
+            { key: "ZIG", label: "Zig exe", das: false }
         ]
+    };
+    var BOARD_HINT = {
+        "Startup": "wall time of one launch: start, one kernel iteration, exit \u00b7 exe lanes carry the artifact size (a das exe links the runtime library dynamically, a zig exe is static)"
     };
     var state = { platform: "windows", board: "Interpreted", view: "bars", sortCol: -1, sortDesc: false, data: null };
 
@@ -286,6 +296,10 @@
         if (t >= 0.001) return (t * 1000).toFixed(2) + "ms";
         return (t * 1e6).toFixed(0) + "\u00b5s";
     }
+    function fmtSize(b) {
+        if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+        return Math.round(b / 1024) + " KB";
+    }
     function ratioText(r) { return r >= 100 ? "\u00d7" + r.toFixed(0) : r >= 10 ? "\u00d7" + r.toFixed(1) : "\u00d7" + r.toFixed(2); }
 
     function currentRows() {
@@ -297,10 +311,12 @@
             var vals = lanes.map(function (l) { return t[l.key] != null ? t[l.key] : null; });
             var laneHalfRangeOverMedian = state.data[state.platform].halfRangeOverMedian[state.board][name] || {};
             var halfRangeOverMedian = lanes.map(function (l) { return laneHalfRangeOverMedian[l.key] != null ? laneHalfRangeOverMedian[l.key] : null; });
+            var laneSizes = (state.data[state.platform].sizes[state.board] || {})[name] || {};
+            var sizes = lanes.map(function (l) { return laneSizes[l.key] != null ? laneSizes[l.key] : null; });
             // a 0.0 lane is below the capture's timer resolution - never the row's baseline
             var best = Math.min.apply(null, vals.filter(function (v) { return v != null && v > 0; }));
             if (!isFinite(best)) best = null;
-            rows.push({ name: name, vals: vals, best: best, halfRangeOverMedian: halfRangeOverMedian });
+            rows.push({ name: name, vals: vals, best: best, halfRangeOverMedian: halfRangeOverMedian, sizes: sizes });
         });
         function cellFor(row, col) {
             if (col === 0) return row.name;
@@ -352,6 +368,7 @@
                 var isBest = v === r.best;
                 var cls = "bm-num" + (isBest ? " bm-best" : "") + (das ? " bm-das" : "");
                 var halfRangeHtml = r.halfRangeOverMedian[i] != null ? "<small class='bm-halfrange'>\u00b1" + (r.halfRangeOverMedian[i] * 100).toFixed(0) + "%</small>" : "";
+                if (r.sizes[i] != null) halfRangeHtml += "<small class='bm-halfrange'> " + fmtSize(r.sizes[i]) + "</small>";
                 if (state.view === "table") {
                     html += "<td class='" + cls + "'>" + fmt(v) + halfRangeHtml + "</td>";
                 } else {
@@ -411,7 +428,8 @@
         document.getElementById("bm-prov").innerHTML = prov;
         var stat = p.sampleCount ? "median of " + p.sampleCount + " samples, \u00b1 half the range"
                  : (p.samplesSeen ? "median, \u00b1 half the sample range" : "");
-        document.getElementById("bm-hint").textContent = "seconds" + (stat ? " \u00b7 " + stat : "") + " \u00b7 lower is better \u00b7 click a column to sort";
+        var lead = BOARD_HINT[state.board] || "seconds";
+        document.getElementById("bm-hint").textContent = lead + (stat ? " \u00b7 " + stat : "") + " \u00b7 lower is better \u00b7 click a column to sort";
     }
 
     function shortVersion(s) {
@@ -450,17 +468,20 @@
         var out = { cpu: cap.cpu, versions: cap.versions,
                     das_capture: cap.das_capture || cap.timestamp,
                     ext_capture: cap.ext_capture || cap.timestamp,
-                    das_version: (cap.versions || {}).daslang || "", sections: {}, halfRangeOverMedian: {}, sampleCount: null, samplesSeen: false };
+                    das_version: (cap.versions || {}).daslang || "", sections: {}, halfRangeOverMedian: {}, sizes: {}, sampleCount: null, samplesSeen: false };
         var sampleCounts = {};
         var rowsWithoutSamples = 0;
-        ["Interpreted", "AOT or JIT"].forEach(function (sec) {
+        ["Interpreted", "AOT or JIT", "Startup"].forEach(function (sec) {
             var tests = {};
             var halfRangeOverMedian = {};
+            var sizes = {};
             Object.keys(cap[sec] || {}).forEach(function (t) {
                 var lanes = {};
                 var laneHalfRangeOverMedian = {};
+                var laneSizes = {};
                 (cap[sec][t] || []).forEach(function (r) {
                     lanes[r.language] = r.time;
+                    if (r.size > 0) laneSizes[r.language] = r.size;
                     if (r.samples && r.samples.length > 1 && r.time > 0) {
                         laneHalfRangeOverMedian[r.language] = (Math.max.apply(null, r.samples) - Math.min.apply(null, r.samples)) / 2 / r.time;
                         sampleCounts[r.samples.length] = true;
@@ -470,9 +491,11 @@
                 });
                 tests[t] = lanes;
                 halfRangeOverMedian[t] = laneHalfRangeOverMedian;
+                sizes[t] = laneSizes;
             });
             out.sections[sec] = tests;
             out.halfRangeOverMedian[sec] = halfRangeOverMedian;
+            out.sizes[sec] = sizes;
         });
         var seen = Object.keys(sampleCounts);
         out.samplesSeen = seen.length > 0;
