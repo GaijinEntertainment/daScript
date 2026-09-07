@@ -2282,10 +2282,11 @@ namespace das {
     // after the folder scan, so module enumeration order stops mattering.
     static vector<tuple<string,string,string>> g_pending_dynamic_modules; // path, cpp_class_name, last dlopen error
 
-    // the descriptor manifest recorder (dyn_modules.h), armed by the scan around one descriptor run
-    static bool                         g_manifest_recording = false;
-    static bool                         g_manifest_opt_out = false;
-    static vector<DynModuleManifestRow> g_manifest_rows;
+    // the descriptor manifest recorder (dyn_modules.h), armed by the scan around one descriptor run;
+    // thread-local like the environment a scan binds, so two hosts scanning on two threads never mix rows
+    static thread_local bool                         g_manifest_recording = false;
+    static thread_local bool                         g_manifest_opt_out = false;
+    static thread_local vector<DynModuleManifestRow> g_manifest_rows;
 
     DAS_API void begin_dynamic_module_recording () {
         g_manifest_recording = true;
