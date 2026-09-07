@@ -139,13 +139,14 @@ jobs:
           "$DASLANG" utils/daspkg/main.das -- release --fat ${{ matrix.fat_class }} --root utils/dasllama-server --out dist
 
       - name: Smoke-test the bundle
-        # the exe loads its runtime and shared modules and answers --help; the supervisor too
+        # the exe loads its runtime and shared modules and answers --help; the supervisor too.
+        # daspkg keeps the .exe suffix on every flat bundle; only the macOS .app drops it
         run: |
           set -eux
           case "${{ runner.os }}" in
             macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog" ;;
             Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe" ;;
-            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog" ;;
+            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog" ;;
           esac
           test -f "$APP/control.html"
           test -f "$APP/tray.ico"
