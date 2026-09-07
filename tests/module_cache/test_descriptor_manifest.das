@@ -35,39 +35,114 @@ def report_child(t : T?; phase : string; rc : int; out : string; marker : string
 
 let DESCRIPTOR = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"manifest_probe\", \"hello\", \"\{project_path\}/hello.das\")\n\}\n"
 let DESCRIPTOR_OPT_OUT = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    no_manifest()\n    register_native_path(\"manifest_probe\", \"hello\", \"\{project_path\}/hello.das\")\n\}\n"
+let DESCRIPTOR_TABBED = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"manifest_probe\", \"hello\", \"\{project_path\}/hello.das\")\n    register_native_path(\"manifest_probe\", \"tab\\ted\", \"\{project_path\}/tabbed.das\")\n\}\n"
+//! a C++ module row on an artifact that is not there: the Quiet overload defers the dlopen
+//! failure and never fails the descriptor
+let DESCRIPTOR_DM = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_dynamic_module(\"\{project_path\}/absent.shared_module\", \"Module_Absent\")\n\}\n"
+let DESCRIPTOR_BROKEN = "options gen2\n\n[export]\ndef initialize(project_path : string) \{\n    this_is_not_a_function()\n\}\n"
 
-//! the scan trace line for the probe descriptor: `[module] descriptor <path>/.das_module: <verdict>`
-def probe_line(out : string) : string {
-    let at = find(out, "manifest_probe/.das_module: ")
+//! the scan trace line for a module's descriptor: `[module] descriptor <path>/.das_module: <verdict>`
+def probe_line(out : string; mod : string = "manifest_probe") : string {
+    let marker = "{mod}/.das_module: "
+    let at = find(out, marker)
     if (at < 0) {
         return ""
     }
-    let rest = slice(out, at + length("manifest_probe/.das_module: "))
+    let rest = slice(out, at + length(marker))
     let eol = find(rest, "\n")
     return eol < 0 ? rest : slice(rest, 0, eol)
 }
 
-//! a project root holding one pure-das module whose descriptor registers one require path,
-//! and a driver that requires through it; the child runs with the scan trace on
-[test]
-def test_descriptor_manifest(t : T?) {
-    var terr : string
-    let tmp = create_temp_directory("das_dm_manifest", terr)
-    if (empty(tmp)) {
-        t |> failure("create_temp_directory: {terr}")
-        return
+def count_of(text : string; needle : string) : int {
+    var n = 0
+    var at = find(text, needle)
+    while (at >= 0) {
+        n++
+        at = find(text, needle, at + length(needle))
     }
-    let modDir = path_join(path_join(tmp, "modules"), "manifest_probe")
+    return n
+}
+
+//! the good manifest's lines: header, stamp, dll, root, dasroot, target, the np row, end
+def manifest_lines(manifest : string) : array<string> {
+    var lines <- split(fread(manifest), "\n")
+    if (!empty(lines) && empty(lines[length(lines) - 1])) {
+        lines |> pop()
+    }
+    return <- lines
+}
+
+def with_line(lines : array<string>; idx : int; text : string) : string {
+    var edited := lines
+    edited[idx] = text
+    return join(edited, "\n") + "\n"
+}
+
+def with_line_inserted(lines : array<string>; idx : int; text : string) : string {
+    var edited : array<string>
+    edited |> reserve(length(lines) + 1)
+    for (i in range(length(lines))) {
+        if (i == idx) {
+            edited |> push(text)
+        }
+        edited |> push(lines[i])
+    }
+    return join(edited, "\n") + "\n"
+}
+
+//! writes `text` as the manifest, runs the child, and expects the scan to reject it for `why`
+//! and rewrite it; the require resolves either way
+def expect_rewrite(t : T?; cmd : string; manifest : string; text : string; why : string) {
+    fwrite(manifest, text)
+    var out : string
+    t |> success(report_child(t, why, run(cmd, out), out, "PROBE 42"), "'{why}': the require resolves without the manifest")
+    t |> equal("compiled ({why}), manifest written (1 row(s))", probe_line(out), "'{why}' recompiles and rewrites:\n{out}")
+}
+
+//! the project root the arms share: the probe module's paths and the child command line
+struct Fixture {
+    tmp : string
+    modDir : string
+    dmDir : string
+    brokenDir : string
+    descriptor : string
+    manifest : string
+    manifestTmp : string
+    dmManifest : string
+    cmd : string
+}
+
+//! a project root holding one pure-das module whose descriptor registers one require path,
+//! a module whose descriptor registers an absent C++ artifact, a module whose descriptor does
+//! not compile, and a driver that requires through the first
+def make_fixture(tmp : string) : Fixture {
+    let modules = path_join(tmp, "modules")
+    var fx = Fixture(
+        tmp = tmp,
+        modDir = path_join(modules, "manifest_probe"),
+        dmDir = path_join(modules, "dm_probe"),
+        brokenDir = path_join(modules, "broken_probe")
+    )
     var merr : string
-    mkdir_rec(modDir, merr)
-    let descriptor = path_join(modDir, ".das_module")
-    let manifest = path_join(modDir, ".das_module.manifest")
-    fwrite(descriptor, DESCRIPTOR)
-    fwrite(path_join(modDir, "hello.das"), "options gen2\nmodule hello\ndef hello_value() : int \{\n    return 42\n\}\n")
+    mkdir_rec(fx.modDir, merr)
+    mkdir_rec(fx.dmDir, merr)
+    mkdir_rec(fx.brokenDir, merr)
+    fx.descriptor = path_join(fx.modDir, ".das_module")
+    fx.manifest = path_join(fx.modDir, ".das_module.manifest")
+    fx.manifestTmp = "{fx.manifest}.tmp"
+    fx.dmManifest = path_join(fx.dmDir, ".das_module.manifest")
+    fwrite(fx.descriptor, DESCRIPTOR)
+    fwrite(path_join(fx.modDir, "hello.das"), "options gen2\nmodule hello\ndef hello_value() : int \{\n    return 42\n\}\n")
+    fwrite(path_join(fx.dmDir, ".das_module"), DESCRIPTOR_DM)
+    fwrite(path_join(fx.brokenDir, ".das_module"), DESCRIPTOR_BROKEN)
     fwrite(path_join(tmp, "use.das"), "options gen2\nrequire manifest_probe/hello\n[export]\ndef main \{\n    print(\"PROBE \{hello_value()\}\\n\")\n\}\n")
-    let cmd = "{das_exe()} -dasroot {get_das_root()} -no-module-cache -project_root {tmp} {path_join(tmp, "use.das")}"
-    let prevTrace = get_env_variable("DAS_TRACE_MODULE_LOAD")
-    set_env_variable("DAS_TRACE_MODULE_LOAD", "1")   //! inherited by the child; the trace names each descriptor's verdict
+    fx.cmd = "{das_exe()} -dasroot {get_das_root()} -no-module-cache -project_root {tmp} {path_join(tmp, "use.das")}"
+    return fx
+}
+
+def arms_record_and_replay(t : T?; fx : Fixture) {
+    let cmd = fx.cmd
+    let manifest = fx.manifest
     t |> run("the first start compiles the descriptor and writes its manifest") @(t : T?) {
         var out : string
         t |> success(report_child(t, "cold", run(cmd, out), out, "PROBE 42"), "the require resolves through the compiled descriptor")
@@ -78,13 +153,27 @@ def test_descriptor_manifest(t : T?) {
         t |> success(find(text, "\nnp\tmanifest_probe\thello\t") >= 0, "the manifest carries the recorded row: {text}")
         t |> success(find(text, "\nend\t1\n") >= 0, "the manifest closes with its row count: {text}")
     }
+    t |> run("a dynamic-module row records the artifact, the class, the on_error and the (empty) module name") @(t : T?) {
+        let text = fread(fx.dmManifest)
+        t |> success(find(text, "\ndm\t") >= 0 && find(text, "absent.shared_module\tModule_Absent\t0\t\n") >= 0,
+            "the dm row carries five fields, the last empty for an artifact that did not load: {text}")
+        t |> success(find(text, "\nend\t1\n") >= 0, "the dm manifest closes with its row count: {text}")
+    }
+    t |> run("a descriptor that does not compile gets no manifest, and the run goes on") @(t : T?) {
+        var out : string
+        t |> success(report_child(t, "broken", run(cmd, out), out, "PROBE 42"), "the other module's require still resolves")
+        t |> equal("compiled with errors, no manifest", probe_line(out, "broken_probe"), "the trace names the failure:\n{out}")
+        t |> success(!stat(path_join(fx.brokenDir, ".das_module.manifest")).is_valid, "nothing was written for it")
+    }
     t |> run("the second start replays the manifest and never compiles the descriptor") @(t : T?) {
         var out : string
         t |> success(report_child(t, "warm", run(cmd, out), out, "PROBE 42"), "the require resolves through the replayed rows")
         t |> equal("replayed 1 row(s)", probe_line(out), "the trace says replayed:\n{out}")
+        t |> equal("replayed 1 row(s)", probe_line(out, "dm_probe"), "the dm row replays too:\n{out}")
+        t |> success(count_of(out, "Module_Absent <- ") >= 1, "the replayed dm row retries its dlopen:\n{out}")
     }
     t |> run("an edited descriptor recompiles once and is replayed again after") @(t : T?) {
-        fwrite(descriptor, "{DESCRIPTOR}// edited\n")
+        fwrite(fx.descriptor, "{DESCRIPTOR}// edited\n")
         var out : string
         t |> success(report_child(t, "edited", run(cmd, out), out, "PROBE 42"), "the edited descriptor still resolves the require")
         t |> equal("compiled (descriptor changed), manifest written (1 row(s))", probe_line(out), "the stamp mismatch recompiles and rewrites:\n{out}")
@@ -92,6 +181,11 @@ def test_descriptor_manifest(t : T?) {
         t |> success(report_child(t, "edited warm", run(cmd, again), again, "PROBE 42"), "the rewritten manifest resolves the require")
         t |> equal("replayed 1 row(s)", probe_line(again), "the rewritten manifest replays:\n{again}")
     }
+}
+
+def arms_rejections(t : T?; fx : Fixture) {
+    let cmd = fx.cmd
+    let manifest = fx.manifest
     t |> run("a damaged manifest recompiles and is rewritten") @(t : T?) {
         let text = fread(manifest)
         let endAt = find(text, "\nend\t")
@@ -99,6 +193,29 @@ def test_descriptor_manifest(t : T?) {
         var out : string
         t |> success(report_child(t, "damaged", run(cmd, out), out, "PROBE 42"), "the damaged manifest is not replayed")
         t |> equal("compiled (no end line), manifest written (1 row(s))", probe_line(out), "the trace names the damage:\n{out}")
+    }
+    t |> run("every other rejection: no row of a manifest the reader cannot vouch for is replayed") @(t : T?) {
+        let lines <- manifest_lines(manifest)
+        t |> equal(8, length(lines), "the good manifest is eight lines: {join(lines, " | ")}")
+        return if (length(lines) != 8)
+        expect_rewrite(t, cmd, manifest, join([for (i in range(4)); lines[i]], "\n") + "\n", "fewer than 7 lines")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 0, "das_module_manifest\t2"), "format version")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 1, "stamp\t1"), "stamp line")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 2, lines[2] == "dll\t0" ? "dll\t1" : "dll\t0"), "binary kind")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 3, "rooted\t{fx.modDir}"), "root line")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 3, "root\t{fx.modDir}/elsewhere"), "module folder moved")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 4, "dasroot"), "dasroot line")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 4, "dasroot\t{fx.tmp}"), "das root moved")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 5, "target"), "target line")
+        expect_rewrite(t, cmd, manifest, with_line_inserted(lines, 6, ""), "empty line")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 6, "np\tmanifest_probe\thello"), "np field count")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 6, "dm\ta\tb"), "dm field count")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 6, "no_manifest\tx"), "no_manifest field count")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 6, "xx\ta\tb\tc"), "unknown row kind")
+        expect_rewrite(t, cmd, manifest, with_line(lines, 7, "end\t2"), "end row count")
+        expect_rewrite(t, cmd, manifest, join(lines, "\n") + "\njunk\n", "content after end")
+        expect_rewrite(t, cmd, manifest, with_line_inserted(lines, 7, "no_manifest"), "no_manifest with rows")
+        t |> equal(join(lines, "\n") + "\n", fread(manifest), "the last rewrite restored the good manifest")
     }
     t |> run("a cross-compile target is part of the key: a --jit-target run never replays a native manifest") @(t : T?) {
         //! dasOpenGL's descriptor registers its module only when get_cross_platform_name() says emscripten -
@@ -110,8 +227,13 @@ def test_descriptor_manifest(t : T?) {
         t |> success(report_child(t, "native again", run(cmd, back), back, "PROBE 42"), "the native run resolves the require")
         t |> equal("compiled (compile target), manifest written (1 row(s))", probe_line(back), "the native run keys apart from the target's manifest:\n{back}")
     }
+}
+
+def arms_opt_out_and_write_failures(t : T?; fx : Fixture) {
+    let cmd = fx.cmd
+    let manifest = fx.manifest
     t |> run("no_manifest() inside the descriptor makes it run on every start") @(t : T?) {
-        fwrite(descriptor, DESCRIPTOR_OPT_OUT)
+        fwrite(fx.descriptor, DESCRIPTOR_OPT_OUT)
         var out : string
         t |> success(report_child(t, "opt-out", run(cmd, out), out, "PROBE 42"), "the opted-out descriptor resolves the require")
         t |> equal("compiled (descriptor changed), no_manifest recorded", probe_line(out), "the first run records the opt-out:\n{out}")
@@ -121,6 +243,46 @@ def test_descriptor_manifest(t : T?) {
         t |> success(report_child(t, "opt-out warm", run(cmd, again), again, "PROBE 42"), "the opted-out descriptor resolves the require again")
         t |> equal("compiled (no_manifest)", probe_line(again), "every later start compiles it:\n{again}")
     }
+    t |> run("a recorded argument the format cannot carry leaves the manifest unwritten") @(t : T?) {
+        fwrite(fx.descriptor, DESCRIPTOR_TABBED)
+        let before = fread(manifest)
+        var out : string
+        t |> success(report_child(t, "tabbed", run(cmd, out), out, "PROBE 42"), "the descriptor still resolves the require")
+        t |> equal("compiled (descriptor changed), manifest not written: a recorded argument contains a tab or newline", probe_line(out), "the trace names the field:\n{out}")
+        t |> equal(before, fread(manifest), "the stale manifest is left as it was")
+    }
+    t |> run("a tree the scan cannot write to just compiles, every start") @(t : T?) {
+        fwrite(fx.descriptor, DESCRIPTOR)
+        remove_result(manifest)
+        mkdir_result(fx.manifestTmp)   //! a directory where the .tmp goes: the create fails on every platform, root or not
+        var out : string
+        t |> success(report_child(t, "no tmp", run(cmd, out), out, "PROBE 42"), "the require resolves without a manifest")
+        t |> success(probe_line(out) |> starts_with("compiled (no manifest), manifest not written: cannot create "), "the trace names the create failure:\n{out}")
+        rmdir_result(fx.manifestTmp)
+        mkdir_result(manifest)   //! a directory where the manifest goes: the rename fails
+        var again : string
+        t |> success(report_child(t, "no rename", run(cmd, again), again, "PROBE 42"), "the require resolves without a manifest")
+        t |> success(find(probe_line(again), ", manifest not written: cannot rename ") >= 0, "the trace names the rename failure:\n{again}")
+        t |> success(!stat(fx.manifestTmp).is_valid, "the failed rename left no .tmp behind")
+        rmdir_result(manifest)
+    }
+}
+
+//! the child runs with the scan trace on; the arms share one root and run in this order
+[test]
+def test_descriptor_manifest(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_dm_manifest", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let fx = make_fixture(tmp)
+    let prevTrace = get_env_variable("DAS_TRACE_MODULE_LOAD")
+    set_env_variable("DAS_TRACE_MODULE_LOAD", "1")   //! inherited by the child; the trace names each descriptor's verdict
+    arms_record_and_replay(t, fx)
+    arms_rejections(t, fx)
+    arms_opt_out_and_write_failures(t, fx)
     set_env_variable("DAS_TRACE_MODULE_LOAD", prevTrace)
     var err : string
     rmdir_rec(tmp, err)

@@ -73,9 +73,13 @@ def test_exe_native_paths(t : T?) {
         let out = build_and_run(t, dir, "plain", "")
         t |> equal(0, native_path_rows(out), "no register_native_path row at startup: {tail(out)}")
     }
-    t |> run("a whole-lib exe (--jit-register-all-modules) still carries the rows") @(t : T?) {
+    t |> run("a whole-lib exe (--jit-register-all-modules) carries the host's rows, each once") @(t : T?) {
         let out = build_and_run(t, dir, "whole", "-- --jit-register-all-modules")
-        t |> success(native_path_rows(out) > 0, "rows registered for a run-time compile: {tail(out)}")
+        var hout = ""
+        let hrc = run_capture("\"{self_daslang()}\" -no-module-cache modules/dasLLVM/tests/_exe_native_paths_root.das 2>&1", hout)
+        t |> equal(0, hrc, "the fixture runs interpreted on the host: {tail(hout)}")
+        t |> success(native_path_rows(hout) > 0, "the host scan registered rows: {tail(hout)}")
+        t |> equal(native_path_rows(hout), native_path_rows(out), "the exe registers the host's row count - two emission sites would double it: {tail(out)}")
     }
     rmdir_rec_result(dir)
 }

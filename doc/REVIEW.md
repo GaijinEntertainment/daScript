@@ -10,6 +10,8 @@ files, or report less than it did before the change with the same `ALLOWED_HOSTS
 **A diff that adds a host to `REVIEW.das`'s `ALLOWED_HOSTS` states, in the PR body, what a
 reader sends that host and whether the host sets cookies.**
 
-**A diff that adds to a page a download address, an asset name, or a command a reader runs
-states, in the PR body, that each exists and works at merge, and where that was checked** -
+**A diff that adds to a page - any text the build renders: an authored `.rst` under `source`, a
+handmade fragment, or page text a `reflections` generator writes - a download address, an asset
+name, or a command a reader runs states, in the PR body, that each exists and works at merge,
+and where that was checked** -
 the build proves the page renders, never that what it points a reader at is there.

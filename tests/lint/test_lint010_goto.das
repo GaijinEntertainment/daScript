@@ -33,6 +33,7 @@ def test_lint010_goto(t : T?) {
         t |> success(find(output, "dead store of 't'") >= 0, "the finding names the control's variable: {output}")
         t |> success(find(output, "dead store of 'res'") < 0, "stores before a forward or computed goto are not dead: {output}")
         t |> success(find(output, "dead store of 'acc'") < 0 && find(output, "dead store of 'i'") < 0,
-            "stores above a backward-jump label are not dead: {output}")
+            "an overwrite under a backward-jump label is not dead: {output}")
+        t |> success(find(output, "dead store of 'late'") < 0, "a variable declared under a label starts skipped: {output}")
     }
 }

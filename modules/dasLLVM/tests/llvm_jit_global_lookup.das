@@ -70,4 +70,15 @@ def test_global_lookup_once_per_function(t : T?) {
         let hoisted = count_of(entry, "@jit_get_global_mnh(") - count_of(entry, "@jit_get_global_mnh(i64 %")
         t |> equal(0, hoisted, "no constant-hash lookup in branchy's entry block - an untaken branch pays nothing:\n{bir}")
     }
+    t |> run("a solid-context global is one base load per function and no lookup") @(t : T?) {
+        let root = "modules/dasLLVM/tests/_global_lookup_solid_root.das"
+        var out = ""
+        let rc = run_and_capture([self_daslang(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
+        t |> equal(0, rc, "the solid fixture runs under -jit: {tail(out)}")
+        t |> success(find(out, "FOUR_SUMS ") >= 0, "the solid fixture printed its sum: {tail(out)}")
+        let ir = function_ir(out, "four_sums")
+        t |> success(!empty(ir), "the dump carries four_sums: {tail(out)}")
+        t |> equal(0, count_of(ir, "@jit_get_global_mnh("), "a solid-context global never goes through the hash lookup:\n{ir}")
+        t |> equal(1, count_of(ir, "load ptr, ptr"), "one load of the context's globals base serves every access of both globals:\n{ir}")
+    }
 }

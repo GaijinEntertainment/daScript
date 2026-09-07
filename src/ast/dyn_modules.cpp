@@ -193,8 +193,8 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
     bool optOut = false;
     size_t i = 6;
     for ( ; i < lines.size(); ++i ) {
+        if ( lines[i].empty() ) return damaged("empty line");
         auto fields = split_tabs(lines[i]);
-        if ( fields.empty() ) return damaged("empty line");
         const auto & kind = fields[0];
         if ( kind == "end" ) break;
         if ( kind == "np" ) {
