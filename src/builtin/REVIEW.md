@@ -15,8 +15,11 @@
   binary, so a stale binary is a false green.
 
 - **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require` list in
-  the same change - directly, or through the daslib wrapper that requires it - and never drops a
-  module from the list.** A module the list does not reach is a module the scan never sees.
+  the same change - directly, or through the daslib wrapper that requires it.** A module the list
+  does not reach is a module the scan never sees.
+
+- **Never drop a module from `review_nttp.das`'s `require` list.** The list is what sets the
+  modules the scan covers.
 
 - **A diff that changes what `module_builtin_ast_serialize.cpp` streams - a field added,
   removed, reordered, re-typed, or given a new meaning - bumps the version `getVersion()`

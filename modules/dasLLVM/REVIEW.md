@@ -16,8 +16,8 @@
   git-tracked path.**
 
 - **A test under `tests/` here that writes at all - through its own filesystem calls, not a
-  child process's - writes only under a directory it created for this process, and removes it**
-  - a shared path under `build/` is one two concurrent runs collide on.
+  child process's - writes only under a directory it created for this process, and removes
+  it** - a shared path under `build/` is one two concurrent runs collide on.
 
 - **A test under `tests/` here that spawns a daslang child keeps the child's artifacts inside
   the directory it created for this process: `-output <dir>/...` for a `-exe` build,
