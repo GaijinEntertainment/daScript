@@ -14,8 +14,13 @@ def das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
-//! stderr joins stdout: the scan trace goes through the logger. Commands stay unquoted: a leading
-//! quote breaks Windows _popen (cmd /c quote stripping)
+//! the child's environment, as a command prefix: the scan trace on, so the trace names each descriptor's
+//! verdict; the prefix also keeps the command from opening with a quote, which cmd.exe would strip
+def trace_prefix() : string {
+    return get_platform_name() == "windows" ? "set \"DAS_TRACE_MODULE_LOAD=1\"&& " : "DAS_TRACE_MODULE_LOAD=1 "
+}
+
+//! stderr joins stdout: the scan trace goes through the logger
 def run(cmd : string; var output : string&) : int {
     return unsafe(popen_timeout("{cmd} 2>&1", 300.0, $(f) {
         if (f != null) {
@@ -151,7 +156,7 @@ def make_fixture(tmp : string) : Fixture {
         manifest = manifest,
         manifestTmp = "{manifest}.tmp",
         dmManifest = path_join(dmDir, ".das_module.manifest"),
-        cmd = "{das_exe()} -dasroot {get_das_root()} -no-module-cache -project_root {tmp} {path_join(tmp, "use.das")}"
+        cmd = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" -no-module-cache -project_root \"{tmp}\" \"{path_join(tmp, "use.das")}\""
     )
     fwrite(fx.descriptor, DESCRIPTOR)
     fwrite(path_join(fx.modDir, "hello.das"), "options gen2\nmodule hello\ndef hello_value() : int \{\n    return 42\n\}\n")
@@ -317,7 +322,7 @@ def arms_opt_out_and_write_failures(t : T?; fx : Fixture) {
     }
 }
 
-//! the child runs with the scan trace on; the arms share one root and run in this order
+//! the arms share one root and run in this order
 [test]
 def test_descriptor_manifest(t : T?) {
     var terr : string
@@ -327,12 +332,9 @@ def test_descriptor_manifest(t : T?) {
         return
     }
     let fx = make_fixture(tmp)
-    let prevTrace = get_env_variable("DAS_TRACE_MODULE_LOAD")
-    set_env_variable("DAS_TRACE_MODULE_LOAD", "1")   //! inherited by the child; the trace names each descriptor's verdict
     arms_record_and_replay(t, fx)
     arms_rejections(t, fx)
     arms_opt_out_and_write_failures(t, fx)
-    set_env_variable("DAS_TRACE_MODULE_LOAD", prevTrace)
     var err : string
     rmdir_rec(tmp, err)
 }

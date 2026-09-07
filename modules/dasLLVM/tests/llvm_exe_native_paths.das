@@ -28,11 +28,13 @@ def private run_capture(cmd : string; var out : string&) : int {
 }
 
 //! builds the fixture root with the given extra script args and runs the artifact; returns the run's stdout
-def private build_and_run(t : T?; dir : string; tag : string; extra_args : string) : string {
+def private build_and_run(t : T?; dir : string; tag : string; extra_args : array<string>) : string {
     let root = "modules/dasLLVM/tests/_exe_native_paths_root.das"
     let exe = path_join(dir, "{tag}.exe")   //! daslang -exe appends `.exe` to -output itself
     var bout = ""
-    let brc = run_capture("\"{das_exe()}\" -jit -exe -output \"{path_join(dir, tag)}\" {root} {extra_args} 2>&1", bout)
+    var argv <- [das_exe(), "-jit", "-exe", "-output", path_join(dir, tag), root]   //! argv, no shell: a path with spaces needs no quoting
+    argv |> push_from(extra_args)
+    let brc = run_and_capture(argv, bout, 300.0)
     t |> equal(0, brc, "the -exe build ({tag}) succeeds: {tail(bout)}")
     if (brc != 0 || !stat(exe).is_valid) {
         t |> success(stat(exe).is_valid, "the exe artifact exists at -output ({tag})")
@@ -70,13 +72,13 @@ def test_exe_native_paths(t : T?) {
     }
     let dir = unsafe(dir_r.value)
     t |> run("a runtime-only exe registers no require-resolver rows") @(t : T?) {
-        let out = build_and_run(t, dir, "plain", "")
+        let out = build_and_run(t, dir, "plain", [])
         t |> equal(0, native_path_rows(out), "no register_native_path row at startup: {tail(out)}")
     }
     t |> run("a whole-lib exe (--jit-register-all-modules) carries the host's rows, each once") @(t : T?) {
-        let out = build_and_run(t, dir, "whole", "-- --jit-register-all-modules")
+        let out = build_and_run(t, dir, "whole", ["--", "--jit-register-all-modules"])
         var hout = ""
-        let hrc = run_capture("\"{das_exe()}\" -no-module-cache modules/dasLLVM/tests/_exe_native_paths_root.das 2>&1", hout)
+        let hrc = run_and_capture([das_exe(), "-no-module-cache", "modules/dasLLVM/tests/_exe_native_paths_root.das"], hout, 300.0)
         t |> equal(0, hrc, "the fixture runs interpreted on the host: {tail(hout)}")
         t |> success(native_path_rows(hout) > 0, "the host scan registered rows: {tail(hout)}")
         t |> equal(native_path_rows(hout), native_path_rows(out), "the exe registers the host's row count - two emission sites would double it: {tail(out)}")
