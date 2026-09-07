@@ -940,7 +940,6 @@ namespace das
     char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context, LineInfoArg * at ) {
         int32_t len = int32_t(strlen(str));
         char * cstr = context->allocateString(str, len, at);
-        memcpy(cstr, str, len);
         Array arr;
         array_mark_locked(arr, cstr, uint32_t(len));
         vec4f args[1];

@@ -124,6 +124,11 @@ namespace  das {
             else if ( a==INTMIN && b==-1 ) return 0;
             return a % b;
         }
+        static __forceinline void SetMod ( TT & a, TT b, Context & context, LineInfo * at ) {
+            if ( b==0 ) context.throw_error_at(at, "division by zero in modulo");
+            else if ( a==INTMIN && b==-1 ) a = 0;
+            else a %= b;
+        }
     };
 
     template <typename TT>

@@ -8,6 +8,10 @@
 
 #include <stdlib.h>
 
+#if !DAS_TARGET_PS && !defined(_WIN32)
+extern "C" char ** environ;
+#endif
+
 namespace das {
 
     const char * das_getenv ( const char * name ) {
@@ -26,6 +30,16 @@ namespace das {
         _putenv_s(name, value ? value : "");
 #else
         setenv(name, value ? value : "", 1);
+#endif
+    }
+
+    char * const * das_environ () {
+#if DAS_TARGET_PS
+        return nullptr;
+#elif defined(_WIN32)
+        return _environ;
+#else
+        return environ;
 #endif
     }
 

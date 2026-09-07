@@ -36,10 +36,34 @@ would miss the node's 16; either way every such key moves to another bucket at t
 Non-string tables are open-addressed from their first slot (only string keys pack linearly up
 to 8), so a disagreement shows on a one-key table as much as on a large one.
 
+`KeyCompare` (`runtime_table.h`) answers the other half of a lookup, and it compares the bytes
+`KeyHash` hashed: `KeyCompare<vec4f>` is a bit compare, `v_cmp_eqi`. It takes the workhorse
+detour for every key type whose `WrapType` names one, builtin vector and handled type alike, and
+unlike the hash it has no width to get wrong - both sides widen through the same
+`prune<vec4f, PT>`, which zero-fills the padding on every one of its paths. What it must not do
+is compare as float, because an integer key's bytes are not a float: every `int2` component in
+[-8388607, -1] spells a NaN, NaN is not equal to itself, and such a key therefore inserts (nothing
+compares equal, so nothing dedups) and is then unreachable to every lookup, `key_exists` and
+erase, on any platform. Bytes small in magnitude spell denormals, which a host built with FTZ/DAZ
+reads as zero, so two such keys merge wherever they meet in the probe sequence. A float key pays
+for the bit compare with the `0.0 == -0.0` tie, which its two distinct hashes never honoured
+anyway. `tests/language/table_vector_keys.das` covers both patterns.
+
 ## Sanctioned hot-path additions
 
 The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why
 correctness required it, and the alternative that was rejected.
+
+- **`SetMod` on `SimPolicy_IntBin`** (`sim_policy.h`) - one compare-and-branch on the
+  `a == INTMIN && b == -1` pair, matching the guard `Div`, `SetDiv` and `Mod` on the same
+  template already carry. Correctness required it because x86 `idiv` faults on that pair
+  rather than wrapping: without the override `SimPolicy_Int64` inherited
+  `SimPolicy_Bin::SetMod`, whose only guard is `b == 0`, so `LONG_MIN %= -1` killed the
+  process with SIGFPE in every build, and `INT_MIN %= -1` did the same wherever
+  `DAS_FAST_INTEGER_MOD` is 0 - which `platform.h` sets for any host built `-ffast-math`.
+  Rejected alternative: giving `SimPolicy_Int64` the double-division form `SimPolicy_Int`
+  uses under `DAS_FAST_INTEGER_MOD`, which cannot hold an int64 exactly and is the reason
+  that path is already disabled under relaxed math.
 
 - **CRT scalar transcendentals** (`sim_policy.h`) - the scalar float arms of `Exp`, `Exp2`,
   `Log2` and `Pow` call the CRT; the `vec4f` arms stay on the vecmath polynomials, where

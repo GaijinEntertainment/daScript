@@ -41,7 +41,7 @@ namespace das
     template <>
     struct KeyCompare <vec4f> {
         __forceinline bool operator () ( const vec4f & a, const vec4f & b ) {
-            return v_signmask(v_cmp_eq(a, b)) == 0xF;
+            return v_signmask(v_cmp_eqi(a, b)) == 0xF;
         }
     };
 

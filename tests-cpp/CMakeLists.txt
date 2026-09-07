@@ -26,6 +26,14 @@ else()
     set(DAS_FAST_MATH_FLAG -ffast-math)
 endif()
 set_source_files_properties(small/test_isnan_fastmath.cpp PROPERTIES COMPILE_OPTIONS ${DAS_FAST_MATH_FLAG})
+# its twin is the precise half and #errors on __FAST_MATH__, so it pins the mode instead of
+# inheriting the build's - DAS_FAST_MATH=ON would otherwise stop tests-cpp compiling
+if(MSVC)
+    set(DAS_PRECISE_MATH_FLAG /fp:precise)
+else()
+    set(DAS_PRECISE_MATH_FLAG -fno-fast-math)
+endif()
+set_source_files_properties(small/test_isnan_fastmath_region.cpp PROPERTIES COMPILE_OPTIONS ${DAS_PRECISE_MATH_FLAG})
 
 add_executable(tests-cpp-small doctest_main.cpp ${SMALL_SOURCES})
 target_link_libraries(tests-cpp-small PRIVATE

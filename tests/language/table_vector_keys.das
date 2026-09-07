@@ -88,3 +88,53 @@ def test_int4_keys(t : T?) {
         t |> equal(i, tab?[int4(i, 1, 2, 3)] ?? -1, "int4 key {i} after the grows")
     }
 }
+
+// An integer key's bytes are not a float. Every int2 component in [-8388607, -1] spells a NaN, and
+// NaN is not equal to itself, so a float compare of the key bytes never matches a stored key: the
+// insert lands (nothing compares equal, so nothing dedups) and every later lookup, key_exists and
+// erase misses. Bytes small in magnitude spell denormals, which a host built with FTZ/DAZ reads as
+// zero, merging two keys wherever they meet in the probe sequence. Small positive components, which
+// the tests above use, are the one shape that hides both.
+[test]
+def test_key_bit_patterns(t : T?) {
+    var neg : table<int2; int>   // nolint:STYLE027 - one insert at a time is the point: the table must grow and rehash
+    for (i in range(N)) {
+        neg[int2(-i - 1, -i * 7 - 1)] = i
+    }
+    t |> equal(N, length(neg))
+    for (i in range(N)) {
+        t |> equal(i, neg?[int2(-i - 1, -i * 7 - 1)] ?? -1, "negative int2 key {i} after the grows")
+        t |> success(key_exists(neg, int2(-i - 1, -i * 7 - 1)), "key_exists on negative int2 key {i}")
+    }
+    for (i in range(N)) {
+        t |> success(neg |> erase(int2(-i - 1, -i * 7 - 1)), "erase of negative int2 key {i}")
+    }
+    t |> equal(0, length(neg))
+
+    var r : table<range; int>   // nolint:STYLE027 - one insert at a time is the point: the table must grow and rehash
+    for (i in range(N)) {
+        r[range(-i - 1, i + 1)] = i
+    }
+    t |> equal(N, length(r))
+    for (i in range(N)) {
+        t |> equal(i, r?[range(-i - 1, i + 1)] ?? -1, "negative range key {i} after the grows")
+    }
+
+    var u : table<uint4; int>   // nolint:STYLE027 - one insert at a time is the point: the table must grow and rehash
+    for (i in range(N)) {
+        u[uint4(0xFFFFFF00u + uint(i), 1u, 2u, 3u)] = i
+    }
+    t |> equal(N, length(u))
+    for (i in range(N)) {
+        t |> equal(i, u?[uint4(0xFFFFFF00u + uint(i), 1u, 2u, 3u)] ?? -1, "NaN-patterned uint4 key {i}")
+    }
+
+    // 0 and the sign bit alone spell +0.0 and -0.0, which a float compare ties and the two
+    // distinct hashes never did. They stay two keys.
+    var z : table<int2; int>   // nolint:STYLE031 - two statements, because the pair is the point
+    z[int2(0, 0)] = 1
+    z[int2(1 << 31, 0)] = 2
+    t |> equal(2, length(z))
+    t |> equal(1, z?[int2(0, 0)] ?? -1, "the +0.0-patterned key")
+    t |> equal(2, z?[int2(1 << 31, 0)] ?? -1, "the -0.0-patterned key")
+}

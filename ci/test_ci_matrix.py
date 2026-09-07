@@ -16,7 +16,10 @@ WORKFLOWS = os.path.join(os.path.dirname(HERE), ".github", "workflows")
 
 
 def names(cells):
-    return sorted("%s-%s-%s-%s" % (c["target"], c["architecture"], c["cmake_preset"], c["sanitizers"]) for c in cells)
+    # the fast-math cell is a Release/none cell too, so its flag has to reach the name
+    return sorted("%s-%s-%s-%s%s" % (c["target"], c["architecture"], c["cmake_preset"], c["sanitizers"],
+                                     "-fastmath" if c.get("fast_math") == "ON" else "")
+                  for c in cells)
 
 
 PR_BUILD = sorted([
@@ -28,6 +31,7 @@ PR_BUILD = sorted([
 ])
 NIGHTLY_ONLY_BUILD = sorted([
     "windows-64-Debug-none", "linux-64-Release-asan", "linux-64-Release-tsan", "linux-64-Release-ubsan",
+    "linux-64-Release-none-fastmath",
 ])
 
 

@@ -2928,6 +2928,13 @@ namespace das
         // platform and architecture
         addExternInline<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_platform_name",
             SideEffects::none, "das_get_platform_name");
+        // whether THIS binary's float ops were compiled relaxed (-ffast-math / /fp:fast)
+#if defined(__FAST_MATH__) || defined(_M_FP_FAST)
+        addConstant(*this, "HOST_FAST_MATH", true);
+#else
+        addConstant(*this, "HOST_FAST_MATH", false);
+#endif
+
         // Same C++ query, but registered with a side effect so the optimizer never const-folds it.
         // get_platform_name() (SideEffects::none) folds at compile time to the HOST platform, which is
         // wrong inside a wasm cross-compile (host is e.g. windows, the code will RUN under emscripten).

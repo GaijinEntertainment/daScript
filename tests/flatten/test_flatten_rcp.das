@@ -79,6 +79,10 @@ def cmp3f_approx(t : T?; a, b : float3) {
 
 [test]
 def test_flatten_rcp(t : T?) {
+    if (HOST_FAST_MATH) {
+        t |> skip("host runtime is built -ffast-math: the pow2 reciprocal rewrites this file pins are exact only in precise math")
+        return
+    }
     t |> run("x / 4.0 -> x * 0.25 (pow2 reciprocal, exact)") @(t : T?) {
         for (v in GRID) {
             t |> equal(r_pow2_flat(v), r_pow2(v))

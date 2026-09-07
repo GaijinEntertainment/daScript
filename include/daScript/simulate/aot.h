@@ -2252,6 +2252,14 @@ namespace das {
         }
     };
 
+    // a `type<T>` argument's slot holds no object, and nothing reads the reference bound off it
+    template <typename TT>
+    struct cast_aot_arg<const TT &> {
+        DAS_SUPPRESS_UB static __forceinline const TT & to ( Context &, vec4f x ) {
+            return *cast<const TT *>::to(x);
+        }
+    };
+
     template <>
     struct cast_aot_arg<Context *> {
         static __forceinline Context * to ( Context & ctx, vec4f ) {

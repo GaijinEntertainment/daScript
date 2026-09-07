@@ -20,6 +20,11 @@ namespace das {
     // generic write; on PS there is no environment and the call is a no-op
     DAS_API void das_setenv ( const char * name, const char * value );
 
+    // every entry of the environment as "NAME=VALUE", NULL-terminated, for a reader that needs
+    // the whole set rather than one name; null on PS, which has no environment. The raw
+    // `environ` symbol is private to env_cfg.cpp - PS does not export it at all.
+    DAS_API char * const * das_environ ();
+
     // every environment variable daslang core reads, one accessor each.
     // documented at https://daslang.io/doc/reference/environment_variables.html
 
