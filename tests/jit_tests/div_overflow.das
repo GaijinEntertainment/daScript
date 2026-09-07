@@ -29,6 +29,18 @@ def set_mod_jit(a : int, b : int) {
     return r
 }
 
+def set_div64_jit(a : int64, b : int64) {
+    var r = a
+    r /= b
+    return r
+}
+
+def set_mod64_jit(a : int64, b : int64) {
+    var r = a
+    r %= b
+    return r
+}
+
 def expect_div_panic(t : T?; msg : string; blk : block) {
     var failed = false
     try {
@@ -45,6 +57,7 @@ def test_division_overflow(t : T?) {
         t |> equal(mod_jit(INT_MIN, -1), 0, "INT_MIN % -1")
         t |> equal(mod64_jit(LONG_MIN, -1l), 0l, "LONG_MIN % -1")
         t |> equal(set_mod_jit(INT_MIN, -1), 0, "INT_MIN %= -1")
+        t |> equal(set_mod64_jit(LONG_MIN, -1l), 0l, "LONG_MIN %= -1")
     }
     t |> run("division panics") @@(t : T?) {
         expect_div_panic(t, "INT_MIN / -1") $ {
@@ -55,6 +68,9 @@ def test_division_overflow(t : T?) {
         }
         expect_div_panic(t, "INT_MIN /= -1") $ {
             print("{set_div_jit(INT_MIN, -1)}")
+        }
+        expect_div_panic(t, "LONG_MIN /= -1") $ {
+            feint("{set_div64_jit(LONG_MIN, -1l)}")
         }
     }
     t |> run("plain values unaffected") @@(t : T?) {
