@@ -30,6 +30,7 @@ on:
       - 'utils/daspkg/**'
       - 'daslib/daspkg.das'
       - 'modules/dasHV/**'
+      - '!**/*.md'
   workflow_dispatch:
     inputs:
       publish:
