@@ -3637,11 +3637,24 @@ def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpRespo
     }
 }
 
+// A fat release bakes one kernel clone per CPU class and never tunes, so the exchange has nothing
+// to apply, share or redo on it; the read-only status and matches stay, the levers answer this.
+def private fat_exe_exchange_refusal(var resp : HttpResponse?) : http_status {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        if (!tune_fat_built()) return http_status.OK
+        return resp |> JSON(error_body("this is a fat release: the kernels are baked per CPU class, so there is no tune of this box to share, apply or redo - the SDK's daslang -jit run tunes the box", "invalid_request_error"), http_status.BAD_REQUEST)
+    } else {
+        return http_status.OK
+    }
+}
+
 def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
     static_if (typeinfo module_exists(dasllama_exchange)) {
+        let refused = fat_exe_exchange_refusal(resp)
+        if (refused != http_status.OK) return refused
         var jerr = ""
         var js = read_json(string(req.body), jerr)
         defer() {
@@ -3676,6 +3689,8 @@ def private handle_exchange_submit(var req : HttpRequest?; var resp : HttpRespon
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
     static_if (typeinfo module_exists(dasllama_exchange)) {
+        let refused = fat_exe_exchange_refusal(resp)
+        if (refused != http_status.OK) return refused
         let err = exchange_submit_current(exchange_policy_from_config(g_config_save_path))
         if (!empty(err)) {
             return resp |> JSON(error_body(err, "invalid_request_error"), http_status.BAD_REQUEST)
@@ -3692,6 +3707,8 @@ def private handle_exchange_consent(var req : HttpRequest?; var resp : HttpRespo
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
     static_if (typeinfo module_exists(dasllama_exchange)) {
+        let refused = fat_exe_exchange_refusal(resp)
+        if (refused != http_status.OK) return refused
         var jerr = ""
         var js = read_json(string(req.body), jerr)
         defer() {
@@ -3731,6 +3748,8 @@ def private handle_exchange_retune(var req : HttpRequest?; var resp : HttpRespon
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
     static_if (typeinfo module_exists(dasllama_exchange)) {
+        let refused = fat_exe_exchange_refusal(resp)
+        if (refused != http_status.OK) return refused
         let err = exchange_request_retune()
         if (!empty(err)) {
             // the marker write failed and the sidecar is untouched — do NOT drain/restart

@@ -38,9 +38,15 @@ defaults:
 permissions:
   contents: write
 
+# a push burst on one branch keeps only the newest build; a release run is never cancelled
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
 jobs:
   build:
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -139,8 +145,11 @@ jobs:
           "$DASLANG" utils/daspkg/main.das -- release --fat ${{ matrix.fat_class }} --root utils/dasllama-server --out dist
 
       - name: Smoke-test the bundle
-        # the exe loads its runtime and shared modules and answers --help; the supervisor too.
-        # daspkg keeps the .exe suffix on every flat bundle; only the macOS .app drops it
+        # the server has no --help (its flag is --show-help, and an unknown flag is ignored), so the
+        # smoke is the real thing: the exe boots into setup mode on a spare port, answers /v1/stats,
+        # and leaves cleanly on POST /shutdown. daspkg keeps the .exe suffix on every flat bundle;
+        # only the macOS .app drops it
+        timeout-minutes: 15
         run: |
           set -eux
           case "${{ runner.os }}" in
@@ -151,11 +160,23 @@ jobs:
           test -f "$APP/control.html"
           test -f "$APP/tray.ico"
           test -f "$APP/watchdog.json"
-          "$SERVER" --help
           "$WATCHDOG" --help
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             grep -A1 CFBundleExecutable dist/dasllama-server.app/Contents/Info.plist | grep -q '<string>watchdog</string>'
+            grep -A1 LSUIElement dist/dasllama-server.app/Contents/Info.plist | grep -q '<true'
           fi
+          "$SERVER" --port 18099 > smoke_server.log 2>&1 &
+          SERVER_PID=$!
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:18099/v1/stats > smoke_stats.json; then break; fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then echo "the server exited before serving"; cat smoke_server.log; exit 1; fi
+            sleep 2
+          done
+          cat smoke_stats.json
+          grep -q '"setup":true' smoke_stats.json
+          curl -sf -X POST http://127.0.0.1:18099/shutdown
+          wait "$SERVER_PID"
+          tail -5 smoke_server.log
 
       - name: Package
         run: |

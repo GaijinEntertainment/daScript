@@ -69,6 +69,11 @@ def test_stat_is_exec(t : T?) {
             var out = ""
             t |> equal(0, run_and_capture(["chmod", "755", plain], out, 10.0), "chmod runs")
             t |> success(stat(plain).is_exec, "chmod 755 sets the bit stat reports")
+            t |> equal(0, run_and_capture(["chmod", "610", plain], out, 10.0), "chmod runs")
+            t |> success(stat(plain).is_exec, "a group-only execute bit counts too")
+            t |> equal(0, run_and_capture(["chmod", "600", plain], out, 10.0), "chmod runs")
+            t |> success(!stat(plain).is_exec, "and no execute bit at all reads false")
+            t |> success(stat(dir).is_exec && stat(dir).is_dir, "a directory carries the bit, so a program test pairs it with is_reg")
         }
         t |> success(remove(plain))
     }

@@ -188,8 +188,9 @@ def private load_config(folder : string) : LoadedConfig {
 
 //! What to supervise, from the layout: `main.das` means script mode when a daslang sits beside it
 //! (`bin/Release/daslang(.exe)`) or beside the watchdog itself (a source tree keeps both in `bin/`);
-//! exactly one program - a `*.exe`, or on a Unix layout an executable file with no extension, the
-//! watchdog's own executable aside - means that program. Ambiguity is an error, never a guess.
+//! exactly one program - a `*.exe` file, or on a Unix layout an executable file with no extension,
+//! the watchdog's own executable aside - means that program. A `main.das` with no daslang in reach
+//! is refused, never traded for a program. Ambiguity is an error, never a guess.
 def private discover_target(var cfg : WatchdogConfig; folder, program_dir : string) : string {
     let script = path_join(folder, "main.das")
     if (fexist(script)) {
@@ -203,6 +204,7 @@ def private discover_target(var cfg : WatchdogConfig; folder, program_dir : stri
             cfg.daslang = exe
             return ""
         }
+        return "watchdog: nothing to supervise in {folder} - main.das is there but no daslang sits beside it or beside the watchdog (bin/Release/daslang, bin/daslang, build/daslang). Pass --daslang, or --program for a standalone exe."
     }
     var exes : array<string>
     dir(folder) $(fname) {
@@ -223,14 +225,15 @@ def private discover_target(var cfg : WatchdogConfig; folder, program_dir : stri
     return "watchdog: nothing to supervise in {folder} - expected a single program (*.exe, or a file with no extension), or main.das with a daslang beside it or beside the watchdog. Use --program/--script or ship {CONFIG_NAME}."
 }
 
-//! A `*.exe` anywhere; on a Unix layout also an executable regular file with no extension, which
-//! is what a daspkg bundle names its exe. The watchdog's own executable is never a candidate.
+//! A regular `*.exe` file anywhere - a flat daspkg bundle keeps the suffix on Linux too - and on
+//! a Unix layout also an executable regular file with no extension, which is how the macOS `.app`
+//! names its exe. The watchdog's own executable is never a candidate.
 def private is_program_candidate(path, fname : string) : bool {
     if (stem(fname) == "watchdog") return false
-    if (ends_with(fname, ".exe")) return true
-    if (get_platform_name() == "windows" || find(fname, ".") >= 0) return false
+    let is_exe = ends_with(fname, ".exe")
+    if (!is_exe && (get_platform_name() == "windows" || find(fname, ".") >= 0)) return false
     let st = stat(path)
-    return st.is_valid && st.is_reg && st.is_exec
+    return st.is_valid && st.is_reg && (is_exe || st.is_exec)
 }
 
 //! Where a daslang may sit, nearest first: beside the script, beside the watchdog, and one level
@@ -1038,17 +1041,17 @@ def public tray_mark(side : int; badge : string) : array<uint8> {
 }
 
 //! An icon read from a file for the tray: `rgba` is `side` x `side` RGBA8, or `error` says why
-//! the file gives none. A PNG, or an ICO whose frames are PNG-compressed - the largest square
-//! frame up to `TRAY_ICON_FRAME_MAX` a side is the one shown. PNG is the one codec the static
-//! binary carries, so a BMP-framed ICO is refused by name.
+//! the file gives none.
 struct public TrayIcon {
     rgba : array<uint8>
     side : int
     error : string
 }
 
-let public TRAY_ICON_FRAME_MAX = 64
-let private TRAY_ICON_PNG_MAX = 256
+//! The icon is square, up to this many pixels a side - a PNG, or the ICO frame chosen
+let public TRAY_ICON_MAX = 256
+//! An icon file past this size is refused before it is read: the whole file is copied into memory
+let public TRAY_ICON_FILE_MAX = 4l * 1024l * 1024l
 
 def private read_u16(bytes : array<uint8>; at : int) : int {
     return int(bytes[at]) | (int(bytes[at + 1]) << 8)
@@ -1067,16 +1070,20 @@ def private is_ico(bytes : array<uint8>) : bool {
 }
 
 //! The ICO directory: six header bytes, then sixteen per frame - width, height (0 reads 256),
-//! two reserved, planes, bit depth, byte size, byte offset. The chosen frame's byte range, with
-//! `side` 0 and the reason when none qualifies.
+//! two reserved, planes, bit depth, byte size, byte offset. The chosen frame is the largest the
+//! directory declares square and within `TRAY_ICON_MAX`, among the PNG-compressed ones whose
+//! byte range lies inside the file; the decoded pixels are the truth the caller re-checks. `side`
+//! 0 and the reason when none qualifies.
 def private ico_frame(bytes : array<uint8>) : tuple<at : int; len : int; side : int; reason : string> {
     let count = read_u16(bytes, 4)
     var best = (at = 0, len = 0, side = 0, reason = "")
+    var listed = 0
     var in_range = 0
     var bmp_frames = 0
     for (i in range(count)) {
         let entry = 6 + 16 * i
         if (entry + 16 > length(bytes)) break
+        listed++
         let w = bytes[entry] == 0u8 ? 256 : int(bytes[entry])
         let h = bytes[entry + 1] == 0u8 ? 256 : int(bytes[entry + 1])
         let len = read_u32(bytes, entry + 8)
@@ -1087,19 +1094,29 @@ def private ico_frame(bytes : array<uint8>) : tuple<at : int; len : int; side : 
             bmp_frames++
             continue
         }
-        if (w != h || w > TRAY_ICON_FRAME_MAX || w <= best.side) continue
+        if (w != h || w > TRAY_ICON_MAX || w <= best.side) continue
         best = (at = at, len = len, side = w, reason = "")
     }
     if (best.side == 0) {
         best.reason = (count == 0 ? "the ICO directory lists no frame"
-            : (in_range == 0 ? "every ICO frame's byte range lies outside the file"
-                : (bmp_frames == in_range ? "every ICO frame is a BMP; the tray reads PNG-compressed frames only"
-                    : "no square PNG frame of {TRAY_ICON_FRAME_MAX} px or less")))
+            : (listed < count ? "the ICO directory is truncated"
+                : (in_range == 0 ? "every ICO frame's byte range lies outside the file"
+                    : (bmp_frames == in_range ? "no ICO frame is PNG-compressed; the tray reads PNG frames only, never BMP"
+                        : "no square PNG frame of {TRAY_ICON_MAX} px or less"))))
     }
     return best
 }
 
+//! The tray icon a file supplies: a PNG, or an ICO whose frames are PNG-compressed (the largest
+//! square frame within `TRAY_ICON_MAX`), decoded to `side` x `side` RGBA8. PNG is the one codec
+//! the static binary carries, so a BMP-framed ICO is refused by name; so is anything that is not
+//! a regular file of at most `TRAY_ICON_FILE_MAX` bytes, before it is read. `error` carries the
+//! reason and `side` is 0 when no icon comes back.
 def public tray_icon_load(path : string) : TrayIcon {
+    let st = stat(path)
+    if (!st.is_valid) return TrayIcon(error = "cannot read {path}")
+    if (!st.is_reg) return TrayIcon(error = "{path} is not a regular file")
+    if (st.size > uint64(TRAY_ICON_FILE_MAX)) return TrayIcon(error = "{path} is {st.size} bytes; a tray icon is at most {TRAY_ICON_FILE_MAX}")
     var bytes : array<uint8>
     var loaded = false
     fopen(path, "rb") $(f) {
@@ -1124,8 +1141,8 @@ def public tray_icon_load(path : string) : TrayIcon {
     var pixels = stbi_load_from_memory(unsafe(addr(bytes[at])), len, unsafe(addr(w)), unsafe(addr(h)), unsafe(addr(comp)), 4)
     if (pixels == null) return TrayIcon(error = "{path}: {stbi_failure_reason()}")
     var icon = TrayIcon(side = w)
-    if (w != h || w <= 0 || w > TRAY_ICON_PNG_MAX) {
-        icon.error = "{path}: {w}x{h} - the tray icon is square, up to {TRAY_ICON_PNG_MAX} px"
+    if (w != h || w <= 0 || w > TRAY_ICON_MAX) {
+        icon.error = "{path}: {w}x{h} decoded - the tray icon is square, up to {TRAY_ICON_MAX} px"
         icon.side = 0
     } else {
         icon.rgba |> resize(w * h * 4)
@@ -1723,6 +1740,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
     var resolved <- resolve_config(args, program_dir)
     if (!empty(resolved.error)) {
         print("{resolved.error}\n")
+        notify("watchdog not started", resolved.error, true)
         exit_code = 2
         return null
     }
@@ -1771,7 +1789,9 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
         }
         if (prior != 0 && prior != self_pid && unsafe(process_alive(prior))) {
             log->emit("watchdog_already_running", JV((pid = prior, pid_file = cfg.pid_file)))
-            print("watchdog: {cfg.name} is already supervised by pid {prior} (per {cfg.pid_file}). Stop it first, or delete the pid file if it is stale.\n")
+            let why = "watchdog: {cfg.name} is already supervised by pid {prior} (per {cfg.pid_file}). Stop it first, or delete the pid file if it is stale."
+            print("{why}\n")
+            notify("{cfg.name} watchdog not started", why, true)
             exit_code = 2
             return null
         }

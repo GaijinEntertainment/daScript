@@ -211,8 +211,13 @@ def private dl_worker(url_, partial_, final_path_, sha_path_, want_sha_ : string
     // curl owns resume (-C -) and retries; its exit status is advisory — the verify is the gate
     var args <- ["curl", "-sSL", "-C", "-", "--retry", "5", "--retry-delay", "10", "-o", partial, url]
     var out = ""
-    run_and_capture(args, out, 86400.0)
+    let spawned = run_and_capture(args, out, 86400.0)
     delete args
+    if (spawned == -1) {
+        events |> push_clone(DlEvent(kind = DlEventKind.failed,
+            text = "curl is not installed - the catalog downloads through curl; install it, or place the file in the models directory yourself"))
+        return
+    }
     let st = stat(partial)
     if (!st.is_valid || int64(st.size) != want_bytes) {
         events |> push_clone(DlEvent(kind = DlEventKind.failed,

@@ -121,6 +121,8 @@ def release() {
     release_main("main.das")
     release_include("assets/**")                 // release-owned; refreshed every time
     release_include_if_missing("app.toml")       // user-owned after initialization
+    release_include_tool("watchdog")             // a built tool from bin/, shipped beside the exe
+    release_launcher("watchdog")                 // macOS: the .app opens this tool, which starts the exe
 }
 ```
 

@@ -29,9 +29,10 @@ That works because the watchdog resolves what to supervise in this order, first 
 3. **Layout discovery** - `main.das` means `daslang -jit main.das`, with the daslang found beside
    it (`bin/Release/daslang(.exe)`) or beside the watchdog itself, which is how `bin/watchdog`
    in a source tree finds `bin/daslang`; exactly one program in the directory means that
-   program - a `*.exe`, or on a Unix layout an executable file with no extension, which is what
-   a daspkg bundle names its exe; the watchdog's own executable is never a candidate. Anything
-   ambiguous is an error, never a guess.
+   program - a `*.exe` file (a flat daspkg bundle keeps the suffix on Linux too), or on a Unix
+   layout an executable file with no extension, which is how the macOS `.app` names its exe;
+   the watchdog's own executable is never a candidate. A `main.das` with no daslang in reach is
+   refused, never traded for a program. Anything ambiguous is an error, never a guess.
 
 Everything after `--` goes to the child verbatim. From the source tree the watchdog does not sit
 beside what it supervises, so pass `--cwd`:
@@ -113,9 +114,10 @@ visible to which tier.
 disc, plain while the child serves, wearing an amber triangle while it starts or tunes and a red
 square when it is unhealthy, crashed or waiting to restart. `--tray-icon <file>` (the
 `tray_icon` key; a path relative to `--cwd`) replaces the disc with the program's own mark, a
-PNG or an ICO whose frames are PNG-compressed - the largest square frame up to 64 px is shown,
-and the badge is drawn over it the same way. PNG is the one codec the static binary decodes; a
-file it cannot read is logged as `tray_icon_unavailable` with the reason, and the disc shows.
+PNG or an ICO whose frames are PNG-compressed - square, up to 256 px; from an ICO the largest
+such frame is shown - and the badge is drawn over it the same way. PNG is the one codec the
+static binary decodes; a file it cannot use (not a regular file, over 4 MB, a BMP-framed ICO,
+not square) is logged as `tray_icon_unavailable` with the reason, and the disc shows.
 The tooltip and the menu's first row
 carry one status line - `starting up - loading the model`, `tuning this box - 3/12 kernels
 (gemv)`, `serving - healthy 2h05m`, `unhealthy (ready)`, `crashed (exit 9) - collecting the

@@ -1935,9 +1935,9 @@ def test_cmd_release_launcher(t : T?) {
         tt |> equal(1, refused, "a launcher no release_include_tool ships is refused")
         tt |> success(!fexist(bundle_exe_path(out_dir, "launched")), "and nothing was built")
         if (empty(built_watchdog_path())) {
-            to_log(LOG_INFO, "test_cmd_release_launcher: no built watchdog in this tree; the .app half skips\n")
             force_rmdir(tmp_root)
             force_rmdir(out_dir)
+            tt |> skip("no built watchdog in this tree - the shipped-tool half of the launcher test needs bin/watchdog")
             return
         }
         fopen("{tmp_root}/.das_package", "wb") $(f) {
@@ -1956,7 +1956,52 @@ def test_cmd_release_launcher(t : T?) {
             let value_at = find(plist, "<string>", key_at)
             tt |> success(value_at >= 0 && starts_with(slice(plist, value_at, length(plist)), "<string>watchdog</string>"),
                 "CFBundleExecutable is the launcher, so a double click on the .app starts the supervisor:\n{plist}")
+            tt |> success(find(plist, "<key>LSUIElement</key>") >= 0, "a launcher app is menu-bar-only - no Dock tile, no application menu:\n{plist}")
         }
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+    t |> run("without a launcher the .app opens the exe itself and is an ordinary application") @(tt : T?) {
+        if (get_platform_name() != "darwin") {
+            tt |> skip("the Info.plist exists only in the macOS .app layout")
+            return
+        }
+        let tmp_root = "{get_das_root()}/_test_release_nolauncher"
+        let out_dir = "{get_das_root()}/_test_release_nolauncher_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"plainapp\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+        }
+        tt |> equal(0, cmd_release(tmp_root, out_dir), "cmd_release returns 0")
+        let plist = fread(path_join(bundle_root_dir(out_dir, "plainapp"), "Contents/Info.plist"))
+        tt |> success(find(plist, "<string>plainapp</string>") >= 0, "CFBundleExecutable is the exe:\n{plist}")
+        tt |> success(find(plist, "LSUIElement") < 0, "and it is not marked menu-bar-only")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
+[test]
+def test_cmd_release_refuses_jit_only(t : T?) {
+    t |> run("release_requires_jit() refuses the release before anything builds") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_jitonly"
+        let out_dir = "{get_das_root()}/_test_release_jitonly_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"jitonly\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n    release_requires_jit()\n\}\n")
+        }
+        tt |> equal(1, cmd_release(tmp_root, out_dir), "a JIT-only package is refused")
+        tt |> success(!fexist(bundle_exe_path(out_dir, "jitonly")), "and nothing was built")
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
     }

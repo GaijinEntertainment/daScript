@@ -1544,8 +1544,10 @@ def private sanitize_bundle_id_part(s : string) : string {
 // Minimal macOS .app Info.plist. Built with dasPUGIXML so values are
 // XML-escaped automatically — inputs (bundle_name, exe, bundle_id) are
 // otherwise unrestricted on the XML side. CFPropertyList accepts plist
-// without a DOCTYPE, so we omit it.
-def private build_info_plist(name, exe, bundle_id : string) : string {
+// without a DOCTYPE, so we omit it. `ui_element` marks a menu-bar-only app
+// (LSUIElement): no Dock tile, no application menu - the shape of a
+// supervisor launcher, whose only surface is its tray icon.
+def private build_info_plist(name, exe, bundle_id : string; ui_element : bool) : string {
     var out = ""
     with_doc() $(doc) {
         doc |> tag("plist") $(var pl) {
@@ -1555,6 +1557,10 @@ def private build_info_plist(name, exe, bundle_id : string) : string {
                 d |> tag("string", name)
                 d |> tag("key", "CFBundleExecutable")
                 d |> tag("string", exe)
+                if (ui_element) {
+                    d |> tag("key", "LSUIElement")
+                    d |> tag("true")
+                }
                 d |> tag("key", "CFBundleIdentifier")
                 d |> tag("string", bundle_id)
                 d |> tag("key", "CFBundlePackageType")
@@ -2629,7 +2635,7 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
         }
         let plist_path = path_join(app_root, "Contents/Info.plist")
         let launcher = empty(spec.launcher) ? bundle_name : spec.launcher
-        if (!fwrite(plist_path, build_info_plist(bundle_name, launcher, bundle_id))) {
+        if (!fwrite(plist_path, build_info_plist(bundle_name, launcher, bundle_id, !empty(spec.launcher)))) {
             to_log(LOG_ERROR, "release: cannot write {plist_path}\n")
             return 1
         }

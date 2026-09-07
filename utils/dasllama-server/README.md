@@ -24,25 +24,31 @@ The server ships as a standalone download - no daslang install, no Python - from
 | Linux arm64 | `dasllama-server-linux-arm64.tar.gz` |
 
 Unpack it and start the supervisor beside the server - `watchdog` (`watchdog.exe`), or on
-macOS the `dasllama-server.app` itself, whose launcher is the watchdog. It keeps the server up,
-puts the dasllama mark in the notification area, and a click on it opens the control page,
-<http://127.0.0.1:8080/>. With no model configured the server starts in **setup mode** (below):
-pick a model from the catalog, it downloads into `~/.dasllama/models`, and *serve this model*
-restarts into it. The config it writes, `dasllama-server.toml` beside the exe, and the tune
-sidecar survive an upgrade unpacked over the old bundle.
+macOS the `dasllama-server.app` itself, whose launcher is the watchdog. The server binary
+beside it is `dasllama-server.exe` on Linux and Windows alike (the macOS app carries it as
+`Contents/MacOS/dasllama-server`). The watchdog keeps the server up, puts the dasllama mark in
+the notification area, and a click on it opens the control page, <http://127.0.0.1:8080/>.
+With no model configured the server starts in **setup mode** (below): pick a model from the
+catalog, it downloads into `~/.dasllama/models`, and *serve this model* restarts into it. The
+config it writes, `dasllama-server.toml` beside the exe, and the tune sidecar beside it survive
+an upgrade unpacked over the old directory on Linux and Windows; on macOS a new `.app` replaces
+the old one whole, so copy the two files out of `Contents/MacOS` first and back in after.
 
 The exe is a fat build (`daspkg release --fat`): plain code for the platform's baseline CPU
 class - `x86-avx2` on x86, `arm-neon` on arm64 - with one clone of every `[tune]` kernel per
 class the engine ships a profile for (`x86-vnni512`, `x86-amx`, `arm-i8mm`), picked from cpuid
 at start. On a Mac the Metal crowns are raced once at the first start and kept beside the exe.
-That is the good default. The fastest a box can serve is still the JIT from a daslang SDK,
-tuned on the box itself: `bin/daslang -jit utils/dasllama-server/main.das` below, or a
-`daspkg release` of this package run on that box, which mints its own sidecar.
+That is the good default. The advanced path is the JIT from a daslang SDK, tuned on the box
+itself - `bin/daslang -jit utils/dasllama-server/main.das` below, or a `daspkg release` of this
+package run on that box, which mints its own sidecar: every kernel is raced on your own
+hardware instead of picked from a class profile.
 
-The bundles are not code-signed. macOS quarantines a downloaded app: either allow it under
-System Settings > Privacy & Security after the first refused start, or clear the flag once -
-`xattr -dr com.apple.quarantine dasllama-server.app`. Windows SmartScreen shows an unknown
-publisher: *More info*, *Run anyway*.
+The bundles are not code-signed. macOS quarantines a downloaded app, and an app started from
+the download folder runs from a read-only copy where nothing it writes beside itself survives -
+so first drag `dasllama-server.app` out of Downloads with the Finder (Applications, or any folder
+of yours), then either allow it under System Settings > Privacy & Security after the first
+refused start, or clear the flag once - `xattr -dr com.apple.quarantine dasllama-server.app`.
+Windows SmartScreen shows an unknown publisher: *More info*, *Run anyway*.
 
 ## Run from the source tree
 
@@ -53,7 +59,7 @@ bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 
                                                     [--streams 4] [--chunk 64] [--page-rows 64] [--prefix N]
 ```
 
-Run under `-jit` - the interpreter is refused, its inference is a hundred times slower. Flags:
+Run under `-jit` - the interpreter is refused, it is far too slow for inference. Flags:
 
 | Flag | Short | Default | Meaning |
 |---|---|---|---|
@@ -225,9 +231,11 @@ bundle: the exe, the shared modules and runtime libraries it needs, `watchdog` b
 `watchdog.json`, `control.html` and `tray.ico`. Plain `release` tunes the kernels on the build
 box and ships that box's sidecar - the bundle for a machine you own. `release --fat x86-avx2`
 (`arm-neon` on arm64) is what the public download is built from: no mint, no sidecar, one
-clone of every kernel per shipped class profile, the runtime section raced at the first start
-on whatever box runs it. The `.das_package` names the launcher: on macOS the `.app` opens the
-watchdog, so a double click supervises.
+clone of every kernel per shipped class profile, the runtime section minted at the first start
+on whatever box runs it (the Metal twin kernels race where a Metal device exists; elsewhere it
+records the knob defaults). The `.das_package` names the launcher: on macOS the `.app` opens the
+watchdog, so a double click supervises. The exchange levers on the control page - apply a
+sidecar, share, re-tune - refuse on a fat release, which has no tune of its own.
 
 A JIT deployment instead stages the toolchain - `main.das`, `bin/Release/daslang.exe` plus the
 runtime DLLs and shared modules, `watchdog.exe`, `watchdog.json`, `control.html`, `tray.ico` -

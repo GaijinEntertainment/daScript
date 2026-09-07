@@ -70,6 +70,7 @@ working-tree copy.
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
+| `dasllama_server_release.yml` | `release: prereleased`, `workflow_dispatch` (`publish` input), and a branch push that edits the file itself | four cells (linux x86_64, linux arm64, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server`, smoke, package; a release or a `publish` dispatch uploads to the rolling `dasllama-server` release (and the daslang release being cut). Local mirror: `bin/daslang utils/daspkg/main.das -- release --fat <class> --root utils/dasllama-server --out <dir>` on the box, then run the bundle |
 
 > A manual **`workflow_dispatch`** of `build.yml` runs the **whole** workflow - every per-PR job, both nightly toolchains, *and* the full AOT sweep. The cron `schedule` runs the two toolchains, the full build matrix and `bundle_smoke` (the cron run is what seeds its sccache slot); `build_linux_gcc` is gated off `schedule`.
 
