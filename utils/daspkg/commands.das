@@ -1555,6 +1555,7 @@ def private release_build_program(daslang, main_path, bundle_dir, name, deps_fil
         var rerr : string
         if (!rename("{exe_path}.exe", exe_path, rerr)) {
             to_log(LOG_ERROR, "release: cannot rename {exe_path}.exe -> {exe_path}: {rerr}\n")
+            release_drop_program_files(exe_path)
             return 1
         }
     }
@@ -2350,8 +2351,12 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     programs |> reserve(length(spec.programs))
     for (p in spec.programs) {
         let at = find(p, "@")
-        let pname = at > 0 ? slice(p, 0, at) : ""
-        let pscript = at > 0 ? slice(p, at + 1, length(p)) : ""
+        if (at <= 0) {   // release_program() writes `name@script`; only an edit to daslib/daspkg.das breaks that
+            to_log(LOG_ERROR, "release: malformed companion entry `{p}` - release_program(name, script) records `name@script`\n")
+            return 1
+        }
+        let pname = slice(p, 0, at)
+        let pscript = slice(p, at + 1, length(p))
         // the name is a file name the platform suffixes itself (`foo.exe.exe` otherwise), and one
         // clean_previous_release never sweeps when it carries `..`
         if (empty(pname) || !is_safe_pkg_name(pname) || pname == bundle_name || (pname |> ends_with(".exe")) || find(pname, "..") >= 0) {
