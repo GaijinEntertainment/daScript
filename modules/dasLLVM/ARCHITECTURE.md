@@ -265,3 +265,16 @@ so the sign trick that would feed it (`dot(w, x) == dot(sign(x)*w, |x|)`) wraps 
 operand and answers the wrong sign there, and `+relaxed-simd` is a whole-module switch that also
 turns float-vector `min`/`max` and `mad` into engine-defined instructions (NaN and signed-zero
 answers, fusion) - the feature string stays `+simd128,+nontrapping-fptoint`, the runtime archive's.
+
+## 10. A standalone exe's require-resolver rows
+
+`inject_main` (`daslib/llvm_exe.das`) decides the exe's link - the runtime-only library, or the
+whole compiler library when the program registers every builtin module, ships a dynamic module,
+or reaches a compiler-lib module - and emits the `register_native_path` rows the host's module
+scan loaded only under the whole-lib link, once, after that decision. The rows feed the
+compile-time require resolver (`FsFileAccess::getModuleInfo`), which lives in the compiler
+library: a runtime-only exe has no compiler and can never reach them, and every row it would
+carry is a startup `jit_register_native_path_resolve` call - an exe-file lookup plus a stat each,
+several hundred for a hello world - and a build-machine path baked into the binary. A whole-lib
+exe (`dastest.exe`, which compiles test files at run time) still carries every row, re-rooted at
+run time the way dynamic modules are.
