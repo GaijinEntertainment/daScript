@@ -719,8 +719,12 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
             }
             // a default slot whose context is shorter than the pp row is refused, not prefilled into a
             // capacity panic (a runtime load of a second file, activated, so it is the default)
-            let smol = to_generic_path(path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf"))
-            if (stat(smol).is_valid) {
+            t |> run("a context below pp512 refuses the run (needs SmolLM2-135M q8)") @(t : T?) {
+                let smol = to_generic_path(path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf"))
+                if (!stat(smol).is_valid) {
+                    t |> skip("{base_name(smol)} not present (set DASLLAMA_MODELS_DIR)")
+                    return
+                }
                 POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-256\",\"ctx\":256,\"activate\":true}") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK), "a 256-token slot loads and becomes the default")
                 }
@@ -728,8 +732,6 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
                     t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "a context below pp512 refuses the run")
                     t |> success(find(string(resp.body), "context is 256") >= 0, "and names the context: {resp.body}")
                 }
-            } else {
-                t |> success(true, "not covered here: the short-context refusal needs SmolLM2-135M, which is not present")
             }
         }
     }
