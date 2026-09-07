@@ -183,7 +183,7 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
 
     // 5. fat is an exe mode: a -jit run refuses by name
     var lj : array<string>
-    t |> success(spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -jit \"{client}\"", lj) != 0, "case 5: fat outside -exe refuses")
+    t |> success(spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", lj) != 0, "case 5: fat outside -exe refuses")
     t |> success(lj |> has("standalone-exe mode"), "case 5: the refusal names the mode\n{join(lj, "\n")}")
 
     // 6. fat needs the baseline class

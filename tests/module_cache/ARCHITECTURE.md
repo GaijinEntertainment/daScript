@@ -44,7 +44,10 @@ under (`argv[0]`): the default-path case on scripts it writes to a temp director
 the child's stdout and on the files under `.jitted_scripts/module_cache/` in the cwd; the
 explicit-cache cases on a driver under `_fixtures/` with `-module-cache` pointed into a temp
 directory, asserting on the child's stdout; the manifest case on a project root under a temp
-directory, asserting on the scan trace. Each removes what it wrote under its own directory;
-the `.das_module.manifest` sidecars every child's module scan warms beside the tree's
-descriptors are the scan's, gitignored, and stay. A child's stdout is echoed on failure,
+directory, asserting on the scan trace. Each removes what it wrote under its own directory,
+with one ledgered write outside it: the default-path case's child writes the default cache,
+which is `.jitted_scripts/module_cache/` under the cwd it shares with dastest by definition,
+and the test removes what that child wrote before it returns. The `.das_module.manifest`
+sidecars every child's module scan warms beside the tree's descriptors are the scan's,
+gitignored, and stay. A child's stdout is echoed on failure,
 because the exit code alone would turn a one-line answer into an exit-code hunt.

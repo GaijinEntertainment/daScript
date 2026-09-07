@@ -24,7 +24,7 @@ def test_llvm_tune_grid_mode(t : T?) {
     let args <- get_command_line_arguments()  // locked view — do not delete
     let bin = args[0]
     let client = "{get_this_module_dir()}/llvm_tune_modes_client.das"
-    let inner = "\"{bin}\" -jit \"{client}\""
+    let inner = "\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\""
     // popen goes through cmd.exe / /bin/sh — set the env inside the command line
     let cmd = get_platform_name() == "windows" ? "set DAS_TUNE_MODE=test&& {inner}" : "DAS_TUNE_MODE=test {inner}"
     var lines : array<string>

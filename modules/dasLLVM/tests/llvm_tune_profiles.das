@@ -131,7 +131,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     remove(sidecar)
     remove(profile)
     var noProfile : array<string>
-    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -jit \"{client}\"", noProfile), 0, "case 1 exit code")
+    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", noProfile), 0, "case 1 exit code")
     t |> success(noProfile |> has("FAKE TUNER"), "case 1: no profile - the tuner runs\n{join(noProfile, "\n")}")
     t |> success(noProfile |> has("ONLY=''"), "case 1: the full race carries no --tune-only filter")
     t |> success(!(noProfile |> has("defaults profile")), "case 1: nothing mentions a profile")
@@ -142,7 +142,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     remove(sidecar)
     write_profile(defdir, klass, "k0", tune_feature_fingerprint())
     var fullCover : array<string>
-    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -jit \"{client}\"", fullCover), 0, "case 2 exit code")
+    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", fullCover), 0, "case 2 exit code")
     t |> success(fullCover |> has("covered by the '{klass}' defaults profile"), "case 2: the guard reports the box covered\n{join(fullCover, "\n")}")
     t |> success(!(fullCover |> has("FAKE TUNER")), "case 2: no tuner on a covered box")
     t |> success(!(fullCover |> has("re-launching")), "case 2: a covered box compiles once")
@@ -158,7 +158,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     remove(sidecar)
     write_profile(defdir, klass, "k0", "")
     var unlockedSeat : array<string>
-    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -jit \"{client}\"", unlockedSeat), 0, "case 3 exit code")
+    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", unlockedSeat), 0, "case 3 exit code")
     t |> success(unlockedSeat |> has("racing 1 unlocked/new families"), "case 3: the unlocked seat races\n{join(unlockedSeat, "\n")}")
     t |> success(unlockedSeat |> has("ONLY='prof_add'"), "case 3: the residue filter names the family")
     t |> success(unlockedSeat |> has("RESULT 7"), "case 3: the raced k2 tier ran")
@@ -169,7 +169,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
 
     // 4. --tune outranks the profile: full re-race, no adoption
     var forcedTune : array<string>
-    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -jit \"{client}\" -- --tune", forcedTune), 0, "case 4 exit code")
+    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\" -- --tune", forcedTune), 0, "case 4 exit code")
     t |> success(!(forcedTune |> has("defaults profile")), "case 4: --tune skips adoption\n{join(forcedTune, "\n")}")
     t |> success(forcedTune |> has("FAKE TUNER"), "case 4: --tune runs the tuner on a complete sidecar")
     delete forcedTune
@@ -177,13 +177,13 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     // 5. --tune-only converges: the relaunch strips both spellings, so exactly one tuner runs and
     //    the child does not re-tune forever (the strip arms are what keep it from looping)
     var onlyOne : array<string>
-    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -jit \"{client}\" -- --tune-only prof_add", onlyOne), 0, "case 5 exit code")
+    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\" -- --tune-only prof_add", onlyOne), 0, "case 5 exit code")
     t |> equal(count_hits(onlyOne, "FAKE TUNER"), 1, "case 5: --tune-only runs exactly one tuner\n{join(onlyOne, "\n")}")
     t |> success(onlyOne |> has("ONLY='prof_add'"), "case 5: the filter reaches the tuner")
     t |> success(onlyOne |> has("RESULT 7"), "case 5: the re-minted k2 tier ran")
     delete onlyOne
     var onlyEq : array<string>
-    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -jit \"{client}\" -- --tune-only=prof_add", onlyEq), 0, "case 5b exit code")
+    t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\" -- --tune-only=prof_add", onlyEq), 0, "case 5b exit code")
     t |> equal(count_hits(onlyEq, "FAKE TUNER"), 1, "case 5b: the = spelling runs exactly one tuner\n{join(onlyEq, "\n")}")
     delete onlyEq
 
@@ -197,7 +197,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
         remove(profile)
         write_profile(defdir, lower, "k0", tune_feature_fingerprint())
         var lowerAdopt : array<string>
-        t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -jit \"{client}\"", lowerAdopt), 0, "case 6 exit code")
+        t |> equal(spawn_child("{tune_env_prefix("")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", lowerAdopt), 0, "case 6 exit code")
         t |> success(lowerAdopt |> has("covered by the '{lower}' defaults profile"), "case 6: the lower class's profile covers the box\n{join(lowerAdopt, "\n")}")
         t |> success(!(lowerAdopt |> has("FAKE TUNER")), "case 6: no tuner under a lower-class profile")
         delete lowerAdopt
@@ -211,7 +211,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     let refEnv = (get_platform_name() == "windows" ?
         "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=reference&& set DAS_TUNE_ONLY=&& " :
         "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY=reference DAS_TUNE_ONLY= ")
-    t |> equal(spawn_child("{refEnv}\"{bin}\" -no-module-cache -jit \"{client}\"", refRun), 0, "case 7 exit code")
+    t |> equal(spawn_child("{refEnv}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", refRun), 0, "case 7 exit code")
     t |> success(refRun |> has("policy 'reference' set by DAS_TUNE_POLICY"), "case 7: the reference policy announces itself\n{join(refRun, "\n")}")
     t |> success(refRun |> has("STATUS prof_add|llvm_tune_profiles_probe||reference"), "case 7: the stamp reads reference")
     t |> success(refRun |> has("RESULT 5"), "case 7: the original body ran")
@@ -223,7 +223,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     remove(sidecar)
     remove(profile)
     var fused : array<string>
-    t |> equal(spawn_child("{tune_env_prefix("1")}\"{bin}\" -no-module-cache -jit \"{client}\"", fused), 0, "case 8 exit code")
+    t |> equal(spawn_child("{tune_env_prefix("1")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", fused), 0, "case 8 exit code")
     t |> success(fused |> has("did not converge"), "case 8: the relaunched child reports the non-convergence\n{join(fused, "\n")}")
     t |> success(fused |> has("DAS_TUNE_RELAUNCH=1"), "case 8: the report names the depth knob")
     t |> success(!(fused |> has("FAKE TUNER")), "case 8: no second tuner")
