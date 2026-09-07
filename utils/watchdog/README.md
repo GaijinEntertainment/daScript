@@ -2,8 +2,8 @@
 
 One supervisor for any daslang program that needs to stay up. It restarts the child with
 bounded backoff, captures crashes into bundles, reports startup progress, and polls health.
-It supervises `utils/dasllama-server` (JIT) in-tree and the dictation bot in the das-telegram
-package (a baked exe).
+It supervises `utils/dasllama-server` - the released fat exe in its bundle, or `daslang -jit
+main.das` in a JIT deployment - and the dictation bot in the das-telegram package (a baked exe).
 
 It ships as a static executable, `bin/watchdog` (`bin/Release/watchdog.exe` in an MSVC tree): a
 `-ctx` standalone context on the full runtime with `libDaScript`, dasHV, dasStdDlg and dasStbImage
@@ -29,8 +29,8 @@ That works because the watchdog resolves what to supervise in this order, first 
 3. **Layout discovery** - `main.das` means `daslang -jit main.das`, with the daslang found beside
    it (`bin/Release/daslang(.exe)`) or beside the watchdog itself, which is how `bin/watchdog`
    in a source tree finds `bin/daslang`; exactly one program in the directory means that
-   program - a `*.exe`, or on a Unix layout a regular file with no extension, which is what a
-   daspkg bundle names its exe; the watchdog's own executable is never a candidate. Anything
+   program - a `*.exe`, or on a Unix layout an executable file with no extension, which is what
+   a daspkg bundle names its exe; the watchdog's own executable is never a candidate. Anything
    ambiguous is an error, never a guess.
 
 Everything after `--` goes to the child verbatim. From the source tree the watchdog does not sit

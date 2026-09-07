@@ -188,7 +188,7 @@ def private load_config(folder : string) : LoadedConfig {
 
 //! What to supervise, from the layout: `main.das` means script mode when a daslang sits beside it
 //! (`bin/Release/daslang(.exe)`) or beside the watchdog itself (a source tree keeps both in `bin/`);
-//! exactly one program - a `*.exe`, or on a Unix layout a regular file with no extension, the
+//! exactly one program - a `*.exe`, or on a Unix layout an executable file with no extension, the
 //! watchdog's own executable aside - means that program. Ambiguity is an error, never a guess.
 def private discover_target(var cfg : WatchdogConfig; folder, program_dir : string) : string {
     let script = path_join(folder, "main.das")
@@ -223,14 +223,14 @@ def private discover_target(var cfg : WatchdogConfig; folder, program_dir : stri
     return "watchdog: nothing to supervise in {folder} - expected a single program (*.exe, or a file with no extension), or main.das with a daslang beside it or beside the watchdog. Use --program/--script or ship {CONFIG_NAME}."
 }
 
-//! A `*.exe` anywhere; on a Unix layout also a regular file with no extension, which is what a
-//! daspkg bundle names its exe. The watchdog's own executable is never a candidate.
+//! A `*.exe` anywhere; on a Unix layout also an executable regular file with no extension, which
+//! is what a daspkg bundle names its exe. The watchdog's own executable is never a candidate.
 def private is_program_candidate(path, fname : string) : bool {
     if (stem(fname) == "watchdog") return false
     if (ends_with(fname, ".exe")) return true
     if (get_platform_name() == "windows" || find(fname, ".") >= 0) return false
     let st = stat(path)
-    return st.is_valid && st.is_reg
+    return st.is_valid && st.is_reg && st.is_exec
 }
 
 //! Where a daslang may sit, nearest first: beside the script, beside the watchdog, and one level
@@ -1072,7 +1072,7 @@ def private is_ico(bytes : array<uint8>) : bool {
 def private ico_frame(bytes : array<uint8>) : tuple<at : int; len : int; side : int; reason : string> {
     let count = read_u16(bytes, 4)
     var best = (at = 0, len = 0, side = 0, reason = "")
-    var frames = 0
+    var in_range = 0
     var bmp_frames = 0
     for (i in range(count)) {
         let entry = 6 + 16 * i
@@ -1081,8 +1081,8 @@ def private ico_frame(bytes : array<uint8>) : tuple<at : int; len : int; side : 
         let h = bytes[entry + 1] == 0u8 ? 256 : int(bytes[entry + 1])
         let len = read_u32(bytes, entry + 8)
         let at = read_u32(bytes, entry + 12)
-        if (at < 0 || len <= 0 || at + len > length(bytes)) continue
-        frames++
+        if (at < 0 || len <= 0 || at > length(bytes) || len > length(bytes) - at) continue
+        in_range++
         if (!is_png(bytes, at, len)) {
             bmp_frames++
             continue
@@ -1091,9 +1091,10 @@ def private ico_frame(bytes : array<uint8>) : tuple<at : int; len : int; side : 
         best = (at = at, len = len, side = w, reason = "")
     }
     if (best.side == 0) {
-        best.reason = (frames == 0 ? "the ICO directory lists no frame"
-            : (bmp_frames == frames ? "every ICO frame is a BMP; the tray reads PNG-compressed frames only"
-                : "no square PNG frame of {TRAY_ICON_FRAME_MAX} px or less"))
+        best.reason = (count == 0 ? "the ICO directory lists no frame"
+            : (in_range == 0 ? "every ICO frame's byte range lies outside the file"
+                : (bmp_frames == in_range ? "every ICO frame is a BMP; the tray reads PNG-compressed frames only"
+                    : "no square PNG frame of {TRAY_ICON_FRAME_MAX} px or less")))
     }
     return best
 }

@@ -39,15 +39,22 @@ flags (``--program``, ``--script``, ``--name``, …); ``watchdog.json``
 beside the executable (each key is a flag name with underscores and sets
 the default for that flag; unknown keys are a hard error); layout
 discovery (``main.das`` beside ``bin/Release/daslang`` → ``daslang -jit
-main.das``; exactly one ``*.exe`` → that program — anything ambiguous is
-an error, never a guess).  Everything after ``--`` goes to the child.
+main.das``; exactly one program → that program, where a program is a
+``*.exe`` or, on a Unix layout, an executable file with no extension - what a
+``daspkg release`` bundle names its exe - and the watchdog's own executable
+never counts; anything ambiguous is an error, never a guess).  Everything
+after ``--`` goes to the child.
 
 ``--tray`` (the ``tray`` key in ``watchdog.json``) puts a status icon in the
 notification area: a mark badged by state, the status line as its tooltip and
 the menu's first row, ``Open <name>`` for the page named by ``--tray-url`` (or
 the health URL's origin), live while the health check is green, and
-``Shutdown``.  Where no desktop can show one, the log says ``tray_unavailable``
-and supervision runs without it.
+``Shutdown``.  ``--tray-icon <file>`` (the ``tray_icon`` key) replaces the
+stock disc with the program's own mark - a PNG, or an ICO whose frames are
+PNG-compressed - and the badge is drawn over it; a file it cannot read is
+logged as ``tray_icon_unavailable`` and the disc shows.  Where no desktop can
+show an icon, the log says ``tray_unavailable`` and supervision runs without
+it.
 
 .. seealso::
 

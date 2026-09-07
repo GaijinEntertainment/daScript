@@ -34,6 +34,10 @@ defaults:
   run:
     shell: bash
 
+# the rolling release is created and its assets replaced with the workflow token
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ${{ matrix.runner }}
@@ -184,11 +188,13 @@ jobs:
         if: github.event_name == 'release' || inputs.publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # four cells publish in parallel: the first to find no release creates it, a loser of that
+        # race sees "already exists" and re-checks instead of failing
         run: |
           set -eux
-          if ! gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release create dasllama-server --repo "$GITHUB_REPOSITORY" --latest=false \
+          gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
+            || gh release create dasllama-server --repo "$GITHUB_REPOSITORY" --latest=false \
               --title "dasllama-server - standalone downloads (rolling)" \
-              --notes "The OpenAI-compatible dasLLAMA server as a standalone download per platform, no daslang install needed. Rolling: every asset is replaced in place when a daslang release is cut. Unpack, start watchdog (the .app on macOS), open http://127.0.0.1:8080/ - utils/dasllama-server/README.md."
-          fi
+              --notes "The OpenAI-compatible dasLLAMA server as a standalone download per platform, no daslang install needed. Rolling: every asset is replaced in place when a daslang release is cut. Unpack, start watchdog (the .app on macOS), open http://127.0.0.1:8080/ - utils/dasllama-server/README.md." \
+            || gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null
           gh release upload dasllama-server --repo "$GITHUB_REPOSITORY" artifacts/* --clobber

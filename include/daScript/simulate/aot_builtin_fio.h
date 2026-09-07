@@ -51,9 +51,11 @@ namespace das {
 #if defined(_WIN32)
         bool     is_reg() const { return stats.st_mode & _S_IFREG; }
         bool     is_dir() const { return stats.st_mode & _S_IFDIR; }
+        bool     is_exec() const { return stats.st_mode & _S_IEXEC; }
 #else
         bool     is_reg() const { return S_ISREG(stats.st_mode); }
         bool     is_dir() const { return S_ISDIR(stats.st_mode); }
+        bool     is_exec() const { return (stats.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0; }
 #endif
     };
 #else
@@ -67,6 +69,7 @@ namespace das {
         Time     mtime() const  { return Time{}; }
         bool     is_reg() const { return false; }
         bool     is_dir() const { return false; }
+        bool     is_exec() const { return false; }
     };
 #endif
 

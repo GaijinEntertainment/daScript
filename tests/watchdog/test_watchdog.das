@@ -573,25 +573,34 @@ def test_discovery(t : T?) {
         let cleanup = rmdir_rec_result(root)
         t |> success(cleanup is value && cleanup as value, "temp dir removed")
     }
-    t |> run("a daspkg bundle on a Unix layout: the extensionless exe beside the watchdog, its config and its assets") @(t : T?) {
+    t |> run("a daspkg bundle on a Unix layout: the extensionless exe beside the watchdog, its config, its assets and a README") @(t : T?) {
         let root = make_temp(t, "wd bundle ")
         if (empty(root)) return
-        fwrite(path_join(root, "dasllama-server"), "")
-        fwrite(path_join(root, "watchdog"), "")
+        let windows = get_platform_name() == "windows"
+        for (exe in ["dasllama-server", "watchdog"]) {
+            fwrite(path_join(root, exe), "")
+            if (!windows) {
+                var out = ""
+                run_and_capture(["chmod", "755", path_join(root, exe)], out, 10.0)
+            }
+        }
         fwrite(path_join(root, "watchdog.json"), "\{\"no_health\": true\}")
         fwrite(path_join(root, "control.html"), "")
+        fwrite(path_join(root, "README"), "")
         fwrite(path_join(root, ".daspkg_release.manifest"), "")
         mkdir(path_join(root, "modules"))
         let bundle <- resolve_config([], root)
-        if (get_platform_name() == "windows") {
+        if (windows) {
             t |> success(find(bundle.error, "nothing to supervise") >= 0, "an extensionless file is not a program on Windows: {bundle.error}")
         } else {
             t |> equal(bundle.error, "")
-            t |> success(ends_with(bundle.cfg.program, "dasllama-server"), "the extensionless exe is the program: {bundle.cfg.program}")
+            t |> success(ends_with(bundle.cfg.program, "dasllama-server"), "the extensionless executable is the program, the README beside it is not: {bundle.cfg.program}")
             t |> equal(bundle.cfg.name, "dasllama-server", "and names the supervision")
             fwrite(path_join(root, "dasllama-bench"), "")
+            var out = ""
+            run_and_capture(["chmod", "755", path_join(root, "dasllama-bench")], out, 10.0)
             let two <- resolve_config([], root)
-            t |> success(find(two.error, "2 executables") >= 0, "two extensionless files are ambiguous: {two.error}")
+            t |> success(find(two.error, "2 executables") >= 0, "two extensionless executables are ambiguous: {two.error}")
         }
         let cleanup = rmdir_rec_result(root)
         t |> success(cleanup is value && cleanup as value, "temp dir removed")

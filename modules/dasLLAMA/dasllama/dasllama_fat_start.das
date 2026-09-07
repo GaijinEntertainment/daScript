@@ -82,7 +82,7 @@ def public dasllama_metal_crown_race() : tuple<wins : array<string>; ran : bool>
 def public dasllama_race_runtime_section() : bool {
     static_if (typeinfo module_exists(llvm_tune)) {
         let path = tune_manifest_path()
-        to_log(LOG_INFO, "dasLLAMA: first start on this box - racing the Metal twin kernels; the winners are kept in {path} and the next start reads them\n")
+        to_log(LOG_INFO, "dasLLAMA: first start on this box - minting the runtime section (the Metal twin kernels race where a Metal device exists); it is kept in {path} and the next start reads it\n")
         tune_progress_plan("dasllama_first_start", 1)
         tune_progress_kernel_begin("metal_crowns", 0)
         var race <- dasllama_metal_crown_race()

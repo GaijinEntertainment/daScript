@@ -2823,6 +2823,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(mtime)>("mtime");
             addProperty<DAS_BIND_MANAGED_PROP(is_reg)>("is_reg");
             addProperty<DAS_BIND_MANAGED_PROP(is_dir)>("is_dir");
+            addProperty<DAS_BIND_MANAGED_PROP(is_exec)>("is_exec");
         }
         virtual bool canMove() const override { return true; }
         virtual bool canCopy() const override { return true; }
