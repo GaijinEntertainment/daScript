@@ -52,8 +52,8 @@ timeout, and repeats a file only when `--nreps` is passed explicitly (default 1,
 best-of-N). Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
 that cache serves dastest's own module graph only - the test program dastest compiles at
 runtime sits past it, so each child still pays the engine compile.
-`preflight --full` runs both per-PR suites when the diff touches `modules/dasLLAMA/` (gates
-`dasllama-model-free`, `dasllama-stocked`) and skips them otherwise.
+No preflight tier runs the two per-PR suites: `preflight -- --only dasllama-model-free` and
+`-- --only dasllama-stocked` do, one after the other.
 
 ## The iteration loop
 

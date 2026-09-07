@@ -9,17 +9,18 @@ companions belong to the routed checklists). Planned work: `followup_general.md`
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
 
-**A timing rig - a script whose output is a measured wall-clock time or rate - or a kernel
-race - a run that times two kernel variants (arms) against each other in one process -
-wherever it lives, answers to this folder's `benchmarks/REVIEW.md` in addition to its own
-folder's checklist.**
+**A timing rig - a file that times a run and reports a wall-clock time or rate as its result,
+printed or returned to a caller that prints it - a kernel race - a run that times two kernel
+variants (arms) against each other in one process - or a function a `benchmarks/lcpp_bench.das`
+cell's timed body calls, wherever it lives, answers to this folder's `benchmarks/REVIEW.md` in
+addition to its own folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
-code comment, or a PR body - or adds a serving path or moves an existing one onto other code,
-or changes what a measured or served run with no flags and no environment overrides computes,
-applies `REVIEW_MEASUREMENT.md`.** A serving path is the end-to-end route a run takes from
-prompt to tokens; its compile tier (interpreted, JIT, AOT) and its cross target (a build for
-another platform) are part of it.
+code comment, checked-in data a run produced, or a PR body - or adds a serving path or moves
+an existing one onto other code, or changes what a measured or served run with no flags and no
+environment overrides computes, applies `REVIEW_MEASUREMENT.md`.** A serving path is the
+end-to-end route a run takes from prompt to tokens; its compile tier (interpreted, JIT, AOT)
+and its cross target (a build for another platform) are part of it.
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -104,8 +105,8 @@ while every `-jit` gate stays green; a global another file's `[init]` arms (`set
 has no initializer, and its null default is the declared "no hook".
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
-(`dasllama/dasllama_rope.das`).** A regrouping
-moves the angles in the last bits and flips token-exact fixtures.
+(`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
+token-exact fixtures.
 
 **A diff that changes a predicate in `dasllama/` picking between kernel forms that both
 produce the right answer is based on timing that ran both forms interleaved in one process,
@@ -128,11 +129,11 @@ stay f32 for another reason is ledgered on its own file's sec.1 charter line in 
 without first proving both stdin and stdout are terminals is a defect - emit the question as
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
-**A print or log of an elapsed interval in an engine file (`dasllama/`), outside a cold one-shot
-load, bake, map or tokenizer-build progress log and the first-start race report
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a), is a defect - whoever read the clock** - instrumentation
-goes through the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the
-Vulkan tier's `vk_prof()`-gated ledgers), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
+**A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside a
+cold one-shot load, bake, map or tokenizer-build progress log and the first-start race report
+(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a), is a defect** - instrumentation goes through the
+profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan
+tier's `vk_prof()`-gated ledgers), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
 
 **A clock value that changes what the program DOES - control flow, eviction, a generated
 name; not a reported wall-clock time or a best-of reduction over reported wall-clock times -
@@ -147,7 +148,10 @@ entry reaches it: an annotation binds every function the entry calls, so an inte
 carries nothing of its own; an entry no annotated entry reaches carries the annotation itself,
 and a function reached only through a registered function value is reached by none. A region
 entry is the outermost such function (a kernel `*_encode` / `*_decode`, a step driver, the CPU
-decoder's `forward_*` entries); a loop reached only from a load, stage, bake, or convert path is not one.
+decoder's `forward_*` entries); a loop reached only from a load, stage, bake, or convert path is
+not one. A driver that calls the `forward_*` entries and is reached only by a measurement - a
+benchmark row, a rig's loop - and never by a served request carries `[cold_path]`, which covers
+only the functions below it that carry no annotation of their own.
 
 **A renamed per-token function is not new: its annotation moves with the name in the same change.**
 
@@ -187,9 +191,11 @@ false updates it in the same change** - a section no `[arch]` cites is the revie
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
-path under `modules/dasLLAMA/` - is a defect:** a module added to its allowed set, the path
-match dropped or narrowed, or an error text that no longer names the facade to require
-instead. The allowed set is the table in the lint.
+path under `modules/dasLLAMA/` - is a defect:** the path match dropped or narrowed, an error
+text that no longer names the facade to require instead, or a module added to its allowed set
+without both halves of the pair that makes it an entry module - the `ARCHITECTURE_ENGINE.md`
+sec.1.8 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
+naming it beside the facade. The allowed set is the table in the lint.
 
 **A `// nolint:STYLE037` or `// nolint:STYLE038` on a function a follow-up ledger entry says
 can be shortened or split is a defect - land the ledgered split instead.** The warning is what
@@ -211,25 +217,15 @@ edit that text asks for. What the gate enforces is read from the gate itself; ea
 finding text states its own rule.
 
 **A new `REVIEW.das` check ships its line on the checked file's sec.1 charter - in an
-`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The line names the check and the names it licenses. A licensed name is one that check does not
-flag. When the check licenses no names, the line says so.
+`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The line names the check and the names it
+licenses. A licensed name is one that check does not flag. When the check licenses no names,
+the line says so.
 
-**Checked-in text under `modules/dasLLAMA/` - docs, comments, and string data, any language -
-that is not locating, patching, or reproducing work against the reference build describes an
-upstream mechanism in our own terms: no "lifted/ported verbatim from", and no name belonging
-to the reference build - symbol, header, constant, binary, project or organization - write
-"the reference exe" or "upstream" instead.** The reference build is the third-party engine
-this module measures itself against - the checkout `benchmarks/setup_lcpp_ref.das` pins. A
-symbol the file carrying that text calls or holds as a value is its own name, not attribution.
-
-**Prose whose job is to locate, patch, or reproduce work against the reference build names
-that build's binaries and symbols outright, and keeps that naming inside the sentences doing
-that job.** The job decides, not the artifact kind - a regeneration path, an env-knob row, a
-command line in a methodology or how-to document, a ledger row whose subject is a reading of
-the reference build (the compared row, the command that reproduces it), and a source patch
-applied TO the reference build all qualify. A paragraph that mixes a reading of the reference
-build with a proposal of our own keeps them in separate sentences; a row that cites upstream
-while proposing our own work is a proposal, not a reading, so it names no upstream symbol.
+**Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language -
+that describes a mechanism of the reference build, or names that build, its binaries or its
+symbols, wherever the diff puts it, applies `REVIEW_UPSTREAM.md`.** The reference build is the
+third-party engine this module measures itself against - the checkout
+`benchmarks/setup_lcpp_ref.das` pins.
 
 **A diff that changes what authoring a new weight format entails - a step added or dropped, a
 file the author must touch, a fixture or probe entry the format must supply, or a gate it must
@@ -247,10 +243,10 @@ in a `tutorials/dasLLAMA/*.das` source and narrated on a
 `doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The facade files are
 `dasllama/dasllama.das` and `dasllama/dasllama_tts.das` - a facade file's defs reach a consumer
 through `require dasllama/dasllama`, and a diff that makes another file's defs reach that way
-adds it here and to `check_tutorial_floor` in the same change. `REVIEW.das`'s `check_tutorial_floor`
-matches def NAMES only, so an overload passes on a sibling's tutorial - the reviewer confirms
-a tutorial calls the NEW signature, and a mention that only names it (a comment, a passing
-reference) does not count.
+adds it here and to `check_tutorial_floor` in the same change. `REVIEW.das`'s
+`check_tutorial_floor` matches def NAMES only, so an overload passes on a sibling's tutorial -
+the reviewer confirms a tutorial calls the NEW signature, and a mention that only names it (a
+comment, a passing reference) does not count.
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
 struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;

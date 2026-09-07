@@ -315,7 +315,7 @@ let MODULE_AREAS <- {
     "dasllama_metal_prefill" => "llm", "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
     "dasllama_rope" => "llm", "dasllama_sampling" => "llm", "dasllama_scheduler" => "llm", "dasllama_spm" => "llm",
-    "dasllama_bench" => "llm",
+    "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)
     "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm", "dasllama_unicode" => "llm",
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm"
 }

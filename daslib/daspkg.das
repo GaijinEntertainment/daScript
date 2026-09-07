@@ -199,7 +199,7 @@ def release_launcher(tool : string) {
     _release_spec.launcher = tool
 }
 
-//! Bake a companion program into the same bundle: `script` (relative to the package root; `..` may reach another tree) becomes `<name>.exe` beside the main exe, built under the same CPU class and tune mode and sharing the runtime libraries and shared modules the bundle already carries - a companion costs one exe, nothing else. The shared modules it alone requires ship too. The benchmark beside dasllama-server is the worked example: `release_program("dasllama-bench", "../../modules/dasLLAMA/benchmarks/lcpp_bench.das")`.
+//! Bake a companion program into the same bundle: `script` (relative to the package root; `..` may reach another tree) becomes `<name>.exe` beside the main exe (extensionless inside a macOS .app), built under the same CPU class and tune mode - after a mint, under the main program's manifest, with that sidecar shipped under the companion's name too - and sharing the runtime libraries and shared modules the bundle already carries: a companion costs one exe, nothing else. The shared modules it alone requires ship too; a tune scope only it declares refuses the release. `release wasm` ignores companions. The benchmark beside dasllama-server is the worked example: `release_program("dasllama-bench", "../../modules/dasLLAMA/benchmarks/lcpp_bench.das")`.
 def release_program(name, script : string) {
     _release_spec.programs |> push("{name}@{script}")
 }

@@ -13,8 +13,8 @@ def release() {
     release_main("main.das")
     release_name("dasllama-server")
     release_include_tool("watchdog")
-    release_launcher("watchdog")
-    release_program("dasllama-bench", "../../modules/dasLLAMA/benchmarks/lcpp_bench.das")   // the llama-bench rows from a shell, baked under the server's class   // the macOS .app opens the supervisor, which starts the server
+    release_launcher("watchdog")   // the macOS .app opens the supervisor, which starts the server
+    release_program("dasllama-bench", "../../modules/dasLLAMA/benchmarks/lcpp_bench.das")   // the llama-bench rows from a shell, baked under the server's class
     release_include("watchdog.json")
     release_include("control.html")
     release_include("tray.ico")   // the forge dasllama mark, served as the control page's favicon

@@ -59,9 +59,10 @@ daslang with dasLLAMA (the SDK) and run the server through the JIT - the
 command below - or ``daspkg release`` the package on that box: either mints
 the box's own sidecar, every kernel raced on your own hardware instead of
 picked from a class profile.  The control page's benchmark button measures
-the box - pp512 and tg128 on the served model - and ``dasllama-bench`` beside
-the server runs the same rows from a shell (``--ref <llama-bench>`` adds the
-llama.cpp comparison).
+the box - pp512 and tg128 on the served model, seconds on a small one - and
+``dasllama-bench.exe`` beside the server (``dasllama-bench`` inside the Mac
+app) runs the same rows from a shell; ``--ref <llama-bench>`` adds the
+llama.cpp comparison.
 The bundles are not code-signed: on macOS drag the app out of Downloads with
 the Finder first (an app started from the download folder runs from a
 read-only copy), then allow it once under Privacy & Security or clear the
@@ -227,7 +228,7 @@ Endpoints
      - ``{"name": <entry>}`` — start one catalog download (sha-verified; ``"tower"`` pulls a vision/asr companion, and ``{"tower": "tts", "file": <file>}`` one file of the speech set)
    * - ``GET`` / ``POST``
      - ``/bench``
-     - Read bench state, mode, log and result / start the quiesced benchmark: in process by default (pp512 and tg128 on the served model, three reps each, the text routes holding meanwhile), or the llama.cpp A/B child when ``lcpp_bin`` is configured on a source-tree daslang (``POST`` is loopback-only)
+     - Read bench state, mode, log and result / start the quiesced benchmark: in process by default (pp512 and tg128 on the served model, three reps each, every route that could contend holding meanwhile; the result names the device, the KV codec, the exec tier and the tune state the rows ran under), or the llama.cpp A/B child when ``lcpp_bin`` is configured on a source-tree daslang (``POST`` is loopback-only)
    * - ``GET`` / ``POST``
      - ``/bake``
      - Read bake state and log / bake the slot's prepared ``.dlim`` image via ``dasllama-convert`` (``POST`` is loopback-only)

@@ -9,7 +9,7 @@ module dasllama_lint shared private
 //! directly - by name, or by a path that resolves into the module tree. The public entry
 //! points are ``dasllama/dasllama`` (the facade), ``dasllama/dasllama_scheduler`` (serving),
 //! ``dasllama/dasllama_exchange`` (the tune-sidecar exchange) and ``dasllama/dasllama_bench``
-//! (the llama-bench rows). Engine files, in-module tests and harnesses opt out per file via
+//! (the benchmark rows). Engine files, in-module tests and harnesses opt out per file via
 //! ``options _dasllama_internal = true``.
 
 require daslib/ast_boost
@@ -46,7 +46,7 @@ class DasllamaLintMacro : AstPassMacro {
             let inside_tree = find(to_lower(replace(string(rmod.fileName), "\\", "/")), "modules/dasllama/") >= 0
             if (!inside_tree) return
             prog |> macro_error(at,
-                "DASLLAMA001: require of dasLLAMA internal '{mname}' - the public surface is require dasllama/dasllama (+ dasllama/dasllama_scheduler for serving, dasllama/dasllama_exchange for the sidecar exchange, dasllama/dasllama_bench for the llama-bench rows). A symbol the facade lacks means the facade is missing it: add it to dasllama.das. Engine/test escape: options _dasllama_internal = true.")
+                "DASLLAMA001: require of dasLLAMA internal '{mname}' - the public surface is require dasllama/dasllama (+ dasllama/dasllama_scheduler for serving, dasllama/dasllama_exchange for the sidecar exchange, dasllama/dasllama_bench for the benchmark rows). A symbol the facade lacks means the facade is missing it: add it to dasllama.das. Engine/test escape: options _dasllama_internal = true.")
         }
         return true
     }

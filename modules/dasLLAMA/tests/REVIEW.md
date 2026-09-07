@@ -44,17 +44,24 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds, removes or moves a gate (one test cell, or a file between suites) corrects,
-in the same change, every `CLAUDE.md` clause that names that gate's suite, fixture, model, arm
-or skip condition.** A clause that only names the file (a brace list, a suite roster) carries
-nothing to correct.
+**A diff that adds, removes or moves a gate (one test cell, or a file between suites), or
+changes the contract a gate pins - what its asserts hold fixed - corrects, in the same change,
+every clause in this folder that names that gate's suite, fixture, model, arm, skip condition
+or pinned contract - a `CLAUDE.md` clause, this checklist's pinned-set entry, or a test file's
+own header.** A clause that only names the file (a brace list, a suite roster) carries nothing
+to correct.
+
+**A diff that adds, moves, or removes a `[test]` file outside `modules/dasLLAMA/` that carries
+a `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
+lives there, in `CLAUDE.md`'s "Out-of-folder test files" ledger in the same change.** A file
+reaching an engine module through another module's public require is not a row.
 
 **A diff that changes `run.das`'s flag surface - a flag, a suite name, an area name, or what a
-flag does, never the roster of files a suite or area lists - adds it to or corrects it in
-`CLAUDE.md`'s "Run suites ONLY through the runner" block and `../CLAUDE.md`'s "Test workflow"
-section in the same change.** Both documents restate the surface for an agent that reads them
-cold; a copy the code has left behind sends that agent to a flag that no longer does what the
-text says.
+flag does - adds it to or corrects it in `CLAUDE.md`'s "Run suites ONLY through the runner"
+block and `../CLAUDE.md` in the same change.** A data row in a table `run.das` looks up -
+`MODULE_AREAS`, a suite's or an area's file list - is not the surface. Both documents restate
+the surface for an agent that reads them cold; a copy the code has left behind sends that agent
+to a flag that no longer does what the text says.
 
 **A new test file listed in `run.das`'s `model-free` or `stocked` suite, or in no `run.das`
 suite at all, whose name does not say what it covers, gets a `CLAUDE.md` entry in the same

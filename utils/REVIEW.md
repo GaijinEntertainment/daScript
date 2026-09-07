@@ -17,8 +17,11 @@ tool's own `REVIEW.md`, where one exists, as well as with this checklist.**
 
 **A diff under `utils/` that changes how a `.dlim` is built from a gguf, how one is loaded, or
 what identifies one - the fields that decide whether two `.dlim`s are the same image - answers
-to `modules/dasLLAMA/REVIEW.md` (repo root) too.** A `utils/` diff never opens that checklist
-on its own.
+to `modules/dasLLAMA/REVIEW.md` (repo root) too.**
+
+**A file under `utils/` that carries `options _dasllama_internal`, wherever the diff puts it,
+applies `modules/dasLLAMA/REVIEW.md` (repo root) too** - the option turns off the DASLLAMA001
+compile error that keeps a file on the `dasllama` facade.
 
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a check
 walks, or rewriting a finding text so it no longer names what failed.**
@@ -35,12 +38,14 @@ list never carried leaves no record.
 **An arm the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions a CI row can run against the change, ships with a CI row that executes those
 assertions on every pull request, wherever the diff puts the arm, added in the same change if
-no row already covers it.** A row that only compile-checks the arm (`dastest --compile-only`)
-does not execute them, and a nightly-only row runs them after the merge.
+no row already runs that file on every pull request.** A row that only compile-checks the arm
+(`dastest --compile-only`) does not execute them, and a nightly-only row runs them after the
+merge.
 
 **An arm the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions no CI row can run, ships with a row that compile-checks it -
-`dastest --compile-only` - in the same change.**
+`dastest --compile-only` - added in the same change if no row already compile-checks that
+file.**
 
 **An arm the diff adds or changes that covers a change under `utils/`, whose load-bearing
 assertions no CI row can run, records in the PR description an executed run against the build

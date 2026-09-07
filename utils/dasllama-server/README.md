@@ -54,10 +54,13 @@ hardware instead of picked from a class profile.
 
 The control page's *benchmark* button runs the llama-bench rows on the served model right in
 the server - pp512 and tg128, three timed reps each after an untimed warmup - and shows tokens
-per second beside the hardware line; the text routes answer 503 for the run's duration (under
-a minute on a small model), so nothing contends with it. The same rows from a shell, and the
-comparison the page cannot run itself, come from `dasllama-bench` (`dasllama-bench.exe`)
-beside the server:
+per second beside the hardware line; every route that could contend holds for the run's
+duration (the text, audio and speech routes answer 503, the model-switching, bake and download
+routes 409), so nothing shares the cores with it. A run is seconds on a small model - about a
+second for a 135M model and six for a 1B one on an M1 Max. The same rows from a shell, and the
+comparison the page cannot run itself, come from `dasllama-bench` beside the server -
+`dasllama-bench.exe` on Linux and Windows, `dasllama-server.app/Contents/MacOS/dasllama-bench`
+on a Mac:
 
 ```sh
 ./dasllama-bench.exe -m ~/.dasllama/models/<model>.gguf           # pp512/tg128, five reps
@@ -66,7 +69,17 @@ beside the server:
 
 It is `modules/dasLLAMA/benchmarks/lcpp_bench.das` baked with the server's class; `--help`
 lists the rest (`-p`, `-n`, `-r`, `-t`, `-o md`). Its first start on a Mac races the Metal
-crowns like the server's does.
+crowns like the server's does. The two run the same rows, not the same numbers: the page
+measures the served slot as it is - its device (Metal, or the Vulkan tier where the slot armed
+one), its KV codec - on a session sized to the rows, while `dasllama-bench` runs f16 KV on the
+CPU unless `-ngl` says otherwise, the llama-bench defaults, five reps to the page's three. The
+page's result names what produced it - the device that served the rows, the KV codec, the exec
+tier (`exe-native` in a bundle, `jit` from the SDK), the tune state (`fat` in a bundle; `tuned`
+or `untuned` under the JIT) - and the `llama-bench` line that matches it. One difference to
+know about: the rows run llama-bench's flat session, so on the Vulkan tier they take the
+resident driver where the paged serving path declines it, and the result says `gpu:resident`
+when they did. A pp rep on a large CPU model can outlast the watchdog's two-second health
+probe; the tray reads unhealthy for that rep and recovers on its own.
 
 The bundles are not code-signed. macOS quarantines a downloaded app, and an app started from
 the download folder runs from a read-only copy where nothing it writes beside itself survives -
@@ -110,6 +123,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
 | `--mtp` | - | - | MTP/NextN self-speculative decode - needs a model with an in-file NextN head (the `-MTP-` GGUFs). Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. Up to ~2x decode on the dense qwen35/qwen3.6 models (measured rows: `modules/dasLLAMA/performance/records/<box>.json`, on the site board), ~nothing on the MoEs. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
 | `--models-dir` | - | `~/.dasllama/models` | Where the model catalog downloads land (`DASLLAMA_MODELS_DIR` overrides both this and the config key) |
+| `--tune` | - | - | Re-tune this box's dasLLAMA kernels, then relaunch (the JIT run; a fat build carries no tuner and ignores it) |
 | `--help` | `-?` | - | Show help and exit |
 
 A config file replaces long command lines; keys are the long flag names with underscores.
@@ -288,8 +302,8 @@ server first; Windows locks the DLLs.
 | `POST` | `/vad` | Silero speech spans over an uploaded clip (the control page's waveform overlay; in-handler, <=120 s, needs the in-repo `silero_vad.bin`) |
 | `GET`  | `/catalog` | The curated model list with local presence, the `asr` tower row, the `tts` list (the three speech GGUFs and the two front-end packs, each `file`/`bytes`/`pack`/`present`/`path`), the `box` memory facts + the download state machine (`idle | downloading | verifying | done | failed`, byte progress) |
 | `POST` | `/catalog/download` | `{"name": <entry>}` - start one catalog download; `{"name", "tower": "vision"}` / `{"tower": "asr"}` pull a tower, `{"tower": "tts", "file": <file>}` one file of the speech set (409 while one runs or the file exists; sha-verified, never waived) |
-| `POST` | `/bench` | Loopback-only: start the benchmark, quiesced. In process by default: pp512 and tg128 on the served model, an untimed warmup then three timed reps each, one rep per tick, the text routes and the model-switching routes holding (503 / 409) until it finishes; with `lcpp_bin` in the config on a source-tree daslang, the A/B child instead - our lcpp_bench then llama-bench on the same GGUF. 400 in setup mode, 409 while a bench runs or streams are active |
-| `GET`  | `/bench` | Bench state (`idle | running | done | failed`), `mode` (`inprocess` | `ab`: what a `POST` runs), live log lines, the result JSON - `ours_pp`, `ours_tg`, `threads`, `elapsed_s`, `ts`; in process also `mode`, `pp_sd`, `tg_sd`, `reps`, `model`, `gguf`, `backend` and `ref_cmd` (the llama-bench line for the comparison); the A/B also `theirs_pp`, `theirs_tg`, `pp_ratio`, `tg_ratio` and `record` - and the hardware line |
+| `POST` | `/bench` | Loopback-only: start the benchmark, quiesced. In process by default: pp512 and tg128 on the served model, an untimed warmup then three timed reps each, one pp prefill or one tg token per tick, the text, audio and speech routes (503) and the model-switching, bake and catalog-download routes (409) holding until it finishes - in either mode; with `lcpp_bin` in the config on a source-tree daslang, the A/B child instead - our lcpp_bench then llama-bench on the same GGUF. 400 in setup mode or when the served context is shorter than pp512, 409 while a bench, a bake or a catalog download runs or streams are active, 503 while draining |
+| `GET`  | `/bench` | Bench state (`idle | running | done | failed`), `mode` (`inprocess` | `ab`: what a `POST` runs), live log lines, the result JSON - `ours_pp`, `ours_tg`, `threads`, `elapsed_s`, `ts`; in process also `mode`, `pp_sd`, `tg_sd`, `reps`, `model`, `gguf`, `backend` (`metal`, `gpu:resident`, or the slot's word), `kv` (the codec the rows ran), `exec` (`exe-native` | `jit` | `interpreted`), `tune` (`fat` | `tuned` | `untuned (N of M on fallback)` | `none`) and `ref_cmd` (the llama-bench line for the comparison); the A/B also `theirs_pp`, `theirs_tg`, `pp_ratio`, `tg_ratio` and `record` - and the hardware line |
 | `POST` | `/bake` | `{"model"?: name}` loopback-only: bake the slot's prepared `.dlim` image by spawning `dasllama-convert` (empty body bakes the default slot; 409 while a bake or bench runs or streams are active; the dlim GC of never-loadable images runs on completion) |
 | `GET`  | `/bake` | Bake state (`idle | running | done | failed`), the slot it runs for, log lines, the result JSON |
 | `GET`  | `/v1/images` | Per-slot prepared-image inventory: source GGUF path, the flavor THIS process mapped (planar/vulkan/metal, or raw gguf), the trimmed flag, and each on-disk `.dlim`'s info - plus the slot name a bake is currently running for |

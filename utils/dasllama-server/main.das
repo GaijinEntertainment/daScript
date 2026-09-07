@@ -1080,8 +1080,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         to_log(LOG_INFO, "dasllama-server: models dir {catalog_dir} (DASLLAMA_MODELS_DIR overrides the models_dir config key)\n")
     }
     set_setup_mode(g_setup_mode)
-    // the bench button runs OUR bench as a child daslang process (lcpp_bench.das) — a
-    // standalone-exe deployment has no script runner, so /bench and /bake refuse there
+    // the A/B bench and the bake spawn a child daslang process (lcpp_bench.das, the converter) — a
+    // standalone-exe deployment has no script runner, so /bake refuses there and /bench measures
+    // in process instead
     var daslang_bin = ""
     if (!is_standalone_exe()) {
         for (a in get_command_line_arguments()) {   // argv[0] = the running daslang binary (locked temp — no delete)

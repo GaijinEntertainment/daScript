@@ -611,7 +611,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
     }
 }
 
-let TEST_PORT_BENCH = 18137   // 18097/18098/18099/18101/18102/18120/18121/18131/18135/18136 are the other server suites'
+let TEST_PORT_BENCH = 18140   // 18097/18098/18099/18101/18102/18120/18121/18131/18135-18139 are the other server suites'
 
 //! the state GET /bench reports, "" on any failure
 def private bench_state(base_url : string) : string {
@@ -630,7 +630,7 @@ def private bench_state(base_url : string) : string {
 }
 
 [test]
-def test_bench_inprocess(t : T?) {
+def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server session per test: every endpoint assertion runs against that one boot
     t |> run("the in-process bench: pp512 and tg128 on the served model, the text routes holding meanwhile (needs tinyllama q8)") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA server test is JIT-only)")
@@ -654,25 +654,30 @@ def test_bench_inprocess(t : T?) {
             POST("{base_url}/bench", "") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.ACCEPTED), "the run starts")
             }
-            var saw_running = false
-            var held = false
-            var state = "running"
+            var state = bench_state(base_url)
+            t |> equal(state, "running", "the run is observed running right after the start")
+            if (state == "running") {   // the holds, while it runs: the text and embedding routes 503, the switching and bake routes 409
+                POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":4}") $(resp) {
+                    if (resp != null) {
+                        t |> equal(int(resp.status_code), int(http_status.SERVICE_UNAVAILABLE), "a chat during the run is held")
+                        t |> success(find(string(resp.body), "benchmark is running") >= 0, "and the reply says why: {resp.body}")
+                    }
+                }
+                POST("{base_url}/v1/embeddings", "\{\"input\":\"hi\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.SERVICE_UNAVAILABLE), "an embedding during the run is held")
+                }
+                POST("{base_url}/v1/models/activate", "\{\"model\":\"test-llm\"}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a model switch during the run is refused")
+                }
+                POST("{base_url}/bake", "") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a bake during the run is refused")
+                }
+            }
             let started = ref_time_ticks()
             while (state == "running" && int64(get_time_usec(started)) < 240000000l) {
-                saw_running = true
-                if (!held) {   // one chat during the run: the text routes hold with a 503, they never contend
-                    POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":4}") $(resp) {
-                        if (resp != null) {
-                            t |> equal(int(resp.status_code), int(http_status.SERVICE_UNAVAILABLE), "a chat during the run is held")
-                            t |> success(find(string(resp.body), "benchmark is running") >= 0, "and the reply says why: {resp.body}")
-                        }
-                    }
-                    held = true
-                }
                 sleep(500u)
                 state = bench_state(base_url)
             }
-            t |> success(saw_running, "the run was observed running")
             t |> equal(state, "done", "the run finished")
             GET("{base_url}/bench") $(resp) {
                 var err : string
@@ -688,6 +693,13 @@ def test_bench_inprocess(t : T?) {
                     t |> equal(int(r?["reps"] ?? 0l), 3, "three reps per row")
                     t |> success(find(r?["ref_cmd"] ?? "", "llama-bench") >= 0, "the llama-bench comparison line rides along")
                     t |> equal(r?["model"] ?? "", "test-llm", "the row names the slot it ran on")
+                    t |> equal(r?["backend"] ?? "", "cpu", "the harness serves on the CPU, and the row says so")
+                    t |> success(find(r?["ref_cmd"] ?? "", "-ngl 0") >= 0, "so the comparison line asks llama.cpp for the CPU too")
+                    t |> equal(r?["kv"] ?? "", "f16", "the row names the slot's KV codec")
+                    t |> equal(r?["exec"] ?? "", "jit", "and the exec tier it ran under")
+                    t |> success(!empty(r?["tune"] ?? ""), "and the tune state: {r?["tune"] ?? ""}")
+                    t |> success(int(r?["threads"] ?? 0l) > 0, "and the lanes it dispatched on")
+                    t |> success((r?["theirs_pp"]).value is _null && (r?["record"]).value is _null, "an in-process result carries no llama.cpp row and no record")   // a missing key reads as the null sentinel, never a null pointer
                 }
                 let logs = js?["log"]
                 var sanity = false
@@ -704,6 +716,20 @@ def test_bench_inprocess(t : T?) {
             }
             POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":4}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK), "the text routes serve again once the run is done")
+            }
+            // a default slot whose context is shorter than the pp row is refused, not prefilled into a
+            // capacity panic (a runtime load of a second file, activated, so it is the default)
+            let smol = to_generic_path(path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf"))
+            if (stat(smol).is_valid) {
+                POST("{base_url}/v1/models/load", "\{\"path\":\"{smol}\",\"id\":\"smol-256\",\"ctx\":256,\"activate\":true}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK), "a 256-token slot loads and becomes the default")
+                }
+                POST("{base_url}/bench", "") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "a context below pp512 refuses the run")
+                    t |> success(find(string(resp.body), "context is 256") >= 0, "and names the context: {resp.body}")
+                }
+            } else {
+                t |> success(true, "not covered here: the short-context refusal needs SmolLM2-135M, which is not present")
             }
         }
     }

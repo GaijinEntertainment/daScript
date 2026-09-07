@@ -67,11 +67,11 @@ struct Args {
 
     @clarg_short = "p"
     @clarg_doc = "Prompt tokens per pp rep (default: 512, llama-bench -p)"
-    plen : int = 512
+    plen : int = int(BENCH_PP_TOKENS)
 
     @clarg_short = "n"
     @clarg_doc = "Generated tokens per tg rep (default: 128, llama-bench -n)"
-    ngen : int = 128
+    ngen : int = int(BENCH_TG_TOKENS)
 
     @clarg_short = "r"
     @clarg_doc = "Timed repetitions per row (default: 5, llama-bench -r)"
@@ -968,8 +968,6 @@ def private tok_cell_main(cfg : Args; reps : int; fmt : OutFmt) : bool {
     return ok && any
 }
 
-// deterministic synthetic ids (vocab-safe low range, the decode_prof convention); llama-bench
-// feeds std::rand() — token content doesn't affect speed, determinism keeps runs comparable
 // One in-process A/B lever: both arms run under a SINGLE model load, so cross-run drift cancels and
 // the pair is directly comparable. Arms ride the test name (" dense=off" / " dense=on"), which keeps
 // both inside one BenchRun and leaves the (box, engine, backend, flavor) upsert identity intact.
@@ -1458,6 +1456,7 @@ def main() : int {
     var model_list <- [for (m in split(cfg.model, ",")); strip(m)]
     var mdRows : array<array<string>>
     var jsonModels : array<BenchModel>
+    var no_rows = false   // a model that produced no row ends the run non-zero, below the que scope
     with_job_que() {
         setup_dasllama_jobque_()
         //! the regime line above prints the INTENT; this is the que that actually spawned
@@ -1531,7 +1530,7 @@ def main() : int {
         if (cfg.prof) {
             dispatch_census(t, fmt)
         }
-        var s <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+        var s <- bench_session(t, plen, ngen, KVDtype.f16, KVDtype.f16)   // the cap above already bounds t.config at the rows' size; nothing serves this model afterwards, so nothing restores it
         var pp_off : array<double>
         pp_off |> resize(length(toks))
         for (arm in range(ab ? 2 : 1)) {
@@ -1591,7 +1590,7 @@ def main() : int {
                             }
                         }
                         rep_gen += p_gen
-                        let p_us = int64(get_time_usec(t0))
+                        let p_us = get_time_nsec(t0) / 1000l   // the 64-bit clock: a real continuation on a slow box outlives the 32-bit microsecond one
                         total_us += p_us
                         pp_us[pi] += p_us
                         pp_gen[pi] += p_gen
@@ -1722,6 +1721,11 @@ def main() : int {
         }
         delete s
         delete t
+        if (empty(results)) {   // a run that measured nothing must not report success (-p 0 -n 0)
+            say(fmt, "lcpp_bench: no rows measured for {mpath} - nothing to report\n")
+            no_rows = true
+            break
+        }
         // the reference runs AFTER our model is freed — one model in memory at a time
         var refRows : array<LlamaBenchRow>
         var refCmd = ""
@@ -1826,6 +1830,9 @@ def main() : int {
     delete refRows
     }   // model loop
     }   // with_job_que
+    if (no_rows) {
+        return 1
+    }
     if (fmt == OutFmt.md) {
         let headers <- ["engine", "model", "backend", "ngl", "threads", "test", "t/s"]
         let aligns <- [ColAlign.left, ColAlign.left, ColAlign.left, ColAlign.right, ColAlign.right, ColAlign.left, ColAlign.right]
