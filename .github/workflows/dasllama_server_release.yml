@@ -10,8 +10,9 @@ name: dasllama-server release
 #     rolling release (--clobber) and to the daslang release being cut.
 #   * workflow_dispatch - full matrix build + smoke; uploads to the rolling release only when
 #     the `publish` input is set. A dispatch without it is a build check, nothing moves.
-#   * push of this file on a branch - the same build check, as workflow artifacts, so an edit
-#     to the lane proves itself before it reaches master (a dispatch needs the file on master).
+#   * push on a branch of this file or of what the bundle carries (the server, the watchdog,
+#     daspkg, dasHV) - the same build check, as workflow artifacts, so an edit proves itself
+#     before it reaches master (a dispatch needs the file on master).
 #
 # The matrix is the SDK's: linux x86_64, linux arm64, darwin arm64, windows x64. A fat build
 # needs no target hardware - the clones compile from the shipped profiles - so every class ships
@@ -21,6 +22,11 @@ on:
     branches-ignore: [master]
     paths:
       - '.github/workflows/dasllama_server_release.yml'
+      - 'utils/dasllama-server/**'
+      - 'utils/watchdog/**'
+      - 'utils/daspkg/**'
+      - 'daslib/daspkg.das'
+      - 'modules/dasHV/**'
   workflow_dispatch:
     inputs:
       publish:
