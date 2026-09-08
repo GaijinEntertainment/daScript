@@ -79,10 +79,7 @@ Two processes, hard split - full rationale and wave history in
 - **`subtools/*.das`** - stateless batch tools (`validate.das`, `nav.das`).
   One fresh `daslang` process per request; argv in, LSP-shaped JSON out, exit.
   The document shadow rides along as a `--overlay` temp file, so compiles see
-  the client's buffer even when unsaved. Every subtool spawns with
-  `-ignore-manifest`: the module scan compiles every descriptor and loads every
-  C++ module on start, so a symbol scan sees the whole tree rather than the
-  modules a plain run would load at their first `require`.
+  the client's buffer even when unsaved.
 
 No resident daslang, by design: no macro-state leaks across compiles, no
 binary/DLL locks while builds run, per-request crash isolation.

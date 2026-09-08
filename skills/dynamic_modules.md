@@ -107,7 +107,7 @@ Two consequences:
 
 - `require ?mod x` and `typeinfo builtin_module_exists(mod)` still ask whether the build has
   `mod`: a guard loads a waiting module, so a cold start and a warm one answer alike.
-- A tool that enumerates the process's modules (the MCP server, the LSP subtools) runs with
+- A tool that enumerates the process's modules (the MCP server) runs with
   `-ignore-manifest`: no manifest read or written, every descriptor compiles, every C++ module
   loads on start. `has_module(name)` (`daslib/rtti`) answers loaded-or-deferred, so a sweep
   gate asking what the tree has keeps its answer.

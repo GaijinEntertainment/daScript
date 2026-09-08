@@ -104,17 +104,18 @@ require guard (`require ?mod`) and `builtin_module_exists` ask whether the build
 module (`guardModuleAvailable`): linked in, or waiting in a manifest row, which the guard
 loads then - so `require ?das_metal metal/das_metal_boost` still means "on a build with
 Metal", a cold start and a warm start answer alike, and `llvm`, a witness module no das file
-requires unguarded, comes in through the guards `daslib/tune` places on it. A load changes no
-other module's content: a module-cache record carries each builtin module's cumulative hash
-of mangled names, and a process that loaded a different set of C++ modules would otherwise
-fail every record on `$`, so a `vector<T>` of a handled element registers into the element's
-module (`vectorHomeModule`, `ast_handle.h`) whichever module builds it, and only a vector of a
-builtin element lands in `$`, which every library lists first because
+requires unguarded, comes in through the guards `daslib/tune` places on it. A load adds
+nothing to `$`: a module-cache record carries each builtin module's cumulative hash of
+mangled names, and a process that loaded a different set of C++ modules would otherwise fail
+every record on `$`, so a `vector<T>` of a handled element registers into the element's
+module (`vectorHomeModule`, `ast_handle.h`) whichever module builds it - a module that exists
+already, when the element is another module's - and only a vector of a builtin element lands
+in `$`, which every library lists first because
 `ModuleLibrary::addModule` puts a module's dependencies before it. The described name of such
 a vector carries that module - ``ast::dasvector`ptr`Expression``, not ``$::...`` - so code
 that names one compares the part after `::` (`daslib/ast_boost`'s printer). `-ignore-manifest`
 reads and writes no manifest: every descriptor compiles and every C++ module loads on start,
-the form a tool that enumerates modules - the MCP server, the LSP subtools - runs under.
+the form a tool that enumerates modules - the MCP server - runs under.
 `no_manifest()` inside `initialize` marks the descriptor as one that runs on every start: its
 manifest carries the stamp and the flag and no rows, and is not rewritten. With
 `DAS_TRACE_MODULE_LOAD=1` the scan prints one line per descriptor - `replayed N row(s) in <sec>

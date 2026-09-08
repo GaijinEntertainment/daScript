@@ -38,8 +38,8 @@ this document states what the folder is and why its tests take the shape they do
   warm start defers the row and loads nothing for a program that requires nothing; the first
   `require UnitTest` loads it and the program calls into it; `typeinfo builtin_module_exists`
   loads it with no require naming it, while rtti `has_module` answers true and loads nothing;
-  a lazy start and an eager start count the same functions in `$`, so a load registers
-  nothing into another module; a guard alone loads the module
+  a lazy start and an eager start count the same functions in `$`, so a load adds nothing
+  to `$`; a guard alone loads the module
   and is taken, as it is with a `require UnitTest` above it, below it, or in the entry while
   the guard sits in a module walked earlier;
   `-ignore-manifest` compiles every descriptor, loads every C++ module on start and writes no
