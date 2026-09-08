@@ -187,6 +187,11 @@ namespace das {
         return g_deferredModuleLoader;
     }
 
+    bool guardModuleAvailable ( const string & name ) {
+        if ( Module::requireEx(name, false) ) return true;
+        return g_deferredModuleLoader && g_deferredModuleLoader(name) && Module::requireEx(name, false);
+    }
+
     void Module::Initialize() {
         daScriptEnvironment::ensure();
         static bool atexit_registered = (atexit(daslang_atexit_audit), true);

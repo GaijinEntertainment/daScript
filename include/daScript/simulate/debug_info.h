@@ -238,7 +238,6 @@ namespace das
     struct RequireRecord : BaseRequireRecord {
         bool                isPublic = false;
         bool                cantBeRequired = false;
-        string              guard;      // `require ?guard target`, a plain module name: tested when the walk reaches the line, not when it collects the file
     };
 
     enum class MissingHint {

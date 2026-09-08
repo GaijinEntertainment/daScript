@@ -4,7 +4,6 @@
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_infer_type.h"
 #include "daScript/ast/ast_pass_macros.h"
-#include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_visitor.h"
 
 #define DAS_XSTR(s) #s
@@ -2847,7 +2846,7 @@ namespace das {
                         // also accepts shared das modules compiled earlier in the process
                         auto mod = Module::requireEx(evar->name, true);
                         reportAstChanged();
-                        return new ExprConstBool(expr->at, mod != nullptr && !is_dynamic_module_unrequired(evar->name.c_str()));
+                        return new ExprConstBool(expr->at, mod != nullptr || guardModuleAvailable(evar->name));
                     } else {
                         error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
                               expr->at, CompilationError::invalid_typeinfo_module_subexpression);

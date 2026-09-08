@@ -105,11 +105,8 @@ walk loads the row and runs the `initDependencies` fixed point; a module needing
 deferred one pulls the whole deferred set in. A program pays for the C++ modules it requires.
 Two consequences:
 
-- `require ?mod x` and `typeinfo builtin_module_exists(mod)` say whether some require in the
-  compile named `mod`, not what `modules/` holds, and a cold start answers as a warm one.
-  The `daslang` host names the `llvm` witness under `-jit` and `-exe`, so `?llvm` is true
-  there; an interpreter run that never requires `llvm` reads it false. Require order does not
-  matter.
+- `require ?mod x` and `typeinfo builtin_module_exists(mod)` still ask whether the build has
+  `mod`: a guard loads a waiting module, so a cold start and a warm one answer alike.
 - A tool that enumerates the process's modules (the MCP server, the LSP subtools) runs with
   `-ignore-manifest`: no manifest read or written, every descriptor compiles, every C++ module
   loads on start. `has_module(name)` (`daslib/rtti`) answers loaded-or-deferred, so a sweep

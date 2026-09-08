@@ -83,34 +83,23 @@ recorded. A `dm` row carrying that name is not loaded by the scan: the row waits
 (`defer_dynamic_module`), and the load happens at the first require that names it. The
 prerequisite walk (`getPrerequisits`) finds no module under the name and asks the loader the
 scan installed (`setDeferredModuleLoader`); the loader dlopens and registers the module, runs the
-`initDependencies` fixed point `Module::Initialize` runs (`Module::InitializeDependencies`) over
+`initDependencies` fixed point that `Module::Initialize` runs (`Module::InitializeDependencies`) over
 the grown list, and when a module reports it cannot initialize - what it needs is deferred too -
 brings every deferred module in and runs the fixed point again, which is the set an eager start
 has; the new modules' TypeDecls, made on the active root, move to their module roots. A `dm` row
 with no name - the recording start's load failed - replays as recorded, so the Quiet deferral
 and the post-scan retry of a sibling `DT_NEEDED` dlopen behave as on a compiled start. A
-require guard (`require ?mod`) and `builtin_module_exists` answer whether a require of the
-process named the module, not whether the tree holds it: the `daslang` host names the `llvm`
-witness itself when `-jit` or `-exe` is on (the module carries no symbol, so no das file
-requires it unguarded, and a static host runs the JIT without it), so `?llvm` is taken there;
-an interpreter run of a program that never requires `llvm` reads it absent whatever `modules/`
-holds. The recording start loads every module
-eagerly, so the module a `dm` row names counts as unrequired (`is_dynamic_module_unrequired`)
-until a require resolves to it (`mark_dynamic_module_required`), and a cold start answers a
-guard as a warm one does. Order inside a compile does not matter: the collector
-(`getAllRequireReq`) decides a path guard (its file resolves) as it reads the file, but carries
-a plain-name guard on the record (`RequireRecord::guard`) for `getPrerequisits` to test when
-the walk reaches the line, and `compileDaScript` walks again whenever a skipped guard's module
-was loaded later in the walk, so the guarded target lands in dependency order; the parser
-(`ast_requireModule`) reads the walk's verdict for its file and line (`walkedGuardVerdict`)
-rather than testing the guard itself, so a module loaded between the walk and the parse
-cannot make the two disagree. A load must not change another module's content either: a
-module-cache record carries each builtin module's cumulative hash of mangled names, and a
-process that loaded a different set of C++ modules would otherwise fail every record on `$`,
-so a `vector<T>` of a module's own handled type registers into that module
-(`vectorHomeModule`, `ast_handle.h`), and only a vector of a builtin element lands in `$`, which
-every library lists first because `ModuleLibrary::addModule` puts a module's dependencies
-before it. `-ignore-manifest`
+require guard (`require ?mod`) and `builtin_module_exists` ask whether the build has the
+module (`guardModuleAvailable`): linked in, or waiting in a manifest row, which the guard
+loads then - so `require ?das_metal metal/das_metal_boost` still means "on a build with
+Metal", a cold start and a warm start answer alike, and `llvm`, a witness module no das file
+requires unguarded, comes in through the guards `daslib/tune` places on it. A load changes no
+other module's content: a module-cache record carries each builtin module's cumulative hash
+of mangled names, and a process that loaded a different set of C++ modules would otherwise
+fail every record on `$`, so a `vector<T>` of a handled element registers into the element's
+module (`vectorHomeModule`, `ast_handle.h`) whichever module builds it, and only a vector of a
+builtin element lands in `$`, which every library lists first because
+`ModuleLibrary::addModule` puts a module's dependencies before it. `-ignore-manifest`
 reads and writes no manifest: every descriptor compiles and every C++ module loads on start,
 the form a tool that enumerates modules - the MCP server, the LSP subtools - runs under.
 `no_manifest()` inside `initialize` marks the descriptor as one that runs on every start: its

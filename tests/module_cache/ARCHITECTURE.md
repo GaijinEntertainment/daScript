@@ -34,11 +34,11 @@ this document states what the folder is and why its tests take the shape they do
 - `test_deferred_modules.das` - a replayed `dm` row is not loaded by the scan. The project root
   holds a copy of the tree's `dasUnitTest` (descriptor and artifact), which shadows the tree's,
   so the copy's manifest is the test's to make cold or warm: a cold start compiles the
-  descriptor, loads the module to record its name, and still reads a `require ?UnitTest x`
-  as skipped; a warm start defers the row and loads nothing for a program that requires
-  nothing; the first `require UnitTest` loads it and the program calls into it; the guard is
-  taken whether the `require UnitTest` sits above it, below it, or in the entry while the
-  guard sits in a module walked earlier, and skipped when no require names the module;
+  descriptor, loads the module to record its name, and a `require ?UnitTest x` is taken; a
+  warm start defers the row and loads nothing for a program that requires nothing; the first
+  `require UnitTest` loads it and the program calls into it; a guard alone loads the module
+  and is taken, as it is with a `require UnitTest` above it, below it, or in the entry while
+  the guard sits in a module walked earlier;
   `-ignore-manifest` compiles every descriptor, loads every C++ module on start and writes no
   manifest; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
   deferred module in because its `initDependencies` asks for two more. A static build, whose

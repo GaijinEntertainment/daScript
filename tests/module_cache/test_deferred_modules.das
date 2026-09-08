@@ -142,9 +142,9 @@ def has_shared_modules(dir : string; names : array<string>) : bool {
 }
 
 def arms_deferred(t : T?; fx : Fixture) {
-    t |> run("a cold start loads the module to record its name, and a guard still reads it unrequired") @(t : T?) {
+    t |> run("a cold start loads the module to record its name, and a guard reads it available") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "cold", run(child_cmd(fx, fx.guarded), out), out, "GUARD false"), "the cold start runs, and the guard alone takes nothing")
+        t |> success(report_child(t, "cold", run(child_cmd(fx, fx.guarded), out), out, "GUARD true"), "the cold start runs, and the guard takes its target")
         t |> equal("compiled (no manifest), manifest written (1 row(s))", descriptor_line(out, UNIT_TEST_FOLDER), "the copied descriptor compiles and records:\n{out}")
         t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": loaded") >= 0, "the recording start loads the module:\n{out}")
     }
@@ -161,16 +161,16 @@ def arms_deferred(t : T?; fx : Fixture) {
         t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the trace names the require that loaded it:\n{out}")
         t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": loaded") >= 0, "the shared module loads:\n{out}")
     }
-    t |> run("a require guard reads whether some require of the compile named the module, in any order") @(t : T?) {
+    t |> run("a require guard loads a waiting module, whatever else the compile requires") @(t : T?) {
         var alone : string
-        t |> success(report_child(t, "guarded", run(child_cmd(fx, fx.guarded), alone), alone, "GUARD false"), "no require names the module, so the guarded require is skipped")
-        t |> equal(-1, find(alone, "{UNIT_TEST_CLASS} <- "), "the guard alone loads nothing:\n{alone}")
+        t |> success(report_child(t, "guarded", run(child_cmd(fx, fx.guarded), alone), alone, "GUARD true"), "the guard alone takes its target")
+        t |> success(find(alone, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the guard loaded the module:\n{alone}")
         var after : string
         t |> success(report_child(t, "guarded after", run(child_cmd(fx, fx.guardedAfter), after), after, "GUARD true"), "a require above the guard")
         var before : string
         t |> success(report_child(t, "guarded before", run(child_cmd(fx, fx.guardedBefore), before), before, "GUARD true"), "a require below the guard")
         var dep : string
-        t |> success(report_child(t, "guarded dep", run(child_cmd(fx, fx.guardedDep), dep), dep, "GUARD true"), "a guard inside a module walked before the require that loads its module")
+        t |> success(report_child(t, "guarded dep", run(child_cmd(fx, fx.guardedDep), dep), dep, "GUARD true"), "a guard inside a module walked before the entry's own require")
     }
     t |> run("-ignore-manifest compiles every descriptor, loads every C++ module on start, and writes no manifest") @(t : T?) {
         remove_result(fx.manifest)

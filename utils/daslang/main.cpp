@@ -466,9 +466,6 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         if ( jitNoCache ) policies.jit_dll_mode = false;
         policies.jit_emit_prologue = jitStack;
         access->addExtraModule("just_in_time", getDasRoot() + "/daslib/just_in_time.das");
-        // the witness every `require ?llvm` guards on: a JIT run names it (src/ast/ARCHITECTURE.md sec.2)
-        if ( auto loader = getDeferredModuleLoader() ) loader("llvm");
-        mark_dynamic_module_required("llvm");
         policies.jit_output_path = jitOutPath;
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
     }

@@ -4,7 +4,6 @@
 #include "parser_state.h"
 
 #include "daScript/ast/ast_generate.h"
-#include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_handle.h"
 
 #undef yyextra
@@ -1241,10 +1240,7 @@ namespace das {
                 auto ginfo = yyextra->g_Access->getModuleInfo(*guard, yyextra->g_FileAccessStack.back()->name);
                 guardAvailable = !ginfo.fileName.empty() && yyextra->g_Access->getFileInfo(ginfo.fileName) != nullptr;
             } else {
-                // the walk decided this line already (a later require may have loaded the guard module since)
-                auto verdict = walkedGuardVerdict(yyextra->g_FileAccessStack.back()->name, int32_t(atName.line));
-                guardAvailable = verdict >= 0 ? verdict != 0
-                    : Module::requireEx(*guard, false) != nullptr && !is_dynamic_module_unrequired(guard->c_str());
+                guardAvailable = guardModuleAvailable(*guard);
             }
             delete guard;
             if ( !guardAvailable ) {

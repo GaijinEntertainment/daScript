@@ -75,7 +75,7 @@ require geom                          // a bare name also finds geom.das next to
 require ./helpers.das                 // file-relative path
 require %/daslib/random.das as rng    // `%` is the daslang root; `as` binds a local qualifier
 require dastest/testing_boost public  // re-export to whoever requires me
-require ?pugixml pugixml/PUGIXML_boost  // only if module `pugixml` is linked or required in this compile
+require ?pugixml pugixml/PUGIXML_boost  // load only if module `pugixml` is available
 ```
 
 - **Path form needs the `.das`:** a require is a literal path only when it starts with `./`, `../`,
@@ -183,8 +183,7 @@ else is a require.
 | `fio_core`, `rtti_core`, `ast_core`, `network_core` | Low-level C++ layers; require the wrapper instead - `daslib/fio`, `daslib/rtti`, `daslib/ast`, `daslib/network`. Bare `require rtti` / `require ast` do **not** resolve. |
 
 Which built-in modules exist depends on how the host embedded daslang - guard anything non-core
-with `require ?mod ...`. The guard passes when `mod` is linked into the host or required
-somewhere in this compile; a guard loads nothing itself.
+with `require ?mod ...`.
 
 ## Container operations
 

@@ -317,8 +317,6 @@ namespace das {
     DAS_API size_t load_all_deferred_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API bool has_deferred_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API bool is_dynamic_module_deferred ( const char * ) GENERATE_IO_STUB_RET
-    DAS_API bool is_dynamic_module_unrequired ( const char * ) GENERATE_IO_STUB_RET
-    DAS_API void mark_dynamic_module_required ( const char * ) GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
@@ -2289,16 +2287,6 @@ namespace das {
     // after the folder scan, so module enumeration order stops mattering.
     static vector<tuple<string,string,string>> g_pending_dynamic_modules; // path, cpp_class_name, last dlopen error
 
-    static das_hash_set<string> g_unrequired_dynamic_modules;   // loaded by the recording scan, no require yet (dyn_modules.h)
-
-    DAS_API bool is_dynamic_module_unrequired ( const char * das_name ) {
-        return das_name && g_unrequired_dynamic_modules.count(das_name) != 0;
-    }
-
-    DAS_API void mark_dynamic_module_required ( const char * das_name ) {
-        if ( das_name ) g_unrequired_dynamic_modules.erase(das_name);
-    }
-
     // the descriptor manifest recorder (dyn_modules.h, src/ast/ARCHITECTURE.md sec.2)
     static thread_local bool                         g_manifest_recording = false;
     static thread_local bool                         g_manifest_opt_out = false;
@@ -2421,10 +2409,7 @@ namespace das {
         }
         *ModuleKarma += unsigned(intptr_t(mod));
         g_registered_dynamic_modules.emplace_back(path, mod_name, mod->name);
-        if ( recordedRowIndex != size_t(-1) ) {
-            g_manifest_rows[recordedRowIndex].c = mod->name;
-            g_unrequired_dynamic_modules.insert(mod->name);
-        }
+        if ( recordedRowIndex != size_t(-1) ) g_manifest_rows[recordedRowIndex].c = mod->name;
         return lib;
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {

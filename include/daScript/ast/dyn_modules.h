@@ -46,9 +46,5 @@ DAS_API bool load_deferred_dynamic_module(const char * das_name);   // true = th
 DAS_API size_t load_all_deferred_dynamic_modules();                 // the count it attempted
 DAS_API bool has_deferred_dynamic_modules();
 DAS_API bool is_dynamic_module_deferred(const char * das_name);
-// a module the recording scan loaded is not "required" until a require names it: a guard reads it
-// absent on a cold start as on a warm one, where the row waits (ARCHITECTURE.md sec.2)
-DAS_API bool is_dynamic_module_unrequired(const char * das_name);
-DAS_API void mark_dynamic_module_required(const char * das_name);
 DAS_CC_API void ignore_dynamic_module_manifests(bool ignore);       // -ignore-manifest: no read, no write, every module loads on start
 }

@@ -85,6 +85,8 @@ On **Linux/macOS** point each entry at the binary directly (no launcher needed):
 }
 ```
 
+An existing `.mcp.json` needs `-ignore-manifest` added by hand (or a rerun of `utils/mcp/setup.das`): without it the server enumerates only the modules a compile loaded, so `list_modules` and the all-modules symbol scans come up short.
+
 Tools are namespaced by server, so the cpp server's tools appear as `mcp__daslang-cpp__cpp_compile_check` etc. `cpp-mcp` - a standalone static AOT build of `cpp_main.das` for C++-only consumers - exists as a gated target (`DAS_BUILD_CPP_MCP`, OFF by default; bundled by `ci/make_cpp_mcp_bundle.sh`, released via `cpp_mcp_release.yml`, setup in `cpp-mcp-setup.md`); the interpreted form above is the same server. It is a separate product: the mcp server itself never ships as a `daslang -exe` binary - development runs it through the python keep-alive supervisor, so that exe form would never be dogfooded.
 
 ### Duplicate Detection

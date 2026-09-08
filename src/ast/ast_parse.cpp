@@ -62,20 +62,6 @@ DAS_CC_API das::smart_ptr<das::FileAccess> get_file_access( char * pak ) {
 
 namespace das {
 
-    // the walk in flight's `require ?guard x` verdicts by file and line, and the skipped guards' module
-    // names - a later require may load one, and then the walk runs again (ARCHITECTURE.md sec.2)
-    static thread_local das_hash_map<string,int> g_guardVerdicts;
-    static thread_local das_hash_set<string> g_skippedGuards;
-
-    static string guardVerdictKey ( const string & fileName, int32_t line ) {
-        return fileName + "\t" + to_string(line);
-    }
-
-    int walkedGuardVerdict ( const string & fileName, int32_t line ) {
-        auto it = g_guardVerdicts.find(guardVerdictKey(fileName, line));
-        return it == g_guardVerdicts.end() ? -1 : it->second;
-    }
-
     void applyPostRewriteMacros ( Program * program ) {
         program->library.foreach([&](Module * mod) -> bool {
             for ( const auto & pm : mod->postRewriteMacros ) {
@@ -275,15 +261,13 @@ namespace das {
                                     // linked C++ module); no target-resolvability fallback (module source
                                     // dirs exist in every checkout regardless of build config). Otherwise —
                                     // skip silently. Must match ast_requireModule (parser_impl.cpp).
-                                    // a plain-name guard is tested by getPrerequisits at its line (ARCHITECTURE.md sec.2)
-                                    string plainGuard;
                                     if ( hasReqGuard && reqGuard.find('/')!=string::npos ) {
                                         auto ginfo = access->getModuleInfo(reqGuard, fi->name);
                                         if ( ginfo.fileName.empty() || !access->getFileInfo(ginfo.fileName) ) {
                                             continue;
                                         }
-                                    } else if ( hasReqGuard ) {
-                                        plainGuard = reqGuard;
+                                    } else if ( hasReqGuard && !guardModuleAvailable(reqGuard) ) {
+                                        continue;
                                     }
                                     bool isPublic = false;
                                     while ( src < src_end && src[0] == ' ' ) {
@@ -293,7 +277,6 @@ namespace das {
                                         isPublic = true;
                                     }
                                     req.push_back({mod, line, chain, isPublic});
-                                    req.back().guard = plainGuard;
                                 } else if ( isInc ) {
                                     string incFileName = access->getIncludeFileName(fi->name,mod);
                                     auto info = access->getFileInfo(incFileName);
@@ -427,17 +410,6 @@ namespace das {
             vector<RequireRecord> ownReq = getAllRequire(fi, modName, chain, access);
             for ( auto & modRec : ownReq ) {
                 string mod = modRec.name;
-                if ( !modRec.guard.empty() ) {
-                    bool taken = Module::requireEx(modRec.guard, false)!=nullptr && !is_dynamic_module_unrequired(modRec.guard.c_str());
-                    g_guardVerdicts[guardVerdictKey(fi->name, modRec.line)] = taken ? 1 : 0;
-                    if ( !taken ) {
-                        g_skippedGuards.insert(modRec.guard);
-                        if ( log ) {
-                            *log << string(tab,'\t') << "require ?" << modRec.guard << " " << mod << " - guard module not required, skipped\n";
-                        }
-                        continue;
-                    }
-                }
                 if ( log ) {
                     *log << string(tab,'\t') << "require " << mod << "\n";
                 }
@@ -594,7 +566,6 @@ namespace das {
                         return false;
                     } else {
                         libGroup.addModule(module);
-                        mark_dynamic_module_required(module->name.c_str());
                     }
                 }
             }
@@ -1869,38 +1840,20 @@ namespace das {
         string modName;
         [[maybe_unused]] auto builtinModule = Module::require("$");
         DAS_ASSERTF(builtinModule, "Somehow `builtin` module is missing.");
-        bool walked = false;
-        for ( ;; ) {
-            req.clear(); missing.clear(); circular.clear(); notAllowed.clear(); chain.clear();
-            dependencies.clear(); namelessReq.clear(); namelessMismatches.clear(); modName.clear();
-            g_guardVerdicts.clear(); g_skippedGuards.clear();
-            bool allGood = addExtraDependency("builtin", get_builtin_path(), missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
-            if ( !allGood ) {
-                auto res = make_smart<Program>();
-                res->error("internal error: failed to build builtin.das", logs.str(), "", LineInfo(), CompilationError::internal_module);
-                return res;
-            }
-            for ( const auto & em : access->getExtraModules() ) {
-                allGood = addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, nullptr) && allGood;
-            }
-            if ( !allGood ) {
-                return reportPrerequisitesErrors(fileName, missing, circular, notAllowed, namelessMismatches, libGroup, policies);
-            }
-            walked = getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain,
-                dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules);
-            if ( !walked ) break;
-            // a guard skipped before a later require loaded its module: the walk runs again, and
-            // the guard's target lands in dependency order (ARCHITECTURE.md sec.2)
-            bool flipped = false;
-            for ( auto & guard : g_skippedGuards ) {
-                if ( Module::requireEx(guard, false)!=nullptr && !is_dynamic_module_unrequired(guard.c_str()) ) {
-                    flipped = true;
-                    break;
-                }
-            }
-            if ( !flipped ) break;
+        bool allGood = addExtraDependency("builtin", get_builtin_path(), missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
+        if ( !allGood ) {
+            auto res = make_smart<Program>();
+            res->error("internal error: failed to build builtin.das", logs.str(), "", LineInfo(), CompilationError::internal_module);
+            return res;
         }
-        if ( walked ) {
+        for ( const auto & em : access->getExtraModules() ) {
+            allGood = addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, nullptr) && allGood;
+        }
+        if ( !allGood ) {
+            return reportPrerequisitesErrors(fileName, missing, circular, notAllowed, namelessMismatches, libGroup, policies);
+        }
+        if ( getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain,
+                dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             preqT = get_time_usec(time0);
             disableSerializationOnDebugger(req);
             if ( !verifyModuleNamesUnique(req, logs) ) {

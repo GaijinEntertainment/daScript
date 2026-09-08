@@ -1110,8 +1110,8 @@ namespace das
     typedef bool (*DeferredModuleLoader) ( const string & name );
     DAS_API void setDeferredModuleLoader ( DeferredModuleLoader loader );
     DAS_API DeferredModuleLoader getDeferredModuleLoader ();
-    // the require walk's verdict on a `require ?guard x` line: 1 taken, 0 skipped, -1 the walk never saw it
-    DAS_API int walkedGuardVerdict ( const string & fileName, int32_t line );
+    // what `require ?guard x` and builtin_module_exists ask: the module is linked in, or the loader brings it in now
+    DAS_API bool guardModuleAvailable ( const string & name );
 
     class DAS_API Module {
     public:
