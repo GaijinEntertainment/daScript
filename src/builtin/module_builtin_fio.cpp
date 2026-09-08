@@ -327,6 +327,7 @@ namespace das {
 
 #include <thread>
 #include <atomic>
+#include <mutex>
 #include <chrono>
 #if _WIN32
 #include <fcntl.h>
@@ -2427,12 +2428,15 @@ namespace das {
         int on_error = 0;
     };
     static vector<DeferredDynamicModule> g_deferred_dynamic_modules;    // src/ast/ARCHITECTURE.md sec.2
+    static std::recursive_mutex g_deferred_dynamic_modules_mutex;       // a run-time has_module reads while another thread's compile loads
 
     DAS_API void defer_dynamic_module ( const char * path, const char * cpp_class, int on_error, const char * das_name ) {
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
         g_deferred_dynamic_modules.push_back({path ? path : "", cpp_class ? cpp_class : "", das_name ? das_name : "", on_error});
     }
 
     DAS_API bool load_deferred_dynamic_module ( const char * das_name ) {
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
         auto it = find_if(g_deferred_dynamic_modules.begin(), g_deferred_dynamic_modules.end(),
             [&](const DeferredDynamicModule & dm) { return dm.das_name == das_name; });
         if ( it == g_deferred_dynamic_modules.end() ) return false;
@@ -2445,6 +2449,7 @@ namespace das {
     }
 
     DAS_API size_t load_all_deferred_dynamic_modules () {
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
         vector<DeferredDynamicModule> all;
         all.swap(g_deferred_dynamic_modules);
         if ( trace_module_load() && !all.empty() ) {
@@ -2458,11 +2463,14 @@ namespace das {
     }
 
     DAS_API bool is_dynamic_module_deferred ( const char * das_name ) {
-        return das_name && find_if(g_deferred_dynamic_modules.begin(), g_deferred_dynamic_modules.end(),
+        if ( !das_name ) return false;
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
+        return find_if(g_deferred_dynamic_modules.begin(), g_deferred_dynamic_modules.end(),
             [&](const DeferredDynamicModule & dm) { return dm.das_name == das_name; }) != g_deferred_dynamic_modules.end();
     }
 
     DAS_API void clear_deferred_dynamic_modules () {
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
         g_deferred_dynamic_modules.clear();
     }
 
