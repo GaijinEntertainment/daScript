@@ -8,6 +8,7 @@
 #include <daScript/misc/string_writer.h>       // TextWriter, LOG (the env-gated scan trace)
 #include <daScript/misc/anyhash.h>             // hash_block64
 #include <daScript/misc/env_cfg.h>             // get_dasenv_trace_module_load
+#include <daScript/misc/performance_time.h>
 #include <cctype>                              // tolower (case-insensitive basename normalize)
 #include <cstdio>                              // fprintf(stderr) for the shadow-shadows-global diagnostic
 
@@ -343,17 +344,22 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     const uint64_t stamp = src ? hash_block64((const uint8_t *) src, len) : 0;
     const string manifest = path + "/" + MANIFEST_SUFFIX;
     const ManifestKey key = manifest_key(path);
+    auto time0 = ref_time_ticks();
     auto mr = src ? read_manifest(manifest, len, stamp, key, fa) : ManifestRead();
     if ( mr.verdict == ManifestVerdict::Replay ) {
+        int64_t dllUsec = 0;
         for ( auto & row : mr.rows ) {
             if ( row.dynamic ) {
+                auto dll0 = ref_time_ticks();
                 replay_dynamic_module(row.a.c_str(), row.b.c_str(), row.on_error);
+                dllUsec += get_time_usec(dll0);
             } else {
                 replay_native_path(row.a.c_str(), row.b.c_str(), row.c.c_str());
             }
         }
         if ( trace_scan() ) {
-            LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": replayed " << mr.rows.size() << " row(s)\n";
+            LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": replayed " << mr.rows.size() << " row(s) in "
+                << (get_time_usec(time0) / 1000000.) << " (shared module load " << (dllUsec / 1000000.) << ")\n";
         }
         return Result::OK;
     }

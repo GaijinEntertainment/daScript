@@ -58,7 +58,9 @@ def probe_line(out : string; mod : string = "manifest_probe") : string {
     }
     let rest = slice(out, at + length(marker))
     let eol = find(rest, "\n")
-    return eol < 0 ? rest : slice(rest, 0, eol)
+    let line = eol < 0 ? rest : slice(rest, 0, eol)
+    let timing = find(line, " in ")
+    return timing < 0 ? line : slice(line, 0, timing)
 }
 
 def count_of(text : string; needle : string) : int {

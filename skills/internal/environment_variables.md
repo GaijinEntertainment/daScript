@@ -72,7 +72,7 @@ and unknown codes are harmless. The `-no-lint` command-line flag skips the lint 
 |---|---|---|
 | `DAS_GC_STAGE_REPORT` | flag | Report gc_node deltas per compilation stage - the first thing to reach for on a `GC APP LEAK` at exit. |
 | `DAS_GC_BREAK_ON_ID` | number | Break when the gc_node with this id is allocated. Pair it with the id from a leak report. |
-| `DAS_TRACE_MODULE_LOAD` | flag | Log every module as it loads, with its resolved path - the fastest way to see which of two same-named modules actually won - and one line per `.das_module` descriptor saying whether the scan replayed its manifest or compiled it, and why (`src/ast/ARCHITECTURE.md` sec.2). |
+| `DAS_TRACE_MODULE_LOAD` | flag | Log every module as it loads, with its resolved path - the fastest way to see which of two same-named modules actually won - and one line per `.das_module` descriptor saying whether the scan replayed its manifest or compiled it, and why; a replayed line carries its time and the share its shared-module loads took (`src/ast/ARCHITECTURE.md` sec.2). |
 
 ## Ambient variables daslang reads but does not own
 

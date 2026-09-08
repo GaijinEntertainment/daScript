@@ -83,5 +83,8 @@ recorded rows in recorded order, so the Quiet deferral and the post-scan retry o
 `DT_NEEDED` dlopen behave as on a compiled start. `no_manifest()` inside `initialize` marks the
 descriptor as one that runs on every start: its manifest carries the stamp and the flag and no
 rows, and is not rewritten. With `DAS_TRACE_MODULE_LOAD=1` the scan prints one line per
-descriptor - `replayed N row(s)`, `compiled (<why>), manifest written (N row(s))`,
-`compiled (no_manifest)`, or why a manifest was not written.
+descriptor - `replayed N row(s) in <sec> (shared module load <sec>)`, `compiled (<why>),
+manifest written (N row(s))`, `compiled (no_manifest)`, or why a manifest was not written. A
+replayed descriptor's time is its manifest read plus its rows, and the second number is the
+share the `.shared_module` dlopen and module constructor took - on a warm start that is nearly
+all of it.

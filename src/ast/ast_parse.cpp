@@ -580,6 +580,9 @@ namespace das {
     static DAS_THREAD_LOCAL(int64_t) totInfer;
     static DAS_THREAD_LOCAL(int64_t) totOpt;
     static DAS_THREAD_LOCAL(int64_t) totM;
+    static DAS_THREAD_LOCAL(int64_t) totCacheRead;
+    static DAS_THREAD_LOCAL(int64_t) cntCacheRead;
+    static DAS_THREAD_LOCAL(int64_t) totCacheMacroSim;
 
     // deserialization may have left the active gc root pointing at (or the old program
     // owning) a module root that dies with the old program — repoint around the swap so
@@ -1071,7 +1074,19 @@ namespace das {
         program->inferPassesUsed = 0;  // reset once per module; inferTypesDirty accumulates across all inferTypes legs (incl. restartInfer)
         program->policies = policies;   // before the cache read: the reader compares the record's policies against this compile's
 
+        auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
+        uint64_t macroSim0 = serializer_read ? serializer_read->totMacroTime : 0;
         if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
+            auto readT = get_time_usec(time0);
+            auto macroSimT = int64_t(serializer_read->totMacroTime - macroSim0);
+            *totCacheRead += readT;
+            *cntCacheRead += 1;
+            *totCacheMacroSim += macroSimT;
+            if ( policies.log_module_compile_time ) {
+                logs << "cache read took " << (readT / 1000000.) << ", " << program->thisModule->name << " (" << fileName << ")";
+                if ( macroSimT ) logs << " -- macro simulate " << (macroSimT / 1000000.);
+                logs << "\n";
+            }
             return program;
         } else {
             // Serialization failed and the program changed, so set it for proper GC collection on exit.
@@ -1800,6 +1815,9 @@ namespace das {
         *totInfer = 0;
         *totOpt = 0;
         *totM = 0;
+        *totCacheRead = 0;
+        *cntCacheRead = 0;
+        *totCacheMacroSim = 0;
         daScriptEnvironment::getBound()->macroTimeTicks = 0;
         vector<ModuleInfo> req;
         vector<MissingRecord> missing;
@@ -1933,6 +1951,7 @@ namespace das {
                 auto totT = get_time_usec(time0);
                 logs << "total compile took " << (totT  / 1000000.) << ", " << fileName << " -- " << res->totalFunctions << " functions\n"
                      << "\trequire  " << (preqT    / 1000000.) << "\n"
+                     << "\tcache read " << (*totCacheRead / 1000000.) << " (" << *cntCacheRead << " modules, macro simulate " << (*totCacheMacroSim / 1000000.) << ")\n"
                      << "\tparse    " << (*totParse / 1000000.) << "\n"
                      << "\tinfer    " << (*totInfer / 1000000.) << "\n"
                      << "\toptimize " << (*totOpt   / 1000000.) << "\n"
