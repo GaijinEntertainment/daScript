@@ -3,11 +3,11 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`. A diff that changes a `debug_info.h` struct layout, or removes, renames or
 retypes a public member of a struct or class under this folder, applies
-`skills/internal/abi_break_sweep.md` too. A diff that changes or removes a name under this
-folder that a `daslib/*.das` file spells out - a struct or member the AOT C++ emitter writes
-into generated code, a flag or field a daslib predicate reads - applies `daslib/REVIEW.md`
-too; checklist discovery walks changed paths only, so the C++ half never opens the daslib
-checklist on its own.
+`skills/internal/abi_break_sweep.md` too. A diff that changes what a name under this folder
+resolves to for a `daslib/*.das` caller - a rename, a removal, or a new overload of a struct or
+member the AOT C++ emitter writes into generated code, or of a flag or field a daslib predicate
+reads - applies `daslib/REVIEW.md` too; checklist discovery walks changed paths only, so the
+C++ half never opens the daslib checklist on its own.
 
 - **A diff that adds a field to `CodeOfPolicies` (`code_of_policies.h`) adds it to
   `DAS_MODULE_CACHE_POLICY_FIELDS` in `src/builtin/module_builtin_ast_serialize.cpp`, in the
@@ -31,13 +31,15 @@ checklist on its own.
   template under this folder that generated code runs for every evaluated expression. An added
   load, branch, call, copy, or counter, a direct call becoming indirect, a static dispatch
   becoming virtual, or an unboxed value becoming a boxed round-trip is that defect unless the
-  PR names the check showing the shipped build costs no more: its codegen unchanged, or a
-  measurement of the new code against the code it replaces - a diff cannot show optimized
-  codegen.
+  PR names the check showing the shipped build costs no more: its codegen unchanged, a
+  measurement of the new code against the code it replaces, or the addition landing its
+  sanctioned-additions entry per the rule below - a diff cannot show optimized codegen. The
+  baseline is what already answered correctly: a slot that returned a wrong constant costs more
+  once it computes the right one, and that is not this defect.
 
 - **A diff that adds work to the hot path - whether or not the shipped build flattens it -
   lands its entry under `ARCHITECTURE.md`'s sanctioned hot-path additions in the same diff:
-  what was added, where, why correctness required it, and the alternative that was rejected.**
+  what was added, where, why correctness requires it, and the alternative that was rejected.**
   Replacing a hot-path body with code that performs the same per-evaluation operations - no
   load, branch, call, copy, or counter the old body did not have - and measures no slower on
   the build the repo ships is not added work. A body that gains one of those operations is

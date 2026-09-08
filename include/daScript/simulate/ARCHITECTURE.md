@@ -137,3 +137,14 @@ correctness required it, and the alternative that was rejected.
   matching slot; only uint-index reads and value reinterpret land here). Rejected
   alternative: keeping the per-function NTTP matrix everywhere - master's shape, ~24KB of
   object code and ~11ms of compile per bind, mostly duplicated typed-eval stubs.
+
+- **Typed evals on the function-address const nodes** (`simulate_nodes.h`:
+  `SimNode_FuncConstValue`, `SimNode_FuncConstValueMnh`) - `evalPtr`, `evalInt64` and
+  `evalUInt64` route through the base as `cast<CTYPE>::to(eval(context))`, a second virtual
+  dispatch plus a vec4f round-trip. Correctness requires them because without them those
+  three slots assert and return 0, which in a build with `DAS_NO_ASSERTIONS` is a silent null:
+  `reinterpret<uint64>(@@fn)` written on the address-of expression is typed uint64, so every
+  store of it - a local, a field, an array element, an arithmetic operand, a return - reads the
+  uint64 slot, while the same cast through a parameter, an argument, JIT and AOT all answer the
+  address. Rejected alternative: rejecting the cast during inference, which would break the
+  reverse spelling and the two tiers that already answer correctly.
