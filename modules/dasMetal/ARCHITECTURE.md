@@ -173,7 +173,7 @@ than a second GPU. Cross-GPU parity of one source is secondary. Current entries:
 - **A kernel body calling a `[spirv_decode]` method directly is Vulkan-only; pending, not
   deliberate.** dasSpirv emits the call as an ordinary function - on a plane element the
   callee takes the element's index and chains through the plane, on a copy the struct
-  parameter spills to a local (`dasSpirv/ARCHITECTURE.md` sec.3.5). An MSL function takes a
+  parameter spills to a local (`dasSpirv/ARCHITECTURE_COOPMAT.md` sec.3.5). An MSL function takes a
   struct by value with its members addressable as written, so Metal needs no spill; the
   direct-call form itself has no MSL fixture yet, and a Metal kernel wanting one decode body
   for a staged tile is what would land it.

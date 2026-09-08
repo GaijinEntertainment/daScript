@@ -298,7 +298,7 @@ def public rfor_words : array<uint> {
     return clone_to_move(rfor_spv)
 }
 
-//! three loops, three folds: the bare induction constant, a nested pair through a `uint()` re-type, a non-zero lower bound.
+//! three shapes, three folds: the bare induction constant, a nested pair through a `uint()` re-type, a non-zero lower bound.
 [compute_shader(local_size_x=64, name="ufor_spv"), marker(no_coverage)]
 def ufor {
     let gi = gl_GlobalInvocationID.x
@@ -320,6 +320,34 @@ def ufor {
 
 def public ufor_words : array<uint> {
     return clone_to_move(ufor_spv)
+}
+
+let private UFOLD_N = 4   //! a named module constant as the bound: the lint compile hands it over unfolded
+
+//! every integer fold the unroll carries, over one induction variable: unary - and ~, the binary - / % << >> & | ^;
+//! then the bound shapes a literal range() cannot spell: a literal urange, a zero-trip range and a one-trip range
+[compute_shader(local_size_x=64, name="ufold_spv"), marker(no_coverage)]
+def ufold {
+    let gi = gl_GlobalInvocationID.x
+    var s = 0.0
+    for [unroll_full] (i in range(UFOLD_N)) {
+        let u = uint(i)
+        s += float(-i) + float(~u) + float(i - 1) + float(i / 2) + float(i % 3) + float(i << 1) + float(i >> 1) + float(i & 1) + float(i | 2) + float(i ^ 1)
+    }
+    for [unroll_full] (k in urange(2u, 5u)) {
+        s += float(k)
+    }
+    for [unroll_full] (_z in range(0)) {
+        s += 100.0
+    }
+    for [unroll_full] (_o in range(1)) {
+        s++
+    }
+    fdata[gi] = s
+}
+
+def public ufold_words : array<uint> {
+    return clone_to_move(ufold_spv)
 }
 
 // ===== Phase-3 vertex/fragment fixtures: stage I/O (@in/@out + Location), rasterizer builtins
@@ -2355,7 +2383,7 @@ def public coopmat_arr_words : array<uint> {
     return clone_to_move(coopmat_arr_spv)
 }
 
-def public function_storage_chain_indices(words : array<uint>) : tuple<chains : int; dynamic_indices : int> {
+def public count_function_storage_chains(words : array<uint>) : tuple<chains : int; dynamic_indices : int> {
     var consts : table<uint>
     var fvars : table<uint>
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {

@@ -41,6 +41,21 @@ def private check_rejects(t : T?; fixture, needle : string) {
     }
 }
 
+//! the refusal a fixture raises in every unrolled copy reaches the issues ONCE: the unroll drops a copy's repeat of an earlier copy's error
+def private check_rejects_once(t : T?; fixture, needle : string) {
+    let r = compile_issues("{get_das_root()}/tests/spirv/_fail_closed/{fixture}.das")
+    var hits = 0
+    var at = find(r.issues, needle)
+    while (at >= 0) {
+        hits++
+        at = find(r.issues, needle, at + 1)
+    }
+    t |> equal(hits, 1, "{fixture}: '{needle}' is reported once, not once per unrolled copy")
+    if (hits != 1) {
+        to_log(LOG_ERROR, "FAIL-CLOSED {fixture}: {hits} hits, issues=\n{r.issues}\n")
+    }
+}
+
 [test]
 def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-check-per-fixture list
     t |> run("emitter rejects shader-illegal constructs cleanly") <| @(t : T?) {
@@ -56,6 +71,11 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         check_rejects(t, "_fc_deadcode", "unreachable code after a block terminator")
         check_rejects(t, "_fc_unroll_runtime", "the range must have literal bounds")
         check_rejects(t, "_fc_unroll_break", "break inside a `for [unroll_full]` body")
+        check_rejects_once(t, "_fc_unroll_break", "break inside a `for [unroll_full]` body")
+        check_rejects(t, "_fc_unroll_continue", "continue inside a `for [unroll_full]` body")
+        check_rejects(t, "_fc_unroll_return", "return inside a `for [unroll_full]` body")
+        check_rejects(t, "_fc_unroll_while", "loop hint [unroll_full] applies to a `for (i in range(lo, hi))`")
+        check_rejects(t, "_fc_unroll_hint_pair", "loop hint [dont_unroll] beside [unroll_full]")
         // a write-swizzle chains a component pointer off its base, so the base needs an OpVariable; a
         // swizzle of a swizzle has only a loaded value, and there is nothing to store through
         check_rejects(t, "_fc_wswz", "write-swizzle target must be addressable")

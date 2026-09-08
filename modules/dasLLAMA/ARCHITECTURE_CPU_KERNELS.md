@@ -42,7 +42,7 @@ codes for the rest. Per row group and weight octet a constant two-source shuffle
 code bytes in its qword, `VPMULTISHIFTQB` spreads the symbols into bytes, one `vpshufb` maps them to
 magnitudes, and the signs ride the activation copy as a mask `(x ^ m) - m`. The lattice row shares
 its tile body and planes with the 512/mr16 row, so only the gemv differs - what the gemv's own seat
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.26) races.
+(`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` sec.2.26) races.
 
 ### 2.42 A CPU tier selects on the TARGET, not the host {#cpu-tier-target-select}
 

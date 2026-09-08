@@ -2,8 +2,8 @@
 
 **Read `ARCHITECTURE_COMMON.md` (repo root) first - its contract binds this document.** The
 checklists that bind a diff here are `REVIEW.md` (this folder) and
-`modules/REVIEW_SHADER_EMITTERS.md`. The plan sections and the implementation log this
-document grew from are archived at `history/dasSpirv/MASTERPLAN_LOG.md`.
+`modules/REVIEW_SHADER_EMITTERS.md`. Sections 3.2, 3.3, 3.5, 3.6 and 3.7 - cooperative matrix and
+emission-time unrolling - are in `ARCHITECTURE_COOPMAT.md` beside this file.
 
 ## 1. Why
 
@@ -38,17 +38,15 @@ compute test as a ready-made end-to-end gate.
 2. **Fresh frontend** - its own shader annotations (sec.3). dasSpirv has no code dependency on
    dasGlsl or dasOpenGL; it reuses only the generic AST tooling, none of which lives in
    dasGlsl.
-3. The opcode census declares the supported opcode set and is checked against the fixtures in
-   both directions; LCOV covers the runtime-reached files beside it (sec.4).
 4. **SPIR-V 1.3 is the default header version; a feature that needs more raises it.** 1.3
    gives StorageBuffer storage class + `Block` (not the deprecated 1.0 BufferBlock+Uniform
    path), lavapipe advertises >= 1.2, and at `<= 1.3` the entry-point interface lists only
    Input/Output globals (1.4 requires *all* globals, which would churn every stage's
    interface). The version is a per-module field, `SpirvModule.version`: a mesh or task stage
    raises it to 1.4 because `SPV_EXT_mesh_shader` requires it, a call that re-types a
-   Block-laid-out struct with `OpCopyLogical` (sec.3.5) raises it to 1.4 because that opcode
-   requires it, a few subgroup ops raise it to 1.5, and the cooperative-matrix ops raise it to
-   1.6. Every other stage stays at 1.3.
+   Block-laid-out struct with `OpCopyLogical` (`ARCHITECTURE_COOPMAT.md` sec.3.5) raises it to
+   1.4 because that opcode requires it, a few subgroup ops raise it to 1.5, and the
+   cooperative-matrix ops raise it to 1.6. Every other stage stays at 1.3.
 
 ## 3. Files and emission mechanism {#files-and-emission}
 
@@ -60,7 +58,7 @@ consumes it via `require spirv/...` and feeds the emitted `array<uint>` (SPIR-V 
 | File | Gen/Hand | Purpose |
 |---|---|---|
 | `spirv/spirv_grammar.das` | **generated** | Opcode + GLSL.std.450 enums + StorageClass/Decoration/BuiltIn/ExecutionMode/Capability token constants, generated from the vendored, pinned SPIRV-Headers grammar JSON. Single source of numeric truth (+ opcode->name table for the disassembler). |
-| `spirv/spirv_builder.das` | hand | `SpirvModule` (per-section append buffers), monotonic id allocator, type/constant dedup pools, `emit(section, opcode, ...)`, `get_type_id`, `get_const_id`, `finalize() : array<uint>`. AST-agnostic. |
+| `spirv/spirv_builder.das` | hand | `SpirvModule` (per-section append buffers), monotonic id allocator, type/constant dedup pools (`type_pool` / `const_pool`, behind the `type_*` and `const_*` helpers), `emit(section, opcode, ...)`, and `module_words() : array<uint>`, which prepends the five-word header and concatenates the sections. `finalize` frees the buffers and the pools. AST-agnostic. |
 | `spirv/spirv_types.das` | hand | daslang `TypeDecl` -> SPIR-V type-id (scalars, vec/mat, fixed + runtime arrays, structs, pointers) with layout decorations. Highest-detail correctness file. |
 | `spirv/spirv_builtins.das` | hand | The builtin surface the emitter recognizes by name: builtin globals (`gl_*`), the opaque resource marker structs (`sampler2D`/`image2D`/`sampler2DShadow`/...), and the intrinsic stubs (`texture`, `imageLoad`, `barrier`, the atomics, the derivatives, ...). Every stub is `[sideeffects]` so no const-fold or DCE pass can reach it before the annotation runs. |
 | `spirv/spirv_emit.das` | hand | `SpirvEmit : AstVisitor` codegen visitor + the `[macro_function] generate_spirv(...)` entry point. Every construct the emitter cannot lower has a rejection override or hits the `value_of`/`ptr_of` backstop, so it becomes a clean compile error rather than a bad blob. |
@@ -68,17 +66,19 @@ consumes it via `require spirv/...` and feeds the emitted `array<uint>` (SPIR-V 
 | `spirv/spirv_shader.das` | hand | The shader annotations, each a `SpirvShader : AstFunctionAnnotation` subclass carrying its stage: `[compute_shader]`, `[spirv_kernel]` (class-method authoring), `[vertex_shader]`, `[fragment_shader]`, `[mesh_shader]`, `[task_shader]`, `[raygen_shader]`, `[miss_shader]`, `[closest_hit_shader]`; plus the `[spirv_decode]` / `[spirv_combine]` / `[spirv_per_element]` callback annotations. `apply` reserves the blob global and its `_reflect` companion; `fixup` runs dependency collection, calls `generate_spirv`, and sets both inits. |
 | `spirv/spirv_dis.das` | hand | Minimal disassembler + opcode-census helper (self-delimiting walk: word0 = `(wordCount<<16)\|opcode`). Symbolic via `spirv_grammar`'s opcode->name table. |
 | `generator/gen_spirv_grammar.das` | hand | The mini-generator: reads vendored grammar JSON -> emits `spirv/spirv_grammar.das`. |
-| `spirv_headers/*.json` | vendored | Pinned `spirv.core.grammar.json` + `extinst.glsl.std.450.grammar.json`; license in `SPIRV_HEADERS.LICENSE`, provenance in `history/dasSpirv/MASTERPLAN_LOG.md`. |
+| `spirv_headers/*.json` | vendored | The pinned Khronos SPIRV-Headers grammars: `spirv.core.grammar.json` at SPIR-V 1.6 revision 7, and `extinst.glsl.std.450.grammar.json` at version 100 revision 2. License in `SPIRV_HEADERS.LICENSE`. |
 | `CMakeLists.txt` | hand | `ADD_MODULE_DAS_FROM_DESCRIPTOR(spirv spirv)` + install rule, modeled on `modules/dasGlsl/CMakeLists.txt`. |
 
-**SSA backend (llvm_jit template).** `SpirvEmit` carries `e2v : table<Expression?;uint>`
-(Expression->result-id), `v2v : table<Variable?;uint>` (Variable->pointer-id),
-`ite2blocks`/`loop_stack` for control flow, and a hand-maintained `cur_block_terminated`
-(SPIR-V has no builder to query - set on every terminator, cleared on `OpLabel`; guards
-mirror llvm_jit's `current_block_terminates()`). Section buffers concatenate at `finalize`
-in SPIR-V's mandated order: header(5) -> capabilities -> extensions -> ext-imports ->
-memory-model -> entry-points -> exec-modes -> debug -> decorations -> types+constants+global-vars
-(interleaved, define-before-use, deduplicated) -> functions.
+**SSA backend (llvm_jit template).** `SpirvEmit` carries `e2id` (intptr(Expression) -> rvalue
+result-id), `e2ptr`/`e2pty` (intptr(Expression) -> lvalue pointer-id + pointee type-id),
+`ctx.local_vars` (intptr(Variable) -> the Function-storage `OpVariable` backing a local),
+`ite_ids`/`loop_ids` and `ctx.loop_stack` for control flow, and a hand-maintained
+`ctx.terminated` (SPIR-V has no builder to query - set on every terminator, cleared on
+`OpLabel`; guards mirror llvm_jit's `current_block_terminates()`). `module_words`
+concatenates the section buffers behind the five-word header, in SPIR-V's mandated order:
+capabilities -> extensions -> ext-imports -> memory-model -> entry-points -> exec-modes ->
+debug -> decorations -> types+constants+global-vars (interleaved, define-before-use,
+deduplicated) -> functions.
 
 **Capture mechanism (dasGlsl analog).** dasGlsl's `fixup` sets
 `glob.init = new ExprConstString(value := text)`; ours builds an `ExprMakeArray` of
@@ -91,20 +91,14 @@ without macro plumbing.
 **`[spirv_decode]` method form.** The decode callback's SPIR-V signature is a rigid three
 parameters. The method form erases the das-level `self` from it, so the decode body still reads
 its class members - a separate scale plane, push constants, `@workgroup` staging. The four-wide
-twin of that callback is section 3.3; a kernel body calling the method directly is section 3.5.
-
-**Cooperative-matrix element loops carry `Unroll`.** `coopmatClamp` walks a coopmat local
-element by element through a hand-emitted structured loop bounded by
-`OpCooperativeMatrixLengthKHR`, and its `OpLoopMerge` sets loop control `Unroll` - the control
-glslang emits for `[[unroll]]`. Rolled, the dynamic per-element `OpAccessChain` index demotes
-the accumulator out of tensor-register form into addressable storage for the whole kernel, not
-only for the loop. On an RTX 5060 Ti (driver 610.74) the cm2 l-tile min-kernel runs 34.2 TFLOP/s
-rolled and 57.8 unrolled.
+twin of that callback is `ARCHITECTURE_COOPMAT.md` section 3.3; a kernel body calling the method
+directly is that document's section 3.5.
 
 ### 3.1 The 8/16-bit small-integer surface {#small-int-surface}
 
 A shader reads AND writes `int8`/`uint8`/`int16`/`uint16`/`float16` SSBO elements and struct
-members, and the write direction costs the emitter no arm of its own. A narrowing daslang cast
+members, and the write direction costs the emitter no *arm* of its own. An **arm** is one branch
+of the emitter that handles one construct. A narrowing daslang cast
 (`int8(v)`, `uint16(u)`) is one of the conversion opcodes `convert_op` already picks for any
 narrowing pair, and a store reaches its element through the same width-aware std430 access chain
 a load reads - so `ensure_member_storage_caps`, pulling `StorageBuffer8BitAccess` /
@@ -119,56 +113,6 @@ needs no emitter change at all. The `byte4`/`ubyte4` type factory pulls the `Int
 and widening an unpacked lane (`int4(b4)`) is a same-class `OpSConvert`, which gives sign
 extension for free.
 
-### 3.2 A cm2 tile shape is one struct declaration {#cm2-tile-markers}
-
-The workgroup-scope cooperative-matrix tiles are marker structs in `spirv_builtins.das` whose
-NAMES carry their geometry - `coopmatWg{A|B|Acc}_{f16|f32|s8|s32}_{R}x{C}` - and
-`coopmat_wg_info` parses that name instead of looking the struct up in a table. Adding a tile
-shape is therefore one struct declaration plus the overload that types the das call
-(`coopmatMulAdd` for a multiply tile, `coopmatConvert` for an accumulator-only tile): no
-emitter arm changes, because every cm2 arm reads rows, columns and component width out of the
-parse. The tile markers are empty structs with no storage, so every builtin over them - the
-tensor loads and stores, the decode forms, `coopmatMulAdd`, `coopmatConvert`, `coopmatClamp`,
-the reductions - has an inert CPU body that cannot compute what the emitted form computes: a
-coopmat kernel's device test takes a plain CPU reference as its oracle, the one sanctioned
-exception class `modules/REVIEW_SHADER_EMITTERS.md` admits. A reduction width
-known only at run time reaches a SPIR-V kernel through a `tensorLayout2D` or
-`tensorLayout2DPad` whose dimension `tensorLayoutSetDimension` sets - that layout is this
-emitter's runtime-extent descriptor.
-
-### 3.3 The four-wide decode twin {#cm2-decode-vector}
-
-`SPV_NV_cooperative_matrix_decode_vector` adds no opcode: one capability and the
-`DecodeVectorFunc` bit of the tensor-load's addressing mask, whose operand names a second decode
-function returning the 4-lane vector of the tile component type, called for four consecutive
-elements along the block's last dimension from a multiple of four. The scalar `DecodeFunc` stays
-mandatory beside it and the driver picks per call site, so one module serves devices with and
-without the feature. `coopmatLoadTensorDecode`'s tenth argument selects the twin: `true` has the
-emitter synthesize it as four `OpFunctionCall`s of the scalar body at `coordInBlock.y + 0..3`
-composed into the vector (the driver's compiler inlines the calls and merges the loads they
-share), `false` is the scalar-only load, and a `[spirv_decode]` function returning `half4`
-over a `float16` decode, with the scalar contract's parameters, is a hand-laid twin (daslang
-spells no int8 or 32-bit four-vector the tiles would take, so the hand-laid form is f16-only;
-the synthesized twin covers every scalar type a decode may return). Twins register in their own
-table keyed by the function they came from, so one scalar body yields one twin however many loads
-name it, and emit after the scalar bodies they call.
-
-The extension stands apart from the cm2 base: a module that uses the twin declares the
-`CooperativeMatrixDecodeVectorNV` capability and the `SPV_NV_cooperative_matrix_decode_vector`
-extension name, and the device must have its own
-`VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV` bit enabled.
-
-The tensor-addressing operands follow the mask word in bit order - `TensorView`, then
-`DecodeFunc`, then `DecodeVectorFunc` - after the load's fixed prefix: result type, result,
-pointer, object, layout, memory-access mask and that mask's own extra words. The emitter appends
-them in that order and the strip counts forward to the operand it removes by the same rule.
-
-A finished module is downgraded rather than recompiled. `strip_decode_vector` walks the word
-stream and removes the capability, the extension declaration, and each
-`OpCooperativeMatrixLoadTensorNV`'s `DecodeVectorFunc` bit together with its operand word; the
-twin's `OpFunction` stays in the module, unreferenced, and the mandatory scalar `DecodeFunc`
-serves the load. One emitted blob therefore runs on a device without the feature.
-
 ### 3.4 Operand laziness follows the language {#operand-laziness}
 
 `cond ? a : b`, `&&` and `||` lower to `OpSelect` / `OpLogicalAnd` / `OpLogicalOr` while both
@@ -176,71 +120,14 @@ operands are pure - branchless, both evaluated. An operand that indexes a global
 ssbo, a block field, a `@workgroup` array) lowers as a branch instead: `SpirvTempAlloc` hoists a
 Function-storage temp per such node (`ctx.lazy_temps`), the operand the condition admits stores
 through it, and the merge block reloads it as the value. For `&&` and `||` the left operand's
-answer stores before the branch, so the edge the left operand settles goes straight to the merge;
-the branch labels are allocated after the condition is visited, in the visitor's if/else hook
-order (the left- and right-operand pre-visit hooks). `OpSelect` evaluates both operands, and
-the operand a condition rules out is exactly the one whose index the condition guards - on the
-device an out-of-range load is a fault that surfaces only when the overshoot leaves mapped memory,
-so it tracks allocation layout, not the kernel's inputs. A local fixed array stays eager: its
-index is register arithmetic, not a device address.
+answer stores before the branch, so the edge that skips the right operand runs straight to the
+merge. The branch labels are allocated after the condition is visited, in the visitor's if/else
+hook order (the left- and right-operand pre-visit hooks).
 
-### 3.5 A kernel calls a decode method directly {#direct-decode-call}
-
-A kernel body may CALL a `[spirv_decode]` method directly: that is an ordinary user function -
-its own OpFunction, registered beside the callback form and pulling no cooperative-matrix
-capability - which is what lets one decode body serve a tensor load on a cm2 device and a
-hand-staged tile on a KHR one. The block argument takes one of two forms, fixed per method at
-discovery (a method called both ways is refused). Called on the plane element itself
-(`decode(wq[i], bc, cib)`), the block parameter is emitted as the element's `uint` INDEX and the
-function's entry chains `OpAccessChain plane, 0, index` once, binding the parameter as a memory
-local in the plane's own storage class, so the body's member reads chain through the plane
-exactly as the callback form's chain through its block pointer - the element is never loaded as
-a value. A pointer could not travel instead: under logical addressing an SSBO pointer is not a
-legal OpFunctionCall argument without the VariablePointersStorageBuffer capability, and the
-index needs no capability at all. Called on a copy (`let blk = wq[i]; decode(blk, bc, cib)`),
-the block goes by value and lands in the spill local of the next paragraph - the whole block
-loaded and stored per call, which the KHR tile measured at a third of the element form's rate.
-
-**A struct value parameter with an aggregate member is a memory local.** A read-only parameter
-of a plain data struct that carries a fixed-array or nested-struct member (not a coopmat tile, a
-tensor object, a ray query or a sampler marker) binds its SSA OpFunctionParameter and is stored
-at entry into a Function-storage OpVariable. The variable is declared first in the entry block,
-ahead of the body's locals and call temps; the store that fills it follows the block's last
-OpVariable, because SPIR-V requires every OpVariable of a block to lead the block. The parameter
-is thereafter that local: its members access-chain like a `var` struct local's. The reason is a
-fixed-array member indexed at run time (`blk.qs[cib.y >> 1]`): an SSA composite offers no
-pointer, and `OpCompositeExtract` takes literal indices only. A scalar-only struct parameter
-keeps the value path (its members extract), and a `let` copy of a block element in a body stays
-a composite (scalar and vector members extract; its array and struct members are still refused),
-because reading it whole and then storing it would double every element load; the parameter
-form pays the store once per call. The Metal emitter needs no arm for this: an MSL function
-takes a struct by value and its members are addressable as written.
-
-**A struct loaded out of a `Block` re-types at the call.** A struct loaded out of a `Block` -
-an ssbo element - carries the Block's laid-out `OpTypeStruct`, a different type id from the
-plain struct a parameter takes, so a call passing one re-types the value with `OpCopyLogical`
-first, and the module's version floor rises to SPIR-V 1.4, which that opcode requires. The
-emitter remembers the struct type each loaded id was read as and copies only when the two ids
-differ, so a struct already at the plain type passes through untouched.
-
-### 3.6 `for [unroll_full]` unrolls at emission {#unroll-full}
-
-A `for [unroll_full] (i in range(lo, hi))` over literal bounds emits `hi - lo` copies of its body
-and no loop construct: the visitor walks the body once per copy with the induction variable bound
-to that copy's `OpConstant`, then rewinds the function section past the walk it makes on its own.
-Integer arithmetic on such a constant folds at emission - a literal, the induction constant or an
-earlier fold on either side - so `acc[t * 16 + c]` chains an `OpConstant` index, the shape drivers
-promote to registers: a fixed array of cooperative-matrix tiles (`coopmatAcc_f16_16x16[16]`) is
-one Function-storage `OpTypeArray` over the tile type, each element reached through a constant
-`OpAccessChain`, so a 2-D subgroup tiling's accumulators stay in registers where a rolled loop or
-the driver hint `[unroll]` leaves them indexed by the counter. The fold takes no operand the unroll
-did not derive, so a body without the hint emits word for word what it did. A bound the compiler
-folds counts as a literal (lint and LSP compiles run with optimizations off, so `range(N)` and
-`int(KHR_KHALF_WORDS)` arrive unfolded and the emitter asks for the fold), so a bound may be a named
-module constant; a bound it cannot fold, and `break` or `continue` in the body, are refused; an error
-the body raises is reported once, not per copy. dasMetal lowers the hint to `#pragma clang loop
-unroll(full)`, the JIT to `llvm.loop.unroll.full`; the interpreter ignores it: the CPU run is the
-same body rolled.
+`OpSelect` evaluates both operands. The operand a condition rules out is the one whose index that
+condition guards. On the device an out-of-range load faults only when the overshoot leaves mapped
+memory, so whether it faults follows the allocation layout, not the kernel's inputs. A local fixed
+array stays eager: its index is register arithmetic, not a device address.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 
@@ -283,17 +170,5 @@ real-driver layer, which lives in dasVulkan):
 
 ## 5. Cross-backend parity - the kernel-model asymmetry ledger
 
-`modules/REVIEW_SHADER_EMITTERS.md` requires a kernel-model capability added to one emitter to
-be added to the other or recorded as an asymmetry. That ledger is shared - one list for both
-backends, not one per backend - and lives in `modules/dasMetal/ARCHITECTURE.md` sec.5.
-
-## 6. Verification
-
-- **Standing per-change gate (main tree):**
-  `daslang dastest/dastest.das -- --test tests/spirv --cov-path spirv.lcov --isolated-mode`
-  -> all green, opcode census == declared set both directions, every blob spirv-val-clean, no
-  `GC APP LEAK`.
-- **Disassembly check:** an emitted module is dumped via `spirv_dis` (symbolic) and diffed
-  against external `spirv-dis` as ground truth.
-- **Real-driver gate (dasVulkan):** the integration suite under lavapipe and the local real
-  GPU.
+`modules/REVIEW_SHADER_EMITTERS.md` requires one kernel-model asymmetry ledger for both emitters.
+That list lives in `modules/dasMetal/ARCHITECTURE.md` sec.5.

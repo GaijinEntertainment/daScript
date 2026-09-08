@@ -25,6 +25,7 @@ require dasllama/dasllama_vulkan_prefill
 require dasllama/dasllama_kqformat
 require daslib/typemacro_boost
 require _vk_probe_fixture   // hash_word, cool_f16_pair: the synthetic planes both probes build
+require ../tests/_vkd_oracles.das   // k4f16_gemm_oracle: the CPU reference the khrx baseline arm is checked against
 
 let private MM_TILE = 128
 let private DISPATCHES = 16
@@ -786,7 +787,7 @@ class KhrPxBase : MoeCmBase {
         }
     }
 
-    def body_f32 {
+    def body_f32a {
         let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
         let wblk0 = sched[rb]
         let row0 = sched[rb + 1u]
@@ -807,8 +808,8 @@ class KhrPxBase : MoeCmBase {
         let skh = (tid & 1u) * 16u
         let sbase = srow * KHRPX_STRIDE + skh
         let wrow = m0 + srow
-        let arow = (sg & 1u) * 64u
-        let bcol0 = (sg >> 1u) * 32u
+        let wrow0 = (sg & 1u) * 64u
+        let trow0 = (sg >> 1u) * 32u
         var acc00, acc01, acc10, acc11, acc20, acc21, acc30, acc31 : coopmatAcc_f32_16x16
         var k = 0u
         while (k < pa.n) {
@@ -820,13 +821,13 @@ class KhrPxBase : MoeCmBase {
             for (ks in range(2)) {
                 let ko = uint(ks) * 16u
                 var a0, a1, a2, a3 : coopmatA_f16_16x16
-                coopmatLoad(a0, khr_a, int(arow * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a1, khr_a, int((arow + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a2, khr_a, int((arow + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a3, khr_a, int((arow + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a0, khr_a, int(wrow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a1, khr_a, int((wrow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a2, khr_a, int((wrow0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a3, khr_a, int((wrow0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
                 var b0, b1 : coopmatB_f16_16x16
-                coopmatLoad(b0, khr_b, int(bcol0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
-                coopmatLoad(b1, khr_b, int((bcol0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b0, khr_b, int(trow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b1, khr_b, int((trow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
                 acc00 = coopmatMulAdd(a0, b0, acc00)
                 acc01 = coopmatMulAdd(a0, b1, acc01)
                 acc10 = coopmatMulAdd(a1, b0, acc10)
@@ -839,7 +840,7 @@ class KhrPxBase : MoeCmBase {
             barrier()
             k += 32u
         }
-        let yb = (t0 + bcol0) * pa.d + m0 + arow
+        let yb = (t0 + trow0) * pa.d + m0 + wrow0
         coopmatStore(acc00, y, int(yb), int(pa.d), 1)
         coopmatStore(acc01, y, int(yb + 16u * pa.d), int(pa.d), 1)
         coopmatStore(acc10, y, int(yb + 16u), int(pa.d), 1)
@@ -905,23 +906,23 @@ class KhrPxBase : MoeCmBase {
             k += 32u
         }
         let yb = t0 * pa.d + m0 + sg * 16u
-        var o : coopmatAcc_f32_16x16
-        coopmatConvert(o, acc0)
-        coopmatStore(o, y, int(yb), int(pa.d), 1)
-        coopmatConvert(o, acc1)
-        coopmatStore(o, y, int(yb + 16u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc2)
-        coopmatStore(o, y, int(yb + 32u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc3)
-        coopmatStore(o, y, int(yb + 48u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc4)
-        coopmatStore(o, y, int(yb + 64u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc5)
-        coopmatStore(o, y, int(yb + 80u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc6)
-        coopmatStore(o, y, int(yb + 96u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc7)
-        coopmatStore(o, y, int(yb + 112u * pa.d), int(pa.d), 1)
+        var accf32 : coopmatAcc_f32_16x16
+        coopmatConvert(accf32,acc0)
+        coopmatStore(accf32,y, int(yb), int(pa.d), 1)
+        coopmatConvert(accf32,acc1)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc2)
+        coopmatStore(accf32,y, int(yb + 32u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc3)
+        coopmatStore(accf32,y, int(yb + 48u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc4)
+        coopmatStore(accf32,y, int(yb + 64u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc5)
+        coopmatStore(accf32,y, int(yb + 80u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc6)
+        coopmatStore(accf32,y, int(yb + 96u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc7)
+        coopmatStore(accf32,y, int(yb + 112u * pa.d), int(pa.d), 1)
     }
 
     [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
@@ -946,8 +947,8 @@ class KhrPxBase : MoeCmBase {
         let skh = (tid & 1u) * 16u
         let sbase = srow * KHRPX_STRIDE + skh
         let wrow = m0 + srow
-        let arow = (sg & 1u) * 64u
-        let bcol0 = (sg >> 1u) * 32u
+        let wrow0 = (sg & 1u) * 64u
+        let trow0 = (sg >> 1u) * 32u
         var acc00, acc01, acc10, acc11, acc20, acc21, acc30, acc31 : coopmatAcc_f16_16x16
         var k = 0u
         while (k < pa.n) {
@@ -959,13 +960,13 @@ class KhrPxBase : MoeCmBase {
             for (ks in range(2)) {
                 let ko = uint(ks) * 16u
                 var a0, a1, a2, a3 : coopmatA_f16_16x16
-                coopmatLoad(a0, khr_a, int(arow * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a1, khr_a, int((arow + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a2, khr_a, int((arow + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a3, khr_a, int((arow + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a0, khr_a, int(wrow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a1, khr_a, int((wrow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a2, khr_a, int((wrow0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a3, khr_a, int((wrow0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
                 var b0, b1 : coopmatB_f16_16x16
-                coopmatLoad(b0, khr_b, int(bcol0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
-                coopmatLoad(b1, khr_b, int((bcol0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b0, khr_b, int(trow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b1, khr_b, int((trow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
                 acc00 = coopmatMulAdd(a0, b0, acc00)
                 acc01 = coopmatMulAdd(a0, b1, acc01)
                 acc10 = coopmatMulAdd(a1, b0, acc10)
@@ -978,24 +979,24 @@ class KhrPxBase : MoeCmBase {
             barrier()
             k += 32u
         }
-        let yb = (t0 + bcol0) * pa.d + m0 + arow
-        var o : coopmatAcc_f32_16x16
-        coopmatConvert(o, acc00)
-        coopmatStore(o, y, int(yb), int(pa.d), 1)
-        coopmatConvert(o, acc01)
-        coopmatStore(o, y, int(yb + 16u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc10)
-        coopmatStore(o, y, int(yb + 16u), int(pa.d), 1)
-        coopmatConvert(o, acc11)
-        coopmatStore(o, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
-        coopmatConvert(o, acc20)
-        coopmatStore(o, y, int(yb + 32u), int(pa.d), 1)
-        coopmatConvert(o, acc21)
-        coopmatStore(o, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
-        coopmatConvert(o, acc30)
-        coopmatStore(o, y, int(yb + 48u), int(pa.d), 1)
-        coopmatConvert(o, acc31)
-        coopmatStore(o, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
+        let yb = (t0 + trow0) * pa.d + m0 + wrow0
+        var accf32 : coopmatAcc_f32_16x16
+        coopmatConvert(accf32,acc00)
+        coopmatStore(accf32,y, int(yb), int(pa.d), 1)
+        coopmatConvert(accf32,acc01)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc10)
+        coopmatStore(accf32,y, int(yb + 16u), int(pa.d), 1)
+        coopmatConvert(accf32,acc11)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+        coopmatConvert(accf32,acc20)
+        coopmatStore(accf32,y, int(yb + 32u), int(pa.d), 1)
+        coopmatConvert(accf32,acc21)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
+        coopmatConvert(accf32,acc30)
+        coopmatStore(accf32,y, int(yb + 48u), int(pa.d), 1)
+        coopmatConvert(accf32,acc31)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
     }
 }
 
@@ -1066,7 +1067,7 @@ class KhrPxShip : KhrPxW4Base {
 class KhrPxF32a : KhrPxW4Base {
     [spirv_kernel(local_size_x = 256, name = "khrpx_f32a_spv")]
     def run {
-        body_f32()
+        body_f32a()
     }
 }
 
@@ -1100,8 +1101,8 @@ class KhrPxWg128 : KhrPxW4Base {
         let sg = gl_SubgroupID
         let sbase = srow * KHRPX_STRIDE
         let wrow = m0 + srow
-        let arow = (sg & 1u) * 64u
-        let bcol0 = (sg >> 1u) * 64u
+        let wrow0 = (sg & 1u) * 64u
+        let trow0 = (sg >> 1u) * 64u
         var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13 : coopmatAcc_f16_16x16
         var acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
         var k = 0u
@@ -1117,15 +1118,15 @@ class KhrPxWg128 : KhrPxW4Base {
             for (ks in range(2)) {
                 let ko = uint(ks) * 16u
                 var a0, a1, a2, a3 : coopmatA_f16_16x16
-                coopmatLoad(a0, khr_a, int(arow * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a1, khr_a, int((arow + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a2, khr_a, int((arow + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                coopmatLoad(a3, khr_a, int((arow + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a0, khr_a, int(wrow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a1, khr_a, int((wrow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a2, khr_a, int((wrow0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a3, khr_a, int((wrow0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
                 var b0, b1, b2, b3 : coopmatB_f16_16x16
-                coopmatLoad(b0, khr_b, int(bcol0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
-                coopmatLoad(b1, khr_b, int((bcol0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
-                coopmatLoad(b2, khr_b, int((bcol0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
-                coopmatLoad(b3, khr_b, int((bcol0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b0, khr_b, int(trow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b1, khr_b, int((trow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b2, khr_b, int((trow0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b3, khr_b, int((trow0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
                 acc00 = coopmatMulAdd(a0, b0, acc00)
                 acc01 = coopmatMulAdd(a0, b1, acc01)
                 acc02 = coopmatMulAdd(a0, b2, acc02)
@@ -1146,46 +1147,55 @@ class KhrPxWg128 : KhrPxW4Base {
             barrier()
             k += 32u
         }
-        let yb = (t0 + bcol0) * pa.d + m0 + arow
-        var o : coopmatAcc_f32_16x16
-        coopmatConvert(o, acc00)
-        coopmatStore(o, y, int(yb), int(pa.d), 1)
-        coopmatConvert(o, acc01)
-        coopmatStore(o, y, int(yb + 16u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc02)
-        coopmatStore(o, y, int(yb + 32u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc03)
-        coopmatStore(o, y, int(yb + 48u * pa.d), int(pa.d), 1)
-        coopmatConvert(o, acc10)
-        coopmatStore(o, y, int(yb + 16u), int(pa.d), 1)
-        coopmatConvert(o, acc11)
-        coopmatStore(o, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
-        coopmatConvert(o, acc12)
-        coopmatStore(o, y, int(yb + 32u * pa.d + 16u), int(pa.d), 1)
-        coopmatConvert(o, acc13)
-        coopmatStore(o, y, int(yb + 48u * pa.d + 16u), int(pa.d), 1)
-        coopmatConvert(o, acc20)
-        coopmatStore(o, y, int(yb + 32u), int(pa.d), 1)
-        coopmatConvert(o, acc21)
-        coopmatStore(o, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
-        coopmatConvert(o, acc22)
-        coopmatStore(o, y, int(yb + 32u * pa.d + 32u), int(pa.d), 1)
-        coopmatConvert(o, acc23)
-        coopmatStore(o, y, int(yb + 48u * pa.d + 32u), int(pa.d), 1)
-        coopmatConvert(o, acc30)
-        coopmatStore(o, y, int(yb + 48u), int(pa.d), 1)
-        coopmatConvert(o, acc31)
-        coopmatStore(o, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
-        coopmatConvert(o, acc32)
-        coopmatStore(o, y, int(yb + 32u * pa.d + 48u), int(pa.d), 1)
-        coopmatConvert(o, acc33)
-        coopmatStore(o, y, int(yb + 48u * pa.d + 48u), int(pa.d), 1)
+        let yb = (t0 + trow0) * pa.d + m0 + wrow0
+        var accf32 : coopmatAcc_f32_16x16
+        coopmatConvert(accf32,acc00)
+        coopmatStore(accf32,y, int(yb), int(pa.d), 1)
+        coopmatConvert(accf32,acc01)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc02)
+        coopmatStore(accf32,y, int(yb + 32u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc03)
+        coopmatStore(accf32,y, int(yb + 48u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32,acc10)
+        coopmatStore(accf32,y, int(yb + 16u), int(pa.d), 1)
+        coopmatConvert(accf32,acc11)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+        coopmatConvert(accf32,acc12)
+        coopmatStore(accf32,y, int(yb + 32u * pa.d + 16u), int(pa.d), 1)
+        coopmatConvert(accf32,acc13)
+        coopmatStore(accf32,y, int(yb + 48u * pa.d + 16u), int(pa.d), 1)
+        coopmatConvert(accf32,acc20)
+        coopmatStore(accf32,y, int(yb + 32u), int(pa.d), 1)
+        coopmatConvert(accf32,acc21)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
+        coopmatConvert(accf32,acc22)
+        coopmatStore(accf32,y, int(yb + 32u * pa.d + 32u), int(pa.d), 1)
+        coopmatConvert(accf32,acc23)
+        coopmatStore(accf32,y, int(yb + 48u * pa.d + 32u), int(pa.d), 1)
+        coopmatConvert(accf32,acc30)
+        coopmatStore(accf32,y, int(yb + 48u), int(pa.d), 1)
+        coopmatConvert(accf32,acc31)
+        coopmatStore(accf32,y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
+        coopmatConvert(accf32,acc32)
+        coopmatStore(accf32,y, int(yb + 32u * pa.d + 48u), int(pa.d), 1)
+        coopmatConvert(accf32,acc33)
+        coopmatStore(accf32,y, int(yb + 48u * pa.d + 48u), int(pa.d), 1)
     }
 }
 
 let private KHR_ARMS = 8
+let private KHR_ARM_NAMES = fixed_array("nil   ", "ship  ", "dec4  ", "khr   ", "kq    ", "f32a  ", "strip ", "wg128 ")
+let private KHR_ARM_KHR = 3   //! the shipped class: the compared arms' reference and the CPU check's subject
+let private KHR_ARM_KQ = 4    //! the sdot4 kq tile, 32 x 32 where every other arm tiles 128 x 128
+let private KHR_ARM_COMPARED = fixed_array(false, true, true, false, false, true, true, true)   //! khr is the reference; nil stages constants and kq reads its own Q8 activation fixture: timing-only
+let private KHR_ARM_REL_BOUND = 2e-2lf   //! a compared arm passes within this relative difference of the shipped class; the copies read 0, the f32-accumulator arm 0.005-0.009
+
+//! the bisect arms stage and store whole 128-row tiles - only the two shipped tiles clamp token rows to the window's count, so only they run on a partial window
+def private khr_arm_clamps(v : int) : bool => v == KHR_ARM_KHR || v == KHR_ARM_KQ
 let private MMQ_ARMS = 5
 var private g_prof_arm = ""
+var private g_probe_exit = 0   //! the process exit code: a decline, a compared arm over its bound, or a profiler run that dispatched nothing
 
 //! the interleaved timing of one sweep's arms: after a two-submit warm-up each, every round times
 //! SUBMITS / ROUNDS submits of every arm in turn, and an arm's figure is its best round
@@ -1194,11 +1204,17 @@ def private sweep_best_us(var raws : array<VkCommandBuffer>) : array<double> {
     best |> resize(length(raws))
     for (raw, bv in raws, best) {
         bv = 1.0e30lf
+        if (raw == null) {
+            continue
+        }
         submit_wait(raw)
         submit_wait(raw)
     }
     for (_r in range(ROUNDS)) {
         for (raw, bv in raws, best) {
+            if (raw == null) {
+                continue
+            }
             let t0 = ref_time_ticks()
             for (_s in range(SUBMITS / ROUNDS)) {
                 submit_wait(raw)
@@ -1284,8 +1300,90 @@ def private khr_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var
     }
 }
 
+//! the baseline arm against the CPU oracle over six corners of the output - eight weight rows by sixteen tokens at the
+//! first, middle and last rows, at the first and last tokens - on the kernel cell's bar: |gpu - cpu| <= 2e-2 |cpu| + 4e-3 max|y|
+def private khr_cpu_check(wqh, wsuh, xfh : array<uint>; y_gpu : array<float>; d, n, cnt : int) : tuple<samples : int; off : int; max_abs : double> {
+    let nsb = n / 256
+    var ymax = 0.0
+    for (v in y_gpu) {
+        ymax = max(ymax, abs(v))
+    }
+    var samples = 0
+    var off = 0
+    var max_abs = 0.0lf
+    for (r0 in [0, (d / 2) & ~7, d - 8]) {
+        for (t0 in [0, cnt - 16]) {
+            let recs = [uint(r0 * nsb), uint(t0), 16u, 0u]
+            var ys : array<float>
+            ys |> resize((t0 + 16) * 8)
+            k4f16_gemm_oracle(wqh, wsuh, xfh, recs, 1, n, 8, ys)
+            for (r in range(16)) {
+                for (c in range(8)) {
+                    let cpu = ys[(t0 + r) * 8 + c]
+                    let gpu = y_gpu[(t0 + r) * d + r0 + c]
+                    let diff = abs(gpu - cpu)
+                    samples++
+                    if (diff > 2e-2 * abs(cpu) + 4e-3 * ymax) {
+                        off++
+                    }
+                    max_abs = max(max_abs, double(diff))
+                }
+            }
+            delete ys
+        }
+    }
+    return (samples = samples, off = off, max_abs = max_abs)
+}
+
+//! one line per arm: its best rate, and for a compared arm its distance from the shipped class - bit-exact, within the bound,
+//! or OVER it (the exit code); the shipped class's output stays in `y_ref` for the CPU check
+def private khr_report(name : string; var raws : array<VkCommandBuffer>; best : array<double>; last_out : uint64; y_bytes : int64; flop : double; var y_ref : array<float>) {
+    read_back_y(raws[KHR_ARM_KHR], last_out, y_bytes, y_ref)
+    var y_arm : array<float>
+    for (v in range(KHR_ARMS)) {
+        if (raws[v] == null) {
+            print("{name} {KHR_ARM_NAMES[v]}: not run - a whole-tile arm on a partial window\n")
+            continue
+        }
+        let tf = flop / (best[v] * 1000000.0lf)
+        var tail = "timing-only"
+        if (KHR_ARM_COMPARED[v]) {
+            read_back_y(raws[v], last_out, y_bytes, y_arm)
+            let mrd = max_rel_diff(y_arm, y_ref)
+            if (mrd == 0.0lf) {
+                tail = "bit-exact vs khr"
+            } else {
+                let within = mrd <= KHR_ARM_REL_BOUND
+                tail = "max rel diff {mrd:.5f} vs khr ({within ? "within" : "OVER"} {KHR_ARM_REL_BOUND})"
+                if (!within) {
+                    g_probe_exit = 1
+                }
+            }
+        }
+        print("{name} {KHR_ARM_NAMES[v]}: {best[v] / 1000.0lf} ms/dispatch  {tf} TFLOP/s  {tail}\n")
+    }
+    delete y_arm
+}
+
+//! the khrprof mode: one submit per arm - or the one arm named - so a GPU profiler sees a single kernel's dispatches
+def private khr_prof_submit(name : string; var raws : array<VkCommandBuffer>) {
+    var submitted = 0
+    for (v in range(KHR_ARMS)) {
+        if (raws[v] != null && (g_prof_arm == "" || strip(KHR_ARM_NAMES[v]) == g_prof_arm)) {
+            submit_wait(raws[v])
+            submitted++
+        }
+    }
+    let which = g_prof_arm == "" ? "all {KHR_ARMS}" : g_prof_arm
+    print("{name}: one submit per arm ({which}), {DISPATCHES} dispatches each\n")
+    if (submitted == 0) {
+        print("khrprof: no arm named '{g_prof_arm}' - nothing was dispatched\n")
+        g_probe_exit = 1
+    }
+}
+
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {   // nolint:STYLE038 — one interleaved measurement sweep over eight arms
+def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {   // nolint:STYLE038 — one interleaved measurement sweep over eight arms, its compare and its CPU check
     let fmt = int(KqFmt.k4)
     let nsb = n / 256
     let totsb = d * nsb
@@ -1340,12 +1438,16 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
         upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
         upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
         let yd2 = make_device_buf(y_bytes)   //! consecutive dispatches alternate outputs, as the served graph overlaps them
-        let vnames = fixed_array("nil   ", "ship  ", "dec4  ", "khr   ", "kq    ", "f32a  ", "strip ", "wg128 ")
-        let compared = fixed_array(false, true, true, false, false, true, true, true)   //! khr is the reference; nil stages constants and kq reads its own Q8 activation fixture: timing-only
+        let partial = cnt % MM_TILE != 0
         var raws : array<VkCommandBuffer>
         raws |> reserve(KHR_ARMS)
         for (v in range(KHR_ARMS)) {
-            let tile = v == 4 ? 32 : 128   //! the kq tile is 32 x 32
+            if (partial && !khr_arm_clamps(v)) {
+                var none : VkCommandBuffer
+                raws |> push(none)
+                continue
+            }
+            let tile = v == KHR_ARM_KQ ? 32 : 128
             let wgs = ((cnt + tile - 1) / tile) * ((d + tile - 1) / tile)
             var sched : array<uint>
             sched |> resize(4 + wgs)
@@ -1372,30 +1474,18 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
             raws |> push(raw)
         }
         if (prof) {
-            for (v in range(KHR_ARMS)) {
-                if (g_prof_arm == "" || strip(vnames[v]) == g_prof_arm) {
-                    submit_wait(raws[v])
-                }
-            }
-            let which = g_prof_arm == "" ? "all {KHR_ARMS}" : g_prof_arm
-            print("{name}: one submit per arm ({which}), {DISPATCHES} dispatches each\n")
+            khr_prof_submit(name, raws)
         } else {
             var best <- sweep_best_us(raws)
             let last_out = DISPATCHES % 2 == 0 ? yd2 : yd
             var y_ref : array<float>
-            read_back_y(raws[3], last_out, y_bytes, y_ref)
-            var y_arm : array<float>
-            for (v in range(KHR_ARMS)) {
-                let tf = flop / (best[v] * 1000000.0lf)
-                var tail = "timing-only"
-                if (compared[v]) {
-                    read_back_y(raws[v], last_out, y_bytes, y_arm)
-                    tail = "max rel diff {max_rel_diff(y_arm, y_ref):.5f} vs khr"
-                }
-                print("{name} {vnames[v]}: {best[v] / 1000.0lf} ms/dispatch  {tf} TFLOP/s  {tail}\n")
+            khr_report(name, raws, best, last_out, y_bytes, flop, y_ref)
+            let cpu = khr_cpu_check(wqh, wsuh, xfh, y_ref, d, n, cnt)
+            print("{name} khr vs CPU oracle: {cpu.off} of {cpu.samples} sampled outputs off the cell bar, max |diff| {cpu.max_abs:.5f}\n")
+            if (cpu.off != 0) {
+                g_probe_exit = 1
             }
             delete y_ref
-            delete y_arm
             delete best
         }
         delete raws
@@ -2596,6 +2686,7 @@ def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear 
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape dispatcher
+    g_probe_exit = 1   //! every early return below is a run with no result row; the sweeps clear it
     if (!ensure_q8_batch_cls()) {
         print("no Vulkan device\n")
         return
@@ -2628,6 +2719,17 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             g_prof_arm = slice(a, 8)
         }
     }
+    if (only == "khrprof" && g_prof_arm != "") {
+        var known = false
+        for (vn in KHR_ARM_NAMES) {
+            known = known || strip(vn) == g_prof_arm
+        }
+        if (!known) {
+            print("khrprof: no arm named '{g_prof_arm}' - the arms are {KHR_ARM_NAMES}\n")
+            return
+        }
+    }
+    g_probe_exit = 0
     if (only == "cm2:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
@@ -2726,6 +2828,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_khr_shape("q4k gate", 9728, 2560, 512)
         run_khr_shape("q4k down", 2560, 9728, 512)
         run_khr_shape("q4k q/wo", 4096, 2560, 512)
+        run_khr_shape("q4k gate 300", 9728, 2560, 300)   //! a partial window: the last token tile takes the edge store
         return
     }
     if (only == "khrprof") {
@@ -2767,6 +2870,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
 }
 
 [export]
-def main {
+def main : int {
     run_probe()
+    return g_probe_exit
 }

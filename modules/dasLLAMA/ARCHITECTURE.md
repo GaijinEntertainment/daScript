@@ -48,12 +48,14 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i, 2.2u-2.2v, 2.2aa: the Metal prefill driver's
   GEMM form ladder, dev-W knee map, attention slab, MoE bucket rail, chunked submission, the
   f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm scaffold.
-- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j, 2.2p, 2.2ab: the Vulkan resident driver's prefill
-  chain and byte stores - the prefill window chain, the Q8 requant byte store, and the decode
-  GEMV family's grid codebook buffer.
-- `ARCHITECTURE_GPU_VULKAN_GEMM.md` - sec.2.2k-2.2m, 2.2q: the cooperative-matrix tiles the
-  Vulkan tier's GEMMs run on - the cm2 decode lanes, the tile pick and the coopmat mode ladder,
-  the class-pipeline build seat, and the MoE expert chain on those tiles.
+- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad: the Vulkan resident
+  driver's prefill chain and byte stores - the prefill window chain, the Q8 requant byte store,
+  the decode GEMV family's grid codebook buffer, the tile probe's shared descriptor set layout,
+  and the recurrent block of the prefill window.
+- `ARCHITECTURE_GPU_VULKAN_GEMM.md` - sec.2.2k-2.2m, 2.2q, 2.2ae: the cooperative-matrix tiles
+  the Vulkan tier's GEMMs run on - the cm2 decode lanes, the tile pick and the coopmat mode
+  ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and the KHR arm's
+  hand-staged kq tile.
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - sec.2.2n-2.2o: what a model has to fit on the card
   before the driver runs - the residency plan, and the GPU-slot marks swap that lets one slot
   serve many models.
@@ -65,16 +67,18 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39: the Metal speculative round over the batch driver's
   same-slab verify, the box knob that sets the depth a round drafts, and the kernel
   argument-alignment contract enforced at every dispatch.
-- `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12, 2.18-2.19: kernel
-  shape, caches, lint policy, knobs, coverage, the GPU ramp, the hybrid worker pool, and the
-  MoE region split.
+- `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12, 2.18-2.19, 2.44:
+  kernel shape, caches, lint policy, knobs, coverage, the GPU ramp, the hybrid worker pool, the
+  MoE region split, and the job queue the engine dispatches on.
 - `ARCHITECTURE_MEDIA.md` - sec.2.13-2.16: the padded tower GEMM widths, the family GPU hooks,
   the tower weight lane, and the plain-Model ASR decoders.
-- `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10, 2.20, 2.21, 2.26-2.28, 2.40-2.41, 2.42a: the
-  benchmark rig, the tune gate, the sanctioned instrumentation rails, kernel-race fidelity, the
-  gemv's own tune seat, the CPU kernel bench's fixture conditions, the speculative round's ruler
-  record, the `[tuned]` perm precedence, the mint wall in the sidecar's provenance, and the fat
-  exe's first-start race.
+- `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10, 2.20, 2.40-2.41, 2.42a, 2.45: the benchmark
+  rig, the tune gate, the sanctioned instrumentation rails, the ASR board's GPU row pairs, the
+  `[tuned]` perm precedence, the mint wall in the sidecar's provenance, the fat exe's
+  first-start race, and the speculative round's ruler record.
+- `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - sec.2.21, 2.26-2.27: the instruments that time a
+  kernel away from the served graph - kernel-race fidelity, the gemv's own tune seat, and the
+  CPU kernel bench's fixture conditions.
 - `ARCHITECTURE_CPU_KERNELS.md` - sec.2.22-2.24, 2.42: the sub-block-packed k3/k6 planes, the grid
   formats' panel and row-group decodes, the VBMI symbol lattice, and the tier that selects on the
   target rather than the host.

@@ -2,6 +2,9 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
 
-**A document here that a dasLLAMA change writes - a model board, a kernel census, a ledger of
-that module's work - applies `modules/dasLLAMA/REVIEW_UPSTREAM.md` too.** Its figure and
-reference-build rules bind the rows and readings the document carries.
+**A diff that writes a measured number a dasLLAMA run or its reference build produced into a
+document here applies `modules/dasLLAMA/REVIEW_MEASUREMENT.md` too.** The reference build is the
+third-party engine dasLLAMA measures itself against.
+
+**A diff that writes a reference-build name, or a description of one of its mechanisms, into a
+document here applies `modules/dasLLAMA/REVIEW_UPSTREAM.md` too.**

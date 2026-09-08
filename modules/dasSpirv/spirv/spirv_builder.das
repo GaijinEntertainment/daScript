@@ -253,7 +253,7 @@ def public ensure_coopmat_conversions(var m : SpirvModule) {
     m.type_pool |> insert("cap_cm2_convert", 1u)
 }
 
-[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector")]
 def public ensure_coopmat_decode_vector(var m : SpirvModule) {
     ensure_cooperative_matrix2(m)
     return if ((m.type_pool?["cap_cm2_decvec"] ?? 0u) != 0u)

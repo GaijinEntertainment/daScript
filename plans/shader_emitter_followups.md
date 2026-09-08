@@ -41,7 +41,7 @@ the binding rules in `modules/REVIEW_SHADER_EMITTERS.md`. This file holds what i
    item 42): a hinted loop leaves a `var acc : float[64]` local a Function-storage `OpVariable`
    indexed by the loop counter unless the driver both unrolls and scalarizes, and a 128-accumulator
    block - or a coopmat tile's sixteen accumulator fragments - is writable only as an array.
-   LANDED 2026-09-08 (`modules/dasSpirv/ARCHITECTURE.md` section 3.6): `[unroll_full]` with
+   LANDED 2026-09-08 (`modules/dasSpirv/ARCHITECTURE_COOPMAT.md` section 3.6): `[unroll_full]` with
    literal bounds emits the body once per copy with the induction variable an `OpConstant`, folds
    the integer arithmetic on it so `acc[t * 16 + c]` chains a literal index, and refuses `break`,
    `continue` and a runtime bound; `[unroll]` stays the driver's `Unroll` hint. The spelling is the
@@ -54,3 +54,6 @@ the binding rules in `modules/REVIEW_SHADER_EMITTERS.md`. This file holds what i
    and the first kernel written on it, the KHR coopmat tile's accumulator block (item 42), whose
    device cells are the runtime gate a fixture cannot be.
    Done = the note, and the tile's cells green on the array form.
+   - Measured 2026-09-08 (moved here from `modules/dasSpirv/ARCHITECTURE.md`): the `Unroll` loop
+     control on `coopmatClamp`'s hand-emitted element walk is worth 34.2 TFLOP/s rolled against
+     57.8 unrolled, on the cm2 l-tile min-kernel, RTX 5060 Ti, driver 610.74.

@@ -220,7 +220,7 @@ device-form CPU oracle
 an l/m/s cell in `tests/test_vulkan_kernels.das`. Payoff on the 1B: iq4xs pp512 5161 -> 15334,
 k3 5174 -> 14031 (0.90x / 0.80x llama.cpp's Vulkan, from 0.30x).
 
-The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l, the mm-mode
+The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ae, its first
 paragraph): on the format template a `def override khr_stage16(blk, e0, sbase : uint) : void`
 under `static_if (KHR)` that writes the weight row's 16 values `e0 .. e0 + 16` of block `blk`
 into `khr_ao[sbase .. sbase + 8)` as f16 pairs, reading the plane as words - `wq4[...]` (`uint4`,

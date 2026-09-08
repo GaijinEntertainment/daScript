@@ -617,7 +617,7 @@ class DnBaGemm {
     @workgroup xs : float[528]                 // 16 positions x 32 k, stride 33 (bank-spread)
     @workgroup ws : float[528]                 // 16 rows x 32 k, stride 33
 
-    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
     def run {
         let tid = gl_LocalInvocationID.x
         let ne = 2u * pa.nvh
@@ -4916,6 +4916,7 @@ class template KqCm2BatchT : MoeCmBase {
     //! a KHR stamp's format writes weight row `blk`'s 16 values e0 .. e0 + 16 into khr_ao[sbase .. sbase + 8) as f16 pairs, read from the plane's words; the cm2 stamps never call it
     def abstract khr_stage16(blk, e0, sbase : uint) : void
 
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
     def khr_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the staged k loop and its fast/edge store are one register set
         static_if (KHR) {   // the gated staging arrays exist on the KHR instantiations alone
         let t0 = row0 + xt * BN
@@ -4931,8 +4932,8 @@ class template KqCm2BatchT : MoeCmBase {
         let sbase = srow * KHR_STRIDE + khalf * KHR_KHALF_WORDS
         let wrow_in_d = wrow < pa.d
         let trow_in_cnt = trow < cnt
-        let arow = (sg & 1u) * 64u
-        let bcol0 = (sg >> 1u) * 32u
+        let wrow0 = (sg & 1u) * 64u    //! the subgroup's first weight row of the tile's 128
+        let trow0 = (sg >> 1u) * 32u   //! the subgroup's first token row of the tile's 128
         var acc : coopmatAcc_f16_16x16[8]   //! [r * 2 + c]: weight fragment r against token fragment c
         var k = k0
         while (k < k1) {
@@ -4963,11 +4964,11 @@ class template KqCm2BatchT : MoeCmBase {
                 let ko = uint(ks) * 8u
                 var a : coopmatA_f16_16x16[4]
                 for [unroll_full] (r in range(4)) {
-                    coopmatLoad(a[r], khr_ao, int((arow + uint(r) * 16u) * KHR_STRIDE + ko), int(KHR_STRIDE), 0)
+                    coopmatLoad(a[r], khr_ao, int((wrow0 + uint(r) * 16u) * KHR_STRIDE + ko), int(KHR_STRIDE), 0)
                 }
                 for [unroll_full] (c in range(2)) {
                     var b : coopmatB_f16_16x16
-                    coopmatLoad(b, khr_b, int((bcol0 + uint(c) * 16u) * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                    coopmatLoad(b, khr_b, int((trow0 + uint(c) * 16u) * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
                     for [unroll_full] (r in range(4)) {
                         acc[r * 2 + c] = coopmatMulAdd(a[r], b, acc[r * 2 + c])
                     }
@@ -4977,27 +4978,28 @@ class template KqCm2BatchT : MoeCmBase {
             k += 32u
         }
         let tile_whole = m0 + 128u <= pa.d && xt * BN + BN <= cnt
-        var o : coopmatAcc_f32_16x16
         if (tile_whole) {
-            let yb = ybase + (t0 + bcol0) * pa.d + m0 + arow
+            let yb = ybase + (t0 + trow0) * pa.d + m0 + wrow0
+            var accf32 : coopmatAcc_f32_16x16
             for [unroll_full] (r in range(4)) {
                 for [unroll_full] (c in range(2)) {
-                    coopmatConvert(o, acc[r * 2 + c])
-                    coopmatStore(o, y, int(yb + uint(c) * 16u * pa.d + uint(r) * 16u), int(pa.d), 1)
+                    coopmatConvert(accf32, acc[r * 2 + c])
+                    coopmatStore(accf32, y, int(yb + uint(c) * 16u * pa.d + uint(r) * 16u), int(pa.d), 1)
                 }
             }
         } else {
             let lane = gl_SubgroupInvocationID
             let ob = sg * 256u
+            var accf32 : coopmatAcc_f32_16x16
             for [unroll_full] (r in range(4)) {
                 for [unroll_full] (c in range(2)) {
-                    coopmatConvert(o, acc[r * 2 + c])
-                    coopmatStore(o, khr_ao, int(ob), 16, 0)
+                    coopmatConvert(accf32, acc[r * 2 + c])
+                    coopmatStore(accf32, khr_ao, int(ob), 16, 0)
                     barrier()
                     for (e in range(8)) {
                         let idx = lane * 8u + uint(e)
-                        let mr = m0 + arow + uint(r) * 16u + idx / 16u
-                        let tc = xt * BN + bcol0 + uint(c) * 16u + idx % 16u
+                        let mr = m0 + wrow0 + uint(r) * 16u + idx / 16u
+                        let tc = xt * BN + trow0 + uint(c) * 16u + idx % 16u
                         if (mr < pa.d && tc < cnt) {
                             y[ybase + (row0 + tc) * pa.d + mr] = uint_bits_to_float(khr_ao[ob + idx])
                         }

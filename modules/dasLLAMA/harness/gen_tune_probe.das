@@ -454,7 +454,7 @@ def kq_tile_entry(fmt : int64) : string => fmt == 40l ? "q40q8_tile_gen" : (fmt 
 def kq_gemv_entry(fmt : int64) : string => replace(kq_tile_entry(fmt), "_tile_gen", "_gemv_gen")
 
 //! the gemv's seat among the tile winner's same-layout rows; "" when the tile winner keeps it
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#gemv-seat")]
+[arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#gemv-seat")]
 def private kq_gemv_seat(fmt : int64; winner : int; names : array<string>; vmr : array<int64>; tile, gemv : array<double>) : string {
     var cand <- [for (i in range(length(names))); i; where vmr[i] == vmr[winner] && tile[i] < 1.0e29lf]
     cand |> sort() $(a, b) => tile[a] < tile[b]
@@ -1319,7 +1319,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
 // and the gemv (streamed + hot decode shapes), print the table, and return the tile-best
 // suffix ("" = a gate failed). The kq gemv is nrsplit-independent — same-mr rows share the
 // plane and the gemv shape — so the tile bench decides the family entry.
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#gemv-seat")]
+[arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#gemv-seat")]
 def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var gemv_out : string&) : string { // nolint:STYLE037,STYLE038 — one family race: shared repacked buffers couple gate, bench and the two picks
     // batch shape: fat STREAMING ffn (weights > the L2 budget, multi-token-block walk) — the shape
     // class that carries ~90% of prefill time. The old 2048x512x64 kv-projection probe was L2-hot

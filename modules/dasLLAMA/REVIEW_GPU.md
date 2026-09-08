@@ -1,7 +1,8 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`. Planned work: `followup_metal.md`
+for Metal, `followup_vulkan.md` for Vulkan.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 it.**
@@ -133,26 +134,30 @@ axis - one compile-time choice, such as single/batch, format, or single-pass/chu
 
 **A copy-pasted kernel twin - one of two kernel classes whose bodies differ on one compile-time
 choice - or a kernel split into hand instances where a `static_if` on a `@template_constant`
-serves, is a defect - kernel twins stamp one `class template`, whatever that choice is.** Body divergence is carried by a `@template_constant`, or by an
-overridden method spliced flat at emission.
+serves, is a defect - kernel twins stamp one `class template`, whatever that choice is.** Body
+divergence is carried by a `@template_constant`, or by an overridden method spliced flat at
+emission.
 
-**A stamped kernel family - a class template's stamps, or a base shell's `[vk_dispatch]` /
-`[metal_dispatch]` leaves - that binds a real buffer to a field a stamp's own body never reads
-- a dummy bind that exists only to fill the slot - is a defect: gate the field with
-`@template_gate` where a template constant decides it, and where the family shares one set
-layout on purpose, name that case in `ARCHITECTURE_GPU.md` (Metal) or
-`ARCHITECTURE_GPU_VULKAN.md` (Vulkan).** A field the body reads
-under a run-time flag is read, and its unread arm binds a placeholder the kernel never touches.
+**A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
+base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
+binding whose fields its compiled body, inherited code included, never reads - a dummy bind that
+exists only to fill the slot - is a defect: gate the field with `@template_gate` where a
+template constant decides it, and where the family shares one set layout on purpose, name that
+case in `ARCHITECTURE_GPU.md` sec.1.5's ledgered kernel-binding asymmetries (Metal) or
+`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ac (Vulkan).** Several fields, declared in the stamp or in
+the shell, may share one binding - `@role = "alias"` marks such a view - so the binding counts
+as read when the compiled body reads any of them. A field the body reads under a run-time flag
+is read, and its unread arm binds a placeholder the kernel never touches.
 
 **A diff that forks a kernel class out of a shared template shows that the bodies no longer
 differ on the compile-time choice the template carried, and names that choice in the
 surviving template's comment.**
 
-**A `[metal_dispatch]` / `[vk_dispatch]` field whose memory is load-once - a model plane, or
-an `upload_region` upload never written after arming - is a defect unless it carries
-`@role = "weight"`, even when the kernel compiles and passes parity.** A field the kernel reads
-under a run-time flag takes the role of its read arm; the placeholder its unread arm binds is
-never read, so its lifetime does not decide the role.
+**A `[metal_dispatch]` / `[vk_dispatch]` binding whose memory is load-once - a model plane, or
+an `upload_region` upload never written after arming - is a defect unless a field at that
+binding carries `@role = "weight"`, even when the kernel compiles and passes parity.** A field
+the kernel reads under a run-time flag takes the role of its read arm; the placeholder its
+unread arm binds is never read, so its lifetime does not decide the role.
 
 **`@role = "weight"` on per-encode data the kernel reads - a pooled buffer the host refills
 each encode - is a defect; a per-encode field either omits `@role` or names the access its body
@@ -170,9 +175,9 @@ an arm that forces the device mode the class is gated on; a class no census mode
 a census model that does.** A Vulkan class never joins `CENSUS_NEVER_DISPATCHED`, which takes
 Metal classes only.
 
-**Every `@ssbo` field of a new kernel class declared in `dasllama/` carries at least one of the
-annotations its `[metal_dispatch]` / `[vk_dispatch]` builder reads - `@binding`, `@role`,
-`@off`, `@default`.** A field carrying none of them is dropped from the bind list with no error.
+**Weakening the `[metal_dispatch]` / `[vk_dispatch]` lens's refusal to compile an `@ssbo` field
+with no `@binding`, or an `@ssbo` field the kernel body never accesses that declares no `@role`,
+is a defect.**
 
 **Weakening `[metal_dispatch]`'s refusal to compile a `@workgroup` field with no `tgmem=` spec,
 or its gate `test_lens_tgmem_gate` (`tests/test_metal_misc_kernels.das`), is a defect.**
@@ -225,8 +230,8 @@ backend serving the same path faster or slower is not such a change; a seat of t
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
 on one q8 and one kq (K-quant) model the changed path serves.** That code is anything a
-served GPU decode or prefill call executes OR that selects what it
-executes - a driver, a kernel class it dispatches, that class's builder, a servability gate, a
+served GPU decode or prefill call executes OR that selects what it executes - a driver, a
+kernel class it dispatches, that class's builder, a servability gate, a
 race that picks which kernel serves, a forwarder default, a weight-region or residency path,
 the tier forwarders and the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`)
 the call routes through; never the bake paths, never a comment.

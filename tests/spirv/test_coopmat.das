@@ -102,12 +102,12 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
     }
     t |> run("an ARRAY of accumulator tiles under [unroll_full]: one OpTypeArray, every element chain a constant") <| @(t : T?) {
         var words <- coopmat_arr_words()
-        t |> success(count_op(words, SpvOp.TypeArray) == 1, "one OpTypeArray (the tile array; the ssbos are runtime arrays)")
+        t |> equal(count_op(words, SpvOp.TypeArray), 1, "one OpTypeArray (the tile array; the ssbos are runtime arrays)")
         t |> equal(count_op(words, SpvOp.LoopMerge), 0, "no loop construct survives the unroll")
         t |> equal(count_op(words, SpvOp.CooperativeMatrixMulAddKHR), 4, "four OpCooperativeMatrixMulAddKHR, one per copy")
         t |> equal(count_op(words, SpvOp.FConvert), 4, "four OpFConvert widenings")
         t |> equal(count_op(words, SpvOp.CooperativeMatrixStoreKHR), 4, "four stores")
-        let fc = function_storage_chain_indices(words)
+        let fc = count_function_storage_chains(words)
         t |> equal(fc.chains, 12, "twelve element chains into the tile array (read, write and convert per copy)")
         t |> equal(fc.dynamic_indices, 0, "every chain into the tile array indexes with an OpConstant")
         t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_6, "SPIR-V header version 1.6")

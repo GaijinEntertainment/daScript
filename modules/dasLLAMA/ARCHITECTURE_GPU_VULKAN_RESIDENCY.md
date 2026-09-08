@@ -3,9 +3,9 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
 document carries sections 2.2n-2.2o: the residency plan that sizes a whole model before a byte
 uploads, and the marks swap that lets one GPU slot serve many models. The prefill chain and byte
-stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p
-and 2.2ab, and the cooperative-matrix GEMM tiles under them are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m and 2.2q; the per-op tier's decode era is
+stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p,
+2.2ab, 2.2ac and 2.2ad, and the cooperative-matrix GEMM tiles under them are
+`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the per-op tier's decode era is
 `ARCHITECTURE_GPU_VULKAN_DECODE.md` sections 2.2r-2.2v. The GPU backend role table these
 sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 

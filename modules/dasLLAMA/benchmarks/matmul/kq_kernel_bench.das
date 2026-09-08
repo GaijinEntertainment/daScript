@@ -203,7 +203,7 @@ def arena_base(var p : Planes) : int64 {
     }
 }
 
-[arch(at = "../../ARCHITECTURE_MEASUREMENT.md#cpu-kernel-bench-fixture")]
+[arch(at = "../../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#cpu-kernel-bench-fixture")]
 def fill_planes(var p : Planes; sh : PlaneShape; n, d, ntok : int64) {
     var end = 0l
     p.gemvKq = next_plane(end, d * sh.gemvW_row, 0)
@@ -307,7 +307,7 @@ def team_gemv_mx4(fn : GemvMx4Fn; var yp : float?; wn, we : uint8 const?; xqp : 
 
 //! the team arm's interleaved timing: the block dispatches row `row` the engine's way and every lane adds its
 //! call time to laneP[slot]; the row keeps the wall (best, median) and the lanes' fastest and slowest sums
-[arch(at = "../../ARCHITECTURE_MEASUREMENT.md#cpu-kernel-bench-fixture")]
+[arch(at = "../../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#cpu-kernel-bench-fixture")]
 def time_rows_team(var stats : array<RowStat>; rounds : int; blk : block<(row : int; var laneP : int64?) : void>) {
     var laneUs : array<int64>
     laneUs |> resize(get_total_hw_jobs() + 1)
@@ -384,7 +384,7 @@ def perm_wanted(spec, suffix : string) : bool {
 }
 
 //! interleaved timing: round r calls every selected row once before round r + 1 starts
-[arch(at = "../../ARCHITECTURE_MEASUREMENT.md#cpu-kernel-bench-fixture")]
+[arch(at = "../../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#cpu-kernel-bench-fixture")]
 def time_rows(var stats : array<RowStat>; rounds : int; blk : block<(row : int) : void>) {
     for (row in range(length(stats))) {
         stats[row].us |> reserve(rounds)
