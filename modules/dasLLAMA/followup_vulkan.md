@@ -842,7 +842,21 @@ module) is independent and can land any time - it is pure structure.
     cells hold 0 of 89600 off, the hybrid parity file 10 of 10 on the KHR arm, every other kernel's
     SPIR-V is byte-identical, and the board's KHR rows read: the 4B Q4_K_M 3051 -> 4764 t/s (1.13x of
     llama.cpp's 4221), the 27B UD-IQ4_XS 395 -> 741 under a 14000 MB pin (1.10x of 675), decode
-    unchanged (116.8 and 23.2). Still open under this item: the no-coopmat arm
+    unchanged (116.8 and 23.2). Beside it the same day, the cm2 k4 l tile on the same shapes and the
+    same un-barriered submit (`-- k4`, the `k4lnb` rows): 59.8 / 66.0 / 62.0 - the KHR tile reads 90%
+    of the NV_coopmat2 tile's rate, and the 4B's end-to-end ratio (4764 against 5150) reads 92%; the
+    cm2 tile's own levers are the driver's (decode-in-load, its tiling), so the word stage is not a
+    cm2 change. THE ONE ROW UNDER PARITY (the 9B UD-Q5_K_XL at 1788 against 2098) was a gate, not
+    the tile: the recurrent head decided its f16 feed per LAYER over qkv, z and out together, and
+    that file's out plane is Q8_0 - a format the KHR arm's f16 feed does not admit - so every
+    recurrent layer's K-quant qkv and z fell to the sdot4 tile (`vk_rdpf dn` read qkv 72.9 ms and z
+    35.1 ms per window at 11 TFLOP/s against 19.7 / 10.4 on the Q5_K_M file, whose out plane is
+    Q5_K). The x feed (qkv, z) and the o feed (out) are now decided apart, each by the planes that
+    read it (`pf_dnx6` / `pf_dno6`; the attention and FFN heads already split so): qkv 19.7 ms, z
+    10.5, the row 2531 / 56.66 (1.21x / 0.98x). The witness is the hybrid parity file's mixed twin
+    (`Qwen3.5-0.8B-Q4_K_M-q8out.gguf`, a Q8_0 out plane beside K-quant qkv/z) holding, on a
+    coopmat feed, that the prefill never requantized the block input to Q8_K. Still open under this
+    item: the no-coopmat arm
     (`DASLLAMA_COOPMAT=sdot4 DASLLAMA_VK_FA=0` against `GGML_VK_DISABLE_COOPMAT=1`, where llama.cpp's
     integer MMQ tile runs and the prototypes above are the road), the wave64 twin of the KHR tile,
     and the real-hardware pass.

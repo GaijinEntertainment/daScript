@@ -2728,6 +2728,21 @@ def public vk_kernel_coverage() : table<string; int64> {
     return <- out
 }
 
+//! One kernel's dispatch count under its census name - a class kernel's is its SPIR-V name, `<vk_dispatch name>_spv`.
+//! A name no kernel seeded panics, so a misspelt key cannot read as a zero count.
+def public vk_kernel_dispatches(kernel : string) : int64 {
+    if (!key_exists(g_kernel_access, kernel)) {
+        panic("dasLLAMA vulkan tier: no seeded kernel named '{kernel}' in the coverage census")
+    }
+    var n = 0l
+    for (k, c in keys(g_vk_kcov), values(g_vk_kcov)) {
+        if ((g_pipe_names?[k] ?? "") == kernel) {
+            n += c
+        }
+    }
+    return n
+}
+
 def public vk_kernel_coverage_reset {
     g_vk_kcov |> clear()
 }

@@ -99,8 +99,12 @@ Three consequences the code is shaped around:
   quantized x; gate/up share another. Resident arming classifies each member's consumer form
   and DECLINES a mixed group rather than serving one member wrong scales. The prefill f16 feed
   answers the same question one step further: one activation buffer serves every GEMM of a
-  group, so the f16 (cm2 decode-in-load) form engages only when EVERY member of the group is
-  cm2-servable - one member on the quant route pins its whole group to the quant feed.
+  group, so the f16 form engages only when EVERY member of the group is tile-servable (the cm2
+  decode-in-load tile, or the KHR kq tile) - one member on the quant route pins its whole group
+  to the quant feed. A group is exactly the GEMMs that read one buffer, never a layer: the
+  recurrent head's qkv and z read the block input and out reads the scan's o rows, so those are
+  two groups with two decisions, and a Q8_0 out plane beside K-quant qkv/z leaves the pair on
+  the tiles.
 
 ### 2.8 Every program root declares its stack budget and its prefill intent
 

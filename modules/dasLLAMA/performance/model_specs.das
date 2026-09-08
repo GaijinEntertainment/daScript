@@ -308,6 +308,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // out plane q4_K - the step leaves the o row f32 for the superblock out plane's requant
         ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M.gguf",
             recipe = "llama-quantize --allow-requantize Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M.gguf Q4_K_M"),
+        // the mixed twin: the same mixture with the deltanet out plane held at Q8_0 (the unsloth UD
+        // files' shape), so the prefill's x feed (qkv, z) and o feed (out) part ways under the KHR arm
+        ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M-q8out.gguf",
+            recipe = "llama-quantize --allow-requantize --tensor-type ssm_out=q8_0 Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M-q8out.gguf Q4_K_M"),
         // the 9B hybrid with its in-file MTP block, the whole-model driver's parity carrier
         // (head 256 gated attention, partial rope, Q5_K/Q6_K deltanet planes) and the vulkan
         // serving census's head-256 row; the local name carries the MTP tag the release's does not

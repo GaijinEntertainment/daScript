@@ -42,7 +42,7 @@ final PR body of the arc quotes it.
 | 11 | Qwen3.5-4B-Q8_0 | 4.48 | qwen35 hybrid | works (fixed: the mirror's binding cap on a hybrid) | 5087 / 74.37 | 4120 / 74.78 | 1.23 / 0.99 | 4562 / 74.74 | 3657 / 74.46 |
 | 12 | Qwen3.5-9B-IQ4_XS | 5.47 | qwen35 hybrid | works (re-measured no pin, ctx 262143); KHR re-measured on the word-stage kq tile (738 -> 2560) | 2700 / 62.94 | 2794 / 66.82 | 0.97 / 0.94 | 2560 / 62.70 | 2199 / 66.26 |
 | 13 | Qwen3.5-9B-MTP-Q5_K_M | 6.64 | qwen35 hybrid | works; KHR re-measured on the word-stage kq tile (728 -> 2525) | 2743 / 57.29 | 2752 / 59.67 | 1.00 / 0.96 | 2525 / 57.33 | 2102 / 59.41 |
-| 14 | Qwen3.5-9B-MTP-UD-Q5_K_XL | 6.87 | qwen35 hybrid | works (re-measured no pin; pp at 10 reps - the 5-rep run drifted, see notes); KHR re-measured on the word-stage kq tile (767 -> 1788): the one KHR row under parity - see notes | 2698 / 56.40 | 2783 / 58.12 | 0.97 / 0.97 | 1788 / 56.53 | 2098 / 57.86 |
+| 14 | Qwen3.5-9B-MTP-UD-Q5_K_XL | 6.87 | qwen35 hybrid | works (re-measured no pin; pp at 10 reps - the 5-rep run drifted, see notes); KHR re-measured on the word-stage kq tile (767 -> 1788 -> 2531): the 1788 was a feed gate, not the tile - the recurrent head decided its f16 feed per layer and this file's Q8_0 out plane sent the K-quant qkv/z to the sdot4 tile (see notes 14-KHR) | 2698 / 56.40 | 2783 / 58.12 | 0.97 / 0.97 | 2530.6 / 56.66 | 2098 / 57.86 |
 | 15 | Qwen3.5-9B-Q8_0 | 9.53 | qwen35 hybrid | works (re-measured no pin, ctx 174167) | 3227 / 43.82 | 2799 / 43.99 | 1.15 / 1.00 | 2140 / 43.58 | 1871 / 43.95 |
 | 16 | Qwen3.5-9B-MTP-Q8_0 | 9.79 | qwen35 hybrid | works | 3233 / 43.82 | 2797 / 44.03 | 1.16 / 1.00 | 2150 / 43.62 | 1873 / 44.00 |
 | 17 | Qwen3.8-27B.i1-IQ3_S | 12.60 | qwen35 hybrid | works (re-measured no pin, ctx 30623; the pinned run read 752 / 24.95); KHR re-measured on the word-stage kq tile under the 14000 MB pin (238.9 -> 736.7) | 802.9 / 27.51 | 807.9 / 24.67 | 0.99 / 1.12 | 736.7 / 27.35 | 650.6 / 24.65 |
@@ -50,7 +50,7 @@ final PR body of the arc quotes it.
 | 19 | Qwen3.8-27B-UD-IQ4_XS | 14.25 | qwen35 hybrid | works, no pin (cm2 columns); KHR re-measured on the word-stage kq tile under `DASLLAMA_GPU_VRAM_MB=14000` - the desktop holds 1.1 GB, which leaves the no-pin plan's KV room under the 2048-position minimum (`followup_vulkan.md` item 42): 221 -> 395 -> 741 | 865.4 / 23.51 | 814.6 / 24.13 | 1.06 / 0.97 | 740.7 / 23.24 | 675.2 / 24.07 |
 | 20 | Qwen1.5-MoE-A2.7B-Chat.Q8_0 | 15.23 | qwen2moe | works (fixed: the per-op attention chain's bias arm + a 2048-wide kv cap); LAGS on the per-op MoE prefill structure and a span without a shared-expert arm (see notes; first run 390.2 / 29.31 = 0.11 / 0.56) | 506.1 / 39.04 | 3507 / 52.15 | 0.14 / 0.75 | 525.5 / 39.94 | 2185 / 51.84 |
 | 21 | Qwen3-30B-A3B-Instruct-2507-Q4_K_M | 18.56 | qwen3moe | works on the per-op tier: experts of layers [13..48) resident, [0..13) streamed; llama.cpp -ngl 99 OOMs, its cells are the same-split offload (experts 0-12 on the CPU; -ngl 36 in the notes); KHR re-measured on the word-stage kq tile (499.9 -> 712.0, the run's split [14..48) resident) | 749.8 / 66.45 | 612.5 / 42.24 | 1.22 / 1.57 | 712.0 / 64.53 | 588.6 / 42.49 |
-| 22 | Qwen3-Coder-30B-A3B-Instruct-Q4_K_M | 18.56 | qwen3moe | works on the per-op tier like row 21 (see notes 22 and 24 for its cm2 and first KHR rows); KHR prefill re-measured on the word-stage kq tile (494.3 -> 764.1); the same run's decode read 33.61 against 63.60 before and row 21's 64.53 in the same chain - the re-run met the lost GPU and is owed after the reboot | 745.3 / 65.50 | 608.8 / 40.65 | 1.22 / 1.61 | 764.1 / 33.61 | 572.6 / 41.81 |
+| 22 | Qwen3-Coder-30B-A3B-Instruct-Q4_K_M | 18.56 | qwen3moe | works on the per-op tier like row 21 (see notes 22 and 24 for its cm2 and first KHR rows); KHR re-measured on the word-stage kq tile (494.3 -> 764.1 +-13.4, then 721.8 +-6.2 on the re-run after the reboot, the row's figure); the first run's decode read 33.61 against 63.60 before - the re-run's 64.23 beside row 21's 64.53 says that reading was the box, not the tile (the expert split was [14..48) resident both times) | 745.3 / 65.50 | 608.8 / 40.65 | 1.22 / 1.61 | 721.8 / 64.23 | 572.6 / 41.81 |
 | 23 | Qwen3.8-27B-Q4_K_M | 18.97 | qwen35 hybrid | does not fit 16 GB on either engine (llama.cpp OOM) | | | | | |
 | 24 | Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | 22.13 | qwen3moe hybrid | works on the per-op tier: deltanet triples of 30 layers, attention quads of 10, experts of [16..40) resident, [0..16) streamed; llama.cpp -ngl 99 OOMs, its cells = the same-split offload (experts 0-15 on the CPU; -ngl 24 in the notes); KHR re-measured on the word-stage kq tile (422.3 -> 665.4; that run's split [17..40) resident) | 657.6 / 36.39 | 414.1 / 36.76 | 1.59 / 0.99 | 665.4 / 36.86 | 393.4 / 37.06 |
 | 25 | Qwen3-Coder-30B-A3B-Instruct-Q8_0 | 32.48 | qwen3moe | works on the per-op tier: attention quads of 48 layers, experts of [29..48) resident, [0..29) streamed; llama.cpp cells = the same-split offload (experts 0-28 on the CPU; -ngl 20 read 201.0 / 17.38) | 279.1 / 30.64 | 210.5 / 22.27 | 1.33 / 1.38 | 276.8 / 29.82 | 202.7 / 22.65 |
@@ -112,6 +112,20 @@ under either sampler run. Open: a one-shot stall of ~0.4 s with a paging-shaped 
 interfering GPU client, or the memory manager taking the idle gap. From row 20 on the rig samples
 clocks, utilization and memory.used at 100 ms beside every run of ours, so the next occurrence is
 caught. Rows 14 and 18 carry their flat repeat runs.
+
+### 14-KHR. The one KHR row under parity, and why
+On the word-stage kq tile every K-quant row went past llama.cpp's KHR arm except this file: 1788
+against 2098 while its Q5_K_M sibling (row 13) read 2525. The per-role profile (`DASLLAMA_GPU_PROF=1`,
+`vk_rdpf dn`) put the difference in two roles: the recurrent layers' qkv 72.9 ms and z 35.1 ms per
+512-row window against 19.7 / 10.4 on the Q5_K_M file, the same Q6_K format and the same shape, and
+the rates (11 TFLOP/s) were the sdot4 tile's. The cause was the feed gate: the recurrent head decided
+its f16 feed per LAYER over the qkv, z and out planes together, and this file's out plane is Q8_0
+(unsloth's UD mixture; the Q5_K_M's is Q5_K), a format the KHR arm's f16 feed does not admit - so
+every recurrent layer's K-quant qkv and z pair fell to the Q8_K quant route. The x feed (qkv, z)
+and the o feed (out) are now decided apart, each by the planes that read it, as the attention and
+FFN heads already were: qkv 19.7 ms, z 10.5, the row 2530.6 / 56.66 (1.21x / 0.98x). Under cm2 the
+gate never showed (its feed admits q8). The witness is the hybrid parity file's mixed twin
+(`Qwen3.5-0.8B-Q4_K_M-q8out.gguf`, `followup_vulkan.md` item 42).
 
 ### 11. Qwen3.5-4B-Q8_0
 First run: the resident driver declined at the device prepare - "KV mirror (8 x 262144 x 1024)

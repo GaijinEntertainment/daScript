@@ -73,10 +73,10 @@ the copies carry a `//!` naming this section, and the placement is a driver-defe
 not a chain-shape preference.
 
 **A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
-shared.** Per window: the block's feed (f16 rows when qkv, z and out all admit the cm2 tiles, else the
-q8 image), the qkv and z GEMMs into the window planes (the planes in their file formats - the loader tags a dense hybrid's deltanet planes natively when this driver will be attempted, so a Q5_K/Q6_K file rides the k5/k6 tiles; the out plane is q8, the step's o row feeds it so), the beta and alpha rows into the layer's smalls
+shared.** Per window: the x feed (f16 rows when the qkv and z planes both admit the coopmat tiles, else the
+quant image - the out plane has no say, it reads the o rows), the qkv and z GEMMs into the window planes (the planes in their file formats - the loader tags a dense hybrid's deltanet planes natively when this driver will be attempted, so a Q5_K/Q6_K file rides the k5/k6 tiles), the beta and alpha rows into the layer's smalls
 (f32 arm: a 16-position tile GEMM over the `[beta ; alpha]` rows, its grid position tiles by 16-output groups with one output per invocation, so a layer of only `2 x nvh` rows - 64 on the 9B - still fills the card; q8 arm: two q8 GEMMs and copies), the
-conv reading the layer's ring image, the sequential scan over the layer's own state slot, the o rows' feed (f16 or requant) and the out GEMM into `pf_xb2`. The
+conv reading the layer's ring image, the sequential scan over the layer's own state slot, the o rows' feed (f16 when the out plane alone admits the tiles, else requant - the two feeds are decided apart, each by the planes that read it, so a K-quant file whose out plane is Q8_0 keeps its qkv and z GEMMs on the tiles under the KHR arm) and the out GEMM into `pf_xb2`. The
 scan is the plain per-token delta rule: a four-subgroup workgroup per (head, column group), a lane keeps
 16 state rows of two adjacent columns in registers (two independent chains that interleave), the token's k and q rows are staged once per workgroup in
 shared and feed both columns, the tokens loop inside the kernel with two shuffle reductions per column each, the raw o rows land in the tier's workspace for the gated out-norm's one workgroup per position.

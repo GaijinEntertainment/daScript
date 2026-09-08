@@ -344,11 +344,17 @@ without the model or the armed tier. The K-quant twin (`Qwen3.5-0.8B-Q4_K_M.gguf
 the Q8_0 by the recipe its `../performance/model_specs.das` row carries) runs the same one-window
 and two-window cells with the deltanet qkv (q6_K), z (q4_K) and out (q4_K) planes in their file
 formats on the driver, asserts the loader kept them so, and holds a 6% bar (the K-quant chain's device-vs-CPU
-noise runs near double the Q8 file's, flat across steps). Both files make their sessions on the
+noise runs near double the Q8 file's, flat across steps; 10% on the quant feed - `DASLLAMA_COOPMAT=sdot4`, where
+no coopmat tile serves the planes and the prefill's activations ride Q8_K). Both files make their sessions on the
 mirror codec the box arms, so under `DASLLAMA_VK_KV32=1` the Q8 cells run on the f32 mirrors and
 the K-quant cells skip (their bar is calibrated on the f16 mirror). Run under `DASLLAMA_COOPMAT=mm` the
 same file is the KHR arm's end-to-end gate: the K-quant twin's planes then prefill on the KHR kq
-tile (mode 3), and the bars hold there too.
+tile (mode 3), and the bars hold there too. The mixed twin (`Qwen3.5-0.8B-Q4_K_M-q8out.gguf`, the
+same recipe with `--tensor-type ssm_out=q8_0` - the unsloth UD files' shape) runs the two K-quant
+cells with the out plane Q8_0 beside K-quant qkv/z: the one fixture where a recurrent layer's x feed
+and o feed part ways, and the cells hold that its prefill never requantized the block input to Q8_K
+where a coopmat feed serves the K-quant planes (the KHR arm's routing witness - a per-layer feed
+decision would send qkv/z to the sdot4 tile for the out plane's sake).
 `test_gpu_resident_qwen2.das` - stocked suite; the whole-model resident driver on a qwen2
 (Qwen2.5-0.5B-Instruct-Q8_0, `DASLLAMA_GPU=1`): the q/k/v projection bias folded into the rope
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
