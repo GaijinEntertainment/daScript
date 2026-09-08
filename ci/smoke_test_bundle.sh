@@ -201,6 +201,21 @@ for entry in "${SHIPPED_EXE_TESTS[@]}"; do
 done
 
 echo
+echo "Shipped headers' includes:"
+# A shipped header that includes a file the install rule leaves out compiles in the tree and
+# fails in every SDK consumer; each pair below is a shipped header and a file it includes.
+for pair in "include/daScript/simulate/aot_builtin_ast.h:include/daScript/builtin/ast_gen.inc"; do
+    header="${pair%%:*}"; inc="${pair##*:}"
+    if [[ -f "$BUNDLE/$header" && -f "$BUNDLE/$inc" ]]; then
+        printf '  %-52s OK\n' "$inc"
+        PASS=$((PASS + 1))
+    else
+        printf '  %-52s MISSING (included by %s)\n' "$inc" "$header"
+        FAIL=$((FAIL + 1))
+    fi
+done
+
+echo
 echo "Runtime launch:"
 run_check "mcp.das (empty stdin)" bash -c \
     "'$DASLANG' utils/mcp/main.das < /dev/null"
