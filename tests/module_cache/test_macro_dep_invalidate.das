@@ -5,13 +5,7 @@ require dastest/testing_boost public
 
 require strings
 require daslib/fio
-
-//! the daslang binary to spawn - dastest runs as `daslang(.exe) dastest/dastest.das ...`,
-//! so argv[0] is the interpreter, not the test script
-def das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
+require _common
 
 //! child env rides the command string (the portable set/prefix split popen_argv cannot carry)
 def env_run(dep, cmd : string; var output : string&) : int {
@@ -22,15 +16,6 @@ def env_run(dep, cmd : string; var output : string&) : int {
             output = fread(f)
         }
     }))
-}
-
-def report_child(t : T?; phase : string; rc : int; out : string; marker : string) : bool {
-    let ok = rc == 0 && find(out, marker) >= 0
-    if (!ok) {
-        t |> failure("{phase} child: rc={rc}, marker '{marker}' {find(out, marker) >= 0 ? "found" : "MISSING"}")
-        t |> failure("{phase} child output follows:\n{out}")
-    }
-    return ok
 }
 
 //! the module cache must gate a macro-registered file input by CONTENT, not mtime: a tune

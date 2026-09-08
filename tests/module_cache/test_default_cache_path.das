@@ -7,13 +7,7 @@ require strings
 require math
 require daslib/fio
 require daslib/strings_boost
-
-//! the daslang binary to spawn - dastest runs as `daslang(.exe) dastest/dastest.das ...`,
-//! so argv[0] is the interpreter, not the test script
-def das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
+require _common
 
 //! the child shares dastest's cwd (argv[0] is a cwd-relative interpreter path), so the default
 //! cache lands in this tree's own .jitted_scripts/module_cache - the test removes what it wrote.
@@ -27,15 +21,6 @@ def run(cmd : string; var output : string&) : int {
 }
 
 let CACHE_DIR = ".jitted_scripts/module_cache"
-
-def report_child(t : T?; phase : string; rc : int; out : string; marker : string) : bool {
-    let ok = rc == 0 && find(out, marker) >= 0
-    if (!ok) {
-        t |> failure("{phase} child: rc={rc}, marker '{marker}' {find(out, marker) >= 0 ? "found" : "MISSING"}")
-        t |> failure("{phase} child output follows:\n{out}")
-    }
-    return ok
-}
 
 //! the cache files written for one root: `<CACHE_DIR>/<stem>-<hash>.dascache`
 def cache_files(stem : string) : int {
