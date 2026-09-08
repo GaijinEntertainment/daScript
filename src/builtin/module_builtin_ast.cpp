@@ -792,7 +792,7 @@ namespace das {
         ok = true;
         das::Context ctx;
         auto env = daScriptEnvironment::getBound();
-        ctx.thisProgram = env ? env->g_Program.get() : nullptr;  // the expression's program owns its symbol tables (src/ast/ARCHITECTURE.md sec.4)
+        ctx.thisProgram = env ? env->g_Program.get() : nullptr;  // src/ast/ARCHITECTURE.md sec.4
         auto node = simulateExpression(ctx, expr);
         ctx.restart();
         vec4f result = ctx.evalWithCatch(node);

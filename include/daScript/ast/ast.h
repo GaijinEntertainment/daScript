@@ -1667,7 +1667,7 @@ namespace das
         ModuleGroup *               thisModuleGroup = nullptr;
         int                         totalFunctions = 0;
         int                         totalVariables = 0;
-        // program-scoped symbol state on the shared AST objects (ARCHITECTURE.md sec.4)
+        // src/ast/ARCHITECTURE.md sec.4
         das_hash_set<const Function *>          usedFunctions;
         das_hash_set<const Variable *>          usedVariables;
         das_hash_map<const Function *, int32_t> functionIndices;

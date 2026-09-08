@@ -44,7 +44,7 @@ gate is a function of the candidates, the emitter version and the target, all of
 key folds, so one key still names one DLL. What the hit path gains is that it never runs the
 gate: `probe_dll` binds a candidate the DLL holds under a matching hash, leaves one the DLL
 lacks to the interpreter (the gate dropped it at codegen), and calls a candidate held under
-another hash, or a `[no_jit]` function the DLL holds, a miss. `LLVM_JIT_CODEGEN_VERSION` 0x78
+another hash, or a `[no_jit]` function the DLL holds, a miss. `LLVM_JIT_CODEGEN_VERSION` 0x79
 is the key's change of shape.
 
 The candidate set reads the CONTEXT, not the `used` flag alone: `get_function_by_mangled_name_hash`

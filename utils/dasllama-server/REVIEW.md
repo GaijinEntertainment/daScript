@@ -41,9 +41,9 @@ the route that answers with that key first.**
 the same change.** The row is where a consumer learns the key exists.
 
 **A reference in this folder to a symbol of a module the folder requires only under
-`require ?llvm` (`dasllama_exchange`, `llvm_tune`) outside a
-`static_if (typeinfo module_exists(<that module>))` arm is a defect** - the unguarded reference
-fails the compile of a build without dasLLVM.
+`require ?llvm` or `require [tune_framework]` (`dasllama_exchange`, `llvm_tune`, `llvm_code`)
+outside a `static_if (typeinfo module_exists(<that module>))` arm is a defect** - the unguarded
+reference fails the compile of a build without dasLLVM.
 
 **A function signature in this folder never names a type from one of those modules - those
 types stay inside the guarded arm, and plain types cross the boundary.** A signature cannot sit

@@ -9,9 +9,7 @@ module linq_fold_xml shared public
 //! linq_fold XML source adapter: ``XmlAdapter`` + ``extract_xml_source``. Lets ``_fold`` over a
 //! ``from_xml_node(node[, name], type<Row>)`` chain emit an inlined DOM child-element walk (mirroring
 //! ``PUGIXML_boost``'s generator body) instead of driving the generator + an intermediate array.
-//! Optional companion to ``daslib/linq_fold``: a member of the ``linq_fold_source`` group, joined
-//! from the pugixml descriptor, registering its recognizer through ``register_linq_fold_source``.
-//! See daslib/ARCHITECTURE_LINQ.md sec. 37.
+//! Optional companion to ``daslib/linq_fold``. See daslib/ARCHITECTURE_LINQ.md sec. 37.
 
 require pugixml public
 require pugixml/PUGIXML_boost   // nolint:STYLE030 — build_xml_row / read_xml_field / peek_xml_field are emitted via qmacro, invisible to the require-usage scan

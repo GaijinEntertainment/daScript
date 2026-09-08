@@ -2267,7 +2267,7 @@ class StyleLintVisitor : AstVisitor {
         st030_report_requires(prog, module_files, this_name, hook_reach)
     }
 
-    // a `require [group]` is one declaration per member at one location: one used member keeps the line
+    [arch(at="ARCHITECTURE_LINT.md#style-lint-require-group")]
     def st030_report_requires(prog : ProgramPtr; module_files : table<string>; this_name : string; hook_reach : table<string; int>) : void {
         var decl_count : table<string; int>
         prog |> for_each_require_declaration() $ [unused_argument(mod, req_name, file, pub)] (mod, req_name, file, pub, at) {
@@ -2275,7 +2275,6 @@ class StyleLintVisitor : AstVisitor {
             let key = st030_decl_key(at)
             decl_count[key] = (decl_count?[key] ?? 0) + 1
         }
-        // verdict per declaration: "" keeps the line, "029:<module>" and "030" report in the last pass
         var keep : table<string; bool>
         var verdict : table<string; string>
         var members : table<string; string>

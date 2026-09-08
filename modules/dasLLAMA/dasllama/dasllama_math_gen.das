@@ -44,10 +44,9 @@ require math
 // backends over the SAME
 // ISA-agnostic slot traversals: "arm64-gen" (priority 25, the arm64 load-select tier since
 // slice C) and "x64-gen" (priority 25, witness-gated — only selectable when the stamped
-// family emitted). dasllama_common pulls it in behind a path guard
-// (`require ?llvm`), so any Q8/mx4 model load on a gen-capable box runs the
-// generated family. The generators live in dasllama/dasllama_gemm_gen.das (llvm-jit context,
-// wired via llvm/daslib/llvm_user_modules.das).
+// family emitted). dasllama_common requires it, so any Q8/mx4 model load on a gen-capable box
+// runs the generated family. The generators live in dasllama/dasllama_gemm_gen.das (llvm-jit
+// context, reached through the llvm_code_generator group).
 
 //! The layout companion (six-function stamp): the repack interleave (mr) the stamped tile reads.
 //! Reference body = the reference tile's grp4; generator declines in lockstep with the tile

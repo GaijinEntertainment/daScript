@@ -181,7 +181,8 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 - **`try_splice_patterns` tries recognizers in a fixed order** - sql, decs, the registered
   `linq_fold_sources` in registration order, json, table - and the array arm runs last with
   no recognizer of its own: it is what claims a chain nobody else claimed. A source outside
-  daslib joins the `linq_fold_source` group from its descriptor and registers a
+  daslib joins the `linq_fold_source` group from its descriptor and from its C++ module's
+  constructor, and registers a
   `LinqFoldSourceRecognizer` from its `register_linq_fold_source` entry, which
   `register_all_linq_fold_rows` calls on every member; pugixml's `linq_fold_xml` is the one
   such source.

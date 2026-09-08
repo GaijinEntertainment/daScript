@@ -21,7 +21,7 @@ require daslib/json public                // JV(...) for logger field payloads
 require daslib/json_boost                 // ?[] / ?? navigation — the sidecar provenance reader
 require dasllama/dasllama_common public   // QuantMode
 require dasllama/dasllama_math            // active_kernel_backend — the exec_fmt layout receipt
-require [tune_framework]       // nolint:STYLE030,LINT019 — tune_status, the stamp provenance; empty without the framework
+require [tune_framework]                  // nolint:STYLE030,LINT019 — tune_status, the stamp provenance; empty without the framework
 require model_specs public                // the model-set table + its llm/official views
 require box_ident                         // derive_box_name — the hardware-keyed box tag
 

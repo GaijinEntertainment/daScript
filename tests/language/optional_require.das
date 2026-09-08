@@ -13,8 +13,7 @@ require ?math math                                  // nolint:STYLE030 — the g
 require ?no_such_guard_xyz no_such_target_also_xyz  // guard absent, target unresolvable -> skipped
 require ?no_such_guard_pkg optional_require_fixture // guard absent -> SKIPPED even though the target resolves (strict plain guards); the non-load IS the test
 // PATH guard (contains '/'): availability = the guard's OWN file resolves; the rail for
-// pure-das packages (nothing C++ to guard on) and cross-package dependency witnesses — the
-// target may live in an always-present package while depending on an optional one.
+// pure-das packages (nothing C++ to guard on) and cross-package dependency witnesses.
 require ?daslib/fio optional_require_fixture_pathguard        // path guard resolves -> target loaded
 require ?daslib/no_such_file_xyz optional_require_fixture_skipme  // path guard unresolvable -> SKIPPED even though the target file resolves
 // %/-rooted guards: grammar-legal require_module_name forms the pre-parse require scanner must

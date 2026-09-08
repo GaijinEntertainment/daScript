@@ -80,7 +80,10 @@ def initialize(project_path : string) {
 - `require [group]` is one ordinary require per member, sorted by member path; `public` and a
   `?guard` on the group apply to every member, a member that does not resolve fails as a
   hand-written require would, and a group nothing joined adds nothing
-- A C++ module joins from its constructor with `registerModuleGroupMember(group, member)`
+- A C++ module joins from its constructor with `registerModuleGroupMember(group, member)`. A
+  module with both a descriptor and a C++ class registers the same two strings in both places:
+  the descriptor row serves the scan, the constructor a host that runs no descriptors, and
+  nothing checks that the pair agrees
 
 The group turns the dependency around: a module that wants every installed provider names the
 group once, and each provider names the group it joins - nothing is edited when a provider is

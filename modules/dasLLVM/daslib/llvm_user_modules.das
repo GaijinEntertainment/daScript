@@ -13,9 +13,9 @@ require [llvm_code_generator]
 //! Wiring for `[llvm_code]` generator modules. The JIT calls
 //! `register_user_llvm_code_generators` (lazily, in the context that reads the registry)
 //! before the first generator lookup. A generator package joins the `llvm_code_generator`
-//! group from its descriptor and defines `register_llvm_code_generators`; nothing here
-//! names a package. Registered generators are name-keyed and inert for programs whose
-//! `[llvm_code]` annotations never name them.
+//! group from its descriptor and defines `register_llvm_code_generators`. Registered
+//! generators are name-keyed and inert for programs whose `[llvm_code]` annotations never
+//! name them.
 
 var private g_registered = false
 

@@ -71,7 +71,10 @@ cannot tell the two apart, so this boundary is the reviewer's to hold.
 it in a name, a shape, or a test, or documents itself in the module's `.md`. Kept when one
 is earned: `//!` and `/** */` docs on a contract a CALLER must know - public API always, a
 non-public helper when callers inside the module need the contract - `NOLINT` /
-`clang-format` suppressions, the leading header block. Existing comments answer to the
+`clang-format` suppressions, the leading header block, and the bare section pointer
+`// <folder>/ARCHITECTURE.md sec.N` on the function that implements the section (C++ has no
+`[arch]` annotation; the pointer is its citation, and nothing checks it - a renumbered section
+orphans every pointer to it). Existing comments answer to the
 deletion test; editing one so it stays true is not a new comment, and the edited comment
 answers to that test as a whole.
 

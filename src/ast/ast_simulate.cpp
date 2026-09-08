@@ -27,7 +27,7 @@ namespace das
     // fusion function pointers (defined here in main lib, set by fusion lib)
     void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
     void (*g_resetFusionEngineFn) () = nullptr;
-    // a context simulating outside Program::simulate (eval_single_expression) has no program: no slot
+    // ARCHITECTURE.md sec.4
     static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
         return context.thisProgram ? context.thisProgram->indexOf(fn) : -1;
     }

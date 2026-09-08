@@ -63,8 +63,9 @@ this document states what the folder is and why its tests take the shape they do
   adds nothing; `public` on the group re-exports every member and its absence keeps them
   private; the unserved member fails as a hand-written require would; `call_module_group`
   (`daslib/module_group`) calls both members' entry with its argument, sorted by member path,
-  and a member without the entry is a compile error naming the member's call; and, on an
-  explicit module cache, a member joining the group after a requirer's record was written cuts
+  and a member without the entry is a compile error naming the member's call; the lint reads a
+  group require as one unit - one used member draws nothing, no used member is a single
+  STYLE030 naming every member; and, on an explicit module cache, a member joining the group after a requirer's record was written cuts
   the cache off at that requirer (`require set changed`) while the unchanged tree and the
   rewritten cache serve.
 - `test_require_module_now.das` - a `require` issued after the walk (`daslib/cross_context`),

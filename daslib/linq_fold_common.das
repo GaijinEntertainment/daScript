@@ -304,7 +304,7 @@ var linq_fold_sources : array<LinqFoldSourceRecognizer>
 
 def add_linq_fold_source(recognizer : LinqFoldSourceRecognizer) {
     //! Registers a source recognizer in the current macro context; `linq_fold` tries them
-    //! after its built-in sources, in registration order.
+    //! after its sql and decs sources and before json, table and array, in registration order.
     linq_fold_sources |> push(recognizer)
 }
 

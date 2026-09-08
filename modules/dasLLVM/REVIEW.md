@@ -46,6 +46,12 @@
   constant, so such a change without the bump serves the old machine code back
   (`ARCHITECTURE.md` sec.1.2).
 
+- **A `[llvm_code]` generator package joins the `llvm_code_generator` group from its own
+  descriptor and defines `register_llvm_code_generators` - a diff that adds a `require` line
+  naming a generator package to `daslib/llvm_user_modules.das` is a defect.** The wiring module
+  names no package, so a build that does not carry the package registers nothing and compiles
+  unchanged.
+
 - **A function the jit finalizer reaches - `free_jit_context` (`daslib/llvm_jit_link.das`) and
   anything it calls - calls externs only, never a das helper.** The finalizer is program code, so
   a das helper on its path joins every jitted program's DLL, and the emitter cannot lower a block

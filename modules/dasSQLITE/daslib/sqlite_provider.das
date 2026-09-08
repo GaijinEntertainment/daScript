@@ -123,9 +123,7 @@ def private _sqlite_render_json_extract(target : string; jsonPath : string) : st
 def private _sqlite_quote_id(id : string) : string => sql_quote_id(id)
 
 def register_provider {
-    //! The `sql_provider` group entry: registers the sqlite `SqlProviderInfo` in the
-    //! CURRENT macro context. Reached through `sql_register_present_providers`
-    //! (daslib/sql_boost) from each consulting macro module's own `[_macro]`.
+    //! The `sql_provider` group entry: registers the sqlite `SqlProviderInfo` in the CURRENT macro context.
     var info = SqlProviderInfo(
         name = "sqlite",
         runnerModule = "sqlite_boost",

@@ -202,7 +202,14 @@ and `indexOf` and written through `setUsed` and `setIndex`; `clearSymbolUse` emp
 An index is `-1` for an object the allocation never saw, `-2` for one it saw and found unused,
 the context slot otherwise; the constant folder tells the first from the rest. Simulate reads
 the tables through `context.thisProgram`, and das code through the `ast` module's `is_used`,
-`function_index` and `variable_index`, each taking the program. A compile nested inside another -
+`function_index` and `variable_index`, each taking the program. `Program::simulate` binds itself
+to the context it fills, and clears the binding at the end when the `rtti` option is off. A
+context that simulates an expression outside that call takes the compiling program from the
+bound environment instead: `eval_single_expression` sets it on the context it makes, and on a
+caller's context only when that context has none, putting back what was there. A context that
+still has no program answers -1 for every function and variable (`programIndexOf`,
+`ast_simulate.cpp`) - with no tables to read, nothing is used and nothing holds a slot. A
+compile nested inside another -
 a macro calling `compile`, a late `require` (sec.3), the folding program - fills its own tables
 and leaves the outer program's answers standing. The stream a module-cache record carries has
 neither the flag nor the slot: both are recomputed by the reading program.
