@@ -2426,7 +2426,7 @@ namespace das {
         string path, cpp_class, das_name;
         int on_error = 0;
     };
-    static vector<DeferredDynamicModule> g_deferred_dynamic_modules;    // manifest rows waiting for a require (ARCHITECTURE.md sec.2)
+    static vector<DeferredDynamicModule> g_deferred_dynamic_modules;    // src/ast/ARCHITECTURE.md sec.2
 
     DAS_API void defer_dynamic_module ( const char * path, const char * cpp_class, int on_error, const char * das_name ) {
         g_deferred_dynamic_modules.push_back({path ? path : "", cpp_class ? cpp_class : "", das_name ? das_name : "", on_error});

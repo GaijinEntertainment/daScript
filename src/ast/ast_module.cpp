@@ -159,7 +159,6 @@ namespace das {
             }
         }
         if ( all ) return true;
-        // Some modules was not initialized!
         size_t i = 0;
         for ( auto m = daScriptEnvironment::getBound()->modules; m ; m = m->next, i++ ) {
             DAS_ASSERT(mod_state.size() > i);

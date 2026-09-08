@@ -10,7 +10,7 @@
 #include <daScript/misc/env_cfg.h>             // get_dasenv_trace_module_load
 #include <daScript/misc/performance_time.h>
 #include <cctype>                              // tolower (case-insensitive basename normalize)
-#include <mutex>                               // the deferred-load lock
+#include <mutex>
 #include <cstdio>                              // fprintf(stderr) for the shadow-shadows-global diagnostic
 
 das::FileAccessPtr get_file_access( char * pak );
@@ -191,7 +191,6 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
                                   const smart_ptr<FileAccess> & fa) {
     ManifestRead res;
 #if DAS_NO_FILEIO
-    // the guard the fio builtins carry: a build without file IO reads no manifest
     (void)file; (void)descSize; (void)descHash; (void)key; (void)fa;
     return res;
 #else
@@ -365,7 +364,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     const ManifestKey key = manifest_key(path);
     auto time0 = ref_time_ticks();
 #if DAS_NO_FILEIO
-    const bool useManifest = false;     // the guard the fio builtins carry: no manifest read or written
+    const bool useManifest = false;
     const char * noManifestWhy = "no file io";
 #else
     const bool useManifest = src && !g_ignore_manifests;
@@ -379,7 +378,6 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
             if ( !row.dynamic ) {
                 replay_native_path(row.a.c_str(), row.b.c_str(), row.c.c_str());
             } else if ( !row.c.empty() ) {
-                // a row without a das name failed to load on the recording start, and replays as it did
                 defer_dynamic_module(row.a.c_str(), row.b.c_str(), row.on_error, row.c.c_str());
                 deferred ++;
             } else {
@@ -580,12 +578,11 @@ static void move_all_nodes(gc_root & from, gc_root & to) {
     }
 }
 
-// ARCHITECTURE.md sec.2: the prerequisite walk found no module under `name`
+// ARCHITECTURE.md sec.2
 static bool load_deferred_module_for_require(const string & name) {
     static recursive_mutex loadMutex;
     lock_guard<recursive_mutex> guard(loadMutex);
-    // one root for all the load makes (a collect walks one root): the thread root's own nodes sit
-    // aside while a compiled builtin das module dumps its leftovers there, then join loadRoot
+    // a collect walks one root: the thread root's own nodes park while the load's leftovers gather on loadRoot
     auto & threadRoot = gc_root::gc_get_thread_root();
     gc_root parked, loadRoot;
     move_all_nodes(threadRoot, parked);
@@ -596,7 +593,6 @@ static bool load_deferred_module_for_require(const string & name) {
         if ( loaded ) {
             string notInitialized;
             if ( !Module::InitializeDependencies(notInitialized) ) {
-                // what it needs is deferred too: the whole deferred set, the eager start's, then the fixed point again
                 notInitialized.clear();
                 load_all_deferred_dynamic_modules();
                 if ( !Module::InitializeDependencies(notInitialized) ) {
@@ -624,7 +620,6 @@ bool require_dynamic_modules(FileAccessPtr file_access,
                              const das::vector<das::string> &load_modules,
                              const das::vector<das::string> &disabled_modules,
                              das::TextWriter &tout) {
-    // before the walk: a descriptor compiled mid-scan may require a module an earlier replay deferred
     setDeferredModuleLoader(&load_deferred_module_for_require);
     // Explicitly-disabled modules (case-insensitive on every platform) are never
     // loaded/registered — keeps a native-only module out of a wasm cross-compile.

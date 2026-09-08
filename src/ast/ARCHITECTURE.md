@@ -86,7 +86,11 @@ scan installed (`setDeferredModuleLoader`); the loader dlopens and registers the
 `initDependencies` fixed point that `Module::Initialize` runs (`Module::InitializeDependencies`) over
 the grown list, and when a module reports it cannot initialize - what it needs is deferred too -
 brings every deferred module in and runs the fixed point again, which is the set an eager start
-has; the new modules' TypeDecls, made on the active root, move to their module roots. A `dm` row
+has. The load runs under one gc root of its own with the thread root's nodes parked meanwhile,
+because a constructor's nodes go to the active root while a builtin das module it compiles
+dumps its leftovers on the thread root, and a collect stops at a node owned by another root;
+after the load every module, not only the new ones, collects from that root, since a
+constructor registers into modules that exist already, and the rest is swept. A `dm` row
 with no name - the recording start's load failed - replays as recorded, so the Quiet deferral
 and the post-scan retry of a sibling `DT_NEEDED` dlopen behave as on a compiled start. A
 require guard (`require ?mod`) and `builtin_module_exists` ask whether the build has the

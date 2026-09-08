@@ -1188,7 +1188,7 @@ namespace das {
         return Module::require(name);
     }
 
-    // loaded or deferred: what the tree has, where `require ?name` asks what an earlier require loaded
+    // true for a module the tree has, loaded or waiting in a manifest row - this asks, it never loads
     bool rtti_has_module ( const char * name ) {
         return Module::require(name) != nullptr || is_dynamic_module_deferred(name);
     }

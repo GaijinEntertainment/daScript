@@ -24,3 +24,8 @@
   replay loop in `init_dyn_modules` (`dyn_modules.cpp`) a branch for it in the same change.** The loop
   dispatches on one flag with `replay_native_path` as the other arm, so a kind it does not know
   replays as a native path.
+
+- **A diff that moves or removes the `setDeferredModuleLoader` call in `require_dynamic_modules`
+  (`dyn_modules.cpp`) keeps it above the descriptor walk, in the same change.** A descriptor
+  compiled during the walk can require a module an earlier replay deferred, and with no loader
+  installed that require fails.

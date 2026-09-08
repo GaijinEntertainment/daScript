@@ -435,7 +435,7 @@ namespace das {
                     }
                     module = Module::requireEx(mod, allowPromoted, modRec.name, info.fileName); // try native with that name AGAIN (promoted?)
                     if ( !module ) {
-                        // a C++ module the scan deferred loads at the require that names it (ARCHITECTURE.md sec.2)
+                        // ARCHITECTURE.md sec.2
                         if ( auto loader = getDeferredModuleLoader(); loader && loader(mod) ) {
                             module = Module::requireEx(mod, allowPromoted, modRec.name, info.fileName);
                             if ( log && module ) {
