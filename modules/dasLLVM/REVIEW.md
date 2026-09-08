@@ -8,9 +8,9 @@
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
   covers it.
 
-- **A diff that adds or changes a branch on `get_platform_name()`, `get_architecture_name()`,
-  `cpu_supports()`, or `host_llvm_feature()` runs the module-owned suite on a machine that
-  takes the new branch.**
+- **A diff that adds or changes a branch keyed on what `get_platform_name()`,
+  `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns runs the
+  module-owned suite on a machine that takes the new branch.**
 
 - **A test under `tests/` (beside this file) never creates, overwrites, or deletes a
   git-tracked path.**
@@ -22,8 +22,9 @@
 - **A test under `tests/` here that spawns a daslang child keeps the child's artifacts inside
   the directory it created for this process: `-output <dir>/...` for a `-exe` build,
   `-no-module-cache` or `-module-cache <dir>/...` for a run that compiles through the front-end
-  cache, and `-jit-no-cache` or a pinned `jit_output_path` for a `-jit` run.** A child writes
-  its caches relative to the cwd otherwise, which is the tree two concurrent runs share.
+  cache, and `-jit-no-cache` or a pinned `jit_output_path` for a `-jit` run that executes the
+  script.** A child writes its caches relative to the cwd otherwise, which is the tree two
+  concurrent runs share.
 
 - **A diff that adds or changes a branch on the target triple records in its PR body the
   cross-compile (`write_exe`) for that target that exercised the behavior.** The suite runs on

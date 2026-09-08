@@ -8090,8 +8090,8 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
         }
         // nolint:STYLE014
         // Populate globalVariables[] (offset/debugInfo/shared) for EVERY global so the GC
-        // can trace standalone-exe globals. The exe otherwise leaves globalVariables zeroed
-        // (only tabGMnLookup is filled), so collectHeap would deref a NULL debugInfo and
+        // can trace standalone-exe globals. Registration fills name, hash, offset and the
+        // shared flag but not debugInfo, so collectHeap would deref a NULL debugInfo and
         // crash on any `options gc` heap_collect. Emitted once (main init, not the
         // shared-skipping clone variant); debugInfo is the exe-resident TypeInfo.
         if (!skip_shared) {

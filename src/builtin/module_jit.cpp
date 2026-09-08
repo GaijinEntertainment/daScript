@@ -348,8 +348,8 @@ extern "C" {
                 functions[i].name = (char *) "unimplemented";
                 functions[i].debugInfo = &stubInfo[i];
             }
-            tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();
-            tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
+            functionLookup = make_shared<NameLookup>();
+            variableLookup = make_shared<NameLookup>();
         }
 
         void *registerJitFunction ( uint64_t index, const char * funcName, const char * mangledName,
@@ -375,19 +375,28 @@ extern "C" {
             auto node = code->makeNode<SimNode_Jit>(LineInfo{}, (JitFunction) fnPtr);
             fn.code = node;
             fn.jitFunction = fnPtr;         // the invoke-fastpath mirror
-            (*tabMnLookup)[mnh] = &fn;
             return &fn;
         }
 
-        void registerJitGlobalVariable(uint64_t mnh, size_t offset) {
-            (*tabGMnLookup)[mnh] = offset;
+        void registerJitGlobalVariable(uint64_t index, const char * name, uint64_t mnh, size_t offset, bool shared) {
+            DAS_ASSERT(index < (uint64_t) totalVariables);
+            auto & gv = globalVariables[index];
+            gv.name = code->allocateName(name);
+            gv.mangledNameHash = mnh;
+            gv.offset = (uint32_t) offset;
+            gv.flags = shared ? 1u : 0u;
         }
 
-        // A standalone -exe leaves globalVariables[] zeroed (registerJitGlobalVariable
-        // only fills tabGMnLookup). collectHeap walks globalVariables[i] via
-        // .offset/.debugInfo/.shared, so they must be populated or the GC dereferences
-        // a NULL debugInfo. Called from the JIT'd init function (debugInfo is the
-        // exe-resident TypeInfo emitted by create_type_info_global).
+        // the exe carries both lookups as constant data the emitter sealed; nothing is built or owned here
+        void adoptLookups(const NameLookup::StaticTable * functions, const NameLookup::StaticTable * variables) {
+            functionLookup->adopt(*functions);
+            variableLookup->adopt(*variables);
+        }
+
+        // registerJitGlobalVariable fills name, hash, offset and the shared flag; the
+        // debugInfo is the exe-resident TypeInfo emitted by create_type_info_global, which
+        // only the JIT'd init function can wire. collectHeap walks globalVariables[i] via
+        // .offset/.debugInfo/.shared, so a NULL debugInfo is a GC crash.
         void setStandaloneGlobalInfo(uint64_t index, uint64_t offset, void* debugInfo, int shared) {
             DAS_ASSERT(index < (uint64_t) totalVariables);
             auto & gv = globalVariables[index];
@@ -429,8 +438,12 @@ extern "C" {
                                                             fnPtr, cmres, fastcall, pinvoke, nArguments);
     }
 
-    DAS_API void jit_register_standalone_variable ( Context * ctx, uint64_t mangledNameHash, uint64_t offset ) {
-        static_cast<JitContext *>(ctx)->registerJitGlobalVariable(mangledNameHash, offset);
+    DAS_API void jit_register_standalone_variable ( Context * ctx, uint64_t index, const char * name, uint64_t mangledNameHash, uint64_t offset, int shared ) {
+        static_cast<JitContext *>(ctx)->registerJitGlobalVariable(index, name, mangledNameHash, offset, shared != 0);
+    }
+
+    DAS_API void jit_adopt_standalone_lookups ( Context * ctx, const void * functions, const void * variables ) {
+        static_cast<JitContext *>(ctx)->adoptLookups((const NameLookup::StaticTable *) functions, (const NameLookup::StaticTable *) variables);
     }
 
     // Populate globalVariables[index] so the GC can trace standalone-exe globals.
@@ -954,6 +967,10 @@ extern "C" {
 
     uint64_t das_get_global_variable_mnh( const Context * ctx, int id ) {
         return ctx->getGlobalVariable(id).mangledNameHash;
+    }
+
+    const char * das_get_global_variable_name( const Context * ctx, int id ) {
+        return ctx->getGlobalVariable(id).name;
     }
 
     void * das_get_global_variable_debug_info( const Context * ctx, int id ) {
@@ -1602,6 +1619,8 @@ extern "C" {
                 SideEffects::none, "das_get_global_variable_offset");
             addExternInline<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",
                 SideEffects::none, "das_get_global_variable_mnh");
+            addExternInline<DAS_BIND_FUN(das_get_global_variable_name)>(*this, lib, "get_global_variable_name",
+                SideEffects::none, "das_get_global_variable_name");
             addExternInline<DAS_BIND_FUN(das_get_global_variable_debug_info)>(*this, lib, "get_global_variable_debug_info",
                 SideEffects::none, "das_get_global_variable_debug_info");
             addExternInline<DAS_BIND_FUN(das_get_global_variable_shared)>(*this, lib, "get_global_variable_shared",

@@ -89,6 +89,17 @@ int main () {
         // `options stack = 4096` is honored exactly, plus the headroom the
         // global initializers need - not rounded up to the 16k default.
         expect_int("explicit stack is honored", ctx.stack.size() >= 4096 && ctx.stack.size() < 16384 ? 1 : 0, 1);
+        // by-name lookups answer from the sealed tables the generated constructor built
+        auto dot = ctx.findFunction("dot");
+        expect_int("findFunction(dot)", dot != nullptr ? 1 : 0, 1);
+        expect_int("fnByMangledName(dot)", dot && ctx.fnByMangledName(dot->mangledNameHash) == dot ? 1 : 0, 1);
+        bool unique = false;
+        expect_int("findFunction(dot, unique)", ctx.findFunction("dot", unique) == dot && unique ? 1 : 0, 1);
+        expect_int("findFunction(nope)", ctx.findFunction("nope") == nullptr ? 1 : 0, 1);
+        bool missing_unique = true;
+        expect_int("findFunction(nope, unique) misses and is not unique", ctx.findFunction("nope", missing_unique) == nullptr && !missing_unique ? 1 : 0, 1);
+        expect_int("findVariable(TAPS)", ctx.findVariable("TAPS") >= 0 ? 1 : 0, 1);
+        expect_int("findVariable(nope)", ctx.findVariable("nope"), -1);
     }
 
     {   // tier B - the das heap

@@ -1,0 +1,1 @@
+Stages one entry in an unsealed lookup: ``mnh`` is the mangled-name hash the runtime probes with, ``name`` the plain name (copied, so the string need not outlive the call), ``index`` the position in the context's function or global array, and ``value`` what a mangled-name probe answers - a function index, or a global's byte offset.

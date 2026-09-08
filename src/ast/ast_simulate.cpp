@@ -2623,7 +2623,7 @@ namespace das
             // rewrites such refs to their literal init before simulate. But rtti-exposed ASTs
             // (e.g. struct field defaults) bypass folding, so the original ExprVar reference
             // survives. Re-simulating it would emit a GetSharedMnh / GetGlobalMnh that looks
-            // up a mnh not in tabGMnLookup -> crash. Emit the const init directly instead.
+            // up a mnh the variable lookup does not hold -> crash. Emit the const init directly instead.
             if ( expr->variable->index < 0 && expr->variable->init
                  && expr->variable->init->rtti_isConstant() ) {
                 setE(expr, simulateExpression(expr->variable->init));
@@ -3562,59 +3562,38 @@ namespace das
     }
 
     void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
-        context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
-        context.tabGMnLookup->clear();
+        context.variableLookup = make_shared<NameLookup>();
         for ( int i=0, is=context.totalVariables; i!=is; ++i ) {
             auto & gvar = context.globalVariables[i];
-            auto mnh = gvar.mangledNameHash;
-            auto it = context.tabGMnLookup->find(mnh);
-            if ( it != context.tabGMnLookup->end() ) {
-                GlobalVariable * collision = context.globalVariables + it->second;
-                LineInfo * errorAt = nullptr;
-                TextWriter message;
-                message << "internal compiler error: global variable mangled name hash collision '"
-                    << gvar.name << ": " << debug_type(gvar.debugInfo) << "'"
-                    << " hash=" << HEX << gvar.mangledNameHash << DEC
-                    << " offset=" << gvar.offset;
-                if ( collision ) {
-                    message << " and '" << collision->name << ": " << debug_type(collision->debugInfo) << "'"
-                        << " hash=" << HEX << collision->mangledNameHash << DEC
-                        << " offset=" << collision->offset;
-                }
-                if ( gvar.init ) {
-                    errorAt = &gvar.init->debugInfo;
-                } else if ( collision && collision->init ) {
-                    errorAt = &collision->init->debugInfo;
-                }
-                error(message.str(), "", "", errorAt ? *errorAt : LineInfo(), CompilationError::internal_global);
-                return;
-            }
-            context.tabGMnLookup->insert({mnh, context.globalVariables[i].offset});
+            context.variableLookup->insert(gvar.mangledNameHash, gvar.name, uint32_t(i), gvar.offset);
+        }
+        string failure;
+        if ( !context.variableLookup->seal(&failure) ) {
+            error("internal compiler error: global variable " + failure, "", "", LineInfo(), CompilationError::internal_global);
+            return;
         }
         if ( options.getBoolOption("log_gmn_hash",false) ) {
             logs
                 << "totalGlobals: " << context.totalVariables << "\n"
-                << "tabGMnLookup:" << context.tabGMnLookup->size() << "\n";
+                << "variableLookup:" << context.variableLookup->size() << "\n";
         }
     }
 
     void Program::buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs ) {
-        context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();
-        context.tabMnLookup->clear();
+        context.functionLookup = make_shared<NameLookup>();
         for ( const auto & fn : lookupFunctions ) {
-            auto mnh = fn->getMangledNameHash();
-            auto it = context.tabMnLookup->find(mnh);
-            if ( it != context.tabMnLookup->end() ) {
-                error("internal compiler error: function mangled name hash collision '" + fn->name + "'",
-                    "", "", LineInfo(), CompilationError::internal_function);
-                return;
-            }
-            context.tabMnLookup->insert({mnh, context.functions + fn->index});
+            auto & sfn = context.functions[fn->index];
+            context.functionLookup->insert(sfn.mangledNameHash, sfn.name, uint32_t(fn->index), uint32_t(fn->index));
+        }
+        string failure;
+        if ( !context.functionLookup->seal(&failure) ) {
+            error("internal compiler error: function " + failure, "", "", LineInfo(), CompilationError::internal_function);
+            return;
         }
         if ( options.getBoolOption("log_mn_hash",false) ) {
             logs
                 << "totalFunctions: " << context.totalFunctions << "\n"
-                << "tabMnLookup:" << context.tabMnLookup->size() << "\n";
+                << "functionLookup:" << context.functionLookup->size() << "\n";
         }
     }
 

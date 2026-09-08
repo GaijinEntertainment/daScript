@@ -1154,6 +1154,8 @@ include/daScript/simulate/simulate_visit.h
 include/daScript/simulate/simulate_visit_op.h
 include/daScript/simulate/simulate_visit_op_undef.h
 include/daScript/simulate/sim_policy.h
+include/daScript/simulate/name_lookup.h
+src/simulate/name_lookup.cpp
 src/simulate/data_walker.cpp
 include/daScript/simulate/data_walker.h
 src/simulate/debug_print.cpp
@@ -1767,6 +1769,7 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/simulate_fusion_op2_set_perm.h
     include/daScript/simulate/simulate_fusion_op2_vec_settings.h
     include/daScript/simulate/simulate.h
+    include/daScript/simulate/name_lookup.h
     include/daScript/simulate/simulate_nodes.h
     include/daScript/simulate/simulate_visit.h
     include/daScript/simulate/simulate_visit_op.h
@@ -1861,6 +1864,7 @@ install(FILES
     ${PROJECT_SOURCE_DIR}/src/simulate/debug_info.cpp
     ${PROJECT_SOURCE_DIR}/src/simulate/escape_string.cpp
     ${PROJECT_SOURCE_DIR}/src/simulate/heap.cpp
+    ${PROJECT_SOURCE_DIR}/src/simulate/name_lookup.cpp
     ${PROJECT_SOURCE_DIR}/src/simulate/runtime_array.cpp
     ${PROJECT_SOURCE_DIR}/src/simulate/runtime_iterator.cpp
     ${PROJECT_SOURCE_DIR}/src/simulate/runtime_table.cpp

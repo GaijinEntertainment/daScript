@@ -19,6 +19,7 @@ var g_second = next_stamp()
 var g_reads_forward = read_forward() + 100
 var g_later = 7
 var g_init_fn_stamp = 0
+let shared g_shared_taps = fixed_array<int>(1, 2, 3)
 
 [init]
 def record_init {
@@ -48,6 +49,15 @@ def get_reads_forward : int {
 [export]
 def get_later : int {
     return g_later
+}
+
+[export]
+def get_shared_total : int {
+    var total = 0
+    for (t in g_shared_taps) {
+        total += t
+    }
+    return total
 }
 
 struct Pair {

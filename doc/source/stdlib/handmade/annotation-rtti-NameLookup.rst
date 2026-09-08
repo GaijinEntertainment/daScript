@@ -1,0 +1,1 @@
+Handled type wrapping the runtime's sealed function or global name lookup (``das::NameLookup``): a perfect-hash table over mangled-name hashes and plain names. The standalone emitters build one at code-generation time through the ``name_lookup_*`` functions and write its sealed arrays into the generated artifact as constant data.
