@@ -19,7 +19,10 @@ a region's bind offset must be a multiple of 512 elements - the `(off/256)*2` d-
 4-byte aligned only then - which is what `metal_blob_off_ok` and `moe_site_ok` check. iq4nl is
 the exception: it reuses q40's 16-byte plane of eight f16 d per superblock, binds once, and
 ignores `doff`. The Vulkan tier does not use this form - it binds the decoded 20-byte row as five
-uints per superblock.
+uints per superblock, except for iq4xs, iq3s, iq3xxs and iq2xxs, whose device row is two words
+(`kq_dev_ssb`): f16 d with the format's native high bits above it, then eight 4-bit sub-scale
+fields - iq4xs's `scales_h` and `scales_l` verbatim, the others' `s` nibbles - which the
+gather packs from the plane's decoded bytes and `iq4xs_sc` / `grid_sc` decode in the kernels.
 
 ### 2.2z The iquant GEMV grid read and its f4-slab twin {#metal-iquant-gemv-grid}
 

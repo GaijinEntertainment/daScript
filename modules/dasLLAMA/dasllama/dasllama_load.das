@@ -601,6 +601,89 @@ def conv_profile_report() {
     delete rows
 }
 
+//! The form a converted tensor is served in: a kq plane, the q8 rail's quants and scales, the
+//! q4_0 rail's nibbles and scales, or f32 rows.
+enum private ConvServed {
+    kq
+    q8
+    q40
+    f32
+}
+
+struct private ConvBytes {
+    tensors : int64
+    disk : int64
+    elems : int64
+    fmt : KqFmt
+    served : ConvServed
+}
+
+struct private ConvReportRow {
+    name : string
+    tensors : int64
+    disk_bytes : int64
+    served_bytes : int64
+}
+
+var private g_conv_bytes : table<string; ConvBytes>
+var private g_load_demotions = 0l
+
+def private conv_reset() {
+    g_conv_bytes |> clear()
+    g_load_demotions = 0l
+}
+
+def private conv_account(m : GGUFMeta; name, kind : string; served : ConvServed; fmt : KqFmt; n : int64) {
+    let gt = gguf_tensor_type(m, name)
+    let key = "{ggml_type_name(gt)} -> {kind}"
+    var b = g_conv_bytes[key]
+    b.tensors++
+    b.disk += ggml_type_bytes(gt, n)
+    b.elems += n
+    b.fmt = fmt
+    b.served = served
+    g_conv_bytes[key] = b
+}
+
+//! Bytes the served form of `n` converted elements takes: kq planes by their stride sizes, q8 as
+//! the quants plus the scale plane the load leaves (f16 after the wscale pass, else f32), q4_0 as
+//! nibbles plus f32 scales, everything else as f32.
+def private served_bytes(t : Model; served : ConvServed; fmt : KqFmt; n : int64) : int64 {
+    if (served == ConvServed.kq) {
+        return n / kq_elems(fmt) * (kq_qsb(fmt) + kq_ssb(fmt))
+    }
+    if (served == ConvServed.q8) {
+        return n + n / 32l * (t.wscale_f16 ? 2l : 4l)
+    }
+    if (served == ConvServed.q40) {
+        return n / 2l + n / 32l * 4l
+    }
+    return n * 4l
+}
+
+//! The load report: the file's bytes, then every (disk type -> conversion kind) as bytes on disk
+//! against bytes served with the delta, biggest overhead first, and the q8-rail demotion count.
+def private log_conversion_report(t : Model; file_bytes : int64) {
+    if (empty(g_conv_bytes)) {
+        return
+    }
+    var rows : array<ConvReportRow>
+    var disk_total = 0l
+    var served_total = 0l
+    for (k, v in keys(g_conv_bytes), values(g_conv_bytes)) {
+        let s = served_bytes(t, v.served, v.fmt, v.elems)
+        rows |> emplace(ConvReportRow(name = clone_string(k), tensors = v.tensors, disk_bytes = v.disk, served_bytes = s))
+        disk_total += v.disk
+        served_total += s
+    }
+    rows |> sort() $(a, b) => a.served_bytes - a.disk_bytes > b.served_bytes - b.disk_bytes
+    to_log(LOG_INFO, "dasLLAMA load: {file_bytes >> 20l} MB on disk; converted weights {disk_total >> 20l} MB -> {served_total >> 20l} MB served ({mb_delta(served_total, disk_total)}); {g_load_demotions} q8-rail demotion(s)\n")
+    for (r in rows) {
+        to_log(LOG_INFO, "dasLLAMA load:   {r.name}: {r.disk_bytes >> 20l} MB -> {r.served_bytes >> 20l} MB ({mb_delta(r.served_bytes, r.disk_bytes)}) over {r.tensors} tensor(s)\n")
+    }
+    delete rows
+}
+
 // ===== streaming plan/fill (phase D of the .dlim arc) =====
 
 //! One recorded big-tensor conversion: load_big's call args, replayable — the fill pass
@@ -821,9 +904,11 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
         temp_q |> grow_resize(int(sh.qb))
         let t0 = g_conv_prof ? ref_time_ticks() : 0l
         var kind = ""
+        var served = ConvServed.q8
         if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
             temp_s |> grow_resize(int(sh.sb))
             kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_q, temp_s, 0l, j.n, j.src_off, scratch)
+            served = ConvServed.kq
         } else {
             // q8 family: scales are FLOATS; the epilogue converts the whole plane at the end
             temp_q8 |> grow_resize(int(j.n))
@@ -831,6 +916,7 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
             kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
         }
         conv_note(kind, t0, j.n)
+        conv_account(m, j.name, kind, served, j.fmt, j.n)
         // land the scale half at its real offset (RAM-resident plane)
         unsafe {
             if (j.fmt == KqFmt.k4) {
@@ -1230,6 +1316,19 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
         gguf_read_tensor_f32(m, bytes, name, t.wblob, woff, n, src_off)
     }
     conv_note(kind, t0, n)
+    conv_account(m, name, kind, big_served_form(t, fmt), fmt, n)
+}
+
+//! The form load_big's ladder serves a tensor in: a kq plane by its format, else the model's q8 or
+//! q4_0 rail, else f32 rows.
+def private big_served_form(t : Model; fmt : KqFmt) : ConvServed {
+    if (fmt != KqFmt.q8) {
+        return ConvServed.kq
+    }
+    if (t.quant == QuantMode.q8) {
+        return ConvServed.q8
+    }
+    return t.quant == QuantMode.q4_0 ? ConvServed.q40 : ConvServed.f32
 }
 
 // qwen3next-layout deltanet big weights: same planes as the qwen35 arm, but the file's v-indexed
@@ -1366,6 +1465,29 @@ def private kq_fmt_of(gt : int) : KqFmt {
 }
 
 
+//! One weight's plane tag off its disk type: the K-quant form when the dense rails serve it at
+//! this row length, else the q8 rail - a demotion is logged and counted for the load report.
+def private kq_tag(m : GGUFMeta; name : string; rows : int64) : KqFmt {
+    let disk_fmt = kq_fmt_of(gguf_tensor_type(m, name))
+    let why = disk_fmt == KqFmt.q51 ? "the dense rails carry no q51 form" : "a {rows}-wide row is no multiple of 256"
+    return note_demotion(name, disk_fmt, kq_fmt_row_ok(disk_fmt, rows), why)
+}
+
+//! The expert-stack twin of kq_tag (q51 serves natively off per-32 planes there).
+def private kq_tag_expert(m : GGUFMeta; name : string; rows : int64) : KqFmt {
+    let disk_fmt = kq_fmt_of(gguf_tensor_type(m, name))
+    let why = disk_fmt == KqFmt.q51 ? "a {rows}-wide row is no multiple of 32" : "a {rows}-wide row is no multiple of 256"
+    return note_demotion(name, disk_fmt, kq_fmt_expert_ok(disk_fmt, rows), why)
+}
+
+def private note_demotion(name : string; disk_fmt, tag_fmt : KqFmt; why : string) : KqFmt {
+    if (tag_fmt != disk_fmt) {
+        g_load_demotions++
+        to_log(LOG_WARNING, "dasLLAMA load: {name} ({disk_fmt} on disk) serves through the q8 rail - {why}\n")
+    }
+    return tag_fmt
+}
+
 // Fill the per-kind weight format tags from the file's tensor types (q8-mode loads with the
 // kquant_native knob on). Fused-projection arches (Phi3) split attn_qkv/ffn_up at row-aligned
 // slice offsets, so every slice stays superblock-aligned; one disk tensor = one tag for its slices.
@@ -1387,22 +1509,22 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
     // q40 tags additionally demote per tensor when the row length isn't % 256 — Q4_0 only guarantees % 32
     for (l in range64(layers)) {
         if (t.config.fused_qkv) {
-            let fqkv = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_qkv.weight")), t.config.dim)
+            let fqkv = kq_tag(m, "blk.{l}.attn_qkv.weight", t.config.dim)
             t.wq_fmt[l] = fqkv
             t.wk_fmt[l] = fqkv
             t.wv_fmt[l] = fqkv
-            let fgu = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_up.weight")), t.config.dim)
+            let fgu = kq_tag(m, "blk.{l}.ffn_up.weight", t.config.dim)
             t.w1_fmt[l] = fgu
             t.w3_fmt[l] = fgu
         } else {
-            t.wq_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_q.weight")), t.config.dim)
-            t.wk_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_k.weight")), t.config.dim)
-            t.wv_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_v.weight")), t.config.dim)
-            t.w1_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_gate.weight")), t.config.dim)
-            t.w3_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_up.weight")), t.config.dim)
+            t.wq_fmt[l] = kq_tag(m, "blk.{l}.attn_q.weight", t.config.dim)
+            t.wk_fmt[l] = kq_tag(m, "blk.{l}.attn_k.weight", t.config.dim)
+            t.wv_fmt[l] = kq_tag(m, "blk.{l}.attn_v.weight", t.config.dim)
+            t.w1_fmt[l] = kq_tag(m, "blk.{l}.ffn_gate.weight", t.config.dim)
+            t.w3_fmt[l] = kq_tag(m, "blk.{l}.ffn_up.weight", t.config.dim)
         }
-        t.wo_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_output.weight")), layer_qd(t.config, l))
-        t.w2_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_down.weight")), layer_hidden(t, l))
+        t.wo_fmt[l] = kq_tag(m, "blk.{l}.attn_output.weight", layer_qd(t.config, l))
+        t.w2_fmt[l] = kq_tag(m, "blk.{l}.ffn_down.weight", layer_hidden(t, l))
         any ||= t.wq_fmt[l] != KqFmt.q8 || t.wk_fmt[l] != KqFmt.q8 || t.wv_fmt[l] != KqFmt.q8
         any ||= t.wo_fmt[l] != KqFmt.q8 || t.w1_fmt[l] != KqFmt.q8 || t.w2_fmt[l] != KqFmt.q8
         any ||= t.w3_fmt[l] != KqFmt.q8
@@ -1416,26 +1538,26 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         let fused_gu = t.config.moe_dense_shexp   // gemma4: experts ship fused as ffn_gate_up_exps
         for (l in range64(layers)) {
             if (fused_gu) {
-                let f = kq_fmt_expert_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_gate_up_exps.weight")), t.config.dim)
+                let f = kq_tag_expert(m, "blk.{l}.ffn_gate_up_exps.weight", t.config.dim)
                 t.we1_fmt[l] = f
                 t.we3_fmt[l] = f
             } else {
-                t.we1_fmt[l] = kq_fmt_expert_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_gate_exps.weight")), t.config.dim)
-                t.we3_fmt[l] = kq_fmt_expert_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_up_exps.weight")), t.config.dim)
+                t.we1_fmt[l] = kq_tag_expert(m, "blk.{l}.ffn_gate_exps.weight", t.config.dim)
+                t.we3_fmt[l] = kq_tag_expert(m, "blk.{l}.ffn_up_exps.weight", t.config.dim)
             }
-            t.we2_fmt[l] = kq_fmt_expert_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ffn_down_exps.weight")), t.config.n_ff_exp)
+            t.we2_fmt[l] = kq_tag_expert(m, "blk.{l}.ffn_down_exps.weight", t.config.n_ff_exp)
             any ||= t.we1_fmt[l] != KqFmt.q8 || t.we2_fmt[l] != KqFmt.q8 || t.we3_fmt[l] != KqFmt.q8
         }
     }
     if (t.config.shared_weights) {
-        t.emb_fmt = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "token_embd.weight")), t.config.dim)
+        t.emb_fmt = kq_tag(m, "token_embd.weight", t.config.dim)
         any ||= t.emb_fmt != KqFmt.q8
     } else {
-        t.wcls_fmt = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "output.weight")), t.config.dim)
+        t.wcls_fmt = kq_tag(m, "output.weight", t.config.dim)
         any ||= t.wcls_fmt != KqFmt.q8
     }
     if (t.config.n_layer_nextn > 0l) {
-        t.mtp_ehproj_fmt = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{t.config.n_layers}.nextn.eh_proj.weight")), 2l * t.config.dim)
+        t.mtp_ehproj_fmt = kq_tag(m, "blk.{t.config.n_layers}.nextn.eh_proj.weight", 2l * t.config.dim)
         any ||= t.mtp_ehproj_fmt != KqFmt.q8
     }
     let dn_native_driver = gpu_want_dn_native() && t.config.n_expert == 0l
@@ -1447,9 +1569,9 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         t.dnout_fmt |> resize(layers)
         for (l in range64(layers)) {
             if (layer_is_recurrent(t.config, l)) {
-                t.dnqkv_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_qkv.weight")), t.config.dim)
-                t.dngate_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.attn_gate.weight")), t.config.dim)
-                t.dnout_fmt[l] = kq_fmt_row_ok(kq_fmt_of(gguf_tensor_type(m, "blk.{l}.ssm_out.weight")), t.config.ssm_d_inner)
+                t.dnqkv_fmt[l] = kq_tag(m, "blk.{l}.attn_qkv.weight", t.config.dim)
+                t.dngate_fmt[l] = kq_tag(m, "blk.{l}.attn_gate.weight", t.config.dim)
+                t.dnout_fmt[l] = kq_tag(m, "blk.{l}.ssm_out.weight", t.config.ssm_d_inner)
                 any ||= t.dnqkv_fmt[l] != KqFmt.q8 || t.dngate_fmt[l] != KqFmt.q8 || t.dnout_fmt[l] != KqFmt.q8
             }
         }
@@ -1510,6 +1632,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
     g_stream_want_blob = want_blob
     bump_weights_epoch()
     t.quant = mode
+    conv_reset()
     if (g_env_engine.conv_prof) {
         set_conv_profile(true)
     }
@@ -1589,6 +1712,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
     bump_weights_epoch()
     var t = Model()
     t.quant = mode
+    conv_reset()
     if (g_env_engine.conv_prof) {
         set_conv_profile(true)
     }
@@ -2345,6 +2469,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // weights below
         if (!t.emb_q8 && !cls_kq(t)) {
             gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.fblob, t.tok_emb_off, vocab * dim)
+            conv_account(m, "token_embd.weight", "f32 token table", ConvServed.f32, KqFmt.q8, vocab * dim)
         }
         // gpt-oss names its pre-FFN norm post_attention_norm (same graph role as ffn_norm)
         let ffn_norm_name = t.config.post_attn_is_ffn_norm ? "post_attention_norm" : "ffn_norm"
@@ -2679,6 +2804,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
         }
         to_log(LOG_INFO, "dasLLAMA: load stage wscale: {get_time_usec(ts_stage) / 1000} ms, total {get_time_usec(ts_load) / 1000} ms\n")
+        log_conversion_report(t, long_length(bytes))
         log_load_report(t)
         if (!g_fill_plan_mode) {   // streaming converts only — no serving, no gathers over unmade planes
             ple_check_table(t, "gguf load")

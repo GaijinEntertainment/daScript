@@ -32,9 +32,16 @@ struct BpeTokenizer {
     // SPM-style BPE (Gemma-4): raw-UTF-8 merges (no GPT-2 byte alphabet), '▁' space escape,
     // newline-run pre-split. No field default — zero-init `var tk : BpeTokenizer` must stay legal.
     spm_space : bool
-    // whether encode(add_special) prepends BOS — the GGUF add_bos_token key, else a per-pre
-    // default (gpt-4o adds none). Same no-field-default rule as spm_space.
     add_bos : bool
+}
+
+//! Whether a BPE vocab whose GGUF omits `tokenizer.ggml.add_bos_token` prepends BOS - upstream's
+//! per-pre default; the list is the pres that add one, every other pre adds none.
+def bpe_pre_adds_bos(pre : string) : bool {
+    for (p in ["llama3", "llama-v3", "llama-bpe", "falcon3", "falcon-h1", "pixtral", "midm-2.0", "lfm2", "jina-v5-nano", "tekken", "chameleon"]) {
+        return true if (pre == p)
+    }
+    return false
 }
 
 //! Load the BPE vocab / merges / token-types from a llama-arch GGUF's tokenizer metadata.
@@ -65,11 +72,9 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
         // Qwen2.5-Omni GGUFs omit bos_token_id entirely (qwen2 never adds BOS)
         tk.bos_id = gguf_has(m, "tokenizer.ggml.bos_token_id") ? gguf_int(m, bytes, "tokenizer.ggml.bos_token_id") : -1l
         tk.eos_id = gguf_int(m, bytes, "tokenizer.ggml.eos_token_id")
-        // the metadata key wins; absent, the per-pre default applies (gpt-4o adds no BOS,
-        // the llama-bpe family keeps it)
         tk.add_bos = (gguf_has(m, "tokenizer.ggml.add_bos_token")
             ? gguf_int(m, bytes, "tokenizer.ggml.add_bos_token") != 0l
-            : tk.pre != "gpt-4o")
+            : bpe_pre_adds_bos(tk.pre))
         if (tk.pre == "gpt-4o") {
             // these gpt-oss control tokens force-render (attr -> USER_DEFINED) so channel
             // markers stay visible in decoded text (type 4 escapes the type-3 mute rule)

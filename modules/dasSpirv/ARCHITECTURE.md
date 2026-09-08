@@ -45,8 +45,10 @@ compute test as a ready-made end-to-end gate.
    path), lavapipe advertises >= 1.2, and at `<= 1.3` the entry-point interface lists only
    Input/Output globals (1.4 requires *all* globals, which would churn every stage's
    interface). The version is a per-module field, `SpirvModule.version`: a mesh or task stage
-   raises it to 1.4 because `SPV_EXT_mesh_shader` requires it, and a few subgroup and
-   cooperative-matrix ops raise it to 1.5. Every other stage stays at 1.3.
+   raises it to 1.4 because `SPV_EXT_mesh_shader` requires it, a call that re-types a
+   Block-laid-out struct with `OpCopyLogical` (sec.3.5) raises it to 1.4 because that opcode
+   requires it, a few subgroup ops raise it to 1.5, and the cooperative-matrix ops raise it to
+   1.6. Every other stage stays at 1.3.
 
 ## 3. Files and emission mechanism {#files-and-emission}
 
@@ -89,7 +91,7 @@ without macro plumbing.
 **`[spirv_decode]` method form.** The decode callback's SPIR-V signature is a rigid three
 parameters. The method form erases the das-level `self` from it, so the decode body still reads
 its class members - a separate scale plane, push constants, `@workgroup` staging. The four-wide
-twin of that callback is section 3.3.
+twin of that callback is section 3.3; a kernel body calling the method directly is section 3.5.
 
 **Cooperative-matrix element loops carry `Unroll`.** `coopmatClamp` walks a coopmat local
 element by element through a hand-emitted structured loop bounded by
@@ -181,6 +183,45 @@ the operand a condition rules out is exactly the one whose index the condition g
 device an out-of-range load is a fault that surfaces only when the overshoot leaves mapped memory,
 so it tracks allocation layout, not the kernel's inputs. A local fixed array stays eager: its
 index is register arithmetic, not a device address.
+
+### 3.5 A kernel calls a decode method directly {#direct-decode-call}
+
+A kernel body may CALL a `[spirv_decode]` method directly: that is an ordinary user function -
+its own OpFunction, registered beside the callback form and pulling no cooperative-matrix
+capability - which is what lets one decode body serve a tensor load on a cm2 device and a
+hand-staged tile on a KHR one. The block argument takes one of two forms, fixed per method at
+discovery (a method called both ways is refused). Called on the plane element itself
+(`decode(wq[i], bc, cib)`), the block parameter is emitted as the element's `uint` INDEX and the
+function's entry chains `OpAccessChain plane, 0, index` once, binding the parameter as a memory
+local in the plane's own storage class, so the body's member reads chain through the plane
+exactly as the callback form's chain through its block pointer - the element is never loaded as
+a value. A pointer could not travel instead: under logical addressing an SSBO pointer is not a
+legal OpFunctionCall argument without the VariablePointersStorageBuffer capability, and the
+index needs no capability at all. Called on a copy (`let blk = wq[i]; decode(blk, bc, cib)`),
+the block goes by value and lands in the spill local of the next paragraph - the whole block
+loaded and stored per call, which the KHR tile measured at a third of the element form's rate.
+
+**A struct value parameter with an aggregate member is a memory local.** A read-only parameter
+of a plain data struct that carries a fixed-array or nested-struct member (not a coopmat tile, a
+tensor object, a ray query or a sampler marker) binds its SSA OpFunctionParameter and is stored
+at entry into a Function-storage OpVariable. The variable is declared first in the entry block,
+ahead of the body's locals and call temps; the store that fills it follows the block's last
+OpVariable, because SPIR-V requires every OpVariable of a block to lead the block. The parameter
+is thereafter that local: its members access-chain like a `var` struct local's. The reason is a
+fixed-array member indexed at run time (`blk.qs[cib.y >> 1]`): an SSA composite offers no
+pointer, and `OpCompositeExtract` takes literal indices only. A scalar-only struct parameter
+keeps the value path (its members extract), and a `let` copy of a block element in a body stays
+a composite (scalar and vector members extract; its array and struct members are still refused),
+because reading it whole and then storing it would double every element load; the parameter
+form pays the store once per call. The Metal emitter needs no arm for this: an MSL function
+takes a struct by value and its members are addressable as written.
+
+**A struct loaded out of a `Block` re-types at the call.** A struct loaded out of a `Block` -
+an ssbo element - carries the Block's laid-out `OpTypeStruct`, a different type id from the
+plain struct a parameter takes, so a call passing one re-types the value with `OpCopyLogical`
+first, and the module's version floor rises to SPIR-V 1.4, which that opcode requires. The
+emitter remembers the struct type each loaded id was read as and copies only when the two ids
+differ, so a struct already at the plain type passes through untouched.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 

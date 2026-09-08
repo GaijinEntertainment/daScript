@@ -2697,6 +2697,120 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
     t |> equal(sdiff, 0, "kq {fmt}: scale device bytes identical from disk-order and grp planes")
 }
 
+//! the decoded sub-scale byte a synthetic plane row carries at (row, blk): iq4xs's ls - 32, the iq3 family's 1 + 2s
+def private iq_plane_sc(fmt : KqFmt; r, blk : int64) : int {
+    return fmt == KqFmt.iq4xs ? int((r * 5l + blk * 7l) % 64l) - 32 : 1 + 2 * int((r * 3l + blk * 5l) % 16l)
+}
+
+def private iq_plane_d(r : int64) : float => 0.25 + 0.5 * float(r)
+
+def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
+    let n = 512l
+    let d = 16l
+    let nsb = n / 256l
+    let mr = kq_layout_of(int(fmt))
+    let qsb = kq_qsb(fmt)
+    let ssb = kq_ssb(fmt)
+    var kq : array<uint8>
+    var ks : array<uint8>
+    kq |> resize(d * nsb * qsb)
+    ks |> resize(d * nsb * ssb)
+    var st = 0xC0FFEEu
+    for (i in range64(d * nsb * qsb)) {
+        st = st * 1664525u + 1013904223u
+        kq[i] = uint8(st >> 24u)
+    }
+    for (r in range64(d)) {
+        for (sbi in range64(nsb)) {
+            let ro = (r * nsb + sbi) * ssb
+            let dh = f32_to_f16(iq_plane_d(r + sbi))
+            ks[ro] = uint8(dh & 0xFFu)
+            ks[ro + 1l] = uint8((dh >> 8u) & 0xFFu)
+            for (blk in range64(8l)) {
+                ks[ro + 4l + blk] = uint8(iq_plane_sc(fmt, r + sbi, blk) & 0xFF)
+            }
+        }
+    }
+    var m = Model()
+    if (fmt == KqFmt.iq4xs) {
+        m.iq4xsq := kq
+        m.iq4xss := ks
+    } elif (fmt == KqFmt.iq3s) {
+        m.iq3sq := kq
+        m.iq3ss := ks
+    } elif (fmt == KqFmt.iq3xxs) {
+        m.iq3xxsq := kq
+        m.iq3xxss := ks
+    } else {
+        m.iq2xxsq := kq
+        m.iq2xxss := ks
+    }
+    var wqDisk : array<uint8>
+    var wsDisk : array<uint8>
+    moe_gpu_gather_stack_kq(m, fmt, 0l, n, d, d, false, mr, wqDisk, wsDisk)
+    // the device row is two words: word 0 = the f16 d with iq4xs's high scale bits above it, word 1 = eight 4-bit fields
+    var bad = 0
+    for (r in range64(d)) {
+        for (sbi in range64(nsb)) {
+            let wo = (r * nsb + sbi) * 8l
+            let w0 = uint(wsDisk[wo]) | (uint(wsDisk[wo + 1l]) << 8u) | (uint(wsDisk[wo + 2l]) << 16u) | (uint(wsDisk[wo + 3l]) << 24u)
+            let w1 = uint(wsDisk[wo + 4l]) | (uint(wsDisk[wo + 5l]) << 8u) | (uint(wsDisk[wo + 6l]) << 16u) | (uint(wsDisk[wo + 7l]) << 24u)
+            if (f16_to_f32(w0 & 0xFFFFu) != iq_plane_d(r + sbi)) {
+                bad++
+            }
+            for (blk in range64(8l)) {
+                let f = int((w1 >> uint(4l * blk)) & 15u) | (int((w0 >> uint(16l + 2l * blk)) & 3u) << 4)
+                let got = fmt == KqFmt.iq4xs ? f - 32 : 1 + 2 * f
+                if (got != iq_plane_sc(fmt, r + sbi, blk)) {
+                    bad++
+                }
+            }
+        }
+    }
+    t |> equal(bad, 0, "kq {fmt}: the two-word device scale rows decode back to the plane's d and sub-scales")
+    t |> equal(long_length(wqDisk), d * nsb * qsb, "kq {fmt}: the quant plane gathers whole")
+    if (fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s) {
+        unsafe {
+            if (fmt == KqFmt.iq4xs) {
+                repack_iq4xs_grp(addr(m.iq4xsq[0]), addr(m.iq4xss[0]), n, d, mr)
+            } else {
+                repack_iq3s_grp(addr(m.iq3sq[0]), addr(m.iq3ss[0]), n, d, mr)
+            }
+        }
+        var wqGrp : array<uint8>
+        var wsGrp : array<uint8>
+        moe_gpu_gather_stack_kq(m, fmt, 0l, n, d, d, true, mr, wqGrp, wsGrp)
+        var qdiff = 0
+        for (a, b in wqDisk, wqGrp) {
+            if (a != b) {
+                qdiff++
+            }
+        }
+        var sdiff = 0
+        for (a, b in wsDisk, wsGrp) {
+            if (a != b) {
+                sdiff++
+            }
+        }
+        t |> equal(qdiff, 0, "kq {fmt}: quant device bytes identical from disk-order and grp planes")
+        t |> equal(sdiff, 0, "kq {fmt}: scale device bytes identical from disk-order and grp planes")
+        delete wqGrp
+        delete wsGrp
+    }
+    delete wqDisk
+    delete wsDisk
+    delete m
+}
+
+[test]
+def test_kq_gpu_gather_iq(t : T?) {
+    for (fmt in [KqFmt.iq4xs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2xxs]) {
+        t |> run("moe_gpu_gather_stack_kq {fmt}: the codebook format's two-word device scale rows") @(t : T?) {
+            kq_gpu_gather_iq_gate(t, fmt)
+        }
+    }
+}
+
 [test]
 def test_kq_gpu_gather_grp(t : T?) {
     for (fmt in [3, 6]) {

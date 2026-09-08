@@ -1316,6 +1316,14 @@ def cls_kq(t : Model) : bool => t.kquant_native && t.config.shared_weights && t.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
 
 // Exact reserve then size — no pow2 slack, and the reserved resize never trips max_unreserved_size.
+//! A byte count against its baseline for a report line: "+12 MB, +3.4%" (a zero baseline prints n/a for the percent).
+def mb_delta(now, base : int64) : string {
+    let d = now - base
+    let sign = d < 0l ? "-" : "+"
+    let pct = base > 0l ? "{sign}{100.0lf * double(abs(d)) / double(base):.1f}%" : "n/a"
+    return "{sign}{abs(d) >> 20l} MB, {pct}"
+}
+
 def reserve_resize(var a : array<auto(numT)>; n : int | int64) {
     a |> reserve(n)
     a |> resize(n)

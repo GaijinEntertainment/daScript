@@ -48,3 +48,7 @@ fails the compile of a build without dasLLVM.
 **A function signature in this folder never names a type from one of those modules - those
 types stay inside the guarded arm, and plain types cross the boundary.** A signature cannot sit
 inside a `static_if` arm, so no guard fixes it.
+
+**A `[test]` file in this folder that carries a `require dasllama/...` line of its own answers
+to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
+there.

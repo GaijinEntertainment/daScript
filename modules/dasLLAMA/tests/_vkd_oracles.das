@@ -260,9 +260,9 @@ def iq4xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
             for (s in range(nsb)) {
                 let sb = w0 + s
                 let xsb = x0 + s
-                let dd = unpackHalf2x16(ws[sb * 5]).x
+                let dd = unpackHalf2x16(ws[sb * 2]).x
                 for (blk in range(8)) {
-                    let sc = byte_s8(ws, sb * 20 + 4 + blk)
+                    let sc = iq4xs_sc(ws[sb * 2], ws[sb * 2 + 1], uint(blk))
                     var bacc = 0.0
                     for (m in range(16)) {
                         let b = byte_u8(wq, sb * 128 + blk * 16 + m)
@@ -332,9 +332,9 @@ def iq3s_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
             for (s in range(nsb)) {
                 let sb = w0 + s
                 let xsb = x0 + s
-                let dd = half_at(ws, sb * 10)
+                let dd = unpackHalf2x16(ws[sb * 2]).x
                 for (blk in range(8)) {
-                    let sc = float(byte_s8(ws, sb * 20 + 4 + blk))   // the plane byte IS the signed (1 + 2s) sub-scale
+                    let sc = float(grid_sc(ws[sb * 2 + 1], uint(blk)))   // the row's 4-bit s field -> the signed (1 + 2s) sub-scale
                     var bacc = 0.0
                     for (e in range(32)) {
                         let l = e / 8
@@ -369,9 +369,9 @@ def iq3xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
             for (s in range(nsb)) {
                 let sb = w0 + s
                 let xsb = x0 + s
-                let dd = half_at(ws, sb * 10)
+                let dd = unpackHalf2x16(ws[sb * 2]).x
                 for (blk in range(8)) {
-                    let sc = float(byte_s8(ws, sb * 20 + 4 + blk))   // the plane byte IS the (2ls + 1) sub-scale
+                    let sc = float(grid_sc(ws[sb * 2 + 1], uint(blk)))   // the row's 4-bit field -> the (2ls + 1) sub-scale
                     let aux = byte_u8(wq, sb * 96 + 64 + blk * 4) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 1) << 8) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 2) << 16) | (byte_u8(wq, sb * 96 + 64 + blk * 4 + 3) << 24)
                     var bacc = 0.0
                     for (e in range(32)) {
@@ -488,11 +488,11 @@ def iq2xxs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
             for (s in range(nsb)) {
                 let sb = w0 + s
                 let xsb = x0 + s
-                let dd = half_at(ws, sb * 10)
+                let dd = unpackHalf2x16(ws[sb * 2]).x
                 for (b in range(8)) {
                     let gw = wq[sb * 16 + b * 2]
                     let aux = int(wq[sb * 16 + b * 2 + 1])
-                    let sc = float(byte_s8(ws, sb * 20 + 4 + b))   // SIGNED like the class/batch stage - real (2ls+1) strips stay positive
+                    let sc = float(grid_sc(ws[sb * 2 + 1], uint(b)))   // the row's 4-bit field -> the (2ls + 1) sub-scale, as the class stage decodes it
                     var bacc = 0.0
                     for (l in range(4)) {
                         let idx = int((gw >> uint(8 * l)) & 0xFFu)
@@ -531,9 +531,9 @@ def iq3sf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                 var acc = 0.0
                 for (s in range(nsb)) {
                     let sb = wsb0 + c * nsb + s
-                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    let dv = unpackHalf2x16(wsu[sb * 2]).x
                     for (g in range(8)) {
-                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - g % 4) * 8)) >> 24)
+                        let sc = float(grid_sc(wsu[sb * 2 + 1], uint(g)))
                         for (e in range(32)) {
                             let wj = e / 4
                             let qi = byte_u8(wq, sb * 104 + g * 8 + wj) | ((byte_u8(wq, sb * 104 + 64 + g) << (8 - wj)) & 256)
@@ -565,9 +565,9 @@ def iq3xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                 var acc = 0.0
                 for (s in range(nsb)) {
                     let sb = wsb0 + c * nsb + s
-                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    let dv = unpackHalf2x16(wsu[sb * 2]).x
                     for (g in range(8)) {
-                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - g % 4) * 8)) >> 24)
+                        let sc = float(grid_sc(wsu[sb * 2 + 1], uint(g)))
                         let aux = byte_u8(wq, sb * 96 + 64 + g * 4) | (byte_u8(wq, sb * 96 + 64 + g * 4 + 1) << 8) | (byte_u8(wq, sb * 96 + 64 + g * 4 + 2) << 16) | (byte_u8(wq, sb * 96 + 64 + g * 4 + 3) << 24)
                         for (e in range(32)) {
                             let qi = byte_u8(wq, sb * 96 + g * 8 + e / 4)
@@ -674,7 +674,7 @@ def iq2xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                 var acc = 0.0
                 for (s in range(nsb)) {
                     let sb = wsb0 + c * nsb + s
-                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    let dv = unpackHalf2x16(wsu[sb * 2]).x
                     for (e in range(256)) {
                         let g = e / 32
                         let rr2 = e % 32
@@ -688,7 +688,7 @@ def iq2xxsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                         tt = tt ^ (tt >> 2)
                         tt = tt ^ (tt >> 1)
                         let sgb = sidx | ((tt & 1) << 7)
-                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - (g % 4)) * 8)) >> 24)
+                        let sc = float(grid_sc(wsu[sb * 2 + 1], uint(g)))
                         let gb = float(int(IQ2XXS_GRID[idx * 2 + j / 4] >> uint(8 * (j % 4))) & 0xFF)
                         let w = float(float16(dv * sc * (((sgb >> j) & 1) != 0 ? -gb : gb)))
                         acc += w * half_at(xf, (row0 + r) * n + s * 256 + e)
@@ -867,9 +867,9 @@ def iq4xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                 var acc = 0.0
                 for (s in range(nsb)) {
                     let sb = wsb0 + c * nsb + s
-                    let dv = unpackHalf2x16(wsu[sb * 5]).x
+                    let dv = unpackHalf2x16(wsu[sb * 2]).x
                     for (g in range(8)) {
-                        let sc = float(int(wsu[sb * 5 + 1 + g / 4] << uint((3 - g % 4) * 8)) >> 24)
+                        let sc = float(iq4xs_sc(wsu[sb * 2], wsu[sb * 2 + 1], uint(g)))
                         for (e in range(32)) {
                             let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
                             let q = (by >> ((e / 16) * 4)) & 0xF

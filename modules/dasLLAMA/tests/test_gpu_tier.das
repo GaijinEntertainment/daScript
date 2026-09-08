@@ -13,6 +13,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_config
+require dasllama/dasllama_env   // g_env_gpu: an exported DASLLAMA_GPU answers gpu_want_auto ahead of the want state
 
 // ===== rdec doubles: record what arrives, answer distinctively =====
 
@@ -195,7 +196,7 @@ def test_gpu_tier_contract(t : T?) {
         t |> success(gpu_want_attn(), "attn wanted")
         t |> equal(gpu_want_heat(), 5l)
         t |> success(gpu_want_qkv(), "qkv wanted")
-        t |> success(!gpu_want_auto(), "auto not requested")
+        t |> equal(gpu_want_auto(), g_env_gpu.gpu ?? false, "auto follows an exported DASLLAMA_GPU, else the set state (not requested)")
         t |> success(gpu_want_arms_tier(), "arms-tier reflects the set state")
         // membership witness: ONE rail alone must flip the predicate (the aggregate case
         // above cannot see a dropped member)

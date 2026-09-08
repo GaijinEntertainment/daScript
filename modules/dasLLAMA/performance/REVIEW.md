@@ -9,15 +9,15 @@ validate through `../dasllama/dasllama_exchange_schema.das` instead.** The engin
 `dasllama/` require beyond the lint macro module) is `REVIEW.das`'s to enforce; weakening
 that gate is a defect.
 
-**Weakening `REVIEW.das`'s record-hygiene checks is a defect; the fix for a red is a re-mint
-on a quiet, session-free box, never an edit.** What each check enforces is read from the gate
-itself; each check's finding text states its own rule.
+**Weakening any check in `REVIEW.das` - the conditions it fires on - is a defect; the fix for a
+red is a re-mint on a quiet, session-free box, never an edit.**
 
 **Narrowing the scope of any `REVIEW.das` check - the files it walks, the names it does not
 flag - is a defect unless `../ARCHITECTURE_ENGINE.md` or `../ARCHITECTURE_MEASUREMENT.md`
-ledgers the excluded scope in the same change.** The single-exchange-client check walks the
-engine (`../dasllama/`); a measurement harness talking HTTP to a reference server is the
-ledgered exclusion.
+ledgers the excluded scope in the same change.** What each check enforces is
+read from the gate itself; each check's finding text states its own rule. The
+single-exchange-client check walks the engine (`../dasllama/`); a measurement harness talking
+HTTP to a reference server is the ledgered exclusion.
 
 **A diff that writes a commit stamp anywhere under this folder naming a commit the branch
 under review cannot reach is a defect - re-mint, or re-stamp to a reachable commit whose
@@ -39,8 +39,8 @@ checkout the record's provenance spells, the python legs by
 `../benchmarks/asr/requirements-*.txt`.
 
 **A diff that writes a records row, sidecar archive, or `defaults/` profile under this
-folder whose `provenance.dasllama_version` differs from, or is absent where, the
-`DASLLAMA_RELEASE` string (`../dasllama/dasllama_version.das`) is a defect - re-mint.** For a
+folder whose `provenance.dasllama_version` differs from, or is absent where,
+`DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`) is a defect - re-mint.** For a
 sidecar with an `engine_sha`, read the value at that commit; a `defaults/` profile compares
 against the branch under review. A ruler record pins its engines through `meta.das_sha`, and
 through `meta.lcpp_version` when a reference arm ran (`-` when none did).
@@ -77,11 +77,14 @@ second tool's record carrying the wrong engine, and looks real.
 
 **Outside `model_specs()` (text, in `model_specs.das`) and `asr_catalog()` (audio, in
 `profile_common.das`), a `.das` function under this folder that lists model files, quants,
-board membership, provenance, or parity fixtures is a defect.** Board membership is which
-models the site results board shows. Write a new list as a view over those two functions: it
-recomputes from them on every call, selects rows by one field whose value on the row states
-membership, never by matching a field against a list of literal values - file names, name
-prefixes, and recipe constants alike - and stores no `url`/`bytes`/`sha256` of its own.
+board membership, provenance, or parity fixtures is a defect - write it as a view over those
+two functions.** Board membership is which models the site results board shows.
+
+**A view over `model_specs()` or `asr_catalog()` recomputes from them on every call, selects
+rows by one field whose value on the row states membership, and stores no
+`url`/`bytes`/`sha256` of its own; a view that matches a field against a list of literal
+values - file names, name prefixes, recipe constants - is a defect.** A literal list is a
+second catalog that drifts from the first.
 
 **A diff that makes a recorded row or manifest under this folder pin a model file keeps that
 file's provenance on its own row.** The row is a row of `model_specs()` (`model_specs.das`) or
@@ -112,6 +115,11 @@ description: one `fetch_models.das -- -o <name>` run per changed row, on a box h
 row's model file, ending `0 pending, 0 failed` with the row reported `ok`, plus one unscoped
 `fetch_models.das --` run in which no row the diff touched is `pending`.** A box stocks only
 some of the rows, so an unscoped run's `pending` count is the box's.
+
+**A diff that changes the `recipe` of a row carrying no `sha256` records, in the PR
+description, the conversion command as run and the produced file's identity - its byte size,
+or a `file_identity` hash.** `fetch_models` reports such a row `ok` on presence alone, so its
+run cannot tell a re-mint from the stale file the old recipe made.
 
 **A diff that changes `fetch_models.das` beyond its comments records its settling evidence in
 the PR description: one unscoped `fetch_models.das --` run ending `0 failed`.**

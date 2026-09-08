@@ -138,7 +138,12 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   share no state; a third merge algorithm gets a fourth file. Two sanctioned family-name tests
   live here rather than in `dasllama_pretok`: the `pre`-name selector inside `bpe_encode`, and the
   gemma-4 newline-run split in `bpe_encode_spm_space`; `load_bpe_tokenizer_gguf`'s per-family
-  metadata defaults are the third and last.
+  metadata defaults are the third and last. A GGUF without `tokenizer.ggml.add_bos_token` takes
+  upstream's per-pre default (`bpe_pre_adds_bos`): the pres on its list - the llama3 family,
+  tekken, chameleon, a few smaller ones - prepend BOS, every other pre - qwen2, qwen35, gpt-2,
+  gpt-4o among them - prepends none. The
+  default matters: a Qwen hybrid fed a leading `<|endoftext|>` degenerates for the whole
+  generation, and the unsloth Qwen3.8 conversions omit the key.
 - **`dasllama_pretok.das`** - the pre-tokenizer: one hand-compiled split function per family
   (llama3/qwen2/qwen35, gpt-2, gpt-4o, tekken), selected by the BPE `pre` name. Regex-port growth
   lands here, never in the merge engine - the two change for different reasons (new model family
@@ -152,7 +157,14 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
 detection, the eager and streamed conversion ladders, and the load entry points. It owns nothing the
 forward path touches at run time - a loaded `Model` is the whole handoff - and it requires
 `dasllama_common` back for `Model`/`Session`, so the transformer umbrella requires it `public` and
-breaks the cycle. That re-export is what keeps every consumer on the facade.
+breaks the cycle. That re-export is what keeps every consumer on the facade. Every big-weight
+conversion is accounted as it runs (`conv_account`, on both the eager and the streamed ladder),
+and a load that converts ends with the report: the file's bytes, then each (disk type ->
+conversion kind) as bytes on disk against bytes served with the delta, biggest overhead first,
+and the count of tags the row-length rule demoted to the q8 rail (each demotion logged by
+name as it is decided). The delta column is where a served form costs more than the file - a
+decoded scale row, an f32 copy of a quantized token table - and it is read as a number, not
+inferred from image sizes.
 
 - **`dasllama_image.das`** - the prepared-model `.dlim` rail, and it is ONE rail
   (`ARCHITECTURE_IMAGE.md` sec.2.1). Nothing

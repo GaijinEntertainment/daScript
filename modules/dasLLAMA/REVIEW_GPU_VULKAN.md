@@ -1,8 +1,9 @@
 # dasLLAMA Vulkan Tier Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` and
-`ARCHITECTURE_GPU_VULKAN_DECODE.md`. Planned work: `followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` and `ARCHITECTURE_GPU_VULKAN_DECODE.md`. Planned work:
+`followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
@@ -10,8 +11,9 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 **A hand-written Vulkan pipeline build is a defect - a Vulkan pipeline is created only by a
 `[vk_dispatch]`-generated `ensure_*`.**
 
-**A diff that adds a Vulkan pipeline tears it down in `vk_drop_model_state`, in the same
-change.**
+**A diff that adds a Vulkan dispatch family adds its model-owned device buffers, descriptor-set
+caches and `*_ready` latch to `vk_drop_model_state`'s sweep, in the same change.** Pipelines
+are device-lifetime state that survives the drop and rebuilds lazily.
 
 **Never size a buffer bound as one SSBO (shader storage buffer) range above
 `vk_max_storage_range()` - check the size at the site that computes it, not at the site that
@@ -55,16 +57,31 @@ template cover both codecs, or a single-codec kernel has a sibling that serves t
 behind an arming gate that keys on `kv16`. The whole-model driver serves both codecs, so a
 codec no kernel covers silently drops that codec's GPU path.
 
-**A diff that adds a cm2 tile instance for a kq superblock format - one `kq_sb`
-(`dasllama/dasllama_kqformat.das`) accepts - changes such a format's cm2 decode body, or
-changes its four-wide twin (`decode_v4`) or its `DECV4` or `DECVEC` constant puts that
-format's `cm2:<fmt>` probe rows (`harness/vk_gemm_probe.das`), both the
-`DASLLAMA_VK_DECVEC=1` and the `=0` rows, in the PR body.** A cm2 tile is the
+**A diff that changes what a kq superblock format's cm2 tile emits - its instance set, its
+decode body or four-wide twin (`decode_v4`), its `DECV4` or `DECVEC` constant, or the shared
+`KqCm2BatchT` body - puts that format's `cm2:<fmt>` probe rows (`harness/vk_gemm_probe.das`),
+both the `DASLLAMA_VK_DECVEC=1` and the `=0` rows, in the PR body, or the claim that the
+format's emitted kernels are byte-identical to master's.** A cm2 tile is the
 NV_cooperative_matrix2 GEMM class stamped per weight format and token-column width (the
 class's `BN`) in `dasllama/dasllama_vulkan_classes.das`.
 
-**A cm2 tile format instance whose `DASLLAMA_VK_DECVEC=1` probe row is slower than its `=0` row
-ships one of two fixes in the same change: a hand-written `decode_v4` under
+**A `kq_sb` format (`dasllama/dasllama_kqformat.das`) that joins the cm2 template - a
+`<Fmt>Cm2T` format template in
+`dasllama/dasllama_vulkan_classes.das` - ships its KHR instantiation (`<Fmt>KhrBatch`, the
+`kq_batch_<fmt>_khr_cls` dispatch) and its arm in each of `khr_cls_ensure`, `khr_cls_set` and
+`khr_cls_enc` (`dasllama/dasllama_vulkan_prefill.das`) in the same change, and that format's
+kernel cell in `tests/test_vulkan_kernels.das` runs its KHR arm.** `pf_f16_feed` admits every
+`kq_sb` format in mm mode, so a format with no KHR class reaches the ladders' fall-through
+`verify` - a panic on a KHR-only card that no cm2 box reproduces without `DASLLAMA_COOPMAT=mm`.
+
+**A kernel body that calls a `[spirv_decode]` method directly passes the plane element itself
+(`decode(wq[i], ...)`), never a local copy of it (`let blk = wq[i]` then `decode(blk, ...)`).**
+Both compile: on the element the emitter passes the index and the callee chains through the
+plane; on a copy it loads and spills the whole block per call, and the KHR kq tile measured
+well under half its rate that way (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
+
+**A diff that puts a format's `cm2:<fmt>` probe rows in the PR body whose `DASLLAMA_VK_DECVEC=1`
+row is slower than its `=0` row ships one of two fixes in the same change: a hand-written `decode_v4` under
 `override DECV4 = true` on that format's class (`dasllama/dasllama_vulkan_classes.das`),
 re-measured so its `=1` row now beats its `=0` row; or `override DECV4 = false` and
 `override DECVEC = false` together, which puts the format back on the scalar callback.** With
@@ -79,8 +96,21 @@ moved: attention's `rdq_role_names` with `g_rdq_role`, recurrent's `RDQ_DN_NAMES
 `rdq_sample` indexes a fixed count per layer, so one extra or missing timestamp reports every
 later stamp under the wrong role name.
 
+**A decode GEMV class - a `KqGemvBase` leaf in `dasllama/dasllama_vulkan_classes.das` - that
+stages a codebook into `@workgroup` memory reads it from the family's grid buffer (`gridb`,
+binding 6, filled by `kq_grid_dev` at the format's `KQ_GRID_<FMT>` offset), never from a
+`*_grid_word` accessor.** The accessor is a constant composite the driver reads lane-serially
+per index, and a two-row workgroup pays that read on every row pair it walks
+(`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
+
 **A diff that changes how many GPU timestamps the resident prefill's window command records - a
 `pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in
 `dasllama/dasllama_vulkan_prefill.das` - updates `pf_roles_per_layer` and that file's
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
+
+**A diff that changes `AR_MAX_DIM` (`dasllama/dasllama_vulkan_common.das`) changes the `row`
+`@workgroup` slab of `ArBase` (`dasllama/dasllama_vulkan_classes.das`) and the `c.dim` cap of
+the Vulkan servability gate (`attn_dec_shape_ok`, `dasllama/dasllama_blocks.das`) to the same
+number, in the same change.** The add+rms kernels stage a whole row in that slab, so a slab
+shorter than the cap writes past its end.

@@ -160,9 +160,15 @@ struct private Quad {
     wv : array<float>
     wo : array<float>
     norm : array<float> // the layer's attention rms weight row
+    bq : array<float>   // the q/k/v projection bias rows (empty = the model has none)
+    bk : array<float>
+    bv : array<float>
     kmir : array<float> // the reference mirror (f16-rounded rows at absolute positions)
     vmir : array<float>
 }
+
+//! a bias row's pointer for the block hook: null when the quad carries no bias
+def private bias_ptr(b : array<float>) : float const? => !empty(b) ? unsafe(addr<float const?>(b[0])) : null
 
 // the expert stack pair (dequantized for the reference), the FFN norm row, the routing
 struct private Ffn {
@@ -189,10 +195,15 @@ def private plane_up(fmt : int; rows, n, seed, woff : int64; var w : array<float
     return moe_gpu_upload_stack(wqb, wsb, woff, n, rows, fmt)
 }
 
-// one attention quad's four planes, uploaded and dequantized; false = no device
-def private quad_up(var q : Quad; fmt : int; base : int64; seed : int64; phase : float; neox : bool) : bool {
+//! one attention quad's four planes, uploaded and dequantized; false = no device, hasb = the quad carries bias rows
+def private quad_up(var q : Quad; fmt : int; base : int64; seed : int64; phase : float; neox, hasb : bool) : bool {
     q.fmt = fmt
     q.neox = neox
+    if (hasb) {
+        q.bq <- [for (i in range64(QD)); 0.05 * sin(float(i) * 0.37 + phase)]
+        q.bk <- [for (i in range64(KVD)); 0.05 * cos(float(i) * 0.29 + phase)]
+        q.bv <- [for (i in range64(KVD)); 0.04 * sin(float(i) * 0.53 - phase)]
+    }
     q.woq = base
     q.wok = base + STRIDE
     q.wov = base + 2l * STRIDE
@@ -254,6 +265,15 @@ def private block_ref(var q : Quad; x : array<float>; pos : int64; cossin : arra
     gemv_ref(q.wk, KVD, N, xd, kr)
     gemv_ref(q.wv, KVD, N, xd, vr)
     kraw := kr
+    if (!empty(q.bq)) {
+        for (i in range64(QD)) {
+            qr[i] += q.bq[i]
+        }
+        for (i in range64(KVD)) {
+            kr[i] += q.bk[i]
+            vr[i] += q.bv[i]
+        }
+    }
     rope_ref(qr, NH, cossin, q.neox)
     rope_ref(kr, 1l, cossin, q.neox)
     for (i in range64(KVD)) {
@@ -317,8 +337,10 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     var xq : array<int8>
     var xs : array<float>
     feed_ref(x, qa.norm, qa.fmt, xd, xq, xs)
-    matmul_moe_gpu_attn_dec(xb2, kout, vout, qa.woq, qa.wok, qa.wov, qa.woo, qa.fmt, qa.fmt, qa.fmt, qa.fmt, xq, xs, cossin, null, null,
-        pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qa.neox, false)
+    unsafe {
+        matmul_moe_gpu_attn_dec(xb2, kout, vout, qa.woq, qa.wok, qa.wov, qa.woo, qa.fmt, qa.fmt, qa.fmt, qa.fmt, xq, xs, cossin, null, null,
+            bias_ptr(qa.bq), bias_ptr(qa.bk), bias_ptr(qa.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qa.neox, false)
+    }
     var xb2_ref : array<float>
     var kraw_ref : array<float>
     block_ref(qa, x, pos, cossin, xb2_ref, kraw_ref)
@@ -344,8 +366,10 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     let pair <- [0l, 1l]   // the tail arm routes slot j to expert j
     ffn_ref_sel(f, fd, pair, f.rw, x1_ref)
     // layer B on the block: its feed came from the tail; the host acts are ignored
-    matmul_moe_gpu_attn_dec(xb2, kout, vout, qb.woq, qb.wok, qb.wov, qb.woo, qb.fmt, qb.fmt, qb.fmt, qb.fmt, xq, xs, cossin, null, null,
-        pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qb.neox, false)
+    unsafe {
+        matmul_moe_gpu_attn_dec(xb2, kout, vout, qb.woq, qb.wok, qb.wov, qb.woo, qb.fmt, qb.fmt, qb.fmt, qb.fmt, xq, xs, cossin, null, null,
+            bias_ptr(qb.bq), bias_ptr(qb.bk), bias_ptr(qb.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qb.neox, false)
+    }
     t |> success(!moe_gpu_ffn_tail_pending(), "{tag} pos {pos}: layer B's attention collected the tail")
     check_row(t, "{tag} pos {pos} residual row after FFN A (the tail's combine)", x, x1_ref)
     var xb2b_ref : array<float>
@@ -361,13 +385,13 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
 }
 
 // one quad pair in one plane format through two positions; false = no device
-def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; neox : bool) : bool {
+def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; neox, hasb : bool) : bool {
     var qa : Quad
     var qb : Quad
-    if (!quad_up(qa, fmt, base, 21l + int64(fmt), 0.3, neox)) {
+    if (!quad_up(qa, fmt, base, 21l + int64(fmt), 0.3, neox, hasb)) {
         return false
     }
-    t |> success(quad_up(qb, fmt, base + 10l * STRIDE, 33l + int64(fmt), 0.7, neox), "{tag}: layer B's quad uploaded")
+    t |> success(quad_up(qb, fmt, base + 10l * STRIDE, 33l + int64(fmt), 0.7, neox, hasb), "{tag}: layer B's quad uploaded")
     let gen = moe_gpu_attn_dec_claim(true)
     // a layer the block has never seen hydrates first (zero rows at position 0 creates it), then serves
     t |> success(moe_gpu_attn_dec_ok(qa.woq, 0l, gen) == DAT_HYDRATE, "{tag}: an unseen layer asks for a hydrate at position 0")
@@ -515,6 +539,9 @@ def private span_args(qa, qb : Quad; f : Ffn) : MoeSpanDec {
         f1 <- [1, 1], f3 <- [1, 1], f2 <- [3, 3])
     a.rmsq |> resize(2)   // no qk-norm: null rows
     a.rmsk |> resize(2)
+    a.bq |> resize(2)   // no projection bias: null rows
+    a.bk |> resize(2)
+    a.bv |> resize(2)
     return <- a
 }
 
@@ -554,8 +581,8 @@ def test_vulkan_dec_span(t : T?) {
         }
         var qa : Quad
         var qb : Quad
-        t |> success(quad_up(qa, 1, 60l * STRIDE, 51l, 0.4, true), "dec span: layer A's quad uploaded")
-        t |> success(quad_up(qb, 1, 70l * STRIDE, 63l, 0.8, true), "dec span: layer B's quad uploaded")
+        t |> success(quad_up(qa, 1, 60l * STRIDE, 51l, 0.4, true, false), "dec span: layer A's quad uploaded")
+        t |> success(quad_up(qb, 1, 70l * STRIDE, 63l, 0.8, true, false), "dec span: layer B's quad uploaded")
         let gen = moe_gpu_attn_dec_claim(true)
         matmul_moe_gpu_attn_dec_hydrate(qa.woq, null, null, 0l, KVD, true)
         matmul_moe_gpu_attn_dec_hydrate(qb.woq, null, null, 0l, KVD, true)
@@ -634,8 +661,9 @@ def test_vulkan_dec_tail(t : T?) {
             t |> skip("dec tail: no Vulkan device (or probe/budget refused the upload)")
             return
         }
-        t |> success(pair_cell(t, f, 1, 10l * STRIDE, "k4 quads (Q8_K feed, neox rope)", true), "dec tail: the k4 pair uploaded")
-        t |> success(pair_cell(t, f, 0, 40l * STRIDE, "q8 quads (Q8_0 feed, classic rope)", false), "dec tail: the q8 pair uploaded")
+        t |> success(pair_cell(t, f, 1, 10l * STRIDE, "k4 quads (Q8_K feed, neox rope)", true, false), "dec tail: the k4 pair uploaded")
+        t |> success(pair_cell(t, f, 0, 40l * STRIDE, "q8 quads (Q8_0 feed, classic rope)", false, false), "dec tail: the q8 pair uploaded")
+        t |> success(pair_cell(t, f, 0, 80l * STRIDE, "q8 quads with the q/k/v projection bias (qwen2moe, neox rope)", true, true), "dec tail: the biased q8 pair uploaded")
     } else {
         t |> skip("dasVulkan not installed; the decode block and tail are untestable here")
     }

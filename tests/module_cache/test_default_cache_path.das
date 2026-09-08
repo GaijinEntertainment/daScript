@@ -15,6 +15,15 @@ def das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
+//! an AOT-consuming host (`test_aot --use-aot`) installs no default cache, and spawned as a child it
+//! runs the AOT'd program, not the script - no cache marker ever prints; the cell skips there
+def aot_host_skips(t : T?) : bool {
+    let hostArgs <- get_command_line_arguments()
+    if (find_index(hostArgs, "--use-aot") < 0) return false
+    t |> skip("an AOT-consuming host installs no default cache and runs no child script")
+    return true
+}
+
 //! the child shares dastest's cwd (argv[0] is a cwd-relative interpreter path), so the default
 //! cache lands in this tree's own .jitted_scripts/module_cache - the test removes what it wrote.
 //! Commands stay unquoted: a leading quote breaks Windows _popen (cmd /c quote stripping)
@@ -93,6 +102,7 @@ def quiet(out : string) : bool {
 //! an explicit -module-cache says how many modules the cache served and where the cutoff fell
 [test]
 def test_fallback_verdict_names_the_cutoff(t : T?) {
+    if (aot_host_skips(t)) return
     var terr : string
     let tmp = create_temp_directory("das_mc_verdict", terr)
     if (empty(tmp)) {
@@ -120,6 +130,7 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
 //! the same explicit cache read by a -no-lint run reparses every module in place and is rewritten
 [test]
 def test_policy_change_refuses_the_cache(t : T?) {
+    if (aot_host_skips(t)) return
     var terr : string
     let tmp = create_temp_directory("das_mc_policy", terr)
     if (empty(tmp)) {
@@ -149,6 +160,7 @@ def test_policy_change_refuses_the_cache(t : T?) {
 //! cache, and a same-size edit is a cutoff - the stamp never reads mtime
 [test]
 def test_source_stamp_is_content(t : T?) {
+    if (aot_host_skips(t)) return
     var terr : string
     let tmp = create_temp_directory("das_mc_stamp", terr)
     if (empty(tmp)) {
@@ -180,6 +192,7 @@ def test_source_stamp_is_content(t : T?) {
 //! same derivation, so a -v1syntax host serves a gen2 module instead of rewriting the cache every run
 [test]
 def test_source_derived_syntax_policy_serves(t : T?) {
+    if (aot_host_skips(t)) return
     var terr : string
     let tmp = create_temp_directory("das_mc_gen2", terr)
     if (empty(tmp)) {
@@ -274,6 +287,7 @@ def scramble_header(path : string) {
 //! warm run of a module whose only defence against a lint finding is the marker must still compile
 [test]
 def test_source_lines_survive_the_cache(t : T?) {
+    if (aot_host_skips(t)) return
     var terr : string
     let tmp = create_temp_directory("das_mc_src", terr)
     if (empty(tmp)) {
@@ -317,11 +331,7 @@ def check_damaged_cache(t : T?; base, a : string) {
 //! the AST module cache is on by default - silent, at a path keyed by script, host flags and DAS* env - and the flags that turn it off or make it loud
 [test]
 def test_default_module_cache(t : T?) {
-    let hostArgs <- get_command_line_arguments()
-    if (find_index(hostArgs, "--use-aot") >= 0) {
-        t |> skip("an AOT-consuming host never installs the default cache")
-        return
-    }
+    if (aot_host_skips(t)) return
     var terr : string
     let tmp = create_temp_directory("das_mc_default", terr)
     if (empty(tmp)) {
@@ -416,11 +426,7 @@ def record_size_in(dir, stem : string) : uint64 {
 //! explicit -module-cache path is never pruned
 [test]
 def test_default_cache_evicts_to_the_limit(t : T?) {
-    let hostArgs <- get_command_line_arguments()
-    if (find_index(hostArgs, "--use-aot") >= 0) {
-        t |> skip("an AOT-consuming host never installs the default cache")
-        return
-    }
+    if (aot_host_skips(t)) return
     var terr : string
     let tmp = create_temp_directory("das_mc_evict", terr)
     if (empty(tmp)) {

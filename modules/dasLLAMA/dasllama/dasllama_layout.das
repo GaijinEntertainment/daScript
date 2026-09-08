@@ -918,19 +918,44 @@ def q8_region_to_metal_blob(qp : int8 const?; sp : float const?; n, rows : int64
     }
 }
 
+//! The codebook formats' two-word device scale row: word 0 = the plane row's f16 d with iq4xs's
+//! scales_h above it, word 1 = the eight 4-bit fields (scales_l, or s) packed from the row's eight
+//! decoded sub-scale bytes (iq4xs's ls - 32 or the iq3 pair's 1 + 2s).
+def private pack_iq_dev_row(fmt : KqFmt; var out : uint8?; d : uint8 const?; sc : uint8 const?; sstride : int64) {
+    unsafe {
+        out[0] = d[0]
+        out[1] = d[1]
+        var hi = 0u
+        var lo = 0u
+        for (ib in range64(8l)) {
+            let v = int(int8(sc[ib * sstride]))
+            let f = uint(fmt == KqFmt.iq4xs ? v + 32 : (v - 1) >> 1)
+            lo |= (f & 15u) << uint(4l * ib)
+            hi |= ((f >> 4u) & 3u) << uint(2l * ib)
+        }
+        out[2] = uint8(hi & 0xFFu)
+        out[3] = uint8(hi >> 8u)
+        for (b in range64(4l)) {
+            out[4l + b] = uint8((lo >> uint(8l * b)) & 0xFFu)
+        }
+    }
+}
+
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
-// row-major per superblock in the k/k+16 nibble pairing, plus DECODED 20B scale rows. Reads
-// whatever the load prepared (grp<mr> interleave or disk-order); device bytes are identical either way.
+// row-major per superblock in the k/k+16 nibble pairing, plus the device scale rows (decoded 20 B, or
+// the codebook formats' two words); grp<mr> interleave or disk-order in, identical device bytes out.
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
     let qsb = kq_qsb(fmt)    // quant plane stride per superblock (disk == device for quants)
-    let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to KQ_DEV_SSB
+    let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to kq_dev_ssb(fmt)
+    let dev_ssb = kq_dev_ssb(fmt)
+    let two_word_row = kq_two_word_row(fmt)
     assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
     assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
     wq |> grow_resize(rows * nsb * qsb)
-    ws |> grow_resize(rows * nsb * KQ_DEV_SSB)
+    ws |> grow_resize(rows * nsb * dev_ssb)
     let nslices = int(rows / slice_rows)
     let qrow = nsb * qsb
     let srow = nsb * dssb
@@ -964,7 +989,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                         let r = ri % mr
                         for (sbi in range64(nsb)) {
                             var dq = wqp + rr * qrow + sbi * qsb
-                            var dsc = wsp + (rr * nsb + sbi) * KQ_DEV_SSB
+                            var dsc = wsp + (rr * nsb + sbi) * dev_ssb
                             if (grouped) {
                                 let gq = qp + sliceQ + g * mr * qrow + sbi * qsb * mr
                                 let gs = sp + sliceS + g * mr * srow + sbi * dssb * mr
@@ -1055,6 +1080,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     for (idx in range64(16l)) {
                                         dsc[4l + idx] = gs[idx * mr + r]
                                     }
+                                } elif (two_word_row) {   // the k4-shaped grp row (d at 2r, the eight sub-scale bytes mr-strided from 4mr) packs to two words
+                                    pack_iq_dev_row(fmt, dsc, gs + 2l * r, gs + 4l * mr + r, mr)
                                 } else {
                                     dsc[0] = gs[2l * r]
                                     dsc[1] = gs[2l * r + 1l]
@@ -1095,7 +1122,9 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                         dq[128l + p] = rq[128l + p]
                                     }
                                 }
-                                if (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {   // rows already in the decoded device form
+                                if (two_word_row) {   // the plane row (d, then the eight decoded sub-scale bytes at 4) packs to two words
+                                    pack_iq_dev_row(fmt, dsc, rs, rs + 4l, 1l)
+                                } elif (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.k3 || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs) {   // rows already in the decoded device form
                                     for (idx in range64(dssb)) {
                                         dsc[idx] = rs[idx]
                                     }

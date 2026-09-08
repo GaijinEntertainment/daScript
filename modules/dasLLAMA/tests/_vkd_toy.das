@@ -37,6 +37,36 @@ class VkdToy {
     }
 }
 
+struct VdBlk {
+    qs : int16[16]   //! 32 int8 quants as 16-bit lanes (the q8 block shape)
+}
+
+struct VdArgs {
+    n : uint
+}
+
+[vk_dispatch(name = "vkd_direct_decode", grid = "wgs", params = "wgs : int64")]
+class VkdDirectDecode {
+    @ssbo @binding = 0 wq : array<VdBlk>
+    @ssbo @binding = 1 ws : array<float16>
+    @ssbo @binding = 2 y : array<float>
+    @push_constant pa : VdArgs
+
+    [spirv_decode]
+    def decode(blk : VdBlk; bc, cib : uint2) : float16 {
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return ws[bc.y] * float16(float(int(q)))
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "vkd_direct_decode_spv")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.n) {
+            y[gid] = float(decode(wq[gid >> 5u], uint2(0u, gid >> 5u), uint2(0u, gid & 31u)))
+        }
+    }
+}
+
 // Two stamps of the served q8 cm2 l-tile, for the four-wide decode's device pair: the test
 // ensures one with `g_gpu.decvec_on` off (its words stripped to the scalar callback) and one
 // with it on (the twin served), and holds both to one CPU oracle. Stamps, so the served class's

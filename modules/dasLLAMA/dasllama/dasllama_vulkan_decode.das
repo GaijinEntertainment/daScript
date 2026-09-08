@@ -45,7 +45,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         return false
     }
     let hybrid = dn.cd > 0l
-    if (hybrid && !(dn.ds <= DN_MAX_DS && dn.ds % 32l == 0l && (dn.ds & (dn.ds - 1l)) == 0l && dn.nvh <= DN_MAX_HEADS && dn.cd <= DN_MAX_CD
+    if (hybrid && !(dn.ds <= DN_MAX_DS && dn.ds % 32l == 0l && (dn.ds & (dn.ds - 1l)) == 0l && dn.nvh <= DN_MAX_HEADS && dn.cd <= DN_MAX_CD && 2l * dn.kd <= DN_MAX_QK
             && dn.dconv <= DN_MAX_DCONV && dn.di == dn.nvh * dn.ds && dn.kd == dn.nkh * dn.ds
             && dn.cd == 2l * dn.kd + dn.di && dn.di % 32l == 0l && dn.di <= DND_OQ_BYTES)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: deltanet geometry (cd {dn.cd}, kd {dn.kd}, di {dn.di}, heads {dn.nvh}/{dn.nkh}, state {dn.ds}, conv {dn.dconv}) is outside the step kernel's capacity\n")
@@ -106,6 +106,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         r.dn_proj_dev = make_device_buf((dn.cd + dn.di) * 4l)
         r.dn_oq_dev = make_device_buf(DND_OQ_BYTES)
         r.dn_os_dev = make_device_buf(DND_OS_BYTES)
+        r.dn_of_dev = make_device_buf(DND_OQ_BYTES * 4l)
         r.dn_parity = 0
         ensure_dnd_state()   // the staging buffers the state uploads and flushes ride
     }
@@ -265,22 +266,23 @@ def vk_rdec_set_layer(l, mir_idx : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq
                 fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK | VHZ_KVV))
         }
         let mirbytes = g_rd.n_attn * g_rd.seq_cap * kvd * g_rd.kv_esz
+        let bias_bind = rd_bias_bind()
         if (g_rd.qk_norm) {
             // per-head q/k rmsnorm (class): q rows, k rows (kv_dev — kbase=qd rides the push), norms
             L.s_qkn = set_qk_rms_cls(fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.norms_dev),
                 fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, g_rd.norms_bytes),
                 fixed_array(VHZ_Q, VHZ_KVK, 0u))
-            // the fused twin (class): norm rows bind the norms buffer, mirror row rides TokMeta
-            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.cos_dev, g_rd.norms_dev, g_rd.tok_meta.buf)
-            let qrsizes = fixed_array(qbytes, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, g_rd.head_size * 4l, g_rd.norms_bytes, 16l)
-            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u)
+            // the fused twin (class): norm rows bind the norms buffer, mirror row rides TokMeta, the bias rows their buffer
+            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.cos_dev, g_rd.norms_dev, g_rd.tok_meta.buf, bias_bind.buf)
+            let qrsizes = fixed_array(qbytes, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, g_rd.head_size * 4l, g_rd.norms_bytes, 16l, bias_bind.bytes)
+            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u, 0u)
             L.s_qkn_rope = (kv16 ? set_qkn_rope_f16_cls(qrbufs, qrsizes, qrbits)
                 : set_qkn_rope_cls(qrbufs, qrsizes, qrbits))
         }
-        // rope+store (class): per-token mirror row rides TokMeta
-        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.cos_dev, g_rd.tok_meta.buf)
-        let rsizes = fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, g_rd.head_size * 4l, 16l)
-        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u)
+        // rope+store (class): per-token mirror row rides TokMeta, the bias rows their buffer
+        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.cos_dev, g_rd.tok_meta.buf, bias_bind.buf)
+        let rsizes = fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, g_rd.head_size * 4l, 16l, bias_bind.bytes)
+        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u)
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         // attn (class): per-token cnt rides TokMeta, the scale rides the push
         let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf)
@@ -373,6 +375,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         let anykq = kq_sb(f1) || kq_sb(f2)
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
             && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
+            && (!kq_sb(fout) || ensure_cls_q8k_rq())
             && gemv_cls_ensure(fqkv) && gemv_cls_ensure(fz) && gemv_cls_ensure(fout)
             && (g_rd.dn_ba_f32 || gemv_cls_ensure(int(KqFmt.q8)))
             && gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2),
@@ -408,11 +411,16 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
                 fixed_array(pa.wqb, pa.wsb, META_BYTES, dim, (dim / 32l) * 4l, DND_SMALLS_BYTES),
                 fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_DNSM))
         }
-        // the fused step: proj @0, state @1 (in place), smalls @2 (rw), o scales @3, o quants @4, tok @5
+        // the fused step: proj @0, state @1 (in place), smalls @2 (rw), o scales @3, o quants @4, tok @5, o f32 @6
         L.s_dnstep = set_dn_step_cls(
-            fixed_array(g_rd.dn_proj_dev, L.dn.state_dev, L.dn.smalls_dev, g_rd.dn_os_dev, g_rd.dn_oq_dev, g_rd.tok_meta.buf),
-            fixed_array((cd + di) * 4l, L.dn.state_bytes, DND_SMALLS_BYTES, DND_OS_BYTES, DND_OQ_BYTES, 16l),
-            fixed_array(VHZ_DNP, VHZ_DNST, VHZ_DNSM, VHZ_DNO, VHZ_DNO, 0u))
+            fixed_array(g_rd.dn_proj_dev, L.dn.state_dev, L.dn.smalls_dev, g_rd.dn_os_dev, g_rd.dn_oq_dev, g_rd.tok_meta.buf, g_rd.dn_of_dev),
+            fixed_array((cd + di) * 4l, L.dn.state_bytes, DND_SMALLS_BYTES, DND_OS_BYTES, DND_OQ_BYTES, 16l, DND_OQ_BYTES * 4l),
+            fixed_array(VHZ_DNP, VHZ_DNST, VHZ_DNSM, VHZ_DNO, VHZ_DNO, 0u, VHZ_DNO))
+        if (kq_sb(fout)) {
+            L.s_quant_dno = set_rq_cls(fixed_array(g_rd.dn_of_dev, g_rd.dn_oq_dev, g_rd.dn_os_dev),
+                fixed_array(DND_OQ_BYTES * 4l, DND_OQ_BYTES, DND_OS_BYTES),
+                fixed_array(VHZ_DNO, VHZ_DNO, VHZ_DNO))
+        }
         L.s_dnout = gemv_cls_set(fout, fixed_array(pout.wq, pout.ws, L.m_dnout.buf, g_rd.dn_oq_dev, g_rd.dn_os_dev, g_rd.xb2_dev),
             fixed_array(pout.wqb, pout.wsb, META_BYTES, di, (di / 32l) * 4l, dim * 4l),
             fixed_array(0u, 0u, 0u, VHZ_DNO, VHZ_DNO, VHZ_XB2))
@@ -421,6 +429,25 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     }
     g_rd.tok_recorded = false
 }
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+def vk_rdec_upload_bias(rows : array<float>) {
+    if (g_gpu != null && g_gpu.dry) {
+        return
+    }
+    assert(g_rd != null, "vk_rdec_upload_bias before prepare")
+    g_rd.bias_bytes = long_length(rows) * 4l
+    g_rd.bias_dev = make_device_buf(g_rd.bias_bytes)
+    upload_region_at(g_rd.bias_dev, 0l, unsafe(addr<uint8 const?>(rows[0])), g_rd.bias_bytes)
+    g_rd.has_bias = true
+}
+
+//! hasb 0 leaves the binding unread - the norms buffer only fills the slot
+def private rd_bias_bind() : tuple<buf : uint64; bytes : int64> {
+    return g_rd.has_bias ? (buf = g_rd.bias_dev, bytes = g_rd.bias_bytes) : (buf = g_rd.norms_dev, bytes = g_rd.norms_bytes)
+}
+
+def private rd_bias_off(l : int64) : uint => uint(l * (g_rd.qd + 2l * g_rd.kv_dim))
 
 //! The f32 arm's beta/alpha rows for every recurrent layer, in layer order: per layer `[beta rows
 //! (nvh x dim) ; alpha rows (nvh x dim)]`; a layer's base is its `ba_off` at set_dn_layer. The
@@ -569,7 +596,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.rot / 2l),
             neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = mirbase,
             qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
-            eps = g_rd.eps, qstride = qstride)
+            eps = g_rd.eps, qstride = qstride, boff = rd_bias_off(l), hasb = g_rd.has_bias ? 1u : 0u)
         if (g_rd.kv16) {
             enc_qkn_rope_f16_cls(raw, h, L.s_qkn_rope, pcf, g_rd.n_heads + kvd / hs)
         } else {
@@ -587,7 +614,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
         var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
             neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l),
-            layerbase = mirbase)
+            layerbase = mirbase, boff = rd_bias_off(l), hasb = g_rd.has_bias ? 1u : 0u)
         if (g_rd.kv16) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
         } else {
@@ -646,9 +673,13 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         dconv = uint(g_rd.dn_dconv), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
         taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
         dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
-        eps = g_rd.eps, qscale = 1.0 / sqrt(float(g_rd.dn_ds)))
+        eps = g_rd.eps, qscale = 1.0 / sqrt(float(g_rd.dn_ds)), out_f32 = kq_sb(L.fout) ? 1u : 0u)
     enc_dn_step_cls(raw, h, L.s_dnstep, pcd, nvh)
     pfq_ts(raw)
+    if (kq_sb(L.fout)) {   // no pfq_ts here - the requant bills to the out role, so the stamp count stands
+        var pcr = RqArgs(inbase = 0u, nblk = uint(di / 256l))
+        enc_cls_q8k_rq(raw, h, L.s_quant_dno, pcr, (di / 8l + 255l) / 256l)
+    }
     var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
     gemv_cls_enc(L.fout, raw, h, L.s_dnout, pco, (dim + rpw - 1l) / rpw)
     pfq_ts(raw)
@@ -872,6 +903,31 @@ def private rdq_sample {
     }
 }
 
+let private RD_PAGING_BYTES_PER_US = 40_000l   // 40 GB/s, the PCIe class
+
+//! The resident driver's device weight bytes (rdec_note_weight_bytes's seat; the plan hands them over after prepare)
+def vk_rdec_note_weight_bytes(bytes : int64) {
+    if (g_rd != null) {
+        g_rd.weight_bytes = bytes
+    }
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]   // the first four tokens and every 256th
+def private rd_logits_guard(logits : array<float>) {
+    for (v in logits) {
+        return if (v != 0.0)
+    }
+    panic("dasLLAMA vulkan tier: the device returned an all-zero logits row - the card is over-committed (planes demoted past what the driver can page back) or lost; close other GPU applications, lower DASLLAMA_GPU_VRAM_MB, or restart")
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]   // once per armed driver
+def private rd_warmup_check(wall_us : int64) {
+    vk_demotion_check("decode warm-up")
+    if (g_rd.weight_bytes > 0l && wall_us > g_rd.weight_bytes / RD_PAGING_BYTES_PER_US) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan tier: a decode token ran under {RD_PAGING_BYTES_PER_US / 1_000l} GB/s over {g_rd.weight_bytes / 1_000_000l} MB of resident weights - the paging class; close other GPU applications or lower DASLLAMA_GPU_VRAM_MB\n")
+    }
+}
+
 //! Resident-driver token: run the whole stack on device from the embedded residual `x` and this
 //! position's rope row (cos[half]+sin[half]) -> logits. `cnt` = cached positions incl. this one; K/V
 //! for `pos` store into the mirror. Recorded once — a step is two memcpys + position words + one submit.
@@ -893,6 +949,13 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var
         tm.parity = uint(g_rd.dn_parity)
         submit_wait(g_rd.cmd)
         memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+    }
+    g_rd.tokens_served++
+    if (g_rd.tokens_served <= 4l || (g_rd.tokens_served & 255l) == 0l) {
+        rd_logits_guard(logits)
+    }
+    if (g_rd.tokens_served == 8l) {
+        rd_warmup_check(int64(get_time_usec(ts0)))
     }
     if (vk_prof()) {
         g_rdq_wall_us += double(get_time_usec(ts0))
@@ -1005,6 +1068,7 @@ def private ensure_dnd_state {
     g_gpu.dnd_bg = make_host_buf(DND_BG_BYTES, false)
     g_gpu.dnd_oq_dev = make_device_buf(DND_OQ_BYTES)
     g_gpu.dnd_os_dev = make_device_buf(DND_OS_BYTES)
+    g_gpu.dnd_of_dev = make_device_buf(DND_OQ_BYTES * 4l)
     g_gpu.dnd_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet decode step engaged\n")
 }
@@ -1044,9 +1108,9 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
         fixed_array(0u, 0u, 0u, 0u, 0u, VHG_Y2))
     // fused step (class): proj = the shared y (qkv rows + z at cd); state advances in place — residency IS that binding; parity rides TokMeta
     st.fused_set = set_dn_step_cls(
-        fixed_array(g_gpu.stacks[s_qkv].y_dev, st.state_dev, st.smalls_dev, g_gpu.dnd_os_dev, g_gpu.dnd_oq_dev, st.tok.buf),
-        fixed_array(Y_BYTES, st.state_bytes, DND_SMALLS_BYTES, DND_OS_BYTES, DND_OQ_BYTES, 16l),
-        fixed_array(VHG_Y1 | VHG_Y2, VHG_ST, VHG_SM, VHG_WS, VHG_WS, 0u))
+        fixed_array(g_gpu.stacks[s_qkv].y_dev, st.state_dev, st.smalls_dev, g_gpu.dnd_os_dev, g_gpu.dnd_oq_dev, st.tok.buf, g_gpu.dnd_of_dev),
+        fixed_array(Y_BYTES, st.state_bytes, DND_SMALLS_BYTES, DND_OS_BYTES, DND_OQ_BYTES, 16l, DND_OQ_BYTES * 4l),
+        fixed_array(VHG_Y1 | VHG_Y2, VHG_ST, VHG_SM, VHG_WS, VHG_WS, 0u, VHG_WS))
     // out GEMV: out planes@0/1, its once-filled regions@2, the o image@3/4, its y_dev@5
     st.out_set = gemv_cls_set(fo, fixed_array(g_gpu.stacks[s_o].wqbuf, g_gpu.stacks[s_o].wsbuf, g_gpu.stacks[s_o].meta.buf,
             g_gpu.dnd_oq_dev, g_gpu.dnd_os_dev, g_gpu.stacks[s_o].y_dev),
@@ -1119,7 +1183,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
                    dim, cd, kd, di, nvh, nkh, ds, dconv : int64; eps : float) {
     let taps = dconv - 1l
     assert(ds <= DN_MAX_DS && ds % 32l == 0l && (ds & (ds - 1l)) == 0l && nvh <= DN_MAX_HEADS && cd <= DN_MAX_CD
-           && dconv <= DN_MAX_DCONV && di == nvh * ds && kd == nkh * ds && cd == 2l * kd + di
+           && 2l * kd <= DN_MAX_QK && dconv <= DN_MAX_DCONV && di == nvh * ds && kd == nkh * ds && cd == 2l * kd + di
            && dim % 32l == 0l && di % 32l == 0l && di <= DND_OQ_BYTES,
         "dasLLAMA vulkan tier: deltanet geometry outside step capacity")
     ensure_dnd_state()
@@ -1674,7 +1738,8 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
     ensure_ffn_state()
     for (li in range64(nl)) {
         dat_layer_ensure(a.woq[li], a.kvd)
-        dat_layer_sets(a.woq[li], a.wok[li], a.wov[li], a.woo[li], a.fq[li], a.fk[li], a.fv[li], a.fo[li], a.rmsq[li], a.rmsk[li], a.qk_norm)
+        dat_layer_sets(a.woq[li], a.wok[li], a.wov[li], a.woo[li], a.fq[li], a.fk[li], a.fv[li], a.fo[li], a.rmsq[li], a.rmsk[li],
+            a.bq[li], a.bk[li], a.bv[li], a.qk_norm)
     }
     ensure_span_state(a)
     assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: decode span with a decode ffn tail pending")
@@ -2038,7 +2103,8 @@ def private ensure_dat_state(dim, qd, kvd, hs : int64) {
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]   // once per layer: the chain's sets
-def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rmsqp : float const?; rmskp : float const?; qk_norm : bool) {
+def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rmsqp : float const?; rmskp : float const?;
+                           bqp : float const?; bkp : float const?; bvp : float const?; qk_norm : bool) {
     var L & = unsafe(g_gpu.dat_layers[woq])
     if (L.sets_made) {
         return
@@ -2080,6 +2146,18 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
             g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf, g_gpu.dat_kv_dev),
         fixed_array(g_gpu.stacks[sv].wqbytes, ws_range(sv), META_BYTES, XQ_BYTES, XS_BYTES, (qd + 2l * kvd) * 4l),
         fixed_array(0u, 0u, 0u, 0u, 0u, VHZ_KVV))
+    L.has_bias = bqp != null
+    if (L.has_bias) {
+        L.bias = make_device_buf((qd + 2l * kvd) * 4l)
+        unsafe {
+            upload_region_at(L.bias, 0l, reinterpret<uint8 const?>(bqp), qd * 4l)
+            upload_region_at(L.bias, qd * 4l, reinterpret<uint8 const?>(bkp), kvd * 4l)
+            upload_region_at(L.bias, (qd + kvd) * 4l, reinterpret<uint8 const?>(bvp), kvd * 4l)
+        }
+    }
+    // hasb 0 leaves this binding unread - the cos buffer only fills the slot
+    let bbuf = L.has_bias ? L.bias : g_gpu.dat_cos.buf
+    let bbytes = L.has_bias ? (qd + 2l * kvd) * 4l : hs * 4l
     if (qk_norm) {
         L.norms = make_device_buf(2l * hs * 4l)
         unsafe {
@@ -2087,14 +2165,14 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
             upload_region_at(L.norms, hs * 4l, reinterpret<uint8 const?>(rmskp), hs * 4l)
         }
         L.s_qkr = set_qkn_rope_f16_cls(
-            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, L.norms, g_gpu.dat_tok.buf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, 16l),
-            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u))
+            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, L.norms, g_gpu.dat_tok.buf, bbuf),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, 16l, bbytes),
+            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u))
     } else {
         L.s_qkr = set_rope_kv_f16_cls(
-            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 16l),
-            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u))
+            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf, bbuf),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 16l, bbytes),
+            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u))
     }
     L.s_attn = set_da_attn_f16_cls(
         fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf),
@@ -2199,13 +2277,14 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
     gemv_cls_enc(fk, raw, h, L.s_k, pck, (kvd + rpw - 1l) / rpw)
     var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd))
     gemv_cls_enc(fv, raw, h, L.s_v, pcv, (kvd + rpw - 1l) / rpw)
+    let hb = L.has_bias ? 1u : 0u   // the layer's own row is bound, so boff stays 0
     if (qk_norm) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
-            neox = neox ? 1u : 0u, nh = uint(n_heads), layerbase = 0u, qwoff = 0u, kwoff = uint(hs), eps = eps)
+            neox = neox ? 1u : 0u, nh = uint(n_heads), layerbase = 0u, qwoff = 0u, kwoff = uint(hs), eps = eps, boff = 0u, hasb = hb)
         enc_qkn_rope_f16_cls(raw, h, L.s_qkr, pcf, n_heads + kvd / hs)
     } else {
         var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
-            neox = neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l), layerbase = 0u)
+            neox = neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l), layerbase = 0u, boff = 0u, hasb = hb)
         enc_rope_kv_f16_cls(raw, h, L.s_qkr, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
     }
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale)
@@ -2243,11 +2322,12 @@ if (!L.recorded || vk_rdec_rerecord_on()) {
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]   // per token
 def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wok, wov, woo : int64; fq, fk, fv, fo : int;
                     xqp : int8 const?; xsp : float const?; cosp : float const?; rmsqp : float const?; rmskp : float const?;
+                    bqp : float const?; bkp : float const?; bvp : float const?;
                     pos, dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
     let ts0 = ref_time_ticks()
     ensure_dat_state(dim, qd, kvd, hs)
     dat_layer_ensure(woq, kvd)
-    dat_layer_sets(woq, wok, wov, woo, fq, fk, fv, fo, rmsqp, rmskp, qk_norm)
+    dat_layer_sets(woq, wok, wov, woo, fq, fk, fv, fo, rmsqp, rmskp, bqp, bkp, bvp, qk_norm)
     var L : DatLayer?
     unsafe {
         L = g_gpu.dat_layers?[woq]   // the ensure above made the key: a read, never an insert

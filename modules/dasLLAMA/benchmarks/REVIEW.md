@@ -20,31 +20,28 @@ not one the engine selected. Without the gate or the stamp the instrument measur
 kernels silently.
 
 **A diff that adds or changes a race alternates its arms within one process - one timed round
-per arm, best-of across rounds.** A race is an instrument that runs both implementations
-itself, in its own process, and compares them; an A/B arm is one run of an instrument under a
-named lever, compared against a paired run of the same instrument. One instrument is one or the
-other, never both.
+per arm, best-of across rounds.** A race arm times two implementations of the same computation
+in one process and compares them; an A/B arm is one run of an instrument under a named lever,
+compared against a paired run of the same instrument. An instrument is reviewed arm by arm.
 
-**A diff that adds or changes a race arm proves the arm's output on its report line, by what the
-arm computes:** an arm producing no comparable
-output carries the literal token `timing-only`; an arm whose result is bit-identical to the
-baseline's prints the bit-exact compare over the sampled region - the set of output elements
-the run compares - on the report's "bit-exact vs ..." line; every other arm prints a
-bounded-difference compare (against the baseline arm or the CPU reference) plus the bound it
-passed. How the arm orders its sums, and whether its multiply-adds fuse, decide bit-identity -
-not the declared precision.
+**A diff that adds or changes a race arm that computes a comparable output proves that output
+on its report line:** an arm whose result is bit-identical to the baseline's prints the
+bit-exact compare over the sampled region - the set of output elements the run compares - on
+the report's "bit-exact vs ..." line; every other arm prints a bounded-difference compare
+(against the baseline arm or the CPU reference) plus the bound it passed. How the arm orders
+its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared precision.
 
 **A diff that adds or changes a race also checks the race's baseline arm against a CPU
 reference.** The baseline arm is the arm running the implementation already in use. The
 reference check runs in the same process, on the same output elements the arms are judged on.
 Two arms can agree and both be wrong; only the reference makes the winner right.
 
-**A knockout or sweep arm - one that attributes cost across stages instead of selecting
-between two implementations - carries the literal token `timing-only` on its report line.**
+**An arm that compares no output - a knockout, a sweep across formats or stages, an arm whose
+output is not comparable - carries the literal token `timing-only` on its report line.**
 
-**An instrument all of whose arms attribute carries the literal text `ATTRIBUTION SWEEP` in its
-file header comment, on a line that also names what its arms attribute.** Without the text a
-reader takes the sweep's arms for an adoption decision it never made.
+**An instrument with no race arm carries the literal text `ATTRIBUTION SWEEP` in its file
+header comment, on a line that also names what its arms attribute.** Without the text a reader
+takes the sweep's arms for an adoption decision it never made.
 
 **A new instrument that puts its own clock around a served turn is a defect: add a board cell
 to `../performance/gen_bench_records.das`, or a `lcpp_bench.das` cell with its own

@@ -346,8 +346,8 @@ struct public VulkanEnv {
     @clarg_doc = "Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity)."
     trim : bool = false
 
-    @clarg_doc = "Tag allocations high-priority (VK_EXT_memory_priority) so the driver demotes desktop memory, not ours."
-    vk_memprio : bool = true
+    @clarg_doc = "Tag every device allocation priority 1.0 (VK_EXT_memory_priority). Off by default: on the NVIDIA WDDM driver the tag makes the tagged weights the pageable set, and a resident model then decodes at PCIe speed once anything is demoted."
+    vk_memprio : bool = false
 
     @clarg_doc = "Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths."
     vk_fa : bool = true
@@ -373,10 +373,10 @@ struct public VulkanEnv {
     @clarg_doc = "Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served)."
     vk_kv32 : int64 = 0l
 
-    @clarg_doc = "cm2 prefill tile pick: 0 = occupancy heuristic, 128 = force the m tile, 256 = force the l tile (A/B instrument)."
+    @clarg_doc = "cm2 prefill tile pick: 0 = occupancy heuristic, 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry."
     cm2_tile : int64 = 0l
 
-    @clarg_doc = "cm2 split-k: 0 = occupancy heuristic, 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail)."
+    @clarg_doc = "cm2 split-k: 0 = occupancy heuristic, 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). Inert on the KHR arm, whose kq tile carries no split-k scratch."
     cm2_splitk : int64 = 0l
 
     @clarg_path

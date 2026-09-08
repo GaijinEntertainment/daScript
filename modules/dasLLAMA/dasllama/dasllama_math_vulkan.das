@@ -81,6 +81,9 @@ def install_vk_moe_hooks {
     set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
     set_moe_gpu_ffn_tail_hooks(@@vk_moe_ffn_tail, @@vk_moe_ffn_tail_pending)
     set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
+    install_moe_gpu_os_memory(@@vk_os_memory_now)
+    install_rdec_note_weight_bytes(@@vk_rdec_note_weight_bytes)
+    install_moe_gpu_resident_bias(@@vk_rdec_upload_bias)
 }
 
 // the model drop: no chain may be in flight, the decode-side counters reset, then the tier's teardown

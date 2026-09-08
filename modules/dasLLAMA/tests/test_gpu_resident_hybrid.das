@@ -16,6 +16,7 @@ require daslib/fio
 require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
+require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 
 // The whole-model resident driver on a deltanet hybrid (Qwen3.5-0.8B-Q8_0 under DASLLAMA_GPU=1):
@@ -30,10 +31,24 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // (both conv-tail edges: the last window shorter than the taps).
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltanet bar test_deltanet.das holds too
-//! the K-quant bar: CPU-vs-device rounding sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file 0.19-0.36), with no growth and the one-step-off control well past it
+//! the K-quant bar on the f16 mirror: CPU-vs-device rounding sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file 0.19-0.36), with no growth and the one-step-off control well past it
 let private DN_LOGIT_BAR_REL_KQ = 0.06
-let private PF_WINDOW_ROWS = 512l     // dasllama_vulkan_prefill's PF_WINDOW: a prompt past it runs as sequential windows
+let private PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
 
+//! the served tile arm, so a red names which prefill tile it came from
+def private tile_arm_tag() : string {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return "coopmat mode {g_gpu.coopmat_mode}"
+    } else {
+        return "no vulkan module"
+    }
+}
+
+def private window_pin(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
+    }
+}
 def private argmax_of(v : array<float>) : int64 {
     var best = -1e30
     var bi = 0l
@@ -61,8 +76,7 @@ def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks
 }
 
 // prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
-// prefill logits and every step's within the deltanet bar, the one-step-off control past it. A
-// K-quant file (`kq`) must keep its deltanet qkv/z planes in their file formats on the driver.
+// prefill logits and every step's within the deltanet bar, the one-step-off control past it.
 def private hybrid_forced_feed(t : T?; n : int64; file : string; kq : bool) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
@@ -74,29 +88,34 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; kq : bool) {
         t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
         return
     }
+    if (kq && mirror_kv_dtype() == KVDtype.f32) {
+        t |> skip("the K-quant bar is calibrated on the f16 mirror the tier arms; the f32 A/B mirror (DASLLAMA_VK_KV32=1) is no gate for it")
+        return
+    }
     var tr <- load_model_(path, QuantMode.q8)
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the hybrid (the load log names any decline)")
     if (kq) {
         var native = 0l
         for (l in range64(tr.config.n_layers)) {
-            if (layer_is_recurrent(tr.config, l) && fmt_at(tr.dnqkv_fmt, l) != KqFmt.q8 && fmt_at(tr.dngate_fmt, l) != KqFmt.q8) {
+            if (layer_is_recurrent(tr.config, l) && fmt_at(tr.dnqkv_fmt, l) != KqFmt.q8 && fmt_at(tr.dngate_fmt, l) != KqFmt.q8
+                    && fmt_at(tr.dnout_fmt, l) != KqFmt.q8) {
                 native++
             }
         }
-        t |> success(native > 0l, "the loader kept the deltanet qkv/z planes in their K-quant file formats ({native} recurrent layers)")
+        t |> success(native > 0l, "the loader kept the deltanet qkv/z/out planes in their K-quant file formats ({native} recurrent layers)")
     }
     with_job_que() {
         setup_dasllama_jobque_()
         var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
         var toks <- [for (i in range64(8l)); 2000l + (i * 53l) % 4000l]
-        var sg <- create_session(tr, KVDtype.f16)   // the armed mirror codec
+        var sg <- create_session(tr, mirror_kv_dtype())
         let served0 = moe_gpu_resident_prefills()
         var gpu <- feed_logits(tr, sg, prompt, toks)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
         delete sg
         moe_gpu_drop_model()   // every later step is the CPU chain
-        var sc <- create_session(tr, KVDtype.f16)
+        var sc <- create_session(tr, mirror_kv_dtype())
         var cpu <- feed_logits(tr, sc, prompt, toks)
         delete sc
         let rel = kq ? DN_LOGIT_BAR_REL_KQ : DN_LOGIT_BAR_REL
@@ -105,7 +124,7 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; kq : bool) {
             let bar = rel * logits_maxabs(cpu[st])
             let ag = argmax_of(gpu[st])
             let ac = argmax_of(cpu[st])
-            let what = st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})"
+            let what = (st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
             to_log(LOG_INFO, "{what}: argmax cpu {ac} ({cpu[st][ac]}), resident {ag} ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
             t |> success(diff <= bar, "{what} logits: resident within {bar} of the CPU chain (maxdiff {diff})")
             if (st > 0l) {   // the control: the previous step's CPU logits are a disconnected mechanism the bar must RED
@@ -154,6 +173,7 @@ def test_gpu_resident_hybrid_kq(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M.gguf", true)
     }
     t |> run("Qwen3.5-0.8B-Q4_K_M: the same across two windows") @(t : T?) {
+        window_pin(t)
         hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q4_K_M.gguf", true)
     }
 }

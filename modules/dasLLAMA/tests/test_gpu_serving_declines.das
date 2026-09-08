@@ -4,8 +4,12 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require strings
 require daslib/strings_boost
+
+[unused_argument(rows)]
+def private test_upload_bias(rows : array<float>) {}
 
 // The whole-model driver's decline reasons, decided from a Config or a synthetic Model shell
 // (no weights on disk): every feature and layer shape the driver has no arm for is named in
@@ -53,6 +57,20 @@ def test_resident_unserved_features(t : T?) {
         c.attn_sinks = true
         t |> equal(resident_unserved_features(c), "attention sinks")
     }
+    t |> run("the q/k/v projection bias is named only while no bias seat is installed; a seat serves the qwen2 shape") @(t : T?) {
+        var c = Config()
+        c.attn_qkv_bias = true
+        c.rope_neox = true
+        let saved_seat = g_rdec_upload_bias
+        let saved_installed = g_rdec_bias_installed
+        g_rdec_bias_installed = false
+        t |> equal(resident_unserved_features(c), "attention qkv bias")
+        install_moe_gpu_resident_bias(@@test_upload_bias)
+        t |> equal(resident_unserved_features(c), "")
+        t |> equal(attn_chain_unserved_features(c), "", "the per-op chain carries the bias through its hooks - no seat to install")
+        g_rdec_upload_bias = saved_seat
+        g_rdec_bias_installed = saved_installed
+    }
 }
 
 [test]
@@ -62,6 +80,10 @@ def test_attn_chain_unserved_features(t : T?) {
         t |> equal(attn_chain_unserved_features(c), "interleaved (non-NEOX) rope")
         c.rope_neox = true
         t |> equal(attn_chain_unserved_features(c), "")
+        c.attn_qkv_bias = true
+        t |> equal(attn_chain_unserved_features(c), "", "the q/k/v projection bias is served (qwen2moe)")
+        c.attn_out_bias = true
+        t |> equal(attn_chain_unserved_features(c), "attention output bias")
         var p = Config()
         p.head_size = 256l
         p.rope_dim = 64l
@@ -91,9 +113,12 @@ def test_resident_layer_decline(t : T?) {
         m.dnout_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
         let sq = resident_layer_decline(m, 1l, hid0, hs, kvd)
         t |> success(!says(sq, "kq-tagged") && !says(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
-        // only the OUT plane kq-tagged: the step's o row feeds a q8 GEMV, so the layer declines by number
         m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
-        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's deltanet out plane is kq-tagged"), "kq-tagged out plane named")
+        let so = resident_layer_decline(m, 1l, hid0, hs, kvd)
+        t |> success(!says(so, "out plane"), "a K-quant out plane is no format decline: '{so}'")
+        //! an inner width off the format's block leaves the out plane untileable - the decline names it
+        m.config.ssm_d_inner = 100l
+        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
         delete m
     }
     t |> run("shared K/V, a missing plane and a differing FFN width each name the layer") @(t : T?) {
@@ -108,5 +133,49 @@ def test_resident_layer_decline(t : T?) {
         m.ffn_w <- [64l, 96l, 64l]
         t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 FFN width 96"), "FFN width named")
         delete m
+    }
+}
+
+[test]
+def test_resident_binding_ctx(t : T?) {
+    t |> run("the KV mirror's binding cap counts the attention layers' rows, whatever layer 0 is") @(t : T?) {
+        let bcap = 4_294_967_295l   //! the 4 GiB maxStorageBufferRange of the NV/AMD drivers
+        //! 32 layers, attention every fourth (3, 7, ..., 31), kv width 8 x 128 in f16: one side is 8 x 2048 B per position
+        var hy <- shell(32l, 0x7777_7777ul)
+        hy.config.n_kv_heads = 8l
+        hy.config.head_size = 128l
+        t |> success(layer_is_recurrent(hy.config, 0l) && layer_kv_dim(hy.config, 0l) == 0l, "layer 0 is recurrent: its kv width reads 0")
+        t |> equal(resident_binding_ctx(hy.config, KVDtype.f16, bcap), 262143l, "the hybrid's ctx is the range over eight attention rows, not skipped for layer 0's zero width")
+        t |> equal(resident_binding_ctx(hy.config, KVDtype.f32, bcap), 131071l, "f32 rows halve it")
+        t |> equal(resident_binding_ctx(hy.config, KVDtype.f16, 0l), 0l, "no cap known reads 0")
+        delete hy
+        var dense <- shell(32l, 0ul)
+        dense.config.n_kv_heads = 8l
+        dense.config.head_size = 128l
+        t |> equal(resident_binding_ctx(dense.config, KVDtype.f16, bcap), 65535l, "the dense twin counts all 32 rows")
+        delete dense
+        var recr <- shell(4l, 0xFul)
+        t |> equal(resident_binding_ctx(recr.config, KVDtype.f16, bcap), 0l, "no attention layer reads 0")
+        delete recr
+    }
+}
+
+[test]
+def test_plan_room(t : T?) {
+    t |> run("the plan's room: the tier cap less headroom, capped by the OS's room when it answers") @(t : T?) {
+        let gib = 1_073_741_824l
+        let silent = (budget = 0l, usage = 0l, adapter_dedicated = 0l, adapter_shared = 0l)
+        let no_os = plan_room(16l * gib, false, silent)
+        t |> equal(16l * gib * 27l / 100l, no_os.headroom, "no OS answer: 27% of a 16 GiB cap, past the 2 GiB floor, is the headroom")
+        t |> equal(16l * gib - no_os.headroom, no_os.usable, "no OS answer: the cap less the headroom")
+        t |> equal(0l, no_os.others, "no OS answer: nobody else is counted")
+        let os = (budget = 14l * gib, usage = 1l * gib, adapter_dedicated = 5l * gib, adapter_shared = 0l)
+        let answered = plan_room(16l * gib, false, os)
+        t |> equal(0l, answered.headroom, "an OS answer takes no headroom")
+        t |> equal(4l * gib, answered.others, "the other processes hold the adapter's dedicated usage less ours")
+        t |> equal(14l * gib - 4l * gib - 1l * gib, answered.usable, "the OS budget less the others and the 1 GiB reserve")
+        let pinned = plan_room(8l * gib, true, os)
+        t |> equal(8l * gib, pinned.usable, "a pinned cap fills itself and reads no room")
+        t |> equal(0l, pinned.others, "a pinned cap counts nobody else")
     }
 }

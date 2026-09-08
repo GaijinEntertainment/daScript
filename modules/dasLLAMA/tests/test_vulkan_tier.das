@@ -2014,11 +2014,24 @@ def test_vulkan_attention(t : T?) {
                 rmsq[i] = 1.0 + synth_f(int64(i), 71l, 0.3)
                 rmsk[i] = 1.0 + synth_f(int64(i), 73l, 0.3)
             }
-            // arms: (npos, rot, gated, k4 wo)
-            for (arm in [(npos = 70l, rot = 64l, gated = true, o4 = false),
-                         (npos = 70l, rot = 128l, gated = false, o4 = false),
-                         (npos = 70l, rot = 64l, gated = true, o4 = true),
-                         (npos = 1100l, rot = 64l, gated = true, o4 = false)]) {
+            var bq : array<float>
+            var bk : array<float>
+            var bv : array<float>
+            bq |> resize(int(ATQD))
+            bk |> resize(int(ATKVD))
+            bv |> resize(int(ATKVD))
+            for (i in range(int(ATQD))) {
+                bq[i] = synth_f(int64(i), 83l, 0.4)
+            }
+            for (i in range(int(ATKVD))) {
+                bk[i] = synth_f(int64(i), 89l, 0.4)
+                bv[i] = synth_f(int64(i), 97l, 0.4)
+            }
+            for (arm in [(npos = 70l, rot = 64l, gated = true, wo_k4 = false, bias = false),
+                         (npos = 70l, rot = 128l, gated = false, wo_k4 = false, bias = false),
+                         (npos = 70l, rot = 64l, gated = true, wo_k4 = true, bias = false),
+                         (npos = 1100l, rot = 64l, gated = true, wo_k4 = false, bias = false),
+                         (npos = 70l, rot = 128l, gated = false, wo_k4 = false, bias = true)]) {
                 let npos = arm.npos
                 let rot = arm.rot
                 let half = rot / 2l
@@ -2052,14 +2065,15 @@ def test_vulkan_attention(t : T?) {
                 unsafe {
                     matmul_moe_gpu_attn(y, kout, vout,
                         arm.gated ? ATQ_WOFF : ATQ_WOFF + 500000l, ATK_WOFF, ATV_WOFF,
-                        arm.o4 ? ATO4_WOFF : ATO_WOFF,
-                        0, 0, 0, arm.o4 ? 1 : 0, xq, xs,
+                        arm.wo_k4 ? ATO4_WOFF : ATO_WOFF,
+                        0, 0, 0, arm.wo_k4 ? 1 : 0, xq, xs,
                         addr<float const?>(rmsq[0]), addr<float const?>(rmsk[0]),
+                        arm.bias ? addr<float const?>(bq[0]) : null, arm.bias ? addr<float const?>(bk[0]) : null, arm.bias ? addr<float const?>(bv[0]) : null,
                         addr<float const?>(cosr[0]), addr<float const?>(sinr[0]),
-                        npos, ATD, ATQD, ATKVD, ATHS, rot, ATNH, ATNH / ATNKV,
+                        npos, ATD, ATQD, ATKVD, ATHS, rot, ATNH,
                         1.0 / sqrt(float(ATHS)), AT_EPS, arm.gated, true)
                 }
-                // the CPU mirror: GEMMs, prep, attention, requant, wo
+                // the CPU mirror: GEMMs (+ the projection bias), prep, attention, requant, wo
                 var qgy : array<float>
                 var ky : array<float>
                 var vy : array<float>
@@ -2070,6 +2084,17 @@ def test_vulkan_attention(t : T?) {
                 }
                 ref_q8_gemm(wk, wsk, xq, xs, ATD, ATKVD, npos, ky)
                 ref_q8_gemm(wv, wsv, xq, xs, ATD, ATKVD, npos, vy)
+                if (arm.bias) {   //! ungated: the q rows are plain [npos x ATQD]
+                    for (p in range64(npos)) {
+                        for (i in range64(ATQD)) {
+                            qgy[int(p * ATQD + i)] += bq[int(i)]
+                        }
+                        for (i in range64(ATKVD)) {
+                            ky[int(p * ATKVD + i)] += bk[int(i)]
+                            vy[int(p * ATKVD + i)] += bv[int(i)]
+                        }
+                    }
+                }
                 var qp : array<float>
                 var gatep : array<float>
                 var kp : array<float>
@@ -2080,7 +2105,7 @@ def test_vulkan_attention(t : T?) {
                 ref_at_attn(qp, kp, vy, gatep, npos, arm.gated, op)
                 // requant the o rows in the wo stack's form, then the wo GEMM
                 var refy : array<float>
-                if (arm.o4) {
+                if (arm.wo_k4) {
                     var oq : array<int>
                     var os : array<float>
                     oq |> resize(int(npos * ATQD))
@@ -2135,7 +2160,7 @@ def test_vulkan_attention(t : T?) {
                     delete oq
                     delete os
                 }
-                let tag = "npos={npos} rot={rot} gated={arm.gated} o4={arm.o4}"
+                let tag = "npos={npos} rot={rot} gated={arm.gated} o4={arm.wo_k4} bias={arm.bias}"
                 let cy = compare_gout(y, refy)
                 t |> success(cy.maxref > 0.0, "{tag}: chain produced non-trivial outputs")
                 t |> success(cy.maxdiff <= AT_REL_TOL * cy.maxref,

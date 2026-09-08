@@ -683,12 +683,34 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             vk_cov_model(t, path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"), "llama", [2])
             // gemma3 q8: the per-op arena rails + qk_norm
             vk_cov_model(t, path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf"), "gemma3", none)
-            // qwen3 q8: the resident fused qk_norm rail (qkn_rope) — the kq row below rides the
-            // split rail by construction, so this is the fused twin's only carrier
-            vk_cov_model(t, path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf"), "qwen3", none)
-            // qwen3 Q4_K_M: the native K-quant formats (k4/k6 GEMV + batch tiles) + the Q8_K
-            // activation quant forms + qk_norm on the split rail
-            vk_cov_model(t, path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), "qwen3", none)
+            // every prefill tile family under the coopmat modes its planes have twins in - the
+            // box's resolved mode, mm, sdot4, and for the q8 and q40 planes the f16 and int8
+            // coopmat twins too; the carriers are the qwen3 files (the Q8_0 also carries the
+            // resident fused qk_norm rail; the Q4_K_M k4/k6 with the Q8_K activation quant forms
+            // and qk_norm on the split rail) and the 1B requants the format arc used
+            let vehicles = fixed_array(
+                (file = "Qwen3-0.6B-Q8_0.gguf", family = "qwen3", nmodes = 5),
+                (file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf", family = "llama", nmodes = 5),
+                (file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", family = "qwen3", nmodes = 3),          // k4 + k6
+                (file = "Llama-3.2-1B-Instruct-IQ4_XS.gguf", family = "llama", nmodes = 3),
+                (file = "Llama-3.2-1B-Instruct-Q3_K_L.gguf", family = "llama", nmodes = 3),           // k3 + k5
+                (file = "Llama-3.2-1B-Instruct-IQ3_M.gguf", family = "llama", nmodes = 3),            // iq3s
+                (file = "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", family = "llama", nmodes = 3),
+                (file = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", family = "llama", nmodes = 3),
+                (file = "Llama-3.2-1B-Instruct-Q2_K-local.gguf", family = "llama", nmodes = 3),
+                (file = "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", family = "llama", nmodes = 3),
+                (file = "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf", family = "llama", nmodes = 3),
+                (file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", family = "llama", nmodes = 3))       // iq2s on the attention planes
+            let box_mode = g_gpu.coopmat_mode
+            let modes = fixed_array(box_mode, COOPMAT_MM, COOPMAT_SDOT4, COOPMAT_F16, COOPMAT_INT8)
+            for (v in vehicles) {
+                let vpath = path_join(models_dir(), v.file)
+                for (mi in range(v.nmodes)) {
+                    g_gpu.coopmat_mode = modes[mi]
+                    vk_cov_model(t, vpath, v.family, none)
+                }
+                g_gpu.coopmat_mode = box_mode
+            }
             // qwen3.5 q8: the DeltaNet chains (conv/step/scan + the decode step)
             vk_cov_model(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35", none)
             // qwen3.5 9B (large tier): head-256 gated attention on the cm2 flash stamps, the

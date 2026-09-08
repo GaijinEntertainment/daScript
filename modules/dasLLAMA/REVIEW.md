@@ -115,8 +115,8 @@ timing two candidates against each other. A reading taken across two processes, 
 commits, says which way the wall-clock time moved, not which implementation to adopt.
 
 **A change to an allocation reached from a load, bake, or convert path (judge a shared helper
-at each call site) that trades footprint for speed ships the measured pair - peak footprint and
-wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
+at each call site) that trades footprint against wall-clock, either way, ships the measured
+pair - peak footprint and wall-clock - in `PERF_LEDGER.md` with the decision it settles.**
 
 **A new call to an f32 matmul (`matmul_batch`, `mm_blob_b`, per-head `gemm_f32` /
 `gemm_f32_jo`, or an f32 GPU mm) outside a correctness-comparison path (one whose only job is
@@ -130,8 +130,8 @@ without first proving both stdin and stdout are terminals is a defect - emit the
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
 **A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside a
-cold one-shot load, bake, map or tokenizer-build progress log and the first-start race report
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a), is a defect** - instrumentation goes through the
+cold one-shot load, bake, map or tokenizer-build progress log and the fat exe's first-start
+kernel race report, is a defect** - instrumentation goes through the
 profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan
 tier's `vk_prof()`-gated ledgers), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
 
@@ -145,8 +145,10 @@ quantum - one batch of prompt tokens the prefill path processes in a single pass
 by an annotated region entry** - `[hot_path]`, any of the `[no_alloc]` / `[no_env]` /
 `[no_io]` contracts, or `[cold_path]` on its only reaching entry. Covered means an annotated
 entry reaches it: an annotation binds every function the entry calls, so an interior function
-carries nothing of its own; an entry no annotated entry reaches carries the annotation itself,
-and a function reached only through a registered function value is reached by none. A region
+carries nothing of its own except a `[cold_path]` that exempts a rarely-taken branch (a guard
+that logs once) from the entry's contracts; an entry no annotated entry reaches carries the
+annotation itself, and a function reached only through a registered function value is reached
+by none. A region
 entry is the outermost such function (a kernel `*_encode` / `*_decode`, a step driver, the CPU
 decoder's `forward_*` entries); a loop reached only from a load, stage, bake, or convert path is
 not one. A driver that calls the `forward_*` entries and is reached only by a measurement - a
@@ -155,10 +157,11 @@ only the functions below it that carry no annotation of their own.
 
 **A renamed per-token function is not new: its annotation moves with the name in the same change.**
 
-**A change to code or data of `encode`/`bpe_encode` or anything they reach in
-`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`
-ships before/after `--tok` rows (this folder's `benchmarks/lcpp_bench.das`) for a model using
-the affected tokenizer.**
+**A change to `encode`/`bpe_encode`, or to a function they call, in `dasllama/dasllama_spm.das` /
+`dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`, ships before/after `--tok` rows
+(this folder's `benchmarks/lcpp_bench.das`) for a model using the affected tokenizer.** A
+change confined to the load path - a metadata default the encode reads as a value - is the
+tokenizer-suite rule's below, not this one's.
 
 **A tokenizer wall-clock time that grows faster than linearly with input size is a defect** -
 the `--tok` rows cover at least two input sizes so the growth is readable.
@@ -256,9 +259,9 @@ a struct the renderer emits but the registry does not is caught by
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff that adds a file under `dasllama/`, moves code between files, or changes what a file
-owns lands the sec.1 edit that keeps the charters true - in an `ARCHITECTURE_*.md` companion,
-never `ARCHITECTURE.md` - in the same change.** A diff that adds a file to any
+**A diff the placement routing line above routes, or one that changes what a file owns, lands
+the sec.1 edit that keeps the charters true - in an `ARCHITECTURE_*.md` companion, never
+`ARCHITECTURE.md` - in the same change.** A diff that adds a file to any
 folder where another file has its own sec.1 charter line lands the new file's charter line
 too. A module-root doc file - a ledger, a plan - has no charter line and needs no charter
 edit.

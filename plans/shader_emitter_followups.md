@@ -34,3 +34,22 @@ the binding rules in `modules/REVIEW_SHADER_EMITTERS.md`. This file holds what i
      retires to "weakening that note is a defect".
    Done = the operators and `select` documented in `skills/daslang/`, the emitter heuristic gone,
    the census sites converted with the two measurements beside them.
+
+2. **`for [unroll]` unrolls at emission; a fixed-array local with constant indices becomes
+   registers.** Found 2026-09-07 by the integer GEMM tile prototypes
+   (`modules/dasLLAMA/harness/vk_gemm_probe.das -- mmqx`, `modules/dasLLAMA/followup_vulkan.md`
+   item 42): dasSpirv emits `for [unroll] (i in range(N))` as a loop carrying the `Unroll` loop
+   control and a `var acc : float[64]` local as a Function-storage `OpVariable` indexed by the
+   loop counter - a register block written as an array runs through local memory unless the
+   driver both unrolls and scalarizes, and the 5060 Ti's measured the same rate with the block
+   as named scalars, which says the shape, not the array, capped that kernel, but the array form
+   is what a 128-accumulator block (the reference exe's 4 x 32 register block) needs to be
+   writable at all. The plan: dasSpirv clones the body N times for a constant `range(N)` with the
+   counter bound to `OpConstant`, so every `arr[expr(i)]` chains a constant index (SROA-friendly in
+   every driver), and reports the unroll it performed in the same note channel item 1 gives the
+   branched operators; dasMetal needs nothing - MSL's `#pragma unroll` and the Metal compiler's
+   scalarization already do this, which is why the Metal GEMV twins carry `sumf : float[NR]`
+   arrays. Gate: a `tests/spirv` fixture pinning zero `OpLoopMerge` under an unrolled body and a
+   constant-index `OpAccessChain` per element, the kernel suite byte-identical elsewhere, and the
+   `mmqx` probe's ceiling twin re-measured with the block as an array.
+   Done = the fixture, the note, and the probe row.

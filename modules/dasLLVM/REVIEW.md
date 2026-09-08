@@ -133,3 +133,7 @@
   the detected host features.** LLVM's `SubtargetFeatures` takes the last occurrence of a name, so
   a forced feature placed first is silently overridden by detection. A wasm machine has no force
   knob and no detected features, so the rule does not reach it.
+
+**A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
+to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
+there.

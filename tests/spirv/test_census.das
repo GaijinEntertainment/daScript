@@ -108,6 +108,9 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, coopmat2fa256_words())
         add_set(present, q8store_words())
         add_set(present, unpack16_words())
+        add_set(present, spdirect_words())
+        add_set(present, spelem_words())
+        add_set(present, spelemi_words())
         var declared <- coopmat2fa_emitter_opcodes()
         for (op in keys(present)) {
             t |> success(key_exists(declared, op), "emitted {op_name(op)} is in the declared set")

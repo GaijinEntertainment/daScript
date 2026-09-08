@@ -1620,7 +1620,8 @@ def public phase10_6_emitter_opcodes : table<uint> {
 // already declared). OpFunction / OpLabel / OpFunctionEnd were declared back in Phase 1. Phase-10.6 + these:
 def public phase11_fn_emitter_opcodes : table<uint> {
     var s <- phase10_6_emitter_opcodes()
-    for (op in [SpvOp.FunctionCall, SpvOp.FunctionParameter, SpvOp.ReturnValue]) {
+    //! CopyLogical: the spdirect fixture's direct decode call
+    for (op in [SpvOp.FunctionCall, SpvOp.FunctionParameter, SpvOp.ReturnValue, SpvOp.CopyLogical]) {
         s |> insert(uint(op))
     }
     return <- s
@@ -2111,6 +2112,94 @@ def unpack16_kernel {
 
 def public unpack16_words : array<uint> {
     return clone_to_move(unpack16_spv)
+}
+
+// ===== spdirect: a [spirv_decode] method called DIRECTLY over a block the kernel body copied out of its plane =====
+struct SpBlk {
+    qs : int16[16]   // 32 int8 quants as 16-bit lanes (the q8 block shape)
+}
+
+struct SpArgs {
+    n : uint
+}
+
+class SpDirectCls {
+    @ssbo @binding = 0 wq : array<SpBlk>
+    @ssbo @binding = 1 ws : array<float16>
+    @ssbo @binding = 2 y : array<float>
+    @push_constant pa : SpArgs
+
+    [spirv_decode]
+    def decode(blk : SpBlk; bc, cib : uint2) : float16 {
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return ws[bc.y] * float16(float(int(q)))
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "spdirect_spv"), marker(no_coverage)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.n) {
+            let blk = wq[gid >> 5u]
+            y[gid] = float(decode(blk, uint2(0u, gid >> 5u), uint2(0u, gid & 31u)))
+        }
+    }
+}
+
+def public spdirect_words : array<uint> {
+    return clone_to_move(spdirect_spv)
+}
+
+// ===== spelem: the same call on the plane element itself - the block argument is the SSBO element =====
+class SpElemCls {
+    @ssbo @binding = 0 wq : array<SpBlk>
+    @ssbo @binding = 1 ws : array<float16>
+    @ssbo @binding = 2 y : array<float>
+    @push_constant pa : SpArgs
+
+    [spirv_decode]
+    def decode(blk : SpBlk; bc, cib : uint2) : float16 {
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return ws[bc.y] * float16(float(int(q)))
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "spelem_spv"), marker(no_coverage)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.n) {
+            y[gid] = float(decode(wq[gid >> 5u], uint2(0u, gid >> 5u), uint2(0u, gid & 31u)))
+        }
+    }
+}
+
+def public spelem_words : array<uint> {
+    return clone_to_move(spelem_spv)
+}
+
+// ===== spelemi: the plane-element call with an int index - the index bitcasts to uint on the way in =====
+class SpElemIntCls {
+    @ssbo @binding = 0 wq : array<SpBlk>
+    @ssbo @binding = 1 ws : array<float16>
+    @ssbo @binding = 2 y : array<float>
+    @push_constant pa : SpArgs
+
+    [spirv_decode]
+    def decode(blk : SpBlk; bc, cib : uint2) : float16 {
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
+        return ws[bc.y] * float16(float(int(q)))
+    }
+
+    [spirv_kernel(local_size_x = 64, name = "spelemi_spv"), marker(no_coverage)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.n) {
+            let i = int(gid >> 5u)
+            y[gid] = float(decode(wq[i], uint2(0u, gid >> 5u), uint2(0u, gid & 31u)))
+        }
+    }
+}
+
+def public spelemi_words : array<uint> {
+    return clone_to_move(spelemi_spv)
 }
 
 // ===== cooperative matrix (SPV_KHR_cooperative_matrix): an f16 x f16 -> f32 GEMM tile. Loads a 16x16 A

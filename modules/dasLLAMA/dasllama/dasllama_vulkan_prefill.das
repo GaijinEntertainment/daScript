@@ -40,7 +40,10 @@ var private @scratch g_pf_ids_stage : array<uint>
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_f16_feed(f : int) : bool {
-    return (f == int(KqFmt.q8) || kq_sb(f)) && g_gpu.coopmat_mode == 4
+    if (g_gpu.coopmat_mode == COOPMAT_CM2) {
+        return f == int(KqFmt.q8) || kq_sb(f)
+    }
+    return g_gpu.coopmat_mode == COOPMAT_MM && kq_sb(f) && khr_kq_tile_on()
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
@@ -57,10 +60,81 @@ def private pf_qkv_feed_fused(l : int64) : bool => !g_rd.layers[l].recurrent && 
 
 let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from it
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def khr_cls_ensure(fmt : int) : bool {
+    if (fmt == int(KqFmt.k4)) return ensure_kq_batch_k4_khr_cls()
+    if (fmt == int(KqFmt.k5)) return ensure_kq_batch_k5_khr_cls()
+    if (fmt == int(KqFmt.k6)) return ensure_kq_batch_k6_khr_cls()
+    if (fmt == int(KqFmt.q40)) return ensure_kq_batch_q40_khr_cls()
+    if (fmt == int(KqFmt.iq4xs)) return ensure_kq_batch_iq4xs_khr_cls()
+    if (fmt == int(KqFmt.k3)) return ensure_kq_batch_k3_khr_cls()
+    if (fmt == int(KqFmt.iq3s)) return ensure_kq_batch_iq3s_khr_cls()
+    if (fmt == int(KqFmt.iq3xxs)) return ensure_kq_batch_iq3xxs_khr_cls()
+    if (fmt == int(KqFmt.iq4nl)) return ensure_kq_batch_iq4nl_khr_cls()
+    if (fmt == int(KqFmt.k2)) return ensure_kq_batch_k2_khr_cls()
+    if (fmt == int(KqFmt.iq2s)) return ensure_kq_batch_iq2s_khr_cls()
+    if (fmt == int(KqFmt.iq2xs)) return ensure_kq_batch_iq2xs_khr_cls()
+    verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR ensure fell through for a format the f16 feed admits")
+    return ensure_kq_batch_iq2xxs_khr_cls()
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.k4)) return set_kq_batch_k4_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.k5)) return set_kq_batch_k5_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.k6)) return set_kq_batch_k6_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.q40)) return set_kq_batch_q40_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq4xs)) return set_kq_batch_iq4xs_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.k3)) return set_kq_batch_k3_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq3s)) return set_kq_batch_iq3s_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq3xxs)) return set_kq_batch_iq3xxs_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq4nl)) return set_kq_batch_iq4nl_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.k2)) return set_kq_batch_k2_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq2s)) return set_kq_batch_iq2s_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq2xs)) return set_kq_batch_iq2xs_khr_cls(bufs, sizes, gbits)
+    verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR set fell through for a format the f16 feed admits")
+    return set_kq_batch_iq2xxs_khr_cls(bufs, sizes, gbits)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    if (fmt == int(KqFmt.k4)) {
+        enc_kq_batch_k4_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k5)) {
+        enc_kq_batch_k5_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k6)) {
+        enc_kq_batch_k6_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.q40)) {
+        enc_kq_batch_q40_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        enc_kq_batch_iq4xs_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k3)) {
+        enc_kq_batch_k3_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq3s)) {
+        enc_kq_batch_iq3s_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        enc_kq_batch_iq3xxs_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        enc_kq_batch_iq4nl_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k2)) {
+        enc_kq_batch_k2_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq2s)) {
+        enc_kq_batch_iq2s_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq2xs)) {
+        enc_kq_batch_iq2xs_khr_cls(raw, h, s, pc, groups)
+    } else {
+        verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR enc fell through for a format the f16 feed admits")
+        enc_kq_batch_iq2xxs_khr_cls(raw, h, s, pc, groups)
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     verify(fmt == int(KqFmt.q8) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l, "vk prefill: a cm2 tile column the pick never returns")
+    if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        return khr_cls_ensure(fmt)
+    }
     if (fmt == int(KqFmt.k4)) {
         return tc == 256l ? ensure_kq_batch_k4_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k4_cm2m_cls() : ensure_kq_batch_k4_cm2s_cls())
     }
@@ -104,8 +178,11 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     return tc == 256l ? ensure_q8_batch_cm2l_cls() : (tc == 128l ? ensure_q8_batch_cm2m_cls() : ensure_q8_batch_cm2s_cls())
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        return khr_cls_set(fmt, bufs, sizes, gbits)
+    }
     if (fmt == int(KqFmt.k4)) {
         if (tc == 256l) {
             return set_kq_batch_k4_cm2l_cls(bufs, sizes, gbits)
@@ -191,9 +268,11 @@ def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 con
     return tc == 128l ? set_q8_batch_cm2m_cls(bufs, sizes, gbits) : set_q8_batch_cm2s_cls(bufs, sizes, gbits)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    if (fmt == int(KqFmt.k4)) {
+    if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        khr_cls_enc(fmt, raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k4)) {
         if (tc == 256l) {
             enc_kq_batch_k4_cm2l_cls(raw, h, s, pc, groups)
         } elif (tc == 128l) {
@@ -389,7 +468,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         }
     } elif (kq_sb(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
-        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
+        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
         let key = idx * 16 + 6
         if (!key_exists(g_rd.pf_cls_gemm, key)) {
             verify(kq_batch_cls_ensure(fmt, q40cm), "vk prefill: the kq batch class rail must engage")
@@ -545,6 +624,9 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     if (dn6) {
         var pco = ActArgs(nelem = uint(wlen * di), gelu = 0u, nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_dnof_set, pco, (wlen * di / 4l + 255l) / 256l)
+    } elif (kq_sb(L.fout)) {
+        var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(wlen * di / 256l))
+        enc_cls_q8k_rq(raw, h, g_rd.pf_dnrq_set, pcr, (wlen * di / 8l + 255l) / 256l)
     } else {
         var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(wlen * di / 32l))
         enc_cls_dn_rq(raw, h, g_rd.pf_dnrq_set, pcr, (wlen * di / 4l + 255l) / 256l)
@@ -619,20 +701,21 @@ def private pf_setup {
     }
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
     // f16-fed groups (pf_f16_feed) take f16 convert roles; kq consumers the Q8_K quant/act forms
-    var any6 = false
+    var any_f16_feed = false
     var anykq = kq_sb(g_rd.cls_fmt_marker)
     for (L in g_rd.layers) {
-        any6 = any6 || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
-        anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz)))
+        any_f16_feed = (any_f16_feed || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
+            || (L.recurrent && (pf_f16_feed(L.fqkv) || pf_f16_feed(L.fz) || pf_f16_feed(L.fout))))
+        anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz) || kq_sb(L.fout)))
     }
-    if (any6) {
+    if (any_f16_feed) {
         assert(np % 32l == 0l, "dasLLAMA vulkan tier: the s tile's unclamped column needs a 32-row-multiple window")   // the resident planes carry no read slack
     g_rd.pf_xf = make_device_buf(np * dim * 2l)
         g_rd.pf_af = make_device_buf(np * qd * 2l)
         g_rd.pf_hf = make_device_buf(np * hid * 2l)
     }
     // cm2 split-k scratch (one SSBO range): cap at the device range HERE where the size is negotiated
-    if (any6 && g_gpu.coopmat_mode == 4) {
+    if (any_f16_feed && g_gpu.coopmat_mode == COOPMAT_CM2) {
         var skb = 262_144l * int64(g_gpu.sm_count)
         let fsk = cm2_splitk_env()
         if (fsk > 1l) {
@@ -666,11 +749,11 @@ def private pf_setup {
         && (!g_rd.pf_facm2
             || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : (g_rd.head_size == 128l ? ensure_fa_cm2_h128_cls()
                 : (g_rd.q_gated ? ensure_fa_cm2_h256_g_cls() : ensure_fa_cm2_h256_cls()))))
-        && (!g_rd.pf_facm2 || !any6
+        && (!g_rd.pf_facm2 || !any_f16_feed
             || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_f16_cls() : (g_rd.head_size == 128l ? ensure_fa_cm2_h128_f16_cls()
                 : (g_rd.q_gated ? ensure_fa_cm2_h256_g_f16_cls() : ensure_fa_cm2_h256_f16_cls()))))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
-        && (!any6 || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
+        && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
@@ -699,7 +782,7 @@ def private pf_setup {
         g_rd.pf_dnrq_set = set_rq_cls(fixed_array(g_gpu.dn_ws_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(DN_WS_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(VHZ_DNWS, VHZ_HQ, VHZ_HQ))
-        if (g_gpu.coopmat_mode == 4) {
+        if (any_f16_feed) {
             g_rd.pf_dnof = make_device_buf(np * di * 2l)
             g_rd.pf_dnof_set = set_f16cvt_cls(fixed_array(g_gpu.dn_ws_dev, g_rd.pf_dnof),
                 fixed_array(DN_WS_BYTES, np * di * 2l), fixed_array(VHZ_DNWS, VHZ_HQ))
@@ -724,10 +807,10 @@ def private pf_setup {
                 fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
         // (GEMM roles 1/2/3/7/10/11/13 build lazily per router variant at record time)
         if (!L.recurrent) {
-            // 4 rope+store (class: q, kv, Kmir, Vmir, cos)
-            let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos)
-            let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.head_size * 4l)
-            let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS)
+            // 4 rope+store (class: q, kv, Kmir, Vmir, cos, bias)
+            let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
+            let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.head_size * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
+            let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u)
             g_rd.pf_sets[b + 4] = (kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits)
                 : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve
@@ -819,6 +902,7 @@ def private pf_setup {
 [hot_path]   // the per-window resident prefill — encode + one submit per window
 def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) {
     let noids : array<int64>
+    vk_demotion_check("prefill")
     pf_run(x_batch, noids, false, 1.0, cos_batch, npos, logits)
 }
 
@@ -826,6 +910,7 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int
 def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; var logits : array<float>) {
     assert(g_rd != null && (g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul), "vk_rdec_prefill_ids without a placed embd plane")
     let nox : array<float>
+    vk_demotion_check("prefill")
     pf_run(nox, tokens, true, emb_scale, cos_batch, npos, logits)
 }
 
@@ -1038,7 +1123,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.rot / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
                     layerbase = uint(mirb), npos = uint(wlen), pos0 = uint(w0),
-                    voff = uint(kv_merged ? kvd : wlen * kvd), kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs))
+                    voff = uint(kv_merged ? kvd : wlen * kvd), kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
+                    boff = uint(l * (qd + 2l * kvd)), hasb = g_rd.has_bias ? 1u : 0u)
                 if (g_rd.kv16) {
                     enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
                 } else {
@@ -1567,7 +1653,7 @@ def private cmd_copy_batch_acts(raw : VkCommandBuffer; xq_bytes, xs_bytes : int6
 // build the chunk's schedule: regions clipped to the row window [r0, r1) (row0 re-based to the
 // window), then the per-workgroup region map. Weight offsets follow the stack's format units.
 // Returns the workgroup count; `n` rides the push block (param removal = the deletion sweep's)
-[unused_argument(n), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+[unused_argument(n), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def private fill_batch_meta(si : int; offs : int64 const?; nregions : int64; n, d : int64; r0, r1 : int64; cm2 : bool = false) : uint {
     let fmt = g_gpu.stacks[si].fmt
     let unit = fmt_unit(fmt)
@@ -1624,7 +1710,7 @@ let private BATCH_CLS_CM2S = 7   // batch_cls_sets slots of the cm2 s / m / l ti
 let private BATCH_CLS_CM2M = 8
 let private BATCH_CLS_CM2L = 9
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def private stack_batch_enc_cm2(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg : uint; n, d : int64) {
     unsafe {
         var st & = g_gpu.stacks[si]
@@ -1651,7 +1737,7 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
         var st & = g_gpu.stacks[si]
         let fmt = st.fmt
         // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
-        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == 1
+        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
         var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin
         if (fmt == int(KqFmt.q8)) {
             v = q8_batch_cls_variant(st.batch_tile, st.batch_aligned)
@@ -1988,7 +2074,7 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
         return
     }
     assert(ds <= DN_MAX_DS && ds % 16l == 0l && (ds & (ds - 1l)) == 0l && nvh <= DN_MAX_HEADS && cd <= DN_MAX_CD
-           && dconv <= DN_MAX_DCONV && di == nvh * ds && kd == nkh * ds && cd == 2l * kd + di
+           && 2l * kd <= DN_MAX_QK && dconv <= DN_MAX_DCONV && di == nvh * ds && kd == nkh * ds && cd == 2l * kd + di
            && npos > taps && dim % 32l == 0l && di % 32l == 0l,
         "dasLLAMA vulkan tier: deltanet geometry outside chain capacity")
     ensure_batch_state()
@@ -2069,15 +2155,21 @@ def private ensure_at_state {
     g_gpu.at_v_dev = make_device_buf(AT_CTX * AT_MAX_KV * 4l)
     g_gpu.at_vraw_dev = make_device_buf(AT_WINDOW * AT_MAX_KV * 4l)
     g_gpu.at_kv_host = make_host_buf(2l * AT_WINDOW * AT_MAX_KV * 4l, true, [cached = true])
-    // prep (class: GEMM rows, prepped panel, gate stash, smalls) — the k form's gate view never fires
+    g_gpu.at_bias_dev = make_device_buf((AT_MAX_QD + 2l * AT_MAX_KV) * 4l)
+    // prep (class: GEMM rows, prepped panel, gate stash, smalls, projection bias) — the k/v forms' gate view never fires
     g_gpu.at_prep_q_set = set_at_prep_cls(
-        fixed_array(g_gpu.batch_y1_dev, g_gpu.at_q_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev),
-        fixed_array(BATCH_Y_BYTES, AT_WINDOW * AT_MAX_QD * 4l, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES),
-        fixed_array(VHB_Y1, VHB_ATQ, VHB_ATG, VHB_SM))
+        fixed_array(g_gpu.batch_y1_dev, g_gpu.at_q_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev, g_gpu.at_bias_dev),
+        fixed_array(BATCH_Y_BYTES, AT_WINDOW * AT_MAX_QD * 4l, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES, (AT_MAX_QD + 2l * AT_MAX_KV) * 4l),
+        fixed_array(VHB_Y1, VHB_ATQ, VHB_ATG, VHB_SM, VHB_ATBIAS))
     g_gpu.at_prep_k_set = set_at_prep_cls(
-        fixed_array(g_gpu.batch_y2_dev, g_gpu.at_k_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev),
-        fixed_array(BATCH_Y_BYTES, AT_CTX * AT_MAX_KV * 4l, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES),
-        fixed_array(VHB_Y2, VHB_ATK, 0u, VHB_SM))
+        fixed_array(g_gpu.batch_y2_dev, g_gpu.at_k_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev, g_gpu.at_bias_dev),
+        fixed_array(BATCH_Y_BYTES, AT_CTX * AT_MAX_KV * 4l, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES, (AT_MAX_QD + 2l * AT_MAX_KV) * 4l),
+        fixed_array(VHB_Y2, VHB_ATK, 0u, VHB_SM, VHB_ATBIAS))
+    // IN PLACE on at_vraw: src and outp are the same buffer
+    g_gpu.at_prep_v_set = set_at_prep_cls(
+        fixed_array(g_gpu.at_vraw_dev, g_gpu.at_vraw_dev, g_gpu.at_g_dev, g_gpu.at_smalls_dev, g_gpu.at_bias_dev),
+        fixed_array(AT_WINDOW * AT_MAX_KV * 4l, AT_WINDOW * AT_MAX_KV * 4l, AT_WINDOW * AT_MAX_QD * 4l, AT_SMALLS_BYTES, (AT_MAX_QD + 2l * AT_MAX_KV) * 4l),
+        fixed_array(VHB_VRAW, VHB_VRAW, VHB_ATG, VHB_SM, VHB_ATBIAS))
     // attn (class: q panel, k panel, v rows, gate/out plane)
     g_gpu.at_attn_set = set_at_attn_cls(
         fixed_array(g_gpu.at_q_dev, g_gpu.at_k_dev, g_gpu.at_v_dev, g_gpu.at_g_dev),
@@ -2093,12 +2185,12 @@ def private ensure_at_state {
 
 //! Does the cm2 flash-attention tile serve this window? A coopmat2-fa device, the fa knob, head 64
 //! or 128, and no gate (this chain wires neither the h256 stamps nor their gated epilogue - gated models keep at_attn).
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def private at_fa_serves(hs : int64; gated : bool) : bool {
     return !gated && g_gpu.has_coopmat2_fa && vk_fa_on() && (hs == 64l || hs == 128l)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def private ensure_at_fa_state(hs : int64) {
     if (g_gpu.at_fa_ready) {
         return
@@ -2127,7 +2219,7 @@ def private ensure_at_fa_state(hs : int64) {
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
 def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o : uint;
                           rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul, o_nblk : int64;
-                          axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm, fa : bool;
+                          axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm, fa, hasb : bool;
                           eps, scale : float; woq : int64) {
     let raw = g_gpu.batch_cmd
     let rf : VkCommandBufferResetFlags
@@ -2152,14 +2244,21 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     stack_batch_enc(raw, h, s_v, nwg_v, dim, kv_dim)
     pfq_ts(raw)
     let pflags = uint((gated ? 1 : 0) | (qknorm ? 2 : 0))
+    let hb = hasb ? 1u : 0u
     var pcq = AtPrepArgs(d = uint(qd), nh = uint(n_heads), hs = uint(hs), half = uint(half),
         flags = pflags, rms_off = uint(AT_SM_RMSQ), cos_off = uint(AT_SM_COS),
-        sin_off = uint(AT_SM_COS + rows * half), obase = 0u, qsrc = 1u, eps = eps)
+        sin_off = uint(AT_SM_COS + rows * half), obase = 0u, qsrc = 1u, boff = 0u, hasb = hb, eps = eps)
     enc_at_prep_cls(raw, h, g_gpu.at_prep_q_set, pcq, rows)
     var pck = AtPrepArgs(d = uint(kv_dim), nh = uint(n_kv), hs = uint(hs), half = uint(half),
         flags = pflags, rms_off = uint(AT_SM_RMSK), cos_off = uint(AT_SM_COS),
-        sin_off = uint(AT_SM_COS + rows * half), obase = uint(w0), qsrc = 0u, eps = eps)
+        sin_off = uint(AT_SM_COS + rows * half), obase = uint(w0), qsrc = 0u, boff = uint(qd), hasb = hb, eps = eps)
     enc_at_prep_cls(raw, h, g_gpu.at_prep_k_set, pck, rows)
+    if (hasb) {
+        var pcv = AtPrepArgs(d = uint(kv_dim), nh = uint(n_kv), hs = uint(hs), half = 0u,
+            flags = 0u, rms_off = 0u, cos_off = 0u, sin_off = 0u, obase = 0u, qsrc = 0u,
+            boff = uint(qd + kv_dim), hasb = 1u, eps = eps)
+        enc_at_prep_cls(raw, h, g_gpu.at_prep_v_set, pcv, rows)
+    }
     pfq_ts(raw)
     // append raw v at absolute positions
     vhz_dep(raw, h, VHB_VRAW, VHB_ATV, true)
@@ -2225,8 +2324,9 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
                 woq, wok, wov, woo : int64; fq, fk, fv, fo : int;
                 xqp : int8 const?; xsp : float const?;
                 rmsqp : float const?; rmskp : float const?;
+                bqp : float const?; bkp : float const?; bvp : float const?;
                 cosp : float const?; sinp : float const?;
-                npos, dim, qd, kv_dim, hs, rot, n_heads, kv_mul : int64;
+                npos, dim, qd, kv_dim, hs, rot, n_heads : int64;
                 scale : float; eps : float; gated : bool; qknorm : bool) {
     let s_q = find_stack(woq, fq, "prefill attn q")
     let s_k = find_stack(wok, fk, "prefill attn k")
@@ -2239,6 +2339,7 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
         "dasLLAMA vulkan tier: q/k/v stack format class mismatch in one attention chain")
     let half = rot / 2l
     let n_kv = kv_dim / hs
+    let kv_mul = n_kv > 0l ? n_heads / n_kv : 0l
     assert(npos <= AT_CTX && qd <= AT_MAX_QD && kv_dim <= AT_MAX_KV
            && (hs == 128l || hs == 256l) && half >= 1l && 2l * half <= hs
            && n_heads * hs == qd && n_kv * hs == kv_dim && n_heads == n_kv * kv_mul
@@ -2266,6 +2367,14 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
         if (qknorm) {
             memcpy(reinterpret<void?>(sp + AT_SM_RMSQ), reinterpret<void?>(rmsqp), hs * 4l)
             memcpy(reinterpret<void?>(sp + AT_SM_RMSK), reinterpret<void?>(rmskp), hs * 4l)
+        }
+    }
+    let hasb = bqp != null
+    if (hasb) {
+        unsafe {
+            upload_region_at(g_gpu.at_bias_dev, 0l, reinterpret<uint8 const?>(bqp), qd * 4l)
+            upload_region_at(g_gpu.at_bias_dev, qd * 4l, reinterpret<uint8 const?>(bkp), kv_dim * 4l)
+            upload_region_at(g_gpu.at_bias_dev, (qd + kv_dim) * 4l, reinterpret<uint8 const?>(bvp), kv_dim * 4l)
         }
     }
     var q_region = fixed_array(woq, 0l, 0l)
@@ -2305,7 +2414,7 @@ def vk_moe_attn(var yp : float?; var kp : float?; var vp : float?;
             rows, r0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul,
             rows * qd / (fo != 0 ? 256l : 32l),
             rows * dim, rows * (dim / xunit) * 4l, (AT_SM_COS + 2l * rows * half) * 4l,
-            fo != 0, gated, qknorm, fa, eps, scale, woq)
+            fo != 0, gated, qknorm, fa, hasb, eps, scale, woq)
         submit_wait(g_gpu.batch_cmd)
         let ts2 = ref_time_ticks()
         unsafe {
@@ -2527,7 +2636,7 @@ def vk_moe_ffn_streamed_xf(g : int; var goutp : float?; offs1 : int64 const?; of
 //! MoeGpuFfnXfOkFn: does the cm2 chain serve a layer whose triple is (f1, f3, f2) at this window?
 //! Mode 4 on a coopmat2 device, every stack a format the f16 feed admits, and the window
 //! inside the f32 x plane's cap. The combined (npos > 0) form only.
-[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def vk_moe_ffn_xf_ok(npos, n : int64; f1, f3, f2 : int) : bool {
     if (g_gpu == null || g_gpu.dry || !g_gpu.has_coopmat2) {
         return false
@@ -2556,11 +2665,11 @@ def private ensure_xf_state {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 expert chain engaged\n")
 }
 
-let private TILE_READ_SLACK = 32l   // the s tile's unclamped column reads up to 31 rows past a region's last row (ARCHITECTURE_GPU_VULKAN.md sec.2.2l)
+let private TILE_READ_SLACK = 32l   // rows of read slack past a region's last row
 
 //! chunk row cap of the cm2 chain: the gathered f16 image (batch_xq window), the f16 hidden plane
 //! (hq_dev) and the f32 output planes must all fit; 128-aligned like the tiles' columns
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def private ffn_cm2_chunk_rows(n, nfe : int64) : int64 {
     var r = min(BATCH_XQ_BYTES / (n * 2l), BATCH_HQ_BYTES / (nfe * 2l)) - TILE_READ_SLACK
     r = min(r, BATCH_Y_BYTES / (max(nfe, n) * 4l))
@@ -2569,7 +2678,7 @@ def private ffn_cm2_chunk_rows(n, nfe : int64) : int64 {
     return rows
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def private record_ffn_cm2_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n, nfe, nk, npos : int64;
                                r0, r1 : int64; is_gelu : bool) {
     let raw = g_gpu.batch_cmd
@@ -2643,7 +2752,7 @@ def private xf_record_chunk(s1, s3, s2 : int; offs1 : int64 const?; offs3 : int6
 //! MoeGpuFfnXfFn: the cm2 route of the batch arm. `xp` = the window's f32 rows (npos x n, one
 //! per position); `invp`/`wp` = the combine's slot map and weights over nrows = npos x k bucket
 //! rows. Chunked over bucket-row windows like the quant arm; combined rows read back once at the end.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def vk_moe_ffn_batch_xf(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     let st = xf_prepare(offs1, offs3, offs2, xp, wp, invp, n, nrows, npos, f1, f3, f2)
     let chunk = ffn_cm2_chunk_rows(n, nfe)
@@ -2678,7 +2787,7 @@ def vk_moe_ffn_xf_async_rows(n, nfe : int64) : int64 => ffn_cm2_chunk_rows(n, nf
 
 //! MoeGpuFfnXfBeginFn: the cm2 chain over the given regions, submitted and left in flight - the
 //! streamed-layer split runs its CPU regions meanwhile; vk_moe_ffn_batch_xf_join collects.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def vk_moe_ffn_batch_xf_begin(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     assert(!g_xf_pending, "dasLLAMA vulkan tier: async cm2 chain begin while one is already in flight")
     let cap = ffn_cm2_chunk_rows(n, nfe)

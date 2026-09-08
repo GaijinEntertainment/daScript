@@ -1370,3 +1370,14 @@
    same way would be a few MB. Same nature: `dasModuleVulkan` (11-17 MB) ships in every bundle,
    the macOS one included, where it only backs the tier probe. Neither is a priority - the
    bundles are peanuts beside a gguf - but both are where the archive shrinks if it ever has to.
+120. **The image mint holds two whole models.** Loading a 48 GB Qwen3-Coder-Next Q4_K_M
+   through `load_model_cached` on a 256 GB box died "out of heap memory, requested 91 GB, used
+   232 GB": the mint path keeps the converted planar model (48 GB served, the 46 GB source
+   prefetch, the pinned mirrors of 37 streamed layers' experts) while it writes the `.dlim` and
+   then loads AGAIN to map it; when the save aborted ("plane 'k4q' failed writing 32 GB - disk
+   full") it fell into a second full conversion beside the first. The aborted-save half is fixed:
+   a declined save now serves the streamed build from memory. The other half stands: on a good
+   save release the planar model before the map (or map the just-written planes without a second
+   read). The disk was full because the comparison bench mints an image per model and per flavor
+   by default - 37 debug-jit images, 293 GB, in one day's walk; the bench under
+   `--for-debug-purposes` should run `DASLLAMA_IMAGE=0` itself, since its flavor serves no rig.

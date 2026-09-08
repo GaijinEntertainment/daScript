@@ -13,9 +13,10 @@ skips the chain; exit 2 names the red gate. This file is the authority on fix po
 the tool prints as STILL YOURS. Commit, run it, push once (one batched PR).
 
 **The full preflight runs ONCE per PR - never a second full run.** On failure fix everything,
-validate each fix with the **targeted** gate or an isolated repro (`--only <gate>`, the
-failing test slice, a scratch probe - minutes, not tens of minutes), say so in your summary,
-and let CI validate the tip. Later fix commits - its own findings, Copilot/CI rounds
+validate each fix with the **targeted** gate or an isolated repro (`make-pr --only <gate>` for
+its own gates, `utils/internal/preflight/main.das -- --only <lane>` for a preflight lane - the
+lanes a red fast tier skipped included, each run once - the failing test slice, a scratch
+probe - minutes, not tens of minutes), say so in your summary, and let CI validate the tip. Later fix commits - its own findings, Copilot/CI rounds
 (`skills/internal/babysit.md`) - do NOT re-trigger it.
 
 **The tree is FROZEN while the chain runs** - no commits, no reconfigure, no `cmake

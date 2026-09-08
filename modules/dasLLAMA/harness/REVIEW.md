@@ -17,3 +17,9 @@ tune-sidecar service: sidecar lookup, download, or submit - is a defect; it call
 through `dasllama/dasllama_exchange` (the module `../dasllama/dasllama_exchange.das` declares)
 instead.** A `dashv` call at a reference engine's server (a llama-server on localhost) is not
 the exchange.
+
+**A `[vk_dispatch]` class in this folder never silences the lens's never-accessed check with
+`@role = "alias"` or `"weight"` on a binding its kernel reads through a `dasllama/` base's
+body - it reads that binding in a body this folder's file declares.** The lens collects
+accesses from this file's bodies only, and `@role` keeps the access out of the hazard masks, so
+a base-read binding silenced here escapes the hazard rail.

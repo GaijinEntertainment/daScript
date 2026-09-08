@@ -24,7 +24,7 @@ def emit_golden(dir, name : string; words : array<uint>) {
 }
 
 [export]
-def main {
+def main {   // nolint:STYLE038 — one emit per golden fixture: a flat list, one line each
     let dir = "{get_das_root()}/tests/spirv/_golden"
     mkdir(dir)
     emit_golden(dir, "square", square_words())
@@ -116,4 +116,7 @@ def main {
     emit_golden(dir, "coopmat_i8", coopmat_i8_words())
     // coopmat from @workgroup shared memory (the tiled-GEMM staging path)
     emit_golden(dir, "coopmat_sm", coopmat_sm_words())
+    emit_golden(dir, "spdirect", spdirect_words())
+    emit_golden(dir, "spelem", spelem_words())
+    emit_golden(dir, "spelemi", spelemi_words())
 }

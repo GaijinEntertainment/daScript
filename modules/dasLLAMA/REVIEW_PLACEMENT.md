@@ -11,11 +11,14 @@ it.**
 charters own the per-file list; a rule naming what KIND of code lands in which file is the
 checklist's own.
 
+**A function whose KIND the file's sec.1 charter line seats in another file lands in that
+file, or the charter line changes in the same diff.**
+
 **A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
-**A disk-order -> compute-order transform lands per scope: a transform a kernel's layout needs
-in `dasllama/dasllama_repack.das`, a transform run while the model loads in
-`dasllama/dasllama_layout.das`.**
+**A disk-order -> compute-order transform lands by its consumer: a transform into the layout
+a CPU row core reads in `dasllama/dasllama_repack.das`, a transform into the layout a GPU plane
+or gather reads in `dasllama/dasllama_layout.das`.**
 
 **A CPU KV-cache store, read, score dot, or V-accumulate OVER CACHE BYTES - a codec primitive
 that knows the K/V element format - lands in `dasllama/dasllama_kv_codec.das`, its format
@@ -27,19 +30,19 @@ backend file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
 **A kernel body - the arithmetic loop itself, the one a `[tune]` family or a dispatch class (a
 class a `[metal_dispatch]` or `[vk_dispatch]` declares) picks one variant of - lands in its
-owner's backend file.** A GPU kernel body lands in the file where its pipeline state object
-(PSO) is compiled and released. A CPU-tier kernel body lands in that tier's
-`dasllama/dasllama_math_<tier>.das`. A kernel body never lands in `dasllama/dasllama_math.das`
-or in a file whose job is declaring kernels and routing dispatch. A class stamped from a
-template declared elsewhere is not a kernel body: it compiles and releases its own PSO where it
-is stamped.
+owner's backend file.** A GPU kernel body lands in its backend's kernel home -
+`dasllama/dasllama_metal_kernels.das`, `dasllama/dasllama_vulkan_classes.das` - never in a
+driver, seat or math file. A CPU-tier kernel body lands in that tier's
+`dasllama/dasllama_math_<tier>.das`, never in `dasllama/dasllama_math.das`. A class stamped from
+a template declared elsewhere is not a kernel body: it compiles its own PSO where it is stamped.
 
 **A quirk of one family - one model architecture's file, or one backend driver's - lands in that
 file, never sideways into a sibling.**
 
 **A piece two files need lands in their nearest shared file (its own file when none exists) -
-never a second copy.** A predicate, a constant, or a helper spelled twice drifts on the first
-edit to one copy. A piece two folders outside each other both need lands in the folder that
+never a second copy.** A predicate, a constant, or a helper spelled once in each of two files
+drifts on the first edit to one copy; an enum-and-int twin of one predicate inside one file is
+the tier's idiom, not a copy. A piece two folders outside each other both need lands in the folder that
 owns the concern; one landing under `dasllama/` that code outside `modules/dasLLAMA/` drives
 lands as a public entry module - one `dasllama/dasllama_lint.das` licenses a consumer to
 require directly.

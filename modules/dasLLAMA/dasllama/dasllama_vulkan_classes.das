@@ -12,6 +12,7 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
+require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
 require math
 
 // The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
@@ -97,7 +98,7 @@ class ArBase : RmsWgBase {
     @ssbo @binding = 1 aa : array<float>   // the add partner rows
     @ssbo @binding = 2 wn : array<float>   // the norm weight row
     @push_constant pa : ArArgs
-    @workgroup row : float[4096]           // AR_MAX_DIM — staged so the post-reduce reread is local
+    @workgroup row : float[8192]           // AR_MAX_DIM — staged so the post-reduce reread is local
 
     // the residual add + row stash + sum-of-squares pass over one row at `base`
     def accum_row(base : uint) : float {
@@ -137,54 +138,17 @@ class ClsArAddRms : ArBase {
 
 // ar_add_rms + Q8_0 requant in ONE dispatch: the normed row quantizes out of the row stash, so
 // xb never reaches memory. Verbatim reduce/amax/rounding => bit-identical to the split pair.
-[vk_dispatch(name = "cls_ar_rq", grid = "wgs", params = "wgs : int64")]
-class ArAddRmsRq : ArBase {
-    @ssbo @binding = 3 outq : array<int8>    // the quantized bytes
-    @ssbo @binding = 4 outs : array<float>   // per-32-block scales
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def run {
-        let tid = gl_LocalInvocationID.x
-        let ss = accum_row(0u)
-        let inv = rms_inv(ss)
-        // quantize the normed row instead of storing it: 8 lanes per 32-block, 32 blocks per pass
-        let nblk = pa.dim / 32u
-        let lane8 = tid % 8u
-        var b = tid / 8u
-        while (b < nblk) {
-            let base = b * 32u + lane8 * 4u
-            let v0 = wn[pa.woff + base] * (row[base] * inv)
-            let v1 = wn[pa.woff + base + 1u] * (row[base + 1u] * inv)
-            let v2 = wn[pa.woff + base + 2u] * (row[base + 2u] * inv)
-            let v3 = wn[pa.woff + base + 3u] * (row[base + 3u] * inv)
-            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
-            let d = m / 127.0
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            if (lane8 == 0u) {
-                outs[b] = d
-            }
-            outq[base] = q8_quant1(v0, id)
-            outq[base + 1u] = q8_quant1(v1, id)
-            outq[base + 2u] = q8_quant1(v2, id)
-            outq[base + 3u] = q8_quant1(v3, id)
-            b += 32u
-        }
-    }
-}
-
-[vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
-class ClsArAddRmsRqB : ArBase {
+class ArRqBase : ArBase {
     @ssbo @binding = 3 outq : array<int8>    // the quantized bytes, row-major blocks
     @ssbo @binding = 4 outs : array<float>   // per-32-block scales
 
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def run {
+    // quantize the normed row instead of storing it: 8 lanes per 32-block, 32 blocks per pass
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def rq_row(rbase, qb0 : uint) {
         let tid = gl_LocalInvocationID.x
-        let rbase = gl_WorkGroupID.x * pa.dim
         let ss = accum_row(rbase)
         let inv = rms_inv(ss)
         let nblk = pa.dim / 32u
-        let qb0 = gl_WorkGroupID.x * nblk
         let lane8 = tid % 8u
         var b = tid / 8u
         while (b < nblk) {
@@ -206,6 +170,22 @@ class ClsArAddRmsRqB : ArBase {
             outq[qb + 3u] = q8_quant1(v3, id)
             b += 32u
         }
+    }
+}
+
+[vk_dispatch(name = "cls_ar_rq", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRq : ArRqBase {
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_spv")]
+    def run {
+        rq_row(0u, 0u)
+    }
+}
+
+[vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
+class ClsArAddRmsRqB : ArRqBase {
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv")]
+    def run {
+        rq_row(gl_WorkGroupID.x * pa.dim, gl_WorkGroupID.x * (pa.dim / 32u))
     }
 }
 
@@ -841,7 +821,7 @@ class MoeGatherF16 {
     @ssbo @binding = 2 xg : array<float16>     // the gathered rows, bucket order, window-relative
     @push_constant pa : GatherArgs
 
-    [spirv_kernel(local_size_x = 256, name = "moe_gather_f16_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-expert-chain")]
+    [spirv_kernel(local_size_x = 256, name = "moe_gather_f16_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
     def run {
         let r = gl_WorkGroupID.x
         let b = slot_idx[r]
@@ -880,7 +860,7 @@ class DnConv {
     @ssbo @binding = 1 outr : array<float>     // conv output rows
     @ssbo @binding = 2 smalls : array<float>   // taps + history + any small planes (push offsets)
     @push_constant pa : DnConvArgs
-    @workgroup row : float[8192]               // the whole position row, silu'd
+    @workgroup row : float[8192]               // the position row's q/k region, silu'd: staged for the per-head norm (2 kd <= DN_MAX_QK); the v region streams through
     @workgroup nsc : float[64]                 // per-block L2 scales
 
     [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv")]
@@ -906,7 +886,12 @@ class DnConv {
                 acc += xv * smalls[pa.taps_off + ch * pa.dconv + k]
                 k++
             }
-            row[ch] = acc / (1.0 + exp(-acc))
+            let sv = acc / (1.0 + exp(-acc))
+            if (ch < 2u * pa.kd) {
+                row[ch] = sv
+            } else {
+                outr[p * pa.cd + ch] = sv
+            }
             ch += 256u
         }
         barrier()
@@ -924,9 +909,8 @@ class DnConv {
         }
         barrier()
         ch = tid
-        while (ch < pa.cd) {
-            let s = ch < 2u * pa.kd ? nsc[ch / pa.ds] : 1.0
-            outr[p * pa.cd + ch] = row[ch] * s
+        while (ch < 2u * pa.kd) {
+            outr[p * pa.cd + ch] = row[ch] * nsc[ch / pa.ds]
             ch += 256u
         }
     }
@@ -978,11 +962,12 @@ struct DnStepArgs {
     hist_off : uint
     eps : float
     qscale : float   // the conv-ring parity rides tok[0].parity
+    out_f32 : uint
 }
 
 // the decode-step FUSED chain (one workgroup per v-head): conv preamble -> chunk-length-1 delta
-// rule IN PLACE on the persistent state -> gated out-norm -> the head's Q8_0 requant. The conv
-// ring is parity-double-buffered inside the smalls member.
+// rule IN PLACE on the persistent state -> gated out-norm -> the head's o row. The conv ring is
+// parity-double-buffered inside the smalls member.
 [vk_dispatch(name = "dn_step_cls", grid = "nvh", params = "nvh : int64")]
 class DnStepFused {
     @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
@@ -991,6 +976,7 @@ class DnStepFused {
     @ssbo @binding = 3 outs : array<float>     // the head's Q8_0 scales
     @ssbo @binding = 4 outq : array<uint>      // ... and quant words
     @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
+    @ssbo @binding = 6 outf : array<float>     // the head's o row as f32
     @push_constant pa : DnStepArgs
     @workgroup dq : float[128]
     @workgroup dk : float[128]
@@ -1115,8 +1101,13 @@ class DnStepFused {
             e += 256u
         }
         barrier()
-        // the head's Q8_0 blocks (ds % 32 asserted host-side)
-        if (tid < ds / 32u) {
+        if (pa.out_f32 != 0u) {
+            e = tid
+            while (e < ds) {
+                outf[h * ds + e] = dout[e]
+                e += 256u
+            }
+        } elif (tid < ds / 32u) {   // the head's Q8_0 blocks (ds % 32 asserted host-side)
             let gb = (h * ds) / 32u + tid
             let jb = tid * 32u
             var amax = 0.0
@@ -1463,16 +1454,18 @@ class DnScanP3 {
 // ===== prefill attention: the prep pass =====
 
 struct AtPrepArgs {
-    d : uint         // this pass's row width (qd for q, kvd for k)
+    d : uint         // this pass's row width (qd for q, kvd for k/v)
     nh : uint        // heads in this pass
     hs : uint
-    half : uint      // partial-rope half (0 = no rope)
+    half : uint      // partial-rope half (0 = no rope; the v pass runs here)
     flags : uint     // bit 0 = gated q, bit 1 = qk-norm
     rms_off : uint   // this pass's norm-weight row in smalls
     cos_off : uint   // per-position cos rows in smalls
     sin_off : uint
     obase : uint     // output panel's row base (0 for q, npos for k)
-    qsrc : uint      // 1 = the q source (gating applies), 0 = k
+    qsrc : uint      // 1 = the q source (gating applies), 0 = k/v
+    boff : uint      // this pass's row base in the bias buffer ([q | k | v] per-head biases)
+    hasb : uint
     eps : float
 }
 
@@ -1485,6 +1478,7 @@ class AtPrep {
     @ssbo @binding = 1 outp : array<float>     // the prepped panel rows
     @ssbo @binding = 2 gates : array<float>    // the gate stash (gated-q models; written only then)
     @ssbo @binding = 3 smalls : array<float>   // cos/sin rows + norm weights (push offsets)
+    @ssbo @binding = 4 bias : array<float>     // per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : AtPrepArgs
     @workgroup row : float[8192]               // one position's projection row (d <= 8192)
     @workgroup hsinv : float[64]               // per-head inverse rms (heads <= 64)
@@ -1502,10 +1496,10 @@ class AtPrep {
             let h = i / hs
             let j = i % hs
             if (gated != 0u) {
-                row[i] = src[p * 2u * pa.d + h * 2u * hs + j]
+                row[i] = src[p * 2u * pa.d + h * 2u * hs + j] + (pa.hasb != 0u ? bias[pa.boff + i] : 0.0)
                 gates[p * pa.d + i] = src[p * 2u * pa.d + h * 2u * hs + hs + j]
             } else {
-                row[i] = src[p * pa.d + i]
+                row[i] = src[p * pa.d + i] + (pa.hasb != 0u ? bias[pa.boff + i] : 0.0)
             }
             i += 256u
         }
@@ -1881,217 +1875,20 @@ struct FaCm2Args {
     qhs : uint      // the q panel's per-head stride (2 x hs on a gated plane); 0 = hs
 }
 
-// hs=64 (tinyllama-class). The h128 twin below differs only in the head-size-shaped tiles —
-// duplication tolerated until the kernel-reification arc.
+// The cm2 flash pass over the f16 K/V shadows: ONE class template over the head size. The head
+// template sizes the eight coopmat typedefs: QACC/QA the q and o tiles (64 x HS), SACC/PA the
+// score tiles (64 x BC), KB/VB the K^T and V steps, ONE the rowsum ones-matrix, OF the f16 store.
 [ |> template_struct_instance]
-class template FaCm2H64T {
+class template FaCm2T {
     @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
     @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
     @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
     @push_constant pa : FaCm2Args
-    @template_constant OUT16 : bool = false
-
-    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-    def run {
-        let qtiles = (pa.rows + 63u) / 64u
-        let h = gl_WorkGroupID.x / qtiles
-        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
-        let kvh = h / pa.kv_mul
-        let kvlen = pa.w0 + pa.rows
-        var tlq : tensorLayout2DPad
-        tensorLayoutCreate(tlq)
-        tensorLayoutSetDimension(tlq, pa.rows, pa.qd)
-        tensorLayoutSetStride(tlq, pa.qd, 1u)
-        var tlk : tensorLayout2DPad
-        tensorLayoutCreate(tlk)
-        tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
-        tensorLayoutSetStride(tlk, pa.kvd, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
-        tensorLayoutSetStride(tlo, pa.qd, 1u)
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        var q : coopmatWgAcc_f32_64x64
-        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * 64u, 64u)
-        coopmatScale(q, pa.scale)
-        var qf : coopmatWgA_f16_64x64
-        coopmatConvert(qf, q)
-        var mrow : coopmatWgAcc_f32_64x64
-        coopmatFill(mrow, -1.7e38)
-        var lrow : coopmatWgAcc_f32_64x64
-        var o : coopmatWgAcc_f32_64x64
-        let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
-        var j = 0u
-        while (j < kmax) {
-            var s : coopmatWgAcc_f32_64x64
-            var kt : coopmatWgB_f16_64x64
-            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 64u, kvh * 64u, 64u, tv)
-            s = coopmatMulAdd(qf, kt, s)
-            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
-            var rmax : coopmatWgAcc_f32_64x64
-            coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
-            var mold : coopmatWgAcc_f32_64x64
-            coopmatCopy(mold, mrow)
-            coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
-            coopmatSub(s, s, mrow)
-            coopmatPerElement(s, s, @@facm2_exp)                        // P = e^(S - M), in place
-            var em : coopmatWgAcc_f32_64x64
-            coopmatSub(em, mold, mrow)
-            coopmatPerElement(em, em, @@facm2_exp)                      // eM = e^(Mold - M)
-            var pf : coopmatWgA_f16_64x64
-            coopmatConvert(pf, s)
-            var rsum : coopmatWgAcc_f32_64x64
-            var one : coopmatWgB_f16_64x64
-            coopmatFill(one, 1.0)
-            rsum = coopmatMulAdd(pf, one, rsum)                         // rowsum by ones-matrix multiply
-            coopmatMulElem(lrow, em, lrow)
-            coopmatAdd(lrow, lrow, rsum)                                // L = eM*L + rowsum
-            var emd : coopmatWgAcc_f32_64x64
-            coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
-            coopmatMulElem(o, emd, o)
-            var vt : coopmatWgB_f16_64x64
-            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 64u, kvh * 64u, 64u)
-            o = coopmatMulAdd(pf, vt, o)                                // O = eMdiag*O + P @ V
-            j += 64u
-        }
-        var ld : coopmatWgAcc_f32_64x64
-        coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
-        coopmatPerElement(ld, ld, @@facm2_recip)
-        coopmatMulElem(o, ld, o)                                        // O /= L (padding rows discard at store)
-        static_if (OUT16) {
-            var of : coopmatWgAcc_f16_64x64
-            coopmatConvert(of, o)
-            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
-        } else {
-            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 64u, 64u)
-        }
-    }
-}
-
-[vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2H64 : FaCm2H64T {
-    typedef OT = float
-}
-
-[vk_dispatch(name = "fa_cm2_h64_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2H64F16 : FaCm2H64T {
-    typedef OT = float16
-    override OUT16 = true
-}
-
-// hs=128 (llama-3.2-3B-class): same algorithm at Bc=32 (the head-size cut — K^T/V/softmax
-// state at 32 columns, KV loop steps 32). Fast standalone (24.7 TFLOP/s, right beside the h64) and
-// WINS end-to-end when the shadows fit (3B 4287 vs 3955 no-fa) — serving is gated only on the
-// resident plan learning the f16 shadow cost (see the pf_facm2 gate)
-[ |> template_struct_instance]
-class template FaCm2H128T {
-    @ssbo @binding = 0 qpanel : array<float>
-    @ssbo @binding = 1 kh : array<float16>
-    @ssbo @binding = 2 vh : array<float16>
-    @ssbo @binding = 3 outp : array<OT>
-    @push_constant pa : FaCm2Args
-    @template_constant OUT16 : bool = false
-
-    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-    def run {
-        let qtiles = (pa.rows + 63u) / 64u
-        let h = gl_WorkGroupID.x / qtiles
-        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
-        let kvh = h / pa.kv_mul
-        let kvlen = pa.w0 + pa.rows
-        var tlq : tensorLayout2DPad
-        tensorLayoutCreate(tlq)
-        tensorLayoutSetDimension(tlq, pa.rows, pa.qd)
-        tensorLayoutSetStride(tlq, pa.qd, 1u)
-        var tlk : tensorLayout2DPad
-        tensorLayoutCreate(tlk)
-        tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
-        tensorLayoutSetStride(tlk, pa.kvd, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
-        tensorLayoutSetStride(tlo, pa.qd, 1u)
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        var q : coopmatWgAcc_f32_64x128
-        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * 128u, 128u)
-        coopmatScale(q, pa.scale)
-        var qf : coopmatWgA_f16_64x128
-        coopmatConvert(qf, q)
-        var mrow : coopmatWgAcc_f32_64x32
-        coopmatFill(mrow, -1.7e38)
-        var lrow : coopmatWgAcc_f32_64x32
-        var o : coopmatWgAcc_f32_64x128
-        let kmax = pa.w0 + min(q0 + 64u, pa.rows)
-        var j = 0u
-        while (j < kmax) {
-            var s : coopmatWgAcc_f32_64x32
-            var kt : coopmatWgB_f16_128x32
-            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 32u, kvh * 128u, 128u, tv)
-            s = coopmatMulAdd(qf, kt, s)
-            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
-            var rmax : coopmatWgAcc_f32_64x32
-            coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
-            var mold : coopmatWgAcc_f32_64x32
-            coopmatCopy(mold, mrow)
-            coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
-            coopmatSub(s, s, mrow)
-            coopmatPerElement(s, s, @@facm2_exp)
-            var em : coopmatWgAcc_f32_64x32
-            coopmatSub(em, mold, mrow)
-            coopmatPerElement(em, em, @@facm2_exp)
-            var pf : coopmatWgA_f16_64x32
-            coopmatConvert(pf, s)
-            var rsum : coopmatWgAcc_f32_64x32
-            var one : coopmatWgB_f16_32x32
-            coopmatFill(one, 1.0)
-            rsum = coopmatMulAdd(pf, one, rsum)
-            coopmatMulElem(lrow, em, lrow)
-            coopmatAdd(lrow, lrow, rsum)
-            var emd : coopmatWgAcc_f32_64x128
-            coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
-            coopmatMulElem(o, emd, o)
-            var vt : coopmatWgB_f16_32x128
-            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 32u, kvh * 128u, 128u)
-            o = coopmatMulAdd(pf, vt, o)
-            j += 32u
-        }
-        var ld : coopmatWgAcc_f32_64x128
-        coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
-        coopmatPerElement(ld, ld, @@facm2_recip)
-        coopmatMulElem(o, ld, o)
-        static_if (OUT16) {
-            var of : coopmatWgAcc_f16_64x128
-            coopmatConvert(of, o)
-            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
-        } else {
-            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 128u, 128u)
-        }
-    }
-}
-
-[vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2H128 : FaCm2H128T {
-    typedef OT = float
-}
-
-[vk_dispatch(name = "fa_cm2_h128_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2H128F16 : FaCm2H128T {
-    typedef OT = float16
-    override OUT16 = true
-}
-
-[ |> template_struct_instance]
-class template FaCm2H256T {
-    @ssbo @binding = 0 qpanel : array<float>
-    @ssbo @binding = 1 kh : array<float16>
-    @ssbo @binding = 2 vh : array<float16>
-    @ssbo @binding = 3 outp : array<OT>
-    @push_constant pa : FaCm2Args
-    @template_constant OUT16 : bool = false
-    @template_constant GATED : bool = false
+    @template_constant HS : uint = 64u           // the head width
+    @template_constant BC : uint = 64u           // the K/V step: 64 at hs 64, 32 above (the head-size cut: K^T, V and the softmax state at 32 columns)
+    @template_constant OUT16 : bool = false      // the o store as f16
+    @template_constant GATED : bool = false      // multiply the sigmoid of the gate half of a [q | gate] head into o; qstride/qhs describe that panel and read as qd/HS when unset
 
     [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
@@ -2101,7 +1898,7 @@ class template FaCm2H256T {
         let kvh = h / pa.kv_mul
         let kvlen = pa.w0 + pa.rows
         let qstride = pa.qstride == 0u ? pa.qd : pa.qstride
-        let qhs = pa.qhs == 0u ? 256u : pa.qhs
+        let qhs = pa.qhs == 0u ? HS : pa.qhs
         var tlq : tensorLayout2DPad
         tensorLayoutCreate(tlq)
         tensorLayoutSetDimension(tlq, pa.rows, qstride)
@@ -2116,67 +1913,136 @@ class template FaCm2H256T {
         tensorLayoutSetStride(tlo, pa.qd, 1u)
         var tv : tensorView2Dt
         tensorViewCreate(tv)
-        var q : coopmatWgAcc_f32_64x256
-        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * qhs, 256u)
+        var q : QACC
+        coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * qhs, HS)
         coopmatScale(q, pa.scale)
-        var qf : coopmatWgA_f16_64x256
+        var qf : QA
         coopmatConvert(qf, q)
-        var mrow : coopmatWgAcc_f32_64x32
+        var mrow : SACC
         coopmatFill(mrow, -1.7e38)
-        var lrow : coopmatWgAcc_f32_64x32
-        var o : coopmatWgAcc_f32_64x256
-        let kmax = pa.w0 + min(q0 + 64u, pa.rows)
+        var lrow : SACC
+        var o : QACC
+        let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
         var j = 0u
         while (j < kmax) {
-            var s : coopmatWgAcc_f32_64x32
-            var kt : coopmatWgB_f16_256x32
-            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, 32u, kvh * 256u, 256u, tv)
+            var s : SACC
+            var kt : KB
+            coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, BC, kvh * HS, HS, tv)
             s = coopmatMulAdd(qf, kt, s)
             coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
-            var rmax : coopmatWgAcc_f32_64x32
+            var rmax : SACC
             coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
-            var mold : coopmatWgAcc_f32_64x32
+            var mold : SACC
             coopmatCopy(mold, mrow)
             coopmatPerElement(mrow, rmax, @@facm2_pick, mold)
             coopmatSub(s, s, mrow)
-            coopmatPerElement(s, s, @@facm2_exp)
-            var em : coopmatWgAcc_f32_64x32
+            coopmatPerElement(s, s, @@facm2_exp)                        // P = e^(S - M), in place
+            var em : SACC
             coopmatSub(em, mold, mrow)
-            coopmatPerElement(em, em, @@facm2_exp)
-            var pf : coopmatWgA_f16_64x32
+            coopmatPerElement(em, em, @@facm2_exp)                      // eM = e^(Mold - M)
+            var pf : PA
             coopmatConvert(pf, s)
-            var rsum : coopmatWgAcc_f32_64x32
-            var one : coopmatWgB_f16_32x32
+            var rsum : SACC
+            var one : ONE
             coopmatFill(one, 1.0)
-            rsum = coopmatMulAdd(pf, one, rsum)
+            rsum = coopmatMulAdd(pf, one, rsum)                         // rowsum by ones-matrix multiply
             coopmatMulElem(lrow, em, lrow)
-            coopmatAdd(lrow, lrow, rsum)
-            var emd : coopmatWgAcc_f32_64x256
+            coopmatAdd(lrow, lrow, rsum)                                // L = eM*L + rowsum
+            var emd : QACC
             coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
             coopmatMulElem(o, emd, o)
-            var vt : coopmatWgB_f16_32x256
-            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, 32u, kvh * 256u, 256u)
-            o = coopmatMulAdd(pf, vt, o)
-            j += 32u
+            var vt : VB
+            coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, BC, kvh * HS, HS)
+            o = coopmatMulAdd(pf, vt, o)                                // O = eMdiag*O + P @ V
+            j += BC
         }
-        var ld : coopmatWgAcc_f32_64x256
+        var ld : QACC
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
         coopmatPerElement(ld, ld, @@facm2_recip)
-        coopmatMulElem(o, ld, o)
+        coopmatMulElem(o, ld, o)                                        // O /= L (padding rows discard at store)
         static_if (GATED) {
-            var g : coopmatWgAcc_f32_64x256
-            coopmatLoadTensor(g, qpanel, 0u, tlq, q0, 64u, h * qhs + 256u, 256u)
+            var g : QACC
+            coopmatLoadTensor(g, qpanel, 0u, tlq, q0, 64u, h * qhs + HS, HS)
             coopmatPerElement(g, g, @@facm2_sigmoid)
             coopmatMulElem(o, g, o)
         }
         static_if (OUT16) {
-            var of : coopmatWgAcc_f16_64x256
+            var of : OF
             coopmatConvert(of, o)
-            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * 256u, 256u)
+            coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * HS, HS)
         } else {
-            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * 256u, 256u)
+            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * HS, HS)
         }
     }
+}
+
+// hs=64 (tinyllama-class): the whole head is one K/V step
+[ |> template_struct_instance]
+class template FaCm2H64T : FaCm2T {
+    override HS = 64u
+    override BC = 64u
+    typedef QACC = coopmatWgAcc_f32_64x64
+    typedef QA = coopmatWgA_f16_64x64
+    typedef SACC = coopmatWgAcc_f32_64x64
+    typedef PA = coopmatWgA_f16_64x64
+    typedef KB = coopmatWgB_f16_64x64
+    typedef VB = coopmatWgB_f16_64x64
+    typedef ONE = coopmatWgB_f16_64x64
+    typedef OF = coopmatWgAcc_f16_64x64
+}
+
+[vk_dispatch(name = "fa_cm2_h64_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64 : FaCm2H64T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_cm2_h64_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64F16 : FaCm2H64T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
+// hs=128 (llama-3.2-3B-class) at Bc=32. Fast standalone (24.7 TFLOP/s, right beside the h64) and
+// WINS end-to-end when the shadows fit (3B 4287 vs 3955 no-fa) — serving is gated only on the
+// resident plan learning the f16 shadow cost (see the pf_facm2 gate)
+[ |> template_struct_instance]
+class template FaCm2H128T : FaCm2T {
+    override HS = 128u
+    override BC = 32u
+    typedef QACC = coopmatWgAcc_f32_64x128
+    typedef QA = coopmatWgA_f16_64x128
+    typedef SACC = coopmatWgAcc_f32_64x32
+    typedef PA = coopmatWgA_f16_64x32
+    typedef KB = coopmatWgB_f16_128x32
+    typedef VB = coopmatWgB_f16_32x128
+    typedef ONE = coopmatWgB_f16_32x32
+    typedef OF = coopmatWgAcc_f16_64x128
+}
+
+[vk_dispatch(name = "fa_cm2_h128_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128 : FaCm2H128T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_cm2_h128_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H128F16 : FaCm2H128T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
+// hs=256 (the deltanet hybrids' attention heads) at Bc=32; the gated leaves ride the [q | gate] panel
+[ |> template_struct_instance]
+class template FaCm2H256T : FaCm2T {
+    override HS = 256u
+    override BC = 32u
+    typedef QACC = coopmatWgAcc_f32_64x256
+    typedef QA = coopmatWgA_f16_64x256
+    typedef SACC = coopmatWgAcc_f32_64x32
+    typedef PA = coopmatWgA_f16_64x32
+    typedef KB = coopmatWgB_f16_256x32
+    typedef VB = coopmatWgB_f16_32x256
+    typedef ONE = coopmatWgB_f16_32x32
+    typedef OF = coopmatWgAcc_f16_64x256
 }
 
 [vk_dispatch(name = "fa_cm2_h256_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
@@ -2589,29 +2455,33 @@ struct BatchArgs {
     ksplit : uint    // cm2 split-k: 256-aligned k chunk per partial plane; 0 = no split
 }
 
-// 32x32 tiles through shared so weight rows stream once per 32 rows; K advances 8 blocks per
-// barrier pair. sched = 4-word region records [wblk0, row0, cnt, wg0] then the wg -> region map.
-[vk_dispatch(name = "q8_batch_cls", grid = "wgs", params = "wgs : int64")]
-class Q8Batch {
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words
-    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
-    @ssbo @binding = 2 sched : array<uint>     // region records + per-wg map (bulk schedule data)
-    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
-    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
+// the MoE region rail every batch tile shares: sched = 4-word region records [wblk0, row0, cnt,
+// wg0] at 0, then the per-wg map at pa.map_off; region_rec = this workgroup's record - x = weight
+// base, y = activation row base, z = row count, w = the wg's tile index rebased to the region
+class MoeCmBase {
+    @ssbo @binding = 2 sched : array<uint>   // region records + per-wg map (bulk schedule data)
     @push_constant pa : BatchArgs
-    @workgroup xw4 : uint4[544]   // x tile: 32 rows x 16 uint4 chunks, stride 17 (bank-spread)
-    @workgroup ww4 : uint4[544]   // w tile: 32 cols x 16 chunks, stride 17
-    @workgroup xsw : float[256]   // x scales per (block, row)
-    @workgroup wsw : float[256]   // w scales per (block, col)
 
-    // this workgroup's region record: x = weight base, y = activation row base, z = row count,
-    // w = the wg's tile index rebased to the region
     def region_rec : uint4 {
         let rid = sched[pa.map_off + gl_WorkGroupID.x]
         let rb = rid * 4u
         return uint4(sched[rb], sched[rb + 1u], sched[rb + 2u], gl_WorkGroupID.x - sched[rb + 3u])
     }
+}
+
+// 32x32 tiles through shared so weight rows stream once per 32 rows; K advances 8 blocks per
+// barrier pair.
+[vk_dispatch(name = "q8_batch_cls", grid = "wgs", params = "wgs : int64")]
+class Q8Batch : MoeCmBase {
+    @ssbo @binding = 0 wq : array<uint>        // weight quant words
+    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
+    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
+    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
+    @ssbo @binding = 5 y : array<float>
+    @workgroup xw4 : uint4[544]   // x tile: 32 rows x 16 uint4 chunks, stride 17 (bank-spread)
+    @workgroup ww4 : uint4[544]   // w tile: 32 cols x 16 chunks, stride 17
+    @workgroup xsw : float[256]   // x scales per (block, row)
+    @workgroup wsw : float[256]   // w scales per (block, col)
 
     [spirv_kernel(local_size_x = 256, name = "q8_batch_cls_spv")]
     def run {   // nolint:STYLE038 — the verbatim tile pass (stage/reduce/store), parity-locked to the shipped kernel
@@ -3331,31 +3201,35 @@ def private iq4_word(n : uint) : uint {
     return b0 | (b1 << 8u) | (b2 << 16u) | (b3 << 24u)
 }
 
-// the iq4xs scale row's sub-scale for block blk: word 1..2 of the 5-word row, SIGNED (ls - 32)
-def private iq4_sc(w : uint; blk : uint) : int {
-    let s4 = int4(unpack8(int(w)))
-    return blk % 4u == 0u ? s4.x : (blk % 4u == 1u ? s4.y : (blk % 4u == 2u ? s4.z : s4.w))
+[arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def iq4xs_sc(w0, w1, blk : uint) : int {
+    let ls = ((w1 >> (4u * blk)) & 15u) | (((w0 >> (16u + 2u * blk)) & 3u) << 4u)
+    return int(ls) - 32
 }
 
-class KqBatchBase {
+[arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def grid_sc(w1, blk : uint) : int {
+    return 1 + 2 * int((w1 >> (4u * blk)) & 15u)
+}
+
+//! sign-apply by xor-and-add: the magnitudes are odd, so no byte carries into the next
+def iq3s_signed(g, nib : uint) : uint {
+    let m1 = (nib * 0x00204081u) & 0x01010101u
+    let mask = m1 * 255u
+    return (g ^ mask) + m1
+}
+
+class KqBatchBase : MoeCmBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant planes (per-format block layout)
     @ssbo @binding = 1 wsu : array<uint>       // scale planes (5-word superblock layout)
-    @ssbo @binding = 2 sched : array<uint>     // region records + per-wg map
     @ssbo @binding = 3 xqw : array<uint>       // Q8_K activation words (64 per row-superblock)
     @ssbo @binding = 4 axs : array<float>      // one Q8_K d per (row, superblock)
     @ssbo @binding = 5 y : array<float>
-    @push_constant pa : BatchArgs
     @workgroup xw4 : uint4[544]
     @workgroup ww4 : uint4[544]
     @workgroup xsw : float[256]
     @workgroup wsw : float[256]    // first per-(block, col) scale plane
     @workgroup wsw2 : float[256]   // second plane (the d/min pair's min side; k6's hi sub-scale)
-
-    def region_rec : uint4 {
-        let rid = sched[pa.map_off + gl_WorkGroupID.x]
-        let rb = rid * 4u
-        return uint4(sched[rb], sched[rb + 1u], sched[rb + 2u], gl_WorkGroupID.x - sched[rb + 3u])
-    }
 
     // x tile stage: this thread's two uint4 chunks of the Q8_K activation rows
     def load_x(row0, xrow, cnt, nsb, s, word, grp : uint) {
@@ -3581,7 +3455,8 @@ class KqBatchIq4xs : KqBatchBase {
         var sa = 0.0
         if (wt * 32u + slane < pa.d) {
             let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            sa = unpackHalf2x16(wsu[wsb * 5u]).x * float(iq4_sc(wsu[wsb * 5u + 1u + sblk / 4u], sblk))
+            let w0 = wsu[wsb * 2u]
+            sa = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, wsu[wsb * 2u + 1u], sblk))
         }
         wsw[sblk * 32u + slane] = sa
     }
@@ -3600,19 +3475,26 @@ class KqBatchIq4xs : KqBatchBase {
     }
 }
 
-// IQ3_S tile: the iq4xs staging with the GRID GATHER in stage_w - each staged uint4 is four
-// grid words sign-applied (mask = ((nibble * 0x00204081) & 0x01010101) * 255; magnitudes odd
-// 1..15, no cross-byte carry); scale row and blk_fma are iq4xs's verbatim (inherited). The 2 KB
-// grid stages into workgroup memory once, before the tile loop.
-[vk_dispatch(name = "kq_batch_iq3s_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
-class KqBatchIq3s : KqBatchIq4xs {
-    @workgroup gridw : uint[512]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
+// the grid formats' scale stage over the iq3 row: d x the (1 + 2s) fields, not iq4xs's ls - 32;
+// iq4xs's fold (no bsum term) inherits. iq3s, iq3xxs and iq2xxs stage their grids and gather on it
+class KqBatchGridBase : KqBatchIq4xs {
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            sa = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], sblk))
+        }
+        wsw[sblk * 32u + slane] = sa
     }
+}
+
+// IQ3_S tile: the iq4xs staging with the GRID GATHER in stage_w - each staged uint4 is four
+// grid words sign-applied. The 2 KB grid stages into workgroup memory once, before the tile loop.
+[vk_dispatch(name = "kq_batch_iq3s_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq3s : KqBatchGridBase {
+    @workgroup gridw : uint[512]
 
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -3650,17 +3532,11 @@ class KqBatchIq3s : KqBatchIq4xs {
 }
 
 // IQ3_XXS tile: the iq3s staging with the halved-grid gather - bare 8-bit indices (no ninth
-// bit), signs from the aux32's four 7-bit ksigns indices via the parity helper (no table);
-// scale row and blk_fma are iq4xs's verbatim (inherited). The 1 KB grid stages once.
+// bit), signs from the aux32's four 7-bit ksigns indices via the parity helper (no table).
+// The 1 KB grid stages once.
 [vk_dispatch(name = "kq_batch_iq3xxs_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
-class KqBatchIq3xxs : KqBatchIq4xs {
+class KqBatchIq3xxs : KqBatchGridBase {
     @workgroup gridw : uint[256]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
-    }
 
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -3692,18 +3568,12 @@ class KqBatchIq3xxs : KqBatchIq4xs {
 }
 
 // IQ2_XXS tile: the iq3xxs shell over the two-word u64 grid - block b's grid word (column 2b)
-// carries four BYTE indices, its aux32 (column 2b+1) the parity-derived ksigns; the per-32
-// strip plane and fma inherit from KqBatchIq4xs (the (2ls+1) strips read exactly under the
-// signed extract, staying below 128).
+// carries four BYTE indices, its aux32 (column 2b+1) the parity-derived ksigns; the iq3 strip
+// stage and iq4xs's fma inherit (the (2ls+1) strips read exactly under the signed extract,
+// staying below 128).
 [vk_dispatch(name = "kq_batch_iq2xxs_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
-class KqBatchIq2xxs : KqBatchIq4xs {
+class KqBatchIq2xxs : KqBatchGridBase {
     @workgroup gridw : uint[512]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
-    }
 
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -3854,8 +3724,12 @@ class KqBatchK6 : KqBatchBase {
         wsw2[sblk * 32u + slane] = sbv
     }
 
+    //! the quant offset the split-half fold subtracts through each half's block sum
+    def q_off : int => 32
+
     // the split-half FMA: each 16-weight half keeps its own dot, sum, and signed sub-scale
     def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        let off = q_off()
         let kL = bu * 2u
         let kH = bu * 2u + 1u
         let xwL = xw4[grp * 17u + kL]
@@ -3878,10 +3752,10 @@ class KqBatchK6 : KqBatchBase {
         let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
         let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
         let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
-        return float4(xscl * (wsw[bu * 32u + word] * float(l0 - 32 * blo) + wsw2[bu * 32u + word] * float(h0 - 32 * bhi)),
-            xscl * (wsw[bu * 32u + word + 8u] * float(l1 - 32 * blo) + wsw2[bu * 32u + word + 8u] * float(h1 - 32 * bhi)),
-            xscl * (wsw[bu * 32u + word + 16u] * float(l2 - 32 * blo) + wsw2[bu * 32u + word + 16u] * float(h2 - 32 * bhi)),
-            xscl * (wsw[bu * 32u + word + 24u] * float(l3 - 32 * blo) + wsw2[bu * 32u + word + 24u] * float(h3 - 32 * bhi)))
+        return float4(xscl * (wsw[bu * 32u + word] * float(l0 - off * blo) + wsw2[bu * 32u + word] * float(h0 - off * bhi)),
+            xscl * (wsw[bu * 32u + word + 8u] * float(l1 - off * blo) + wsw2[bu * 32u + word + 8u] * float(h1 - off * bhi)),
+            xscl * (wsw[bu * 32u + word + 16u] * float(l2 - off * blo) + wsw2[bu * 32u + word + 16u] * float(h2 - off * bhi)),
+            xscl * (wsw[bu * 32u + word + 24u] * float(l3 - off * blo) + wsw2[bu * 32u + word + 24u] * float(h3 - off * bhi)))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cls_spv")]
@@ -3915,34 +3789,7 @@ class KqBatchK3 : KqBatchK6 {
         }
     }
 
-    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
-        let kL = bu * 2u
-        let kH = bu * 2u + 1u
-        let xwL = xw4[grp * 17u + kL]
-        let xwH = xw4[grp * 17u + kH]
-        let blo = sdot4(xwL.x, 0x01010101) + sdot4(xwL.y, 0x01010101) + sdot4(xwL.z, 0x01010101) + sdot4(xwL.w, 0x01010101)
-        let bhi = sdot4(xwH.x, 0x01010101) + sdot4(xwH.y, 0x01010101) + sdot4(xwH.z, 0x01010101) + sdot4(xwH.w, 0x01010101)
-        let wL0 = ww4[word * 17u + kL]
-        let wL1 = ww4[(word + 8u) * 17u + kL]
-        let wL2 = ww4[(word + 16u) * 17u + kL]
-        let wL3 = ww4[(word + 24u) * 17u + kL]
-        let wH0 = ww4[word * 17u + kH]
-        let wH1 = ww4[(word + 8u) * 17u + kH]
-        let wH2 = ww4[(word + 16u) * 17u + kH]
-        let wH3 = ww4[(word + 24u) * 17u + kH]
-        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
-        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
-        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
-        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
-        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
-        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
-        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
-        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
-        return float4(xscl * (wsw[bu * 32u + word] * float(l0 - 4 * blo) + wsw2[bu * 32u + word] * float(h0 - 4 * bhi)),
-            xscl * (wsw[bu * 32u + word + 8u] * float(l1 - 4 * blo) + wsw2[bu * 32u + word + 8u] * float(h1 - 4 * bhi)),
-            xscl * (wsw[bu * 32u + word + 16u] * float(l2 - 4 * blo) + wsw2[bu * 32u + word + 16u] * float(h2 - 4 * bhi)),
-            xscl * (wsw[bu * 32u + word + 24u] * float(l3 - 4 * blo) + wsw2[bu * 32u + word + 24u] * float(h3 - 4 * bhi)))
-    }
+    def override q_off : int => 4
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_k3_cls_spv")]
     def override run {
@@ -4034,19 +3881,62 @@ class KqBatchK2 : KqBatchK6 {
     }
 }
 
-// IQ2_S tile: the iq3s grid gather widened to the u64 grid (a 10-bit qs|qh index picks TWO
-// words - eight magnitudes) with the block's own sign bytes; the per-16 UNSIGNED strips ride
-// k6's wsw/wsw2 planes with a plain split fma (no offset, no min term). The 8 KB grid stages
-// once, 8 words per thread.
-[vk_dispatch(name = "kq_batch_iq2s_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
-class KqBatchIq2s : KqBatchK6 {
-    @workgroup gridw : uint[2048]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
+// the iq2 grid formats' scale stage and fold: per-16 UNSIGNED strips on k6's wsw/wsw2 planes and a
+// plain split fma (no offset, no min term); iq2s and iq2xs stage their grids and gather on it
+class KqBatchIq2Base : KqBatchK6 {
+    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        var sbv = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let w = wsu[wsb * 5u + 1u + sblk / 2u]
+            let s0 = (w >> ((sblk % 2u) * 16u)) & 255u
+            let s1 = (w >> ((sblk % 2u) * 16u + 8u)) & 255u
+            let dd = unpackHalf2x16(wsu[wsb * 5u]).x
+            sa = dd * float(s0)
+            sbv = dd * float(s1)
+        }
+        wsw[sblk * 32u + slane] = sa
+        wsw2[sblk * 32u + slane] = sbv
     }
+
+    // the split-half fma with UNSIGNED strips: xscl * (d*s0*l + d*s1*h) - no offset, no min
+    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
+        let kL = bu * 2u
+        let kH = bu * 2u + 1u
+        let xwL = xw4[grp * 17u + kL]
+        let xwH = xw4[grp * 17u + kH]
+        let wL0 = ww4[word * 17u + kL]
+        let wL1 = ww4[(word + 8u) * 17u + kL]
+        let wL2 = ww4[(word + 16u) * 17u + kL]
+        let wL3 = ww4[(word + 24u) * 17u + kL]
+        let wH0 = ww4[word * 17u + kH]
+        let wH1 = ww4[(word + 8u) * 17u + kH]
+        let wH2 = ww4[(word + 16u) * 17u + kH]
+        let wH3 = ww4[(word + 24u) * 17u + kH]
+        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
+        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
+        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
+        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
+        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
+        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
+        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
+        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
+        return float4(xscl * (wsw[bu * 32u + word] * float(l0) + wsw2[bu * 32u + word] * float(h0)),
+            xscl * (wsw[bu * 32u + word + 8u] * float(l1) + wsw2[bu * 32u + word + 8u] * float(h1)),
+            xscl * (wsw[bu * 32u + word + 16u] * float(l2) + wsw2[bu * 32u + word + 16u] * float(h2)),
+            xscl * (wsw[bu * 32u + word + 24u] * float(l3) + wsw2[bu * 32u + word + 24u] * float(h3)))
+    }
+}
+
+// IQ2_S tile: the iq3s grid gather widened to the u64 grid (a 10-bit qs|qh index picks TWO
+// words - eight magnitudes) with the block's own sign bytes. The 8 KB grid stages once, 8 words
+// per thread.
+[vk_dispatch(name = "kq_batch_iq2s_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq2s : KqBatchIq2Base {
+    @workgroup gridw : uint[2048]
 
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -4071,52 +3961,6 @@ class KqBatchIq2s : KqBatchK6 {
         }
     }
 
-    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
-        let slane = tid % 32u
-        let sblk = tid / 32u
-        var sa = 0.0
-        var sbv = 0.0
-        if (wt * 32u + slane < pa.d) {
-            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let w = wsu[wsb * 5u + 1u + sblk / 2u]
-            let s0 = (w >> ((sblk % 2u) * 16u)) & 255u
-            let s1 = (w >> ((sblk % 2u) * 16u + 8u)) & 255u
-            let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-            sa = dd * float(s0)
-            sbv = dd * float(s1)
-        }
-        wsw[sblk * 32u + slane] = sa
-        wsw2[sblk * 32u + slane] = sbv
-    }
-
-    // the split-half fma with UNSIGNED strips: xscl * (d*s0*l + d*s1*h) - no offset, no min
-    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
-        let kL = bu * 2u
-        let kH = bu * 2u + 1u
-        let xwL = xw4[grp * 17u + kL]
-        let xwH = xw4[grp * 17u + kH]
-        let wL0 = ww4[word * 17u + kL]
-        let wL1 = ww4[(word + 8u) * 17u + kL]
-        let wL2 = ww4[(word + 16u) * 17u + kL]
-        let wL3 = ww4[(word + 24u) * 17u + kL]
-        let wH0 = ww4[word * 17u + kH]
-        let wH1 = ww4[(word + 8u) * 17u + kH]
-        let wH2 = ww4[(word + 16u) * 17u + kH]
-        let wH3 = ww4[(word + 24u) * 17u + kH]
-        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
-        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
-        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
-        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
-        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
-        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
-        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
-        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
-        return float4(xscl * (wsw[bu * 32u + word] * float(l0) + wsw2[bu * 32u + word] * float(h0)),
-            xscl * (wsw[bu * 32u + word + 8u] * float(l1) + wsw2[bu * 32u + word + 8u] * float(h1)),
-            xscl * (wsw[bu * 32u + word + 16u] * float(l2) + wsw2[bu * 32u + word + 16u] * float(h2)),
-            xscl * (wsw[bu * 32u + word + 24u] * float(l3) + wsw2[bu * 32u + word + 24u] * float(h3)))
-    }
-
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq2s_cls_spv")]
     def override run {
         let tid = gl_LocalInvocationID.x
@@ -4130,16 +3974,10 @@ class KqBatchIq2s : KqBatchK6 {
 
 // IQ2_XS tile: the iq2s gather with ksigns-by-parity - each u16 qs word carries a 9-bit grid
 // index (two staged words) and a 7-bit KSIGNS_IQ2XS index whose sign byte ksign7 recomputes
-// (no sign plane, no qh); strips and fma ride the iq2s spellings. The 4 KB grid stages once.
+// (no sign plane, no qh). The 4 KB grid stages once.
 [vk_dispatch(name = "kq_batch_iq2xs_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
-class KqBatchIq2xs : KqBatchK6 {
+class KqBatchIq2xs : KqBatchIq2Base {
     @workgroup gridw : uint[1024]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
-    }
 
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -4161,52 +3999,6 @@ class KqBatchIq2xs : KqBatchK6 {
         }
     }
 
-    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
-        let slane = tid % 32u
-        let sblk = tid / 32u
-        var sa = 0.0
-        var sbv = 0.0
-        if (wt * 32u + slane < pa.d) {
-            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let w = wsu[wsb * 5u + 1u + sblk / 2u]
-            let s0 = (w >> ((sblk % 2u) * 16u)) & 255u
-            let s1 = (w >> ((sblk % 2u) * 16u + 8u)) & 255u
-            let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-            sa = dd * float(s0)
-            sbv = dd * float(s1)
-        }
-        wsw[sblk * 32u + slane] = sa
-        wsw2[sblk * 32u + slane] = sbv
-    }
-
-    // the split-half fma with UNSIGNED strips: xscl * (d*s0*l + d*s1*h) - no offset, no min
-    def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
-        let kL = bu * 2u
-        let kH = bu * 2u + 1u
-        let xwL = xw4[grp * 17u + kL]
-        let xwH = xw4[grp * 17u + kH]
-        let wL0 = ww4[word * 17u + kL]
-        let wL1 = ww4[(word + 8u) * 17u + kL]
-        let wL2 = ww4[(word + 16u) * 17u + kL]
-        let wL3 = ww4[(word + 24u) * 17u + kL]
-        let wH0 = ww4[word * 17u + kH]
-        let wH1 = ww4[(word + 8u) * 17u + kH]
-        let wH2 = ww4[(word + 16u) * 17u + kH]
-        let wH3 = ww4[(word + 24u) * 17u + kH]
-        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
-        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
-        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
-        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
-        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
-        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
-        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
-        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
-        return float4(xscl * (wsw[bu * 32u + word] * float(l0) + wsw2[bu * 32u + word] * float(h0)),
-            xscl * (wsw[bu * 32u + word + 8u] * float(l1) + wsw2[bu * 32u + word + 8u] * float(h1)),
-            xscl * (wsw[bu * 32u + word + 16u] * float(l2) + wsw2[bu * 32u + word + 16u] * float(h2)),
-            xscl * (wsw[bu * 32u + word + 24u] * float(l3) + wsw2[bu * 32u + word + 24u] * float(h3)))
-    }
-
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq2xs_cls_spv")]
     def override run {
         let tid = gl_LocalInvocationID.x
@@ -4221,26 +4013,15 @@ class KqBatchIq2xs : KqBatchK6 {
 // ===== the prefill batch GEMMs — cooperative-matrix variants (DASLLAMA_COOPMAT=f16|int8|mm) =====
 
 let private CML_SST = 20u   // mm shared row stride in uints (16 f16-pair data + 4 pad — bank spread)
+let private KHR_STRIDE = 20u   // the KHR kq tile's shared row stride in 32-bit words: 32 k halves as 16 f16 pairs + 4 pad (bank spread)
+let private KHR_KHALF_WORDS = 8u   // the 16 k halves one thread stages per step, as f16 pairs
 
-// the MoE region rail the coopmat batch tiles share: sched = 4-word region records
-// [wblk0, row0, cnt, wg0] at 0, then the per-wg map at pa.map_off
-class MoeCmBase {
-    @ssbo @binding = 2 sched : array<uint>   // region records + per-wg map (bulk schedule data)
-    @push_constant pa : BatchArgs
-
-    def region_rec : uint4 {
-        let rid = sched[pa.map_off + gl_WorkGroupID.x]
-        let rb = rid * 4u
-        return uint4(sched[rb], sched[rb + 1u], sched[rb + 2u], gl_WorkGroupID.x - sched[rb + 3u])
-    }
-}
-
-// f16 tensor-core 32x32 tile: same MoE routing + Q8_0 layout as Q8Batch, but the inner GEMM rides
-// the tensor cores — 128 threads / 4 subgroups, one 16x16 subtile each; edge tiles zero-fill
-[vk_dispatch(name = "q8_batch_cmf16_cls", grid = "wgs", params = "wgs : int64")]
-class CmF16Batch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words
-    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
+// The f16 tensor-core 32x32 tile shell (DASLLAMA_COOPMAT=f16): the MoE routing of Q8Batch with the
+// inner GEMM on the tensor cores - 128 threads / 4 subgroups, one 16x16 subtile each, the staged
+// f16 A (32 rows x 256 k) and B (256 k x 32 cols) tiles, 16 MMAs per step, the f32 scratch bounce
+// for the bounds-checked store. A leaf stages its own weight format into the tiles (edge rows
+// zero-fill) and hands the shell its step count and the block count its stage reads.
+class CmF16Base : MoeCmBase {
     @ssbo @binding = 3 xqw : array<uint>       // activation quant words
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
     @ssbo @binding = 5 y : array<float>
@@ -4248,8 +4029,11 @@ class CmF16Batch : MoeCmBase {
     @workgroup cm_bs : float16[8192]   // 256 k x 32 cols, row-major stride 32 (f16 dequant B)
     @workgroup cm_out : float[1024]    // 4 subgroups x 16x16 f32 scratch (bounds-checked write-out)
 
-    [spirv_kernel(local_size_x = 128, name = "q8_batch_cmf16_cls_spv")]
-    def run {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+    // step s of the leaf's format: the activation rows into cm_as, the weight columns into cm_bs
+    def stage(s, wblk0, row0, cnt, xt, wt, nblk, tid : uint) {
+    }
+
+    def body(nsteps, nblk : uint) {
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
@@ -4258,8 +4042,6 @@ class CmF16Batch : MoeCmBase {
         let wtiles = (pa.d + 31u) / 32u
         let xt = tix / wtiles
         let wt = tix % wtiles
-        let nbb = pa.n / 32u
-        let nsteps = (nbb + 7u) / 8u
         let tid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID          // 0..3 (subgroupSize 32)
         let row_half = sg / 2u               // which 16-row half of the tile
@@ -4267,49 +4049,7 @@ class CmF16Batch : MoeCmBase {
         var acc : coopmatAcc_f32_16x16
         var s = 0u
         while (s < nsteps) {
-            let b0 = s * 8u
-            for (i in range(16)) {       // stage A: 32x64 = 2048 uints, 16/thread; OOR -> 0
-                let u = tid * 16u + uint(i)
-                let row = u / 64u          // 0..31 local token row
-                let chunk = u % 64u
-                let blk = chunk / 8u
-                let w = chunk % 8u
-                let xrow = xt * 32u + row
-                let gblk = b0 + blk
-                var packed = 0u
-                var xs = 0.0
-                if (xrow < cnt && gblk < nbb) {
-                    packed = xqw[((row0 + xrow) * nbb + gblk) * 8u + w]
-                    xs = axs[(row0 + xrow) * nbb + gblk]
-                }
-                let qv = int4(unpack8(int(packed)))
-                let o = row * 256u + blk * 32u + w * 4u
-                cm_as[o] = float16(float(qv.x) * xs)
-                cm_as[o + 1u] = float16(float(qv.y) * xs)
-                cm_as[o + 2u] = float16(float(qv.z) * xs)
-                cm_as[o + 3u] = float16(float(qv.w) * xs)
-            }
-            for (i in range(16)) {       // stage B: 32x64 = 2048 uints, 16/thread; OOR -> 0
-                let u = tid * 16u + uint(i)
-                let col = u / 64u          // 0..31 output col
-                let chunk = u % 64u
-                let blk = chunk / 8u
-                let w = chunk % 8u
-                let wcol = wt * 32u + col
-                let gblk = b0 + blk
-                var packed = 0u
-                var ws = 0.0
-                if (wcol < pa.d && gblk < nbb) {
-                    packed = wq[(wblk0 + wcol * nbb + gblk) * 8u + w]
-                    ws = float(wsh[wblk0 + wcol * nbb + gblk])
-                }
-                let qv = int4(unpack8(int(packed)))
-                let k = blk * 32u + w * 4u
-                cm_bs[k * 32u + col] = float16(float(qv.x) * ws)
-                cm_bs[(k + 1u) * 32u + col] = float16(float(qv.y) * ws)
-                cm_bs[(k + 2u) * 32u + col] = float16(float(qv.z) * ws)
-                cm_bs[(k + 3u) * 32u + col] = float16(float(qv.w) * ws)
-            }
+            stage(s, wblk0, row0, cnt, xt, wt, nblk, tid)
             barrier()
             for (bb in range(8)) {       // 8 blocks x 2 K-subtiles = 16 MMAs into one acc
                 for (ks in range(2)) {
@@ -4336,6 +4076,65 @@ class CmF16Batch : MoeCmBase {
                 y[(row0 + orow) * pa.d + ocol] = cm_out[sg * 256u + idx]
             }
         }
+    }
+}
+
+// the Q8_0 leaf: eight 32-blocks per step, each staged uint the four quants of one block word
+[vk_dispatch(name = "q8_batch_cmf16_cls", grid = "wgs", params = "wgs : int64")]
+class CmF16Batch : CmF16Base {
+    @ssbo @binding = 0 wq : array<uint>        // weight quant words
+    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
+
+    def override stage(s, wblk0, row0, cnt, xt, wt, nblk, tid : uint) {
+        let b0 = s * 8u
+        for (i in range(16)) {       // stage A: 32x64 = 2048 uints, 16/thread; OOR -> 0
+            let u = tid * 16u + uint(i)
+            let row = u / 64u          // 0..31 local token row
+            let chunk = u % 64u
+            let blk = chunk / 8u
+            let w = chunk % 8u
+            let xrow = xt * 32u + row
+            let gblk = b0 + blk
+            var packed = 0u
+            var xs = 0.0
+            if (xrow < cnt && gblk < nblk) {
+                packed = xqw[((row0 + xrow) * nblk + gblk) * 8u + w]
+                xs = axs[(row0 + xrow) * nblk + gblk]
+            }
+            let qv = int4(unpack8(int(packed)))
+            let o = row * 256u + blk * 32u + w * 4u
+            cm_as[o] = float16(float(qv.x) * xs)
+            cm_as[o + 1u] = float16(float(qv.y) * xs)
+            cm_as[o + 2u] = float16(float(qv.z) * xs)
+            cm_as[o + 3u] = float16(float(qv.w) * xs)
+        }
+        for (i in range(16)) {       // stage B: 32x64 = 2048 uints, 16/thread; OOR -> 0
+            let u = tid * 16u + uint(i)
+            let col = u / 64u          // 0..31 output col
+            let chunk = u % 64u
+            let blk = chunk / 8u
+            let w = chunk % 8u
+            let wcol = wt * 32u + col
+            let gblk = b0 + blk
+            var packed = 0u
+            var ws = 0.0
+            if (wcol < pa.d && gblk < nblk) {
+                packed = wq[(wblk0 + wcol * nblk + gblk) * 8u + w]
+                ws = float(wsh[wblk0 + wcol * nblk + gblk])
+            }
+            let qv = int4(unpack8(int(packed)))
+            let k = blk * 32u + w * 4u
+            cm_bs[k * 32u + col] = float16(float(qv.x) * ws)
+            cm_bs[(k + 1u) * 32u + col] = float16(float(qv.y) * ws)
+            cm_bs[(k + 2u) * 32u + col] = float16(float(qv.z) * ws)
+            cm_bs[(k + 3u) * 32u + col] = float16(float(qv.w) * ws)
+        }
+    }
+
+    [spirv_kernel(local_size_x = 128, name = "q8_batch_cmf16_cls_spv")]
+    def run {
+        let nbb = pa.n / 32u
+        body((nbb + 7u) / 8u, nbb)
     }
 }
 
@@ -4406,37 +4205,107 @@ class CmI8Batch : MoeCmBase {
     }
 }
 
-// the mul_mm L-tile variant (DASLLAMA_COOPMAT=mm): the aligned-L geometry — BM=BN=128
-// BK=32, 4 warps 2x2 with 16 f16acc fragments each. Edge tiles bounce stores via cml_o
-[vk_dispatch(name = "q8_batch_mm_cls", grid = "wgs", params = "wgs : int64")]
-class MmBatch : MoeCmBase {
+// The mul_mm tile (DASLLAMA_COOPMAT=mm) as ONE class template over the tile edge and the edge
+// policy. The fragment sets are per-edge `static_if` arms: a cooperative-matrix handle cannot sit
+// in a sized array, and each arm's MMA order is parity-locked to the shipped kernel.
+[ |> template_struct_instance]
+class template MmBatchT : MoeCmBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words
     @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
     @ssbo @binding = 3 xqw : array<uint>       // activation quant words
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
     @ssbo @binding = 5 y : array<float>
-    @workgroup cml_a : uint[2560]     // A tile: 128 weight rows x one block (32 K) as f16 pairs
-    @workgroup cml_b : uint[2560]     // B tile: 128 token rows x one block
-    @workgroup cml_o : float16[1024]  // 4 warps x 16x16 f16-acc store bounce (edge tiles only)
+    @template_constant BT : uint = 128u        // the tile edge: 128 = the aligned-L geometry (BM=BN=128 BK=32, 4 warps 2x2 with 16 f16acc fragments each), 64 = the M twin (2x2 fragments each, routed in when cnt or d <= 64)
+    @template_constant EDGE : bool = true      // rows past d / cnt exist: guarded staging, bounced stores; the aligned-L leaf runs with it off, its own pipeline for d and every cnt 128-multiples
+    @workgroup cml_a : uint[int(BT * CML_SST)]   // A tile: BT weight rows x one block (32 K) as f16 pairs
+    @workgroup cml_b : uint[int(BT * CML_SST)]   // B tile: BT token rows x one block
+    @workgroup @template_gate = EDGE cml_o : float16[1024]   // 4 warps x 16x16 f16-acc store bounce (edge tiles only)
 
-    [spirv_kernel(local_size_x = 128, name = "q8_batch_mm_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+    // stage A: BT weight rows x 1 block; OOR rows -> 0 on the edge policy
+    def stage_a(wblk0, gm0, nbb, kb, lw, lr0 : uint) {
+        for [unroll] (p in range(int(BT) / 16)) {
+            let row = lr0 + uint(p) * 16u
+            let wrow = gm0 + row
+            var v = float4(0.0)
+            static_if (EDGE) {
+                if (wrow < pa.d) {
+                    let ib = wblk0 + wrow * nbb + kb
+                    v = float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])
+                }
+            } else {
+                let ib = wblk0 + wrow * nbb + kb
+                v = float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])
+            }
+            let o = row * CML_SST + lw * 2u
+            cml_a[o] = packHalf2x16(v.xy)
+            cml_a[o + 1u] = packHalf2x16(v.zw)
+        }
+    }
+
+    // stage B: BT token rows x 1 block; OOR rows -> 0 on the edge policy
+    def stage_b(row0, gn0, cnt, nbb, kb, lw, lr0 : uint) {
+        for [unroll] (p in range(int(BT) / 16)) {
+            let row = lr0 + uint(p) * 16u
+            var v = float4(0.0)
+            static_if (EDGE) {
+                if (gn0 + row < cnt) {
+                    let ib = (row0 + gn0 + row) * nbb + kb
+                    v = float4(int4(unpack8(int(xqw[ib * 8u + lw])))) * axs[ib]
+                }
+            } else {
+                let ib = (row0 + gn0 + row) * nbb + kb
+                v = float4(int4(unpack8(int(xqw[ib * 8u + lw])))) * axs[ib]
+            }
+            let o = row * CML_SST + lw * 2u
+            cml_b[o] = packHalf2x16(v.xy)
+            cml_b[o + 1u] = packHalf2x16(v.zw)
+        }
+    }
+
+    // an edge tile's fragment, already stored to this warp's cml_o slab (rowmajor, row = weight
+    // dim): 32 lanes widen and write 8 elements each under the row and column bounds
+    def bounce_out(fr, fc, dr, dc, row0, cnt : uint) {
+        static_if (EDGE) {
+            let lane = gl_SubgroupInvocationID
+            let ob = gl_SubgroupID * 256u
+            for (e in range(8)) {
+                let idx = lane * 8u + uint(e)
+                let wr = dr + fr * 16u + idx / 16u
+                let tc = dc + fc * 16u + idx % 16u
+                if (wr < pa.d && tc < cnt) {
+                    y[(row0 + tc) * pa.d + wr] = float(cml_o[ob + idx])
+                }
+            }
+        }
+    }
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
         let cnt = reg.z
         let tix = reg.w
-        let wtiles = (pa.d + 127u) / 128u
+        let wtiles = (pa.d + BT - 1u) / BT
         let xt = tix / wtiles             // token (B) tile
         let wt = tix % wtiles             // weight (A) tile
-        let gm0 = wt * 128u
-        let gn0 = xt * 128u
+        let gm0 = wt * BT
+        let gn0 = xt * BT
         let nbb = pa.n / 32u
         let tid = gl_LocalInvocationID.x
-        let warp_r = gl_SubgroupID % 2u   // which 64-row half of the A tile
-        let warp_c = gl_SubgroupID / 2u   // which 64-col half of the B tile
+        let warp_r = gl_SubgroupID % 2u   // which half of the A tile
+        let warp_c = gl_SubgroupID / 2u   // which half of the B tile
         let lw = tid % 8u                 // which packed word (4 qs) of the staged row's block
         let lr0 = tid / 8u                // staging row base 0..15
+        static_if (BT == 128u) {
+            l_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0)
+        } else {
+            m_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0)
+        }
+    }
+
+    def l_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+        static_if (BT == 128u) {
         var acc00 : coopmatAcc_f16_16x16
         var acc01 : coopmatAcc_f16_16x16
         var acc02 : coopmatAcc_f16_16x16
@@ -4455,29 +4324,8 @@ class MmBatch : MoeCmBase {
         var acc33 : coopmatAcc_f16_16x16
         var kb = 0u
         while (kb < nbb) {
-            for [unroll] (p in range(8)) {   // stage A: 128 weight rows x 1 block; OOR rows -> 0
-                let row = lr0 + uint(p) * 16u
-                let wrow = gm0 + row
-                var v = float4(0.0)
-                if (wrow < pa.d) {
-                    let ib = wblk0 + wrow * nbb + kb
-                    v = float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])
-                }
-                let o = row * CML_SST + lw * 2u
-                cml_a[o] = packHalf2x16(v.xy)
-                cml_a[o + 1u] = packHalf2x16(v.zw)
-            }
-            for [unroll] (p in range(8)) {   // stage B: 128 token rows x 1 block; OOR rows -> 0
-                let row = lr0 + uint(p) * 16u
-                var v = float4(0.0)
-                if (gn0 + row < cnt) {
-                    let ib = (row0 + gn0 + row) * nbb + kb
-                    v = float4(int4(unpack8(int(xqw[ib * 8u + lw])))) * axs[ib]
-                }
-                let o = row * CML_SST + lw * 2u
-                cml_b[o] = packHalf2x16(v.xy)
-                cml_b[o + 1u] = packHalf2x16(v.zw)
-            }
+            stage_a(wblk0, gm0, nbb, kb, lw, lr0)
+            stage_b(row0, gn0, cnt, nbb, kb, lw, lr0)
             barrier()
             for [unroll] (ks in range(2)) {   // 2 K-subtiles x (4 A rows x 4 B cols), their MMA order
                 let k8 = uint(ks) * 8u
@@ -4526,7 +4374,8 @@ class MmBatch : MoeCmBase {
         // stores: y[(row0 + token) * d + wrow] — fragment weight-dim contiguous = column-major, stride d
         let dr = gm0 + warp_r * 64u
         let dc = gn0 + warp_c * 64u
-        if (gm0 + 128u <= pa.d && gn0 + 128u <= cnt) {
+        let whole = !EDGE || (gm0 + 128u <= pa.d && gn0 + 128u <= cnt)
+        if (whole) {
             var accw : coopmatAcc_f32_16x16
             let yb = (row0 + dc) * pa.d + dr
             coopmatConvert(accw, acc00)
@@ -4562,283 +4411,78 @@ class MmBatch : MoeCmBase {
             coopmatConvert(accw, acc33)
             coopmatStore(accw, y, int(yb + 48u * pa.d + 48u), int(pa.d), 1)
         } else {
-            // edge tile: every fragment bounces its f16 acc through this warp's cml_o slab (rowmajor,
-            // row = weight dim), then 32 lanes widen + write 8 elements each under bounds checks
-            let lane = gl_SubgroupInvocationID
-            let ob = gl_SubgroupID * 256u
-            for (fi in range(16)) {
-                let fr = uint(fi) / 4u       // fragment row: weight offset fr*16
-                let fc = uint(fi) % 4u       // fragment col: token offset fc*16
-                if (fi == 0) {
-                    coopmatStore(acc00, cml_o, int(ob), 16, 0)
-                } elif (fi == 1) {
-                    coopmatStore(acc01, cml_o, int(ob), 16, 0)
-                } elif (fi == 2) {
-                    coopmatStore(acc02, cml_o, int(ob), 16, 0)
-                } elif (fi == 3) {
-                    coopmatStore(acc03, cml_o, int(ob), 16, 0)
-                } elif (fi == 4) {
-                    coopmatStore(acc10, cml_o, int(ob), 16, 0)
-                } elif (fi == 5) {
-                    coopmatStore(acc11, cml_o, int(ob), 16, 0)
-                } elif (fi == 6) {
-                    coopmatStore(acc12, cml_o, int(ob), 16, 0)
-                } elif (fi == 7) {
-                    coopmatStore(acc13, cml_o, int(ob), 16, 0)
-                } elif (fi == 8) {
-                    coopmatStore(acc20, cml_o, int(ob), 16, 0)
-                } elif (fi == 9) {
-                    coopmatStore(acc21, cml_o, int(ob), 16, 0)
-                } elif (fi == 10) {
-                    coopmatStore(acc22, cml_o, int(ob), 16, 0)
-                } elif (fi == 11) {
-                    coopmatStore(acc23, cml_o, int(ob), 16, 0)
-                } elif (fi == 12) {
-                    coopmatStore(acc30, cml_o, int(ob), 16, 0)
-                } elif (fi == 13) {
-                    coopmatStore(acc31, cml_o, int(ob), 16, 0)
-                } elif (fi == 14) {
-                    coopmatStore(acc32, cml_o, int(ob), 16, 0)
-                } else {
-                    coopmatStore(acc33, cml_o, int(ob), 16, 0)
-                }
-                barrier()
-                for (e in range(8)) {
-                    let idx = lane * 8u + uint(e)
-                    let wr = dr + fr * 16u + idx / 16u
-                    let tc = dc + fc * 16u + idx % 16u
-                    if (wr < pa.d && tc < cnt) {
-                        y[(row0 + tc) * pa.d + wr] = float(cml_o[ob + idx])
+            static_if (EDGE) {
+                // edge tile: every fragment bounces its f16 acc through this warp's cml_o slab
+                let ob = gl_SubgroupID * 256u
+                for (fi in range(16)) {
+                    let fr = uint(fi) / 4u       // fragment row: weight offset fr*16
+                    let fc = uint(fi) % 4u       // fragment col: token offset fc*16
+                    if (fi == 0) {
+                        coopmatStore(acc00, cml_o, int(ob), 16, 0)
+                    } elif (fi == 1) {
+                        coopmatStore(acc01, cml_o, int(ob), 16, 0)
+                    } elif (fi == 2) {
+                        coopmatStore(acc02, cml_o, int(ob), 16, 0)
+                    } elif (fi == 3) {
+                        coopmatStore(acc03, cml_o, int(ob), 16, 0)
+                    } elif (fi == 4) {
+                        coopmatStore(acc10, cml_o, int(ob), 16, 0)
+                    } elif (fi == 5) {
+                        coopmatStore(acc11, cml_o, int(ob), 16, 0)
+                    } elif (fi == 6) {
+                        coopmatStore(acc12, cml_o, int(ob), 16, 0)
+                    } elif (fi == 7) {
+                        coopmatStore(acc13, cml_o, int(ob), 16, 0)
+                    } elif (fi == 8) {
+                        coopmatStore(acc20, cml_o, int(ob), 16, 0)
+                    } elif (fi == 9) {
+                        coopmatStore(acc21, cml_o, int(ob), 16, 0)
+                    } elif (fi == 10) {
+                        coopmatStore(acc22, cml_o, int(ob), 16, 0)
+                    } elif (fi == 11) {
+                        coopmatStore(acc23, cml_o, int(ob), 16, 0)
+                    } elif (fi == 12) {
+                        coopmatStore(acc30, cml_o, int(ob), 16, 0)
+                    } elif (fi == 13) {
+                        coopmatStore(acc31, cml_o, int(ob), 16, 0)
+                    } elif (fi == 14) {
+                        coopmatStore(acc32, cml_o, int(ob), 16, 0)
+                    } else {
+                        coopmatStore(acc33, cml_o, int(ob), 16, 0)
                     }
+                    barrier()
+                    bounce_out(fr, fc, dr, dc, row0, cnt)
+                    barrier()
                 }
-                barrier()
             }
         }
-    }
-}
-
-// the aligned L twin: staging guards + edge branch removed — its own pipeline for
-// d + every cnt 128-multiples
-[vk_dispatch(name = "q8_batch_mm_a_cls", grid = "wgs", params = "wgs : int64")]
-class MmABatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words
-    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
-    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
-    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
-    @workgroup cma_a : uint[2560]     // A tile: 128 weight rows x one block (32 K) as f16 pairs
-    @workgroup cma_b : uint[2560]     // B tile: 128 token rows x one block
-
-    [spirv_kernel(local_size_x = 128, name = "q8_batch_mm_a_cls_spv")]
-    def run {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let tix = reg.w
-        let wtiles = (pa.d + 127u) / 128u
-        let xt = tix / wtiles             // token (B) tile
-        let wt = tix % wtiles             // weight (A) tile
-        let gm0 = wt * 128u
-        let gn0 = xt * 128u
-        let nbb = pa.n / 32u
-        let tid = gl_LocalInvocationID.x
-        let warp_r = gl_SubgroupID % 2u   // which 64-row half of the A tile
-        let warp_c = gl_SubgroupID / 2u   // which 64-col half of the B tile
-        let lw = tid % 8u                 // which packed word (4 qs) of the staged row's block
-        let lr0 = tid / 8u                // staging row base 0..15
-        var acc00 : coopmatAcc_f16_16x16
-        var acc01 : coopmatAcc_f16_16x16
-        var acc02 : coopmatAcc_f16_16x16
-        var acc03 : coopmatAcc_f16_16x16
-        var acc10 : coopmatAcc_f16_16x16
-        var acc11 : coopmatAcc_f16_16x16
-        var acc12 : coopmatAcc_f16_16x16
-        var acc13 : coopmatAcc_f16_16x16
-        var acc20 : coopmatAcc_f16_16x16
-        var acc21 : coopmatAcc_f16_16x16
-        var acc22 : coopmatAcc_f16_16x16
-        var acc23 : coopmatAcc_f16_16x16
-        var acc30 : coopmatAcc_f16_16x16
-        var acc31 : coopmatAcc_f16_16x16
-        var acc32 : coopmatAcc_f16_16x16
-        var acc33 : coopmatAcc_f16_16x16
-        var kb = 0u
-        while (kb < nbb) {
-            for [unroll] (p in range(8)) {   // stage A: 128 weight rows x 1 block, unguarded
-                let row = lr0 + uint(p) * 16u
-                let ib = wblk0 + (gm0 + row) * nbb + kb
-                let v = float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])
-                let o = row * CML_SST + lw * 2u
-                cma_a[o] = packHalf2x16(v.xy)
-                cma_a[o + 1u] = packHalf2x16(v.zw)
-            }
-            for [unroll] (p in range(8)) {   // stage B: 128 token rows x 1 block, unguarded
-                let row = lr0 + uint(p) * 16u
-                let ib = (row0 + gn0 + row) * nbb + kb
-                let v = float4(int4(unpack8(int(xqw[ib * 8u + lw])))) * axs[ib]
-                let o = row * CML_SST + lw * 2u
-                cma_b[o] = packHalf2x16(v.xy)
-                cma_b[o + 1u] = packHalf2x16(v.zw)
-            }
-            barrier()
-            for [unroll] (ks in range(2)) {   // 2 K-subtiles x (4 A rows x 4 B cols), their MMA order
-                let k8 = uint(ks) * 8u
-                var ca : coopmatA_f16_16x16
-                var cb : coopmatB_f16_16x16
-                coopmatLoad(ca, cma_a, int((warp_r * 64u) * CML_SST + k8), int(CML_SST), 0)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
-                acc00 = coopmatMulAdd(ca, cb, acc00)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
-                acc01 = coopmatMulAdd(ca, cb, acc01)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
-                acc02 = coopmatMulAdd(ca, cb, acc02)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
-                acc03 = coopmatMulAdd(ca, cb, acc03)
-                coopmatLoad(ca, cma_a, int((warp_r * 64u + 16u) * CML_SST + k8), int(CML_SST), 0)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
-                acc10 = coopmatMulAdd(ca, cb, acc10)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
-                acc11 = coopmatMulAdd(ca, cb, acc11)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
-                acc12 = coopmatMulAdd(ca, cb, acc12)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
-                acc13 = coopmatMulAdd(ca, cb, acc13)
-                coopmatLoad(ca, cma_a, int((warp_r * 64u + 32u) * CML_SST + k8), int(CML_SST), 0)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
-                acc20 = coopmatMulAdd(ca, cb, acc20)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
-                acc21 = coopmatMulAdd(ca, cb, acc21)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
-                acc22 = coopmatMulAdd(ca, cb, acc22)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
-                acc23 = coopmatMulAdd(ca, cb, acc23)
-                coopmatLoad(ca, cma_a, int((warp_r * 64u + 48u) * CML_SST + k8), int(CML_SST), 0)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
-                acc30 = coopmatMulAdd(ca, cb, acc30)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
-                acc31 = coopmatMulAdd(ca, cb, acc31)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
-                acc32 = coopmatMulAdd(ca, cb, acc32)
-                coopmatLoad(cb, cma_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
-                acc33 = coopmatMulAdd(ca, cb, acc33)
-            }
-            barrier()
-            kb++
         }
-        // stores: y[(row0 + token) * d + wrow] — fragment weight-dim contiguous = column-major, stride d
-        let dr = gm0 + warp_r * 64u
-        let dc = gn0 + warp_c * 64u
-        var accw : coopmatAcc_f32_16x16
-        let yb = (row0 + dc) * pa.d + dr
-        coopmatConvert(accw, acc00)
-        coopmatStore(accw, y, int(yb), int(pa.d), 1)
-        coopmatConvert(accw, acc01)
-        coopmatStore(accw, y, int(yb + 16u * pa.d), int(pa.d), 1)
-        coopmatConvert(accw, acc02)
-        coopmatStore(accw, y, int(yb + 32u * pa.d), int(pa.d), 1)
-        coopmatConvert(accw, acc03)
-        coopmatStore(accw, y, int(yb + 48u * pa.d), int(pa.d), 1)
-        coopmatConvert(accw, acc10)
-        coopmatStore(accw, y, int(yb + 16u), int(pa.d), 1)
-        coopmatConvert(accw, acc11)
-        coopmatStore(accw, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
-        coopmatConvert(accw, acc12)
-        coopmatStore(accw, y, int(yb + 32u * pa.d + 16u), int(pa.d), 1)
-        coopmatConvert(accw, acc13)
-        coopmatStore(accw, y, int(yb + 48u * pa.d + 16u), int(pa.d), 1)
-        coopmatConvert(accw, acc20)
-        coopmatStore(accw, y, int(yb + 32u), int(pa.d), 1)
-        coopmatConvert(accw, acc21)
-        coopmatStore(accw, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
-        coopmatConvert(accw, acc22)
-        coopmatStore(accw, y, int(yb + 32u * pa.d + 32u), int(pa.d), 1)
-        coopmatConvert(accw, acc23)
-        coopmatStore(accw, y, int(yb + 48u * pa.d + 32u), int(pa.d), 1)
-        coopmatConvert(accw, acc30)
-        coopmatStore(accw, y, int(yb + 48u), int(pa.d), 1)
-        coopmatConvert(accw, acc31)
-        coopmatStore(accw, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
-        coopmatConvert(accw, acc32)
-        coopmatStore(accw, y, int(yb + 32u * pa.d + 48u), int(pa.d), 1)
-        coopmatConvert(accw, acc33)
-        coopmatStore(accw, y, int(yb + 48u * pa.d + 48u), int(pa.d), 1)
     }
-}
 
-// the mul_mm M-tile twin (64x64): the L scheme at half edge — 4 warps 2x2 over the tile,
-// 2x2 fragments each. Routed in when cnt or d <= 64
-[vk_dispatch(name = "q8_batch_mm_m_cls", grid = "wgs", params = "wgs : int64")]
-class MmMBatch : MoeCmBase {
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words
-    @ssbo @binding = 1 wsh : array<float16>    // per-block weight scales
-    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
-    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
-    @workgroup cmm_a : uint[1280]     // A tile: 64 weight rows x one block (32 K) as f16 pairs
-    @workgroup cmm_b : uint[1280]     // B tile: 64 token rows x one block
-    @workgroup cml_o : float16[1024]  // 4 warps x 16x16 f16-acc store bounce (edge tiles only)
-
-    [spirv_kernel(local_size_x = 128, name = "q8_batch_mm_m_cls_spv")]
-    def run {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
-        let reg = region_rec()
-        let wblk0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let tix = reg.w
-        let wtiles = (pa.d + 63u) / 64u
-        let xt = tix / wtiles             // token (B) tile
-        let wt = tix % wtiles             // weight (A) tile
-        let gm0 = wt * 64u
-        let gn0 = xt * 64u
-        let nbb = pa.n / 32u
-        let tid = gl_LocalInvocationID.x
-        let warp_r = gl_SubgroupID % 2u   // which 32-row half of the A tile
-        let warp_c = gl_SubgroupID / 2u   // which 32-col half of the B tile
-        let lw = tid % 8u                 // which packed word (4 qs) of the staged row's block
-        let lr0 = tid / 8u                // staging row base 0..15
+    def m_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {
+        static_if (BT == 64u) {
         var acc00 : coopmatAcc_f16_16x16
         var acc01 : coopmatAcc_f16_16x16
         var acc10 : coopmatAcc_f16_16x16
         var acc11 : coopmatAcc_f16_16x16
         var kb = 0u
         while (kb < nbb) {
-            for [unroll] (p in range(4)) {   // stage A: 64 weight rows x 1 block; OOR rows -> 0
-                let row = lr0 + uint(p) * 16u
-                let wrow = gm0 + row
-                var v = float4(0.0)
-                if (wrow < pa.d) {
-                    let ib = wblk0 + wrow * nbb + kb
-                    v = float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])
-                }
-                let o = row * CML_SST + lw * 2u
-                cmm_a[o] = packHalf2x16(v.xy)
-                cmm_a[o + 1u] = packHalf2x16(v.zw)
-            }
-            for [unroll] (p in range(4)) {   // stage B: 64 token rows x 1 block; OOR rows -> 0
-                let row = lr0 + uint(p) * 16u
-                var v = float4(0.0)
-                if (gn0 + row < cnt) {
-                    let ib = (row0 + gn0 + row) * nbb + kb
-                    v = float4(int4(unpack8(int(xqw[ib * 8u + lw])))) * axs[ib]
-                }
-                let o = row * CML_SST + lw * 2u
-                cmm_b[o] = packHalf2x16(v.xy)
-                cmm_b[o + 1u] = packHalf2x16(v.zw)
-            }
+            stage_a(wblk0, gm0, nbb, kb, lw, lr0)
+            stage_b(row0, gn0, cnt, nbb, kb, lw, lr0)
             barrier()
             for [unroll] (ks in range(2)) {   // 2 K-subtiles x (2 A rows x 2 B cols), the L MMA order
                 let k8 = uint(ks) * 8u
                 var ca : coopmatA_f16_16x16
                 var cb : coopmatB_f16_16x16
-                coopmatLoad(ca, cmm_a, int((warp_r * 32u) * CML_SST + k8), int(CML_SST), 0)
-                coopmatLoad(cb, cmm_b, int((warp_c * 32u) * CML_SST + k8), int(CML_SST), 1)
+                coopmatLoad(ca, cml_a, int((warp_r * 32u) * CML_SST + k8), int(CML_SST), 0)
+                coopmatLoad(cb, cml_b, int((warp_c * 32u) * CML_SST + k8), int(CML_SST), 1)
                 acc00 = coopmatMulAdd(ca, cb, acc00)
-                coopmatLoad(cb, cmm_b, int((warp_c * 32u + 16u) * CML_SST + k8), int(CML_SST), 1)
+                coopmatLoad(cb, cml_b, int((warp_c * 32u + 16u) * CML_SST + k8), int(CML_SST), 1)
                 acc01 = coopmatMulAdd(ca, cb, acc01)
-                coopmatLoad(ca, cmm_a, int((warp_r * 32u + 16u) * CML_SST + k8), int(CML_SST), 0)
-                coopmatLoad(cb, cmm_b, int((warp_c * 32u) * CML_SST + k8), int(CML_SST), 1)
+                coopmatLoad(ca, cml_a, int((warp_r * 32u + 16u) * CML_SST + k8), int(CML_SST), 0)
+                coopmatLoad(cb, cml_b, int((warp_c * 32u) * CML_SST + k8), int(CML_SST), 1)
                 acc10 = coopmatMulAdd(ca, cb, acc10)
-                coopmatLoad(cb, cmm_b, int((warp_c * 32u + 16u) * CML_SST + k8), int(CML_SST), 1)
+                coopmatLoad(cb, cml_b, int((warp_c * 32u + 16u) * CML_SST + k8), int(CML_SST), 1)
                 acc11 = coopmatMulAdd(ca, cb, acc11)
             }
             barrier()
@@ -4847,7 +4491,8 @@ class MmMBatch : MoeCmBase {
         // stores: y[(row0 + token) * d + wrow] — same column-major layout as the L tile
         let dr = gm0 + warp_r * 32u
         let dc = gn0 + warp_c * 32u
-        if (gm0 + 64u <= pa.d && gn0 + 64u <= cnt) {
+        let whole = !EDGE || (gm0 + 64u <= pa.d && gn0 + 64u <= cnt)
+        if (whole) {
             var accw : coopmatAcc_f32_16x16
             let yb = (row0 + dc) * pa.d + dr
             coopmatConvert(accw, acc00)
@@ -4859,142 +4504,115 @@ class MmMBatch : MoeCmBase {
             coopmatConvert(accw, acc11)
             coopmatStore(accw, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
         } else {
-            // edge tile: bounce each f16 acc through this warp's cml_o slab, bounds-checked write-out
-            let lane = gl_SubgroupInvocationID
-            let ob = gl_SubgroupID * 256u
-            for (fi in range(4)) {
-                let fr = uint(fi) / 2u       // fragment row: weight offset fr*16
-                let fc = uint(fi) % 2u       // fragment col: token offset fc*16
-                if (fi == 0) {
-                    coopmatStore(acc00, cml_o, int(ob), 16, 0)
-                } elif (fi == 1) {
-                    coopmatStore(acc01, cml_o, int(ob), 16, 0)
-                } elif (fi == 2) {
-                    coopmatStore(acc10, cml_o, int(ob), 16, 0)
-                } else {
-                    coopmatStore(acc11, cml_o, int(ob), 16, 0)
-                }
-                barrier()
-                for (e in range(8)) {
-                    let idx = lane * 8u + uint(e)
-                    let wr = dr + fr * 16u + idx / 16u
-                    let tc = dc + fc * 16u + idx % 16u
-                    if (wr < pa.d && tc < cnt) {
-                        y[(row0 + tc) * pa.d + wr] = float(cml_o[ob + idx])
+            static_if (EDGE) {
+                // edge tile: bounce each f16 acc through this warp's cml_o slab, bounds-checked write-out
+                let ob = gl_SubgroupID * 256u
+                for (fi in range(4)) {
+                    let fr = uint(fi) / 2u       // fragment row: weight offset fr*16
+                    let fc = uint(fi) % 2u       // fragment col: token offset fc*16
+                    if (fi == 0) {
+                        coopmatStore(acc00, cml_o, int(ob), 16, 0)
+                    } elif (fi == 1) {
+                        coopmatStore(acc01, cml_o, int(ob), 16, 0)
+                    } elif (fi == 2) {
+                        coopmatStore(acc10, cml_o, int(ob), 16, 0)
+                    } else {
+                        coopmatStore(acc11, cml_o, int(ob), 16, 0)
                     }
+                    barrier()
+                    bounce_out(fr, fc, dr, dc, row0, cnt)
+                    barrier()
                 }
-                barrier()
             }
         }
+        }
     }
+}
+
+// the L tile with edge tiles
+[vk_dispatch(name = "q8_batch_mm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class MmBatch : MmBatchT {
+    override BT = 128u
+    override EDGE = true
+}
+
+// the aligned L twin: staging guards + edge branch removed — its own pipeline for d and every cnt 128-multiples
+[vk_dispatch(name = "q8_batch_mm_a_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class MmABatch : MmBatchT {
+    override BT = 128u
+    override EDGE = false
+}
+
+// the M twin (64x64), routed in when cnt or d <= 64
+[vk_dispatch(name = "q8_batch_mm_m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class MmMBatch : MmBatchT {
+    override BT = 64u
+    override EDGE = true
 }
 
 // Q4_0 coopmat f16 variant (fmt=4 stacks): the q40 math baked into f16 dequant — w = (nib-8)*d_b,
 // a = aq*xs (per-256 Q8_K) — then the same 4-subgroup MMA as CmF16Batch
 [vk_dispatch(name = "kq_batch_q40_cmf16_cls", grid = "wgs", params = "wgs : int64")]
-class KqQ40CmF16 : MoeCmBase {
+class KqQ40CmF16 : CmF16Base {
     @ssbo @binding = 0 wq : array<uint>        // nibble-packed weight superblocks (32 words each)
     @ssbo @binding = 1 wsu : array<uint>       // 5-word scale superblocks (d halves)
-    @ssbo @binding = 3 xqw : array<uint>       // Q8_K activation words (64 per row-superblock)
-    @ssbo @binding = 4 axs : array<float>      // one Q8_K d per (row, superblock)
-    @ssbo @binding = 5 y : array<float>
-    @workgroup cm_as : float16[8192]   // 32 local rows x 256 k, row-major stride 256 (f16 dequant A)
-    @workgroup cm_bs : float16[8192]   // 256 k x 32 cols, row-major stride 32 (f16 dequant B)
-    @workgroup cm_out : float[1024]    // 4 subgroups x 16x16 f32 scratch (bounds-checked write-out)
+
+    def override stage(s, wblk0, row0, cnt, xt, wt, nblk, tid : uint) {
+        // stage A: 32 rows x 64 uints (one superblock of Q8_K acts), 16/thread — one thread stays
+        // in one row (16 divides 64), so xs (per-256) loads ONCE per thread
+        let arow0 = tid * 16u / 64u            // this thread's row
+        let ac0 = tid * 16u % 64u              // first chunk within the row
+        let axrow = xt * 32u + arow0
+        var xs = 0.0
+        if (axrow < cnt) {
+            xs = axs[(row0 + axrow) * nblk + s]
+        }
+        for (i in range(16)) {
+            let c = ac0 + uint(i)
+            let bu = c / 8u
+            let ww = c % 8u
+            var packed = 0u
+            if (axrow < cnt) {
+                packed = xqw[((row0 + axrow) * nblk + s) * 64u + c]
+            }
+            let qv = int4(unpack8(int(packed)))
+            let o = arow0 * 256u + bu * 32u + ww * 4u
+            cm_as[o] = float16(float(qv.x) * xs)
+            cm_as[o + 1u] = float16(float(qv.y) * xs)
+            cm_as[o + 2u] = float16(float(qv.z) * xs)
+            cm_as[o + 3u] = float16(float(qv.w) * xs)
+        }
+        // stage B: 32 cols x 32 uints (one superblock of nibble-packed weights), 8/thread; each
+        // uint yields 4 lo-nibble weights (k = bu*32 + w*4 + j) and 4 hi (k + 16), dequant (nib-8)*d_b
+        for (i in range(8)) {
+            let u2 = tid * 8u + uint(i)
+            let col = u2 / 32u
+            let c = u2 % 32u
+            let bu = c / 4u
+            let w = c % 4u
+            let wcol = wt * 32u + col
+            var r = 0u
+            var db = 0.0
+            if (wcol < pa.d) {
+                let wsb = wblk0 + wcol * nblk + s
+                r = wq[wsb * 32u + c]
+                let dp = unpackHalf2x16(wsu[wsb * 5u + bu / 2u])
+                db = bu % 2u == 0u ? dp.x : dp.y
+            }
+            let k = bu * 32u + w * 4u
+            for (j in range(4)) {
+                let lo = int((r >> (uint(j) * 8u)) & 0x0Fu)
+                let hi = int((r >> (uint(j) * 8u + 4u)) & 0x0Fu)
+                cm_bs[(k + uint(j)) * 32u + col] = float16(float(lo - 8) * db)
+                cm_bs[(k + 16u + uint(j)) * 32u + col] = float16(float(hi - 8) * db)
+            }
+        }
+    }
 
     [spirv_kernel(local_size_x = 128, name = "kq_batch_q40_cmf16_cls_spv")]
-    def run {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
-        let reg = region_rec()
-        let wsb0 = reg.x
-        let row0 = reg.y
-        let cnt = reg.z
-        let tix = reg.w
-        let wtiles = (pa.d + 31u) / 32u
-        let xt = tix / wtiles
-        let wt = tix % wtiles
+    def run {
         let nsb = pa.n / 256u
-        let tid = gl_LocalInvocationID.x
-        let sg = gl_SubgroupID
-        let row_half = sg / 2u
-        let col_half = sg % 2u
-        var acc : coopmatAcc_f32_16x16
-        var s = 0u
-        while (s < nsb) {
-            // stage A: 32 rows x 64 uints (one superblock of Q8_K acts), 16/thread — one thread stays
-            // in one row (16 divides 64), so xs (per-256) loads ONCE per thread
-            let arow0 = tid * 16u / 64u            // this thread's row
-            let ac0 = tid * 16u % 64u              // first chunk within the row
-            let axrow = xt * 32u + arow0
-            var xs = 0.0
-            if (axrow < cnt) {
-                xs = axs[(row0 + axrow) * nsb + s]
-            }
-            for (i in range(16)) {
-                let c = ac0 + uint(i)
-                let bu = c / 8u
-                let ww = c % 8u
-                var packed = 0u
-                if (axrow < cnt) {
-                    packed = xqw[((row0 + axrow) * nsb + s) * 64u + c]
-                }
-                let qv = int4(unpack8(int(packed)))
-                let o = arow0 * 256u + bu * 32u + ww * 4u
-                cm_as[o] = float16(float(qv.x) * xs)
-                cm_as[o + 1u] = float16(float(qv.y) * xs)
-                cm_as[o + 2u] = float16(float(qv.z) * xs)
-                cm_as[o + 3u] = float16(float(qv.w) * xs)
-            }
-            // stage B: 32 cols x 32 uints (one superblock of nibble-packed weights), 8/thread; each
-            // uint yields 4 lo-nibble weights (k = bu*32 + w*4 + j) and 4 hi (k + 16), dequant (nib-8)*d_b
-            for (i in range(8)) {
-                let u2 = tid * 8u + uint(i)
-                let col = u2 / 32u
-                let c = u2 % 32u
-                let bu = c / 4u
-                let w = c % 4u
-                let wcol = wt * 32u + col
-                var r = 0u
-                var db = 0.0
-                if (wcol < pa.d) {
-                    let wsb = wsb0 + wcol * nsb + s
-                    r = wq[wsb * 32u + c]
-                    let dp = unpackHalf2x16(wsu[wsb * 5u + bu / 2u])
-                    db = bu % 2u == 0u ? dp.x : dp.y
-                }
-                let k = bu * 32u + w * 4u
-                for (j in range(4)) {
-                    let lo = int((r >> (uint(j) * 8u)) & 0x0Fu)
-                    let hi = int((r >> (uint(j) * 8u + 4u)) & 0x0Fu)
-                    cm_bs[(k + uint(j)) * 32u + col] = float16(float(lo - 8) * db)
-                    cm_bs[(k + 16u + uint(j)) * 32u + col] = float16(float(hi - 8) * db)
-                }
-            }
-            barrier()
-            for (bb in range(8)) {
-                for (ks in range(2)) {
-                    var a : coopmatA_f16_16x16
-                    var b : coopmatB_f16_16x16
-                    coopmatLoad(a, cm_as, int(row_half * 16u * 256u + uint(bb) * 32u + uint(ks) * 16u), 256, 0)
-                    coopmatLoad(b, cm_bs, int((uint(bb) * 32u + uint(ks) * 16u) * 32u + col_half * 16u), 32, 0)
-                    acc = coopmatMulAdd(a, b, acc)
-                }
-            }
-            barrier()
-            s++
-        }
-        coopmatStore(acc, cm_out, int(sg * 256u), 16, 0)
-        barrier()
-        let lane = gl_SubgroupInvocationID
-        for (e in range(8)) {
-            let idx = lane * 8u + uint(e)
-            let m = idx / 16u
-            let nn = idx % 16u
-            let orow = xt * 32u + row_half * 16u + m
-            let ocol = wt * 32u + col_half * 16u + nn
-            if (orow < cnt && ocol < pa.d) {
-                y[(row0 + orow) * pa.d + ocol] = cm_out[sg * 256u + idx]
-            }
-        }
+        body(nsb, nsb)
     }
 }
 
@@ -5062,7 +4680,8 @@ struct VkIq2xxsBlk {
 class template KqCm2BatchT : MoeCmBase {
     @ssbo @binding = 0 @role = "weight" wq : array<BLK>   // the quant plane, read as 16-bit lanes
     @ssbo @binding = 1 @role = "weight" ws : array<ST>    // the scale plane (q8: f16 per block; kq: 5 words per superblock)
-    @ssbo @binding = 3 xf16 : array<float16>              // f16 activation plane
+    @ssbo @binding = 3 @role = "alias" xf16 : array<float16>    // f16 activation plane (the tensor loads' view)
+    @ssbo @binding = 3 @role = "alias" xf16w4 : array<uint4>    // the same plane as 16-byte words: the KHR arm's activation stage
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                             // the region's block base, staged for the decode
     @template_constant BN : uint = 256u                   // the token column
@@ -5082,9 +4701,12 @@ class template KqCm2BatchT : MoeCmBase {
     @workgroup @template_gate = IQ2XSGRID iq2xs_gridc : uint[1024]
     @template_constant IQ2XXSGRID : bool = false          // stage the 2 KB iq2xxs u64 grid into workgroup memory
     @workgroup @template_gate = IQ2XXSGRID iq2xxs_gridc : uint[512]
+    @template_constant KHR : bool = false                 //!< the KHR cooperative-matrix arm: hand-staged f16 tiles over the format's own decode, no cm2 API (a card without NV_coopmat2)
+    @workgroup @template_gate = KHR khr_ao : uint[int(128u * KHR_STRIDE)]   //! the A stage: 128 weight rows of f16 pairs; then the edge tile's f32 store bounce, 8 subgroups x 256 words
+    @workgroup @template_gate = KHR khr_b : uint[int(128u * KHR_STRIDE)]    //! the B stage: BN (128) token rows of f16 pairs
 
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-tile-pick-and-default")]
-    def run {   // nolint:STYLE037,STYLE038 — the fast/edge path pair, barrier- and register-coupled
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+    def run {
         let reg = region_rec()
         let wblk0 = reg.x
         let row0 = reg.y
@@ -5110,8 +4732,6 @@ class template KqCm2BatchT : MoeCmBase {
         if (gl_LocalInvocationID.x == 0u) {
             wg_blk0 = wblk0
         }
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
         static_if (IQLUT) {
             if (gl_LocalInvocationID.x < 16u) {
                 let li = gl_LocalInvocationID.x
@@ -5146,6 +4766,16 @@ class template KqCm2BatchT : MoeCmBase {
             }
         }
         barrier()   // wg_blk0 (and the gated codebook) visible before the first decode load
+        static_if (KHR) {
+            khr_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt)
+        } else {
+            cm2_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt)
+        }
+    }
+
+    def cm2_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
         var a : coopmatWgA_f16_128x64
         var b : BT
         var acc : ACC
@@ -5280,6 +4910,140 @@ class template KqCm2BatchT : MoeCmBase {
         coopmatConvert(accw, acc)
         coopmatStoreTensor(accw, y, ybase, tlo, t0, BN, m0, 128u, tv)
     }
+
+    def khr_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE037,STYLE038 — the staged k loop and its fast/edge store are one register set
+        static_if (KHR) {   // the gated staging arrays exist on the KHR instantiations alone
+        let t0 = row0 + xt * BN
+        let m0 = wt * 128u
+        let tid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let srow = tid >> 1u
+        let khalf = tid & 1u   //! the low or the high 16 k of the step
+        let skh = khalf * 16u
+        let nbk = pa.n / BLKW
+        let wrow = m0 + srow
+        let trow = xt * BN + srow
+        let sbase = srow * KHR_STRIDE + khalf * KHR_KHALF_WORDS
+        let wrow_in_d = wrow < pa.d
+        let trow_in_cnt = trow < cnt
+        var acc0 : coopmatAcc_f32_16x16
+        var acc1 : coopmatAcc_f32_16x16
+        var acc2 : coopmatAcc_f32_16x16
+        var acc3 : coopmatAcc_f32_16x16
+        var acc4 : coopmatAcc_f32_16x16
+        var acc5 : coopmatAcc_f32_16x16
+        var acc6 : coopmatAcc_f32_16x16
+        var acc7 : coopmatAcc_f32_16x16
+        var k = k0
+        while (k < k1) {
+            let kk = k + skh
+            if (wrow_in_d && kk < k1) {
+                let bcol = kk / BLKW
+                let e0 = kk - bcol * BLKW
+                static_if (DECV4) {
+                    for (j in range(4)) {
+                        let v4 = float4(decode_v4(wq[wblk0 + wrow * nbk + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 4u)))
+                        khr_ao[sbase + uint(j) * 2u] = packHalf2x16(v4.xy)
+                        khr_ao[sbase + uint(j) * 2u + 1u] = packHalf2x16(v4.zw)
+                    }
+                } else {
+                    for (j in range(int(KHR_KHALF_WORDS))) {
+                        let lo = decode(wq[wblk0 + wrow * nbk + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 2u))
+                        let hi = decode(wq[wblk0 + wrow * nbk + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 2u + 1u))
+                        khr_ao[sbase + uint(j)] = packHalf2x16(float2(float(lo), float(hi)))
+                    }
+                }
+            } else {
+                for (j in range(int(KHR_KHALF_WORDS))) {
+                    khr_ao[sbase + uint(j)] = 0u
+                }
+            }
+            if (trow_in_cnt && kk < k1) {
+                let q = ((t0 + srow) * pa.n + kk) >> 3u   // the 16 halves as two 16-byte words
+                for (h in range(2)) {
+                    let w4 = xf16w4[q + uint(h)]
+                    for (c in range(4)) {
+                        khr_b[sbase + uint(h) * 4u + uint(c)] = w4[c]
+                    }
+                }
+            } else {
+                for (j in range(int(KHR_KHALF_WORDS))) {
+                    khr_b[sbase + uint(j)] = 0u
+                }
+            }
+            barrier()
+            for (ks in range(2)) {
+                let ko = uint(ks) * 8u
+                var a : coopmatA_f16_16x16
+                coopmatLoad(a, khr_ao, int(sg * 16u * KHR_STRIDE + ko), int(KHR_STRIDE), 0)
+                var b : coopmatB_f16_16x16
+                coopmatLoad(b, khr_b, int(ko), int(KHR_STRIDE), 1)
+                acc0 = coopmatMulAdd(a, b, acc0)
+                coopmatLoad(b, khr_b, int(16u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                acc1 = coopmatMulAdd(a, b, acc1)
+                coopmatLoad(b, khr_b, int(32u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                acc2 = coopmatMulAdd(a, b, acc2)
+                coopmatLoad(b, khr_b, int(48u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                acc3 = coopmatMulAdd(a, b, acc3)
+                coopmatLoad(b, khr_b, int(64u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                acc4 = coopmatMulAdd(a, b, acc4)
+                coopmatLoad(b, khr_b, int(80u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                acc5 = coopmatMulAdd(a, b, acc5)
+                coopmatLoad(b, khr_b, int(96u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                acc6 = coopmatMulAdd(a, b, acc6)
+                coopmatLoad(b, khr_b, int(112u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                acc7 = coopmatMulAdd(a, b, acc7)
+            }
+            barrier()
+            k += 32u
+        }
+        let mrow0 = m0 + sg * 16u
+        let tile_whole = m0 + 128u <= pa.d && xt * BN + BN <= cnt
+        if (tile_whole) {
+            let yb = ybase + t0 * pa.d + mrow0
+            coopmatStore(acc0, y, int(yb), int(pa.d), 1)
+            coopmatStore(acc1, y, int(yb + 16u * pa.d), int(pa.d), 1)
+            coopmatStore(acc2, y, int(yb + 32u * pa.d), int(pa.d), 1)
+            coopmatStore(acc3, y, int(yb + 48u * pa.d), int(pa.d), 1)
+            coopmatStore(acc4, y, int(yb + 64u * pa.d), int(pa.d), 1)
+            coopmatStore(acc5, y, int(yb + 80u * pa.d), int(pa.d), 1)
+            coopmatStore(acc6, y, int(yb + 96u * pa.d), int(pa.d), 1)
+            coopmatStore(acc7, y, int(yb + 112u * pa.d), int(pa.d), 1)
+        } else {
+            let lane = gl_SubgroupInvocationID
+            let ob = sg * 256u
+            for (fi in range(8)) {
+                if (fi == 0) {
+                    coopmatStore(acc0, khr_ao, int(ob), 16, 0)
+                } elif (fi == 1) {
+                    coopmatStore(acc1, khr_ao, int(ob), 16, 0)
+                } elif (fi == 2) {
+                    coopmatStore(acc2, khr_ao, int(ob), 16, 0)
+                } elif (fi == 3) {
+                    coopmatStore(acc3, khr_ao, int(ob), 16, 0)
+                } elif (fi == 4) {
+                    coopmatStore(acc4, khr_ao, int(ob), 16, 0)
+                } elif (fi == 5) {
+                    coopmatStore(acc5, khr_ao, int(ob), 16, 0)
+                } elif (fi == 6) {
+                    coopmatStore(acc6, khr_ao, int(ob), 16, 0)
+                } else {
+                    coopmatStore(acc7, khr_ao, int(ob), 16, 0)
+                }
+                barrier()
+                for (e in range(8)) {
+                    let idx = lane * 8u + uint(e)
+                    let mr = mrow0 + idx / 16u
+                    let tc = xt * BN + uint(fi) * 16u + idx % 16u
+                    if (mr < pa.d && tc < cnt) {
+                        y[ybase + (row0 + tc) * pa.d + mr] = uint_bits_to_float(khr_ao[ob + idx])
+                    }
+                }
+                barrier()
+            }
+        }
+        }
+    }
 }
 
 // the format templates: the block struct, the scale element, the block width and the decode
@@ -5289,7 +5053,7 @@ class template Q8Cm2T : KqCm2BatchT {
     typedef ST = float16
     override BLKW = 32u
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkQ8Blk; bc, cib : uint2) : float16 {
         let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
         return ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
@@ -5302,7 +5066,7 @@ class template K4Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5316,7 +5080,7 @@ class template K4Cm2T : KqCm2BatchT {
         return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5339,7 +5103,7 @@ class template K6Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK6Blk; bc, cib : uint2) : float16 {
         let e = cib.y
         let bu = e >> 5u
@@ -5357,7 +5121,7 @@ class template K6Cm2T : KqCm2BatchT {
         return float16(d * float(sc) * float(q6))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkK6Blk; bc, cib : uint2) : half4 {
         let e = cib.y
         let bu = e >> 5u
@@ -5389,7 +5153,7 @@ class template K5Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK5Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5407,7 +5171,7 @@ class template K5Cm2T : KqCm2BatchT {
         return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkK5Blk; bc, cib : uint2) : half4 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5437,7 +5201,7 @@ class template Q40Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5450,7 +5214,7 @@ class template Q40Cm2T : KqCm2BatchT {
         return float16(d * (float(q) - 8.0))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5473,20 +5237,21 @@ class template Iq4xsCm2T : KqCm2BatchT {
     override IQLUT = true
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let d = unpackHalf2x16(ws[srow]).x
-        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
+        let w0 = ws[srow]
+        let d = unpackHalf2x16(w0).x
+        let sc = iq4xs_sc(w0, ws[srow + 1u], g)
         return float16(d * float(sc) * float(iq4lut[int(q)]))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5494,9 +5259,10 @@ class template Iq4xsCm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let d = unpackHalf2x16(ws[srow]).x
-        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
+        let w0 = ws[srow]
+        let d = unpackHalf2x16(w0).x
+        let sc = iq4xs_sc(w0, ws[srow + 1u], g)
         let ds = d * float(sc)
         return half4(float4(ds * float(iq4lut[int((l0 >> sh) & 0xFu)]), ds * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
             ds * float(iq4lut[int((l1 >> sh) & 0xFu)]), ds * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
@@ -5509,7 +5275,7 @@ class template K3Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK3Blk; bc, cib : uint2) : float16 {
         let e = cib.y
         let g = e >> 5u
@@ -5525,7 +5291,7 @@ class template K3Cm2T : KqCm2BatchT {
         return float16(d * float(sc) * float(q3))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkK3Blk; bc, cib : uint2) : half4 {
         let e = cib.y
         let g = e >> 5u
@@ -5555,7 +5321,7 @@ class template K2Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK2Blk; bc, cib : uint2) : float16 {
         let e = cib.y
         let g = e >> 4u
@@ -5569,7 +5335,7 @@ class template K2Cm2T : KqCm2BatchT {
         return float16(dm.x * float(pb & 15u) * float(q) - dm.y * float(pb >> 4u))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkK2Blk; bc, cib : uint2) : half4 {
         let e = cib.y
         let g = e >> 4u
@@ -5595,7 +5361,7 @@ class template Iq3sCm2T : KqCm2BatchT {
     override IQ3GRID = true
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3sBlk; bc, cib : uint2) : float16 {
         let e = cib.y
         let g = e >> 5u
@@ -5608,13 +5374,13 @@ class template Iq3sCm2T : KqCm2BatchT {
         let sgb = uint(int(unpack8(blk.sg[int(si >> 1u)])[int(si & 1u)])) & 0xFFu
         let gw = iq3s_gridc[qb | ((qh << (8u - wj)) & 256u)]
         let gb = float((gw >> ((r & 3u) * 8u)) & 0xFFu)
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let d = unpackHalf2x16(ws[srow]).x
-        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        let sc = grid_sc(ws[srow + 1u], g)
         return float16(d * float(sc) * (((sgb >> (((r >> 2u) & 1u) * 4u + (r & 3u))) & 1u) != 0u ? -gb : gb))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkIq3sBlk; bc, cib : uint2) : half4 {
         let e = cib.y
         let g = e >> 5u
@@ -5626,9 +5392,9 @@ class template Iq3sCm2T : KqCm2BatchT {
         let si = g * 4u + (r >> 3u)
         let sgb = uint(int(unpack8(blk.sg[int(si >> 1u)])[int(si & 1u)])) & 0xFFu
         let gw = iq3s_gridc[qb | ((qh << (8u - wj)) & 256u)]
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let d = unpackHalf2x16(ws[srow]).x
-        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        let sc = grid_sc(ws[srow + 1u], g)
         let ds = d * float(sc)
         let sgn = sgb >> (((r >> 2u) & 1u) * 4u)
         let g0 = float(gw & 0xFFu)
@@ -5647,7 +5413,7 @@ class template Iq3xxsCm2T : KqCm2BatchT {
     override IQ3XGRID = true
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3xxsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
         let g = e >> 5u
@@ -5667,13 +5433,13 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         let sgb = sidx | ((tt & 1u) << 7u)
         let gw = iq3x_gridc[qb]
         let gb = float((gw >> ((r & 3u) * 8u)) & 0xFFu)
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let d = unpackHalf2x16(ws[srow]).x
-        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        let sc = grid_sc(ws[srow + 1u], g)
         return float16(d * float(sc) * (((sgb >> (r & 7u)) & 1u) != 0u ? -gb : gb))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkIq3xxsBlk; bc, cib : uint2) : half4 {
         let e = cib.y
         let g = e >> 5u
@@ -5692,9 +5458,9 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         tt = tt ^ (tt >> 1u)
         let sgb = sidx | ((tt & 1u) << 7u)
         let gw = iq3x_gridc[qb]
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let d = unpackHalf2x16(ws[srow]).x
-        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        let sc = grid_sc(ws[srow + 1u], g)
         let ds = d * float(sc)
         let sgn = sgb >> (r & 7u)
         let g0 = float(gw & 0xFFu)
@@ -5713,7 +5479,7 @@ class template Iq4nlCm2T : KqCm2BatchT {
     override IQLUT = true
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5726,7 +5492,7 @@ class template Iq4nlCm2T : KqCm2BatchT {
         return float16(d * float(iq4lut[int(q)]))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
@@ -5749,7 +5515,7 @@ class template Iq2sCm2T : KqCm2BatchT {
     override IQ2SGRID = true
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2sBlk; bc, cib : uint2) : float16 {
         let e = cib.y
         let g = e >> 5u
@@ -5769,7 +5535,7 @@ class template Iq2sCm2T : KqCm2BatchT {
         return float16(d * float(sc) * (((sgb >> j) & 1u) != 0u ? -gb : gb))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkIq2sBlk; bc, cib : uint2) : half4 {
         let e = cib.y
         let g = e >> 5u
@@ -5802,7 +5568,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
     override IQ2XSGRID = true
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
         let wi = e >> 3u
@@ -5822,7 +5588,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
         return float16(dv * float(sc) * (((sgb >> j) & 1u) != 0u ? -gb : gb))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkIq2xsBlk; bc, cib : uint2) : half4 {
         let e = cib.y
         let wi = e >> 3u
@@ -5855,7 +5621,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     override IQ2XXSGRID = true
     override DECV4 = true
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xxsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
         let g = e >> 5u
@@ -5875,13 +5641,13 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         let sgb = sidx | ((tt & 1u) << 7u)
         let gw = iq2xxs_gridc[qb * 2u + (j >> 2u)]
         let gb = float((gw >> ((j & 3u) * 8u)) & 0xFFu)
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let dv = unpackHalf2x16(ws[srow]).x
-        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        let sc = grid_sc(ws[srow + 1u], g)
         return float16(dv * float(sc) * (((sgb >> j) & 1u) != 0u ? -gb : gb))
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode_v4(blk : VkIq2xxsBlk; bc, cib : uint2) : half4 {
         let e = cib.y
         let g = e >> 5u
@@ -5900,9 +5666,9 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         tt = tt ^ (tt >> 1u)
         let sgb = sidx | ((tt & 1u) << 7u)
         let gw = iq2xxs_gridc[qb * 2u + (j >> 2u)]
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let dv = unpackHalf2x16(ws[srow]).x
-        let sc = int(ws[srow + 1u + (g >> 2u)] << ((3u - (g & 3u)) * 8u)) >> 24
+        let sc = grid_sc(ws[srow + 1u], g)
         let ds = dv * float(sc)
         let sgn = sgb >> j
         let g0 = float(gw & 0xFFu)
@@ -6293,12 +6059,144 @@ class Iq2xxsCm2SBatch : Iq2xxsCm2T {
     typedef FLO = tensorLayout2DPad
 }
 
-// ===== the split-k reduce (sums the cm2 partial planes into y) =====
+// the KHR arm of every kq format (KHR, BN 128); the cm2 typedefs belong to the template's uncalled
+// body and are never materialized
+[vk_dispatch(name = "kq_batch_k4_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4KhrBatch : K4Cm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k5_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K5KhrBatch : K5Cm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k6_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K6KhrBatch : K6Cm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_q40_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q40KhrBatch : Q40Cm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq4xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4xsKhrBatch : Iq4xsCm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k3_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K3KhrBatch : K3Cm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq3s_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3sKhrBatch : Iq3sCm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq3xxs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3xxsKhrBatch : Iq3xxsCm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq4nl_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4nlKhrBatch : Iq4nlCm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_k2_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K2KhrBatch : K2Cm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq2s_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2sKhrBatch : Iq2sCm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq2xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xsKhrBatch : Iq2xsCm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
+
+[vk_dispatch(name = "kq_batch_iq2xxs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xxsKhrBatch : Iq2xxsCm2T {
+    override KHR = true
+    override BN = 128u
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+    typedef FLO = tensorLayout2D
+}
 
 struct SkRedArgs {
     nelem : uint   // one partial plane's float count (cnt x d; always a 4-multiple, d is 32-aligned)
     k : uint       // planes
 }
+
+// ===== the split-k reduce (sums the cm2 partial planes into y) =====
 
 // 4 floats per thread, like the elementwise family
 [vk_dispatch(name = "splitk_reduce_cls", grid = "wgs", params = "wgs : int64")]
@@ -6393,6 +6291,8 @@ struct RopeKvArgs {
     kpair0 : uint   // first k pair's global index (q pairs come first)
     npairs : uint
     layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
+    boff : uint     // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
+    hasb : uint
 }
 
 // fused rope + KV-row store (decode, one token): one thread per rotation pair, each owning
@@ -6406,6 +6306,7 @@ class template RopeKvStoreT {
     @ssbo @binding = 3 vmir : array<KT>        // the V mirror plane
     @ssbo @binding = 4 cossin : array<float>   // this position's cos row then sin row
     @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
+    @ssbo @binding = 6 @role = "weight" bias : array<float>   // per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : RopeKvArgs
     @template_constant CLAMP16 : bool = true
 
@@ -6424,25 +6325,27 @@ class template RopeKvStoreT {
             if (is_k) {
                 let mrow = pa.layerbase + tok[0u].pos * pa.kvd
                 let kb = pa.qd + h * pa.hs
-                let a0 = kvsrc[kb + e0]
-                let a1 = kvsrc[kb + e1]
-                // v is not roped — copy the same two elements raw into the V plane
+                let a0 = kvsrc[kb + e0] + (pa.hasb != 0u ? bias[pa.boff + kb + e0] : 0.0)
+                let a1 = kvsrc[kb + e1] + (pa.hasb != 0u ? bias[pa.boff + kb + e1] : 0.0)
+                // v is not roped — copy the same two elements raw (plus their bias) into the V plane
                 let vb = pa.qd + pa.kvd + h * pa.hs
+                let v0 = kvsrc[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + vb + e0] : 0.0)
+                let v1 = kvsrc[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + vb + e1] : 0.0)
                 static_if (CLAMP16) {
                     kmir[mrow + h * pa.hs + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
                     kmir[mrow + h * pa.hs + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
-                    vmir[mrow + h * pa.hs + e0] = float16(clamp(kvsrc[vb + e0], -65504.0, 65504.0))
-                    vmir[mrow + h * pa.hs + e1] = float16(clamp(kvsrc[vb + e1], -65504.0, 65504.0))
+                    vmir[mrow + h * pa.hs + e0] = float16(clamp(v0, -65504.0, 65504.0))
+                    vmir[mrow + h * pa.hs + e1] = float16(clamp(v1, -65504.0, 65504.0))
                 } else {
                     kmir[mrow + h * pa.hs + e0] = a0 * fcr - a1 * fci
                     kmir[mrow + h * pa.hs + e1] = a0 * fci + a1 * fcr
-                    vmir[mrow + h * pa.hs + e0] = kvsrc[vb + e0]
-                    vmir[mrow + h * pa.hs + e1] = kvsrc[vb + e1]
+                    vmir[mrow + h * pa.hs + e0] = v0
+                    vmir[mrow + h * pa.hs + e1] = v1
                 }
             } else {
                 let qb = h * pa.hs
-                let a0 = qrows[qb + e0]
-                let a1 = qrows[qb + e1]
+                let a0 = qrows[qb + e0] + (pa.hasb != 0u ? bias[pa.boff + qb + e0] : 0.0)
+                let a1 = qrows[qb + e1] + (pa.hasb != 0u ? bias[pa.boff + qb + e1] : 0.0)
                 qrows[qb + e0] = a0 * fcr - a1 * fci
                 qrows[qb + e1] = a0 * fci + a1 * fcr
             }
@@ -6476,6 +6379,8 @@ struct RopeKvBArgs {
     voff : uint
     kstride : uint
     qhs : uint       // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head, the gate half left in place)
+    boff : uint      // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
+    hasb : uint
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -6487,6 +6392,7 @@ class template RopeKvStoreBT {
     @ssbo @binding = 2 kmir : array<KT>
     @ssbo @binding = 3 vmir : array<KT>
     @ssbo @binding = 4 cossin : array<float>   // per-position cos row then sin row (hs floats each)
+    @ssbo @binding = 5 @role = "weight" bias : array<float>   // per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : RopeKvBArgs
     @template_constant CLAMP16 : bool = true
 
@@ -6511,28 +6417,31 @@ class template RopeKvStoreBT {
             let e0 = rot ? (pa.neox != 0u ? j : j * 2u) : 2u * pa.half + 2u * (j - pa.half)
             let e1 = rot ? (pa.neox != 0u ? j + pa.half : j * 2u + 1u) : e0 + 1u
             let apos = pa.pos0 + p
+            let bhead = h * pa.hs
             if (is_k) {
                 let kb = p * pa.kstride + h * pa.hs
-                let a0 = kvrows[kb + e0]
-                let a1 = kvrows[kb + e1]
+                let a0 = kvrows[kb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e0] : 0.0)
+                let a1 = kvrows[kb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e1] : 0.0)
                 let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
                 let vb = pa.voff + p * pa.kstride + h * pa.hs
+                let v0 = kvrows[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e0] : 0.0)
+                let v1 = kvrows[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e1] : 0.0)
                 static_if (CLAMP16) {
                     kmir[mo + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
                     kmir[mo + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
-                    vmir[mo + e0] = float16(clamp(kvrows[vb + e0], -65504.0, 65504.0))
-                    vmir[mo + e1] = float16(clamp(kvrows[vb + e1], -65504.0, 65504.0))
+                    vmir[mo + e0] = float16(clamp(v0, -65504.0, 65504.0))
+                    vmir[mo + e1] = float16(clamp(v1, -65504.0, 65504.0))
                 } else {
                     kmir[mo + e0] = a0 * fcr - a1 * fci
                     kmir[mo + e1] = a0 * fci + a1 * fcr
-                    vmir[mo + e0] = kvrows[vb + e0]
-                    vmir[mo + e1] = kvrows[vb + e1]
+                    vmir[mo + e0] = v0
+                    vmir[mo + e1] = v1
                 }
-            } elif (rot) {
+            } elif (rot || pa.hasb != 0u) {   // a pass-through q pair (fcr 1, fci 0) is rewritten only when a bias lands on it
                 let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
                 let qb = p * (pa.qd / pa.hs) * qhs + h * qhs
-                let a0 = qrows[qb + e0]
-                let a1 = qrows[qb + e1]
+                let a0 = qrows[qb + e0] + (pa.hasb != 0u ? bias[pa.boff + bhead + e0] : 0.0)
+                let a1 = qrows[qb + e1] + (pa.hasb != 0u ? bias[pa.boff + bhead + e1] : 0.0)
                 qrows[qb + e0] = a0 * fcr - a1 * fci
                 qrows[qb + e1] = a0 * fci + a1 * fcr
             }
@@ -6564,6 +6473,8 @@ struct QknRopeArgs {
     kwoff : uint
     eps : float
     qstride : uint  // q head stride in qrows: 0 = hs; 2*hs on a gated-q model ([q | gate] per head, roped in place)
+    boff : uint     // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
+    hasb : uint
 }
 
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; verbatim
@@ -6578,6 +6489,7 @@ class template QknRopeKvT : RmsWgBase {
     @ssbo @binding = 5 wn : array<float>       // the q/k norm weight rows (its OWN member now —
                                                // the old kernel packed them into the cos buffer)
     @ssbo @binding = 6 tok : array<TokMeta>    // the shared per-token block (element 0)
+    @ssbo @binding = 7 @role = "weight" bias : array<float>   // per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : QknRopeArgs
     @workgroup row : float[256]                // this head's normed q or k row (hs <= 256)
     @template_constant CLAMP16 : bool = true
@@ -6590,9 +6502,10 @@ class template QknRopeKvT : RmsWgBase {
         let tid = gl_LocalInvocationID.x
         let qstride = pa.qstride == 0u ? pa.hs : pa.qstride
         let sbase = is_k ? pa.qd + h * pa.hs : h * qstride
+        let bbase = is_k ? pa.qd + h * pa.hs : h * pa.hs
         var v = 0.0
         if (tid < pa.hs) {
-            v = is_k ? kvsrc[sbase + tid] : qrows[sbase + tid]
+            v = (is_k ? kvsrc[sbase + tid] : qrows[sbase + tid]) + (pa.hasb != 0u ? bias[pa.boff + bbase + tid] : 0.0)
         }
         let ss = tid < pa.hs ? v * v : 0.0
         let inv = wg_rms_inv(ss, pa.hs, pa.eps)
@@ -6627,16 +6540,18 @@ class template QknRopeKvT : RmsWgBase {
         if (!is_k && tid >= 2u * pa.half && tid < pa.hs) {
             qrows[h * qstride + tid] = row[tid]
         }
-        // v is not roped or normed — the k-head wgs copy their own raw row into the V plane
+        // v is not roped or normed — the k-head wgs copy their own raw row (plus its bias) into the V plane
         if (is_k && tid < pa.hs) {
             let mrow = pa.layerbase + tok[0u].pos * pa.kvd
+            let vi = pa.qd + pa.kvd + h * pa.hs + tid
+            let vv = kvsrc[vi] + (pa.hasb != 0u ? bias[pa.boff + vi] : 0.0)
             static_if (CLAMP16) {
-                vmir[mrow + h * pa.hs + tid] = float16(clamp(kvsrc[pa.qd + pa.kvd + h * pa.hs + tid], -65504.0, 65504.0))
+                vmir[mrow + h * pa.hs + tid] = float16(clamp(vv, -65504.0, 65504.0))
                 if (tid >= 2u * pa.half) {
                     kmir[mrow + h * pa.hs + tid] = float16(clamp(row[tid], -65504.0, 65504.0))
                 }
             } else {
-                vmir[mrow + h * pa.hs + tid] = kvsrc[pa.qd + pa.kvd + h * pa.hs + tid]
+                vmir[mrow + h * pa.hs + tid] = vv
                 if (tid >= 2u * pa.half) {
                     kmir[mrow + h * pa.hs + tid] = row[tid]
                 }
@@ -6726,6 +6641,45 @@ class Q8Gemv {
 let private KQC_LOW = 0x0F0F0F0Fu   // nibble mask
 let private KQC_ONES = 0x01010101u  // sdot4 against this sums 4 signed bytes
 
+let KQ_GRID_IQ2S_WORDS = 2048u
+let KQ_GRID_IQ2XS_WORDS = 1024u
+let KQ_GRID_IQ2XXS_WORDS = 512u
+let KQ_GRID_IQ3S_WORDS = 512u
+let KQ_GRID_IQ3XXS_WORDS = 256u
+let KQ_GRID_IQ2S = 0u
+let KQ_GRID_IQ2XS = KQ_GRID_IQ2S + KQ_GRID_IQ2S_WORDS
+let KQ_GRID_IQ2XXS = KQ_GRID_IQ2XS + KQ_GRID_IQ2XS_WORDS
+let KQ_GRID_IQ3S = KQ_GRID_IQ2XXS + KQ_GRID_IQ2XXS_WORDS
+let KQ_GRID_IQ3XXS = KQ_GRID_IQ3S + KQ_GRID_IQ3S_WORDS
+let KQ_GRID_WORDS = int(KQ_GRID_IQ3XXS + KQ_GRID_IQ3XXS_WORDS)
+let KQ_GRID_BYTES = int64(KQ_GRID_WORDS) * 4l
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer")]
+def kq_grid_dev() : uint64 {
+    if (g_gpu.kq_grid_dev == 0ul) {
+        var words : array<uint>
+        words |> resize(KQ_GRID_WORDS)
+        for (i in range(int(KQ_GRID_IQ2S_WORDS))) {
+            words[int(KQ_GRID_IQ2S) + i] = iq2s_grid_word(i)
+        }
+        for (i in range(int(KQ_GRID_IQ2XS_WORDS))) {
+            words[int(KQ_GRID_IQ2XS) + i] = iq2xs_grid_word(i)
+        }
+        for (i in range(int(KQ_GRID_IQ2XXS_WORDS))) {
+            words[int(KQ_GRID_IQ2XXS) + i] = iq2xxs_grid_word(i)
+            words[int(KQ_GRID_IQ3S) + i] = iq3s_grid_word(i)
+        }
+        for (i in range(int(KQ_GRID_IQ3XXS_WORDS))) {
+            words[int(KQ_GRID_IQ3XXS) + i] = iq3xxs_grid_word(i)
+        }
+        g_gpu.kq_grid_dev = make_device_buf(KQ_GRID_BYTES)
+        unsafe {
+            upload_region_at(g_gpu.kq_grid_dev, 0l, addr<uint8 const?>(words[0]), KQ_GRID_BYTES)
+        }
+    }
+    return g_gpu.kq_grid_dev
+}
+
 class KqGemvBase {
     @ssbo @binding = 0 @role = "alias" wq : array<uint>   // weight quant words (k5's qh rides this view)
     @ssbo @binding = 0 wq4 : array<uint4>      // vec4 view of the same words
@@ -6734,6 +6688,7 @@ class KqGemvBase {
     @ssbo @binding = 3 xq4 : array<uint4>      // activation quant words, vec4 view
     @ssbo @binding = 4 axs : array<float>      // activation block scales
     @ssbo @binding = 5 y : array<float>        // output rows
+    @ssbo @binding = 6 @role = "weight" gridb : array<uint>   // the grid codebooks (kq_grid_dev; the grid formats stage from it)
     @push_constant pa : GemvArgs
 
     // per-format: one 32-block's scaled contribution — every [spirv_kernel] variant overrides
@@ -6796,11 +6751,11 @@ class KqGemvBase {
 // variant: 0 = sdot4 tile, 1 = cmf16, 2 = cmi8, 3 = mm M-tile, 4 = mm aligned-L, 5 = mm L
 
 def q8_batch_cls_variant(tile : int64; aligned : bool) : int {
-    if (g_gpu.coopmat_mode == 1) {
+    if (g_gpu.coopmat_mode == COOPMAT_F16) {
         return 1
-    } elif (g_gpu.coopmat_mode == 2) {
+    } elif (g_gpu.coopmat_mode == COOPMAT_INT8) {
         return 2
-    } elif (g_gpu.coopmat_mode >= 3) {
+    } elif (g_gpu.coopmat_mode >= COOPMAT_MM) {
         if (tile == BATCH_TILE) {   // the small tier IS the sdot4 kernel — measured, not a fallback
             return 0
         }
@@ -6987,7 +6942,10 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
     if (fmt == int(KqFmt.q8)) {
         return set_q8_gemv_cls(bufs, sizes, gbits)
     } elif (kq_sb(fmt)) {
-        return set_kq_gemv_cls(bufs, sizes, gbits)   // the family shares one layout — one set serves every kq format
+        // the family shares one layout — one set serves every kq format
+        return set_kq_gemv_cls(fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], kq_grid_dev()),
+            fixed_array(sizes[0], sizes[1], sizes[2], sizes[3], sizes[4], sizes[5], KQ_GRID_BYTES),
+            fixed_array(gbits[0], gbits[1], gbits[2], gbits[3], gbits[4], gbits[5], 0u))
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     return VkDescriptorSet()
@@ -7046,6 +7004,14 @@ class KqGemvK4 : KqGemvBase {
     }
 }
 
+//! the codebook nibble dot: eight sdot4 over the LUT-decoded low and high nibbles of a 32-quant block
+def iq4_dot(wv, xl, xh : uint4) : int {
+    var idot = sdot4(iq4_word(wv.x & KQC_LOW), xl.x) + sdot4(iq4_word(wv.y & KQC_LOW), xl.y)
+    idot += sdot4(iq4_word(wv.z & KQC_LOW), xl.z) + sdot4(iq4_word(wv.w & KQC_LOW), xl.w)
+    idot += sdot4(iq4_word((wv.x >> 4u) & KQC_LOW), xh.x) + sdot4(iq4_word((wv.y >> 4u) & KQC_LOW), xh.y)
+    return idot + sdot4(iq4_word((wv.z >> 4u) & KQC_LOW), xh.z) + sdot4(iq4_word((wv.w >> 4u) & KQC_LOW), xh.w)
+}
+
 // Q4_0: w = d*(q - 8) — the k4 nibble tiling with no min plane; -8 folds against the block sum
 [vk_dispatch(name = "kq_gemv_q40_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvQ40 : KqGemvBase {
@@ -7072,18 +7038,12 @@ class KqGemvQ40 : KqGemvBase {
 // lanes (no block-sum term), the k4 scale-row shape with SIGNED (ls - 32) sub-scales and no min
 [vk_dispatch(name = "kq_gemv_iq4xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq4xs : KqGemvBase {
-    def iq4_dot(wv, xl, xh : uint4) : int {
-        var idot = sdot4(iq4_word(wv.x & KQC_LOW), xl.x) + sdot4(iq4_word(wv.y & KQC_LOW), xl.y)
-        idot += sdot4(iq4_word(wv.z & KQC_LOW), xl.z) + sdot4(iq4_word(wv.w & KQC_LOW), xl.w)
-        idot += sdot4(iq4_word((wv.x >> 4u) & KQC_LOW), xh.x) + sdot4(iq4_word((wv.y >> 4u) & KQC_LOW), xh.y)
-        return idot + sdot4(iq4_word((wv.z >> 4u) & KQC_LOW), xh.z) + sdot4(iq4_word((wv.w >> 4u) & KQC_LOW), xh.w)
-    }
-
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let xb4 = xsb * 16u + blk * 2u
         let idot = iq4_dot(wq4[wsb * 8u + blk], xq4[xb4], xq4[xb4 + 1u])
-        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-        return axs[xsb] * dd * float(iq4_sc(wsu[wsb * 5u + 1u + blk / 4u], blk) * idot)
+        let w0 = wsu[wsb * 2u]
+        let dd = unpackHalf2x16(w0).x
+        return axs[xsb] * dd * float(iq4xs_sc(w0, wsu[wsb * 2u + 1u], blk) * idot)
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_cls_spv")]
@@ -7098,12 +7058,6 @@ class KqGemvIq4xs : KqGemvBase {
 [vk_dispatch(name = "kq_gemv_iq3s_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq3s : KqGemvBase {
     @workgroup gridw : uint[512]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
-    }
 
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let qb = wsb * 26u + blk * 2u
@@ -7128,8 +7082,8 @@ class KqGemvIq3s : KqGemvBase {
                 isum += sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w)
             }
         }
-        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-        return axs[xsb] * dd * float(iq4_sc(wsu[wsb * 5u + 1u + blk / 4u], blk) * isum)
+        let dd = unpackHalf2x16(wsu[wsb * 2u]).x
+        return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3s_cls_spv")]
@@ -7137,7 +7091,7 @@ class KqGemvIq3s : KqGemvBase {
         let lid = gl_LocalInvocationID.x
         for (k in range(8)) {
             let idx = lid + uint(k) * 64u
-            gridw[idx] = iq3s_grid_word(int(idx))
+            gridw[idx] = gridb[KQ_GRID_IQ3S + idx]
         }
         barrier()   // the grid visible before the shell's block walk
         gemv_shell()
@@ -7151,12 +7105,6 @@ class KqGemvIq3s : KqGemvBase {
 [vk_dispatch(name = "kq_gemv_iq3xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq3xxs : KqGemvBase {
     @workgroup gridw : uint[256]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
-    }
 
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let qb = wsb * 24u + blk * 2u
@@ -7180,8 +7128,8 @@ class KqGemvIq3xxs : KqGemvBase {
                 isum += sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w)
             }
         }
-        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-        return axs[xsb] * dd * float(iq4_sc(wsu[wsb * 5u + 1u + blk / 4u], blk) * isum)
+        let dd = unpackHalf2x16(wsu[wsb * 2u]).x
+        return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_cls_spv")]
@@ -7189,7 +7137,7 @@ class KqGemvIq3xxs : KqGemvBase {
         let lid = gl_LocalInvocationID.x
         for (k in range(4)) {
             let idx = lid + uint(k) * 64u
-            gridw[idx] = iq3xxs_grid_word(int(idx))
+            gridw[idx] = gridb[KQ_GRID_IQ3XXS + idx]
         }
         barrier()   // the grid visible before the shell's block walk
         gemv_shell()
@@ -7199,19 +7147,7 @@ class KqGemvIq3xxs : KqGemvBase {
 // IQ4_NL: iq4xs's codebook dot (iq4_word, pure ALU) folded by q40's per-block f16 d - no
 // sub-scales, no bsum term; the rows are q40's 32-word planes verbatim.
 [vk_dispatch(name = "kq_gemv_iq4nl_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvIq4nl : KqGemvBase {
-    def iq4_dot(wv, xl, xh : uint4) : int {
-        var idot = sdot4(iq4_word(wv.x & KQC_LOW), xl.x) + sdot4(iq4_word(wv.y & KQC_LOW), xl.y)
-        idot += sdot4(iq4_word(wv.z & KQC_LOW), xl.z) + sdot4(iq4_word(wv.w & KQC_LOW), xl.w)
-        idot += sdot4(iq4_word((wv.x >> 4u) & KQC_LOW), xh.x) + sdot4(iq4_word((wv.y >> 4u) & KQC_LOW), xh.y)
-        return idot + sdot4(iq4_word((wv.z >> 4u) & KQC_LOW), xh.z) + sdot4(iq4_word((wv.w >> 4u) & KQC_LOW), xh.w)
-    }
-
-    def q40_d(wsb, blk : uint) : float {
-        let dp = unpackHalf2x16(wsu[wsb * 5u + blk / 2u])
-        return blk % 2u == 0u ? dp.x : dp.y
-    }
-
+class KqGemvIq4nl : KqGemvQ40 {
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let xb4 = xsb * 16u + blk * 2u
         let idot = iq4_dot(wq4[wsb * 8u + blk], xq4[xb4], xq4[xb4 + 1u])
@@ -7219,7 +7155,7 @@ class KqGemvIq4nl : KqGemvBase {
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_cls_spv")]
-    def run {
+    def override run {
         gemv_shell()
     }
 }
@@ -7381,12 +7317,6 @@ class KqGemvK6 : KqGemvBase {
 class KqGemvIq2s : KqGemvBase {
     @workgroup gridw : uint[2048]
 
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
-    }
-
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let qw = wq[wsb * 18u + blk]
         let sgw = wq[wsb * 18u + 8u + blk]
@@ -7423,7 +7353,7 @@ class KqGemvIq2s : KqGemvBase {
         let lid = gl_LocalInvocationID.x
         for (k in range(32)) {
             let idx = lid + uint(k) * 64u
-            gridw[idx] = iq2s_grid_word(int(idx))
+            gridw[idx] = gridb[KQ_GRID_IQ2S + idx]
         }
         barrier()   // the grid visible before the shell's block walk
         gemv_shell()
@@ -7436,12 +7366,6 @@ class KqGemvIq2s : KqGemvBase {
 [vk_dispatch(name = "kq_gemv_iq2xs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xs : KqGemvBase {
     @workgroup gridw : uint[1024]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
-    }
 
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let xb4 = xsb * 16u + blk * 2u
@@ -7478,7 +7402,7 @@ class KqGemvIq2xs : KqGemvBase {
         let lid = gl_LocalInvocationID.x
         for (k in range(16)) {
             let idx = lid + uint(k) * 64u
-            gridw[idx] = iq2xs_grid_word(int(idx))
+            gridw[idx] = gridb[KQ_GRID_IQ2XS + idx]
         }
         barrier()   // the iq2xs grid visible before the shell's block walk
         gemv_shell()
@@ -7491,12 +7415,6 @@ class KqGemvIq2xs : KqGemvBase {
 [vk_dispatch(name = "kq_gemv_iq2xxs_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xxs : KqGemvBase {
     @workgroup gridw : uint[512]
-
-    def iq3s_signed(g, nib : uint) : uint {
-        let m1 = (nib * 0x00204081u) & 0x01010101u
-        let mask = m1 * 255u
-        return (g ^ mask) + m1
-    }
 
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let gw = wq[wsb * 16u + blk * 2u]
@@ -7521,8 +7439,8 @@ class KqGemvIq2xxs : KqGemvBase {
                 isum += sdot4(w0, xh.x) + sdot4(w1, xh.y) + sdot4(w2, xh.z) + sdot4(w3, xh.w)
             }
         }
-        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-        return axs[xsb] * dd * float(iq4_sc(wsu[wsb * 5u + 1u + blk / 4u], blk) * isum)
+        let dd = unpackHalf2x16(wsu[wsb * 2u]).x
+        return axs[xsb] * dd * float(grid_sc(wsu[wsb * 2u + 1u], blk) * isum)
     }
 
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_cls_spv")]
@@ -7530,7 +7448,7 @@ class KqGemvIq2xxs : KqGemvBase {
         let lid = gl_LocalInvocationID.x
         for (k in range(8)) {
             let idx = lid + uint(k) * 64u
-            gridw[idx] = iq2xxs_grid_word(int(idx))
+            gridw[idx] = gridb[KQ_GRID_IQ2XXS + idx]
         }
         barrier()   // the iq2xxs grid visible before the shell's block walk
         gemv_shell()
