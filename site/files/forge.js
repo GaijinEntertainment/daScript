@@ -243,9 +243,9 @@ def main() {
     // Source: site/files/profile_results_<platform>.json, vendored from
     // github.com/borisbat/dasProfile and fetched by pages.yml.
 
-    // Hardcoded platform list. Mirrors the curl loop in pages.yml — when
-    // Linux numbers exist, append 'linux' to both lists.
-    const PLATFORMS      = ['darwin', 'windows'];
+    // Hardcoded platform list. Mirrors the curl loop in pages.yml; a platform
+    // whose record is missing is dropped client-side.
+    const PLATFORMS      = ['darwin', 'linux', 'windows'];
     const PLATFORM_ORDER = { darwin: 0, linux: 1, windows: 2 };
     const PLATFORM_OS    = { darwin: 'macOS', linux: 'Linux', windows: 'Windows' };
 

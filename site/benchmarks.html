@@ -179,7 +179,7 @@
 
             <div class="bm-viewbar">
                 <div class="bm-seg" id="bm-platform">
-                    <button class="is-on" data-p="windows">Threadripper 3990X</button><button data-p="darwin">Apple M1 Max</button>
+                    <button class="is-on" data-p="darwin">macOS</button>
                 </div>
                 <div class="bm-seg" id="bm-board">
                     <button class="is-on" data-b="Interpreted">interpreted</button><button data-b="AOT or JIT">AOT / JIT</button><button data-b="Startup">startup</button>
@@ -278,7 +278,9 @@
     var BOARD_HINT = {
         "Startup": "hello world, one launch the way the lane's kernels are launched \u00b7 an exe cell carries the artifact size (a das exe links the runtime library dynamically, a zig exe is static)"
     };
-    var state = { platform: "windows", board: "Interpreted", view: "bars", sortCol: -1, sortDesc: false, data: null };
+    var state = { platform: "darwin", board: "Interpreted", view: "bars", sortCol: -1, sortDesc: false, data: null };
+    // one button per record the deploy fetched, in this order, labeled by the record's CPU
+    var PLATFORM_ORDER = ["darwin", "linux", "windows"];
 
     // "interop host calls" measures interop only - no playground sample
     var PLAYGROUND_SLUGS = {
@@ -534,7 +536,7 @@
     }
     // Same vendored records as files/forge.js's front-page cycler: pages.yml
     // fetches profile_results_<platform>.json from dasProfile at deploy time.
-    Promise.allSettled(["windows", "darwin"].map(function (plat) {
+    Promise.allSettled(PLATFORM_ORDER.map(function (plat) {
         return fetch("files/profile_results_" + plat + ".json")
             .then(function (resp) { if (!resp.ok) throw new Error(resp.status); return resp.json(); })
             .then(function (json) { return { platform: plat, json: json }; });
@@ -543,6 +545,14 @@
         results.forEach(function (settled) {
             if (settled.status === "fulfilled") state.data[settled.value.platform] = normalize(settled.value.json);
         });
+        var seg = document.getElementById("bm-platform");
+        var loaded = PLATFORM_ORDER.filter(function (p) { return state.data[p]; });
+        if (loaded.length) {
+            state.platform = loaded[0];
+            seg.innerHTML = loaded.map(function (p) {
+                return "<button" + (p === state.platform ? " class='is-on'" : "") + " data-p='" + p + "'>" + escapeHtml(state.data[p].cpu || p) + "</button>";
+            }).join("");
+        }
         wireSeg("bm-platform", "platform", "data-p");
         wireSeg("bm-board", "board", "data-b");
         wireSeg("bm-view", "view", "data-v");
