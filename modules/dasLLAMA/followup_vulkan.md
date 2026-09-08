@@ -828,3 +828,21 @@ module) is independent and can land any time - it is pure structure.
     written as a fixed array chains constant indices the driver promotes to registers - the
     coopmat tile's sixteen accumulators need it as much as the integer tile's 128; (b) a hardware
     profile (Nsight) of our KHR tile beside llama.cpp's on one shape, not another blind bisect.
+    THE TILE (2026-09-08, `harness/vk_gemm_probe.das -- khrx` and Nsight GPU Trace on the RTX 5060 Ti):
+    the profile of the shipped KHR tile read the load-store pipe at 81% of its peak - the four-wide
+    decode callback's eight 16-bit lane loads and three scale words per 16 values - and the register
+    file at 99%, two workgroups of eight warps per SM; neither the f16 accumulators alone (32.7
+    against 33.4 TFLOP/s on the 4B gate shape) nor the two-by-four subgroup tiling alone (35.5)
+    moved it, and the reference exe's 128-thread geometry ran at 22 (about 245 registers per lane,
+    one workgroup per SM). The stage went first: every format's `khr_stage16` reads its 16-value
+    run as one or two words of the quant plane (37.6), then f16 accumulators (54.0), then the
+    two-by-four tiling (54.9) - the shipped class 53.8 / 59.8 / 57.9 on the gate / down / q shapes
+    against 32.6 / 31.7 / 32.5 before it and the reference exe's tile at 43-46
+    (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l carries the per-lever rows). The thirteen kernel
+    cells hold 0 of 89600 off, the hybrid parity file 10 of 10 on the KHR arm, every other kernel's
+    SPIR-V is byte-identical, and the board's KHR rows read: the 4B Q4_K_M 3051 -> 4764 t/s (1.13x of
+    llama.cpp's 4221), the 27B UD-IQ4_XS 395 -> 741 under a 14000 MB pin (1.10x of 675), decode
+    unchanged (116.8 and 23.2). Still open under this item: the no-coopmat arm
+    (`DASLLAMA_COOPMAT=sdot4 DASLLAMA_VK_FA=0` against `GGML_VK_DISABLE_COOPMAT=1`, where llama.cpp's
+    integer MMQ tile runs and the prototypes above are the road), the wave64 twin of the KHR tile,
+    and the real-hardware pass.

@@ -68,9 +68,11 @@ class's `BN`) in `dasllama/dasllama_vulkan_classes.das`.
 **A `kq_sb` format (`dasllama/dasllama_kqformat.das`) that joins the cm2 template - a
 `<Fmt>Cm2T` format template in
 `dasllama/dasllama_vulkan_classes.das` - ships its KHR instantiation (`<Fmt>KhrBatch`, the
-`kq_batch_<fmt>_khr_cls` dispatch) and its arm in each of `khr_cls_ensure`, `khr_cls_set` and
-`khr_cls_enc` (`dasllama/dasllama_vulkan_prefill.das`) in the same change, and that format's
-kernel cell in `tests/test_vulkan_kernels.das` runs its KHR arm.** `pf_f16_feed` admits every
+`kq_batch_<fmt>_khr_cls` dispatch), its `khr_stage16` override (the 16-value weight stage read
+from the plane's words - the abstract base refuses a stamp without one at compile time) and its
+arm in each of `khr_cls_ensure`, `khr_cls_set` and `khr_cls_enc`
+(`dasllama/dasllama_vulkan_prefill.das`) in the same change, and that format's kernel cell in
+`tests/test_vulkan_kernels.das` runs its KHR arm.** `pf_f16_feed` admits every
 `kq_sb` format in mm mode, so a format with no KHR class reaches the ladders' fall-through
 `verify` - a panic on a KHR-only card that no cm2 box reproduces without `DASLLAMA_COOPMAT=mm`.
 

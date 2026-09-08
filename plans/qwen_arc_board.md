@@ -35,7 +35,7 @@ final PR body of the arc quotes it.
 | 4 | Qwen2.5-1.5B-Instruct-IQ3_XS | 0.73 | qwen2 (bias) + iq2s/iq3xxs planes | works; pp 0.91x = the grid formats' cm2 decode callbacks | 12517 / 264.7 | 13830 / 252.0 | 0.91 / 1.05 | 4482 / 264.5 | 10809 / 245.9 |
 | 5 | Qwen3.5-0.8B-Q8_0 | 0.81 | qwen35 hybrid | works | 19222 / 272.5 | 16624 / 243.6 | 1.16 / 1.12 | 17007 / 274.0 | 14978 / 242.6 |
 | 6 | Qwen2.5-1.5B-Instruct-Q8_0 | 1.65 | qwen2 | works; tg 0.93x (see notes) | 14080 / 180.1 | 14184 / 193.1 | 0.99 / 0.93 | 11309 / 181.2 | 10813 / 189.0 |
-| 7 | Qwen3-4B-Instruct-2507-Q4_K_M | 2.50 | qwen3 | works; tg 0.93x (see notes); KHR re-measured after the kq tile and its slab fix (`followup_vulkan.md` item 42) | 5150 / 117.6 | 5142 / 126.3 | 1.00 / 0.93 | 3051 / 117.4 | 4221 / 125.7 |
+| 7 | Qwen3-4B-Instruct-2507-Q4_K_M | 2.50 | qwen3 | works; tg 0.93x (see notes); KHR re-measured on the word-stage kq tile (`followup_vulkan.md` item 42): 1564 -> 3051 -> 4764 | 5150 / 117.6 | 5142 / 126.3 | 1.00 / 0.93 | 4764 / 116.8 | 4221 / 125.7 |
 | 8 | Qwen3-4B-Instruct-2507-Q5_K_M | 2.89 | qwen3 | works; tg 0.93x (see notes) | 4700 / 104.8 | 4965 / 113.2 | 0.95 / 0.93 | 1489 / 104.8 | 4015 / 111.3 |
 | 9 | Qwen3-4B-Instruct-2507-Q6_K | 3.31 | qwen3 | works | 4566 / 95.88 | 4762 / 97.50 | 0.96 / 0.98 | 1581 / 95.79 | 3911 / 96.81 |
 | 10 | Qwen3-4B-Instruct-2507-Q8_0 | 4.28 | qwen3 | works; tg 0.94x (see notes) | 5907 / 79.84 | 5064 / 85.03 | 1.17 / 0.94 | 5304 / 79.70 | 4614 / 84.14 |
@@ -47,7 +47,7 @@ final PR body of the arc quotes it.
 | 16 | Qwen3.5-9B-MTP-Q8_0 | 9.79 | qwen35 hybrid | works | 3233 / 43.82 | 2797 / 44.03 | 1.16 / 1.00 | 2150 / 43.62 | 1873 / 44.00 |
 | 17 | Qwen3.8-27B.i1-IQ3_S | 12.60 | qwen35 hybrid | works (re-measured no pin, ctx 30623; the pinned run read 752 / 24.95) | 802.9 / 27.51 | 807.9 / 24.67 | 0.99 / 1.12 | 238.9 / 27.39 | 650.6 / 24.65 |
 | 18 | Qwen3.8-27B-UD-Q3_K_XL | 13.15 | qwen35 hybrid | works (re-measured no pin, ctx 24651; the 5-rep run caught the stall at 803.9 +-33.8 / 25.29 - the row carries the flat 20-rep profiled run, see notes) | 840.0 / 24.92 | 812.6 / 24.88 | 1.03 / 1.00 | 228.2 / 25.15 | 675.4 / 24.80 |
-| 19 | Qwen3.8-27B-UD-IQ4_XS | 14.25 | qwen35 hybrid | works, no pin; KHR re-measured after the kq tile; the slab fix's re-measure is owed - with 1.2 GB held by other processes the plan's KV room fell under the 2048 minimum and the driver declined (`followup_vulkan.md` item 42) | 865.4 / 23.51 | 814.6 / 24.13 | 1.06 / 0.97 | 395.2 / 23.51 | 675.2 / 24.07 |
+| 19 | Qwen3.8-27B-UD-IQ4_XS | 14.25 | qwen35 hybrid | works, no pin (cm2 columns); KHR re-measured on the word-stage kq tile under `DASLLAMA_GPU_VRAM_MB=14000` - the desktop holds 1.1 GB, which leaves the no-pin plan's KV room under the 2048-position minimum (`followup_vulkan.md` item 42): 221 -> 395 -> 741 | 865.4 / 23.51 | 814.6 / 24.13 | 1.06 / 0.97 | 740.7 / 23.24 | 675.2 / 24.07 |
 | 20 | Qwen1.5-MoE-A2.7B-Chat.Q8_0 | 15.23 | qwen2moe | works (fixed: the per-op attention chain's bias arm + a 2048-wide kv cap); LAGS on the per-op MoE prefill structure and a span without a shared-expert arm (see notes; first run 390.2 / 29.31 = 0.11 / 0.56) | 506.1 / 39.04 | 3507 / 52.15 | 0.14 / 0.75 | 525.5 / 39.94 | 2185 / 51.84 |
 | 21 | Qwen3-30B-A3B-Instruct-2507-Q4_K_M | 18.56 | qwen3moe | works on the per-op tier: experts of layers [13..48) resident, [0..13) streamed; llama.cpp -ngl 99 OOMs, its cells are the same-split offload (experts 0-12 on the CPU; -ngl 36 in the notes) | 749.8 / 66.45 | 612.5 / 42.24 | 1.22 / 1.57 | 499.9 / 64.39 | 588.6 / 42.49 |
 | 22 | Qwen3-Coder-30B-A3B-Instruct-Q4_K_M | 18.56 | qwen3moe | | | | | | |
@@ -199,4 +199,5 @@ per-op logger: GEMVs 37.7 vs 37.0 ms/token (gate+up faster than theirs, the beta
 ms slower - the long-rows-few-outputs GEMV shape), small ops equal; the residual add is fused
 into their down/out mat-vecs. Levers left: the beta/alpha GEMV shape, the fused residual add
 (~1% each). On the KHR arm prefill was 0.33x before the kq formats had a KHR-coopmat tile, 0.59x
-with it, and the row above is the tile after its slab fix (`followup_vulkan.md` item 42).
+with it, 0.73x after its slab fix, and 1.10x on the word-stage tile with f16 accumulators the row
+above carries (`followup_vulkan.md` item 42).
