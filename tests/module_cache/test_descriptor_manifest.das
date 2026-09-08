@@ -49,7 +49,8 @@ let DESCRIPTOR_DEP = "options gen2\nrequire daslib/fio\nrequire ./helper\n\n[exp
 let HELPER = "options gen2\nmodule helper\ndef helper_name() : string \{\n    return \"hello\"\n\}\n"
 let DESCRIPTOR_BROKEN = "options gen2\n\n[export]\ndef initialize(project_path : string) \{\n    this_is_not_a_function()\n\}\n"
 
-//! the scan trace line for a module's descriptor: `[module] descriptor <path>/.das_module: <verdict>`
+//! the scan trace line for a module's descriptor: `[module] descriptor <path>/.das_module: <verdict>`;
+//! a replay verdict keeps its deferred count and drops the two timings
 def probe_line(out : string; mod : string = "manifest_probe") : string {
     let marker = "{mod}/.das_module: "
     let at = find(out, marker)
@@ -60,7 +61,11 @@ def probe_line(out : string; mod : string = "manifest_probe") : string {
     let eol = find(rest, "\n")
     let line = eol < 0 ? rest : slice(rest, 0, eol)
     let timing = find(line, " in ")
-    return timing < 0 ? line : slice(line, 0, timing)
+    if (timing < 0) {
+        return line
+    }
+    let deferred = find(line, ", deferred ")
+    return "{slice(line, 0, timing)} ({slice(line, deferred + 2)}"
 }
 
 def count_of(text : string; needle : string) : int {
@@ -197,8 +202,8 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
     t |> run("the second start replays the manifest and never compiles the descriptor") @(t : T?) {
         var out : string
         t |> success(report_child(t, "warm", run(cmd, out), out, "PROBE 42"), "the require resolves through the replayed rows")
-        t |> equal("replayed 1 row(s)", probe_line(out), "the trace says replayed:\n{out}")
-        t |> equal("replayed 1 row(s)", probe_line(out, "dm_probe"), "the dm row replays too:\n{out}")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out), "the trace says replayed:\n{out}")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out, "dm_probe"), "the dm row replays too:\n{out}")
         t |> success(count_of(out, "Module_Absent <- ") >= 1, "the replayed dm row retries its dlopen:\n{out}")
     }
     t |> run("an edited descriptor recompiles once and is replayed again after") @(t : T?) {
@@ -208,7 +213,7 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
         t |> equal("compiled (descriptor changed), manifest written (1 row(s))", probe_line(out), "the stamp mismatch recompiles and rewrites:\n{out}")
         var again : string
         t |> success(report_child(t, "edited warm", run(cmd, again), again, "PROBE 42"), "the rewritten manifest resolves the require")
-        t |> equal("replayed 1 row(s)", probe_line(again), "the rewritten manifest replays:\n{again}")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the rewritten manifest replays:\n{again}")
     }
 }
 
@@ -264,14 +269,14 @@ def arms_rejections(t : T?; fx : Fixture) {
         t |> success(find(fread(manifest), "/helper.das\t") >= 0, "the helper is stamped in the manifest, by the path the require resolved: {fread(manifest)}")
         var warm : string
         t |> success(report_child(t, "dep warm", run(cmd, warm), warm, "PROBE 42"), "the dep descriptor replays")
-        t |> equal("replayed 1 row(s)", probe_line(warm), "an unchanged helper replays:\n{warm}")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(warm), "an unchanged helper replays:\n{warm}")
         fwrite(helper, "{HELPER}// edited\n")
         var edited : string
         t |> success(report_child(t, "dep edited", run(cmd, edited), edited, "PROBE 42"), "the require resolves after the helper edit")
         t |> equal("compiled (dependency changed), manifest written (1 row(s))", probe_line(edited), "the helper's stamp mismatch recompiles the descriptor:\n{edited}")
         var again : string
         t |> success(report_child(t, "dep edited warm", run(cmd, again), again, "PROBE 42"), "the rewritten manifest resolves the require")
-        t |> equal("replayed 1 row(s)", probe_line(again), "the rewritten manifest replays:\n{again}")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the rewritten manifest replays:\n{again}")
     }
     t |> run("a cross-compile target is part of the key: a --jit-target run never replays a native manifest") @(t : T?) {
         //! dasOpenGL's descriptor registers its module only when get_cross_platform_name() says emscripten -

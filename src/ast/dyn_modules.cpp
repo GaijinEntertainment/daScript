@@ -587,10 +587,19 @@ static bool load_deferred_module_for_require(const string & name) {
     gc_root parked, loadRoot;
     move_all_nodes(threadRoot, parked);
     bool loaded = false;
+    bool grown = false;     // the module set changed - the fixed point and the collect are owed whether or not `name` came in
     {
         gc_active_scope scope(&loadRoot);
+        bool wasDeferred = is_dynamic_module_deferred(name.c_str());
         loaded = load_deferred_dynamic_module(name.c_str());
-        if ( loaded ) {
+        grown = loaded;
+        if ( !loaded && wasDeferred ) {
+            // its dlopen failed - a sibling it links may be deferred too; bring every row in (retries the pending ones)
+            load_all_deferred_dynamic_modules();
+            grown = true;
+            loaded = Module::require(name) != nullptr;
+        }
+        if ( grown ) {
             string notInitialized;
             if ( !Module::InitializeDependencies(notInitialized) ) {
                 notInitialized.clear();
@@ -602,7 +611,7 @@ static bool load_deferred_module_for_require(const string & name) {
         }
     }
     move_all_nodes(threadRoot, loadRoot);
-    if ( loaded ) {
+    if ( grown ) {
         // every module: a constructor registers into existing ones too (a vector type's functions)
         Module::foreach([&](Module * m) {
             m->gc_collect(&loadRoot);

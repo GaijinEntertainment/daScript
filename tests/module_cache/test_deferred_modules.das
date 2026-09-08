@@ -182,6 +182,20 @@ def arms_deferred(t : T?; fx : Fixture) {
         t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": loaded") >= 0, "the shared module loads on start:\n{out}")
         t |> success(!stat(fx.manifest).is_valid && !stat(fx.utManifest).is_valid, "no manifest was written")
     }
+    t |> run("a deferred row whose artifact is gone brings every deferred module in, and the require fails as on a cold start") @(t : T?) {
+        var warm : string
+        t |> success(report_child(t, "rewarm", run(child_cmd(fx, fx.plain), warm), warm, "PLAIN"), "a cold start rewrites the manifest")
+        let text = fread(fx.utManifest)
+        t |> success(find(text, "\ndm\t") >= 0, "the manifest carries the dm row: {text}")
+        fwrite(fx.utManifest, replace(text, UNIT_TEST_ARTIFACT, "absent"))
+        var out : string
+        let rc = run(child_cmd(fx, fx.uses), out)
+        t |> success(rc != 0 && find(out, "LENGTH") < 0, "the program does not run:\n{out}")
+        t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the require asks for the row:\n{out}")
+        t |> success(find(out, "[module] loading every deferred module (") >= 0, "the failed load brings the rest in:\n{out}")
+        t |> success(find(out, "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'") >= 0, "the require fails with the missing-module error:\n{out}")
+        remove_result(fx.utManifest)
+    }
 }
 
 def arm_fallback(t : T?; fx : Fixture) {

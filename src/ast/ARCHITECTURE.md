@@ -86,7 +86,9 @@ scan installed (`setDeferredModuleLoader`); the loader dlopens and registers the
 `initDependencies` fixed point that `Module::Initialize` runs (`Module::InitializeDependencies`) over
 the grown list, and when a module reports it cannot initialize - what it needs is deferred too -
 brings every deferred module in and runs the fixed point again, which is the set an eager start
-has. The load runs under one gc root of its own with the thread root's nodes parked meanwhile,
+has. A row whose own dlopen fails takes the same road - every deferred module comes in, the
+pending retry runs - and the require then finds the module or fails as a cold start would. The
+load runs under one gc root of its own with the thread root's nodes parked meanwhile,
 because a constructor's nodes go to the active root while a builtin das module it compiles
 dumps its leftovers on the thread root, and a collect stops at a node owned by another root;
 after the load every module, not only the new ones, collects from that root, since a

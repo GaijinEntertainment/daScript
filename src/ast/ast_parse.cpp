@@ -257,10 +257,10 @@ namespace das {
                                     // guarded optional require. Path guard (contains '/'): proceed only when
                                     // the guard's OWN file resolves — the rail for pure-das packages (nothing
                                     // C++ to guard on) and cross-package dependency witnesses. Plain-name
-                                    // guard: STRICT — proceed only when the guard module is registered (a
-                                    // linked C++ module); no target-resolvability fallback (module source
-                                    // dirs exist in every checkout regardless of build config). Otherwise —
-                                    // skip silently. Must match ast_requireModule (parser_impl.cpp).
+                                    // guard: proceed only when the build has the module (guardModuleAvailable,
+                                    // src/ast/ARCHITECTURE.md sec.2); no target-resolvability fallback (module
+                                    // source dirs exist in every checkout regardless of build config).
+                                    // Otherwise skip silently. Must match ast_requireModule (parser_impl.cpp).
                                     if ( hasReqGuard && reqGuard.find('/')!=string::npos ) {
                                         auto ginfo = access->getModuleInfo(reqGuard, fi->name);
                                         if ( ginfo.fileName.empty() || !access->getFileInfo(ginfo.fileName) ) {
