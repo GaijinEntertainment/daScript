@@ -312,8 +312,9 @@ every publish; a platform with no record upstream is dropped client-side. Local 
 
 ```bash
 for plat in darwin linux windows; do
-    curl -sSL -o site/files/profile_results_$plat.json \
-        https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results_$plat.json
+    curl -fsSL -o site/files/profile_results_$plat.json \
+        https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results_$plat.json \
+      || rm -f site/files/profile_results_$plat.json
 done
 ```
 

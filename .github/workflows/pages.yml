@@ -387,9 +387,9 @@ jobs:
       run: |
         set -eux
         for plat in darwin linux windows; do
-            curl -sSL -o "site/files/profile_results_${plat}.json" \
+            curl -fsSL -o "site/files/profile_results_${plat}.json" \
                 "https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results_${plat}.json" \
-              || echo "WARNING: missing profile_results_${plat}.json"
+              || { rm -f "site/files/profile_results_${plat}.json"; echo "WARNING: missing profile_results_${plat}.json"; }
         done
       continue-on-error: true
 
