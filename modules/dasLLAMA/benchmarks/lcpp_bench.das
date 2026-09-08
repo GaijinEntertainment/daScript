@@ -33,7 +33,7 @@ require daslib/jobque_profile   // JOBQUE_PROFILING_ENABLED — --prof refuses o
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on + bench records — the standing per-box methodology
 require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: --submit POSTs the stamped records to the exchange, which rides the tune framework
-require ?llvm llvm/daslib/llvm_tune   // nolint:STYLE030,LINT019 — OPTIONAL: tune_app_script, the exe-vs-script discriminator behind --for-debug-purposes
+require [tune_framework]   // nolint:STYLE030,LINT019 — OPTIONAL: tune_app_script, the exe-vs-script discriminator behind --for-debug-purposes
 require daslib/jobque_boost
 require daslib/clargs
 require daslib/fio

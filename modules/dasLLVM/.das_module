@@ -35,6 +35,9 @@ def initialize(project_path : string) {
         // the `llvm` witness module (src/dasLLVM.cpp) exists only in a build configured with
         // dasLLVM; the 2-arg form skips silently when the .shared_module was never built, and
         // that silence is what `require ?llvm` reads as "this build has no LLVM"
-        register_dynamic_module("{project_path}/dasModuleLLVM.shared_module", "Module_LLVM")
+        if (register_dynamic_module("{project_path}/dasModuleLLVM.shared_module", "Module_LLVM") != null) {
+            register_module_group("tune_framework", "llvm/daslib/llvm_code")
+            register_module_group("tune_framework", "llvm/daslib/llvm_tune")
+        }
     }
 }

@@ -94,7 +94,10 @@ through; a member without the entry is a compile error naming the call. A group 
 the group a member joins, and the entry every member defines - and both belong in the
 requirer's documentation. Members in this tree: `sql_provider` / `register_provider`
 (`daslib/sql_boost`), `linq_fold_source` / `register_linq_fold_source` (`daslib/linq_fold`),
-`llvm_code_generator` / `register_llvm_code_generators` (`llvm/daslib/llvm_user_modules`).
+`llvm_code_generator` / `register_llvm_code_generators` (`llvm/daslib/llvm_user_modules`);
+`tune_framework` has no entry - `daslib/tune` shells its members under
+`static_if (typeinfo module_exists(llvm_tune))`, and dasLLVM joins it from its `llvm` witness
+module's constructor and from its descriptor, so membership follows the build's configure.
 
 ## Package layout
 

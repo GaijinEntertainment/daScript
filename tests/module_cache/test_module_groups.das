@@ -134,6 +134,16 @@ def arms_expand(t : T?; fx : Fixture) {
         let rc = run_driver(fx, missing, out)
         t |> success(rc != 0 && find(out, "alpha::no_such_entry") >= 0, "a member without the entry is a compile error naming the member's call: rc={rc}\n{out}")
     }
+    t |> run("the lint reads a group require as one unit: a used member keeps it, no used member reports it once") @(t : T?) {
+        var out : string
+        let lint = "{fx.cmdPrefix} -no-module-cache \"{path_join(get_das_root(), "utils/lint/main.das")}\" -- --quiet"
+        let oneUsed = write_driver(fx, "lint_group_used.das", "require [probe_group]", "alpha_value()")
+        run_child("{lint} \"{oneUsed}\"", out)
+        t |> success(find(out, "STYLE030") < 0 && find(out, "STYLE029") < 0 && find(out, "0 issue(s)") >= 0, "beta unused beside a used alpha draws nothing:\n{out}")
+        let noneUsed = write_driver(fx, "lint_group_unused.das", "require [probe_group]", "0")
+        run_child("{lint} \"{noneUsed}\"", out)
+        t |> success(find(out, "STYLE030: require [group] is unused") >= 0 && find(out, "grp_alpha/alpha") >= 0 && find(out, "grp_beta/beta") >= 0 && find(out, "1 issue(s)") >= 0, "an unused group is one finding naming its members:\n{out}")
+    }
 }
 
 def arm_cache_stamps_the_expansion(t : T?; fx : Fixture) {

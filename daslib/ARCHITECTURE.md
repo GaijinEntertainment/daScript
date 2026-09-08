@@ -232,18 +232,21 @@ Three companions carry a concern each; a section number is unique across all fou
   share one macro context; `tune_status` and `log_tune_status` are shells of the same kind.
 - **The shells decide with `typeinfo module_exists(llvm_tune)`, a pair with the trait's C++ half
   in `src/ast/ast_infer_type.cpp` (`module_exists`): visible from the compiling module, which is
-  what the `require ?llvm llvm/daslib/llvm_tune public` line above them decided.** Nothing fails
+  what the `require [tune_framework] public` line above them decided.** Nothing fails
   when the two sides drift - `tests/language/optional_require.das` pins the trait's visibility
   half on fixtures, and `tests/daslib/test_tune_shells.das` is tier-agnostic by design - so the pair
   is recorded here: a trait that answered off the process registry instead would take the
   framework arm inside a tool's nested compile, where the framework is not mounted.
-- **The `llvm/daslib/*` files resolve in every build that carries `modules/dasLLVM/`; only the
-  witness decides what `?llvm` and `module_exists(llvm_tune)` answer.** The framework's das files
-  compile without their C++ module, so a direct `require llvm/daslib/llvm_tune` in a build without
-  dasLLVM compiles with the shells inert and no `<name>_variants()` registry - a program that
-  reads one is framework-only and says so with that direct require. `daslib/just_in_time` keeps
-  its direct require for the opposite reason: a static host that never registered the witness
-  still runs the JIT through the LLVM library, and the guard would switch it off.
+- **The `llvm/daslib/*` files resolve in every build that carries `modules/dasLLVM/`; only a
+  build configured with dasLLVM joins the `tune_framework` group - the `llvm` witness module's
+  constructor for a static host, the descriptor's rows where the witness's `.shared_module` was
+  built - so the group, and with it `module_exists(llvm_tune)`, follows the configure and never
+  the filesystem.** The framework's das files compile without their C++ module, so a direct
+  `require llvm/daslib/llvm_tune` in a build without dasLLVM compiles with the shells inert and no
+  `<name>_variants()` registry - a program that reads one is framework-only and says so with that
+  direct require. `daslib/just_in_time` keeps its direct require for the opposite reason: a static
+  host that never registered the witness still runs the JIT through the LLVM library, and the
+  group would switch it off.
 
 ## 38. cross_context
 

@@ -14,6 +14,8 @@ public:
     Module_LLVM() : Module("llvm") {
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
+        registerModuleGroupMember("tune_framework", "llvm/daslib/llvm_code");
+        registerModuleGroupMember("tune_framework", "llvm/daslib/llvm_tune");
     }
     virtual ModuleAotType aotRequire ( TextWriter & ) const override {
         return ModuleAotType::cpp;

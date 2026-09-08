@@ -116,7 +116,7 @@ require guard (`require ?mod`) and `builtin_module_exists` ask whether the build
 module (`guardModuleAvailable`): linked in, or waiting in a manifest row, which the guard
 loads then - so `require ?das_metal metal/das_metal_boost` still means "on a build with
 Metal", a cold start and a warm start answer alike, and `llvm`, a witness module no das file
-requires unguarded, comes in through the guards `daslib/tune` places on it. A guard whose name
+requires unguarded, comes in through the guards dasLLAMA places on it. A guard whose name
 holds a `/` is a path instead: the guard is taken when the guard's own file resolves through the
 compile's `FileAccess` - the rail for a pure-das package, which has nothing C++ to guard on, and
 for a witness of a cross-package dependency. A guard the build does not have skips the require
