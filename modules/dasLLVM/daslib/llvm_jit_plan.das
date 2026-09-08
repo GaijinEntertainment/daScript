@@ -719,6 +719,10 @@ struct public JitPlan {
     debug_info : bool
     dump_ir : bool
     gen_exe : bool
+    gen_lib : bool
+    lib_static : bool
+    lib_export_marked : bool
+    lib_bindings : string
     exe_main : string
     compile_only : bool
     emit_aot_object : bool
@@ -774,7 +778,19 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
         to_log(LOG_WARNING, "LLVM JIT: dll mode requested but this daslang build is static - no DLL cache, " +
             "every run pays full in-memory codegen\n")
     }
-    plan.gen_exe = prog.policies.jit_exe_mode
+    plan.gen_lib = cli_opts.lib |> unwrap_or((prog._options |> find_arg("jit_lib")) ?as tBool ?? false)
+    plan.gen_exe = prog.policies.jit_exe_mode || plan.gen_lib
+    plan.lib_static = cli_opts.lib_static |> unwrap_or(false)
+    plan.lib_bindings = cli_opts.lib_bindings |> unwrap_or("")
+    plan.lib_export_marked = cli_opts.lib_export_marked |> unwrap_or((prog._options |> find_arg("jit_lib_export_marked")) ?as tBool ?? false)
+    if (announce && !plan.gen_lib) {
+        if (cli_opts.lib_static |> is_some()) {
+            to_log(LOG_WARNING, "LLVM JIT: --jit-lib-static applies to -lib only - ignored for this run\n")
+        }
+        if (cli_opts.lib_bindings |> is_some()) {
+            to_log(LOG_WARNING, "LLVM JIT: --jit-lib-bindings applies to -lib only - ignored for this run\n")
+        }
+    }
     plan.exe_main = "main"
     // --jit-compile-only: build + verify + optimize (+dump), write/load/install nothing —
     // the program runs interpreted. Also bypasses the DLL cache probe, so the

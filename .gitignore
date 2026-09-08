@@ -50,6 +50,7 @@ _aot_generated/
 _llvm_aot_generated/
 # the -ctx driver writes each fixture's daslang bindings beside the host that requires them
 tests-cpp/big/standalone_ctx/_*_c.das
+_standalone_ctx_generated/
 .vscode/
 .cache/
 
@@ -201,3 +202,7 @@ modules/dasLLAMA/benchmarks/asr/_pybench_rows.txt
 # python bytecode, anywhere
 __pycache__/
 site/files/profile_results_*.json
+
+# examples/c_api_library builds its three libraries here, and CMake generates their bindings
+examples/c_api_library/_out/
+examples/c_api_library/*_c.das

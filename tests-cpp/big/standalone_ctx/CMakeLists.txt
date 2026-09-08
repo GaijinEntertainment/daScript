@@ -67,8 +67,9 @@ add_dependencies(test-small test_standalone_capi)
 # The same emission, loaded instead of linked: a shared library built from the generated .cpp
 # exports the C entry points (default visibility; on Windows the header's <PREFIX>_API macro is
 # what says so), and a daslang host reaches them through the bindings the same run wrote. Needs
-# the shared runtime, since the host process already carries one.
-if(TARGET libDaScriptDyn_runtime)
+# the shared runtime, since the host process already carries one, and dasbind to load it -
+# DAS_BIND_EXTERNAL is 0 on 32-bit Windows (das_config.h), where the host cannot bind at all.
+if(TARGET libDaScriptDyn_runtime AND NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4))
     add_library(standalone_init_fixture_shared SHARED
         "${STANDALONE_CTX_GEN}/standalone_init_fixture.das.cpp")
     target_link_libraries(standalone_init_fixture_shared PRIVATE
@@ -97,7 +98,7 @@ if(TARGET libDaScriptDyn_runtime)
                      "${CMAKE_CURRENT_SOURCE_DIR}/test_standalone_bindings_host.das"
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(standalone_capi_dasbind PROPERTIES LABELS "small")
-    add_dependencies(test-small standalone_init_fixture_shared)
+    add_dependencies(test-small standalone_init_fixture_shared daslang)
 endif()
 
 # The generated header asserts every structure's size and each of its field offsets. Nothing
@@ -122,7 +123,8 @@ if(NOT MSVC)
         COMMENT "Standalone AOT: standalone_layout_fixture.das"
         VERBATIM
     )
-    add_custom_target(standalone_layout_fixture_header
+    # ALL, not just a test-small dependency: CI runs `ctest -L small` without building that target
+    add_custom_target(standalone_layout_fixture_header ALL
         DEPENDS "${STANDALONE_CTX_GEN}/standalone_layout_fixture.das.h")
     set_target_properties(standalone_layout_fixture_header PROPERTIES FOLDER "tests-cpp/big")
 

@@ -268,7 +268,7 @@ Pipeline:
 
    #include "standalone_ctx_generated/script.das.h"
 
-   das::standalone::Standalone ctx;
+   das::ctx_standalone::Standalone ctx;
    ctx.test();  // direct call, no findFunction needed
 
 The same generated files also carry a C API: one ``extern "C"`` entry
@@ -332,6 +332,13 @@ past the next call.
 The generated header asserts the layout of every structure it declares
 (``_Static_assert`` in C11, ``static_assert`` in C++), so a host built
 for a different target fails to compile rather than misreading memory.
+
+A daslang host needs no C: ``-- --jit-lib-bindings build/script_c.das``
+writes the daslang twin of the header beside it, one
+``[extern(cdecl, late, ...)]`` per entry point plus a das struct per
+structure that crosses, and the host ``require``\ s that file. The externs
+bind ``late``, so the bindings compile before the library exists and a
+build system can generate them as an ordinary output.
 
 Several such libraries coexist in one process, and so does a library inside a
 host that registered the daslang modules itself: whoever gets there first

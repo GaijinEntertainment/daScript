@@ -66,8 +66,9 @@ Lifecycle
         }
 
 ``[export_c]``
-    An ``[export]`` that also names the function to C: a standalone context declares it in the C
-    half of the header it generates, so a C host calls it with no daslang API of its own. Needs
+    An ``[export]`` that ``daslang -lib`` additionally surfaces as a C function in the header it
+    generates. ``-lib``, ``-jit`` and ``-exe`` carry the annotation themselves, so a library source
+    needs no ``require``; a plain interpreter or AOT compile of the same file needs
     ``require daslib/export_c``. The function keeps working in every tier. Its signature
     has to be one C can spell: scalars, ``string``, raw pointers, enumerations, plain structures,
     the ``float2``..``uint4`` and ``range`` families, and ``fixed_array`` arguments; ``array``,

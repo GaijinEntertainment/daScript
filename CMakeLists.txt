@@ -1645,6 +1645,9 @@ if (NOT ${DAS_TOOLS_DISABLED})
     # their C++, which is why they live here and not beside the nano library.
     add_subdirectory(examples/standalone)
 
+    # `daslang -lib` libraries bound back into daslang through generated [extern] bindings.
+    add_subdirectory(examples/c_api_library)
+
 endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.

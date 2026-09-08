@@ -67,7 +67,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     if (!plan.use_dll) {
         return run_jit_in_emitter(prog, ctx, plan.log_jit_time, t_hash, 0)
     }
-    if (empty(plan.candidates)) {
+    if (empty(plan.candidates) && !plan.gen_lib) {
         to_log(LOG_INFO, "LLVM JIT: 0 functions to jit ({length(plan.disabled)} marked no_jit) - the WHOLE program runs interpreted\n")
         return true
     }

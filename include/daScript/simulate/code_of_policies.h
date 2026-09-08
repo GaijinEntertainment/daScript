@@ -41,6 +41,7 @@ namespace das {
         bool        no_lint = false;                    // skip Program::lint() entirely
         bool        no_init_check = false;              // skip the Module::Initialize() assert, most of the time should be false (except maybe dynamic-module discovery)
         bool        export_all = false;                 // when user compiles, export all (public?) functions
+        bool        export_public_functions = false;
         bool        serialize_main_module = true;       // if false, then we recompile main module each time
         bool        keep_alive = false;                 // produce keep-alive noodes
         /*option*/ bool        very_safe_context = false;          // context is very safe (does not release old memory from array or table grow, leaves it to GC)

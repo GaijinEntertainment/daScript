@@ -16,10 +16,11 @@ program: **hash** (the DLL key over the candidate set: per-function AOT hashes p
 folds), **init** (engine + target machine), **declare** (LLVM function declarations for the jit
 set), **probe** (open the cached DLL, compare per-function hashes), **irgen** (the das IR emitter
 over every function), **optimize** (the LLVM pass pipeline at the requested level, plus the
-opt-in IR dump and the post-opt verify), **emit+link** (artifact production - for the DLL path
-`write_dll` in `llvm_jit_common.das`, itself **emit-obj**, machine-code emission, then **link**,
-the lld-link spawn), **install** (resolve externs, instrument sim nodes), and **finalize**
-(engine teardown / state install). On a hit irgen, optimize and emit+link read as zero.
+opt-in IR dump and the post-opt verify), **emit+link** (artifact production - `write_artifact` in
+`llvm_jit_common.das`, itself **emit-obj**, machine-code emission, then **link**; which artifact
+is the caller's choice, a JIT DLL or an exe or, for `-lib`, a shared library or static archive
+with the C header written beside it), **install** (resolve externs, instrument sim nodes), and
+**finalize** (engine teardown / state install). On a hit irgen, optimize and emit+link read as zero.
 
 ### 1.1 The timing contract
 
@@ -57,13 +58,17 @@ one of those files visible (re-pin `LLVM_JIT_EMITTER_HASH`), and the bump is owe
 emitted code for identical inputs can differ - a comment, a nolint, or a same-value rewrite
 inside an emitter file re-pins without a bump.
 
-`--jit-opt-level` (CLI, over `policies.jit_opt_level`, default 3) drives both the optimize
-pipeline and the DLL path's codegen-side target machine. `write_exe` and AOT-object emission
-(`emit_object_only`) deliberately stay at codegen level 3: shipped artifacts are not
-content-addressed, so a tier change there has no cache guard to catch it. At level 0 the
-injected tune-policy default becomes `fallback` (`jit_cli_opt_level()` in `llvm_tune.das`):
-tune winners are raced under O3 codegen, so an O0 run cannot represent them and must not block
-on the tuner to mint them.
+The per-artifact entry emitters are OUTSIDE that surface: `llvm_exe.das` (a standalone exe's
+`main`) and its `-lib` half (the C entry points and thunks) emit startup glue for artifacts
+nothing content-addresses, so neither is in `EMITTER_FILES` and neither owes a version bump. Both
+artifacts run in `LlvmJitMode.EXE`, which is what makes the exe startup shareable: the four
+`emit_standalone_*` helpers in `llvm_exe.das` are the shared halves, split so a library can put the
+process-global half behind a once guard and the per-context half behind its own catch boundary.
+
+### 1.3 A library's runtime
+
+`daslang -lib` emits an artifact that loads into a process it does not own; its runtime,
+environment and shutdown rules are `ARCHITECTURE_LIB.md` sec. 1.3.
 
 ## 2. Codegen identity - the DLL cache
 

@@ -1667,9 +1667,6 @@ namespace das {
         }
     }
 
-    // from module_builtin_fio.cpp — modules whose .shared_module dlopen failed (Quiet)
-    DAS_API string describe_pending_dynamic_modules();
-
     ProgramPtr reportPrerequisitesErrors (
             const string & fileName,
             const vector<MissingRecord> & missing,
