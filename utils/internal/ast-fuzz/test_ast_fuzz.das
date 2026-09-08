@@ -4,7 +4,13 @@ require dastest/testing_boost public
 require daslib/fio
 require daslib/strings_boost
 
-let BIN = "bin/daslang"
+//! the binary running this test, whatever the build layout put it (`bin/daslang` on a single-config build, `bin/Release/daslang.exe` under MSVC)
+def private das_exe() : string {
+    let args <- get_command_line_arguments()
+    return empty(args) ? "bin/daslang" : get_full_file_name(args[0])
+}
+
+let BIN = das_exe()
 
 def private run(argv : array<string>; var out : string&; timeout : float) : int {
     return run_and_capture(argv, out, timeout)

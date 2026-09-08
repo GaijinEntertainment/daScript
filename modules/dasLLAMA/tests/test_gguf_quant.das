@@ -6,6 +6,7 @@ require dasllama/dasllama_convert  // the codec layer under test — direct requ
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common    // dequant_kq_plane_sb - the plane dequant the f32 fallback must match
 require math
+require daslib/enum_trait
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
 // independently hand-rolled reference, and the exact-transcode rails must be bit-exact against
@@ -76,6 +77,36 @@ def private synth_q5_0_bytes : array<uint8> {
         }
     }
     return <- data
+}
+
+[test]
+def test_gguf_type_sizes(t : T?) {
+    t |> run("ggml_type_bytes follows the ggml block sizes and ggml_type_name the upstream spelling") @(t : T?) {
+        t |> equal(144l, ggml_type_bytes(GGML_TYPE_Q4_K, 256l))
+        t |> equal(210l, ggml_type_bytes(GGML_TYPE_Q6_K, 256l))
+        t |> equal(136l, ggml_type_bytes(GGML_TYPE_IQ4_XS, 256l))
+        t |> equal(110l, ggml_type_bytes(GGML_TYPE_IQ3_S, 256l))
+        t |> equal(82l, ggml_type_bytes(GGML_TYPE_IQ2_S, 256l))
+        t |> equal(34l, ggml_type_bytes(GGML_TYPE_Q8_0, 32l))
+        t |> equal(18l, ggml_type_bytes(GGML_TYPE_IQ4_NL, 32l))
+        t |> equal(2048l, ggml_type_bytes(GGML_TYPE_F16, 1024l))
+        t |> equal(0l, ggml_type_bytes(99, 256l))
+        t |> equal("IQ4_XS", ggml_type_name(GGML_TYPE_IQ4_XS))
+        t |> equal("Q8_0", ggml_type_name(GGML_TYPE_Q8_0))
+        t |> equal("type 99", ggml_type_name(99))
+    }
+    t |> run("every kq format names its ggml type, and kq_disk_bytes is that type's block bytes") @(tt : T?) {
+        tt |> equal(GGML_TYPE_Q4_K, kq_ggml_type(KqFmt.k4))
+        tt |> equal(GGML_TYPE_IQ2_XXS, kq_ggml_type(KqFmt.iq2xxs))
+        tt |> equal(GGML_TYPE_Q8_0, kq_ggml_type(KqFmt.q8))
+        tt |> equal(144l, kq_disk_bytes(KqFmt.k4, 256l))
+        tt |> equal(34l, kq_disk_bytes(KqFmt.q8, 32l))
+        tt |> equal(18l, kq_disk_bytes(KqFmt.iq4nl, 32l))
+        for (f in type<KqFmt>) {
+            tt |> success(kq_ggml_type(f) >= 0, "{f} names a ggml type")
+            tt |> success(kq_disk_bytes(f, 256l) > 0l, "{f} has block bytes")
+        }
+    }
 }
 
 [test]

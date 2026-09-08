@@ -52,7 +52,15 @@ axis to any kq superblock format: it drives the prefill's own (format, column) l
 l and m columns with the kq batch tile as the control row, over random block bytes at that
 format's device block size, and it runs the four-wide decode's two arms (the twin served, then
 stripped through `vkd_pipes_rebuild`) interleaved in one process, two rounds each, so a format's
-`DECVEC` verdict comes from one instrument. A new arm joins one of the three.
+`DECVEC` verdict comes from one instrument. The `khrx` arm is the second axis for the KHR kq
+tile: the staged k4 tile with its weight stage as the variable (a constant fill, the decode on
+the plane element, the plane's words read in place), then the structural variants (unstaged B
+fragments, a 64-deep k step, a separate edge-store slab), with the shipped KHR class and the
+sdot4 tile as control rows. The `mmqx` arm is the first axis for the integer tile: the sdot4
+k4 tile against register-block prototypes over the same planes. Both sweeps read every
+product-computing arm back against the shipped class, and time the served graph's shape:
+sixteen dispatches per submit over two alternating outputs with a fresh hazard each, the arms
+interleaved round by round, an arm's figure its best round. A new arm joins one of the three.
 
 **A measured number proves its kernel provenance through `tune_gate()`
 (`performance/profile_common.das`), one arm per world it can run in.** Four worlds, because
@@ -65,9 +73,10 @@ before its first timed rep. Two rig shapes fall outside "measuring entry point" 
 property itself, ledgered here: a kernel A/B lab dispatches its variants through its own arms
 (never the `[tune]` selection), and `lcpp_bench.das`'s `--tok` cell dispatches no kernels at
 all - neither can measure a fallback silently. A kernel A/B lab is also outside the
-in-process reference check: `harness/vk_gemm_probe.das` dispatches the shipped, suite-gated
-kernels on timing fixtures, compares no arm's output, and marks every row `timing-only`; its
-rows never enter a record store, and a decision it seeds is confirmed by the e2e board rows.
+in-process reference check: it dispatches shipped kernels and prototypes on timing fixtures,
+compares an arm's output against its own reference arm where the outputs are comparable and
+marks the rest `timing-only`; its rows never enter a record store, and a decision it seeds is
+confirmed by the e2e board rows.
 
 **A binary-stale sidecar still serves its `runtime` section; a foreign one serves nothing.**
 The staleness rule kills measured kernel WINNERS - a rebuild can change the bodies they were
@@ -134,16 +143,14 @@ stages, tokenizer build) - the rails do not apply. A timing that is part of an A
 the facade's `TtsTimings`, the per-stage walls a synthesis returns to its caller and the
 server logs per request - is a deliverable of the same kind, not instrumentation, and the
 one-rail follow-up (`followup_general.md` row 72) keeps it that way while it retires the
-duplicate rails. A clock whose value feeds logic is control
-flow, not instrumentation; it is marked `// clock: control` so the sweep and any future lint
-leave it alone.
+duplicate rails. A clock whose value feeds logic is control flow, not instrumentation; it is
+marked `// clock: control` so the sweep and any future lint leave it alone.
 
 The override-announce rule (REVIEW.md) draws its boundary here: a knob or setter whose purpose
 is timing still counts as an override when it moves computed numerics - two GEMM forms of the
 same math differ in float terms - while one that changes only WHEN work happens does not, and
 a CLI flag is never an override (it is the run's own command line, visible where the run is
 launched).
-
 
 ### Re-stamping inside the content-addressed archive
 

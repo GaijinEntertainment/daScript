@@ -7,10 +7,11 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 **Routed from `REVIEW.md` (beside this file): a diff that checklist routes here applies this
 list together with it.**
 
-**A diff that changes a kernel's dispatch geometry - its grid divisor, threadgroup size, or
-threadgroup-memory length - updates every gate that hand-dispatches that kernel, in the same
-change.** A hand-dispatched gate encodes the geometry itself, so a moved divisor leaves the
-gate dispatching the wrong shape with no error.
+**A diff that changes any dispatch geometry a gate itself encodes - a grid divisor, a
+threadgroup size, a threadgroup-memory length the gate sets - updates every gate that
+hand-dispatches that kernel, in the same change.** A hand-dispatched gate encodes the geometry
+itself, so a moved divisor leaves the gate dispatching the wrong shape with no error; a
+`@workgroup` array's size is compiled into the kernel and no gate carries it.
 
 **A diff that changes a kernel's kargs - the kernel-argument struct, or any buffer binding -
 updates every gate that hand-binds that kernel, in the same change.** A stale hand bind reads
@@ -18,9 +19,10 @@ the wrong buffer and passes on garbage that happens to compare.
 
 **A kernel that gains a kargs field whose non-default value changes what it computes or which
 elements it reads or writes - a branch selector, a row or element base, a stride - ships, in
-the same change, a gate cell that sets that field to a non-default value.** At the default the
-new field has no visible effect: a CPU oracle that ignores it and the kernel that honors it
-agree.
+the same change, a kernel-unit cell that sets that field to a non-default value.** At the
+default the new field has no visible effect: a CPU oracle that ignores it and the kernel that
+honors it agree. A model-level cell that reaches the field does not discharge this: it binds the
+layer's own row, so a base stays at its default there.
 
 **A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
 output - missing a compare against a CPU oracle that can witness the cell's property is a

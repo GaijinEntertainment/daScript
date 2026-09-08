@@ -305,9 +305,9 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count([dn_chunked = true])),
         // the K-quant twin of the hybrid for the resident driver's native-plane cells
         // (tests/test_gpu_resident_hybrid.das): qkv q6_K, z q4_K, beta/alpha q4_K, the deltanet
-        // out plane pinned q8_0 like the 9B UD file's (the step's o row is Q8_0)
+        // out plane q4_K - the step leaves the o row f32 for the superblock out plane's requant
         ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M.gguf",
-            recipe = "llama-quantize --allow-requantize --tensor-type ssm_out=q8_0 Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M.gguf Q4_K_M"),
+            recipe = "llama-quantize --allow-requantize Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M.gguf Q4_K_M"),
         // the 9B hybrid with its in-file MTP block, the whole-model driver's parity carrier
         // (head 256 gated attention, partial rope, Q5_K/Q6_K deltanet planes) and the vulkan
         // serving census's head-256 row; the local name carries the MTP tag the release's does not

@@ -144,5 +144,10 @@ def test_fail_closed_kernel_class(t : T?) {
         check_rejects(t, "_fc_kernel_no_ssbo", "has no @ssbo members")
         check_rejects(t, "_fc_kernel_method_rec", "method call cycle")
         check_rejects(t, "_fc_kernel_method_abstract", "has no resolvable body")
+        // a [spirv_decode] method called directly: one block form per method, one plane, a 32-bit index
+        check_rejects(t, "_fc_decode_mixed", "takes its block the same way at every call")
+        check_rejects(t, "_fc_decode_twoplanes", "takes them from ONE plane")
+        check_rejects(t, "_fc_decode_helper_copy", "takes the element itself")
+        check_rejects(t, "_fc_decode_index64", "a plane element index must be int or uint")
     }
 }

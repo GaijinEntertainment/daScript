@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 33   // an untied Q8 load keeps its Q8_0 token table as quants (emb_q8): the fp32 copy left fblob, a linear q8 copy joined qblob
+let IMAGE_VERSION = 35   // the vulkan flavor's iq4xs/iq3s/iq3xxs/iq2xxs scale planes are two-word rows; a BPE vocab without add_bos takes upstream's per-pre default
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -1650,6 +1650,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             var jobs : array<FillJob>
             var streamed = Model()
             var served = false
+            var saved = false
             let ts_s = ref_time_ticks()
             let save = image_save_enabled()
             let ran = load_gguf_streaming(path, mode, mt, jobs, want_metal) $(gm : GGUFMeta; gbytes : array<uint8>) {
@@ -1657,13 +1658,18 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 if (want_metal && !mt.metal_blob) {
                     return false
                 }
-                served = (save ? save_model_image_streaming(mt, gm, gbytes, jobs, s_img, s_tag, s_quant)
-                    : image_from_model_streaming(mt, streamed, gm, gbytes, jobs, "", s_tag, s_quant))
+                if (save) {
+                    saved = save_model_image_streaming(mt, gm, gbytes, jobs, s_img, s_tag, s_quant)
+                    if (!saved) {
+                        to_log(LOG_WARNING, "dasLLAMA: the image save for '{path}' declined - serving the streamed build from memory\n")
+                    }
+                }
+                served = saved || image_from_model_streaming(mt, streamed, gm, gbytes, jobs, "", s_tag, s_quant)
                 return served
             }
             delete jobs
             delete mt   // the streamed planes never became model planes; the rest goes now
-            if (served && save) {
+            if (saved) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image streamed in {get_time_usec(ts_s) / 1000} ms - {s_img}\n")
                 if (!load_image(s_img, streamed, s_tag, s_quant)) {
                     panic("dasLLAMA: '{s_img}' was just streamed out and will not map back - see the decline above")

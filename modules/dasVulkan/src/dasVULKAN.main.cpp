@@ -1,5 +1,6 @@
 #include "dasVULKAN.h"
 #include <cstdio>
+#include <vector>
 
 #if defined(_WIN32)
 // volk forward-declares the Win32 handle TYPES (HWND/HINSTANCE) but does not pull
@@ -152,6 +153,146 @@ static void * das_vk_debug_callback_ptr() {
     return (void *) das_vk_debug_callback;
 }
 
+enum OsVideoMemoryQuery : int32_t {
+    OSVM_BUDGET = 0,
+    OSVM_USAGE = 1,
+    OSVM_ADAPTER_DEDICATED = 2,
+    OSVM_ADAPTER_SHARED = 3,
+};
+
+#if defined(_WIN32)
+extern "C" __declspec(dllimport) void * __stdcall LoadLibraryA(const char * name);
+extern "C" __declspec(dllimport) void * __stdcall GetProcAddress(void * module, const char * name);
+namespace {
+    struct PdhFmtCounterValue { uint32_t CStatus; uint32_t pad; int64_t largeValue; };
+    struct PdhFmtCounterValueItemA { char * szName; PdhFmtCounterValue FmtValue; };
+    typedef int32_t (__stdcall * PfnPdhOpenQueryA)(const char *, uintptr_t, void **);
+    typedef int32_t (__stdcall * PfnPdhAddEnglishCounterA)(void *, const char *, uintptr_t, void **);
+    typedef int32_t (__stdcall * PfnPdhCollectQueryData)(void *);
+    typedef int32_t (__stdcall * PfnPdhGetFormattedCounterArrayA)(void *, uint32_t, uint32_t *, uint32_t *, PdhFmtCounterValueItemA *);
+    typedef int32_t (__stdcall * PfnPdhCloseQuery)(void *);
+    const uint32_t PDH_FMT_LARGE_ = 0x00000400u;
+    const int32_t PDH_MORE_DATA_ = (int32_t) 0x800007D2;
+
+    uint64_t pdh_adapter_usage(uint32_t luid_lo, uint32_t luid_hi, const char * counter_path) {
+        static PfnPdhOpenQueryA open_q = nullptr;
+        static PfnPdhAddEnglishCounterA add_c = nullptr;
+        static PfnPdhCollectQueryData collect = nullptr;
+        static PfnPdhGetFormattedCounterArrayA get_arr = nullptr;
+        static PfnPdhCloseQuery close_q = nullptr;
+        static bool resolved = false;
+        if (!resolved) {
+            resolved = true;
+            if (void * pdh = LoadLibraryA("pdh.dll")) {
+                open_q = (PfnPdhOpenQueryA) GetProcAddress(pdh, "PdhOpenQueryA");
+                add_c = (PfnPdhAddEnglishCounterA) GetProcAddress(pdh, "PdhAddEnglishCounterA");
+                collect = (PfnPdhCollectQueryData) GetProcAddress(pdh, "PdhCollectQueryData");
+                get_arr = (PfnPdhGetFormattedCounterArrayA) GetProcAddress(pdh, "PdhGetFormattedCounterArrayA");
+                close_q = (PfnPdhCloseQuery) GetProcAddress(pdh, "PdhCloseQuery");
+            }
+        }
+        if (!open_q || !add_c || !collect || !get_arr || !close_q) {
+            return 0;
+        }
+        void * query = nullptr;
+        if (open_q(nullptr, 0, &query) != 0 || !query) {
+            return 0;
+        }
+        uint64_t total = 0;
+        void * counter = nullptr;
+        if (add_c(query, counter_path, 0, &counter) == 0 && collect(query) == 0) {
+            uint32_t bytes = 0, count = 0;
+            if (get_arr(counter, PDH_FMT_LARGE_, &bytes, &count, nullptr) == PDH_MORE_DATA_ && bytes > 0) {
+                std::vector<char> buf(bytes);
+                if (get_arr(counter, PDH_FMT_LARGE_, &bytes, &count, (PdhFmtCounterValueItemA *) buf.data()) == 0) {
+                    char prefix[64];
+                    snprintf(prefix, sizeof(prefix), "luid_0x%08x_0x%08x_phys", luid_hi, luid_lo);
+                    const PdhFmtCounterValueItemA * items = (const PdhFmtCounterValueItemA *) buf.data();
+                    for (uint32_t i = 0; i < count; ++i) {
+                        const char * name = items[i].szName;
+                        bool match = name != nullptr;
+                        for (size_t k = 0; match && prefix[k]; ++k) {
+                            const char a = name[k], b = prefix[k];
+                            match = a != 0 && ((a >= 'A' && a <= 'Z') ? a + 32 : a) == b;
+                        }
+                        if (match && items[i].FmtValue.CStatus == 0 && items[i].FmtValue.largeValue > 0) {
+                            total += (uint64_t) items[i].FmtValue.largeValue;
+                        }
+                    }
+                }
+            }
+        }
+        close_q(query);
+        return total;
+    }
+    struct D3dkmtLuid { uint32_t LowPart; int32_t HighPart; };
+    struct D3dkmtOpenAdapterFromLuid { D3dkmtLuid AdapterLuid; uint32_t hAdapter; };
+    struct D3dkmtCloseAdapter { uint32_t hAdapter; };
+    const uint32_t D3DKMT_SEGMENT_LOCAL = 0;
+    struct D3dkmtQueryVideoMemoryInfo {
+        void *   hProcess;                  // NULL = this process
+        uint32_t hAdapter;
+        uint32_t MemorySegmentGroup;
+        uint64_t Budget;
+        uint64_t CurrentUsage;
+        uint64_t AvailableForReservation;
+        uint64_t CurrentReservation;
+        uint32_t PhysicalAdapterIndex;
+    };
+    typedef int32_t (__stdcall * PfnD3dkmtOpen)(D3dkmtOpenAdapterFromLuid *);
+    typedef int32_t (__stdcall * PfnD3dkmtQuery)(D3dkmtQueryVideoMemoryInfo *);
+    typedef int32_t (__stdcall * PfnD3dkmtClose)(const D3dkmtCloseAdapter *);
+}
+static uint64_t das_vk_os_video_memory(uint32_t luid_lo, uint32_t luid_hi, int32_t query) {
+    static PfnD3dkmtOpen open_fn = nullptr;
+    static PfnD3dkmtQuery query_fn = nullptr;
+    static PfnD3dkmtClose close_fn = nullptr;
+    static bool resolved = false;
+    if (!resolved) {
+        resolved = true;
+        if (void * gdi = LoadLibraryA("gdi32.dll")) {
+            open_fn = (PfnD3dkmtOpen) GetProcAddress(gdi, "D3DKMTOpenAdapterFromLuid");
+            query_fn = (PfnD3dkmtQuery) GetProcAddress(gdi, "D3DKMTQueryVideoMemoryInfo");
+            close_fn = (PfnD3dkmtClose) GetProcAddress(gdi, "D3DKMTCloseAdapter");
+        }
+    }
+    if ((luid_lo == 0 && luid_hi == 0) || query < OSVM_BUDGET || query > OSVM_ADAPTER_SHARED) {
+        return 0;
+    }
+    if (query == OSVM_ADAPTER_DEDICATED) {
+        return pdh_adapter_usage(luid_lo, luid_hi, "\\GPU Adapter Memory(*)\\Dedicated Usage");
+    }
+    if (query == OSVM_ADAPTER_SHARED) {
+        return pdh_adapter_usage(luid_lo, luid_hi, "\\GPU Adapter Memory(*)\\Shared Usage");
+    }
+    if (!open_fn || !query_fn || !close_fn) {
+        return 0;
+    }
+    D3dkmtOpenAdapterFromLuid oa{};
+    oa.AdapterLuid.LowPart = luid_lo;
+    oa.AdapterLuid.HighPart = (int32_t) luid_hi;
+    if (open_fn(&oa) != 0) {
+        return 0;
+    }
+    D3dkmtQueryVideoMemoryInfo q{};
+    q.hAdapter = oa.hAdapter;
+    q.MemorySegmentGroup = D3DKMT_SEGMENT_LOCAL;
+    const int32_t st = query_fn(&q);
+    D3dkmtCloseAdapter ca{};
+    ca.hAdapter = oa.hAdapter;
+    close_fn(&ca);
+    if (st != 0) {
+        return 0;
+    }
+    return query == OSVM_BUDGET ? q.Budget : q.CurrentUsage;
+}
+#else
+static uint64_t das_vk_os_video_memory(uint32_t luid_lo, uint32_t luid_hi, int32_t query) {
+    (void) luid_lo; (void) luid_hi; (void) query;
+    return 0;
+}
+#endif
+
 Module_dasVULKAN::Module_dasVULKAN() : Module("vulkan") {
     ModuleLibrary lib(this);
     lib.addBuiltInModule();
@@ -172,6 +313,8 @@ Module_dasVULKAN::Module_dasVULKAN() : Module("vulkan") {
         SideEffects::modifyExternal, "das_vk_surface_from_native")->args({"instance", "native_window", "native_display"});
     addExtern<DAS_BIND_FUN(das_vk_debug_callback_ptr)>(*this, lib, "vk_debug_callback",
         SideEffects::accessExternal, "das_vk_debug_callback_ptr");
+    addExtern<DAS_BIND_FUN(das_vk_os_video_memory)>(*this, lib, "vk_os_video_memory",
+        SideEffects::accessExternal, "das_vk_os_video_memory")->args({"luid_lo", "luid_hi", "query"});
     verifyAotReady();
 }
 

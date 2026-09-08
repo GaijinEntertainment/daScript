@@ -469,6 +469,35 @@ def public pipeline_exec_props_supported(phys : VkPhysicalDevice) : bool {
     return fpe.pipelineExecutableInfo != 0u
 }
 
+let private OSVM_BUDGET = 0
+let private OSVM_USAGE = 1
+let private OSVM_ADAPTER_DEDICATED = 2
+let private OSVM_ADAPTER_SHARED = 3
+
+//! The OS's video memory numbers for ``phys``, in bytes: this process's dedicated ``budget`` and ``usage``, and the
+//! adapter's ``adapter_dedicated`` and ``adapter_shared`` (system-memory) usage across every process. The query ids are
+//! the C++ side's OsVideoMemoryQuery. Windows only - 0 elsewhere, without a LUID, on failure.
+[arch(at="../ARCHITECTURE.md#os-video-memory")]
+def public os_video_memory(phys : VkPhysicalDevice) : tuple<budget : uint64; usage : uint64; adapter_dedicated : uint64; adapter_shared : uint64> {
+    var idp = VkPhysicalDeviceIDProperties()
+    var p2 = VkPhysicalDeviceProperties2()
+    unsafe {
+        p2.pNext = addr<void?>(idp)
+    }
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    if (idp.deviceLUIDValid == 0u) {
+        return (budget = 0ul, usage = 0ul, adapter_dedicated = 0ul, adapter_shared = 0ul)
+    }
+    var lo = 0u
+    var hi = 0u
+    for (i in range(4)) {
+        lo |= uint(idp.deviceLUID[i]) << uint(8 * i)
+        hi |= uint(idp.deviceLUID[4 + i]) << uint(8 * i)
+    }
+    return (budget = vk_os_video_memory(lo, hi, OSVM_BUDGET), usage = vk_os_video_memory(lo, hi, OSVM_USAGE),
+            adapter_dedicated = vk_os_video_memory(lo, hi, OSVM_ADAPTER_DEDICATED), adapter_shared = vk_os_video_memory(lo, hi, OSVM_ADAPTER_SHARED))
+}
+
 //! create_device_cooperative_matrix PLUS the Vulkan 1.3 subgroup-size-control pair so pipelines can pin
 //! ``requiredSubgroupSize``; each bit is enabled only when the device reports it (degrades to the plain
 //! coopmat device). Instance must be api 1.3; opportunistically enables VK_KHR_pipeline_executable_properties.

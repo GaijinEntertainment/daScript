@@ -4,8 +4,9 @@ Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`
 document carries sections 2.2r-2.2v: the decode attention block over per-layer K/V mirrors,
 the streamed expert layer's GPU/CPU split, the whole-token decode span, the deltanet decode
 step's per-session resident state, and the whole-model driver's hybrid token command. The
-prefill window chain, the cm2 tiles and the MoE expert chain these build on are
-`ARCHITECTURE_GPU_VULKAN.md` sections 2.2j-2.2m and 2.2p-2.2q; the residency plan and the marks
+prefill window chain and byte stores these build on are `ARCHITECTURE_GPU_VULKAN.md` sections
+2.2j, 2.2p and 2.2ab; the cm2 tiles and the MoE expert chain on them are
+`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m and 2.2q; the residency plan and the marks
 swap under them are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o.
 
 ### 2.2r The per-op tier's decode attention block {#decode-attention-block}
@@ -25,9 +26,12 @@ The PREFILL chain's readback is the other way round; its k rows come home roped.
 **The block serves one shape, and `attn_dec_shape_ok` is the whole gate.** The layer's q, k, v
 and o planes are resident, the k source is the layer itself (no shared KV), the session's cache
 is flat (not paged) and neither codec is tq4, the rope covers the whole head, and the model
-carries no qkv or output bias, no v-norm, no attention sinks, no logit softcap, no q gate and no
+carries no output bias, no v-norm, no attention sinks, no logit softcap, no q gate and no
 sliding window - the chain's kernels implement none of them. q, k and v also share one quant
-class, because k and v read the q stack's activation image.
+class, because k and v read the q stack's activation image. A q/k/v projection bias (qwen2moe)
+is served: the layer's `[q | k | v]` row uploads once when its sets are made and binds where the
+rope kernels expect it, so the mirror rows carry the bias; the raw rows that come home are the
+GEMV output before it, and the host store adds the bias before its own norm and rope.
 
 **The mirror is per layer, keyed by the q plane offset, and capped** (`DAT_MIRROR_ROWS` rows;
 VRAM is layers x rows x kvd x 4 bytes). The loader reports that need
@@ -35,7 +39,7 @@ VRAM is layers x rows x kvd x 4 bytes). The loader reports that need
 way the stream slots are carved: the mirrors are allocated after placement, and un-carved they
 came out of the desktop reserve and paged the resident expert stacks (the FFN chain's submit
 went from 147 us to 741 us). The prefill chain fills it from its own f16 K/V
-shadows at the end of each layer's window (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2q's fa arm converts the attended prefix;
+shadows at the end of each layer's window (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q's fa arm converts the attended prefix;
 the fill is a device copy of it), and the block appends one row per served token.
 
 **Ownership is a generation plus a per-layer count.** Every prefill claims ONCE, at the end of
@@ -186,9 +190,10 @@ natively where this driver will be attempted or no GPU rail wants them (Metal of
 grouped, since a grouped file has no exact transcode, and either the whole-model driver armed on
 an expert-free model or a tier whose per-op dense and deltanet rails are unwanted; every other
 case transcodes them to q8, because Metal and the per-op rails bind deltanet q8 only), each GEMV
-dispatches per format and a superblock plane takes the Q8_K x feed - while the out plane is q8,
-since the step's o row feeds it as Q8_0
-(a K-quant out plane declines the layer); the beta and alpha rows are q8 arena planes when
+dispatches per format and a superblock plane takes the Q8_K x feed. The out plane rides its
+file format too: for a q8 plane the step writes the o row as Q8_0 blocks, for a superblock plane
+it writes the f32 row and the Q8_K requant - the attention head's wo twin - makes the out GEMV's
+feed, billed to the out role so the stamp count stands; the beta and alpha rows are q8 arena planes when
 the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
 recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
 base into the smalls. A hybrid takes the split activation rail (no fused add+rms+requant): the f32
@@ -210,6 +215,21 @@ mirror is sized `n_attn x seq_cap x kv_dim` and each attention layer carries its
 (`RLayer.mir_idx`); the K/V sync, readback and hydrate seams address by slot and return at
 once on a recurrent layer. The attention geometry (head size, q and kv widths) is the first
 attention layer's - on qwen35 layer 0 is recurrent.
+
+**A q/k/v projection bias (qwen2) folds into the rope stage.** The biased models' bias rows
+upload once as one row per layer in the projection buffer's own `[q | k | v]` layout
+(`vk_rdec_upload_bias`, a recurrent layer's row zero), bound at the last binding of the three
+rope kernels - the decode rope+store, the prefill's batched twin and the fused qk-norm+rope -
+which add the bias to each element as they read it, before the rotation (or the norm) and
+before the v copy, so no dispatch is added: the CPU chain adds the bias between the projection
+and the norm, and so does this. A model without a bias binds the norms buffer in that slot as
+a placeholder the kernel never reads (`hasb` 0). The seat installs separately
+(`install_moe_gpu_resident_bias`), so a tier without it names the bias in its decline instead
+of serving the model unbiased. The per-op tier carries the same rows through its hooks: the
+decode block binds the layer's row to the same rope kernels (sec.2.2r), and the prefill chain's
+`AtPrep` stage adds the q and k rows before its norm and rope and runs a third pass over the raw
+v window - `AtPrep` with no rope and no norm is a copy plus bias, in place - so the attention and
+the v rows that come home both carry it (`ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op chain).
 
 **Gated attention and partial rotary ride the fused qk-norm+rope kernel and the decode
 attention kernel, not a detour.** On a gated model the q GEMV writes `2 x qd` rows in the

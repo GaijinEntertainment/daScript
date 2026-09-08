@@ -44,12 +44,16 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds, removes or moves a gate (one test cell, or a file between suites), or
-changes the contract a gate pins - what its asserts hold fixed - corrects, in the same change,
-every clause in this folder that names that gate's suite, fixture, model, arm, skip condition
-or pinned contract - a `CLAUDE.md` clause, this checklist's pinned-set entry, or a test file's
-own header.** A clause that only names the file (a brace list, a suite roster) carries nothing
-to correct.
+**A diff that adds, removes or moves a gate - one test cell, or a file between suites - updates
+the `CLAUDE.md` census entry of the file it lands in, in the same change.** A brace list or a
+suite roster that only names the file carries nothing to correct.
+
+**A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
+lost - updates that gate's entry in this checklist's pinned set in the same change.**
+
+**A diff that changes a gate's skip condition - the model, fixture, device or arm it needs -
+updates the test file's own header and the `CLAUDE.md` clause that states it, in the same
+change.**
 
 **A diff that adds, moves, or removes a `[test]` file outside `modules/dasLLAMA/` that carries
 a `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -88,20 +92,20 @@ wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
 pages at `donate_stream`); `test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan
-matmul picks for a given width and row count, and whether that dispatch splits its reduction
-across partial planes); `utils/dasllama-server/test_worker_dispatch.das` (repo root: worker-local fork pools, shared queue policy).
+matmul picks for a given width, row count and coopmat mode, and whether that dispatch splits its
+reduction across partial planes); `utils/dasllama-server/test_worker_dispatch.das` (repo root: worker-local fork pools, shared queue policy).
 
 **A diff that adds a gate whose failure means a documented contract changed, rather than a
 kernel regressing, adds it to the pinned set in the same change** - as a file when every
 cell of it pins, as a named cell otherwise.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell
-that returns without asserting - the module is absent, its models are not stocked, no device
-answered, a capability declined - registers `t |> skip` there; `feint` is a print, not a skip.
+that returns without asserting - whatever the reason - registers `t |> skip` there; `feint` is a
+print, not a skip.
 
-**A cell whose claim needs a capability the box may lack - a window server, an audio device, a
-module the build omits - registers `t |> skip` on that fact before it asserts; a cell that reds
-on one instead is a defect.**
+**A cell whose claim needs a capability the box may lack - a device, a window server, an audio
+device, a module the build omits, a stocked model - registers `t |> skip` on that fact before
+it asserts: never a bare return, never a red.**
 
 **A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
 value, a host toolchain's presence, a compile-time module-presence check

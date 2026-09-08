@@ -27,3 +27,10 @@ only a device run shows the words compute.
 
 **A diff under `modules/dasSpirv` that edits a file under `modules/dasGlsl` or
 `modules/dasOpenGL` is a defect** - dasSpirv copies dasGlsl's design, not its code.
+
+**A diff that adds an `OpVariable` emit to an emitted function's entry block puts it ahead of
+every non-`OpVariable` instruction of that block, and an instruction it emits into that block
+goes after the block's last `OpVariable` - in `emit_user_function`, after `collect_locals` and
+`alloc_call_temps`.** SPIR-V requires every `OpVariable` of a block to lead the block
+(`ARCHITECTURE.md` section 3.5), and CI runs no `spirv-val` to catch an invalid module
+(section 4).

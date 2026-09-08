@@ -9,8 +9,8 @@ that a question answered for one backend has an obvious address in the other. Th
 
 | role | holds | must not hold |
 |---|---|---|
-| the kernel home<br>`dasllama_metal_kernels`, `dasllama_vulkan_classes` | kernel source, the derived-access/PSO census | device state, engine types |
-| `dasllama_<gpu>_common`<br>`dasllama_metal_common`, `dasllama_vulkan_common` | device state, buffer/command plumbing, hazard + capture rail, profiler, shared quant-decode helpers (`iq4_lut`) | driver policy |
+| the kernel home<br>`dasllama_metal_kernels`, `dasllama_vulkan_classes` | kernel source, the kernel-side quant-decode helpers and codebook tables, the derived-access/PSO census; on Vulkan the one device buffer kernel data fills (`kq_grid_dev`, the grid codebooks) | device state other than `kq_grid_dev`, engine types |
+| `dasllama_<gpu>_common`<br>`dasllama_metal_common`, `dasllama_vulkan_common` | device state, buffer/command plumbing, hazard + capture rail, profiler, host-side quant-decode helpers (Metal's `iq4_lut`) | driver policy |
 | `dasllama_<gpu>_decode`<br>`dasllama_metal_decode`, `dasllama_vulkan_decode` | the resident token-step driver + decode-time arms | kernel bodies |
 | `dasllama_<gpu>_prefill`<br>`dasllama_metal_prefill`, `dasllama_vulkan_prefill` | the batched prefill driver + batch arms | kernel bodies |
 | `dasllama_<gpu>_shapes`<br>`dasllama_metal_shapes` | PORTABLE servability gates - no GPU C++ require, so any box can bake | device calls |
@@ -88,7 +88,10 @@ that a question answered for one backend has an obvious address in the other. Th
   `set_moe_gpu_attn_dec_hooks`, the decode FFN tail `set_moe_gpu_ffn_tail_hooks`, the deltanet
   decode step's state seams `set_moe_gpu_dn_state_hooks` (flush, invalidate, release), the
   whole-token span `set_moe_gpu_span_dec_hook` - the span rides common's decode override
-  registry as `vulkan_moe_span`, selected by the MoE placement and declining per token). The
+  registry as `vulkan_moe_span`, selected by the MoE placement and declining per token - the
+  resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, the OS
+  video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, and the
+  weight-bytes seat `install_rdec_note_weight_bytes` the decode warm-up guard reads). The
   installs are one-way: a test that arms the tier installs the seats and never restores them,
   because no uninstall exists and none is needed - a seat serves whatever model loads next; Metal
   deliberately does not, because UMA makes residency moot there and Metal
@@ -223,7 +226,6 @@ its PORT/PORTH/PORTC arms and `benchmarks/attn/lcpp_flash_dk72.metal` are the or
 external reference the shipped `MetalTowerFlash` was decided against, and the DIAL arm races
 the production dialect against them - the bisect seat when the flash regresses.
 
-
 - **Per-simdgroup register-fragment matmul2d (16x32x16, device -> `vec<T,8>` fragments):**
   1.7-2.0x slower for weight GEMMs, vectorized loads and deep n-blocking included. The
   fragment architecture pays for attention's streaming operand reuse (one resident Q against
@@ -258,8 +260,10 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
 
-Sections 2.2j-2.2m and 2.2p-2.2q, the Vulkan resident driver, are `ARCHITECTURE_GPU_VULKAN.md`;
-its 2.2n-2.2o - the residency plan and the marks swap - are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
+Sections 2.2j, 2.2p and 2.2ab, the Vulkan resident driver's prefill chain and byte stores, are
+`ARCHITECTURE_GPU_VULKAN.md`; its 2.2k-2.2m and 2.2q - the cooperative-matrix GEMM tiles - are
+`ARCHITECTURE_GPU_VULKAN_GEMM.md`; its 2.2n-2.2o - the residency plan and the marks swap - are
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 

@@ -107,6 +107,26 @@ def test_tokenizer_qwen35(t : T?) {
 }
 
 [test]
+def test_tokenizer_bos_default(t : T?) {
+    t |> run("a BPE vocab without add_bos_token prepends BOS only for upstream's BOS families") @(t : T?) {
+        t |> success(bpe_pre_adds_bos("llama-bpe") && bpe_pre_adds_bos("tekken"), "the llama3 family and tekken default to a BOS")
+        t |> success(!bpe_pre_adds_bos("qwen35") && !bpe_pre_adds_bos("qwen2") && !bpe_pre_adds_bos("gpt-4o"), "qwen and gpt-4o default to none")
+        //! the upstream vocab fixture carries bos_token_id and no add_bos_token key - the unsloth Qwen3.8 shape
+        let path = path_join(models_dir(), "ggml-vocab-qwen35.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var tk <- load_tokenizer_auto(path)
+        t |> success(!tk.bpe.add_bos, "qwen35 without the key adds no BOS")
+        var ids <- encode(tk, "Once upon a time", true)
+        t |> equal(4, length(ids), "four BPE ids and no BOS in front: {ids}")
+        delete ids
+        delete tk
+    }
+}
+
+[test]
 def test_tokenizer_qwen2(t : T?) {
     corpus_case(t, "qwen2 byte-level BPE vs the llama.cpp corpus", "ggml-vocab-qwen2.gguf")
 }

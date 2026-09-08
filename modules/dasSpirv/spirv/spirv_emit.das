@@ -149,8 +149,9 @@ struct EmitCtx {
     kernel_class  : Structure const?            // the kernel class (resolve_kernel_method's dispatch table); null = module-globals frontend
     member_vars   : table<string; VariablePtr>  // member name -> its synthetic Variable (key into globals)
     member_syms   : array<VariablePtr>          // the synthetic Variables (rooted here for gc_node)
-    invoke_fields : table<uint64>               // intptr(ExprField) of a self-method invoke's method-field read — visitExprField skips these (the invoke arm consumes them structurally)
+    invoke_fields : table<uint64>               //!< intptr(ExprField / ExprRef2Value) a call arm consumes structurally: the visitor skips them (a self-method invoke's method-field read, the block argument of a plane-element decode call)
     invoke_targets : table<uint64; uint64>      // intptr(ExprInvoke) -> intptr(devirtualized Function), resolved at discovery
+    decode_elem_calls : table<uint64; uint64>   //!< intptr(a [spirv_decode] method called on plane elements) -> intptr(that plane's Variable)
     decode_methods : table<uint64; FunctionPtr> // intptr(ExprField of coopmatLoadTensorDecode's self.<method> argument) -> the devirtualized decode Function, resolved at discovery
     callback_funcs : table<uint64; CallbackFn>  // intptr(Function) -> registered [spirv_combine] / [spirv_per_element] function (referenced via @@ from coopmatReduce / coopmatPerElement)
     callback_order : array<uint64>              // callback_funcs keys in stable emission order (first-reference order)
@@ -167,6 +168,8 @@ struct UserFunc {
     valid   : bool          // false = signature rejected at registration (error already emitted)
     is_method : bool        // a kernel-class method: self (arg 0) is dropped from the signature —
                             // members are module-scope OpVariables, so the body needs no receiver
+    block_arg : int = -1    //!< a directly called [spirv_decode] method whose block argument is a plane element: the das index of that parameter (its uint INDEX travels, the body chains through the plane); -1 = the value form
+    block_ssbo : uint64     //!< intptr(Variable) of the plane the element form indexes
 }
 
 // Per ref-argument copy-in/copy-out scratch: a Function-storage OpVariable hoisted into the calling
@@ -3172,6 +3175,7 @@ class SpirvEmit : AstVisitor {
     e2ptr   : table<uint64; uint>        // intptr(Expression) -> lvalue pointer result-id
     e2pty   : table<uint64; uint>        // intptr(Expression) -> pointee type-id (paired with e2ptr)
     e2align : table<uint64; uint>        // intptr(Expression) -> Aligned literal for the OpLoad (set only for PhysicalStorageBuffer-rooted chains — PSB loads REQUIRE the Aligned memory operand)
+    id2sty  : table<uint; uint>          //!< struct value id -> the OpTypeStruct it was loaded as
     ite_ids : table<uint64; IteIds>      // intptr(ExprIfThenElse) -> its {merge, then, else} labels
     lazy_ids : table<uint64; IteIds>     //!< intptr(ExprOp3 / ExprOp2 &&,||) lowered as a branch (ctx.lazy_temps) -> its labels
     loop_ids : table<uint64; LoopIds>    // intptr(ExprWhile/ExprFor) -> its 5 loop-skeleton labels
@@ -3202,6 +3206,9 @@ class SpirvEmit : AstVisitor {
                 delete lops
             } else {
                 emit(bm, SEC_FUNCS, SpvOp.Load, pty, res, pid)
+            }
+            if (e._type != null && e._type.baseType == Type.tStructure) {
+                id2sty[res] = pty
             }
             return res
         }
@@ -4473,10 +4480,35 @@ class SpirvEmit : AstVisitor {
         emit_call_core(bm, uf, expr.arguments, 0, 0, intptr(expr))
     }
 
+    def elem_index_of(var bm : SpirvModule; arg : ExpressionPtr; fname : string) : uint {
+        var pe = arg
+        let r2v = pe ?as ExprRef2Value
+        if (r2v != null) {
+            pe = r2v.subexpr
+        }
+        let at = pe ?as ExprAt
+        if (at == null) {
+            errs |> push("'{fname}': a [spirv_decode] method called directly on plane elements takes the element itself (decode(plane[i], ...)) at every call")
+            return 0u
+        }
+        let bt = at.index._type.baseType
+        if (bt != Type.tUInt && bt != Type.tInt) {
+            errs |> push("'{fname}': a plane element index must be int or uint, not {bt}")
+            return 0u
+        }
+        let iv = value_of(at.index)
+        if (iv == 0u) return 0u
+        if (bt == Type.tUInt) return iv
+        let res = alloc_id(bm)
+        emit(bm, SEC_FUNCS, SpvOp.Bitcast, type_uint(bm), res, iv)
+        return res
+    }
+
     // Shared OpFunctionCall core. `skip` = leading arguments to drop, `fshift` = how far the
     // remaining arguments sit AHEAD of f.arguments — a method invoke is [Cls.method field,
     // receiver, args...] against f.arguments [self, params...], so skip=2 / fshift=1 pairs
     // args[i] with f.arguments[i-1] (and the callee's self was dropped at registration).
+    [arch(at="../ARCHITECTURE.md#direct-decode-call")]
     def emit_call_core(var bm : SpirvModule; uf : UserFunc; arguments : dasvector`ptr`Expression; skip, fshift : int; resKey : uint64) {
         let f = uf.fn
         let res = alloc_id(bm)
@@ -4506,12 +4538,32 @@ class SpirvEmit : AstVisitor {
                 emit(bm, SEC_FUNCS, SpvOp.Store, ct.ptr_id, v)
                 ops |> push(ct.ptr_id)
                 ref_temps |> push((temp = ct.ptr_id, orig = p.id, vt = ct.value_type))
+            } elif (fi == uf.block_arg) {
+                let iv = elem_index_of(bm, arg, "{f.name}")
+                if (iv == 0u) {
+                    delete ops
+                    delete ref_temps
+                    return
+                }
+                ops |> push(iv)
             } else {
-                let v = value_of(arg)
+                var v = value_of(arg)
                 if (v == 0u) {
                     delete ops
                     delete ref_temps
                     return
+                }
+                if (fi < length(f.arguments) && f.arguments[fi]._type.baseType == Type.tStructure) {
+                    let want = emit_value_type(bm, f.arguments[fi]._type, errs)
+                    let have = id2sty?[v] ?? 0u
+                    if (want != 0u && have != 0u && have != want) {
+                        if (bm.version < SPV_VERSION_1_4) {
+                            bm.version = SPV_VERSION_1_4
+                        }
+                        let cv = alloc_id(bm)
+                        emit(bm, SEC_FUNCS, SpvOp.CopyLogical, want, cv, v)
+                        v = cv
+                    }
                 }
                 ops |> push(v)
             }
@@ -6970,6 +7022,12 @@ def private register_user_func(var m : SpirvModule; var ctx : EmitCtx; f : Funct
             uf.valid = false
             continue
         }
+        if (is_struct && uf.block_arg < 0 && key_exists(ctx.decode_elem_calls, intptr(f))) {
+            uf.block_arg = ai
+            uf.block_ssbo = ctx.decode_elem_calls?[intptr(f)] ?? 0ul
+            ptypes |> push(type_uint(m))
+            continue
+        }
         let vt = emit_value_type(m, at, errors)
         if (vt == 0u) {
             uf.valid = false
@@ -7425,6 +7483,45 @@ class private SpirvMethodScan : AstVisitor {
         ctx.invoke_fields |> insert(intptr(da0))
         found_decode |> push(mfn)
     }
+    [arch(at="../ARCHITECTURE.md#direct-decode-call")]
+    def note_decode_elem_arg(mfn : FunctionPtr; expr : ExprInvoke const?) : void {
+        if (!function_has_annotation(mfn, "spirv_decode") || length(expr.arguments) < 3) return
+        let a0 = expr.arguments[2]
+        let r2v = a0 ?as ExprRef2Value
+        let at = (r2v != null ? r2v.subexpr : a0) ?as ExprAt
+        let sv = at != null ? self_member_of(at.subexpr) : null
+        let key = intptr(mfn)
+        let prev = ctx.decode_elem_calls?[key] ?? 0ul
+        if (sv == null || !(ctx.globals?[intptr(sv)] ?? GlobalInfo()).is_ssbo) {
+            if (prev != 0ul) {
+                errs |> push("'{mfn.name}': a [spirv_decode] method called directly takes its block the same way at every call - one call passes a plane element, this one does not")
+            }
+            return
+        }
+        if (prev != 0ul && prev != intptr(sv)) {
+            errs |> push("'{mfn.name}': a [spirv_decode] method called directly on plane elements takes them from ONE plane ('{sv.name}' here, another plane elsewhere)")
+            return
+        }
+        ctx.decode_elem_calls[key] = intptr(sv)
+        ctx.invoke_fields |> insert(intptr(a0))
+    }
+    def self_member_of(e : ExpressionPtr) : VariablePtr {
+        var pe = e
+        let r2v = pe ?as ExprRef2Value
+        if (r2v != null) {
+            pe = r2v.subexpr
+        }
+        let fld = pe ?as ExprField
+        if (fld == null) return null
+        var be = fld.value
+        let br2v = be ?as ExprRef2Value
+        if (br2v != null) {
+            be = br2v.subexpr
+        }
+        let bv = be ?as ExprVar
+        if (bv == null || !bv.varFlags.argument || intptr(bv.variable) != self_arg) return null
+        return ctx.member_vars?["{fld.name}"] ?? null
+    }
     def override preVisitExprInvoke(expr : ExprInvoke?) : void {
         if (key_exists(ctx.invoke_targets, intptr(expr))) return
         let fld = invoke_self_method_field(self_arg, expr)
@@ -7435,6 +7532,7 @@ class private SpirvMethodScan : AstVisitor {
         delete lerr
         if (mfn == null) return
         ctx.invoke_targets |> insert(intptr(expr), intptr(mfn))
+        note_decode_elem_arg(mfn, expr)
         // suppress the structural operands: the method-field read + its wrapper, and the WHOLE
         // receiver chain (a base-class method's receiver arrives upcast: Ref2Value/Cast wrappers
         // down to self) — the invoke arm consumes them without producing values
@@ -7659,9 +7757,26 @@ def private alloc_call_temps(var m : SpirvModule; var ctx : EmitCtx; f : Functio
     }
 }
 
+[arch(at="../ARCHITECTURE.md#direct-decode-call")]
+def private spills_struct_param(var m : SpirvModule; at : TypeDecl?) : bool {
+    if (at == null || at.baseType != Type.tStructure || at.structType == null
+            || coopmat_info(at).ok || sampler_info(at).ok || "{at.structType.name}" == "rayQueryEXT"
+            || tensor_object_type_of(m, at).id != 0u) {
+        return false
+    }
+    for (fld in at.structType.fields) {
+        if (fld._type != null && (fld._type.baseType == Type.tFixedArray || fld._type.baseType == Type.tStructure)) {
+            return true
+        }
+    }
+    return false
+}
+
 // Emit one user-defined shader function: OpFunction, its OpFunctionParameters (value params bind an
-// SSA id; ref params bind a Function pointer), the entry block (locals + ref-arg temps), the body,
-// and the trailing return. The result id / type were pre-allocated by register_user_func.
+// SSA id, a struct value param additionally spills into a Function local; ref params bind a Function
+// pointer), the entry block (locals + ref-arg temps + the spill stores), the body, and the trailing
+// return. The result id / type were pre-allocated by register_user_func.
+[arch(at="../ARCHITECTURE.md#direct-decode-call")]
 def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : UserFunc; var errors : array<string>) {
     let f = unsafe(reinterpret<FunctionPtr>(uf.fn))   // read-only emission; strip pointee const
     emit(m, SEC_FUNCS, SpvOp.Function, uf.ret_type, uf.fn_id, 0u, uf.type_id)
@@ -7671,19 +7786,31 @@ def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : User
     if (uf.is_method && !empty(f.arguments)) {
         ctx.self_arg = intptr(f.arguments[0])
     }
+    var spills : array<tuple<arg : uint64; param_id : uint; value_type : uint>>
+    var elem_arg = 0ul
+    var elem_pid = 0u
     for (arg, ai in f.arguments, count()) {
         if (uf.is_method && ai == 0) {
             continue
         }
         let at = arg._type
-        let vt = emit_value_type(m, at, errors)
         let pid = alloc_id(m)
+        if (ai == uf.block_arg) {
+            emit(m, SEC_FUNCS, SpvOp.FunctionParameter, type_uint(m), pid)
+            elem_arg = intptr(arg)
+            elem_pid = pid
+            continue
+        }
+        let vt = emit_value_type(m, at, errors)
         if (is_out_param(at)) {
             // written through: the pointer binds as a memory local, so a field of it access-chains
             // and a bare write stores -- exactly like a `var` local declared in the body.
             let pt = type_pointer(m, SpvStorageClass.Function, vt)
             emit(m, SEC_FUNCS, SpvOp.FunctionParameter, pt, pid)
             ctx.local_vars |> insert(intptr(arg), LocalVar(ptr_id = pid, value_type = vt))
+        } elif (spills_struct_param(m, at)) {
+            emit(m, SEC_FUNCS, SpvOp.FunctionParameter, vt, pid)
+            spills |> push((arg = intptr(arg), param_id = pid, value_type = vt))
         } else {
             // read-only: binds an SSA id, off which a field read is an OpCompositeExtract like any
             // other struct value.
@@ -7694,8 +7821,31 @@ def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : User
     let id_label = alloc_id(m)
     emit(m, SEC_FUNCS, SpvOp.Label, id_label)
     ctx.terminated = false
+    var spill_vars : array<uint>
+    spill_vars |> reserve(length(spills))
+    for (s in spills) {
+        let pt = type_pointer(m, SpvStorageClass.Function, s.value_type)
+        let vid = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.Variable, pt, vid, uint(SpvStorageClass.Function))
+        ctx.local_vars |> insert(s.arg, LocalVar(ptr_id = vid, value_type = s.value_type))
+        spill_vars |> push(vid)
+    }
     collect_locals(m, ctx, f.body, errors)
     alloc_call_temps(m, ctx, f, errors)
+    for (s, si in spills, count()) {
+        emit(m, SEC_FUNCS, SpvOp.Store, spill_vars[si], s.param_id)
+    }
+    if (elem_arg != 0ul) {
+        let gi = ctx.globals?[uf.block_ssbo] ?? GlobalInfo()
+        let ept = type_pointer(m, gi.storage, gi.elem_type)
+        let chain = alloc_id(m)
+        var eops <- [ept, chain, gi.var_id, const_uint(m, 0u), elem_pid]
+        emit_n(m, SEC_FUNCS, SpvOp.AccessChain, eops)
+        delete eops
+        ctx.local_vars |> insert(elem_arg, LocalVar(ptr_id = chain, value_type = gi.elem_type, is_opaque = true, storage = gi.storage))
+    }
+    delete spills
+    delete spill_vars
     drive_emit(m, ctx, f, errors)
     if (!ctx.terminated) {
         if (uf.is_void) {

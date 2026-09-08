@@ -371,12 +371,17 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    vulkan-tagged tests) or make it refuse loudly when a test declares a vulkan requirement
    it cannot satisfy.
 
-17. **VK_EXT_pageable_device_local_memory - the missing half of the residency shield.** The
-   tier chains VK_EXT_memory_priority (priority 1.0 on every device allocation, the armed
-   "residency shield"); the companion extension - runtime `vkSetDeviceMemoryPriorityEXT` +
-   the pageable-aware device-local signal WDDM wants - has zero references in the tree.
-   Small addition: enable when present, and consider demoting cold stacks' priority instead
-   of only boosting everything.
+17. **The residency plan off Windows still guesses.** On Windows the plan sizes against the OS
+   video memory budget (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n, the `os_video_memory`
+   boost helper); elsewhere the 27% headroom share stands, measured on the tagged arm and never
+   re-measured. Two tails: (a) Linux NVIDIA fails an allocation past the card with
+   `OUT_OF_DEVICE_MEMORY`, which `vk_check` turns into a process death - the arena reserve and
+   the mirror allocation should catch it and retry the plan at a shorter context, the remedy
+   the plan already carries; (b) AMD's kernel driver evicts buffers the way WDDM does, so the
+   Mesa `heapBudget` (kernel accounting, system-wide) should feed the plan the way the Windows
+   budget does, and the demotion check needs an AMD reading. The 8 GB-card ladder that set the
+   fixed 2 GiB term is also tagged-arm data. The boost creators enable both memory extensions
+   whenever the card reports them; `vkSetDeviceMemoryPriorityEXT` stays unreferenced.
    MEASURED INCIDENT (2026-08-27, zen2): the ReBAR weight arena (mapped
    host-visible|device-local heap, "uploads write direct to VRAM") LOST WDDM residency
    mid-session - every weight-reading role fell to PCIe speed (decode 254 ms/token = 13.4
@@ -631,16 +636,16 @@ module) is independent and can land any time - it is pure structure.
     those is the memo's delta 1 (scale hoist), delta 2 (scale interleave) and delta 8 (codebook
     and prologue) rows, each behind its own probe A/B.
 
-35. **The grid-format GEMV workgroup re-stage is a fixed per-workgroup cost - amplified on
-    small models.** Every u64-grid gemv (iq2s 8 KB, iq2xs 4 KB) stages the codebook into
-    workgroup memory per 2-row workgroup, so tg pays a fixed latency the row length must
-    amortize. On the 3B i1 vehicle iq2s tg landed 0.81x llama.cpp (~350 GB/s effective);
-    the 1B IQ2_XS vehicle lands 0.54x (188.7 vs 349.9 t/s = ~84 GB/s effective - latency-
-    bound, while its cm2 pp512 sits at a healthy 0.77x). Levers, in likely order: persist
-    the staged grid across the row loop (one stage per SM residency, not per workgroup),
-    widen rows-per-workgroup for grid formats, or fold the grid into a device-buffer read
-    the L2 serves. Done = 1B-class grid-format tg within the k-format band on the same
-    vehicle.
+35. **The grid-format tiles still stage their codebooks from the constant composite.** The
+    GEMV half is done: the five grid GEMVs stage from the family's grid buffer
+    (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab) and sit in the k-format band (iq2s 84 -> 388
+    GB/s at the 27B gate shape; the serial constant read, not the stage's bytes, was the
+    cost). `KqBatch*` and the cm2 `IQ*GRID` axes still stage through the `*_grid_word`
+    accessors - amortized over a tile, so no measured loss yet; the buffer form is there
+    when a probe row says otherwise. The other lever stands: rows-per-subgroup > 1 for the
+    small-d roles (a 27B k/v projection dispatches 1024 two-row workgroups), the shell's
+    `rg` loop striding the grid, so a stage covers more rows. Done = a small-d grid GEMV
+    row within the k-format band in `harness/vk_gemv_probe.das`.
 
 36. **Hand-laid four-wide decode twins for iq3s, iq2s and iq2xxs.** The emitter's synthesized
     twin (four calls of the scalar decode) loses on three formats (`harness/vk_gemm_probe.das --
@@ -731,7 +736,11 @@ module) is independent and can land any time - it is pure structure.
     run exits clean. (e) The tier's kernels assume a 32-lane subgroup - the shuffle reductions'
     xor ladders, the scan's lane-pair arithmetic (`lanes_per_pair`), the GEMV's rows per workgroup
     - and the init refuses a smaller `subgroupSize`; a wider one (a wave64 device) runs those
-    arms unmeasured. Done = a validation message naming `qk_rms_cls` by name, and a wave64 run
+    arms unmeasured. The KHR kq tile (`KqCm2BatchT`'s `KHR` arm, 2026-09-07) is the one site
+    that GATES on it instead: eight subgroups own its 128 weight rows, so `pf_f16_feed` admits
+    a kq format in mode 3 only at subgroup 32 (`khr_kq_tile_on`), and a wave64 card keeps its kq planes on
+    the sdot4 batch tile - the wave64 twin (four subgroups, 32 rows each) is owed with the
+    wave64 run. Done = a validation message naming `qk_rms_cls` by name, and a wave64 run
     of the kernel-unit suite. The emitter's operand laziness itself - eager `select` / bool `&`
     `|` as language surface, the purity heuristic dropped, the 12 kernel sites converted - is
     `plans/shader_emitter_followups.md` item 1.
@@ -740,3 +749,68 @@ module) is independent and can land any time - it is pure structure.
     with nothing to assert registers `t |> skip`, so on a box without a Vulkan device every cell of
     the model-free suite reports PASS having done nothing - the hybrid ladder's fa/dn cells follow
     the file's idiom. Done = a file-wide conversion to `t |> skip` on the no-device and no-cm2 paths.
+42. **End of the 27B arc: the cm2-disabled sweep.** Every 27B row on the board is a cm2 row
+    (NV_cooperative_matrix2 on the 5060 Ti). Boris (2026-09-07): measure each file with the
+    tensor tiles off, both engines - ours `DASLLAMA_COOPMAT=mm` (KHR coopmat mul_mm) and
+    `DASLLAMA_COOPMAT=sdot4` + `DASLLAMA_VK_FA=0` (no cooperative matrix at all), llama.cpp
+    `GGML_VK_DISABLE_COOPMAT2=1` and `GGML_VK_DISABLE_COOPMAT=1` - to learn what cm2 buys,
+    where we stand against llama.cpp on the same arm, and whether every format's non-cm2 tile
+    (the `KqBatch*` sdot4 tier serves every kq format) decodes and prefills correctly - the
+    bench's sanity argmax and logit must match the cm2 run's. The real proof of a lower target
+    is a run on one (a Turing or Ampere card, an RDNA card): the knob arms exercise the kernels,
+    not the device-creation path a card without the extension takes. Done = the four arms on
+    UD-IQ4_XS, UD-Q3_K_XL and i1-IQ3_S in the PR body. The row from a non-5060 card is the
+    real-hardware pass, a follow-up arc after every family works here (Boris 2026-09-07): rented
+    boxes - AWS g4dn (T4, the KHR arm on NVIDIA's driver) and g6e/p4d (48-80 GB, the fully
+    resident 27B Q8 and 35B MoE), an RDNA3/4 card from a GPU marketplace (AWS's AMD parts predate
+    cooperative matrix) - each with a written plan of what to run where.
+    FIRST PAIR (UD-IQ4_XS, 5060 Ti, pin 14000, 2026-09-07): decode is flat on every arm (ours
+    23.4 on all three, llama.cpp 24.1) and the sanity argmax holds (pp 13, tg 5709). Prefill:
+    cm2 860.8 vs 813.7; KHR coopmat 221.2 vs 677.5 (0.33x); no coopmat 215.7 vs 312.6 (0.69x).
+    The cause of the 0.33x: the kq formats have no KHR-coopmat tile - `DASLLAMA_COOPMAT=mm`
+    serves only the q8 planes on the mul_mm L-tile and every kq plane on the `KqBatch*` sdot4
+    tile, so mm and sdot4 read the same on a kq-only file. A card without NV_coopmat2 (every
+    AMD and Intel part, the GTX line) prefilled a 27B at a third of the reference exe's rate.
+    The fix was the format decode on the mul_mm L-tile, the way it moved onto the cm2 template.
+    THE KHR kq TILE LANDED (2026-09-07 evening, `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l): the
+    cm2 template's KHR arm, every kq format, 0 of 89600 off on all thirteen; the 4B Q4_K_M mm row
+    1564 -> 2378 (0.56x llama.cpp's KHR 4221), the 27B UD-IQ4_XS 221 -> 395 (0.59x of 675), decode
+    unchanged. Its three measured steps: the decode call on the plane element (the block copy ran
+    the tile at a third), 16-byte activation loads, a 32-deep k step (the 64-deep one blew the
+    49152 B workgroup cap on the iq2 grids). THE SLAB (the same evening): the probe's copy of the
+    tile body read 33 TFLOP/s where the shipped class read 25.6, and the difference was the 8 KB
+    edge-store slab the shipped class carried beside its two 10 KB staging arrays - the probe's
+    `slab` arm, the copy plus that one array touched on a path no dispatch takes, reads 28.5:
+    8 KB more shared memory per workgroup is one workgroup fewer per SM. The staging arrays are
+    now `uint` f16 pairs (the activation words stored as they arrive, no unpack) and the edge
+    tile's f32 fragments bounce through the weight array once the k loop is done, the row guards
+    hoisted out of the loop: the shipped class 25.6 -> 32.1 / 23.9 -> 31.4 / 25.6 -> 32.2 on the
+    gate / down / q shapes, the kernel suite 108 of 108 with its edge-tile cells, the hybrid file
+    10 of 10 on the KHR arm, the 4B Q4_K_M mm row 2378 -> 3051 (0.72x of llama.cpp's 4221; the
+    probe's khr row 32.6 / 31.8 / 32.6 on a box holding 1.3 GB for other processes). The 27B
+    UD-IQ4_XS row's re-measure is owed: at 1.2 GB held by other processes the resident plan's
+    KV room fell to 147 MB, under the 2048-position minimum, and the driver declined - the row
+    needs the box the board's 395.2 was taken on (about 650 MB held).
+    WHERE THE REST IS: llama.cpp's non-cm2 path does not
+    run K-quants on tensor cores at all - `quantize_y` (ggml-vulkan.cpp, needs integer dot and no
+    coopmat2) routes them to the integer MMQ tile (`matmul_q4_k_q8_1`: 128 threads, 128 x 128 x 32,
+    Q8_1 activations with a per-32 (d, sum), a 4 x 32 f32 register block per thread over
+    dotPacked4x8, the sub-block (d*sc, dmin*m) folded per 32-k block), measured 43-46 TFLOP/s-eq
+    on the 9728/4096 x 2560 shapes and 27-31 on the 80-workgroup ones (its Vulkan build under
+    `GGML_VK_PERF_LOGGER=1`, the 4B prefill on the 5060 Ti) against our f16 KHR tile's 32 on the
+    large shapes (`harness/vk_gemm_probe.das -- khrx`, same card, after the slab fix above; 25 before it). The road to parity on the KHR arm is that tile on our side - a new body with
+    per-format int8 word decodes (the sdot4 `KqBatch` tier's `stage_w` is the same decode at a
+    32 x 32 superblock shape) - and it lifts every integer-dot card with or without coopmat.
+    THE FIRST PROTOTYPES (2026-09-07, `harness/vk_gemm_probe.das -- mmqx`): three register-block
+    shapes over the sdot4 k4 staging (64 x 32 at 4 x 8 per thread staged per superblock; the
+    reference exe's one-block stage at 64 x 128, 4 x 16; that stage at 4 x 4 as named scalars)
+    all read 8.8-9.2 TFLOP/s against the shipped tile's 12.2, and the named-scalar twin with
+    CONSTANTS in place of the plane reads reads 11.0 - the inner loop caps the shape, not the
+    memory: per block a thread issues 24 shared loads and 160 sdot4 for 16 outputs, the reference
+    exe's 4 x 32 block 40 loads for 1024. Two prerequisites before the next prototype: (a) the
+    SPIR-V emitter unrolls `for [unroll] (i in range(N))` at emission (today it emits a hinted
+    loop, and a fixed-array local stays a Function-storage variable indexed by the loop counter -
+    `plans/shader_emitter_followups.md`), so a 128-accumulator block can be written as an array
+    with constant indices the driver promotes to registers; (b) a hardware profile of the ceiling
+    twin (Nsight, not another blind bisect) to see whether the sdot4 issue rate, the shared-load
+    rate or the barrier stalls at two workgroups per SM hold it at 11.

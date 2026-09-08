@@ -63,6 +63,64 @@ let GGML_TYPE_IQ4_XS = 23
 let GGML_TYPE_BF16 = 30
 let GGML_TYPE_MXFP4 = 39
 
+//! Bytes `n` elements of a ggml type take on disk (block bytes x blocks); 0 for a type the loader
+//! does not know, so a census sums what it can and names the rest.
+def ggml_type_bytes(gt : int; n : int64) : int64 {
+    if (gt == GGML_TYPE_F32) return n * 4l
+    if (gt == GGML_TYPE_F16 || gt == GGML_TYPE_BF16) return n * 2l
+    if (gt == GGML_TYPE_Q4_0 || gt == GGML_TYPE_IQ4_NL) return n / 32l * 18l
+    if (gt == GGML_TYPE_Q5_0) return n / 32l * 22l
+    if (gt == GGML_TYPE_Q5_1) return n / 32l * 24l
+    if (gt == GGML_TYPE_Q8_0) return n / 32l * 34l
+    if (gt == GGML_TYPE_MXFP4) return n / 32l * 17l
+    if (gt == GGML_TYPE_Q2_K) return n / 256l * 84l
+    if (gt == GGML_TYPE_Q3_K || gt == GGML_TYPE_IQ3_S) return n / 256l * 110l
+    if (gt == GGML_TYPE_Q4_K) return n / 256l * 144l
+    if (gt == GGML_TYPE_Q5_K) return n / 256l * 176l
+    if (gt == GGML_TYPE_Q6_K) return n / 256l * 210l
+    if (gt == GGML_TYPE_IQ2_XXS) return n / 256l * 66l
+    if (gt == GGML_TYPE_IQ2_XS) return n / 256l * 74l
+    if (gt == GGML_TYPE_IQ2_S) return n / 256l * 82l
+    if (gt == GGML_TYPE_IQ3_XXS) return n / 256l * 98l
+    if (gt == GGML_TYPE_IQ4_XS) return n / 256l * 136l
+    return 0l
+}
+
+//! The ggml type a kq format's plane converts from; -1 for a format no ggml type spells.
+def kq_ggml_type(f : KqFmt) : int {
+    if (f == KqFmt.q8) return GGML_TYPE_Q8_0
+    if (f == KqFmt.q40) return GGML_TYPE_Q4_0
+    if (f == KqFmt.iq4nl) return GGML_TYPE_IQ4_NL
+    if (f == KqFmt.q51) return GGML_TYPE_Q5_1
+    if (f == KqFmt.k2) return GGML_TYPE_Q2_K
+    if (f == KqFmt.k3) return GGML_TYPE_Q3_K
+    if (f == KqFmt.iq3s) return GGML_TYPE_IQ3_S
+    if (f == KqFmt.k4) return GGML_TYPE_Q4_K
+    if (f == KqFmt.k5) return GGML_TYPE_Q5_K
+    if (f == KqFmt.k6) return GGML_TYPE_Q6_K
+    if (f == KqFmt.iq4xs) return GGML_TYPE_IQ4_XS
+    if (f == KqFmt.iq3xxs) return GGML_TYPE_IQ3_XXS
+    if (f == KqFmt.iq2s) return GGML_TYPE_IQ2_S
+    if (f == KqFmt.iq2xs) return GGML_TYPE_IQ2_XS
+    if (f == KqFmt.iq2xxs) return GGML_TYPE_IQ2_XXS
+    return -1
+}
+
+//! Bytes `n` weights of a kq format take on disk (the ggml block sizes) - what a device plane
+//! is measured against; q8 counts its Q8_0 blocks.
+def kq_disk_bytes(f : KqFmt; n : int64) : int64 => ggml_type_bytes(kq_ggml_type(f), n)
+
+let private GGML_TYPE_NAMES <- {
+    GGML_TYPE_F32 => "F32", GGML_TYPE_F16 => "F16", GGML_TYPE_BF16 => "BF16",
+    GGML_TYPE_Q4_0 => "Q4_0", GGML_TYPE_Q5_0 => "Q5_0", GGML_TYPE_Q5_1 => "Q5_1", GGML_TYPE_Q8_0 => "Q8_0", GGML_TYPE_MXFP4 => "MXFP4",
+    GGML_TYPE_Q2_K => "Q2_K", GGML_TYPE_Q3_K => "Q3_K", GGML_TYPE_Q4_K => "Q4_K", GGML_TYPE_Q5_K => "Q5_K", GGML_TYPE_Q6_K => "Q6_K",
+    GGML_TYPE_IQ2_XXS => "IQ2_XXS", GGML_TYPE_IQ2_XS => "IQ2_XS", GGML_TYPE_IQ2_S => "IQ2_S",
+    GGML_TYPE_IQ3_XXS => "IQ3_XXS", GGML_TYPE_IQ3_S => "IQ3_S", GGML_TYPE_IQ4_NL => "IQ4_NL", GGML_TYPE_IQ4_XS => "IQ4_XS"
+}
+
+//! The ggml type's upstream spelling for logs ("Q4_K", "IQ3_S"); "type N" for one the loader does not know.
+def ggml_type_name(gt : int) : string => GGML_TYPE_NAMES?[gt] ?? "type {gt}"
+
 // MXFP4 e2m1 magnitudes DOUBLED (nibble -> ±{0,.5,1,1.5,2,3,4,6}×2, OCP MX spec); the E8M0
 // block scale below is halved to compensate.
 let private MXFP4_KVALUES = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,

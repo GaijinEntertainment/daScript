@@ -216,7 +216,25 @@ either way, and a missing pair leaves the bits off.
 partial-subgroup guards. A pipeline it returns is valid only on a device from a creator that
 enabled the pair, and only for a workgroup width that is a multiple of the subgroup size.
 
-## 12. Documentation pipeline
+## 12. The OS's video memory numbers {#os-video-memory}
+
+`vk_os_video_memory` (`src/dasVULKAN.main.cpp`, bound by hand) answers what Vulkan cannot: how
+much of the adapter's dedicated memory every process holds right now, and how much system memory
+the adapter maps, beside this process's ceiling and its own usage. Its query is one of four
+(`OsVideoMemoryQuery`): the process's budget, the process's usage, the adapter's dedicated usage
+across every process, and the adapter's shared usage across every process. On Windows the ceiling
+and the usage come from three gdi32 exports (`D3DKMTOpenAdapterFromLuid`,
+`D3DKMTQueryVideoMemoryInfo`, `D3DKMTCloseAdapter`) over the LOCAL segment group, and the
+adapter-wide numbers from pdh's "GPU Adapter Memory" Dedicated Usage and Shared Usage counters
+summed over the instances named by the adapter's LUID (`luid_0x<hi>_0x<lo>_phys_<n>`, one per
+physical segment); every entry point is resolved by name (no import library, no WDK, the structs
+spelled from `d3dkmthk.h` and `pdh.h`), and everywhere else, or whenever a call fails, the answer
+is 0, which a caller reads as "no answer". The boost helper `os_video_memory` takes the LUID from
+`VkPhysicalDeviceIDProperties` and returns the four. Neither `VK_EXT_memory_budget` nor the
+process's own WDDM budget carries the desktop: on the NVIDIA Windows driver both read the card
+minus the OS reserve whatever other processes hold.
+
+## 13. Documentation pipeline
 
 `utils/vulkan2rst.das` documents the ergonomic layer into the generated stdlib pages of the
 main Sphinx tree by RTTI introspection, modeled on the `imgui2rst` of dasImgui. The hand-filled
@@ -238,7 +256,7 @@ explains the patterns and points at the spec, which stays correct as the registr
 
 Doc snippets are not compile-checked.
 
-## 13. Tutorial units
+## 14. Tutorial units
 
 A tutorial is a self-contained unit under `tutorials/<NN_name>/`: an offscreen module, its
 `[compute_shader]` or `[shader]` blob, a pixel-oracle `[test]` that CI gates, and a
@@ -254,7 +272,7 @@ resident single-float-pushconstant compute-to-image builder, held as two copies 
 reason. A non-digit shared path such as `tutorials/common/` is what a third windowed compute
 tutorial would need.
 
-## 14. CI gates
+## 15. CI gates
 
 - `.github/workflows/vulkan_checks.yml` - the per-PR gate, paths-filtered to
   `modules/dasVulkan/**` so an unrelated PR pays nothing. It carries the two cheap correctness
@@ -271,6 +289,6 @@ paravirtualized GPU that MoltenVK cannot render the suite on.
 and compute into a storage buffer. No window, no subprocess. A test body calls
 `volkInitialize()` itself, because nothing in the harness does it.
 
-## 15. Exception ledger
+## 16. Exception ledger
 
 Empty. No rule in `REVIEW.md` has a ruled-acceptable case here yet.

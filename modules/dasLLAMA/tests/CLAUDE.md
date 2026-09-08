@@ -207,7 +207,11 @@ GPU-less boxes), and the flavor image round-trips the plan verbatim.
 
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
-under `DASLLAMA_PARITY_FULL=1`) is the KERNEL COVERAGE census (the census-row obligation is
+under `DASLLAMA_PARITY_FULL=1`; every prefill tile family is reached through the qwen3 Q8_0 and
+Q4_K_M and the 1B llama requants, machine-local like the other fixtures - the `-local` ones are
+minted from the bartowski Q8_0 with `llama-quantize --allow-requantize <q8> <out> <type>` - each
+swept under the coopmat modes its planes have twins in: all five for q8 and q40, the box's mode,
+mm and sdot4 for the other kq formats) is the KERNEL COVERAGE census (the census-row obligation is
 `REVIEW.md`'s): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels - never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",
@@ -255,11 +259,21 @@ suite: the runner disarms the guard that tripwire asserts. The map below is part
 two lists together are the census.
 `test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
 era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
-pairings, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
+pairings, a q8 pair carrying the q/k/v projection bias, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
 device router + top-k against `moe_select_core`, plus the `vulkan_moe_span` override reached
 through its registry.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, and the streamed split's async head.
+`test_vulkan_kernels.das` - model-free (a Vulkan device, else skips): the per-class CPU-oracle
+units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
+oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The thirteen per-format tile
+cells (`test_vkd_<fmt>_cm2_batch`) run four arms: the cm2 l/m/s tiles in mode 4 on an
+NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
+32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm;
+`test_vkd_direct_decode`
+proves a `[spirv_decode]` method called from a kernel body on the plane element (the KHR arm's
+staging form: the index travels, the callee chains through the plane) is an ordinary call on
+the device, against the same method run on the CPU.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -312,7 +326,9 @@ deltanet decode step, and skips otherwise.
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
-shape is named in the text a user reads, a served one yields "".
+shape is named in the text a user reads, a served one yields ""; plus the KV mirror's binding cap
+(`resident_binding_ctx`) on a hybrid shell whose layer 0 is recurrent, its dense twin, and a
+shell with no attention layer.
 `test_gpu_resident_hybrid.das` - stocked suite; the whole-model resident driver on a deltanet
 hybrid (Qwen3.5-0.8B-Q8_0, `DASLLAMA_GPU=1`): the resident window chain prefills (recurrent
 layers through conv + chunked scan on device state, gated partial-rope attention over the
@@ -325,11 +341,19 @@ prompt one window plus 88 rows long), one-past-the-window (one row past one wind
 shortens the preceding window so the last one still carries the conv taps) and two-token (a
 prompt shorter than the conv taps: the conv history ring's leading rows are zero) cells; skips
 without the model or the armed tier. The K-quant twin (`Qwen3.5-0.8B-Q4_K_M.gguf`, minted from
-the Q8_0 by the recipe its `../performance/model_specs.das` row carries, which pins one
-tensor - the deltanet out projection (`ssm_out`) - to Q8_0) runs the same one-window and
-two-window cells with the deltanet qkv (q6_K) and z (q4_K) planes in their file formats on the
-driver, asserts the loader kept them so, and holds a 6% bar (the K-quant chain's device-vs-CPU
-noise runs near double the Q8 file's, flat across steps).
+the Q8_0 by the recipe its `../performance/model_specs.das` row carries) runs the same one-window
+and two-window cells with the deltanet qkv (q6_K), z (q4_K) and out (q4_K) planes in their file
+formats on the driver, asserts the loader kept them so, and holds a 6% bar (the K-quant chain's device-vs-CPU
+noise runs near double the Q8 file's, flat across steps). Both files make their sessions on the
+mirror codec the box arms, so under `DASLLAMA_VK_KV32=1` the Q8 cells run on the f32 mirrors and
+the K-quant cells skip (their bar is calibrated on the f16 mirror). Run under `DASLLAMA_COOPMAT=mm` the
+same file is the KHR arm's end-to-end gate: the K-quant twin's planes then prefill on the KHR kq
+tile (mode 3), and the bars hold there too.
+`test_gpu_resident_qwen2.das` - stocked suite; the whole-model resident driver on a qwen2
+(Qwen2.5-0.5B-Instruct-Q8_0, `DASLLAMA_GPU=1`): the q/k/v projection bias folded into the rope
+stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
+the one-step-off control) at one window and two windows, with the arm witnesses that the model
+carries the bias and the driver armed on it; skips without the model or the armed tier.
 `test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
 (Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
 weights, the pin on the upload rail dropping a still-installed model's device state first; skips
@@ -408,10 +432,12 @@ against the committed `site/files/dasllama/bench_records.json` (what daslang.io/
 renders); red means a records commit skipped `gen_site_records`.
 `test_tok_seed.das` - model-free: `lcpp_bench.das`'s `tok_read_seed` corpus-header walk, required
 by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
-`test_tokenizer.das` - stocked suite; every cell is fixture-gated (the `ggml-vocab-*.gguf`
+`test_tokenizer.das` - stocked suite; the corpus cells are fixture-gated (the `ggml-vocab-*.gguf`
 corpora under the models dir, machine-local): the seven vocab families' `.inp`/`.out` corpora
 through `load_tokenizer_auto` -> `encode` / `decode`, ids exact and the decode round-trip
-lossless; reports SKIPPED where the vocab is not stocked.
+lossless; reports SKIPPED where the vocab is not stocked. One cell is model-free: the BPE
+`add_bos` default a GGUF without the key takes (upstream's per-pre table), then the qwen35 vocab
+reading `add_bos == false` where that fixture is stocked.
 `test_exe_smoke.das` - stocked suite; model-gated (SmolLM2-135M, small tier): the
 standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
 artifact - the one rail where globals restore as DATA, so a function-typed global with no

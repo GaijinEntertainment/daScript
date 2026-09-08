@@ -162,8 +162,9 @@ trusting its numbers.
 ## 6. Vulkan - `dasllama_vulkan_classes.das`, `dasllama_vulkan_common.das`
 
 The tier reads the CPU planes verbatim (`stack_plane_bytes` -> `arena_block_bytes` ->
-`kq_qsb(vk_kq_schema_id(fmt))` x `KQ_DEV_SSB`), so a format whose plane pair already has the
-20 B decoded scale row needs no upload work - only the id bridge and the kernels. IQ4_XS took:
+`kq_qsb(vk_kq_schema_id(fmt))` x `kq_dev_ssb(fmt)` - 20 B for a decoded row, 8 B for the codebook
+formats' two-word row the gather packs), so a format whose plane pair already has the 20 B
+decoded scale row needs no upload work - only the id bridge and the kernels. IQ4_XS took:
 
 1. `vk_kq_schema_id` (`dasllama_vulkan_common.das`): the `int(KqFmt)` -> kernel-id arm
    (`6 -> 44`). This is the third id space of QUIRK 5 at its Vulkan seam; without the arm the
@@ -172,8 +173,8 @@ The tier reads the CPU planes verbatim (`stack_plane_bytes` -> `arena_block_byte
    (`wq4[wsb * 8 + blk]`), each nibble word decoded through `iq4_word` (a `fixed_array` LUT
    local - the SPIR-V emitter lowers a `let` fixed array to a Function-storage variable and
    indexes it) into SIGNED lanes for `sdot4` (OpSDot, signed x signed - the block-sum trick of
-   q40/k4 does not apply and is not needed), scale `d * sc` with `sc` the signed byte off word
-   1..2 of the 5-word row (`unpack8` sign-extends, the k6 spelling).
+   q40/k4 does not apply and is not needed), scale `d * sc` with `sc` decoded by `iq4xs_sc` off
+   the two-word device row (`scales_h` above d in word 0, the `scales_l` nibbles in word 1).
 3. `KqBatchIq4xs : KqBatchBase` - `stage_w` decodes the staged words through `iq4_word`
    (k4's staging otherwise), `stage_ws` fills ONE plane with `d * sc`, `blk_fma` is
    `xscl * ws * idot` (q40's without the `- 8 * bsum`).
@@ -185,6 +186,12 @@ The tier reads the CPU planes verbatim (`stack_plane_bytes` -> `arena_block_byte
    `iq4_word`) - `iq4xs_gemv_float_oracle`, a float dequant straight off the plane bytes that
    the class oracle must match.
 
+A grid format adds one more: its table joins the family's grid buffer (`kq_grid_dev` - a
+`KQ_GRID_<FMT>` word offset, `KQ_GRID_WORDS` / `KQ_GRID_BYTES` grown, the accessor called
+once per word into the host image) and the GEMV's `run` stages `gridb[KQ_GRID_<FMT> + idx]`
+into its `@workgroup` table - never the `*_grid_word` accessor, which the batch and cm2 tiles
+keep (`REVIEW_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
+
 Not done, by ruling: a cm2 decode-in-load tile (`[spirv_decode] def decode_iq4xs`). The f16 feed
 admits q8/k4/k6 only (`pf_f16_feed`), q40 and k5 have no cm2 tile either, and
 `followup_vulkan.md` item 24 rules that new formats land on the one class template, not as
@@ -195,7 +202,7 @@ three more hand-stamped bodies. IQ4_XS prefill rides the kq batch tile like q40 
 On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile template
 (`KqCm2BatchT`): a new format is a format template authoring `[spirv_decode] def decode` over
 the DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3
-verbatim; scales the 20 B `KQ_DEV_SSB` row) plus three eight-line width stamps, arms in the
+verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) plus three eight-line width stamps, arms in the
 `cm2_cls_ensure/set/enc` ladders, and `pf_f16_feed` admits it via `kq_sb` automatically. A
 codebook format raises the `IQLUT` axis - a gated `@workgroup` f16 table staged ahead of the
 tile loop (llama.cpp's `init_iq_shmem` form); never select codes out of a register vector per
@@ -212,6 +219,16 @@ device-form CPU oracle
 (`<fmt>f16_gemm_oracle`) and
 an l/m/s cell in `tests/test_vulkan_kernels.das`. Payoff on the 1B: iq4xs pp512 5161 -> 15334,
 k3 5174 -> 14031 (0.90x / 0.80x llama.cpp's Vulkan, from 0.30x).
+
+The KHR instantiation rides the same decode (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l, the mm-mode
+paragraph): `<Fmt>KhrBatch : <Fmt>Cm2T` with `override KHR = true`, `override BN = 128u`, the
+four cm2 typedefs the uncalled tensor body still names (`BT`, `ACC`, `ACCW`, `FLO` - copy k4's),
+a `[vk_dispatch(name = "kq_batch_<fmt>_khr_cls", ...)]`, an arm in each of `khr_cls_ensure/set/enc`
+(`dasllama_vulkan_prefill.das`), and the format's kernel cell runs its fourth arm (`ml == 3`, tile
+128) wherever the device has KHR coopmat at subgroup 32 - on the 5060 Ti the same run covers the
+cm2 l/m/s tiles and the KHR tile. No new decode, no new oracle: the KHR arm calls the format's
+`decode`/`decode_v4` directly on the plane element (`decode_v4(wq[i], ...)` - never on a `let`
+copy of it, which runs at a third of the rate) and the `<fmt>f16_gemm_oracle` already holds it.
 
 ## 7. Metal - `dasllama_metal_kernels.das`, `_common`, `_prefill`, `_shapes`, `dasllama_layout.das`
 
@@ -961,7 +978,8 @@ ksigns table anywhere - the disk carries explicit signs), scale = f16 d x (1 + 2
 sub-scale); signed reconstruction, so no `xbsp` term. Disk block 110 B: f16 d, 64 qs, 8 qh,
 32 signs, 4 packed scale nibbles. Plane pair: quants [qs 64][qh 8][signs 32] VERBATIM (104 B -
 the k3 "disk is already the device form" answer), scale row = the iq4xs/k4 20 B shape with
-(1 + 2s) decoded at transcode, so every k4-row consumer serves unchanged. Ids: `KqFmt.iq3s`
+(1 + 2s) decoded at transcode, so every k4-row consumer serves unchanged; on Vulkan the device
+row is the two-word codebook form (`iq3_sc`). Ids: `KqFmt.iq3s`
 = 8, kernel id 33, stream code 33. The codebook question a grid format adds: the 2 KB table
 ships as `iq3s_grid()` - the per-call-local worker-safe form `IQ4NL_LUT` documented, just 512
 entries now - plus the main-context `IQ3S_GRID`; the repack is 26 uniform 4-byte columns (no
@@ -1130,7 +1148,8 @@ Shape: 256-superblock, codebook nibble (`kvalues_iq4nl`, signed, no offset), sca
 6-bit sub-scale - 32. Disk block 136 B: f16 d, u16 scales_h, 4 scales_l bytes, 128 nibbles
 paired k/k+16 per 32-block. Plane pair: quants verbatim (the q40 tiling), scale row 20 B decoded
 at transcode ([f16 d][2 pad][8 x int8 (ls-32)][8 pad] - the k4 decoded-row shape, so
-`repack_k4_grp`'s scale addressing is reused verbatim in `repack_iq4xs_grp`). Dot fold:
+`repack_k4_grp`'s scale addressing is reused verbatim in `repack_iq4xs_grp`; the Vulkan gather
+packs it back to the disk's two words, `iq4xs_sc` decodes them). Dot fold:
 `sum_blk sc * sum_k LUT[q] * x`, then `* (d * xs)` per superblock; no `xbsp` term. Ids:
 `KqFmt.iq4xs` = 6, kernel id 44, stream code 44. Gates green on the interpreter binary
 AND under `-jit`: `test_kqformat` 14/14, `test_kquant` 114/114 (iq4xs arms: transcode+dequant

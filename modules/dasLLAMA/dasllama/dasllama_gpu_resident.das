@@ -17,6 +17,7 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_math
 require dasllama/dasllama_rope        // build_rope_row_packed — the one source for every resident rope row
 require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS / KQ_SUPERBLOCK_ELEMS — device block sizing
+require dasllama/dasllama_gguf        // kq_disk_bytes - the file bytes a device plane is measured against
 require daslib/f16_cvt   // f32_to_f16 — the trim pass re-packs the emb scale plane
 require dasllama/dasllama_par
 require dasllama/dasllama_env
@@ -414,8 +415,10 @@ struct ResidentPlan {
     weight_bytes : int64
     kv_bytes : int64
     scratch_bytes : int64   //!< the driver's own device scratch (prefill window + decode smalls)
-    headroom_bytes : int64  //!< desktop slack the auto arm leaves unfilled (0 when VRAM is pinned)
+    headroom_bytes : int64  //!< desktop slack the auto arm leaves unfilled (0 when VRAM is pinned, or when the OS budget answers)
     budget_bytes : int64
+    usable_bytes : int64    //!< what the plan may fill: the budget minus the headroom, capped by the room the OS reports when it answers and no pin overrides
+    others_bytes : int64    //!< dedicated video memory every other process holds, when the OS answers (0 otherwise) - named in a decline
     emb_f32_bytes : int64   //!< the raw f32 embd table the gather would upload - counted only when it rides the headroom left after weights + KV (0 = the CPU embed serves)
     fits : bool
     reason : string       //!< "" when it fits; otherwise why, with a remedy where one exists
@@ -426,6 +429,7 @@ let private RDEC_VRAM_HEADROOM = 2_147_483_648l    // auto-arm slack past the ti
                                                    // filling weights + KV to the cap brim measured a
                                                    // 12x WDDM-demotion collapse on a live desktop
 let private RDEC_VRAM_HEADROOM_PCT = 27l
+let private RDEC_OS_RESERVE = 1_073_741_824l
 let private RDEC_MISC_BYTES = 67_108_864l          // decode smalls + batch act planes + metas
 
 // the driver's device allocations past weights + KV — the prefill window buffers dominate.
@@ -438,6 +442,40 @@ def private rdec_scratch_bytes(t : Model) : int64 {
     let wide = max(max(c.dim, qd), hid)
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * layer_kv_dim(c, 0l)
         + 8l * hid + 4l * layer_head_size(c, 0l)) + c.vocab_size * 4l + RDEC_MISC_BYTES
+}
+
+//! The room a plan may fill: the tier's cap less its headroom, capped by the OS's room when the OS
+//! answers - its per-process budget less what the other processes hold on the adapter and the reserve.
+//! A pinned cap takes no headroom and reads no room.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def plan_room(budget_bytes : int64; pinned : bool; os : tuple<budget : int64; usage : int64; adapter_dedicated : int64; adapter_shared : int64>) : tuple<headroom : int64; usable : int64; others : int64> {
+    let answered = !pinned && os.budget > 0l
+    let headroom = (pinned || answered) ? 0l : max(RDEC_VRAM_HEADROOM, budget_bytes * RDEC_VRAM_HEADROOM_PCT / 100l)
+    var usable = budget_bytes - headroom
+    var others = 0l
+    if (answered) {
+        others = max(os.adapter_dedicated - os.usage, 0l)
+        usable = min(usable, os.budget - others - RDEC_OS_RESERVE)
+    }
+    return (headroom = headroom, usable = usable, others = others)
+}
+
+def private fill_plan_room(var p : ResidentPlan) {
+    let pinned = gpu_want_vram_mb() > 0l
+    let room = plan_room(p.budget_bytes, pinned, pinned ? (budget = 0l, usage = 0l, adapter_dedicated = 0l, adapter_shared = 0l) : moe_gpu_os_memory())
+    p.headroom_bytes = room.headroom
+    p.usable_bytes = room.usable
+    p.others_bytes = room.others
+}
+
+//! 0 = no cap known, or no attention layer.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def resident_binding_ctx(c : Config; dt : KVDtype; bcap : int64) : int64 {
+    var side = 0l
+    for (l in range64(c.n_layers)) {
+        side += kv_row_bytes(dt, layer_kv_dim(c, l))
+    }
+    return (bcap > 0l && side > 0l) ? bcap / side : 0l
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
@@ -460,7 +498,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     }
     p.kv_bytes = seq_cap * (krow + vrow)
     p.scratch_bytes = rdec_scratch_bytes(t)
-    p.headroom_bytes = gpu_want_vram_mb() > 0l ? 0l : max(RDEC_VRAM_HEADROOM, p.budget_bytes * RDEC_VRAM_HEADROOM_PCT / 100l)
+    fill_plan_room(p)
     // every 2D plane a dense forward reads: the attention quad, the FFN triple, the classifier
     for (l in range64(c.n_layers)) {
         let qd = layer_qd(c, l)
@@ -494,7 +532,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.vocab_size, int(cls_fmt))
     let total = p.weight_bytes + p.kv_bytes + p.scratch_bytes
-    let usable = p.budget_bytes - p.headroom_bytes
+    let usable = p.usable_bytes
     let emb_want = g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && !t.cls_q8 && !cls_kq(t) && !t.planes_trimmed
     let emb_bytes = emb_want ? rdec_emb_f32_bytes(c.vocab_size, c.dim) : 0l
     p.emb_f32_bytes = total + emb_bytes <= usable ? emb_bytes : 0l
@@ -504,9 +542,10 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         // a shorter context is the remedy that actually works — weights are fixed, KV is not
         let kv_fit = max(usable - p.weight_bytes - p.scratch_bytes, 0l)
         let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow) : 0l
+        let room = p.others_bytes > 0l ? " - other processes hold {p.others_bytes >> 20l} MB of the card" : ""
         p.reason = (cap_fit >= 512l
-            ? "needs {total >> 20l} MB of {usable >> 20l} MB at ctx {seq_cap} - would fit at ctx {cap_fit}"
-            : "needs {total >> 20l} MB of {usable >> 20l} MB (weights alone {p.weight_bytes >> 20l} MB)")
+            ? "needs {total >> 20l} MB of {usable >> 20l} MB at ctx {seq_cap} - would fit at ctx {cap_fit}{room}"
+            : "needs {total >> 20l} MB of {usable >> 20l} MB (weights alone {p.weight_bytes >> 20l} MB){room}")
     }
     return p
 }
@@ -611,7 +650,7 @@ def private name_list_add(var names : string&; on : bool; name : string) {
 //! it serves every feature the config carries. The list is the decline reason a user reads.
 def resident_unserved_features(c : Config) : string {
     var names = ""
-    name_list_add(names, c.attn_qkv_bias, "attention qkv bias")
+    name_list_add(names, c.attn_qkv_bias && !rdec_bias_installed(), "attention qkv bias")
     name_list_add(names, c.attn_out_bias, "attention output bias")
     name_list_add(names, c.v_norm, "v-norm")
     name_list_add(names, c.attn_sinks, "attention sinks")
@@ -640,7 +679,10 @@ def resident_layer_decline(t : Model; l, hid0, hs, kvd : int64) : string {
         if (rdec_quant_class(fqkv) != rdec_quant_class(fz)) {
             return "layer {l}'s deltanet qkv and z planes mix activation-quant forms ({int(fqkv)}/{int(fz)}) - one x feed serves both"
         }
-        if (fmt_at(t.dnout_fmt, l) != KqFmt.q8) return "layer {l}'s deltanet out plane is kq-tagged (the step's o row feeds a q8 GEMV)"
+        let fout = fmt_at(t.dnout_fmt, l)
+        if (!rdec_dn_fmt_ok(fout, c.ssm_d_inner)) {
+            return "layer {l}'s deltanet out plane carries a format ({int(fout)}) the resident GEMVs do not serve at width {c.ssm_d_inner}"
+        }
         if (!t.dn_ba_f32 && (t.dnbeta_offs[l] < 0l || t.dnalpha_offs[l] < 0l)) return "layer {l} lacks its beta/alpha planes"
         if (!rdec_dn_installed()) return "layer {l} is recurrent and the tier installed no deltanet seats for the whole-model driver"
         if (layer_hidden(t, l) != hid0) return "layer {l} FFN width {layer_hidden(t, l)} differs from layer 0's {hid0}"
@@ -673,11 +715,65 @@ def private resident_upload_dn_ba(t : Model; n_recurrent : int64) {
     delete rows
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+def private resident_upload_bias(t : Model; qd, kvd : int64) {
+    let c = t.config
+    let stride = qd + 2l * kvd
+    var rows : array<float>
+    rows |> reserve_resize(c.n_layers * stride)
+    for (l in range64(c.n_layers)) {
+        continue if (layer_is_recurrent(c, l))
+        copy_floats(t.bq, l * qd, rows, l * stride, qd)
+        copy_floats(t.bk, l * kvd, rows, l * stride + qd, kvd)
+        copy_floats(t.bv, l * kvd, rows, l * stride + qd + kvd, kvd)
+    }
+    rdec_upload_bias(rows)
+    delete rows
+}
+
+struct private ImageRow {
+    name : string
+    plane_count : int64
+    file_bytes : int64
+    device_bytes : int64
+}
+
+//! The device-side twin of the load report: every plane the whole-model driver uploads, per
+//! format, as bytes in the file's own blocks against bytes in the device planes, biggest overhead
+//! first, then the KV mirror and scratch the plan adds at this context.
+def private log_resident_image(planes : array<tuple<n : int64; rows : int64; f : KqFmt>>; plan : ResidentPlan; seq_cap : int64) {
+    var rows : table<int; ImageRow>
+    var file_total = 0l
+    var device_total = 0l
+    for (pl in planes) {
+        let fi = int(pl.f)
+        var r = rows[fi]
+        r.name = "{pl.f}"
+        r.plane_count++
+        r.file_bytes += kq_disk_bytes(pl.f, pl.n * pl.rows)
+        r.device_bytes += moe_gpu_plane_bytes(pl.n, pl.rows, fi)
+        rows[fi] = r
+        file_total += kq_disk_bytes(pl.f, pl.n * pl.rows)
+        device_total += moe_gpu_plane_bytes(pl.n, pl.rows, fi)
+    }
+    var sorted : array<ImageRow>
+    for (v in values(rows)) {
+        sorted |> emplace(ImageRow(name = clone_string(v.name), plane_count = v.plane_count, file_bytes = v.file_bytes, device_bytes = v.device_bytes))
+    }
+    sorted |> sort() $(a, b) => a.device_bytes - a.file_bytes > b.device_bytes - b.file_bytes
+    to_log(LOG_INFO, "dasLLAMA: resident image: {file_total >> 20l} MB in the file's blocks -> {device_total >> 20l} MB on device ({mb_delta(device_total, file_total)}) over {long_length(planes)} planes; KV mirror {plan.kv_bytes >> 20l} MB at ctx {seq_cap}, scratch {plan.scratch_bytes >> 20l} MB\n")
+    for (r in sorted) {
+        to_log(LOG_INFO, "dasLLAMA: resident image:   {r.name} x{r.plane_count}: {r.file_bytes >> 20l} MB -> {r.device_bytes >> 20l} MB ({mb_delta(r.device_bytes, r.file_bytes)})\n")
+    }
+    delete sorted
+    delete rows
+}
+
 //! Reserve arenas + place every dense plane + wire the resident decode driver. Returns false (and
 //! leaves the driver unarmed) if the model is not a servable dense shape or does not fit at seq_cap;
 //! every decline logs its reason through `rdec_decline`.
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
+def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentPlan) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
     g_rdec_active = false
     g_rdec_emb_gpu = false
     g_rdec_pass_said |> clear()
@@ -729,7 +825,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         && c.shared_weights && t.cls_q8 && cls_fmt == KqFmt.q8)
     let emb_f32_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
         && !t.emb_q8 && !cls_kq(t) && !t.planes_trimmed   // an untied q8 table has no f32 copy to upload: the CPU embed loop serves it
-        && resident_plan(t, seq_cap, rkdt, rkdt).emb_f32_bytes > 0l)   // the plan counted it at this context
+        && plan.emb_f32_bytes > 0l)   // the plan counted it at this context
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
     planes |> reserve(c.n_layers * 8l + 1l)
     for (l in range64(c.n_layers)) {
@@ -763,6 +859,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
         let fi = int(pl.f)
         need[fi] = (need?[fi] ?? 0l) + rdec_blocks_for(pl.n, pl.rows, pl.f)
     }
+    log_resident_image(planes, plan, seq_cap)
     delete planes
     var reserve_ok = true
     for (fmt, blocks in keys(need), values(need)) {
@@ -783,8 +880,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype) : bool {   // no
                       rkdt == KVDtype.f16, c.q_gated, rot, dng)) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
     }
+    rdec_note_weight_bytes(plan.weight_bytes)
     if (n_recurrent > 0l && dng.ba_f32) {
         resident_upload_dn_ba(t, n_recurrent)
+    }
+    if (c.attn_qkv_bias) {
+        resident_upload_bias(t, qd, kvd)
     }
     // place + wire each layer. One quantized X image feeds each consumer group (qkv shares one,
     // gate/up another), so a group must agree on its quant form — mixed groups decline
@@ -1389,7 +1490,6 @@ def private walk_budget_say(rail : string; l, layers : int64) {
 //! The attention features the per-op attention-quad chain has no arm for, comma-separated; "".
 def attn_chain_unserved_features(c : Config) : string {
     var names = ""
-    name_list_add(names, c.attn_qkv_bias, "attention qkv bias")
     name_list_add(names, c.v_norm, "v-norm")
     name_list_add(names, c.attn_sinks, "attention sinks")
     name_list_add(names, c.attn_logit_softcap != 0.0, "attention logit softcap")
@@ -1475,26 +1575,22 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         // the mirror codec: f16 rows by default (native fa feed, ~2x plannable ctx);
         // DASLLAMA_VK_KV32=1 arms f32 mirrors instead (A/B; then only f32 sessions serve)
         let rkdt = g_env_vulkan.vk_kv32 != 0l ? KVDtype.f32 : KVDtype.f16
-        // each side of the KV mirror binds as ONE SSBO range — the device's max binding
-        // range caps the armable ctx (past it every mirror read is undefined, not slow)
-        let bcap = moe_gpu_binding_cap()
-        let mrow = t.config.n_layers * kv_row_bytes(rkdt, layer_kv_dim(t.config, 0l))
-        if (bcap > 0l && mrow > 0l) {
-            seq_cap = min(seq_cap, bcap / mrow)
+        let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap())
+        if (bctx > 0l) {
+            seq_cap = min(seq_cap, bctx)
         }
         var plan = resident_plan(t, seq_cap, rkdt, rkdt)
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
             // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's
             // own remedy), as long as it stays a usable window. The driver guards decode past the cap.
-            let fit_ctx = (max(plan.budget_bytes - plan.headroom_bytes - plan.weight_bytes
-                - plan.scratch_bytes, 0l)) / (plan.kv_bytes / seq_cap)
+            let fit_ctx = (max(plan.usable_bytes - plan.weight_bytes - plan.scratch_bytes, 0l)) / (plan.kv_bytes / seq_cap)
             if (fit_ctx >= rdec_min_ctx()) {
                 seq_cap = fit_ctx
                 plan = resident_plan(t, seq_cap, rkdt, rkdt)
             }
         }
         if (plan.fits) {
-            if (resident_upload(t, seq_cap, rkdt)) {
+            if (resident_upload(t, seq_cap, rkdt, plan)) {
                 return
             }
         } else {
@@ -1702,9 +1798,8 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     vulkan_bake_role(VkBakeRole.attn)
     if (at_want) {
         let c = t.config
-        // NEOX rope only (partial rotary implies NEOX per the loader); the chain has no bias /
-        // v-norm / sinks / softcap / post-norm arms
-        let arch_ok = (!c.attn_qkv_bias && !c.v_norm && !c.attn_sinks && c.attn_logit_softcap == 0.0
+        // partial rotary implies NEOX per the loader, so the rope test admits it unroped
+        let arch_ok = (!c.v_norm && !c.attn_sinks && c.attn_logit_softcap == 0.0
             && !c.pre_post_norm && !c.attn_out_bias
             && (c.rope_neox || (c.rope_dim > 0l && c.rope_dim != c.head_size)))
         var at_marked = 0l
@@ -1746,7 +1841,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 walk_skip(at_skips, l, "q/k/v/o formats {int(fq)}/{int(fk)}/{int(fv)}/{int(fo)} not tier-servable as one chain")
                 continue
             }
-            if (!(hs == 128l || hs == 256l) || qd > 8192l || kvd > 1024l
+            if (!(hs == 128l || hs == 256l) || qd > 8192l || kvd > 2048l
                     || c.n_heads > 64l || rot % 2l != 0l || rot > hs || kvd % 32l != 0l
                     || qd % (fo != KqFmt.q8 ? 256l : 32l) != 0l || dim % 32l != 0l) {
                 walk_skip(at_skips, l, "geometry outside the chain (hs {hs}, qd {qd}, kvd {kvd}, heads {c.n_heads}, rot {rot})")
