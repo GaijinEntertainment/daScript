@@ -61,10 +61,12 @@ this document states what the folder is and why its tests take the shape they do
   beside its path row and the group brings both members in; a warm start replays the rows; a
   guard the build lacks drops the group and one it has takes it; a group nothing registered
   adds nothing; `public` on the group re-exports every member and its absence keeps them
-  private; the unserved member fails as a hand-written require would; and, on an explicit
-  module cache, a member joining the group after a requirer's record was written cuts the cache
-  off at that requirer (`require set changed`) while the unchanged tree and the rewritten cache
-  serve.
+  private; the unserved member fails as a hand-written require would; `call_module_group`
+  (`daslib/module_group`) calls both members' entry with its argument, sorted by member path,
+  and a member without the entry is a compile error naming the member's call; and, on an
+  explicit module cache, a member joining the group after a requirer's record was written cuts
+  the cache off at that requirer (`require set changed`) while the unchanged tree and the
+  rewritten cache serve.
 - `test_require_module_now.das` - a `require` issued after the walk (`daslib/cross_context`),
   in the test's own process for the API and in a child for the cache: a `shared` fixture with a
   macro context compiles at the call and the same module answers after; `macro_context_of` and

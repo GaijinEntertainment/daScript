@@ -178,9 +178,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   `linq_fold_xml`. `linq_fold_sql` is the exception - it recognizes a `[sql_table]` source
   and hands the whole chain to the `_sql` macro, so it has no adapter and no emit. A source
   file requires `linq_fold_common` and never a sibling source.
-- **`try_splice_patterns` tries recognizers in a fixed order** - sql, decs, xml (behind the
-  pugixml `static_if`), json, table - and the array arm runs last with no recognizer of its
-  own: it is what claims a chain nobody else claimed.
+- **`try_splice_patterns` tries recognizers in a fixed order** - sql, decs, the registered
+  `linq_fold_sources` in registration order, json, table - and the array arm runs last with
+  no recognizer of its own: it is what claims a chain nobody else claimed. A source outside
+  daslib joins the `linq_fold_source` group from its descriptor and registers a
+  `LinqFoldSourceRecognizer` from its `register_linq_fold_source` entry, which
+  `register_all_linq_fold_rows` calls on every member; pugixml's `linq_fold_xml` is the one
+  such source.
 - **The adapter contract is four abstract methods; everything else on the base has a
   default.** `bind_name`, `element_type`, `wrap_source_loop` and `wrap_invoke` are abstract,
   so every source answers them. The per-operation hooks (`emit_loop_or_count`,

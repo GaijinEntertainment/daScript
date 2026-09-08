@@ -12,4 +12,5 @@ def initialize(project_path : string) {
     for (path in dasllama_paths) {
         register_native_path("dasllama", "{path}", "{project_path}/dasllama/{path}.das")
     }
+    register_module_group("llvm_code_generator", "dasllama/dasllama_gemm_register")
 }

@@ -80,6 +80,7 @@ int sqlite3_open_v2_no_vfs ( const char * filename, sqlite3 ** ppDb, int flags )
 }
 
 void Module_dasSQLITE::initMain() {
+    registerModuleGroupMember("sql_provider", "sqlite/sqlite_provider");
 
     addExtern<DAS_BIND_FUN(sqlite3_exec)>(*this,lib,"sqlite3_exec",
         SideEffects::worstDefault, "sqlite3_exec")

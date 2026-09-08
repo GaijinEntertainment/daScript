@@ -704,6 +704,7 @@ pugi::xpath_query * pugiXPathCompileWithVars ( char * query, pugi::xpath_variabl
 class Module_PUGIXML : public Module {
 public:
     Module_PUGIXML() : Module("pugixml") {
+        registerModuleGroupMember("linq_fold_source", "pugixml/linq_fold_xml");
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();

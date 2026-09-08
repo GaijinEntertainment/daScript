@@ -95,10 +95,13 @@ require [sql_provider]                  // every module registered under the gro
   Pair with `static_if (typeinfo builtin_module_exists(guard)) { ... }` for a C++ guard, and
   with `static_if (typeinfo module_exists(target)) { ... }` around uses of the guarded target
   (true when the target is visible from this module, the same inside a tool's nested compile).
-- **`require [group]`** is one ordinary require per module registered under the group name, in
-  registration order - a member resolves and fails as if spelled by hand, `public` and a `?guard`
+- **`require [group]`** is one ordinary require per module registered under the group name, sorted
+  by member path - a member resolves and fails as if spelled by hand, `public` and a `?guard`
   apply to the whole group, and an unregistered group adds nothing. A module joins a group from its
-  `.das_module` descriptor: `register_module_group("sql_provider", "sqlite/sqlite_provider")`.
+  `.das_module` descriptor: `register_module_group("sql_provider", "sqlite/sqlite_provider")`. The
+  requirer calls every member through `daslib/module_group`:
+  `call_module_group("sql_provider", "register_provider")` expands to one
+  `member::register_provider()` per member; a member without the entry is a compile error.
 
 ## Qualified calls
 

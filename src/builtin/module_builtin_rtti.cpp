@@ -1257,6 +1257,13 @@ namespace das {
         return Module::require(name) != nullptr || is_dynamic_module_deferred(name);
     }
 
+    void rtti_module_group_for_each_member ( const char * group, const TBlock<void,const char *> & block, Context * context, LineInfoArg * at ) {
+        for ( const auto & member : getModuleGroupMembers(group ? group : "") ) {
+            vec4f args[1] = { cast<const char *>::from(member.c_str()) };
+            context->invoke(block, args, nullptr, at);
+        }
+    }
+
     void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
         program->library.foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
@@ -1991,6 +1998,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_has_module)>(*this, lib, "has_module",
                 SideEffects::modifyExternal, "rtti_has_module")
                     ->arg("name");
+            addExtern<DAS_BIND_FUN(rtti_module_group_for_each_member)>(*this, lib, "module_group_for_each_member",
+                SideEffects::modifyExternal, "rtti_module_group_for_each_member")
+                    ->args({"group","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_expected_errors)>(*this, lib, "for_each_expected_error",
                 SideEffects::modifyExternal, "builtin_expected_errors")
                     ->args({"program","block","context","line"});

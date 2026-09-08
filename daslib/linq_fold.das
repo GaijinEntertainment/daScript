@@ -37,8 +37,9 @@ require daslib/linq_fold_array public
 require daslib/linq_fold_decs public
 require daslib/linq_fold_json public
 require daslib/linq_fold_table public
-require ?pugixml pugixml/linq_fold_xml
 require daslib/linq_fold_sql
+require daslib/module_group
+require [linq_fold_source]
 
 [macro_function]
 def private fold_linq_default(var expr : Expression?) : Expression? {   // nolint:STYLE037 - one arm per linq call shape in the folded chain
@@ -125,6 +126,7 @@ def private register_all_linq_fold_rows {
     build_group_by_rows()
     build_join_rows()
     build_zip_rows()
+    call_module_group("linq_fold_source", "register_linq_fold_source")
 }
 
 [macro_function]
@@ -180,15 +182,10 @@ def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Exp
         return run_splice_adapter(calls, top, null,
             new DecsAdapter(bridge = bridge, tupName = qn("decs_tup", at)), exprIsIter, at)
     }
-    static_if (typeinfo builtin_module_exists(pugixml)) {
-        var xmlCall = extract_xml_source(top)
-        if (xmlCall != null) {
-            var topClone = clone_expression(top)
-            var nameArg : Expression? = length(xmlCall.arguments) == 3 ? clone_expression(xmlCall.arguments[1]) : null
-            return run_splice_adapter(calls, topClone, topClone,
-                new XmlAdapter(nodeExpr = clone_expression(xmlCall.arguments[0]), srcName = qn("xnode", at),
-                               elemType = clone_type(xmlCall._type.firstType), nameArg = nameArg),
-                exprIsIter, at)
+    for (recognize in linq_fold_sources) {
+        var m = invoke(recognize, top, at)
+        if (m.adapter != null) {
+            return run_splice_adapter(calls, m.matchTop, m.ctxTop, m.adapter, exprIsIter, at)
         }
     }
     var jsonCall = extract_json_source(top)

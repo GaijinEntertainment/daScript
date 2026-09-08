@@ -138,8 +138,8 @@ syntax only):
 A group is a name that modules register themselves under. A module's ``.das_module``
 descriptor calls ``register_module_group("sql_provider", "sqlite/sqlite_provider")``,
 and a C++ module registers from its constructor with ``registerModuleGroupMember``.
-``require [group]`` is one ordinary ``require`` per registered member, in registration
-order: a member resolves and fails exactly as the same require spelled by hand would,
+``require [group]`` is one ordinary ``require`` per registered member, sorted by member
+path: a member resolves and fails exactly as the same require spelled by hand would,
 ``public`` applies to every member, and a guard drops the whole group the way it
 drops a single require. A group nothing registered under adds nothing.
 
@@ -148,6 +148,23 @@ would otherwise have to name each one with its own guard and gain a line per
 provider; with a group each provider names the group it joins, and the requirer
 names only the group. The module cache records the requires a parse took, so a
 member joining a group later re-parses the modules that require the group.
+
+The requirer reaches its members without naming them through ``daslib/module_group``:
+
+.. code-block:: das
+
+    require daslib/module_group
+    require [sql_provider]
+
+    def register_present_providers {
+        call_module_group("sql_provider", "register_provider")
+    }
+
+``call_module_group("group", "entry", args...)`` expands at compile time to one
+``member::entry(args...)`` call per registered member, in the group's sorted order; a member
+without the entry is a compile error naming the call, and an empty group expands to
+nothing. A group is therefore two names: the group a member joins, and the entry every
+member defines.
 
 --------------
 Native modules

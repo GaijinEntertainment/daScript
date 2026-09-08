@@ -77,7 +77,7 @@ def initialize(project_path : string) {
 - First argument: the group name a requirer writes as `require [sql_provider]`
 - Second: the member's require path, exactly as a `require` would spell it - a native path
   this descriptor (or another) registers, or a C++ module's name
-- `require [group]` is one ordinary require per member in registration order; `public` and a
+- `require [group]` is one ordinary require per member, sorted by member path; `public` and a
   `?guard` on the group apply to every member, a member that does not resolve fails as a
   hand-written require would, and a group nothing joined adds nothing
 - A C++ module joins from its constructor with `registerModuleGroupMember(group, member)`
@@ -86,6 +86,15 @@ The group turns the dependency around: a module that wants every installed provi
 group once, and each provider names the group it joins - nothing is edited when a provider is
 added. The row is recorded in the manifest and replayed, and the module cache re-parses a
 requirer when a member joins after its record was written.
+
+The requirer calls its members without naming them through `daslib/module_group`:
+`call_module_group("sql_provider", "register_provider")` expands at compile time to one
+`member::register_provider()` call per member, in the group's sorted order, extra arguments passed
+through; a member without the entry is a compile error naming the call. A group is two names -
+the group a member joins, and the entry every member defines - and both belong in the
+requirer's documentation. Members in this tree: `sql_provider` / `register_provider`
+(`daslib/sql_boost`), `linq_fold_source` / `register_linq_fold_source` (`daslib/linq_fold`),
+`llvm_code_generator` / `register_llvm_code_generators` (`llvm/daslib/llvm_user_modules`).
 
 ## Package layout
 

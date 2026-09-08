@@ -13,8 +13,10 @@ let DESCRIPTOR_BETA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initial
 let DESCRIPTOR_BETA_OUTSIDE = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n\}\n"
 let DESCRIPTOR_GAMMA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_module_group(\"broken_group\", \"grp_gamma/missing\")\n\}\n"
 
-let ALPHA = "options gen2\nmodule alpha\ndef alpha_value() : int \{\n    return 1\n\}\n"
-let BETA = "options gen2\nmodule beta\ndef beta_value() : int \{\n    return 10\n\}\n"
+let ALPHA = "options gen2\nmodule alpha\ndef alpha_value() : int \{\n    return 1\n\}\ndef probe_entry(k : int) \{\n    print(\"ENTRY alpha \{k\}\\n\")\n\}\n"
+let BETA = "options gen2\nmodule beta\ndef beta_value() : int \{\n    return 10\n\}\ndef probe_entry(k : int) \{\n    print(\"ENTRY beta \{k\}\\n\")\n\}\n"
+let CALL_GROUP = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\n[export]\ndef main \{\n    call_module_group(\"probe_group\", \"probe_entry\", 7)\n    print(\"PROBE done\\n\")\n\}\n"
+let CALL_GROUP_MISSING = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\n[export]\ndef main \{\n    call_module_group(\"probe_group\", \"no_such_entry\")\n\}\n"
 let MID_PUBLIC = "options gen2\nmodule mid\nrequire [probe_group] public\n"
 let MID_PRIVATE = "options gen2\nmodule mid_private\nrequire [probe_group]\n"
 
@@ -118,6 +120,19 @@ def arms_expand(t : T?; fx : Fixture) {
         let script = write_driver(fx, "use_broken.das", "require [broken_group]", "0")
         let rc = run_driver(fx, script, out)
         t |> success(rc != 0 && find(out, "grp_gamma/missing") >= 0, "the missing prerequisite names the member: rc={rc}\n{out}")
+    }
+    t |> run("call_module_group calls every member's entry with the arguments, members sorted by path") @(t : T?) {
+        var out : string
+        let script = path_join(fx.tmp, "use_call.das")
+        fwrite(script, CALL_GROUP)
+        t |> success(report_child(t, "call", run_driver(fx, script, out), out, "PROBE done"), "the expansion compiles and runs")
+        let alphaAt = find(out, "ENTRY alpha 7")
+        let betaAt = find(out, "ENTRY beta 7")
+        t |> success(alphaAt >= 0 && betaAt >= 0 && alphaAt < betaAt, "both entries ran with the argument, alpha first:\n{out}")
+        let missing = path_join(fx.tmp, "use_call_missing.das")
+        fwrite(missing, CALL_GROUP_MISSING)
+        let rc = run_driver(fx, missing, out)
+        t |> success(rc != 0 && find(out, "alpha::no_such_entry") >= 0, "a member without the entry is a compile error naming the member's call: rc={rc}\n{out}")
     }
 }
 

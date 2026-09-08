@@ -33,6 +33,7 @@ require daslib/jobque_boost
 require daslib/jobque_profile
 require daslib/apply_in_context
 require daslib/cross_context
+require daslib/module_group
 require daslib/contracts
 require daslib/defer
 require daslib/with_boost
@@ -707,6 +708,14 @@ def document_module_cross_context(_root : string) {
         group_by_regex("Calls into a macro context", mod, %regex~(call_in_context)$%%)
     )
     document("A module required after the walk, and calls into its macro context", mod, "cross_context.rst", groups)
+}
+
+def document_module_module_group(_root : string) {
+    var mod = find_module("module_group")
+    var groups <- array<DocGroup>(
+        group_by_regex("Group members", mod, %regex~(module_group_module_name)$%%)
+    )
+    document("Calls into every member of a module group", mod, "module_group.rst", groups)
 }
 
 def document_module_ansi_colors(_root : string) {
@@ -1961,6 +1970,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_tty(root)
     document_module_apply_in_context(root)
     document_module_cross_context(root)
+    document_module_module_group(root)
     document_module_apply(root)
     document_module_archive(root)
     document_module_array_boost(root)

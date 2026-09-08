@@ -222,7 +222,10 @@ namespace das {
     vector<string> getModuleGroupMembers ( const string & group ) {
         lock_guard<mutex> guard(g_moduleGroupsMutex);
         auto it = g_moduleGroups.find(group);
-        return it != g_moduleGroups.end() ? it->second : vector<string>();
+        if ( it == g_moduleGroups.end() ) return vector<string>();
+        vector<string> members = it->second;
+        sort(members.begin(), members.end());
+        return members;
     }
 
     void clearModuleGroups () {

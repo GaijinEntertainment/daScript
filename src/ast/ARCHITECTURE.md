@@ -139,11 +139,15 @@ the form a tool that enumerates modules - the MCP server - runs under.
 manifest carries the stamp and the flag and no rows, and is not rewritten. A module group is a
 name that `require [group]` expands to a list: `register_module_group(group, member)` in a
 descriptor - recorded as a `grp` row and replayed - or `registerModuleGroupMember` from a C++
-module's constructor adds a member, once, in registration order (`ast_module.cpp`, one
-process-wide registry under a mutex, cleared at `Module::Shutdown`). The text collector
+module's constructor adds a member, once (`ast_module.cpp`, one process-wide registry under a
+mutex, cleared at `Module::Shutdown`); the list comes back sorted by member path, since the
+scan registers in `readdir` order, which no platform promises. The text collector
 (`getAllRequireReq`) and the parser (`ast_requireModuleGroup`) expand the same list into one
 require per member, the group's guard and `public` on each; a member resolves and fails as a
-require spelled by hand would, and a group nothing registered adds nothing. Membership is
+require spelled by hand would, and a group nothing registered adds nothing. The requirer calls
+the members through `daslib/module_group`, whose `call_module_group` reads the same list at
+macro time (`module_group_for_each_member`, the `rtti` module) and emits one qualified call
+per member, so the expansion and the calls agree on the set. Membership is
 tree-level, so the answer does not depend on the walk order - a module joins from its own
 descriptor, and the requirer names only the group; the module-cache record stamps the expansion
 (sec.1), so a member joining later re-parses the modules that require the group. With

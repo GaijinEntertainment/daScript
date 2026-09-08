@@ -290,6 +290,24 @@ struct EmitCtx {
 
 typedef EmitFn = function<(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression?>
 
+struct LinqFoldSourceMatch {
+    //! A source recognizer's answer: the adapter and the chain tops it runs under.
+    //! A null `adapter` is "not this source".
+    matchTop : Expression?
+    ctxTop   : Expression?
+    adapter  : SourceAdapter?
+}
+
+typedef LinqFoldSourceRecognizer = function<(var top : Expression?; at : LineInfo) : LinqFoldSourceMatch>
+
+var linq_fold_sources : array<LinqFoldSourceRecognizer>
+
+def add_linq_fold_source(recognizer : LinqFoldSourceRecognizer) {
+    //! Registers a source recognizer in the current macro context; `linq_fold` tries them
+    //! after its built-in sources, in registration order.
+    linq_fold_sources |> push(recognizer)
+}
+
 struct SplicePattern {
     name     : string
     chain    : array<Slot>

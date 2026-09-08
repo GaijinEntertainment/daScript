@@ -98,6 +98,7 @@ Macros and metaprogramming
 * :doc:`templates_boost <generated/templates_boost>` — template application helpers: variable/type replacement, hygienic names
 * :doc:`macro_boost <generated/macro_boost>` — miscellaneous macro manipulation utilities
 * :doc:`cross_context <generated/cross_context>` — a ``shared`` module required after the walk, and calls into its macro context
+* :doc:`module_group <generated/module_group>` — ``call_module_group``: one call per member of a ``require [group]``
 * :doc:`contracts <generated/contracts>` — function argument contract annotations (``[expect_any_array]``, ``[expect_any_table]``, etc.)
 * :doc:`apply <generated/apply>` — ``apply`` reflection pattern for struct field iteration
 * :doc:`enum_trait <generated/enum_trait>` — compile-time enumeration trait queries

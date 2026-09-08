@@ -10,4 +10,5 @@ def initialize(project_path : string) {
     for (path in sqlite_paths) {
         register_native_path("sqlite", "{path}", "{project_path}/daslib/{path}.das")
     }
+    register_module_group("sql_provider", "sqlite/sqlite_provider")
 }
