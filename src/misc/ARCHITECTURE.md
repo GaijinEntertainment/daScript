@@ -6,6 +6,9 @@
 - `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls.
 - `network.cpp` - the single-client TCP `Server` the DAP debugger and `daslib/network` sit on,
   and the two helpers every socket error passes through.
+- `alloc_tracker.cpp` - the RelWithDebInfo C++ heap leak tracker: the live-allocation map, the
+  exit-time report, and the per-frame symbolizer. `alloc_tracker_overrides.cpp` beside it carries
+  the global `operator new`/`delete` that feed it, compiled into every binary and shared module.
 
 The knobs are bound to daslang in `src/builtin/module_builtin_jobque.cpp`; each knob's caller
 contract is stated on its declaration in `include/daScript/misc/job_que.h`.
@@ -63,3 +66,32 @@ a disconnected client would retry forever while holding the debug-agent context 
 tick that notices the closed socket could never run. `REVIEW.das` beside this file fails a
 `network.cpp` that reads `errno` outside `last_socket_error()`, or names a would-block code
 outside `socket_would_block()`.
+
+## 6. The leak dump runs last, so a static dtor's free is not a leak
+
+`alloc_tracker.cpp` reports from an `atexit` handler, and heap that some other static destructor
+is about to free is indistinguishable from a leak while that destructor has not run. The handler
+therefore has to be registered FIRST, because `atexit` runs LIFO: `#pragma init_seg(lib)` puts the
+registrar's constructor ahead of every user-level static on MSVC, and
+`__attribute__((init_priority(101)))` does the same everywhere else. Losing that ordering does not
+lose a leak, it invents one - every process-lifetime cache in the runtime (the dasbind late-bind
+map, the dynamic-module registries, the JIT parallel-emit job vector) is freed by a static dtor or
+by `Module::Shutdown`, so a dump that runs before them reports the whole set. A toolchain with
+neither mechanism keeps the old ordering and over-reports; nothing else breaks.
+
+What makes running last SAFE is that the tracker owns no destructible state: `getMap` and
+`getMutex` placement-new into static storage and are never destructed, so a `track_free_hook`
+arriving during static teardown - after the dump, at any point - still has a live map to tombstone
+into.
+
+## 7. A frame prints at the best tier that resolved, never as nothing
+
+A frame falls back rather than vanishing: the symbol name plus its offset when the platform
+resolver found one, else the module plus the frame's offset from its load base, else `?`. That
+middle tier is what carries a POSIX build - `dladdr` reads `.dynsym` only, so every static and
+hidden-visibility function in the runtime resolves to no symbol, and a report that printed `?` for
+those would hide most of its own stacks behind manual base-address arithmetic. With the module and
+offset in hand, `addr2line -f -C -e <module> <offset>` is the whole recovery. The MSVC arm carries
+one tier the POSIX arm does not: it distrusts a symbol whose offset exceeds
+`kMaxTrustedSymbolOffset`, because `SymFromAddr` answers with a distant neighbour where `dladdr`
+answers with nothing.

@@ -8,6 +8,7 @@
 #include "dasHV.h"
 
 #include <hv/hlog.h>
+#include <hv/hasync.h>
 
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketClient,hv::WebSocketClient)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketServer,hv::WebSocketServer)
@@ -1700,6 +1701,9 @@ public:
             SideEffects::worstDefault, "das_writer_is_connected")
                 ->args({"server","writer"});
 
+    }
+    ~Module_HV() {
+        hv::async::cleanup();
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"../modules/dasHV/src/aot_hv.h\"\n";
