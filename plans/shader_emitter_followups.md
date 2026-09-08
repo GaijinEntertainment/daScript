@@ -35,21 +35,22 @@ the binding rules in `modules/REVIEW_SHADER_EMITTERS.md`. This file holds what i
    Done = the operators and `select` documented in `skills/daslang/`, the emitter heuristic gone,
    the census sites converted with the two measurements beside them.
 
-2. **`for [unroll]` unrolls at emission; a fixed-array local with constant indices becomes
+2. **`for [unroll_full]` unrolls at emission; a fixed-array local with constant indices becomes
    registers.** Found 2026-09-07 by the integer GEMM tile prototypes
    (`modules/dasLLAMA/harness/vk_gemm_probe.das -- mmqx`, `modules/dasLLAMA/followup_vulkan.md`
-   item 42): dasSpirv emits `for [unroll] (i in range(N))` as a loop carrying the `Unroll` loop
-   control and a `var acc : float[64]` local as a Function-storage `OpVariable` indexed by the
-   loop counter - a register block written as an array runs through local memory unless the
-   driver both unrolls and scalarizes, and the 5060 Ti's measured the same rate with the block
-   as named scalars, which says the shape, not the array, capped that kernel, but the array form
-   is what a 128-accumulator block (the reference exe's 4 x 32 register block) needs to be
-   writable at all. The plan: dasSpirv clones the body N times for a constant `range(N)` with the
-   counter bound to `OpConstant`, so every `arr[expr(i)]` chains a constant index (SROA-friendly in
-   every driver), and reports the unroll it performed in the same note channel item 1 gives the
-   branched operators; dasMetal needs nothing - MSL's `#pragma unroll` and the Metal compiler's
-   scalarization already do this, which is why the Metal GEMV twins carry `sumf : float[NR]`
-   arrays. Gate: a `tests/spirv` fixture pinning zero `OpLoopMerge` under an unrolled body and a
-   constant-index `OpAccessChain` per element, the kernel suite byte-identical elsewhere, and the
-   `mmqx` probe's ceiling twin re-measured with the block as an array.
-   Done = the fixture, the note, and the probe row.
+   item 42): a hinted loop leaves a `var acc : float[64]` local a Function-storage `OpVariable`
+   indexed by the loop counter unless the driver both unrolls and scalarizes, and a 128-accumulator
+   block - or a coopmat tile's sixteen accumulator fragments - is writable only as an array.
+   LANDED 2026-09-08 (`modules/dasSpirv/ARCHITECTURE.md` section 3.6): `[unroll_full]` with
+   literal bounds emits the body once per copy with the induction variable an `OpConstant`, folds
+   the integer arithmetic on it so `acc[t * 16 + c]` chains a literal index, and refuses `break`,
+   `continue` and a runtime bound; `[unroll]` stays the driver's `Unroll` hint. The spelling is the
+   one the JIT (`llvm.loop.unroll.full`) and dasMetal (`#pragma clang loop unroll(full)`) already
+   lower, so a kernel source reads the same on every tier, and no shipped SPIR-V kernel changed (the
+   golden set is byte-identical). Fixture `ufor` in `tests/spirv` (zero `OpLoopMerge`, 23
+   constant-index chains, the fold assertions) and two fail-closed fixtures. Still owed: the note
+   channel - the unroll's copy count and item 1's per-operator note share one channel once item 1
+   lands (a `to_log` at `LOG_DEBUG` prints on every kernel compile, so nothing is reported today);
+   and the first kernel written on it, the KHR coopmat tile's accumulator block (item 42), whose
+   device cells are the runtime gate a fixture cannot be.
+   Done = the note, and the tile's cells green on the array form.

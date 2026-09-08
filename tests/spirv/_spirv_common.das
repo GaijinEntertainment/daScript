@@ -297,6 +297,32 @@ def public rfor_words : array<uint> {
     return clone_to_move(rfor_spv)
 }
 
+// [unroll_full] with literal bounds unrolls at emission: no loop construct, the induction variable an OpConstant
+// per copy, its integer arithmetic folded so every `acc[...]` chains a literal index. The nested pair folds across
+// two induction constants and a `uint()` re-type of one; the read loop starts at a non-zero bound.
+[compute_shader(local_size_x=64, name="ufor_spv"), marker(no_coverage)]
+def ufor {
+    let gi = gl_GlobalInvocationID.x
+    var acc : float[8]
+    for [unroll_full] (i in range(8)) {
+        acc[i] = float(i)
+    }
+    for [unroll_full] (t in range(2)) {
+        for [unroll_full] (c in range(4)) {
+            acc[t * 4 + c] += fdata[gi + (uint(t) * 8u + uint(c))]
+        }
+    }
+    var s = 0.0
+    for [unroll_full] (i in range(1, 8)) {
+        s += acc[i]
+    }
+    fdata[gi] = s
+}
+
+def public ufor_words : array<uint> {
+    return clone_to_move(ufor_spv)
+}
+
 // ===== Phase-3 vertex/fragment fixtures: stage I/O (@in/@out + Location), rasterizer builtins
 // (gl_Position/gl_VertexIndex/gl_InstanceIndex/gl_FragCoord), vector constructors
 // (OpCompositeConstruct), dot (OpDot), and GLSL.std.450 math (OpExtInst). Each emitted blob is

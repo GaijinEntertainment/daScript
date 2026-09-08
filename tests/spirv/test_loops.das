@@ -91,6 +91,49 @@ def test_early_return_in_loop(t : T?) {
     }
 }
 
+// Every OpAccessChain rooted in a Function-storage variable indexes with OpConstant ids alone - the register-block
+// shape [unroll_full] exists to produce. Returns the chain count and how many index operands were not constants.
+def private function_chain_indices(words : array<uint>) : tuple<chains : int; dynamic : int> {
+    var consts : table<uint>
+    var fvars : table<uint>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.Constant) && n >= 2) {
+            consts |> insert(w[s + 1])
+        } elif (opcode == uint(SpvOp.Variable) && n >= 3 && w[s + 2] == uint(SpvStorageClass.Function)) {
+            fvars |> insert(w[s + 1])
+        }
+    }
+    var chains = 0
+    var dynamic = 0
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.AccessChain) && n >= 4 && key_exists(fvars, w[s + 2])) {
+            chains++
+            for (i in range(3, n)) {
+                if (!key_exists(consts, w[s + i])) {
+                    dynamic++
+                }
+            }
+        }
+    }
+    return (chains = chains, dynamic = dynamic)
+}
+
+[test]
+def test_unroll_full(t : T?) {
+    t |> run("for [unroll_full] with literal bounds: emitted as copies, indices folded to constants") <| @(t : T?) {
+        var words <- ufor_words()
+        t |> equal(count_op(words, SpvOp.LoopMerge), 0, "ufor: no loop construct survives the unroll")
+        t |> equal(count_op(words, SpvOp.IMul), 0, "ufor: every index multiply folded at emission")
+        t |> equal(count_op(words, SpvOp.IAdd), 8, "ufor: one add per copy takes the invocation id; the index adds folded")
+        let fc = function_chain_indices(words)
+        t |> equal(fc.chains, 23, "ufor: 8 + 8 + 7 element chains into the register block")
+        t |> equal(fc.dynamic, 0, "ufor: every chain into the block indexes with an OpConstant")
+        t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_3, "ufor: SPIR-V header version stays 1.3")
+        validate(t, words, "ufor")
+        delete words
+    }
+}
+
 [test]
 def test_runtime_for_and_bool_local(t : T?) {
     t |> run("runtime urange(0u, n) bound + bool Function OpVariable") <| @(t : T?) {

@@ -40,6 +40,7 @@ def main {   // nolint:STYLE038 — one emit per golden fixture: a flat list, on
     emit_golden(dir, "echain", echain_words())
     emit_golden(dir, "eret", eret_words())
     emit_golden(dir, "rfor", rfor_words())
+    emit_golden(dir, "ufor", ufor_words())
     emit_golden(dir, "tri_vert", tri_vert_words())
     emit_golden(dir, "tri_frag", tri_frag_words())
     emit_golden(dir, "point_size", point_size_words())

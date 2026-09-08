@@ -54,6 +54,10 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         check_rejects(t, "_fc_localtype", "type tInt64 is not supported")
         check_rejects(t, "_fc_stmt", "memzero is not supported in SPIR-V shaders")
         check_rejects(t, "_fc_deadcode", "unreachable code after a block terminator")
+        // [unroll_full] emits the copies itself: a runtime bound has no copy count, and a break inside the
+        // copies has no loop construct to leave (ARCHITECTURE.md 3.6)
+        check_rejects(t, "_fc_unroll_runtime", "the range must have literal bounds")
+        check_rejects(t, "_fc_unroll_break", "break inside a `for [unroll_full]` body")
         // a write-swizzle chains a component pointer off its base, so the base needs an OpVariable; a
         // swizzle of a swizzle has only a loaded value, and there is nothing to store through
         check_rejects(t, "_fc_wswz", "write-swizzle target must be addressable")

@@ -237,6 +237,14 @@ struct LoopIds {
     merge  : uint
 }
 
+// a `for [unroll_full]` emitted as copies: where the function section and the error list stood when the
+// copies ended, so the walk the visitor makes on its own is cut back to that point
+struct UnrollMark {
+    funcs_len  : int
+    errs_len   : int
+    terminated : bool
+}
+
 def finalize(var c : EmitCtx) {
     delete c.globals
     delete c.locals
@@ -3114,8 +3122,12 @@ def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : Expressio
     }
     let fr = e ?as ExprFor
     if (fr != null) {
-        for (fv in fr.iteratorVariables) {
-            declare_local_var(m, ctx, fv, errors)
+        // an induction variable bound to a constant per unrolled copy has no OpVariable
+        let unrolled = has_loop_hint(fr.annotations, "unroll_full") && length(fr.sources) == 1 && literal_range_of(fr.sources[0]).ok
+        if (!unrolled) {
+            for (fv in fr.iteratorVariables) {
+                declare_local_var(m, ctx, fv, errors)
+            }
         }
         collect_locals(m, ctx, fr.body, errors)
         return
@@ -3157,6 +3169,109 @@ def private const_int_for(var m : SpirvModule; cls : int; v : int) : uint {
     return const_int(m, v)
 }
 
+def private has_loop_hint(args : AnnotationArgumentList; name : string) : bool {
+    for (a in args) {
+        if (a.name == name) return true
+    }
+    return false
+}
+
+def private literal_int_of(e : ExpressionPtr) : tuple<ok : bool; value : int> {
+    let ci = e ?as ExprConstInt
+    if (ci != null) return (ok = true, value = ci.value)
+    let cu = e ?as ExprConstUInt
+    if (cu != null) return (ok = true, value = int(cu.value))
+    return (ok = false, value = 0)
+}
+
+// The bounds of a for-source when both are literals: a folded `range(N)` / `range(lo, hi)` (ExprConstRange, its
+// urange twin), or the call itself with literal arguments (the no_optimizations compile keeps the call).
+def private literal_range_of(src : ExpressionPtr) : tuple<ok : bool; lo : int; hi : int> {
+    let cr = src ?as ExprConstRange
+    if (cr != null) {
+        let ft = unsafe(reinterpret<int2>(cr.value))
+        return (ok = true, lo = ft.x, hi = ft.y)
+    }
+    let cur = src ?as ExprConstURange
+    if (cur != null) {
+        let ft = unsafe(reinterpret<uint2>(cur.value))
+        return (ok = true, lo = int(ft.x), hi = int(ft.y))
+    }
+    let call = src ?as ExprCall
+    if (call == null || ("{call.name}" != "range" && "{call.name}" != "urange")) return (ok = false, lo = 0, hi = 0)
+    let na = length(call.arguments)
+    if (na != 1 && na != 2) return (ok = false, lo = 0, hi = 0)
+    var lo = 0
+    if (na == 2) {
+        let lv = literal_int_of(call.arguments[0])
+        if (!lv.ok) return (ok = false, lo = 0, hi = 0)
+        lo = lv.value
+    }
+    let hv = literal_int_of(call.arguments[na - 1])
+    if (!hv.ok) return (ok = false, lo = 0, hi = 0)
+    return (ok = true, lo = lo, hi = hv.value)
+}
+
+def private fold_uint_op(op : string; ua, ub : uint) : tuple<ok : bool; value : int64> {
+    var r = 0u
+    if (op == "+") {
+        r = ua + ub
+    } elif (op == "-") {
+        r = ua - ub
+    } elif (op == "*") {
+        r = ua * ub
+    } elif (op == "/" || op == "%") {
+        if (ub == 0u) return (ok = false, value = 0l)
+        r = op == "/" ? ua / ub : ua % ub
+    } elif (op == "<<" || op == ">>") {
+        if (ub >= 32u) return (ok = false, value = 0l)
+        r = op == "<<" ? ua << ub : ua >> ub
+    } elif (op == "&") {
+        r = ua & ub
+    } elif (op == "|") {
+        r = ua | ub
+    } elif (op == "^") {
+        r = ua ^ ub
+    } else {
+        return (ok = false, value = 0l)
+    }
+    return (ok = true, value = int64(r))
+}
+
+def private fold_sint_op(op : string; ia, ib : int) : tuple<ok : bool; value : int64> {
+    var r = 0
+    if (op == "+") {
+        r = ia + ib
+    } elif (op == "-") {
+        r = ia - ib
+    } elif (op == "*") {
+        r = ia * ib
+    } elif (op == "/" || op == "%") {
+        if (ib == 0 || (ib == -1 && ia == -2147483647 - 1)) return (ok = false, value = 0l)
+        r = op == "/" ? ia / ib : ia % ib
+    } elif (op == "<<" || op == ">>") {
+        if (ib < 0 || ib >= 32) return (ok = false, value = 0l)
+        r = op == "<<" ? ia << ib : ia >> ib
+    } elif (op == "&") {
+        r = ia & ib
+    } elif (op == "|") {
+        r = ia | ib
+    } elif (op == "^") {
+        r = ia ^ ib
+    } else {
+        return (ok = false, value = 0l)
+    }
+    return (ok = true, value = int64(r))
+}
+
+// 32-bit integer arithmetic on two constants in the class the operands carry - the fold an unrolled body's index
+// expressions take. A division by zero, a shift past the width or a non-arithmetic operator declines, and the
+// instruction is emitted instead.
+def private fold_int_op(op : string; cls : int; a, b : int64) : tuple<ok : bool; value : int64> {
+    if (cls == 1) return fold_uint_op(op, uint(a), uint(b))
+    return fold_sint_op(op, int(a), int(b))
+}
+
 // ===== SpirvEmit : AstVisitor =====
 // The body-codegen visitor (modeled on llvm_jit). generate_spirv builds the module scaffold (caps /
 // entry-point / OpFunction / trailing return) and drives this visitor over fn.body for all codegen.
@@ -3180,6 +3295,10 @@ class SpirvEmit : AstVisitor {
     lazy_ids : table<uint64; IteIds>     //!< intptr(ExprOp3 / ExprOp2 &&,||) lowered as a branch (ctx.lazy_temps) -> its labels
     loop_ids : table<uint64; LoopIds>    // intptr(ExprWhile/ExprFor) -> its 5 loop-skeleton labels
     for_src : table<uint64>              // for-source range() call ptrs to intercept in visitExprCall (6.3)
+    unroll_bind   : table<uint64; uint>       //!< intptr(Variable) of an unrolled induction variable -> the OpConstant of the copy being emitted
+    unroll_consts : table<uint; int64>        //!< OpConstant ids an unrolled copy derives (the induction constant, the folds on it) -> value
+    lit_consts    : table<uint; int64>        //!< every 32-bit integer literal's OpConstant id -> value: the operand a fold may take beside a derived one
+    unroll_marks  : table<uint64; UnrollMark>   //!< intptr(ExprFor) unrolled at emission -> the cut point for the visitor's own walk of its body
     copy_dst : uint64                    // intptr(ExprCopy.left) while that destination subtree is walked
     suppress_bounds_arg : bool = false   // next node is a `.[]` call's __context__/__lineinfo__ tail — elide
     suppress_fn_addr : bool = false      // next node is coopmatLoadTensorDecode's trailing @@decode — read structurally by the cm2 load arm, not lowered
@@ -3383,6 +3502,11 @@ class SpirvEmit : AstVisitor {
             errs |> push("cannot assign to '{wg.name}' - module-scope constants (incl. @constant_id spec constants) are read-only in a shader")
             return (id = 0u, pty = 0u)
         }
+        let uv = e ?as ExprVar
+        if (uv != null && key_exists(unroll_bind, intptr(uv.variable))) {
+            errs |> push("cannot assign to '{uv.name}': the induction variable of a `for [unroll_full]` is a constant in every unrolled copy")
+            return (id = 0u, pty = 0u)
+        }
         errs |> push("internal: {e.__rtti} is not an lvalue")
         return (id = 0u, pty = 0u)
     }
@@ -3528,12 +3652,16 @@ class SpirvEmit : AstVisitor {
     // ----- constants -----
     def override visitExprConstInt(var expr : ExprConstInt?) : ExpressionPtr {
         var bm & = unsafe(*m)
-        e2id[intptr(expr)] = const_int(bm, expr.value)
+        let cid = const_int(bm, expr.value)
+        lit_consts[cid] = int64(expr.value)
+        e2id[intptr(expr)] = cid
         return expr
     }
     def override visitExprConstUInt(var expr : ExprConstUInt?) : ExpressionPtr {
         var bm & = unsafe(*m)
-        e2id[intptr(expr)] = const_uint(bm, expr.value)
+        let cid = const_uint(bm, expr.value)
+        lit_consts[cid] = int64(expr.value)
+        e2id[intptr(expr)] = cid
         return expr
     }
     def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {
@@ -3646,6 +3774,10 @@ class SpirvEmit : AstVisitor {
             let vk = intptr(expr.variable)
             if (ctx.self_arg != 0ul && vk == ctx.self_arg) {
                 return expr   // the kernel class's self: every use resolves via member_var_of at the access site
+            }
+            if (key_exists(unroll_bind, vk)) {   // an unrolled induction variable: the copy's constant, no load
+                e2id[k] = unroll_bind?[vk] ?? 0u
+                return expr
             }
             if (key_exists(ctx.local_vars, vk)) {
                 let lv = ctx.local_vars?[vk] ?? LocalVar()
@@ -3939,6 +4071,17 @@ class SpirvEmit : AstVisitor {
         }
         let v = value_of(expr.subexpr)
         if (v == 0u) return expr
+        if (key_exists(unroll_consts, v) && (op == "-" || op == "~")) {   // a negated or inverted unroll constant stays a constant
+            let ucls = scalar_class(expr.subexpr._type.baseType)
+            if ((ucls == 0 || ucls == 1) && arith_lanes(expr.subexpr._type.baseType) == 1) {
+                let bits = int(unroll_consts?[v] ?? 0l)
+                let r = op == "-" ? (ucls == 1 ? int64(0u - uint(bits)) : int64(-bits)) : (ucls == 1 ? int64(~uint(bits)) : int64(~bits))
+                let cid = const_int_for(bm, ucls, int(r))
+                unroll_consts[cid] = r
+                e2id[intptr(expr)] = cid
+                return expr
+            }
+        }
         if (op == "!") {
             let bt = type_bool(bm)
             let res = alloc_id(bm)
@@ -3956,6 +4099,25 @@ class SpirvEmit : AstVisitor {
         emit(bm, SEC_FUNCS, uo.code, rt, res, v)
         e2id[intptr(expr)] = res
         return expr
+    }
+
+    // An integer op between an unroll-derived constant and another known constant folds to an OpConstant, so an
+    // unrolled body's `acc[t * 16 + c]` chains a literal index; an operand the unroll did not derive folds nothing.
+    [arch(at="../ARCHITECTURE.md#unroll-full")]
+    def fold_unrolled_op2(op : string; cls : int; lbt : Type; l, r : uint; k : uint64) : bool {
+        if ((cls != 0 && cls != 1) || arith_lanes(lbt) != 1) return false
+        let lu = key_exists(unroll_consts, l)
+        let ru = key_exists(unroll_consts, r)
+        if ((!lu && !ru) || !(lu || key_exists(lit_consts, l)) || !(ru || key_exists(lit_consts, r))) return false
+        let a = lu ? (unroll_consts?[l] ?? 0l) : (lit_consts?[l] ?? 0l)
+        let b = ru ? (unroll_consts?[r] ?? 0l) : (lit_consts?[r] ?? 0l)
+        let fv = fold_int_op(op, cls, a, b)
+        if (!fv.ok) return false
+        var bm & = unsafe(*m)
+        let cid = const_int_for(bm, cls, int(fv.value))
+        unroll_consts[cid] = fv.value
+        e2id[k] = cid
+        return true
     }
 
     [arch(at="../ARCHITECTURE.md#operand-laziness")]
@@ -4026,7 +4188,7 @@ class SpirvEmit : AstVisitor {
         let cls = arith_class(lbt)
         let l = value_of(expr.left)
         let r = value_of(expr.right)
-        if (l == 0u || r == 0u) return expr
+        if (l == 0u || r == 0u || fold_unrolled_op2(op, cls, lbt, l, r, intptr(expr))) return expr
         if (op == "*") {
             let mr = emit_mul(bm, expr, expr, l, r, errs)
             if (mr.handled) {
@@ -6041,6 +6203,13 @@ class SpirvEmit : AstVisitor {
             }
             let aid = value_of(a0)
             if (aid == 0u) return expr
+            if (key_exists(unroll_consts, aid) && dst.width == 32 && (dst.cls == 0 || dst.cls == 1) && (sn.cls == 0 || sn.cls == 1) && sn.width == 32) {
+                let bits = int(unroll_consts?[aid] ?? 0l)   // an unroll constant re-typed between int and uint keeps its bits
+                let cid = const_int_for(bm, dst.cls, bits)
+                unroll_consts[cid] = dst.cls == 1 ? int64(uint(bits)) : int64(bits)
+                e2id[k] = cid
+                return expr
+            }
             let src_cls = sn.cls
             let src_w = sn.width
             if (src_cls == dst.cls && src_w == dst.width) {  // same class+width no-op, e.g. float(someFloat)
@@ -6456,6 +6625,8 @@ class SpirvEmit : AstVisitor {
         for (a in args) {
             if (a.name == "unroll") {
                 mask |= uint(SpvLoopControl.Unroll)
+            } elif (a.name == "unroll_full") {
+                errs |> push("loop hint 'unroll_full' applies to a `for (i in range(lo, hi))` with literal bounds, which unrolls at emission; a while loop takes 'unroll', the driver's hint")
             } elif (a.name == "dont_unroll") {
                 mask |= uint(SpvLoopControl.DontUnroll)
             } elif (a.name == "dependency_infinite") {
@@ -6579,14 +6750,18 @@ class SpirvEmit : AstVisitor {
             return
         }
         let iv = expr.iteratorVariables[0]
-        let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
-        if (lvr.ptr_id == 0u) {
-            errs |> push("for: induction variable '{iv.name}' was not declared")
-            return
-        }
         let cls = scalar_class(iv._type.baseType)
         if (cls != 0 && cls != 1) {
             errs |> push("for: induction variable '{iv.name}' must be int or uint (got {iv._type.baseType})")
+            return
+        }
+        if (has_loop_hint(expr.annotations, "unroll_full")) {
+            unroll_at_emission(expr, iv, cls)
+            return
+        }
+        let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
+        if (lvr.ptr_id == 0u) {
+            errs |> push("for: induction variable '{iv.name}' was not declared")
             return
         }
         var lo = 0u
@@ -6638,6 +6813,18 @@ class SpirvEmit : AstVisitor {
     }
 
     def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
+        if (key_exists(unroll_marks, intptr(expr))) {
+            let um = unroll_marks?[intptr(expr)] ?? UnrollMark()
+            var bm & = unsafe(*m)
+            resize(bm.sections[SEC_FUNCS], um.funcs_len)   // the visitor's own walk of the body: the copies before it are the loop
+            if (length(errs) > um.errs_len) {
+                resize(errs, um.errs_len)
+            }
+            ctx.terminated = um.terminated
+            pop(ctx.loop_stack)
+            unroll_bind |> erase(intptr(expr.iteratorVariables[0]))
+            return expr
+        }
         if (!key_exists(loop_ids, intptr(expr))) return expr   // setup failed; errors already pushed
         let ids = loop_ids?[intptr(expr)] ?? LoopIds()
         var bm & = unsafe(*m)
@@ -6659,6 +6846,34 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
+    // A `for [unroll_full]` with literal bounds: the body walked once per copy with the induction variable bound to the
+    // copy's constant, then the mark the visitor's own walk of the body is cut back to (visitExprFor).
+    [arch(at="../ARCHITECTURE.md#unroll-full")]
+    def unroll_at_emission(var expr : ExprFor?; iv : VariablePtr; cls : int) {
+        var bm & = unsafe(*m)
+        let rg = literal_range_of(expr.sources[0])
+        if (!rg.ok) {
+            errs |> push("for [unroll_full]: the range must have literal bounds - range(N) or range(lo, hi) - to unroll at emission; a runtime bound takes [unroll], the driver's hint")
+            return
+        }
+        let vk = intptr(iv)
+        ctx.loop_stack |> push(LoopTargets(merge = 0u, cont = 0u))   // the sentinel break and continue refuse against
+        var errs_after_first = -1
+        for (kv in range(rg.lo, rg.hi)) {
+            let cid = const_int_for(bm, cls, kv)
+            unroll_consts[cid] = cls == 1 ? int64(uint(kv)) : int64(kv)
+            unroll_bind[vk] = cid
+            visit(expr.body, adapter)
+            if (errs_after_first < 0) {
+                errs_after_first = length(errs)
+            } elif (length(errs) > errs_after_first) {
+                resize(errs, errs_after_first)   // a later copy repeats the first copy's errors
+            }
+        }
+        unroll_bind[vk] = const_int_for(bm, cls, rg.lo)   // the visitor's own walk of the body reads a constant too
+        unroll_marks[intptr(expr)] = UnrollMark(funcs_len = length(bm.sections[SEC_FUNCS]), errs_len = length(errs), terminated = ctx.terminated)
+    }
+
     // ----- break / continue -> branch to the innermost loop's merge / continue block -----
     def override preVisitExprBreak(var expr : ExprBreak?) : void {
         var bm & = unsafe(*m)
@@ -6666,7 +6881,12 @@ class SpirvEmit : AstVisitor {
             errs |> push("break outside of a loop")
             return
         }
-        emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].merge)
+        let lt = ctx.loop_stack[length(ctx.loop_stack) - 1]
+        if (lt.merge == 0u) {   // the sentinel of a for [unroll_full]: no loop construct to leave
+            errs |> push("break inside a `for [unroll_full]` body: the loop is unrolled at emission and has no merge block to branch to - restructure the body or take [unroll]")
+            return
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Branch, lt.merge)
         ctx.terminated = true
     }
 
@@ -6676,7 +6896,12 @@ class SpirvEmit : AstVisitor {
             errs |> push("continue outside of a loop")
             return
         }
-        emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].cont)
+        let lt = ctx.loop_stack[length(ctx.loop_stack) - 1]
+        if (lt.cont == 0u) {   // the sentinel of a for [unroll_full]: no continue block to reach
+            errs |> push("continue inside a `for [unroll_full]` body: the loop is unrolled at emission and has no continue block to branch to - restructure the body or take [unroll]")
+            return
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Branch, lt.cont)
         ctx.terminated = true
     }
 
