@@ -110,7 +110,9 @@ of mangled names, and a process that loaded a different set of C++ modules would
 fail every record on `$`, so a `vector<T>` of a handled element registers into the element's
 module (`vectorHomeModule`, `ast_handle.h`) whichever module builds it, and only a vector of a
 builtin element lands in `$`, which every library lists first because
-`ModuleLibrary::addModule` puts a module's dependencies before it. `-ignore-manifest`
+`ModuleLibrary::addModule` puts a module's dependencies before it. The described name of such
+a vector carries that module - ``ast::dasvector`ptr`Expression``, not ``$::...`` - so code
+that names one compares the part after `::` (`daslib/ast_boost`'s printer). `-ignore-manifest`
 reads and writes no manifest: every descriptor compiles and every C++ module loads on start,
 the form a tool that enumerates modules - the MCP server, the LSP subtools - runs under.
 `no_manifest()` inside `initialize` marks the descriptor as one that runs on every start: its
