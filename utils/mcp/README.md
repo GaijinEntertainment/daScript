@@ -80,8 +80,8 @@ On **Linux/macOS** point each entry at the binary directly (no launcher needed):
 
 ```json
 "mcpServers": {
-  "daslang":     { "command": "./bin/daslang", "args": ["utils/mcp/main.das"] },
-  "daslang-cpp": { "command": "./bin/daslang", "args": ["utils/mcp/cpp_main.das"] }
+  "daslang":     { "command": "./bin/daslang", "args": ["-ignore-manifest", "utils/mcp/main.das"] },
+  "daslang-cpp": { "command": "./bin/daslang", "args": ["-ignore-manifest", "utils/mcp/cpp_main.das"] }
 }
 ```
 
@@ -123,10 +123,10 @@ No extra build dependencies - the MCP server uses stdio transport. Claude Code m
 
 ```bash
 # Manual test (Windows):
-bin/Release/daslang.exe utils/mcp/main.das
+bin/Release/daslang.exe -ignore-manifest utils/mcp/main.das
 
 # Manual test (Linux):
-./bin/daslang utils/mcp/main.das
+./bin/daslang -ignore-manifest utils/mcp/main.das
 ```
 
 Configure in `.mcp.json` (project root):
@@ -137,7 +137,7 @@ Configure in `.mcp.json` (project root):
   "mcpServers": {
     "daslang": {
       "command": "bin/Release/daslang.exe",
-      "args": ["utils/mcp/main.das"]
+      "args": ["-ignore-manifest", "utils/mcp/main.das"]
     }
   }
 }
@@ -147,7 +147,7 @@ Configure in `.mcp.json` (project root):
   "mcpServers": {
     "daslang": {
       "command": "./bin/daslang",
-      "args": ["utils/mcp/main.das"]
+      "args": ["-ignore-manifest", "utils/mcp/main.das"]
     }
   }
 }
@@ -157,10 +157,10 @@ Or add via CLI:
 
 ```bash
 # Windows
-claude mcp add daslang -- bin/Release/daslang.exe utils/mcp/main.das
+claude mcp add daslang -- bin/Release/daslang.exe -ignore-manifest utils/mcp/main.das
 
 # Linux
-claude mcp add daslang -- ./bin/daslang utils/mcp/main.das
+claude mcp add daslang -- ./bin/daslang -ignore-manifest utils/mcp/main.das
 ```
 
 Claude Code starts and stops the server automatically with each session.

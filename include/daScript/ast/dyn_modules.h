@@ -40,4 +40,15 @@ DAS_API void begin_dynamic_module_recording();
 DAS_API void end_dynamic_module_recording(vector<DynModuleManifestRow> & rows, bool & optOut);
 DAS_API void replay_native_path(const char * mod_name, const char * src, const char * dst);
 DAS_API void replay_dynamic_module(const char * path, const char * cpp_class, int on_error);
+// a replayed dm row with a das name waits under it for the first require (ARCHITECTURE.md sec.2)
+DAS_API void defer_dynamic_module(const char * path, const char * cpp_class, int on_error, const char * das_name);
+DAS_API bool load_deferred_dynamic_module(const char * das_name);   // true = the module registered
+DAS_API size_t load_all_deferred_dynamic_modules();                 // the count it attempted
+DAS_API bool has_deferred_dynamic_modules();
+DAS_API bool is_dynamic_module_deferred(const char * das_name);
+// a module the recording scan loaded is not "required" until a require names it: a guard reads it
+// absent on a cold start as on a warm one, where the row waits (ARCHITECTURE.md sec.2)
+DAS_API bool is_dynamic_module_unrequired(const char * das_name);
+DAS_API void mark_dynamic_module_required(const char * das_name);
+DAS_CC_API void ignore_dynamic_module_manifests(bool ignore);       // -ignore-manifest: no read, no write, every module loads on start
 }

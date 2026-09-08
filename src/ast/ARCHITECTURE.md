@@ -78,13 +78,47 @@ than an escaped form the reader would have to decode, and goes through a `.tmp` 
 
 Recording is armed around one descriptor run: each builtin appends the arguments it actually
 received, in order, and `register_dynamic_module` records its call whatever the outcome and adds
-the das-visible module name once the load succeeded. Replay calls the same two builtins with the
-recorded rows in recorded order, so the Quiet deferral and the post-scan retry of a sibling
-`DT_NEEDED` dlopen behave as on a compiled start. `no_manifest()` inside `initialize` marks the
-descriptor as one that runs on every start: its manifest carries the stamp and the flag and no
-rows, and is not rewritten. With `DAS_TRACE_MODULE_LOAD=1` the scan prints one line per
-descriptor - `replayed N row(s) in <sec> (shared module load <sec>)`, `compiled (<why>),
-manifest written (N row(s))`, `compiled (no_manifest)`, or why a manifest was not written. A
-replayed descriptor's time is its manifest read plus its rows, and the second number is the
-share the `.shared_module` dlopen and module constructor took - on a warm start that is nearly
-all of it.
+the das-visible module name once the load succeeded. Replay registers every `np` row as
+recorded. A `dm` row carrying that name is not loaded by the scan: the row waits under the name
+(`defer_dynamic_module`), and the load happens at the first require that names it. The
+prerequisite walk (`getPrerequisits`) finds no module under the name and asks the loader the
+scan installed (`setDeferredModuleLoader`); the loader dlopens and registers the module, runs the
+`initDependencies` fixed point `Module::Initialize` runs (`Module::InitializeDependencies`) over
+the grown list, and when a module reports it cannot initialize - what it needs is deferred too -
+brings every deferred module in and runs the fixed point again, which is the set an eager start
+has; the new modules' TypeDecls, made on the active root, move to their module roots. A `dm` row
+with no name - the recording start's load failed - replays as recorded, so the Quiet deferral
+and the post-scan retry of a sibling `DT_NEEDED` dlopen behave as on a compiled start. A
+require guard (`require ?mod`) and `builtin_module_exists` answer whether a require of the
+process named the module, not whether the tree holds it: the `daslang` host names the `llvm`
+witness itself when `-jit` or `-exe` is on (the module carries no symbol, so no das file
+requires it unguarded, and a static host runs the JIT without it), so `?llvm` is taken there;
+an interpreter run of a program that never requires `llvm` reads it absent whatever `modules/`
+holds. The recording start loads every module
+eagerly, so the module a `dm` row names counts as unrequired (`is_dynamic_module_unrequired`)
+until a require resolves to it (`mark_dynamic_module_required`), and a cold start answers a
+guard as a warm one does. Order inside a compile does not matter: the collector
+(`getAllRequireReq`) decides a path guard (its file resolves) as it reads the file, but carries
+a plain-name guard on the record (`RequireRecord::guard`) for `getPrerequisits` to test when
+the walk reaches the line, and `compileDaScript` walks again whenever a skipped guard's module
+was loaded later in the walk, so the guarded target lands in dependency order; the parser
+(`ast_requireModule`) reads the walk's verdict for its file and line (`walkedGuardVerdict`)
+rather than testing the guard itself, so a module loaded between the walk and the parse
+cannot make the two disagree. A load must not change another module's content either: a
+module-cache record carries each builtin module's cumulative hash of mangled names, and a
+process that loaded a different set of C++ modules would otherwise fail every record on `$`,
+so a `vector<T>` of a module's own handled type registers into that module
+(`vectorHomeModule`, `ast_handle.h`), and only a vector of a builtin element lands in `$`, which
+every library lists first because `ModuleLibrary::addModule` puts a module's dependencies
+before it. `-ignore-manifest`
+reads and writes no manifest: every descriptor compiles and every C++ module loads on start,
+the form a tool that enumerates modules - the MCP server, the LSP subtools - runs under.
+`no_manifest()` inside `initialize` marks the descriptor as one that runs on every start: its
+manifest carries the stamp and the flag and no rows, and is not rewritten. With
+`DAS_TRACE_MODULE_LOAD=1` the scan prints one line per descriptor - `replayed N row(s) in <sec>
+(shared module load <sec>, deferred K)`, `compiled (<why>), manifest written (N row(s))`,
+`compiled (no_manifest)`, `compiled (manifests ignored)`, or why a manifest was not written -
+and a deferred load prints `[module] require <name>: loading the deferred <class>`, the
+fallback `[module] loading every deferred module (K)`. A replayed descriptor's time is its
+manifest read plus its rows, and the second number is the share the `.shared_module` dlopen and
+module constructor took.

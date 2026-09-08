@@ -1106,6 +1106,13 @@ namespace das
 
     DAS_API bool isValidBuiltinName ( const string & name, bool canPunkt = false );
 
+    // the scan's loader for a deferred .shared_module, asked by name at a require miss (src/ast/ARCHITECTURE.md sec.2)
+    typedef bool (*DeferredModuleLoader) ( const string & name );
+    DAS_API void setDeferredModuleLoader ( DeferredModuleLoader loader );
+    DAS_API DeferredModuleLoader getDeferredModuleLoader ();
+    // the require walk's verdict on a `require ?guard x` line: 1 taken, 0 skipped, -1 the walk never saw it
+    DAS_API int walkedGuardVerdict ( const string & fileName, int32_t line );
+
     class DAS_API Module {
     public:
         Module ( const string & n = "" );
@@ -1154,6 +1161,8 @@ namespace das
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted, const string & requireName = string(), const string & expectedFileName = string() );
         static void Initialize();
+        // the initDependencies fixed point; false = the named modules never initialized (src/ast/ARCHITECTURE.md sec.2)
+        static bool InitializeDependencies ( string & notInitialized );
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown( bool dumpHandleLeaks = true );
         // Runtime-only shutdown — for standalone exes built with `daslang -exe`,

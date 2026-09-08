@@ -748,6 +748,16 @@ namespace das
         }
     };
 
+    // a vector lives with its element's type: one of a module's own handled type registers into
+    // that module, so loading the module never changes the builtin module's hash; one of a
+    // builtin element stays in `$` (library.front(): a module's dependencies sit before it)
+    __forceinline Module * vectorHomeModule ( const TypeDeclPtr & elem, const ModuleLibrary & library ) {
+        auto t = elem;
+        while ( t && t->isPointer() && t->firstType ) t = t->firstType;
+        if ( t && t->isHandle() && t->annotation && t->annotation->module ) return t->annotation->module;
+        return library.front();
+    }
+
     template <typename TT>
     struct typeFactory<vector<TT>> {
         using VT = vector<TT>;
@@ -759,7 +769,7 @@ namespace das
                 ann->cppName = "das::vector<" + describeCppType(declT, CpptSubstitureRef::no,
                                                                 CpptSkipRef::no, CpptSkipConst::no,
                                                                 CpptRedundantConst::yes, ChooseSmartPtr::yes) + ">";
-                auto mod = library.front();
+                auto mod = vectorHomeModule(declT, library);
                 mod->addAnnotation(ann);
                 registerVectorFunctions<vector<TT>>::init(mod,library,
                     declT->canCopy(),

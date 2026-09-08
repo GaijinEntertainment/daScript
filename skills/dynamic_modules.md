@@ -100,8 +100,23 @@ of the machine, a variant picked by hardware - opts out by calling `no_manifest(
 `initialize`; it then runs on every start. Everything a descriptor registers is replayed, so
 the opt-out is only for a descriptor whose answer changes between starts.
 
-`DAS_TRACE_MODULE_LOAD=1` prints one line per descriptor saying whether it was replayed or
-compiled, and why.
+A replayed C++ module loads at the first `require` naming it, not in the scan: the require
+walk loads the row and runs the `initDependencies` fixed point; a module needing another
+deferred one pulls the whole deferred set in. A program pays for the C++ modules it requires.
+Two consequences:
+
+- `require ?mod x` and `typeinfo builtin_module_exists(mod)` say whether some require in the
+  compile named `mod`, not what `modules/` holds, and a cold start answers as a warm one.
+  The `daslang` host names the `llvm` witness under `-jit` and `-exe`, so `?llvm` is true
+  there; an interpreter run that never requires `llvm` reads it false. Require order does not
+  matter.
+- A tool that enumerates the process's modules (the MCP server, the LSP subtools) runs with
+  `-ignore-manifest`: no manifest read or written, every descriptor compiles, every C++ module
+  loads on start. `has_module(name)` (`daslib/rtti`) answers loaded-or-deferred, so a sweep
+  gate asking what the tree has keeps its answer.
+
+`DAS_TRACE_MODULE_LOAD=1` prints one line per descriptor (replayed or compiled, why, the
+deferred count) and one per deferred module as a require loads it.
 
 ## Adding a `.das` file to an existing module needs the same edit
 

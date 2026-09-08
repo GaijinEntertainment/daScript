@@ -137,7 +137,8 @@ class Server:
             self.compiler = find_compiler(self.init_options)
         if self.compiler is None:
             return None
-        argv = [self.compiler]
+        # -ignore-manifest: a subtool enumerates modules, so every C++ module loads on start
+        argv = [self.compiler, "-ignore-manifest"]
         if self.init_options.get("project_root"):
             argv += ["-project_root", self.init_options["project_root"]]
         for lm in self.init_options.get("load_module") or []:

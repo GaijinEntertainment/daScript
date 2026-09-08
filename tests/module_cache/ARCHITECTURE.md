@@ -31,6 +31,18 @@ this document states what the folder is and why its tests take the shape they do
   tab leaves the manifest unwritten, and a directory sitting where the `.tmp` or the manifest
   goes fails the create or the rename so the start just compiles; each verdict is read from
   the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
+- `test_deferred_modules.das` - a replayed `dm` row is not loaded by the scan. The project root
+  holds a copy of the tree's `dasUnitTest` (descriptor and artifact), which shadows the tree's,
+  so the copy's manifest is the test's to make cold or warm: a cold start compiles the
+  descriptor, loads the module to record its name, and still reads a `require ?UnitTest x`
+  as skipped; a warm start defers the row and loads nothing for a program that requires
+  nothing; the first `require UnitTest` loads it and the program calls into it; the guard is
+  taken whether the `require UnitTest` sits above it, below it, or in the entry while the
+  guard sits in a module walked earlier, and skipped when no require names the module;
+  `-ignore-manifest` compiles every descriptor, loads every C++ module on start and writes no
+  manifest; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
+  deferred module in because its `initDependencies` asks for two more. A static build, whose
+  tree holds no `.shared_module`, has nothing to observe and the test says so and returns.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`); a case needing a macro-bearing module graph puts it here instead of
   writing the script inline.

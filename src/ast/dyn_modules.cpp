@@ -10,6 +10,7 @@
 #include <daScript/misc/env_cfg.h>             // get_dasenv_trace_module_load
 #include <daScript/misc/performance_time.h>
 #include <cctype>                              // tolower (case-insensitive basename normalize)
+#include <mutex>                               // the deferred-load lock
 #include <cstdio>                              // fprintf(stderr) for the shadow-shadows-global diagnostic
 
 das::FileAccessPtr get_file_access( char * pak );
@@ -90,6 +91,12 @@ static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filena
 
 static constexpr const char *MANIFEST_SUFFIX = ".das_module.manifest";   // ARCHITECTURE.md sec.2
 static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t2";
+
+static bool g_ignore_manifests = false;
+
+void ignore_dynamic_module_manifests(bool ignore) {
+    g_ignore_manifests = ignore;
+}
 
 static bool trace_scan() {
     static const bool on = []{
@@ -183,6 +190,11 @@ static ManifestKey manifest_key(const string & path) {
 static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64_t descHash, const ManifestKey & key,
                                   const smart_ptr<FileAccess> & fa) {
     ManifestRead res;
+#if DAS_NO_FILEIO
+    // the guard the fio builtins carry: a build without file IO reads no manifest
+    (void)file; (void)descSize; (void)descHash; (void)key; (void)fa;
+    return res;
+#else
     FILE * f = fopen(file.c_str(), "rb");
     if ( !f ) {
         return res;
@@ -273,6 +285,7 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
     if ( optOut && !res.rows.empty() ) return damaged("no_manifest with rows");
     res.verdict = optOut ? ManifestVerdict::OptOut : ManifestVerdict::Replay;
     return res;
+#endif
 }
 
 static bool field_ok(const string & s) {
@@ -310,6 +323,11 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
         }
         text += "end\t" + to_string(rows.size()) + "\n";
     }
+#if DAS_NO_FILEIO
+    (void)file;
+    why = "no file io";
+    return false;
+#else
     const string tmp = file + ".tmp";
     FILE * f = fopen(tmp.c_str(), "wb");
     if ( !f ) { why = "cannot create " + tmp; return false; }
@@ -321,6 +339,7 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
 #endif
     if ( rename(tmp.c_str(), file.c_str()) != 0 ) { remove(tmp.c_str()); why = "cannot rename " + tmp; return false; }
     return true;
+#endif
 }
 
 static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter &tout, bool debug = false) {
@@ -345,31 +364,44 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     const string manifest = path + "/" + MANIFEST_SUFFIX;
     const ManifestKey key = manifest_key(path);
     auto time0 = ref_time_ticks();
-    auto mr = src ? read_manifest(manifest, len, stamp, key, fa) : ManifestRead();
+#if DAS_NO_FILEIO
+    const bool useManifest = false;     // the guard the fio builtins carry: no manifest read or written
+    const char * noManifestWhy = "no file io";
+#else
+    const bool useManifest = src && !g_ignore_manifests;
+    const char * noManifestWhy = !src ? "no source" : g_ignore_manifests ? "manifests ignored" : "no_manifest";
+#endif
+    auto mr = useManifest ? read_manifest(manifest, len, stamp, key, fa) : ManifestRead();
     if ( mr.verdict == ManifestVerdict::Replay ) {
         int64_t dllUsec = 0;
+        size_t deferred = 0;
         for ( auto & row : mr.rows ) {
-            if ( row.dynamic ) {
+            if ( !row.dynamic ) {
+                replay_native_path(row.a.c_str(), row.b.c_str(), row.c.c_str());
+            } else if ( !row.c.empty() ) {
+                // a row without a das name failed to load on the recording start, and replays as it did
+                defer_dynamic_module(row.a.c_str(), row.b.c_str(), row.on_error, row.c.c_str());
+                deferred ++;
+            } else {
                 auto dll0 = ref_time_ticks();
                 replay_dynamic_module(row.a.c_str(), row.b.c_str(), row.on_error);
                 dllUsec += get_time_usec(dll0);
-            } else {
-                replay_native_path(row.a.c_str(), row.b.c_str(), row.c.c_str());
             }
         }
         if ( trace_scan() ) {
             LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": replayed " << mr.rows.size() << " row(s) in "
-                << (get_time_usec(time0) / 1000000.) << " (shared module load " << (dllUsec / 1000000.) << ")\n";
+                << (get_time_usec(time0) / 1000000.) << " (shared module load " << (dllUsec / 1000000.)
+                << ", deferred " << deferred << ")\n";
         }
         return Result::OK;
     }
-    const bool record = src && mr.verdict != ManifestVerdict::OptOut;
+    const bool record = useManifest && mr.verdict != ManifestVerdict::OptOut;
     if ( record ) begin_dynamic_module_recording();
     das::vector<string> depFiles;
     auto res = run_descriptor(fa, mod_filename, path, tout, record ? &depFiles : nullptr);
     if ( !record ) {
         if ( trace_scan() ) {
-            LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": compiled (" << (src ? "no_manifest" : "no source") << ")\n";
+            LOG(LogLevel::info) << "[module] descriptor " << mod_filename << ": compiled (" << noManifestWhy << ")\n";
         }
         return res;
     }
@@ -540,12 +572,60 @@ static das::string path_basename(const das::string &path) {
     return path.substr(slash + 1, end - slash - 1);
 }
 
+static void move_all_nodes(gc_root & from, gc_root & to) {
+    while ( from.gc_first ) {
+        auto node = from.gc_first;
+        from.gc_unlink(node);
+        to.gc_link(node);
+    }
+}
+
+// ARCHITECTURE.md sec.2: the prerequisite walk found no module under `name`
+static bool load_deferred_module_for_require(const string & name) {
+    static recursive_mutex loadMutex;
+    lock_guard<recursive_mutex> guard(loadMutex);
+    // one root for all the load makes (a collect walks one root): the thread root's own nodes sit
+    // aside while a compiled builtin das module dumps its leftovers there, then join loadRoot
+    auto & threadRoot = gc_root::gc_get_thread_root();
+    gc_root parked, loadRoot;
+    move_all_nodes(threadRoot, parked);
+    bool loaded = false;
+    {
+        gc_active_scope scope(&loadRoot);
+        loaded = load_deferred_dynamic_module(name.c_str());
+        if ( loaded ) {
+            string notInitialized;
+            if ( !Module::InitializeDependencies(notInitialized) ) {
+                // what it needs is deferred too: the whole deferred set, the eager start's, then the fixed point again
+                notInitialized.clear();
+                load_all_deferred_dynamic_modules();
+                if ( !Module::InitializeDependencies(notInitialized) ) {
+                    DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", notInitialized.c_str());
+                }
+            }
+        }
+    }
+    move_all_nodes(threadRoot, loadRoot);
+    if ( loaded ) {
+        // every module: a constructor registers into existing ones too (a vector type's functions)
+        Module::foreach([&](Module * m) {
+            m->gc_collect(&loadRoot);
+            return true;
+        });
+    }
+    loadRoot.gc_sweep();
+    move_all_nodes(parked, threadRoot);
+    return loaded;
+}
+
 bool require_dynamic_modules(FileAccessPtr file_access,
                              const das::string &das_root,
                              const das::string &project_root,
                              const das::vector<das::string> &load_modules,
                              const das::vector<das::string> &disabled_modules,
                              das::TextWriter &tout) {
+    // before the walk: a descriptor compiled mid-scan may require a module an earlier replay deferred
+    setDeferredModuleLoader(&load_deferred_module_for_require);
     // Explicitly-disabled modules (case-insensitive on every platform) are never
     // loaded/registered — keeps a native-only module out of a wasm cross-compile.
     das_hash_set<das::string> disabled_set;

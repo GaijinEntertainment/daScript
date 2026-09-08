@@ -135,16 +135,7 @@ namespace das {
         }
     }
 
-    void Module::Initialize() {
-        daScriptEnvironment::ensure();
-        static bool atexit_registered = (atexit(daslang_atexit_audit), true);
-        (void)atexit_registered;
-        g_envTotal ++;
-
-        if (daScriptEnvironment::getBound()->modules == nullptr) {
-            DAS_FATAL_ERROR("No modules founds. You should add modules before call that function.");
-        }
-
+    bool Module::InitializeDependencies ( string & notInitialized ) {
         // InitDependencies do not add new modules.
         vector<bool> mod_state;
         bool any = true;
@@ -167,24 +158,48 @@ namespace das {
                 }
             }
         }
-        if (!any) {
-            // Some modules was not initialized!
-            size_t i = 0;
-            string error = "";
-            for ( auto m = daScriptEnvironment::getBound()->modules; m ; m = m->next, i++ ) {
-                DAS_ASSERT(mod_state.size() == i);
-                if (!mod_state.at(i)) {
-                    error += " " + m->name;
-                }
+        if ( all ) return true;
+        // Some modules was not initialized!
+        size_t i = 0;
+        for ( auto m = daScriptEnvironment::getBound()->modules; m ; m = m->next, i++ ) {
+            DAS_ASSERT(mod_state.size() > i);
+            if (!mod_state.at(i)) {
+                notInitialized += " " + m->name;
             }
-            // A module that never initializes usually failed Module::require on a dependency
-            // whose .shared_module dlopen failed QUIETLY during the startup scan. Name those
-            // load failures (with their dlerror) so this doesn't read as a missing C++ module.
-            auto pendingNote = describe_pending_dynamic_modules();
-            if ( !pendingNote.empty() ) {
-                error += "\nnote: these dynamic modules failed to load - an unresolved dependency may live in one of them:\n" + pendingNote;
-            }
-            DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", error.c_str());
+        }
+        // A module that never initializes usually failed Module::require on a dependency
+        // whose .shared_module dlopen failed QUIETLY during the startup scan. Name those
+        // load failures (with their dlerror) so this doesn't read as a missing C++ module.
+        auto pendingNote = describe_pending_dynamic_modules();
+        if ( !pendingNote.empty() ) {
+            notInitialized += "\nnote: these dynamic modules failed to load - an unresolved dependency may live in one of them:\n" + pendingNote;
+        }
+        return false;
+    }
+
+    static DeferredModuleLoader g_deferredModuleLoader = nullptr;
+
+    void setDeferredModuleLoader ( DeferredModuleLoader loader ) {
+        g_deferredModuleLoader = loader;
+    }
+
+    DeferredModuleLoader getDeferredModuleLoader () {
+        return g_deferredModuleLoader;
+    }
+
+    void Module::Initialize() {
+        daScriptEnvironment::ensure();
+        static bool atexit_registered = (atexit(daslang_atexit_audit), true);
+        (void)atexit_registered;
+        g_envTotal ++;
+
+        if (daScriptEnvironment::getBound()->modules == nullptr) {
+            DAS_FATAL_ERROR("No modules founds. You should add modules before call that function.");
+        }
+
+        string notInitialized;
+        if ( !InitializeDependencies(notInitialized) ) {
+            DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", notInitialized.c_str());
         }
         // Collect reachable TypeDecl from thread root into module roots, sweep the rest.
         auto & threadRoot = gc_root::gc_get_thread_root();

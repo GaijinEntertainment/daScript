@@ -294,7 +294,8 @@ def _default_launcher() -> list[str]:
         return ["cmd", "/c", os.path.join(SCRIPT_DIR, "daslang-mcp-msvc.cmd")]
     main_das = os.path.join(SCRIPT_DIR, "main.das")
     picked = _pick_binary(REPO_ROOT)
-    return [picked or os.path.join(REPO_ROOT, "bin", "daslang"), main_das]
+    # -ignore-manifest: the server enumerates modules, so every C++ module loads on start
+    return [picked or os.path.join(REPO_ROOT, "bin", "daslang"), "-ignore-manifest", main_das]
 
 
 def _python_launcher() -> str:
@@ -361,7 +362,7 @@ def write_mcp_json(repo_root: str) -> bool:
     if os.path.exists(os.path.join(repo_root, "utils", "internal", "das-herd", "mcp_main.das")):
         prev_herd = servers.get("dasherd", {})
         herd_entry = {"command": _daslang_binary(repo_root),
-                      "args": ["utils/internal/das-herd/mcp_main.das"]}
+                      "args": ["-ignore-manifest", "utils/internal/das-herd/mcp_main.das"]}
         if isinstance(prev_herd, dict) and "defer_loading" in prev_herd:
             herd_entry["defer_loading"] = prev_herd["defer_loading"]
         servers["dasherd"] = herd_entry

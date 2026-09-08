@@ -243,4 +243,6 @@ Three companions carry a concern each; a section number is unique across all fou
   dasLLVM compiles with the shells inert and no `<name>_variants()` registry - a program that
   reads one is framework-only and says so with that direct require. `daslib/just_in_time` keeps
   its direct require for the opposite reason: a static host that never registered the witness
-  still runs the JIT through the LLVM library, and the guard would switch it off.
+  still runs the JIT through the LLVM library, and the guard would switch it off. A host that
+  loads C++ modules at their first require (`daslang`) names the witness itself for a `-jit` or
+  `-exe` run, since no das file requires it unguarded (`src/ast/ARCHITECTURE.md` sec.2).

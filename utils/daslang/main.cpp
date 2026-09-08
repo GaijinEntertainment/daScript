@@ -239,6 +239,8 @@ int das_aot_main ( int argc, char * argv[] ) {
                 gen2MakeSyntax = true;
             } else if ( strcmp(argv[ai],"-no-dynamic-modules")==0 ) {
                 noDynamicModules = true;
+            } else if ( strcmp(argv[ai],"-ignore-manifest")==0 ) {
+                ignore_dynamic_module_manifests(true);
             } else if ( strcmp(argv[ai],"-no-lint")==0 ) {
                 noLint = true;
             } else if ( strcmp(argv[ai],"-log-compile-time")==0 ) {
@@ -464,6 +466,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         if ( jitNoCache ) policies.jit_dll_mode = false;
         policies.jit_emit_prologue = jitStack;
         access->addExtraModule("just_in_time", getDasRoot() + "/daslib/just_in_time.das");
+        // the witness every `require ?llvm` guards on: a JIT run names it (src/ast/ARCHITECTURE.md sec.2)
+        if ( auto loader = getDeferredModuleLoader() ) loader("llvm");
+        mark_dynamic_module_required("llvm");
         policies.jit_output_path = jitOutPath;
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
     }
@@ -740,6 +745,8 @@ void print_help() {
         << "    --das-profiler-global install profiler as singleton agent (default with --das-profiler-memory)\n"
         << "    --das-profiler-leaks track live heap allocations and dump leaks on context destroy\n"
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
+        << "    -ignore-manifest  compile every .das_module descriptor and load every C++ module on start, reading\n"
+        << "                and writing no .das_module.manifest - by default a manifest's C++ module loads at the first require that names it\n"
         << "    -no-lint    skip the lint pass (Program::lint)\n"
         << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
         << "    --ast-verify-batch  checks the finished tree only (no per-pass walks, no cross-module sweeps): cheap enough to gate many files (CI)\n"
@@ -1060,6 +1067,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="no-dynamic-modules" ) {
                 noDynamicModules = true;
+            } else if ( cmd=="ignore-manifest" ) {
+                ignore_dynamic_module_manifests(true);
             } else if ( cmd=="-dump-leaks" ) {
                 dumpLeaks = true;
             } else if ( cmd=="-no-dump-leaks" ) {
