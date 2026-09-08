@@ -629,6 +629,7 @@ bool require_dynamic_modules(FileAccessPtr file_access,
                              const das::vector<das::string> &load_modules,
                              const das::vector<das::string> &disabled_modules,
                              das::TextWriter &tout) {
+    clear_deferred_dynamic_modules();
     setDeferredModuleLoader(&load_deferred_module_for_require);
     // Explicitly-disabled modules (case-insensitive on every platform) are never
     // loaded/registered — keeps a native-only module out of a wasm cross-compile.

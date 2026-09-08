@@ -518,7 +518,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     moduleCache.install(cacheReadPath, cacheWritePath, cacheQuiet);
     auto compile0 = ref_time_ticks();
     auto program = compileDaScript(fn,access,tout,dummyGroup,policies);
-    startupCompileUsec = get_time_usec(compile0);
+    startupCompileUsec += get_time_usec(compile0);
     {
         auto cres = moduleCache.finish();
         if ( !cacheQuiet ) {
@@ -569,7 +569,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
 
             auto simulate0 = ref_time_ticks();
             auto pctx = SimulateWithErrReport(program, tout);
-            startupSimulateUsec = get_time_usec(simulate0);
+            startupSimulateUsec += get_time_usec(simulate0);
             // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
             {
                 auto & root = gc_root::gc_get_thread_root();
@@ -620,7 +620,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                     } else {
                         res = pctx->evalWithCatch(fnTest, nullptr);
                     }
-                    startupRunUsec = get_time_usec(run0);
+                    startupRunUsec += get_time_usec(run0);
                     if ( auto ex = pctx->getException() ) {
                         tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
                         exitCode = 1;

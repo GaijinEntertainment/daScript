@@ -45,5 +45,6 @@ DAS_API bool load_deferred_dynamic_module(const char * das_name);
 DAS_API size_t load_all_deferred_dynamic_modules();                 // the count it attempted
 DAS_API bool has_deferred_dynamic_modules();
 DAS_API bool is_dynamic_module_deferred(const char * das_name);
+DAS_API void clear_deferred_dynamic_modules();                      // the rows are the scan's: cleared at scan start and at shutdown
 DAS_CC_API void ignore_dynamic_module_manifests(bool ignore);
 }

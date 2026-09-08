@@ -12,7 +12,7 @@ reader sends that host and whether the host sets cookies.**
 
 **A diff that adds, to any text that reaches a built page - an authored `.rst` under `source`,
 a stub under `source/stdlib/handmade`, or page text a `reflections` generator writes - anything
-a reader is told to fetch, run, or type - an address, a file, a command, a flag, an API a
-`.das_package` manifest calls - states, in the PR body, that each exists and works at merge, and
+a reader is told to fetch, run, or type - an address, a file, a command, a flag, an API, a name
+a `.das_package` manifest resolves - states, in the PR body, that each exists and works at merge, and
 where that was checked** - the build proves the page renders, never that what it points a
 reader at is there.

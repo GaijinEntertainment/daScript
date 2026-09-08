@@ -317,6 +317,7 @@ namespace das {
     DAS_API size_t load_all_deferred_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API bool has_deferred_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API bool is_dynamic_module_deferred ( const char * ) GENERATE_IO_STUB_RET
+    DAS_API void clear_deferred_dynamic_modules () GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
@@ -2464,6 +2465,10 @@ namespace das {
     DAS_API bool is_dynamic_module_deferred ( const char * das_name ) {
         return das_name && find_if(g_deferred_dynamic_modules.begin(), g_deferred_dynamic_modules.end(),
             [&](const DeferredDynamicModule & dm) { return dm.das_name == das_name; }) != g_deferred_dynamic_modules.end();
+    }
+
+    DAS_API void clear_deferred_dynamic_modules () {
+        g_deferred_dynamic_modules.clear();
     }
 
     // Re-attempt modules whose dlopen was deferred (Quiet failure during the

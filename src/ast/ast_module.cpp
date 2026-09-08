@@ -7,6 +7,7 @@
 #include "daScript/daScriptModule.h"
 #include "daScript/misc/handle_registry.h"
 #include "daScript/simulate/simulate_fusion.h"
+#include "daScript/ast/dyn_modules.h"
 
 #include <atomic>
 
@@ -248,6 +249,8 @@ namespace das {
         if ( dumpHandleLeaks ) handleRegistry_dumpAll();
         // Free allocated structures for dynamic modules (unloads DLLs).
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
+        clear_deferred_dynamic_modules();
+        setDeferredModuleLoader(nullptr);
 
         clearGlobalAotLibrary();
         if ( resetFusion ) {

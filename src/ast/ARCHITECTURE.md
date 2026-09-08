@@ -88,7 +88,9 @@ the grown list, and when a module reports it cannot initialize - what it needs i
 brings every deferred module in and runs the fixed point again, which is the set an eager start
 has. A row whose own dlopen fails takes the same road - every deferred module comes in, the
 pending retry runs - and the require then finds the module or fails as a cold start would. The
-load runs under one gc root of its own with the thread root's nodes parked meanwhile,
+rows and the loader are the scan's: `require_dynamic_modules` clears the rows before its
+walk and installs the loader, and `Module::Shutdown` clears both, so an environment that
+follows sees neither the last one's rows nor its loader. The load runs under one gc root of its own with the thread root's nodes parked meanwhile,
 because a constructor's nodes go to the active root while a builtin das module it compiles
 dumps its leftovers on the thread root, and a collect stops at a node owned by another root;
 after the load every module, not only the new ones, collects from that root, since a
