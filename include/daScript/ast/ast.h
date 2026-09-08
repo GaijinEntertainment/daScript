@@ -304,7 +304,6 @@ namespace das
         ExpressionPtr   source = nullptr;     // if its interator variable, this is where the source is
         Expression *    loop_source = nullptr; // weak ref to ExprFor::sources[i], used for read/write propagation
         LineInfo        at;
-        int             index = -1;
         uint32_t        stackTop = 0;
         uint32_t        extraLocalOffset = 0;   // this is here for fake variables only
         Module *        module = nullptr;
@@ -315,7 +314,6 @@ namespace das
             struct {
                 bool    init_via_move : 1;
                 bool    init_via_clone : 1;
-                bool    used : 1;
                 bool    aliasCMRES : 1;
                 bool    marked_used : 1;
                 bool    global_shared : 1;
@@ -857,7 +855,6 @@ namespace das
         vector<VariablePtr> arguments;
         TypeDeclPtr         result = nullptr;
         ExpressionPtr       body = nullptr;
-        int32_t             index = -1;
         uint32_t            totalStackSize = 0;
         int32_t             totalGenLabel = 0;
         LineInfo            at, atDecl;
@@ -890,7 +887,6 @@ namespace das
 
                 bool    init : 1;
                 bool    addr : 1;
-                bool    used : 1;
                 bool    fastCall : 1;
                 bool    knownSideEffects : 1;
                 bool    hasToRunAtCompileTime : 1;
@@ -1671,6 +1667,19 @@ namespace das
         ModuleGroup *               thisModuleGroup = nullptr;
         int                         totalFunctions = 0;
         int                         totalVariables = 0;
+        // program-scoped symbol state on the shared AST objects (ARCHITECTURE.md sec.4)
+        das_hash_set<const Function *>          usedFunctions;
+        das_hash_set<const Variable *>          usedVariables;
+        das_hash_map<const Function *, int32_t> functionIndices;
+        das_hash_map<const Variable *, int32_t> variableIndices;
+        __forceinline bool isUsed ( const Function * fn ) const { return usedFunctions.find(fn) != usedFunctions.end(); }
+        __forceinline bool isUsed ( const Variable * var ) const { return usedVariables.find(var) != usedVariables.end(); }
+        __forceinline void setUsed ( const Function * fn, bool used ) { if ( used ) usedFunctions.insert(fn); else usedFunctions.erase(fn); }
+        __forceinline void setUsed ( const Variable * var, bool used ) { if ( used ) usedVariables.insert(var); else usedVariables.erase(var); }
+        __forceinline int32_t indexOf ( const Function * fn ) const { auto it = functionIndices.find(fn); return it != functionIndices.end() ? it->second : -1; }
+        __forceinline int32_t indexOf ( const Variable * var ) const { auto it = variableIndices.find(var); return it != variableIndices.end() ? it->second : -1; }
+        __forceinline void setIndex ( const Function * fn, int32_t index ) { functionIndices[fn] = index; }
+        __forceinline void setIndex ( const Variable * var, int32_t index ) { variableIndices[var] = index; }
         int                         newLambdaIndex = 1;
         int                         inferPassesUsed = 0;   // sum of inferTypesDirty inner-loop pass counts across all inferTypes calls (incl. restartInfer legs) for this module; reset by parseDaScript once per module-compile; used by per-module compile-time log
         vector<Error>               errors;

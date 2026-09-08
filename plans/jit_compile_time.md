@@ -60,3 +60,19 @@ that stay:
 4. **Macro-emitter changes are invisible to every cache key** (QUIRK 21; QUIRK 15's unquirk
    note wants the generator hash folded into the sidecar identity too). Done = an emitter
    edit invalidates exactly the families it generates.
+
+## Front-end record read - the macro-context simulate share (ledgered 2026-09-08)
+
+A warm `-jit` hello world spends 70 of its 88 ms in the compile, and the compile is the
+module-cache read: 61 records deserialized (~10 ms of raw bytes) plus the macro-context
+simulate of every macro module the program requires - typemacro_boost 4.6 ms, clargs 4.1,
+templates_boost 3.5, quote 2.8, ast_boost 2.5, llvm_jit_link 4.7, some twenty modules in all
+(`-log-compile-time`, the `cache read took ... -- macro simulate` lines). The emitter's own
+context no longer loads on a DLL hit (`llvm_jit_link`), so what remains is daslib's. Separate
+from the JIT and from the group/late-require work; not started. Also in the read:
+`bindings/llvm_func` re-parses on every run (11 ms) - its `require dasbind` drifts the
+builtin hash, so the record never serves ("reparsing in place").
+
+Levers, unmeasured: a macro context that simulates lazily on the first macro call instead of
+at record read; a cheaper simulate for a context whose program did not change (the record could
+carry the simulated context's tables); a `[_macro]`-free module skipping the context entirely.

@@ -1504,7 +1504,7 @@ namespace das {
 
     void Variable::serialize ( AstSerializer & ser ) {
         ser.tag(HASH_TAG("Variable"));
-        ser << name << aka << type << init << source << at << index << stackTop
+        ser << name << aka << type << init << source << at << stackTop
             << extraLocalOffset << module
             << initStackSize << flags << access_flags << access_info << annotation;
     }
@@ -1570,7 +1570,7 @@ namespace das {
         } else {
             ser.serializePointer(fromGeneric);
         }
-        ser << index         << totalStackSize  << totalGenLabel;
+        ser << totalStackSize  << totalGenLabel;
         ser << at            << atDecl          << module;
         ser << hash          << aotHash;  // do not serialize inferStack
         ser << resultAliases << argumentAliases << resultAliasesGlobals;

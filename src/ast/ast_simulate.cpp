@@ -27,6 +27,13 @@ namespace das
     // fusion function pointers (defined here in main lib, set by fusion lib)
     void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
     void (*g_resetFusionEngineFn) () = nullptr;
+    // a context simulating outside Program::simulate (eval_single_expression) has no program: no slot
+    static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
+        return context.thisProgram ? context.thisProgram->indexOf(fn) : -1;
+    }
+    static __forceinline int32_t programIndexOf ( const Context & context, const Variable * var ) {
+        return context.thisProgram ? context.thisProgram->indexOf(var) : -1;
+    }
     // topological sort for the [init] nodes
 
     struct InitSort {
@@ -817,8 +824,9 @@ namespace das
                 if ( mks->constructor ) {
                     uint32_t offset = mks->extraOffset + index*stride;
                     SimNode_CallBase * pCall = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(0, mks->at);
-                    DAS_ASSERT(mks->constructor->index!=-1 && "should have failed in type infer otherwise");
-                    pCall->fnPtr = context.getFunction(mks->constructor->index);
+                    auto ctorIndex = programIndexOf(context,mks->constructor);
+                    DAS_ASSERT(ctorIndex!=-1 && "should have failed in type infer otherwise");
+                    pCall->fnPtr = context.getFunction(ctorIndex);
                     if ( mks->useCMRES ) {
                         pCall->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(mks->at, offset);
                     } else if ( mks->useStackRef ) {
@@ -1208,7 +1216,7 @@ namespace das
             context.thisProgram->error("internal compilation error, ExprAddr func is null", "", "", at, CompilationError::internal_function);
             setE(expr, nullptr);
             return expr;
-        } else if ( expr->func->index<0 ) {
+        } else if ( programIndexOf(context,expr->func)<0 ) {
             context.thisProgram->error("internal compilation error, ExprAddr func->index is unused", "", "", at, CompilationError::internal_function);
             setE(expr, nullptr);
             return expr;
@@ -1220,8 +1228,9 @@ namespace das
         } temp;
         temp.cval = v_zero();
         if ( expr->func->module->isSolidContext ) {
-            DAS_ASSERT(expr->func->index>=0 && "address of unsued function? how?");
-            temp.mnh = expr->func->index;
+            auto index = programIndexOf(context,expr->func);
+            DAS_ASSERT(index>=0 && "address of unsued function? how?");
+            temp.mnh = index;
             setE(expr, context.code->makeNode<SimNode_FuncConstValue>(at,temp.cval));
         } else {
             temp.mnh = expr->func->getMangledNameHash();
@@ -2624,12 +2633,12 @@ namespace das
             // (e.g. struct field defaults) bypass folding, so the original ExprVar reference
             // survives. Re-simulating it would emit a GetSharedMnh / GetGlobalMnh that looks
             // up a mnh the variable lookup does not hold -> crash. Emit the const init directly instead.
-            if ( expr->variable->index < 0 && expr->variable->init
+            if ( programIndexOf(context,expr->variable) < 0 && expr->variable->init
                  && expr->variable->init->rtti_isConstant() ) {
                 setE(expr, simulateExpression(expr->variable->init));
                 return expr;
             }
-            DAS_ASSERT(expr->variable->index >= 0 && "using variable which is not used. how?");
+            DAS_ASSERT(programIndexOf(context,expr->variable) >= 0 && "using variable which is not used. how?");
             uint64_t mnh = expr->variable->getMangledNameHash();
             if ( !expr->variable->module->isSolidContext ) {
                 if ( expr->variable->global_shared ) {
@@ -2675,7 +2684,7 @@ namespace das
         } else {
             auto pCall = static_cast<SimNode_CallBase *>(expr->func->makeSimNode(context, sarguments));
             pCall->debugInfo = at;
-            pCall->fnPtr = context.getFunction(expr->func->index);
+            pCall->fnPtr = context.getFunction(programIndexOf(context,expr->func));
             pCall->arguments = (SimNode **) context.code->allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
             pCall->arguments[0] = getE(expr->subexpr);
@@ -2737,7 +2746,7 @@ namespace das
         } else {
             auto pCall = static_cast<SimNode_CallBase *>(expr->func->makeSimNode(context, sarguments));
             pCall->debugInfo = at;
-            pCall->fnPtr = context.getFunction(expr->func->index);
+            pCall->fnPtr = context.getFunction(programIndexOf(context,expr->func));
             pCall->arguments = (SimNode **) context.code->allocate(2 * sizeof(SimNode *));
             pCall->nArguments = 2;
             pCall->arguments[0] = getE(expr->left);
@@ -3367,17 +3376,18 @@ namespace das
             if ( var->init && var->init->rtti_isMakeLocal() ) {
                 return getE(var->init);
             } else {
+                auto index = programIndexOf(context,var);
                 if ( !var->module->isSolidContext ) {
                     if ( var->global_shared ) {
-                        get = context.code->makeNode<SimNode_GetSharedMnh>(var->init->at, var->index, var->getMangledNameHash());
+                        get = context.code->makeNode<SimNode_GetSharedMnh>(var->init->at, index, var->getMangledNameHash());
                     } else {
-                        get = context.code->makeNode<SimNode_GetGlobalMnh>(var->init->at, var->index, var->getMangledNameHash());
+                        get = context.code->makeNode<SimNode_GetGlobalMnh>(var->init->at, index, var->getMangledNameHash());
                     }
                 } else {
                     if ( var->global_shared ) {
-                        get = context.code->makeNode<SimNode_GetShared>(var->init->at, var->index, var->getMangledNameHash());
+                        get = context.code->makeNode<SimNode_GetShared>(var->init->at, index, var->getMangledNameHash());
                     } else {
-                        get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index, var->getMangledNameHash());
+                        get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, index, var->getMangledNameHash());
                     }
                 }
             }
@@ -3467,8 +3477,8 @@ namespace das
         if ( context.thisHelper ) context.thisHelper->stampSimNode(expr, pCall->debugInfo);
         if ( func->builtIn) {
             pCall->fnPtr = nullptr;
-        } else if ( func->index>=0 ) {
-            pCall->fnPtr = context.getFunction(func->index);
+        } else if ( auto index = programIndexOf(context,func); index>=0 ) {
+            pCall->fnPtr = context.getFunction(index);
             DAS_ASSERTF(pCall->fnPtr, "calling function which null. how?");
         } else {
             DAS_ASSERTF(0, "calling function which is not used. how?");
@@ -3582,8 +3592,9 @@ namespace das
     void Program::buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs ) {
         context.functionLookup = make_shared<NameLookup>();
         for ( const auto & fn : lookupFunctions ) {
-            auto & sfn = context.functions[fn->index];
-            context.functionLookup->insert(sfn.mangledNameHash, sfn.name, uint32_t(fn->index), uint32_t(fn->index));
+            auto index = indexOf(fn);
+            auto & sfn = context.functions[index];
+            context.functionLookup->insert(sfn.mangledNameHash, sfn.name, uint32_t(index), uint32_t(index));
         }
         string failure;
         if ( !context.functionLookup->seal(&failure) ) {
@@ -3659,7 +3670,7 @@ namespace das
         for ( auto mod : library.modules ) {
             mod->functions.foreach([&](FunctionPtr & fn){
                 if ( fn->builtIn ) return;
-                if ( !fn->used ) return;
+                if ( !isUsed(fn) ) return;
                 if ( fn->isTemplate ) return;
                 das_hash_set<Function *> visited;
                 fn->recursive = isRecursive(fn, visited);
@@ -3725,14 +3736,14 @@ namespace das
         if ( totalVariables ) {
             for (auto & pm : library.modules ) {
                 pm->globals.foreach([&](auto pvar){
-                    if (!pvar->used)
+                    if (!isUsed(pvar))
                         return;
-                    if ( pvar->index<0 ) {
+                    if ( indexOf(pvar)<0 ) {
                         error("Internal compiler errors. Simulating variable which is not used" + pvar->name,
                             "", "", LineInfo(), CompilationError::internal_variable);
                         return;
                     }
-                    auto & gvar = context.globalVariables[pvar->index];
+                    auto & gvar = context.globalVariables[indexOf(pvar)];
                     gvar.name = context.code->allocateName(pvar->name);
                     gvar.size = pvar->type->getSizeOf();
                     gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
@@ -3786,7 +3797,7 @@ namespace das
         if ( totalFunctions ) {
             for (auto & pm : library.modules) {
                 pm->functions.foreach([&](auto pfun){
-                    if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
+                    if (indexOf(pfun) < 0 || !isUsed(pfun) || pfun->isTemplate)
                         return;
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
@@ -3796,7 +3807,7 @@ namespace das
                     auto mangledName = pfun->getMangledName();
                     auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());
                     fnByMnh[MNH] = pfun;
-                    auto & gfun = context.functions[pfun->index];
+                    auto & gfun = context.functions[indexOf(pfun)];
                     gfun.name = context.code->allocateName(pfun->name);
                     gfun.mangledName = context.code->allocateName(mangledName);
                     gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
@@ -3808,7 +3819,7 @@ namespace das
                         // positions stamp each expression's sim node as it is built (see
                         // SimulateVisitor::setE), and the intervals feed the locals gate
                         // (see LocalVariableInfo::openPos)
-                        gfun.debugInfo->spaceId = frameSpaceId(pfun->index);
+                        gfun.debugInfo->spaceId = frameSpaceId(indexOf(pfun));
                         helper.stampFramePositions(pfun->body, gfun.debugInfo->spaceId);
                         helper.appendLocalVariables(gfun.debugInfo, pfun->body);
                         helper.appendGlobalVariables(gfun.debugInfo, pfun);
@@ -3841,9 +3852,9 @@ namespace das
         if ( totalVariables ) {
             for (auto & pm : library.modules ) {
                 pm->globals.foreach([&](auto pvar){
-                    if (!pvar->used)
+                    if (!isUsed(pvar))
                         return;
-                    auto & gvar = context.globalVariables[pvar->index];
+                    auto & gvar = context.globalVariables[indexOf(pvar)];
                     if ( !folding && pvar->init ) {
                         if ( disableInit && !pvar->init->rtti_isConstant() ) {
                             error("[init] is disabled in the options or CodeOfPolicies",
@@ -3909,9 +3920,9 @@ namespace das
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
+                if (indexOf(pfun) < 0 || !isUsed(pfun) || pfun->isTemplate)
                     return;
-                auto & gfun = context.functions[pfun->index];
+                auto & gfun = context.functions[indexOf(pfun)];
                 for ( const auto & an : pfun->annotations ) {
                     auto fna = static_cast<FunctionAnnotation*>(an->annotation);
                     if (!fna->simulate(&context, &gfun)) {
@@ -3919,7 +3930,7 @@ namespace das
                             LineInfo(), CompilationError::runtime_function_annotation);
                     }
                 }
-                indexToFunction[pfun->index] = pfun;
+                indexToFunction[indexOf(pfun)] = pfun;
             });
         }
         // verify code and string heaps
@@ -4125,7 +4136,7 @@ namespace das
         globs.reserve(totalVariables);
         for (auto & pm : library.modules) {
             pm->globals.foreach([&](auto var){
-                if (var->used) {
+                if (isUsed(var)) {
                     globs.push_back(var);
                 }
             });
@@ -4135,7 +4146,7 @@ namespace das
         const uint64_t fnv_prime = 1099511628211ul;
         for (auto& pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used || !pfun->init)
+                if (indexOf(pfun) < 0 || !isUsed(pfun) || !pfun->init)
                     return;
                 res = (res ^ pfun->aotHash) * fnv_prime;
             });
@@ -4152,10 +4163,10 @@ namespace das
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
+                if (indexOf(pfun) < 0 || !isUsed(pfun) || pfun->isTemplate)
                     return;
                 fnn.push_back(pfun);
-                indexToFunction[pfun->index] = pfun;
+                indexToFunction[indexOf(pfun)] = pfun;
             });
         }
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {

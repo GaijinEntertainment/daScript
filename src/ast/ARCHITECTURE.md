@@ -178,10 +178,9 @@ caller's program; the caller reaches it through its macro context (`Module::macr
 `daslib/cross_context`'s `macro_context_of`), which `find_macro_context` gives a context mutex
 because `invoke_in_context` locks its target. The call saves and restores the environment's
 bound program, compiler log and serializer pointers around the walk, since it may run
-mid-parse of another module, and it puts back the `used` flag of every function and global in
-the process as well: the walk's symbol-use passes rewrite those flags across every shared
-module, and the caller may be mid-simulate with a JIT that reads them. One recursive mutex
-serializes every late require in the process. Its module cache is its own: the host's cache is finished before the program
+mid-parse of another module; the symbol state its passes compute lives on its own `Program`
+(sec.4), so the caller's - which may be mid-simulate with a JIT reading it - is untouched. One
+recursive mutex serializes every late require in the process. Its module cache is its own: the host's cache is finished before the program
 simulates, so the late walk would otherwise parse the same modules from source on every run.
 The host records its cache key inputs and whether a cache is in use at all on the environment
 (`lateModuleCache*`), the late walk installs a `ModuleFileCache` at
@@ -190,3 +189,20 @@ in the default directory otherwise, nowhere under `-no-module-cache` - reads and
 the host does, and keeps the object for the life of the process (`keepLateModuleCache`,
 freed at `Module::Shutdown` after the modules), because a served module's line references
 point at the FileInfos the cache holds.
+
+## 4. Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`)
+
+Whether a program uses a function or a global, and the slot each holds in that program's
+context, are decided per program - the symbol-use pass (`markSymbolUse` and its variants,
+`ast_export.cpp`) walks the whole library from the program's roots, and `allocateStack` numbers
+what it marked - while the `Function` and `Variable` objects of a shared module are one instance
+for every program in the process. The state therefore lives on `Program`: `usedFunctions` and
+`usedVariables` are sets, `functionIndices` and `variableIndices` maps, read through `isUsed`
+and `indexOf` and written through `setUsed` and `setIndex`; `clearSymbolUse` empties the sets.
+An index is `-1` for an object the allocation never saw, `-2` for one it saw and found unused,
+the context slot otherwise; the constant folder tells the first from the rest. Simulate reads
+the tables through `context.thisProgram`, and das code through the `ast` module's `is_used`,
+`function_index` and `variable_index`, each taking the program. A compile nested inside another -
+a macro calling `compile`, a late `require` (sec.3), the folding program - fills its own tables
+and leaves the outer program's answers standing. The stream a module-cache record carries has
+neither the flag nor the slot: both are recomputed by the reading program.

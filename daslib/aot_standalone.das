@@ -85,7 +85,7 @@ def collectInitFunctionAotNames(program : ProgramPtr; var context : Context) : a
     let thisModule = program.getThisModule
     program.get_ptr() |> for_each_module_no_order($(pm) {
         pm |> for_each_module_function($(pfun) {
-            if (pfun.index < 0 || !pfun.flags.used || !(initMnhSet |> key_exists(pfun.getMangledNameHash))) {
+            if (function_index(program, pfun) < 0 || !is_used(program, pfun) || !(initMnhSet |> key_exists(pfun.getMangledNameHash))) {
                 return
             }
             if (pm != thisModule) {
@@ -116,8 +116,8 @@ def private usedGlobals(var program : ProgramPtr) : array<Variable?> {
     if (program.totalVariables > 0) {
         program.get_ptr() |> for_each_module_no_order($(pm) {
             pm |> for_each_global($(pvar) {
-                if (!pvar.flags.used) return
-                if (pvar.index < 0) {
+                if (!is_used(program, pvar)) return
+                if (variable_index(program, pvar) < 0) {
                     macro_error(program, pvar.at, "standalone AOT: global {pvar.name} is used but was never allocated an index")
                     return
                 }
@@ -136,8 +136,8 @@ def private standaloneCollects(program : ProgramPtr) : bool {
 //! A `VarInfo` per global, made before the helper dumps its tables so every type they name is in
 //! the dump: the collector walks each global through its info, the way the interpreter's
 //! simulate step wires it.
-def private makeGlobalVarInfos(var helper : AotDebugInfoHelper?; globals : array<Variable?>) : array<tuple<index : int; info : VarInfo?>> {
-    return <- [for (pvar in globals); (index = pvar.index, info = helper.helper |> make_variable_debug_info(pvar))]
+def private makeGlobalVarInfos(program : ProgramPtr; var helper : AotDebugInfoHelper?; globals : array<Variable?>) : array<tuple<index : int; info : VarInfo?>> {
+    return <- [for (pvar in globals); (index = variable_index(program, pvar), info = helper.helper |> make_variable_debug_info(pvar))]
 }
 
 def private writeGlobalVarInfos(var helper : AotDebugInfoHelper?; infos : array<tuple<index : int; info : VarInfo?>>; var tw : StringBuilderWriter) {
@@ -195,7 +195,7 @@ def private writeFunctionLookup(var tw : StringBuilderWriter; usedFunctions : ar
 //! the standalone context's global lookup: the value is the offset InitGlobalVariable assigns at construction -
 //! the 16-byte-rounded running size of the shared or the plain globals, in declaration order - and the
 //! generated constructor verifies every global against it, so the two computations cannot drift apart silently
-def private writeVariableLookup(var tw : StringBuilderWriter; globals : array<Variable?>) {
+def private writeVariableLookup(program : ProgramPtr; var tw : StringBuilderWriter; globals : array<Variable?>) {
     var lookup = unsafe(name_lookup_create())
     var globalsSize = 0u
     var sharedSize = 0u
@@ -207,7 +207,7 @@ def private writeVariableLookup(var tw : StringBuilderWriter; globals : array<Va
         } else {
             globalsSize += size
         }
-        name_lookup_insert(lookup, hash(pvar |> get_mangled_name()), string(pvar.name), uint(pvar.index), offset)
+        name_lookup_insert(lookup, hash(pvar |> get_mangled_name()), string(pvar.name), uint(variable_index(program, pvar)), offset)
     }
     name_lookup_seal(lookup)
     writeLookupTables(tw, "var_lookup", lookup)
@@ -243,9 +243,10 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
 
     write(tw, "     // start totalVariables\n");
     for (pvar in lookupVariableTable) {
-        write(tw, "    InitGlobalVar(context, &context.globalVariables[{pvar.index}/*pvar->index*/], GlobalVarInfo(\"")
+        let vindex = variable_index(program, pvar)
+        write(tw, "    InitGlobalVar(context, &context.globalVariables[{vindex}/*pvar->index*/], GlobalVarInfo(\"")
         write(tw, "{pvar.name}\", \"{pvar |> get_mangled_name()}\", {pvar._type.sizeOf}, {pvar.flags.global_shared}));\n");
-        write(tw, "    context.globalVariables[{pvar.index}].debugInfo = &__gvar_info_{pvar.index};\n");
+        write(tw, "    context.globalVariables[{vindex}].debugInfo = &__gvar_info_{vindex};\n");
     }
     write(tw, "     // end totalVariables\n\n");
     write(tw, "    context.allocateGlobalsAndShared();\n");
@@ -280,7 +281,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         write(tw, "    \}\n");
     }
 
-    writeVariableLookup(tw, lookupVariableTable)
+    writeVariableLookup(program, tw, lookupVariableTable)
     write(tw, "    context.variableLookup = make_shared<NameLookup>();\n");
     write(tw, "    context.variableLookup->adopt(var_lookup_table);\n");
     write(tw, "    for ( int i=0, is=context.totalVariables; i!=is; ++i ) \{\n");
@@ -340,7 +341,7 @@ class StandaloneContextGen : CppAot {
         var globals : array<Variable?>;
         prog.get_ptr() |> for_each_module($(pm) {
             pm |> for_each_global($(pvar) {
-                if (pvar.index < 0 || !pvar.flags.used
+                if (variable_index(prog, pvar) < 0 || !is_used(prog, pvar)
                         || pvar._module == prog.getThisModule) return ;
                 globals.push(pvar);
             });
@@ -493,7 +494,7 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
 
             initFunctions = addFunctionInfo(collectProgramUsedFunctions(program, true, false), gen.helper);
-            let globalInfos <- makeGlobalVarInfos(gen.helper, globals)
+            let globalInfos <- makeGlobalVarInfos(program, gen.helper, globals)
             type_defs += gen.declarations;
             gen.declarations = "";
             write(tw, gen.str());
@@ -523,7 +524,7 @@ def private isMarkedNoAot(pfun : Function?) : bool {
 def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
     program.get_ptr() |> for_each_module_no_order($(pm) {
         pm |> for_each_module_function($(pfun) {
-            if (pfun.index < 0 || !pfun.flags.used || pfun.flags.builtIn) {
+            if (function_index(program, pfun) < 0 || !is_used(program, pfun) || pfun.flags.builtIn) {
                 return
             }
             if (pfun.flags.noAot) {
@@ -583,7 +584,7 @@ def private prepareProgramForEmission(var program : ProgramPtr; context : Contex
         program.get_ptr() |> for_each_module_no_order($(pm) {
             if (pm == thisModule) return
             pm |> for_each_global($(pvar) {
-                if (pvar.index < 0 || !pvar.flags.used || pvar.init == null) return
+                if (variable_index(program, pvar) < 0 || !is_used(program, pvar) || pvar.init == null) return
                 visit_expression(pvar.init, adapter_coll)
             })
         })

@@ -626,6 +626,7 @@ class UseTypeMarker : AstVisitor {
     useHandles : table<TypeAnnotation?>;
     useModules : table<Module?>;
     inUsedCode : bool = false;
+    program : ProgramPtr;
 
     def override preVisitTypeDecl(typeDecl : TypeDeclPtr) {
     }
@@ -635,7 +636,7 @@ class UseTypeMarker : AstVisitor {
     }
 
     def override preVisitFunction(fun : FunctionPtr) {
-        inUsedCode = fun.flags.used;
+        inUsedCode = is_used(program, fun);
     }
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         inUsedCode = false;
@@ -666,7 +667,7 @@ class UseTypeMarker : AstVisitor {
         mark(variable._type);
     }
     def override preVisitGlobalLetVariable(variable : Variable?; lastArg : bool) {
-        inUsedCode = variable.flags.used;
+        inUsedCode = is_used(program, variable);
         mark(variable._type);
     }
     def override visitGlobalLetVariable(var variable : VariablePtr; lastArg : bool) : VariablePtr {
@@ -1571,7 +1572,7 @@ class public CppAot : AstVisitor {
     }
     def override preVisitGlobalLetVariable(variable : Variable?; lastArg : bool) {
         write(*ss, tabs());
-        if (!variable.flags.used) {
+        if (!is_used(program, variable)) {
             write(*ss, "/* ");
         }
         if (variable.flags.global_shared) {
@@ -1587,7 +1588,7 @@ class public CppAot : AstVisitor {
     }
     def override visitGlobalLetVariable(variable : VariablePtr; last : bool) {
         write(*ss, ";");
-        if (!variable.flags.used) {
+        if (!is_used(program, variable)) {
             write(*ss, " */");
         }
         write(*ss, "/*{variable.name}*/\n");
@@ -4211,7 +4212,7 @@ def private aotEmitStruct(ps : Structure?;
 def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?; prune_to_used : bool = false) {
     //! Writes forward declarations and dependent type/function definitions for AOT output.
     buildStructEnumCollisions(program);
-    var utm = new UseTypeMarker();
+    var utm = new UseTypeMarker(program := program);
     make_visitor(*utm) $(adapter) {
         visit(program, adapter);
         if (prune_to_used) {                       // a standalone context emits the foreign functions too
@@ -4327,13 +4328,13 @@ class ArgsConverter : AstVisitor {
 
 
 
-def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_module : Module?; all_modules : bool; is_all : bool = false) : array<Function?> {
+def collectUsedFunctions(program : ProgramPtr; modules : array<Module?>; totalFunctions : int; this_module : Module?; all_modules : bool; is_all : bool = false) : array<Function?> {
     var fnn : array<Function?>;
     fnn.reserve(totalFunctions);
     for (pm in modules) {
         pm |> for_each_module_function($(pfun) {
             if ((!all_modules && pfun._module != this_module)
-                    || pfun.index < 0 || !pfun.flags.used) return ;
+                    || function_index(program, pfun) < 0 || !is_used(program, pfun)) return ;
             if (!is_all) {
                 if (pfun.flags.builtIn || pfun.flags.noAot) return ;
             }
@@ -4352,7 +4353,7 @@ def public foreignUsedFunctions(program : ProgramPtr; before_no_aot_marking : bo
     program.get_ptr() |> for_each_module_no_order($(pm) {
         if (pm == thisModule) return
         pm |> for_each_module_function($(pfun) {
-            if (pfun.index < 0 || !pfun.flags.used || pfun.flags.builtIn || pfun.moreFlags.isTemplate
+            if (function_index(program, pfun) < 0 || !is_used(program, pfun) || pfun.flags.builtIn || pfun.moreFlags.isTemplate
                     || (!before_no_aot_marking && pfun.flags.noAot)) return
             foreign |> push(pfun)
         })
@@ -4366,7 +4367,7 @@ def public collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool;
     program.get_ptr() |> for_each_module_no_order($(mod) {
         modules.push(mod);
     })
-    return collectUsedFunctions(modules, program.totalFunctions, program.getThisModule, all_modules, is_all)
+    return collectUsedFunctions(program, modules, program.totalFunctions, program.getThisModule, all_modules, is_all)
 }
 
 def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, all_modules : bool = false) {
@@ -4435,14 +4436,15 @@ def public setAotHashes(program : ProgramPtr; ctx : Context) {
     var fni = 0;
     program.get_ptr() |> for_each_module_no_order($(mod) {
         mod |> for_each_module_function($(pfun) {
-            if (pfun.index < 0 || !pfun.flags.used) return ;
-            pfun.hash = get_function_hash_by_id(pfun, pfun.index, unsafe(reinterpret<void?>(ctx)));
+            let pindex = function_index(program, pfun)
+            if (pindex < 0 || !is_used(program, pfun)) return ;
+            pfun.hash = get_function_hash_by_id(pfun, pindex, unsafe(reinterpret<void?>(ctx)));
             fni++;
         })
     });
     program.get_ptr() |> for_each_module_no_order($(mod) {
         mod |> for_each_module_function($(pfun) {
-            if (pfun.index < 0 || !pfun.flags.used) return ;
+            if (function_index(program, pfun) < 0 || !is_used(program, pfun)) return ;
             pfun.aotHash = get_function_aot_hash(pfun);
         });
     });
@@ -4481,12 +4483,12 @@ def private collectUsedModules(program : ProgramPtr) : table<Module?> {
     var used : table<Module?>
     program.get_ptr() |> for_each_module_no_order($(pm) {
         pm |> for_each_module_function($(pfun) {
-            if (pfun.index >= 0 && pfun.flags.used && pfun._module != null) {
+            if (function_index(program, pfun) >= 0 && is_used(program, pfun) && pfun._module != null) {
                 used |> insert(pfun._module)
             }
         })
     })
-    var utm = new UseTypeMarker()
+    var utm = new UseTypeMarker(program := program)
     make_visitor(*utm) $(adapter) {
         visit(program, adapter)
         var foreign <- foreignUsedFunctions(program, false)

@@ -709,7 +709,6 @@ namespace das {
         cfun->annotations = cloneAnnotationList(annotations);
         cfun->result = new TypeDecl(*result);
         cfun->body = body->clone();
-        cfun->index = -1;
         cfun->totalStackSize = 0;
         cfun->totalGenLabel = totalGenLabel;
         cfun->at = at;

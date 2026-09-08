@@ -42,6 +42,7 @@ bitfield TabOperation {
 
 class public CollectExternVisitor : AstVisitor {
     uid : UidNodes?
+    @do_not_delete prog : Program?
 
     //! every function registered with the exe's context, once each - the set its function lookup carries
     registered : array<tuple<index : int; mnh : uint64; name : string>>
@@ -254,14 +255,15 @@ class public CollectExternVisitor : AstVisitor {
         let fnmna = uid.get_dll_fn_name_ptr(fn)
         let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
         if (fn_publ == null) return null
-        if (!(registered_index |> key_exists(fn.index))) {
-            registered_index |> insert(fn.index)
-            registered |> push((index = fn.index, mnh = fn.getMangledNameHash, name = string(fn.name)))
+        let findex = function_index(prog, fn)
+        if (!(registered_index |> key_exists(findex))) {
+            registered_index |> insert(findex)
+            registered |> push((index = findex, mnh = fn.getMangledNameHash, name = string(fn.name)))
         }
         let fn_ptr_cast = LLVMBuildPointerCast(builder, fn_publ, types.LLVMVoidPtrType(), "")
         var reg_args = fixed_array<LLVMOpaqueValue?>(
             standalone_ctx,
-            types.ConstI64(fn.index |> uint64),
+            types.ConstI64(findex |> uint64),
             get_string_constant_ptr(builder, string(fn.name)),
             get_string_constant_ptr(builder, fn |> get_mangled_name()),
             types.ConstI64(fn.getMangledNameHash),
@@ -620,6 +622,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                dynamic_modules : table<string; bool>;
                                prog : Program?; register_all_modules : bool = false) : tuple<needs_whole_lib : bool; registered : array<tuple<index : int; mnh : uint64; name : string>>> {
     var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules, LlvmJitMode.EXE)
+    extern_resolver.prog = prog
     extern_resolver.dynamic_modules := dynamic_modules
     make_visitor(*extern_resolver) $(adapter_resolve) {
         ast_gc_guard() {
@@ -630,7 +633,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             prog |> for_each_module() $(m) {
                 if (m.moduleFlags.builtIn) return ;
                 m |> for_each_global() $(var glob) {
-                    if (glob.init != null && glob.flags.used) {
+                    if (glob.init != null && is_used(prog, glob)) {
                         visit_expression(glob.init, adapter_resolve)
                     }
                 }
@@ -1033,7 +1036,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     prog |> for_each_module() $(m) {
         if (m.name == "llvm_func" || m.name == "llvm_macro" || m.name == "llvm_jit_link") return
         m |> for_each_function("") $(fun) {
-            if (fun.flags.used) {
+            if (is_used(prog, fun)) {
                 if (!fun.flags.builtIn && fun.moreFlags.requestNoJit) {
                     has_no_jit = true
                     to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' is marked no_jit but standalone exe requires all functions to be JIT-compiled\n")

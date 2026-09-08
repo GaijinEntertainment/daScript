@@ -161,7 +161,7 @@ def private has_generated_kernel(prog : Program?; jit_all_functions : bool) : bo
     var found = false
     prog |> for_each_module() $(mod) {
         mod |> for_each_function("") $(fun) {
-            if (fun.flags.used && (jit_all_functions || fun.moreFlags.requestJit) && !fun.moreFlags.requestNoJit) {
+            if (is_used(prog, fun) && (jit_all_functions || fun.moreFlags.requestJit) && !fun.moreFlags.requestNoJit) {
                 for (ann in fun.annotations) {
                     if (ann.annotation.name == "llvm_code") {
                         found = true
@@ -874,7 +874,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
             // In object mode emit the whole used, non-noAot set (all modules +
             // per-program generic instantiations), mirroring C++ AOT whole-program
             // coverage; noAot functions interpret as Program::linkCppAot skips them.
-            if (fun.flags.used && (!plan.emit_aot_object || !fun.flags.noAot)
+            if (is_used(prog, fun) && (!plan.emit_aot_object || !fun.flags.noAot)
                     && get_function_by_mangled_name_hash(hash(get_mangled_name(fun)), *ctx) != null
                     && jit_selects(fun, fun.moreFlags.requestJit, plan.aot_host, plan.jit_all_functions, ctx)) {
                 if (!fun.moreFlags.requestNoJit) {

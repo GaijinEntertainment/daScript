@@ -141,12 +141,12 @@ class JIT_LLVM : AstSimulateMacro {
         make_visitor(*astVisitor) $(adapter) {
             prog |> for_each_module() $(mod) {
                 mod |> for_each_function("") $(f) {
-                    if (f.flags.used) {
+                    if (is_used(prog, f)) {
                         visit(f, adapter)
                     }
                 }
                 mod |> for_each_global() $(g) {
-                    if (g.flags.used) {
+                    if (is_used(prog, g)) {
                         if (!g._type.isNoHeapType) {
                             macro_error(compiling_program(), g.at, "global variable {g.name} requires heap")
                         } elif (g.init != null) {

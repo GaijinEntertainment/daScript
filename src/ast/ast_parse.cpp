@@ -1632,9 +1632,9 @@ namespace das {
         rtti_require->type = new TypeDecl(Type::tString, at);
         rtti_require->init = new ExprConstString(at, ss.str());
         rtti_require->init->type = new TypeDecl(Type::tString, at);
-        rtti_require->used = true;
         rtti_require->private_variable = true;
         res->thisModule->addVariable(rtti_require);
+        res->setUsed(rtti_require, true);
     }
 
     void reportChain ( TextWriter & tw, const vector<FileInfo *> & chain ) {
@@ -1896,17 +1896,6 @@ namespace das {
         auto savedModuleName = env->g_compilingModuleName;
         env->serializer_read = nullptr;
         env->serializer_write = nullptr;
-        vector<pair<Function *, bool>> usedFunctions;
-        vector<pair<Variable *, bool>> usedVariables;
-        Module::foreach([&](Module * mod) {
-            mod->functions.foreach([&](auto fn) {
-                usedFunctions.emplace_back(fn, bool(fn->used));
-            });
-            mod->globals.foreach([&](auto var) {
-                usedVariables.emplace_back(var, bool(var->used));
-            });
-            return true;
-        });
         unique_ptr<ModuleFileCache> cache;
         if ( env->lateModuleCacheEnabled ) {
             cache = make_unique<ModuleFileCache>();
@@ -1996,8 +1985,6 @@ namespace das {
             cache->finish();
             keepLateModuleCache(das::move(cache));
         }
-        for ( auto & [fn, used] : usedFunctions ) fn->used = used;
-        for ( auto & [var, used] : usedVariables ) var->used = used;
         env->g_Program = savedProgram;
         env->serializer_read = savedRead;
         env->serializer_write = savedWrite;

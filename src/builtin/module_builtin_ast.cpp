@@ -791,6 +791,8 @@ namespace das {
     float4 evalSingleExpression ( ExpressionPtr expr, bool & ok ) {
         ok = true;
         das::Context ctx;
+        auto env = daScriptEnvironment::getBound();
+        ctx.thisProgram = env ? env->g_Program.get() : nullptr;  // the expression's program owns its symbol tables (src/ast/ARCHITECTURE.md sec.4)
         auto node = simulateExpression(ctx, expr);
         ctx.restart();
         vec4f result = ctx.evalWithCatch(node);
@@ -807,7 +809,11 @@ namespace das {
         if ( !expr || !useCtxPtr || useCtxPtr->getException() ) { ok = false; return v_zero(); }
         Context & useCtx = *useCtxPtr;
         ok = true;
+        auto env = daScriptEnvironment::getBound();
+        auto savedProgram = useCtx.thisProgram;
+        if ( !useCtx.thisProgram && env ) useCtx.thisProgram = env->g_Program.get();
         SimNode * node = simulateExpression(useCtx, expr);
+        useCtx.thisProgram = savedProgram;
         vec4f result = useCtx.evalWithCatch(node);
         if ( useCtx.getException() ) ok = false;
         return result;
@@ -1247,6 +1253,38 @@ namespace das {
         if ( !structure ) context->throw_error_at(at, "expecting structure");
         if ( !aliasName ) context->throw_error_at(at, "expecting alias name");
         return structure->aliases.find(aliasName);
+    }
+
+    bool ast_is_function_used ( const Program * program, const Function * fn ) {
+        return program && fn && program->isUsed(fn);
+    }
+
+    bool ast_is_variable_used ( const Program * program, const Variable * var ) {
+        return program && var && program->isUsed(var);
+    }
+
+    int32_t ast_function_index ( const Program * program, const Function * fn ) {
+        return program && fn ? program->indexOf(fn) : -1;
+    }
+
+    int32_t ast_variable_index ( const Program * program, const Variable * var ) {
+        return program && var ? program->indexOf(var) : -1;
+    }
+
+    bool ast_is_function_used_sp ( smart_ptr_raw<Program> program, const Function * fn ) {
+        return ast_is_function_used(program.get(), fn);
+    }
+
+    bool ast_is_variable_used_sp ( smart_ptr_raw<Program> program, const Variable * var ) {
+        return ast_is_variable_used(program.get(), var);
+    }
+
+    int32_t ast_function_index_sp ( smart_ptr_raw<Program> program, const Function * fn ) {
+        return ast_function_index(program.get(), fn);
+    }
+
+    int32_t ast_variable_index_sp ( smart_ptr_raw<Program> program, const Variable * var ) {
+        return ast_variable_index(program.get(), var);
     }
 
     Function * findCompilingFunctionByMangledNameHash(char * module_name, uint64_t mnh, Context * context, LineInfoArg * at) {
@@ -2005,6 +2043,30 @@ namespace das {
         addExtern<DAS_BIND_FUN(findCompilingFunctionByMangledNameHash)>(*this, lib,  "find_compiling_function_by_mangled_name_hash",
             SideEffects::accessExternal, "findCompilingFunctionByMangledNameHash")
                 ->args({"moduleName","mangledNameHash","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_function_used)>(*this, lib,  "is_used",
+            SideEffects::accessExternal, "ast_is_function_used")
+                ->args({"program","function"});
+        addExtern<DAS_BIND_FUN(ast_is_variable_used)>(*this, lib,  "is_used",
+            SideEffects::accessExternal, "ast_is_variable_used")
+                ->args({"program","variable"});
+        addExtern<DAS_BIND_FUN(ast_function_index)>(*this, lib,  "function_index",
+            SideEffects::accessExternal, "ast_function_index")
+                ->args({"program","function"});
+        addExtern<DAS_BIND_FUN(ast_variable_index)>(*this, lib,  "variable_index",
+            SideEffects::accessExternal, "ast_variable_index")
+                ->args({"program","variable"});
+        addExtern<DAS_BIND_FUN(ast_is_function_used_sp)>(*this, lib,  "is_used",
+            SideEffects::accessExternal, "ast_is_function_used_sp")
+                ->args({"program","function"});
+        addExtern<DAS_BIND_FUN(ast_is_variable_used_sp)>(*this, lib,  "is_used",
+            SideEffects::accessExternal, "ast_is_variable_used_sp")
+                ->args({"program","variable"});
+        addExtern<DAS_BIND_FUN(ast_function_index_sp)>(*this, lib,  "function_index",
+            SideEffects::accessExternal, "ast_function_index_sp")
+                ->args({"program","function"});
+        addExtern<DAS_BIND_FUN(ast_variable_index_sp)>(*this, lib,  "variable_index",
+            SideEffects::accessExternal, "ast_variable_index_sp")
+                ->args({"program","variable"});
         addExtern<DAS_BIND_FUN(isCppKeyword)>(*this, lib, "is_cpp_keyword",
             SideEffects::none, "isCppKeyword")
                 ->args({"str"});

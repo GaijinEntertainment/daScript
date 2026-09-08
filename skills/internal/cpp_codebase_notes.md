@@ -24,6 +24,10 @@ and how to search them.
   during inference
 - `func.moreFlags.propertyFunction` - property accessor, name starts with `` .` ``
 - `func.classParent` - the struct/class owning the method
+- Whether a program uses a function or global, and its slot in that program's context, are NOT
+  fields: `program->isUsed(fn)` / `program->indexOf(fn)` (C++), `is_used(prog, fn)` /
+  `function_index(prog, fn)` / `variable_index(prog, var)` (das) - a shared module's objects
+  serve every program in the process (`src/ast/ARCHITECTURE.md` sec.4)
 
 ## Diffing interpreter against AOT
 

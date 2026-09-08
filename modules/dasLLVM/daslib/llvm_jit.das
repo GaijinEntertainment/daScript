@@ -7818,7 +7818,7 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
 
             prog |> for_each_module() $(mod) {
                 mod |> for_each_global() $(glob) {
-                    if (glob.init != null && glob.flags.used) {
+                    if (glob.init != null && is_used(prog, glob)) {
                         // A clone is not the shared owner: leave shared globals as the
                         // parent's (re-init would corrupt the shared buffer). See skip_shared.
                         if (skip_shared && glob.flags.global_shared) { return }
