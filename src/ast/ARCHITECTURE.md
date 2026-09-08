@@ -88,7 +88,9 @@ the grown list, and when a module reports it cannot initialize - what it needs i
 brings every deferred module in and runs the fixed point again, which is the set an eager start
 has. A row whose own dlopen fails takes the same road - every deferred module comes in, the
 pending retry runs - and the require then finds the module or fails as a cold start would.
-`Module::Initialize` takes it too: on a half-warm tree - one descriptor compiled cold, so its
+The deserializer (`Program::serialize` reading, and the module-cache record header) fetches a
+builtin module by name the same way: a stream written where a module had loaded lazily is read
+where nothing required it yet. `Module::Initialize` takes it too: on a half-warm tree - one descriptor compiled cold, so its
 module loaded on start, beside replayed ones whose rows wait - the eager fixed point fails on
 the first pass, brings every deferred module in and runs once more. A tree is half-warm
 whenever two processes warm it at once, which parallel AOT batches do. The

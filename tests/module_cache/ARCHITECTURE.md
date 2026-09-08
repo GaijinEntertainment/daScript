@@ -46,7 +46,8 @@ this document states what the folder is and why its tests take the shape they do
   manifest; a manifest row hand-edited to an absent artifact makes the require bring every
   deferred module in and then fail on the missing prerequisite; a module cache an eager start
   wrote serves a lazy start, with `-log-compile-time` printing the reads and the startup
-  timeline; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
+  timeline; a dastest `--ser` stream of a test requiring the module is read by a `--deser`
+  child that nothing made require it, and the reader loads it; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
   deferred module in because its `initDependencies` asks for two more, and a half-warm tree -
   copies of dasImgui and dasGlfw under the fixture, the imgui copy's manifest removed so its
   modules load on start while glfw's row waits - initializes by bringing the rest in. A static host - the AOT

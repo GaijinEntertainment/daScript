@@ -246,6 +246,19 @@ def arms_guards_and_caches(t : T?; fx : Fixture) {
         t |> equal(-1, find(warm, "cumulative hash"), "a builtin module's hash does not depend on the loaded set:\n{warm}")
         t |> success(find(warm, "cache read took") >= 0, "the lazy start reads the eager start's records:\n{warm}")
     }
+    t |> run("a dastest stream written where the module had loaded is read where nothing required it yet") @(t : T?) {
+        let testsDir = path_join(fx.tmp, "tests")
+        var merr : string
+        mkdir_rec(testsDir, merr)
+        fwrite(path_join(testsDir, "test_uses.das"), "options gen2\nrequire dastest/testing_boost public\nrequire {UNIT_TEST_MODULE}\n[test]\ndef test_uses(t : T?) \{\n    t |> equal(5l, test_string_arg_length(\"hello\"))\n\}\n")
+        let stream = path_join(fx.tmp, "tests.ser")
+        let dastest = path_join(get_das_root(), "dastest/dastest.das")
+        var wrote : string
+        t |> success(report_child(t, "ser", run_child("{child_cmd(fx, dastest)} -- --test \"{testsDir}\" --ser \"{stream}\"", wrote), wrote, "Serialized 1 programs"), "the writer serializes the test program")
+        var read : string
+        t |> success(report_child(t, "deser", run_child("{child_cmd(fx, dastest)} -- --test \"{testsDir}\" --deser \"{stream}\"", read), read, "1 tests, 0 error(s)"), "the reader runs the test from the stream")
+        t |> success(find(read, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the reader loaded the module the stream names:\n{read}")
+    }
 }
 
 def arm_fallback(t : T?; fx : Fixture) {
