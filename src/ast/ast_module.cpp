@@ -10,6 +10,7 @@
 #include "daScript/ast/dyn_modules.h"
 
 #include <atomic>
+#include <mutex>
 
 namespace das {
 
@@ -193,6 +194,28 @@ namespace das {
         return g_deferredModuleLoader && g_deferredModuleLoader(name) && Module::requireEx(name, false);
     }
 
+    static das_map<string, vector<string>> g_moduleGroups;
+    static mutex g_moduleGroupsMutex;
+
+    void registerModuleGroupMember ( const string & group, const string & member ) {
+        lock_guard<mutex> guard(g_moduleGroupsMutex);
+        auto & members = g_moduleGroups[group];
+        if ( find(members.begin(), members.end(), member) == members.end() ) {
+            members.push_back(member);
+        }
+    }
+
+    vector<string> getModuleGroupMembers ( const string & group ) {
+        lock_guard<mutex> guard(g_moduleGroupsMutex);
+        auto it = g_moduleGroups.find(group);
+        return it != g_moduleGroups.end() ? it->second : vector<string>();
+    }
+
+    void clearModuleGroups () {
+        lock_guard<mutex> guard(g_moduleGroupsMutex);
+        g_moduleGroups.clear();
+    }
+
     void Module::Initialize() {
         daScriptEnvironment::ensure();
         static bool atexit_registered = (atexit(daslang_atexit_audit), true);
@@ -255,6 +278,7 @@ namespace das {
         // Free allocated structures for dynamic modules (unloads DLLs).
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
         clear_deferred_dynamic_modules();
+        clearModuleGroups();
         setDeferredModuleLoader(nullptr);
 
         clearGlobalAotLibrary();

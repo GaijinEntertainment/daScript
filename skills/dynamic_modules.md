@@ -64,6 +64,29 @@ def initialize(project_path : string) {
 - One call per C++ module class; one descriptor may register several DLLs, and may mix in
   `register_native_path` calls for the module's `.das` files
 
+## `register_module_group` - joining a group
+
+```das
+[export]
+def initialize(project_path : string) {
+    register_native_path("sqlite", "sqlite_provider", "{project_path}/daslib/sqlite_provider.das")
+    register_module_group("sql_provider", "sqlite/sqlite_provider")
+}
+```
+
+- First argument: the group name a requirer writes as `require [sql_provider]`
+- Second: the member's require path, exactly as a `require` would spell it - a native path
+  this descriptor (or another) registers, or a C++ module's name
+- `require [group]` is one ordinary require per member in registration order; `public` and a
+  `?guard` on the group apply to every member, a member that does not resolve fails as a
+  hand-written require would, and a group nothing joined adds nothing
+- A C++ module joins from its constructor with `registerModuleGroupMember(group, member)`
+
+The group turns the dependency around: a module that wants every installed provider names the
+group once, and each provider names the group it joins - nothing is edited when a provider is
+added. The row is recorded in the manifest and replayed, and the module cache re-parses a
+requirer when a member joins after its record was written.
+
 ## Package layout
 
 A daspkg package is a module with the descriptor at the repo root:

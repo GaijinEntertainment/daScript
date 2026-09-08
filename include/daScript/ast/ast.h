@@ -1111,6 +1111,10 @@ namespace das
     DAS_API void setDeferredModuleLoader ( DeferredModuleLoader loader );
     DAS_API DeferredModuleLoader getDeferredModuleLoader ();
     DAS_API bool guardModuleAvailable ( const string & name );
+    // module groups: `require [group]` expands to every member registered under the name (src/ast/ARCHITECTURE.md sec.2)
+    DAS_API void registerModuleGroupMember ( const string & group, const string & member );
+    DAS_API vector<string> getModuleGroupMembers ( const string & group );
+    DAS_API void clearModuleGroups ();
 
     class DAS_API Module {
     public:

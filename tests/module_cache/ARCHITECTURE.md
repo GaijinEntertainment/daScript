@@ -55,6 +55,16 @@ this document states what the folder is and why its tests take the shape they do
   and the arm says so. A static host - the AOT
   test binary, whose descriptors register no shared module, or a tree holding no
   `.shared_module` - has nothing to observe and the test says so and returns.
+- `test_module_groups.das` - `require [group]` on a project root the test writes: two pure-das
+  modules whose descriptors register themselves under one group, a third whose descriptor
+  registers a member no require path serves. A cold start writes each descriptor's group row
+  beside its path row and the group brings both members in; a warm start replays the rows; a
+  guard the build lacks drops the group and one it has takes it; a group nothing registered
+  adds nothing; `public` on the group re-exports every member and its absence keeps them
+  private; the unserved member fails as a hand-written require would; and, on an explicit
+  module cache, a member joining the group after a requirer's record was written cuts the cache
+  off at that requirer (`require set changed`) while the unchanged tree and the rewritten cache
+  serve.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`); a case needing a macro-bearing module graph puts it here instead of
   writing the script inline.

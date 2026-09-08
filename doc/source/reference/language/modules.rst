@@ -123,6 +123,32 @@ branch before name resolution, so the symbols are referenced only when present:
         parse_xml("<root/>") $(doc, ok) { /* ... */ }
     }
 
+-------------
+Module groups
+-------------
+
+A ``require`` may name a **group** in square brackets instead of a module (gen2
+syntax only):
+
+.. code-block:: das
+
+    require [sql_provider]
+    require ?sqlite [sql_provider] public
+
+A group is a name that modules register themselves under. A module's ``.das_module``
+descriptor calls ``register_module_group("sql_provider", "sqlite/sqlite_provider")``,
+and a C++ module registers from its constructor with ``registerModuleGroupMember``.
+``require [group]`` is one ordinary ``require`` per registered member, in registration
+order: a member resolves and fails exactly as the same require spelled by hand would,
+``public`` applies to every member, and a guard drops the whole group the way it
+drops a single require. A group nothing registered under adds nothing.
+
+The group turns the dependency around. A module that wants every installed provider
+would otherwise have to name each one with its own guard and gain a line per
+provider; with a group each provider names the group it joins, and the requirer
+names only the group. The module cache records the requires a parse took, so a
+member joining a group later re-parses the modules that require the group.
+
 --------------
 Native modules
 --------------

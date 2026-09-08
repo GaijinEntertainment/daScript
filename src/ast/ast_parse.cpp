@@ -247,6 +247,49 @@ namespace das {
                                     continue;
                                 }
                             }
+                            // guarded optional require. Path guard (contains '/'): proceed only when
+                            // the guard's OWN file resolves — the rail for pure-das packages (nothing
+                            // C++ to guard on) and cross-package dependency witnesses. Plain-name
+                            // guard: proceed only when the build has the module (guardModuleAvailable,
+                            // src/ast/ARCHITECTURE.md sec.2); no target-resolvability fallback (module
+                            // source dirs exist in every checkout regardless of build config).
+                            // Otherwise skip silently. Must match ast_requireGuardAvailable (parser_impl.cpp).
+                            auto guardTaken = [&]() {
+                                if ( !hasReqGuard ) return true;
+                                if ( reqGuard.find('/')!=string::npos ) {
+                                    auto ginfo = access->getModuleInfo(reqGuard, fi->name);
+                                    return !ginfo.fileName.empty() && access->getFileInfo(ginfo.fileName) != nullptr;
+                                }
+                                return guardModuleAvailable(reqGuard);
+                            };
+                            auto publicFollows = [&]() {
+                                while ( src < src_end && src[0] == ' ' ) {
+                                    src ++;
+                                }
+                                return src + 6 < src_end && memcmp(src, "public", 6) == 0;
+                            };
+                            if ( isReq && src[0]=='[' ) {
+                                // `require [group]`: one record per registered member (src/ast/ARCHITECTURE.md sec.2)
+                                src ++;
+                                while ( src < src_end && (src[0]==' ' || src[0]=='\t') ) {
+                                    src ++;
+                                }
+                                string group;
+                                while ( src < src_end && (isalnumE(src[0]) || src[0]=='_') ) {
+                                    group += *src ++;
+                                }
+                                while ( src < src_end && (src[0]==' ' || src[0]=='\t') ) {
+                                    src ++;
+                                }
+                                if ( src < src_end && src[0]==']' && !group.empty() && guardTaken() ) {
+                                    src ++;
+                                    bool isPublic = publicFollows();
+                                    for ( const auto & member : getModuleGroupMembers(group) ) {
+                                        req.push_back({member, line, chain, isPublic});
+                                    }
+                                }
+                                continue;
+                            }
                             if ( src[0]=='_' || isalphaE(src[0]) || src[0] == '%' || src[0] == '.' || src[0]=='/' ) {
                                 string mod;
                                 mod += *src++;
@@ -254,28 +297,10 @@ namespace das {
                                     mod += *src ++;
                                 }
                                 if ( isReq ) {
-                                    // guarded optional require. Path guard (contains '/'): proceed only when
-                                    // the guard's OWN file resolves — the rail for pure-das packages (nothing
-                                    // C++ to guard on) and cross-package dependency witnesses. Plain-name
-                                    // guard: proceed only when the build has the module (guardModuleAvailable,
-                                    // src/ast/ARCHITECTURE.md sec.2); no target-resolvability fallback (module
-                                    // source dirs exist in every checkout regardless of build config).
-                                    // Otherwise skip silently. Must match ast_requireModule (parser_impl.cpp).
-                                    if ( hasReqGuard && reqGuard.find('/')!=string::npos ) {
-                                        auto ginfo = access->getModuleInfo(reqGuard, fi->name);
-                                        if ( ginfo.fileName.empty() || !access->getFileInfo(ginfo.fileName) ) {
-                                            continue;
-                                        }
-                                    } else if ( hasReqGuard && !guardModuleAvailable(reqGuard) ) {
+                                    if ( !guardTaken() ) {
                                         continue;
                                     }
-                                    bool isPublic = false;
-                                    while ( src < src_end && src[0] == ' ' ) {
-                                        src ++;
-                                    }
-                                    if ( src + 6 < src_end && memcmp(src, "public", 6) == 0 ) {
-                                        isPublic = true;
-                                    }
+                                    bool isPublic = publicFollows();
                                     req.push_back({mod, line, chain, isPublic});
                                 } else if ( isInc ) {
                                     string incFileName = access->getIncludeFileName(fi->name,mod);
@@ -722,6 +747,8 @@ namespace das {
         uint64_t payload_size = 0;
         uint32_t depCount = 0;
         vector<tuple<string,int64_t,uint64_t>> savedDeps;
+        uint32_t reqCount = 0;
+        vector<string> savedReq;
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer << saved_hash;
             serializer << saved_size;
@@ -737,10 +764,17 @@ namespace das {
                     serializer << get<2>(dep);
                 }
             }
+            serializer << reqCount;
+            if ( depCount <= SER_MAX_MACRO_DEPS && reqCount <= SER_MAX_MACRO_DEPS ) {
+                savedReq.resize(reqCount);
+                for ( auto & req : savedReq ) {
+                    serializer << req;
+                }
+            }
             serializer << payload_size;
-        }) || depCount > SER_MAX_MACRO_DEPS ) {
+        }) || depCount > SER_MAX_MACRO_DEPS || reqCount > SER_MAX_MACRO_DEPS ) {
             serializer_read->seenNewModule = true;
-            serializer_read->failed = depCount > SER_MAX_MACRO_DEPS;
+            serializer_read->failed = depCount > SER_MAX_MACRO_DEPS || reqCount > SER_MAX_MACRO_DEPS;
             if ( !serializer_read->quietCache ) logs << "ser: read failed '" << fileName << "'\n";
             return false;
         }
@@ -778,6 +812,31 @@ namespace das {
                 }
             }
             return false;
+        }
+        // the requires the source takes today - guards and groups re-applied - against the set the
+        // record was written under: a member a group gained or a guard a build flipped changes
+        // the module's dependencies without touching its bytes (ARCHITECTURE.md sec.1)
+        {
+            vector<string> currentReq;
+            if ( auto fi = access->getFileInfo(fileName) ) {
+                string modName;
+                vector<FileInfo *> chain;
+                for ( auto & rec : getAllRequire(fi, modName, chain, access) ) {
+                    currentReq.push_back(rec.name);
+                }
+            }
+            sort(currentReq.begin(), currentReq.end());
+            sort(savedReq.begin(), savedReq.end());
+            if ( currentReq != savedReq ) {
+                serializer_read->seenNewModule = true;
+                serializer_read->failed = true;
+                serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffReason = "require set changed";
+                if ( !serializer_read->quietCache ) {
+                    logs << "ser: require set changed '" << fileName << "': " << savedReq.size() << " recorded, " << currentReq.size() << " now\n";
+                }
+                return false;
+            }
         }
 
         size_t payload_start = serializer_read->buffer->bufferPos;
@@ -1541,6 +1600,12 @@ namespace das {
                 *serializer_write << get<0>(dep);
                 *serializer_write << get<1>(dep);
                 *serializer_write << get<2>(dep);
+            }
+            // the requires the parse took, guards and groups already applied (ARCHITECTURE.md sec.1)
+            uint32_t reqCount = uint32_t(program->allRequireDecl.size());
+            *serializer_write << reqCount;
+            for ( auto & req : program->allRequireDecl ) {
+                *serializer_write << get<1>(req);
             }
             // record length, backpatched after the payload: lets the reader skip a record
             // that fails to deserialize for an UNCHANGED file and keep serving later ones.

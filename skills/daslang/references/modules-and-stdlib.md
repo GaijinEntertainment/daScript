@@ -76,6 +76,7 @@ require ./helpers.das                 // file-relative path
 require %/daslib/random.das as rng    // `%` is the daslang root; `as` binds a local qualifier
 require dastest/testing_boost public  // re-export to whoever requires me
 require ?pugixml pugixml/PUGIXML_boost  // load only if module `pugixml` is available
+require [sql_provider]                  // every module registered under the group name
 ```
 
 - **Path form needs the `.das`:** a require is a literal path only when it starts with `./`, `../`,
@@ -94,6 +95,10 @@ require ?pugixml pugixml/PUGIXML_boost  // load only if module `pugixml` is avai
   Pair with `static_if (typeinfo builtin_module_exists(guard)) { ... }` for a C++ guard, and
   with `static_if (typeinfo module_exists(target)) { ... }` around uses of the guarded target
   (true when the target is visible from this module, the same inside a tool's nested compile).
+- **`require [group]`** is one ordinary require per module registered under the group name, in
+  registration order - a member resolves and fails as if spelled by hand, `public` and a `?guard`
+  apply to the whole group, and an unregistered group adds nothing. A module joins a group from its
+  `.das_module` descriptor: `register_module_group("sql_provider", "sqlite/sqlite_provider")`.
 
 ## Qualified calls
 

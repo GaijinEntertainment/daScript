@@ -22,6 +22,8 @@ struct private CanarySection {
 let CANARY_SECTIONS : array<CanarySection> <- [
     CanarySection(name = "options + optional-require guard",
         snippet = "options gen2\noptions indenting = 4\n\nrequire ?zz_absent_guard daslib/algorithm\nrequire math\nrequire strings\nrequire daslib/stringify"),
+    CanarySection(name = "group require, bare and guarded",
+        snippet = "require [zz_absent_group]\nrequire ?zz_absent_guard [zz_absent_group] public"),
     CanarySection(name = "enum with base type",
         snippet = "enum CanMode : uint8 \{\n    one\n    two\n\}"),
     CanarySection(name = "struct private + field default + @annotation",

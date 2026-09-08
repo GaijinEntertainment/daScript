@@ -27,7 +27,13 @@ the `CodeOfPolicies` of the compile that wrote it, and a record whose policies d
 reading compile's is never served - a lint compile and a run compile of one graph never share a
 record. The mismatch fails the record the way damage does, reparsed in place rather than cutting
 the stream (damage landing on the policy bytes must not cut it either), and the writeback that
-repairs it carries the new policies. The first mismatch is the cutoff: the reader marks the stream failed, the
+repairs it carries the new policies. The record header also carries the requires the parse
+took - guards and groups already applied, `Program::allRequireDecl` by name - and the reader
+runs the text collector (`getAllRequire`) over the file it is about to serve and compares the two
+as sets: a member a group gained or a guard a build flipped changes a module's dependencies
+without touching its bytes, and a record served then would carry the old dependency set. That
+mismatch is a cutoff (`require set changed`), since the modules after it may have moved too.
+The first mismatch is the cutoff: the reader marks the stream failed, the
 module and everything after it parse from source, and the writer rewrites the whole file - the
 served records re-serialized from the modules the reader restored, then the freshly parsed
 ones. A record whose header matched but whose payload fails to deserialize reparses in place,
@@ -123,7 +129,17 @@ that names one compares the part after `::` (`daslib/ast_boost`'s printer). `-ig
 reads and writes no manifest: every descriptor compiles and every C++ module loads on start,
 the form a tool that enumerates modules - the MCP server - runs under.
 `no_manifest()` inside `initialize` marks the descriptor as one that runs on every start: its
-manifest carries the stamp and the flag and no rows, and is not rewritten. With
+manifest carries the stamp and the flag and no rows, and is not rewritten. A module group is a
+name that `require [group]` expands to a list: `register_module_group(group, member)` in a
+descriptor - recorded as a `grp` row and replayed - or `registerModuleGroupMember` from a C++
+module's constructor adds a member, once, in registration order (`ast_module.cpp`, one
+process-wide registry under a mutex, cleared at `Module::Shutdown`). The text collector
+(`getAllRequireReq`) and the parser (`ast_requireModuleGroup`) expand the same list into one
+require per member, the group's guard and `public` on each; a member resolves and fails as a
+require spelled by hand would, and a group nothing registered adds nothing. Membership is
+tree-level, so the answer does not depend on the walk order - a module joins from its own
+descriptor, and the requirer names only the group; the module-cache record stamps the expansion
+(sec.1), so a member joining later re-parses the modules that require the group. With
 `DAS_TRACE_MODULE_LOAD=1` the scan prints one line per descriptor - `replayed N row(s) in <sec>
 (shared module load <sec>, deferred K)`, `compiled (<why>), manifest written (N row(s))`,
 `compiled (no_manifest)`, `compiled (manifests ignored)`, or why a manifest was not written -

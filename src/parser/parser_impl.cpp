@@ -1222,33 +1222,52 @@ namespace das {
         }
     }
 
+    // Optional require `require ?guard target`: when the guard module is not available, skip the
+    // require entirely (no error) — WITHOUT resolving the target (matches the collector; a
+    // skipped require must not probe file paths). A present guard with a missing target still
+    // errors in the require itself.
+    // Path guard (contains '/'): availability = the guard's OWN file resolves — the rail for
+    // pure-das packages (nothing C++ to guard on) and cross-package dependencies the target's
+    // resolvability can't express. Plain-name guard: the build has the module
+    // (guardModuleAvailable, src/ast/ARCHITECTURE.md sec.2). No target-resolvability
+    // fallback: module source dirs are present in every checkout regardless of build config.
+    // Must match the require collector's rule (ast_parse.cpp getAllRequireReq).
+    static bool ast_requireGuardAvailable ( yyscan_t scanner, string * guard ) {
+        if ( !guard ) return true;
+        bool guardAvailable;
+        if ( guard->find('/') != string::npos ) {
+            auto ginfo = yyextra->g_Access->getModuleInfo(*guard, yyextra->g_FileAccessStack.back()->name);
+            guardAvailable = !ginfo.fileName.empty() && yyextra->g_Access->getFileInfo(ginfo.fileName) != nullptr;
+        } else {
+            guardAvailable = guardModuleAvailable(*guard);
+        }
+        delete guard;
+        return guardAvailable;
+    }
+
+    static void ast_requireOneModule ( yyscan_t scanner, const string & name, string * modalias, bool pub, const LineInfo & atName );
+
     void ast_requireModule ( yyscan_t scanner, string * name, string * modalias, bool pub, const LineInfo & atName, string * guard ) {
-        // Optional require `require ?guard target`: when the guard module is not available, skip the
-        // require entirely (no error) — WITHOUT resolving the target (matches the collector; a
-        // skipped require must not probe file paths). A present guard with a missing target still
-        // errors below.
-        if ( guard ) {
-            // Path guard (contains '/'): availability = the guard's OWN file resolves — the rail for
-            // pure-das packages (nothing C++ to guard on) and cross-package dependencies the target's
-            // resolvability can't express. Plain-name guard: the build has the module
-            // (guardModuleAvailable, src/ast/ARCHITECTURE.md sec.2). No target-resolvability
-            // fallback: module source dirs are present in every checkout regardless of build config.
-            // Must match the require collector's rule (ast_parse.cpp getAllRequireReq).
-            bool guardAvailable;
-            if ( guard->find('/') != string::npos ) {
-                auto ginfo = yyextra->g_Access->getModuleInfo(*guard, yyextra->g_FileAccessStack.back()->name);
-                guardAvailable = !ginfo.fileName.empty() && yyextra->g_Access->getFileInfo(ginfo.fileName) != nullptr;
-            } else {
-                guardAvailable = guardModuleAvailable(*guard);
-            }
-            delete guard;
-            if ( !guardAvailable ) {
-                delete name;
-                if ( modalias ) delete modalias;
-                return;
+        if ( ast_requireGuardAvailable(scanner, guard) ) {
+            ast_requireOneModule(scanner, *name, modalias, pub, atName);
+        }
+        delete name;
+        if ( modalias ) delete modalias;
+    }
+
+    // `require [group]`: one require per registered member, in registration order; an empty or
+    // unknown group adds nothing (src/ast/ARCHITECTURE.md sec.2)
+    void ast_requireModuleGroup ( yyscan_t scanner, string * group, bool pub, const LineInfo & atName, string * guard ) {
+        if ( ast_requireGuardAvailable(scanner, guard) ) {
+            for ( const auto & member : getModuleGroupMembers(*group) ) {
+                ast_requireOneModule(scanner, member, nullptr, pub, atName);
             }
         }
-        auto info = yyextra->g_Access->getModuleInfo(*name, yyextra->g_FileAccessStack.back()->name);
+        delete group;
+    }
+
+    static void ast_requireOneModule ( yyscan_t scanner, const string & name, string * modalias, bool pub, const LineInfo & atName ) {
+        auto info = yyextra->g_Access->getModuleInfo(name, yyextra->g_FileAccessStack.back()->name);
         auto mod = yyextra->g_Program->addModule(info.moduleName);
         if ( !mod ) {
             // a parse with no prerequisite walk (compile of a string) meets a deferred module here (src/ast/ARCHITECTURE.md sec.2)
@@ -1257,7 +1276,7 @@ namespace das {
             }
         }
         if ( mod ) {
-            yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*name,info.fileName,pub,atName));
+            yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,name,info.fileName,pub,atName));
             yyextra->g_Program->thisModule->addDependency(mod, pub);
             das_collect_all_keywords(mod,scanner);
             // an explicit `as` alias registers for every require form; the importName gate
@@ -1276,12 +1295,10 @@ namespace das {
                 }
             }
         } else {
-            yyextra->g_Program->allRequireDecl.push_back(make_tuple((Module *)nullptr,*name,info.fileName,pub,atName));
-            das_yyerror(scanner,"required module not found " + *name,atName,
+            yyextra->g_Program->allRequireDecl.push_back(make_tuple((Module *)nullptr,name,info.fileName,pub,atName));
+            das_yyerror(scanner,"required module not found " + name,atName,
                 CompilationError::lookup_module);
         }
-        delete name;
-        if ( modalias) delete modalias;
     }
 
     Expression * ast_forLoop ( yyscan_t,  vector<VariableNameAndPosition> * iters, Expression * srcs,

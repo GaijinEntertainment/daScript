@@ -1,0 +1,158 @@
+options gen2
+options indenting = 4
+
+require dastest/testing_boost public
+
+require strings
+require daslib/fio
+require daslib/strings_boost
+require _mc_common
+
+//! two pure-das modules whose descriptors register their module into one group, and a third
+//! whose descriptor registers a member no require path serves
+let DESCRIPTOR_ALPHA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_alpha\", \"alpha\", \"\{project_path\}/alpha.das\")\n    register_module_group(\"probe_group\", \"grp_alpha/alpha\")\n\}\n"
+let DESCRIPTOR_BETA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n    register_module_group(\"probe_group\", \"grp_beta/beta\")\n\}\n"
+let DESCRIPTOR_BETA_OUTSIDE = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n\}\n"
+let DESCRIPTOR_GAMMA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_module_group(\"broken_group\", \"grp_gamma/missing\")\n\}\n"
+
+let ALPHA = "options gen2\nmodule alpha\ndef alpha_value() : int \{\n    return 1\n\}\n"
+let BETA = "options gen2\nmodule beta\ndef beta_value() : int \{\n    return 10\n\}\n"
+let MID_PUBLIC = "options gen2\nmodule mid\nrequire [probe_group] public\n"
+let MID_PRIVATE = "options gen2\nmodule mid_private\nrequire [probe_group]\n"
+
+def driver(requires : string; expr : string) : string {
+    return "options gen2\n{requires}\n[export]\ndef main \{\n    print(\"PROBE \{{expr}\}\\n\")\n\}\n"
+}
+
+struct Fixture {
+    tmp : string
+    alphaDir : string
+    betaDir : string
+    cmdPrefix : string
+}
+
+def make_fixture(tmp : string) : Fixture {
+    let modules = path_join(tmp, "modules")
+    let alphaDir = path_join(modules, "grp_alpha")
+    let betaDir = path_join(modules, "grp_beta")
+    let gammaDir = path_join(modules, "grp_gamma")
+    var merr : string
+    mkdir_rec(alphaDir, merr)
+    mkdir_rec(betaDir, merr)
+    mkdir_rec(gammaDir, merr)
+    fwrite(path_join(alphaDir, ".das_module"), DESCRIPTOR_ALPHA)
+    fwrite(path_join(alphaDir, "alpha.das"), ALPHA)
+    fwrite(path_join(betaDir, ".das_module"), DESCRIPTOR_BETA)
+    fwrite(path_join(betaDir, "beta.das"), BETA)
+    fwrite(path_join(gammaDir, ".das_module"), DESCRIPTOR_GAMMA)
+    fwrite(path_join(tmp, "mid.das"), MID_PUBLIC)
+    fwrite(path_join(tmp, "mid_private.das"), MID_PRIVATE)
+    return Fixture(
+        tmp = tmp,
+        alphaDir = alphaDir,
+        betaDir = betaDir,
+        cmdPrefix = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" -project_root \"{tmp}\""
+    )
+}
+
+def write_driver(fx : Fixture; name : string; requires : string; expr : string) : string {
+    let path = path_join(fx.tmp, name)
+    fwrite(path, driver(requires, expr))
+    return path
+}
+
+def run_driver(fx : Fixture; script : string; var out : string&; cache : string = "-no-module-cache") : int {
+    return run_child("{fx.cmdPrefix} {cache} \"{script}\"", out)
+}
+
+//! the scan trace line for a module's descriptor, its timings dropped
+def descriptor_verdict(out : string; mod : string) : string {
+    let marker = "{mod}/.das_module: "
+    let at = find(out, marker)
+    if (at < 0) {
+        return ""
+    }
+    let rest = slice(out, at + length(marker))
+    let eol = find(rest, "\n")
+    let line = eol < 0 ? rest : slice(rest, 0, eol)
+    let timing = find(line, " in ")
+    return timing < 0 ? line : slice(line, 0, timing)
+}
+
+def arms_expand(t : T?; fx : Fixture) {
+    let useGroup = write_driver(fx, "use_group.das", "require [probe_group]", "alpha_value() + beta_value()")
+    t |> run("a cold start compiles both descriptors and the group brings both members in") @(t : T?) {
+        var out : string
+        t |> success(report_child(t, "cold", run_driver(fx, useGroup, out), out, "PROBE 11"), "both members resolve")
+        t |> equal("compiled (no manifest), manifest written (2 row(s))", descriptor_verdict(out, "grp_alpha"), "alpha's manifest carries its path row and its group row:\n{out}")
+        let manifest = fread(path_join(fx.alphaDir, ".das_module.manifest"))
+        t |> success(find(manifest, "\ngrp\tprobe_group\tgrp_alpha/alpha\n") >= 0, "the group row is written as recorded:\n{manifest}")
+    }
+    t |> run("a warm start replays the group rows and the group still brings both members in") @(t : T?) {
+        var out : string
+        t |> success(report_child(t, "warm", run_driver(fx, useGroup, out), out, "PROBE 11"), "both members resolve from the replayed rows")
+        t |> equal("replayed 2 row(s)", descriptor_verdict(out, "grp_alpha"), "alpha's descriptor replays:\n{out}")
+        t |> equal("replayed 2 row(s)", descriptor_verdict(out, "grp_beta"), "beta's descriptor replays:\n{out}")
+    }
+    t |> run("a guard the build lacks drops the group; a guard the build has takes it") @(t : T?) {
+        var out : string
+        let dropped = write_driver(fx, "use_guard_absent.das", "require ?zz_absent_guard [probe_group]", "alpha_value()")
+        let rc = run_driver(fx, dropped, out)
+        t |> success(rc != 0 && find(out, "alpha_value") >= 0, "with the group dropped nothing declares alpha_value: rc={rc}\n{out}")
+        let taken = write_driver(fx, "use_guard_present.das", "require ?math [probe_group]", "alpha_value() + beta_value()")
+        t |> success(report_child(t, "guard taken", run_driver(fx, taken, out), out, "PROBE 11"), "the guarded group expands")
+    }
+    t |> run("a group nothing registered adds nothing") @(t : T?) {
+        var out : string
+        let script = write_driver(fx, "use_empty.das", "require [nobody_registered_here]", "0")
+        t |> success(report_child(t, "empty", run_driver(fx, script, out), out, "PROBE 0"), "the program compiles with no dependency added")
+    }
+    t |> run("`public` on the group re-exports every member; without it the members stay private") @(t : T?) {
+        var out : string
+        let viaPublic = write_driver(fx, "use_public.das", "require mid", "alpha_value() + beta_value()")
+        t |> success(report_child(t, "public", run_driver(fx, viaPublic, out), out, "PROBE 11"), "a module requiring the group public re-exports the members")
+        let viaPrivate = write_driver(fx, "use_private.das", "require mid_private", "alpha_value()")
+        let rc = run_driver(fx, viaPrivate, out)
+        t |> success(rc != 0 && find(out, "alpha_value") >= 0, "a private group require keeps the members out of the requirer's requirer: rc={rc}\n{out}")
+    }
+    t |> run("a member no require path serves fails as a require spelled by hand would") @(t : T?) {
+        var out : string
+        let script = write_driver(fx, "use_broken.das", "require [broken_group]", "0")
+        let rc = run_driver(fx, script, out)
+        t |> success(rc != 0 && find(out, "grp_gamma/missing") >= 0, "the missing prerequisite names the member: rc={rc}\n{out}")
+    }
+}
+
+//! the module cache stamps the requires a parse took: a member joining a group changes a
+//! requirer's dependencies without touching its bytes, and the record must not serve
+def arm_cache_stamps_the_expansion(t : T?; fx : Fixture) {
+    t |> run("a member joining the group after the record was written cuts the cache off at the requirer") @(t : T?) {
+        let cache = "-module-cache \"{path_join(fx.tmp, "groups.dascache")}\""
+        let script = write_driver(fx, "use_cache.das", "require grp_beta/beta\nrequire mid", "alpha_value()")
+        fwrite(path_join(fx.betaDir, ".das_module"), DESCRIPTOR_BETA_OUTSIDE)
+        var out : string
+        t |> success(report_child(t, "cache write", run_driver(fx, script, out, cache), out, "PROBE 1"), "the cache is written with beta outside the group")
+        t |> success(report_child(t, "cache serve", run_driver(fx, script, out, cache), out, "PROBE 1"), "the unchanged tree serves")
+        t |> success(find(out, "FALLBACK") < 0, "nothing cuts the unchanged tree off:\n{out}")
+        fwrite(path_join(fx.betaDir, ".das_module"), DESCRIPTOR_BETA)
+        t |> success(report_child(t, "member joined", run_driver(fx, script, out, cache), out, "PROBE 1"), "the run with beta in the group still answers")
+        t |> success(find(out, "re-parsed from") >= 0 && find(out, "mid.das") >= 0 && find(out, "(require set changed)") >= 0, "the requirer's record is the cutoff, named with its reason:\n{out}")
+        t |> success(report_child(t, "rewritten", run_driver(fx, script, out, cache), out, "PROBE 1"), "the rewritten cache serves again")
+        t |> success(find(out, "FALLBACK") < 0, "the rewritten cache carries the grown expansion:\n{out}")
+    }
+}
+
+[test]
+def test_module_groups(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_module_groups", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let fx = make_fixture(tmp)
+    arms_expand(t, fx)
+    arm_cache_stamps_the_expansion(t, fx)
+    var err : string
+    rmdir_rec(tmp, err)
+}
