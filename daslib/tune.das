@@ -8,14 +8,15 @@ require daslib/ast
 require daslib/ast_boost
 
 require [tune_framework] public
+require [llvm_code_annotation] public
 
 //! The six kernel-tuning annotations - `[tune_perm]`, `[tune_companion]`, `[tune]`,
 //! `[tune_scope]`, `[tune_policy]` and `[llvm_code]` - plus the default-policy infer pass, as
 //! shells every program can spell. The framework that implements them lives in
-//! `llvm/daslib/llvm_tune` and `llvm/daslib/llvm_code`, the members of the `tune_framework`
-//! group above, re-exported, so `require daslib/tune` gives exactly what `require llvm/daslib/llvm_tune`
-//! gave. dasLLVM joins the group exactly when the build is configured with it - from its `llvm`
-//! witness module and its descriptor - the das files being on disk never counts; the group's
+//! `llvm/daslib/llvm_tune` and `llvm/daslib/llvm_code`, the members of the two groups above,
+//! re-exported, so `require daslib/tune` gives exactly what `require llvm/daslib/llvm_tune`
+//! gave. dasLLVM joins both groups exactly when the build is configured with it - from its `llvm`
+//! witness module and its descriptor - the das files being on disk never counts; the groups'
 //! members are then what makes `module_exists` below answer for this compile (`module_exists`, not
 //! `builtin_module_exists`: visible from this module, the same answer inside a tool's nested
 //! compile). Every tune annotation registers HERE and nowhere else, because a

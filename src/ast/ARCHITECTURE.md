@@ -27,12 +27,14 @@ the `CodeOfPolicies` of the compile that wrote it, and a record whose policies d
 reading compile's is never served - a lint compile and a run compile of one graph never share a
 record. The mismatch fails the record the way damage does, reparsed in place rather than cutting
 the stream (damage landing on the policy bytes must not cut it either), and the writeback that
-repairs it carries the new policies. The record header also carries the requires the parse
-took - guards and groups already applied, `Program::allRequireDecl` by name - and the reader
-runs the text collector (`getAllRequire`) over the file it is about to serve and compares the two
-as sets: a member a group gained or a guard a build flipped changes a module's dependencies
-without touching its bytes, and a record served then would carry the old dependency set. That
-mismatch is a cutoff (`require set changed`), since the modules after it may have moved too.
+repairs it carries the new policies. The record header also carries the text collector's
+answer for the file when the record was written (`collectRequireNames` over `getAllRequire`,
+guards and groups already applied, names sorted), and the reader runs the same collector over the
+file it is about to serve and compares: a member a group gained or a guard a build flipped changes
+a module's dependencies without touching its bytes, and a record served then would carry the old
+dependency set. Both sides are one function, so a require only the walk knows - a host's
+`parseCustomRequire` - compares equal to itself instead of cutting the stream on every warm read.
+That mismatch is a cutoff (`require set changed`), since the modules after it may have moved too.
 The first mismatch is the cutoff: the reader marks the stream failed, the
 module and everything after it parse from source, and the writer rewrites the whole file - the
 served records re-serialized from the modules the reader restored, then the freshly parsed
@@ -140,7 +142,7 @@ manifest carries the stamp and the flag and no rows, and is not rewritten. A mod
 name that `require [group]` expands to a list: `register_module_group(group, member)` in a
 descriptor - recorded as a `grp` row and replayed - or `registerModuleGroupMember` from a C++
 module's constructor adds a member, once (`ast_module.cpp`, one process-wide registry under a
-mutex, cleared at `Module::Shutdown`); the list comes back sorted by member path, since the
+mutex, cleared when the last environment shuts down); the list comes back sorted by member path, since the
 scan registers in `readdir` order, which no platform promises. The text collector
 (`getAllRequireReq`) and the parser (`ast_requireModuleGroup`) expand the same list into one
 require per member, the group's guard and `public` on each; a member resolves and fails as a
@@ -187,8 +189,8 @@ The host records its cache key inputs and whether a cache is in use at all on th
 `ModuleFileCache::defaultPath("late~<module>", ...)` - beside an explicit `-module-cache` file,
 in the default directory otherwise, nowhere under `-no-module-cache` - reads and writes it as
 the host does, and keeps the object for the life of the process (`keepLateModuleCache`,
-freed at `Module::Shutdown` after the modules), because a served module's line references
-point at the FileInfos the cache holds.
+freed when the last environment shuts down, after its modules), because a served module's line
+references point at the FileInfos the cache holds and a second environment's modules may too.
 
 ## 4. Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`)
 

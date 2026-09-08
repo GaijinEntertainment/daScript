@@ -50,9 +50,9 @@ is the key's change of shape.
 The candidate set reads the CONTEXT, not the `used` flag alone: `get_function_by_mangled_name_hash`
 answers whether the simulated program holds the function. A module compiled into the process
 after this program simulated - the emitter a late require brings in - runs its own symbol-use
-passes over the shared modules it requires, and `requireModuleNow` restores every shared
-function's and global's `used` flag afterwards (`src/ast/ARCHITECTURE.md` sec.3); the context
-check is the second line, for the window inside one plan.
+passes over the shared modules it requires, and what they compute lives on its own `Program`
+(`src/ast/ARCHITECTURE.md` sec.4), so this program's answers stand; the context check is the
+second line, for the window inside one plan.
 
 ## 3. The extern resolver needs no intrinsic table
 

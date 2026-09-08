@@ -2269,11 +2269,13 @@ class StyleLintVisitor : AstVisitor {
 
     [arch(at="ARCHITECTURE_LINT.md#style-lint-require-group")]
     def st030_report_requires(prog : ProgramPtr; module_files : table<string>; this_name : string; hook_reach : table<string; int>) : void {
-        var decl_count : table<string; int>
-        prog |> for_each_require_declaration() $ [unused_argument(mod, req_name, file, pub)] (mod, req_name, file, pub, at) {
-            if (at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
+        var group_line : table<string; bool>
+        prog |> for_each_require_declaration() $ [unused_argument(req_name, file)] (mod, req_name, file, pub, at) {
+            if (mod == null || pub || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
             let key = st030_decl_key(at)
-            decl_count[key] = (decl_count?[key] ?? 0) + 1
+            if (!key_exists(group_line, key)) {
+                group_line[key] = st030_is_group_line(rtti_get_source_line(at.fileInfo, at.line))
+            }
         }
         var keep : table<string; bool>
         var verdict : table<string; string>
@@ -2305,7 +2307,7 @@ class StyleLintVisitor : AstVisitor {
             st029_collect_all_deps(mod, reached)
             if (used_count == 1 && !empty(via)) {
                 let mods = via[0]
-                if ((decl_count?[key] ?? 1) > 1 || st029_hook_only_through(reached, hook_reach, reached?[mods] ?? null)) {
+                if ((group_line?[key] ?? false) || st029_hook_only_through(reached, hook_reach, reached?[mods] ?? null)) {
                     keep[key] = true
                     return
                 }
@@ -2332,7 +2334,7 @@ class StyleLintVisitor : AstVisitor {
                 style_warning("STYLE029: require {req_name} is used only for the module it re-exports ({mods}); require it directly and drop {req_name}", at)
                 return
             }
-            if ((decl_count?[key] ?? 1) > 1) {
+            if (group_line?[key] ?? false) {
                 if (group_reported?[key] ?? false) return
                 group_reported[key] = true
                 style_warning("STYLE030: require [group] is unused - no symbol from any member ({members?[key] ?? ""}) or a module it re-exports is referenced; drop it", at)
@@ -2344,6 +2346,13 @@ class StyleLintVisitor : AstVisitor {
 
     def st030_decl_key(at : LineInfo) : string {
         return "{at.fileInfo.name}:{at.line}:{at.column}"
+    }
+
+    def st030_is_group_line(src : string) : bool {
+        let cut = find(src, "//")
+        let code = cut < 0 ? src : slice(src, 0, cut)
+        let req = find(code, "require")
+        return req >= 0 && find(code, "[", req) >= 0 && find(code, "]", req) >= 0
     }
 
     def note_decl_span(var file_first_decl : table<string; uint>; fname : string; s : uint) : void {

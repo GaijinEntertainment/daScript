@@ -239,8 +239,10 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 
 - **A `require [group]` reaches `for_each_require_declaration` as one declaration per group
   member, every one carrying the group line's `LineInfo`.** The (file, line, column) key
-  `st030_decl_key` builds is the only thing that tells a group apart from separately written
-  requires, so both rules judge members and then keep, suppress and report per key.
+  `st030_decl_key` builds gathers a group's members, and the source line at the key, read for
+  the `[...]` spelling, is what tells a group apart from a require written by hand - a group
+  with one member has one declaration, exactly like a plain require - so both rules judge
+  members and then keep, suppress and report per key.
 - **A declaration's verdict is settled only after every member sharing its key has been
   judged**, so `st030_report_requires` records verdicts in one walk and reports them in a
   later one. Reporting inside the deciding walk would fire on a member judged ahead of the

@@ -292,11 +292,11 @@ namespace das {
         // pointers in dasModule*.shared_module DLLs are still valid, and any
         // live job threads that were holding handles have exited. Dump here.
         if ( dumpHandleLeaks ) handleRegistry_dumpAll();
-        freeLateModuleCaches();
+        if ( g_envTotal==0 ) freeLateModuleCaches();   // process-wide, after the modules (ARCHITECTURE.md sec.3)
         // Free allocated structures for dynamic modules (unloads DLLs).
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
         clear_deferred_dynamic_modules();
-        clearModuleGroups();
+        if ( g_envTotal==0 ) clearModuleGroups();
         setDeferredModuleLoader(nullptr);
 
         clearGlobalAotLibrary();

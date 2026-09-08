@@ -238,10 +238,12 @@ Three companions carry a concern each; a section number is unique across all fou
   is recorded here: a trait that answered off the process registry instead would take the
   framework arm inside a tool's nested compile, where the framework is not mounted.
 - **The `llvm/daslib/*` files resolve in every build that carries `modules/dasLLVM/`; only a
-  build configured with dasLLVM joins the `tune_framework` group - the `llvm` witness module's
-  constructor for a static host, the descriptor's rows where the witness's `.shared_module` was
-  built - so the group, and with it `module_exists(llvm_tune)`, follows the configure and never
-  the filesystem.** The framework's das files compile without their C++ module, so a direct
+  build configured with dasLLVM joins the `tune_framework` (`llvm_tune`) and
+  `llvm_code_annotation` (`llvm_code`) groups - the `llvm` witness module's constructor for a
+  static host, the descriptor's rows where the witness's `.shared_module` exists - so the groups,
+  and with them `module_exists(llvm_tune)`, follow the configure and never the das files on
+  disk.** Two groups, because a requirer of the tune framework alone must not re-export the
+  `[llvm_code]` annotation with it. The framework's das files compile without their C++ module, so a direct
   `require llvm/daslib/llvm_tune` in a build without dasLLVM compiles with the shells inert and no
   `<name>_variants()` registry - a program that reads one is framework-only and says so with that
   direct require. `daslib/just_in_time` keeps its direct require for the opposite reason: a static

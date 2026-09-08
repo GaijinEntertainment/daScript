@@ -34,6 +34,11 @@ namespace das
     static __forceinline int32_t programIndexOf ( const Context & context, const Variable * var ) {
         return context.thisProgram ? context.thisProgram->indexOf(var) : -1;
     }
+    // the callee's SimFunction: the program's slot, or - simulating outside any program - the context's table by hash
+    static __forceinline SimFunction * programFunction ( Context & context, Function * fn ) {
+        if ( auto index = programIndexOf(context, fn); index>=0 ) return context.getFunction(index);
+        return context.thisProgram ? nullptr : context.fnByMangledName(fn->getMangledNameHash());
+    }
     // topological sort for the [init] nodes
 
     struct InitSort {
@@ -824,9 +829,8 @@ namespace das
                 if ( mks->constructor ) {
                     uint32_t offset = mks->extraOffset + index*stride;
                     SimNode_CallBase * pCall = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(0, mks->at);
-                    auto ctorIndex = programIndexOf(context,mks->constructor);
-                    DAS_ASSERT(ctorIndex!=-1 && "should have failed in type infer otherwise");
-                    pCall->fnPtr = context.getFunction(ctorIndex);
+                    pCall->fnPtr = programFunction(context, mks->constructor);
+                    DAS_ASSERT(pCall->fnPtr && "should have failed in type infer otherwise");
                     if ( mks->useCMRES ) {
                         pCall->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(mks->at, offset);
                     } else if ( mks->useStackRef ) {
@@ -2684,7 +2688,7 @@ namespace das
         } else {
             auto pCall = static_cast<SimNode_CallBase *>(expr->func->makeSimNode(context, sarguments));
             pCall->debugInfo = at;
-            pCall->fnPtr = context.getFunction(programIndexOf(context,expr->func));
+            pCall->fnPtr = programFunction(context, expr->func);
             pCall->arguments = (SimNode **) context.code->allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
             pCall->arguments[0] = getE(expr->subexpr);
@@ -2746,7 +2750,7 @@ namespace das
         } else {
             auto pCall = static_cast<SimNode_CallBase *>(expr->func->makeSimNode(context, sarguments));
             pCall->debugInfo = at;
-            pCall->fnPtr = context.getFunction(programIndexOf(context,expr->func));
+            pCall->fnPtr = programFunction(context, expr->func);
             pCall->arguments = (SimNode **) context.code->allocate(2 * sizeof(SimNode *));
             pCall->nArguments = 2;
             pCall->arguments[0] = getE(expr->left);
@@ -3477,9 +3481,8 @@ namespace das
         if ( context.thisHelper ) context.thisHelper->stampSimNode(expr, pCall->debugInfo);
         if ( func->builtIn) {
             pCall->fnPtr = nullptr;
-        } else if ( auto index = programIndexOf(context,func); index>=0 ) {
-            pCall->fnPtr = context.getFunction(index);
-            DAS_ASSERTF(pCall->fnPtr, "calling function which null. how?");
+        } else if ( auto sfn = programFunction(context, func) ) {
+            pCall->fnPtr = sfn;
         } else {
             DAS_ASSERTF(0, "calling function which is not used. how?");
         }

@@ -98,9 +98,10 @@ the group a member joins, and the entry every member defines - and both belong i
 requirer's documentation. Members in this tree: `sql_provider` / `register_provider`
 (`daslib/sql_boost`), `linq_fold_source` / `register_linq_fold_source` (`daslib/linq_fold`),
 `llvm_code_generator` / `register_llvm_code_generators` (`llvm/daslib/llvm_user_modules`);
-`tune_framework` has no entry - `daslib/tune` shells its members under
-`static_if (typeinfo module_exists(llvm_tune))`, and dasLLVM joins it from its `llvm` witness
-module's constructor and from its descriptor, so membership follows the build's configure.
+`tune_framework` (`llvm_tune`) and `llvm_code_annotation` (`llvm_code`) have no entry -
+`daslib/tune` shells their members under `static_if (typeinfo module_exists(...))`, and dasLLVM
+joins both from its `llvm` witness module's constructor and from its descriptor where the
+witness's `.shared_module` exists, so membership follows the build's configure.
 
 ## Package layout
 

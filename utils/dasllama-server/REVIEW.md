@@ -41,7 +41,7 @@ the route that answers with that key first.**
 the same change.** The row is where a consumer learns the key exists.
 
 **A reference in this folder to a symbol of a module the folder requires only under
-`require ?llvm` or `require [tune_framework]` (`dasllama_exchange`, `llvm_tune`, `llvm_code`)
+`require ?llvm` or `require [tune_framework]` (`dasllama_exchange`, `llvm_tune`)
 outside a `static_if (typeinfo module_exists(<that module>))` arm is a defect** - the unguarded
 reference fails the compile of a build without dasLLVM.
 

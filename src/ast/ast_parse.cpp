@@ -695,6 +695,18 @@ namespace das {
         }
     }
 
+    // ARCHITECTURE.md sec.1
+    static vector<string> collectRequireNames ( FileInfo * fi, const FileAccessPtr & access ) {
+        vector<string> names;
+        if ( fi ) {
+            string modName;
+            vector<FileInfo *> chain;
+            for ( auto & rec : getAllRequire(fi, modName, chain, access) ) names.push_back(rec.name);
+        }
+        sort(names.begin(), names.end());
+        return names;
+    }
+
     bool trySerializeProgramModule (
             ProgramPtr          & program,
             const FileAccessPtr & access,
@@ -809,15 +821,7 @@ namespace das {
         }
         // ARCHITECTURE.md sec.1
         {
-            vector<string> currentReq;
-            if ( auto fi = access->getFileInfo(fileName) ) {
-                string modName;
-                vector<FileInfo *> chain;
-                for ( auto & rec : getAllRequire(fi, modName, chain, access) ) {
-                    currentReq.push_back(rec.name);
-                }
-            }
-            sort(currentReq.begin(), currentReq.end());
+            auto currentReq = collectRequireNames(access->getFileInfo(fileName), access);
             sort(savedReq.begin(), savedReq.end());
             if ( currentReq != savedReq ) {
                 serializer_read->seenNewModule = true;
@@ -849,7 +853,7 @@ namespace das {
             // must round-trip through the deserialized program or the next write drops them
             program->moduleCacheDependencies = das::move(savedDeps);
             if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get()});
+                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(), das::move(savedReq)});
             }
             return true;
         }
@@ -1447,7 +1451,8 @@ namespace das {
             }
             auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
             if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get()});
+                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(),
+                    collectRequireNames(access->getFileInfo(fileName), access)});
             }
             return program;
         }
@@ -1582,7 +1587,7 @@ namespace das {
             *serializer_write << version;
         }
         for ( auto & parsedModule : serializer_write->parsedModules ) {
-            auto & [fileName, fileHash, fileSize, program, thisModule] = parsedModule;
+            auto & [fileName, fileHash, fileSize, program, thisModule, requireNames] = parsedModule;
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
@@ -1594,10 +1599,10 @@ namespace das {
                 *serializer_write << get<2>(dep);
             }
             // ARCHITECTURE.md sec.1
-            uint32_t reqCount = uint32_t(program->allRequireDecl.size());
+            uint32_t reqCount = uint32_t(requireNames.size());
             *serializer_write << reqCount;
-            for ( auto & req : program->allRequireDecl ) {
-                *serializer_write << get<1>(req);
+            for ( auto & req : requireNames ) {
+                *serializer_write << req;
             }
             // record length, backpatched after the payload: lets the reader skip a record
             // that fails to deserialize for an UNCHANGED file and keep serving later ones.
