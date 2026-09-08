@@ -1070,10 +1070,13 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
+        if (current_block_terminates()) {
+            //! a statement after a terminator - a nested block's return / break / continue, or the
+            //! constant-condition if the compiler unfolds even unoptimized - lands in its own dead block
+            LLVMPositionBuilderAtEnd(g_builder, append_basic_block("dead_at_line_{int(expr.at.line)}_"))
+        }
         if (LLVM_DEBUG_TRACES && LLVM_DEBUG_LINE_TRACES) {
-            if (!current_block_terminates()) {
-                build_debug_trace(expr.at, FN_JIT_DEBUG_LINE)
-            }
+            build_debug_trace(expr.at, FN_JIT_DEBUG_LINE)
         }
     }
 
