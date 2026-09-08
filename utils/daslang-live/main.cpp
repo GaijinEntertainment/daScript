@@ -1031,8 +1031,8 @@ int main(int argc, char * argv[]) {
     if ( dumpLeaks ) {
         JobStatus::DumpJobQueLeaks();
     }
-    // das::dump_alloc_leaks is registered as an atexit handler via init_seg(lib),
-    // so it fires after all static destructors — cleaner than dumping here.
+    // das::dump_alloc_leaks registers itself as the FIRST atexit handler, so it
+    // fires after all static destructors — cleaner than dumping here.
     release_single_instance();
     return result;
 }
