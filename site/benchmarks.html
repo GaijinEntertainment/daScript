@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Benchmarks — cross-language · daslang</title>
-    <meta name="description" content="The dasProfile suite: 16 benchmarks, das vs Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono and .NET — interpreter, JIT and AOT lanes, per platform." />
+    <meta name="description" content="The dasProfile suite: 16 benchmarks, das vs Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono, .NET and Zig — interpreter, JIT and AOT lanes, per platform." />
     <link rel="canonical" href="https://daslang.io/benchmarks.html" />
     <link rel="icon" type="image/svg+xml" href="files/daslang-favicon.svg" />
     <link rel="alternate icon" type="image/x-icon" href="files/daslang.ico" />
@@ -141,12 +141,13 @@
         <div class="forge-container forge-hero__grid">
             <div>
                 <span class="bm-hero__badge"><span class="dot"></span>dasProfile · cross-language</span>
-                <h1>Sixteen benchmarks. Seven runtimes. <em>Every lane measured.</em></h1>
+                <h1>Sixteen benchmarks. Eight runtimes. <em>Every lane measured.</em></h1>
                 <p class="forge-hero__lede">
                     The dasProfile suite runs the same programs across daslang and the scripting
                     runtimes it competes with — Lua, LuaJIT, Luau, Quirrel, QuickJS, Mono and .NET —
-                    plus C++ as the floor. Two boards per platform: pure interpreters, and
-                    everything with a JIT or AOT compiler behind it. Absolute seconds, lower is
+                    plus C++ and Zig as the native floor. Three boards per platform: pure interpreters,
+                    everything with a JIT or AOT compiler behind it, and startup - the wall time of one
+                    launch of each program as a script, under the JIT, and as a standalone exe. Absolute seconds, lower is
                     better; the fastest lane in each row is highlighted.
                 </p>
                 <div class="forge-hero__ctas">
@@ -178,10 +179,10 @@
 
             <div class="bm-viewbar">
                 <div class="bm-seg" id="bm-platform">
-                    <button class="is-on" data-p="windows">Threadripper 3990X</button><button data-p="darwin">Apple M1 Max</button>
+                    <button class="is-on" data-p="darwin">macOS</button>
                 </div>
                 <div class="bm-seg" id="bm-board">
-                    <button class="is-on" data-b="Interpreted">interpreted</button><button data-b="AOT or JIT">AOT / JIT</button>
+                    <button class="is-on" data-b="Interpreted">interpreted</button><button data-b="AOT or JIT">AOT / JIT</button><button data-b="Startup">startup</button>
                 </div>
                 <div class="bm-seg" id="bm-view">
                     <button class="is-on" data-v="bars">bars</button><button data-v="table">table</button>
@@ -257,13 +258,29 @@
             { key: "DAS AOT", label: "DAS AOT", das: true },
             { key: "DAS JIT", label: "DAS JIT", das: true },
             { key: "C++", label: "C++", das: false },
+            { key: "ZIG", label: "Zig", das: false },
             { key: "LUAU --codegen", label: "Luau codegen", das: false },
             { key: "LUAJIT", label: "LuaJIT", das: false },
             { key: "MONO", label: "Mono", das: false },
             { key: ".NET", label: ".NET", das: false }
+        ],
+        "Startup": [
+            { key: "hello world", label: "hello world", das: false }
         ]
     };
-    var state = { platform: "windows", board: "Interpreted", view: "bars", sortCol: -1, sortDesc: false, data: null };
+    // the startup board is one row per runtime: the record keys hello world's lanes by language, and
+    // the row's das flag comes from the lane's name
+    var STARTUP_LABELS = {
+        "DAS INTERPRETER": "DAS interp", "DAS JIT": "DAS JIT", "DAS EXE": "DAS exe", "C++": "C++", "ZIG": "Zig",
+        "LUAU --codegen": "Luau codegen", "LUAU": "Luau", "LUA": "Lua", "LUAJIT -joff": "LuaJIT -joff", "LUAJIT": "LuaJIT",
+        "QUIRREL": "Quirrel", "QUICKJS": "QuickJS", "MONO --interpreter": "Mono interp", "MONO": "Mono", ".NET": ".NET"
+    };
+    var BOARD_HINT = {
+        "Startup": "hello world, one launch the way the lane's kernels are launched \u00b7 an exe cell carries the artifact size (a das exe links the runtime library dynamically, a zig exe is static)"
+    };
+    var state = { platform: "darwin", board: "Interpreted", view: "bars", sortCol: -1, sortDesc: false, data: null };
+    // one button per record the deploy fetched, in this order, labeled by the record's CPU
+    var PLATFORM_ORDER = ["darwin", "linux", "windows"];
 
     // "interop host calls" measures interop only - no playground sample
     var PLAYGROUND_SLUGS = {
@@ -285,9 +302,37 @@
         if (t >= 0.001) return (t * 1000).toFixed(2) + "ms";
         return (t * 1e6).toFixed(0) + "\u00b5s";
     }
+    function fmtSize(b) {
+        if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+        return Math.round(b / 1024) + " KB";
+    }
     function ratioText(r) { return r >= 100 ? "\u00d7" + r.toFixed(0) : r >= 10 ? "\u00d7" + r.toFixed(1) : "\u00d7" + r.toFixed(2); }
 
+    function startupRows() {
+        var p = state.data[state.platform];
+        var hello = (p.sections["Startup"] || {})["hello world"] || {};
+        var half = (p.halfRangeOverMedian["Startup"] || {})["hello world"] || {};
+        var sizes = (p.sizes["Startup"] || {})["hello world"] || {};
+        var rows = [];
+        var best = Math.min.apply(null, Object.keys(hello).map(function (k) { return hello[k]; }).filter(function (v) { return v > 0; }));
+        if (!isFinite(best)) best = null;
+        (p.startupOrder || Object.keys(hello)).forEach(function (lane) {
+            if (hello[lane] == null) return;
+            rows.push({ name: STARTUP_LABELS[lane] || lane, das: lane.indexOf("DAS ") === 0, vals: [hello[lane]], best: best,
+                        halfRangeOverMedian: [half[lane] != null ? half[lane] : null], sizes: [sizes[lane] != null ? sizes[lane] : null] });
+        });
+        if (state.sortCol >= 0) {
+            rows.sort(function (a, b) {
+                var x = state.sortCol === 0 ? a.name : a.vals[0], y = state.sortCol === 0 ? b.name : b.vals[0];
+                var c = x < y ? -1 : x > y ? 1 : 0;
+                return state.sortDesc ? -c : c;
+            });
+        }
+        return rows;
+    }
+
     function currentRows() {
+        if (state.board === "Startup") return startupRows();
         var tests = state.data[state.platform].sections[state.board];
         var lanes = LANES[state.board];
         var rows = [];
@@ -296,10 +341,12 @@
             var vals = lanes.map(function (l) { return t[l.key] != null ? t[l.key] : null; });
             var laneHalfRangeOverMedian = state.data[state.platform].halfRangeOverMedian[state.board][name] || {};
             var halfRangeOverMedian = lanes.map(function (l) { return laneHalfRangeOverMedian[l.key] != null ? laneHalfRangeOverMedian[l.key] : null; });
+            var laneSizes = (state.data[state.platform].sizes[state.board] || {})[name] || {};
+            var sizes = lanes.map(function (l) { return laneSizes[l.key] != null ? laneSizes[l.key] : null; });
             // a 0.0 lane is below the capture's timer resolution - never the row's baseline
             var best = Math.min.apply(null, vals.filter(function (v) { return v != null && v > 0; }));
             if (!isFinite(best)) best = null;
-            rows.push({ name: name, vals: vals, best: best, halfRangeOverMedian: halfRangeOverMedian });
+            rows.push({ name: name, vals: vals, best: best, halfRangeOverMedian: halfRangeOverMedian, sizes: sizes });
         });
         function cellFor(row, col) {
             if (col === 0) return row.name;
@@ -333,7 +380,7 @@
         var rows = currentRows();
         var tbl = document.getElementById("bm-table");
 
-        var html = "<thead><tr><th" + thClassAttr(0, false) + ">benchmark</th>";
+        var html = "<thead><tr><th" + thClassAttr(0, false) + ">" + (state.board === "Startup" ? "runtime" : "benchmark") + "</th>";
         lanes.forEach(function (l, i) {
             html += "<th" + thClassAttr(i + 1, l.das) + ">" + l.label + "</th>";
         });
@@ -343,14 +390,15 @@
             var slug = PLAYGROUND_SLUGS[r.name];
             var name = escapeHtml(r.name);
             var label = slug ? "<a href='/playground/?example=" + slug + "'>" + name + "</a>" : name;
-            html += "<tr><td class='bm-td-name'>" + label + "</td>";
+            html += "<tr><td class='bm-td-name" + (r.das ? " bm-das" : "") + "'>" + label + "</td>";
             r.vals.forEach(function (v, i) {
-                var das = lanes[i].das;
+                var das = r.das != null ? r.das : lanes[i].das;
                 if (v == null) { html += "<td class='bm-num bm-dim" + (das ? " bm-das" : "") + "'>-</td>"; return; }
                 if (v === 0) { html += "<td class='bm-num bm-dim" + (das ? " bm-das" : "") + "' title='below timer resolution'>~0</td>"; return; }
                 var isBest = v === r.best;
                 var cls = "bm-num" + (isBest ? " bm-best" : "") + (das ? " bm-das" : "");
                 var halfRangeHtml = r.halfRangeOverMedian[i] != null ? "<small class='bm-halfrange'>\u00b1" + (r.halfRangeOverMedian[i] * 100).toFixed(0) + "%</small>" : "";
+                if (r.sizes[i] != null) halfRangeHtml += "<small class='bm-halfrange'> " + fmtSize(r.sizes[i]) + "</small>";
                 if (state.view === "table") {
                     html += "<td class='" + cls + "'>" + fmt(v) + halfRangeHtml + "</td>";
                 } else {
@@ -372,7 +420,8 @@
             });
         });
 
-        renderSummary(lanes, rows);
+        if (state.board === "Startup") document.getElementById("bm-summary").innerHTML = "";
+        else renderSummary(lanes, rows);
         renderProvenance();
         renderHero();
     }
@@ -410,7 +459,8 @@
         document.getElementById("bm-prov").innerHTML = prov;
         var stat = p.sampleCount ? "median of " + p.sampleCount + " samples, \u00b1 half the range"
                  : (p.samplesSeen ? "median, \u00b1 half the sample range" : "");
-        document.getElementById("bm-hint").textContent = "seconds" + (stat ? " \u00b7 " + stat : "") + " \u00b7 lower is better \u00b7 click a column to sort";
+        var lead = BOARD_HINT[state.board] || "seconds";
+        document.getElementById("bm-hint").textContent = lead + (stat ? " \u00b7 " + stat : "") + " \u00b7 lower is better \u00b7 click a column to sort";
     }
 
     function shortVersion(s) {
@@ -427,7 +477,7 @@
             "<div><span class='prompt'>$</span> daslang dasProfile/main.das -- --json</div>",
             "<div class='dim'>  " + escapeHtml(p.cpu) + "</div>",
             "<div><span class='metric'>daslang </span><span class='amber'>" + escapeHtml(p.das_version) + "</span><span class='dim'> \u00b7 LLVM " + escapeHtml(shortVersion(v.llvm)) + " \u00b7 " + escapeHtml(v.cpp_compiler || "?") + "</span></div>",
-            "<div class='dim'>  LuaJIT " + escapeHtml(shortVersion(v.luajit)) + " \u00b7 Luau " + escapeHtml(shortVersion(v.luau)) + " \u00b7 QuickJS " + escapeHtml(shortVersion(v.quickjs)) + " \u00b7 Mono " + escapeHtml(shortVersion(v.mono)) + " \u00b7 .NET " + escapeHtml(shortVersion(v.dotnet)) + " \u00b7 Quirrel " + escapeHtml(shortVersion(v.quirrel)) + "</div>",
+            "<div class='dim'>  LuaJIT " + escapeHtml(shortVersion(v.luajit)) + " \u00b7 Luau " + escapeHtml(shortVersion(v.luau)) + " \u00b7 QuickJS " + escapeHtml(shortVersion(v.quickjs)) + " \u00b7 Mono " + escapeHtml(shortVersion(v.mono)) + " \u00b7 .NET " + escapeHtml(shortVersion(v.dotnet)) + " \u00b7 Quirrel " + escapeHtml(shortVersion(v.quirrel)) + (v.zig ? " \u00b7 Zig " + escapeHtml(shortVersion(v.zig)) : "") + "</div>",
             "<div class='ok'>  \u2713 " + tests + " benchmarks \u00b7 " + boards + " boards \u00b7 captured " + escapeHtml(p.das_capture) + "</div>"
         ];
         document.getElementById("bm-hero-receipt").innerHTML = lines.join("");
@@ -449,17 +499,21 @@
         var out = { cpu: cap.cpu, versions: cap.versions,
                     das_capture: cap.das_capture || cap.timestamp,
                     ext_capture: cap.ext_capture || cap.timestamp,
-                    das_version: (cap.versions || {}).daslang || "", sections: {}, halfRangeOverMedian: {}, sampleCount: null, samplesSeen: false };
+                    das_version: (cap.versions || {}).daslang || "", sections: {}, halfRangeOverMedian: {}, sizes: {}, sampleCount: null, samplesSeen: false };
         var sampleCounts = {};
         var rowsWithoutSamples = 0;
-        ["Interpreted", "AOT or JIT"].forEach(function (sec) {
+        ["Interpreted", "AOT or JIT", "Startup"].forEach(function (sec) {
             var tests = {};
             var halfRangeOverMedian = {};
+            var sizes = {};
             Object.keys(cap[sec] || {}).forEach(function (t) {
                 var lanes = {};
                 var laneHalfRangeOverMedian = {};
+                var laneSizes = {};
                 (cap[sec][t] || []).forEach(function (r) {
                     lanes[r.language] = r.time;
+                    if (r.size > 0) laneSizes[r.language] = r.size;
+                    if (sec === "Startup") (out.startupOrder = out.startupOrder || []).push(r.language);
                     if (r.samples && r.samples.length > 1 && r.time > 0) {
                         laneHalfRangeOverMedian[r.language] = (Math.max.apply(null, r.samples) - Math.min.apply(null, r.samples)) / 2 / r.time;
                         sampleCounts[r.samples.length] = true;
@@ -469,9 +523,11 @@
                 });
                 tests[t] = lanes;
                 halfRangeOverMedian[t] = laneHalfRangeOverMedian;
+                sizes[t] = laneSizes;
             });
             out.sections[sec] = tests;
             out.halfRangeOverMedian[sec] = halfRangeOverMedian;
+            out.sizes[sec] = sizes;
         });
         var seen = Object.keys(sampleCounts);
         out.samplesSeen = seen.length > 0;
@@ -480,7 +536,7 @@
     }
     // Same vendored records as files/forge.js's front-page cycler: pages.yml
     // fetches profile_results_<platform>.json from dasProfile at deploy time.
-    Promise.allSettled(["windows", "darwin"].map(function (plat) {
+    Promise.allSettled(PLATFORM_ORDER.map(function (plat) {
         return fetch("files/profile_results_" + plat + ".json")
             .then(function (resp) { if (!resp.ok) throw new Error(resp.status); return resp.json(); })
             .then(function (json) { return { platform: plat, json: json }; });
@@ -489,6 +545,14 @@
         results.forEach(function (settled) {
             if (settled.status === "fulfilled") state.data[settled.value.platform] = normalize(settled.value.json);
         });
+        var seg = document.getElementById("bm-platform");
+        var loaded = PLATFORM_ORDER.filter(function (p) { return state.data[p]; });
+        if (loaded.length) {
+            state.platform = loaded[0];
+            seg.innerHTML = loaded.map(function (p) {
+                return "<button" + (p === state.platform ? " class='is-on'" : "") + " data-p='" + p + "'>" + escapeHtml(state.data[p].cpu || p) + "</button>";
+            }).join("");
+        }
         wireSeg("bm-platform", "platform", "data-p");
         wireSeg("bm-board", "board", "data-b");
         wireSeg("bm-view", "view", "data-v");
