@@ -1302,7 +1302,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
             unsafe {
                 p8 = (reinterpret<int8?>(expr)) + int(offset)
             }
-            if (tstr == "$::dasvector`ptr`Expression") {
+            if (tstr |> ends_with("::dasvector`ptr`Expression")) {
                 let pv = unsafe(reinterpret<dasvector`ptr`Expression?>(p8))
                 if (!empty(*pv)) {
                     let ts = repeat("  ", tabs + 2)
@@ -1316,7 +1316,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
                     }
                     writer |> write("]")
                 }
-            } elif (tstr == "$::dasvector`ptr`Variable") {
+            } elif (tstr |> ends_with("::dasvector`ptr`Variable")) {
                 let pv = unsafe(reinterpret<dasvector`ptr`Variable?>(p8))
                 if (!empty(*pv)) {
                     let ts = repeat("  ", tabs + 2)

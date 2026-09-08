@@ -9,6 +9,7 @@
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/crash_handler.h"
 #include "daScript/misc/job_que.h"
+#include "daScript/misc/performance_time.h"
 #ifdef __APPLE__
 #include <pthread/qos.h>
 #endif
@@ -73,6 +74,9 @@ static bool gen2MakeSyntax = false;
 static bool trackAllocations = false;
 static bool heapReportAtExit = false;
 static bool logModuleCompileTime = false;
+static int64_t startupCompileUsec = 0;
+static int64_t startupSimulateUsec = 0;
+static int64_t startupRunUsec = 0;
 static bool buildingDocumentation = false;
 
 static vector<string> dllSearchPaths;
@@ -235,6 +239,8 @@ int das_aot_main ( int argc, char * argv[] ) {
                 gen2MakeSyntax = true;
             } else if ( strcmp(argv[ai],"-no-dynamic-modules")==0 ) {
                 noDynamicModules = true;
+            } else if ( strcmp(argv[ai],"-ignore-manifest")==0 ) {
+                ignore_dynamic_module_manifests(true);
             } else if ( strcmp(argv[ai],"-no-lint")==0 ) {
                 noLint = true;
             } else if ( strcmp(argv[ai],"-log-compile-time")==0 ) {
@@ -510,7 +516,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         cacheQuiet = true;
     }
     moduleCache.install(cacheReadPath, cacheWritePath, cacheQuiet);
+    auto compile0 = ref_time_ticks();
     auto program = compileDaScript(fn,access,tout,dummyGroup,policies);
+    startupCompileUsec += get_time_usec(compile0);
     {
         auto cres = moduleCache.finish();
         if ( !cacheQuiet ) {
@@ -559,7 +567,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
             if ( compileOnly )
                 return 0;
 
+            auto simulate0 = ref_time_ticks();
             auto pctx = SimulateWithErrReport(program, tout);
+            startupSimulateUsec += get_time_usec(simulate0);
             // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
             {
                 auto & root = gc_root::gc_get_thread_root();
@@ -604,11 +614,13 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                     auto fnTest = fnMVec.back();
                     pctx->restart();
                     vec4f res;
+                    auto run0 = ref_time_ticks();
                     if ( debuggerRequired ) {
                         res = pctx->eval(fnTest, nullptr);
                     } else {
                         res = pctx->evalWithCatch(fnTest, nullptr);
                     }
+                    startupRunUsec += get_time_usec(run0);
                     if ( auto ex = pctx->getException() ) {
                         tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
                         exitCode = 1;
@@ -730,10 +742,13 @@ void print_help() {
         << "    --das-profiler-global install profiler as singleton agent (default with --das-profiler-memory)\n"
         << "    --das-profiler-leaks track live heap allocations and dump leaks on context destroy\n"
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
+        << "    -ignore-manifest  compile every .das_module descriptor and load every C++ module on start, reading\n"
+        << "                and writing no .das_module.manifest - by default a manifest's C++ module loads at the first require that names it\n"
         << "    -no-lint    skip the lint pass (Program::lint)\n"
         << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
         << "    --ast-verify-batch  checks the finished tree only (no per-pass walks, no cross-module sweeps): cheap enough to gate many files (CI)\n"
-        << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count\n"
+        << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count,\n"
+        << "                a cached module's read time (and its macro-context simulate), and the process startup timeline (builtin modules / module scan / initialize / compile / simulate / run / teardown / shutdown)\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
         << "    -project <path.das_project> path to project file\n"
@@ -773,6 +788,12 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
     _set_error_mode(_OUT_TO_STDERR);
 #endif
+    auto startupMain0 = ref_time_ticks();
+    int64_t startupScanUsec = 0;
+    int64_t startupInitUsec = 0;
+    int64_t startupCompileAndRunUsec = 0;
+    int64_t startupPreScanUsec = 0;
+    int64_t startupBuiltinUsec = 0;
     install_das_crash_handler();
 #ifdef __APPLE__
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
@@ -1043,6 +1064,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="no-dynamic-modules" ) {
                 noDynamicModules = true;
+            } else if ( cmd=="ignore-manifest" ) {
+                ignore_dynamic_module_manifests(true);
             } else if ( cmd=="-dump-leaks" ) {
                 dumpLeaks = true;
             } else if ( cmd=="-no-dump-leaks" ) {
@@ -1072,6 +1095,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         printf("-no-module-cache disables the cache; do not combine it with -ser/-deser\n");
         return -1;
     }
+    startupPreScanUsec = get_time_usec(startupMain0);
+    auto builtin0 = ref_time_ticks();
     // register modules
     register_builtin_modules();
     require_project_specific_modules();
@@ -1079,6 +1104,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // Otherwises search for static modules.
     #include "modules/external_pull.inc"
     #endif
+    startupBuiltinUsec = get_time_usec(builtin0);
+    auto scan0 = ref_time_ticks();
     #ifdef DAS_ENABLE_DYN_INCLUDES
     if ( !noDynamicModules ) {
         // Search for external modules and init them. Only if flag is enabled.
@@ -1088,7 +1115,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         require_dynamic_modules(access, getDasRoot(), project_root, load_modules, disabled_modules, tout);
     }
     #endif
+    startupScanUsec = get_time_usec(scan0);
+    auto init0 = ref_time_ticks();
     Module::Initialize();
+    startupInitUsec = get_time_usec(init0);
 
     // compile and run
     int exitCode = 0;
@@ -1102,7 +1132,9 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 #endif
     for ( auto & fn : files ) {
         replace(fn, "_dasroot_", getDasRoot());
+        auto compileAndRun0 = ref_time_ticks();
         int rc = compile_and_run(fn, mainName, outputProgramCode, dryRun, compileOnly);
+        startupCompileAndRunUsec += get_time_usec(compileAndRun0);
         if ( rc != 0 ) {
             exitCode = rc;
         }
@@ -1121,9 +1153,25 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // Handle-leak dump runs inside Module::Shutdown, between module
     // destruction (drains job threads) and DLL unload (invalidates the
     // dumpHandleLeaks<T> function pointers registered from shared modules).
+    auto shutdown0 = ref_time_ticks();
     Module::Shutdown(dumpLeaks);
     if ( dumpLeaks ) {
         JobStatus::DumpJobQueLeaks();
+    }
+    if ( logModuleCompileTime ) {
+        auto shutdownUsec = get_time_usec(shutdown0);
+        auto teardownUsec = startupCompileAndRunUsec - startupCompileUsec - startupSimulateUsec - startupRunUsec;
+        tout << "startup: main total " << (get_time_usec(startupMain0) / 1000000.) << "\n"
+             << "\targuments " << (startupPreScanUsec / 1000000.) << "\n"
+             << "\tbuiltin modules " << (startupBuiltinUsec / 1000000.) << "\n"
+             << "\tmodule scan " << (startupScanUsec / 1000000.) << "\n"
+             << "\tinitialize " << (startupInitUsec / 1000000.) << "\n"
+             << "\tcompile  " << (startupCompileUsec / 1000000.) << "\n"
+             << "\tsimulate " << (startupSimulateUsec / 1000000.) << "\n"
+             << "\trun      " << (startupRunUsec / 1000000.) << "\n"
+             << "\tteardown " << (teardownUsec / 1000000.) << "\n"
+             << "\tshutdown " << (shutdownUsec / 1000000.) << "\n"
+        ;
     }
     // das::dump_alloc_leaks registers itself as the FIRST atexit handler, so it
     // fires after all static destructors — cleaner than dumping here.

@@ -31,9 +31,40 @@ this document states what the folder is and why its tests take the shape they do
   tab leaves the manifest unwritten, and a directory sitting where the `.tmp` or the manifest
   goes fails the create or the rename so the start just compiles; each verdict is read from
   the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
+- `test_deferred_modules.das` - a replayed `dm` row is not loaded by the scan. The project root
+  holds a copy of the tree's `dasUnitTest` (descriptor and artifact), which shadows the tree's,
+  so the copy's manifest is the test's to make cold or warm: a cold start compiles the
+  descriptor, loads the module to record its name, and a `require ?UnitTest x` is taken; a
+  warm start defers the row and loads nothing for a program that requires nothing; the first
+  `require UnitTest` loads it and the program calls into it; `typeinfo builtin_module_exists`
+  loads it with no require naming it, while rtti `has_module` answers true and loads nothing;
+  a lazy start and an eager start count the same functions in `$`, so a load adds nothing
+  to `$`; a guard alone loads the module
+  and is taken, as it is with a `require UnitTest` above it, below it, or in the entry while
+  the guard sits in a module walked earlier;
+  `-ignore-manifest` compiles every descriptor, loads every C++ module on start and writes no
+  manifest; a manifest row hand-edited to an absent artifact makes the require bring every
+  deferred module in and then fail on the missing prerequisite; a module cache an eager start
+  wrote serves a lazy start, with `-log-compile-time` printing the reads and the startup
+  timeline; a dastest `--ser` stream of a test requiring the module is read by a `--deser`
+  child that nothing made require it, and the reader loads it; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
+  deferred module in because its `initDependencies` asks for two more, and a half-warm tree -
+  copies of dasImgui and dasGlfw under the fixture, the imgui copy's manifest removed so its
+  modules load on start while glfw's row waits - initializes by bringing the rest in; a build
+  whose copied artifact cannot find its libraries from the copy has nothing to observe there
+  and the arm says so. A static host - the AOT
+  test binary, whose descriptors register no shared module, or a tree holding no
+  `.shared_module` - has nothing to observe and the test says so and returns.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`); a case needing a macro-bearing module graph puts it here instead of
   writing the script inline.
+- `_mc_common.das` - the spawn helpers every test here shares (the name is the folder's, since
+  a sweep worker holds every shared module it met under one name and `tests/linq` has a
+  `_common` already): the binary to spawn (`das_exe`),
+  the scan-trace command prefix (`trace_prefix`), the stderr-joining child run (`run_child`)
+  and the failure report that echoes the child's output (`report_child`). A test whose child
+  needs a different spawn shape - an argv spawn, an environment variable - keeps that one
+  helper local.
 
 ## 2. Why every case is a spawned process
 

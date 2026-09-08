@@ -1092,6 +1092,15 @@ namespace das {
         return *this;
     }
 
+    // a read no prerequisite walk precedes meets a deferred C++ module here (src/ast/ARCHITECTURE.md sec.2)
+    static Module * requireBuiltinModule ( const string & name ) {
+        auto m = Module::require(name);
+        if ( !m ) {
+            if ( auto loader = getDeferredModuleLoader(); loader && loader(name) ) m = Module::require(name);
+        }
+        return m;
+    }
+
     AstSerializer & AstSerializer::operator << ( Module * & module ) {
         bool is_null = module == nullptr;
         *this << is_null;
@@ -3009,7 +3018,7 @@ namespace das {
                 string name; ser << name;
 
                 if ( builtin && !promoted ) {
-                    auto m = Module::require(name);
+                    auto m = requireBuiltinModule(name);
                     // a corrupted record can hand this arm a garbage name - require()
                     // answers null, and the deref was a SIGSEGV (recoverable throw now;
                     // the resume reparses the record in place)
@@ -3221,7 +3230,7 @@ namespace das {
         uint64_t size_builtin = 0; ser << size_builtin;
         for ( uint64_t i = 0; i < size_builtin; i++ ) {
             string name; ser << name;
-            Module * m = Module::require(name);
+            Module * m = requireBuiltinModule(name);
             library.addModule(m);
         }
 

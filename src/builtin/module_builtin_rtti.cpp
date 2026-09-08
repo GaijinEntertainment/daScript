@@ -11,6 +11,7 @@
 
 #include "daScript/misc/performance_time.h"
 #include "daScript/ast/ast_serializer.h"
+#include "daScript/ast/dyn_modules.h"
 #include "daScript/misc/gc_node.h"
 
 using namespace das;
@@ -1187,8 +1188,9 @@ namespace das {
         return Module::require(name);
     }
 
+    // true for a module the tree has, loaded or waiting in a manifest row - this asks, it never loads
     bool rtti_has_module ( const char * name ) {
-        return Module::require(name) != nullptr;
+        return Module::require(name) != nullptr || is_dynamic_module_deferred(name);
     }
 
     void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {

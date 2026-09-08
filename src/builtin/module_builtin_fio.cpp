@@ -312,6 +312,11 @@ namespace das {
     DAS_API void end_dynamic_module_recording ( vector<DynModuleManifestRow> &, bool & ) GENERATE_IO_STUB
     DAS_API void replay_native_path ( const char *, const char *, const char * ) GENERATE_IO_STUB
     DAS_API void replay_dynamic_module ( const char *, const char *, int ) GENERATE_IO_STUB
+    DAS_API void defer_dynamic_module ( const char *, const char *, int, const char * ) GENERATE_IO_STUB
+    DAS_API bool load_deferred_dynamic_module ( const char * ) GENERATE_IO_STUB_RET
+    DAS_API size_t load_all_deferred_dynamic_modules () GENERATE_IO_STUB_RET
+    DAS_API bool is_dynamic_module_deferred ( const char * ) GENERATE_IO_STUB_RET
+    DAS_API void clear_deferred_dynamic_modules () GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
@@ -322,6 +327,7 @@ namespace das {
 
 #include <thread>
 #include <atomic>
+#include <mutex>
 #include <chrono>
 #if _WIN32
 #include <fcntl.h>
@@ -2413,6 +2419,60 @@ namespace das {
 
     DAS_API void replay_dynamic_module ( const char * path, const char * cpp_class, int on_error ) {
         register_dynamic_module(path, cpp_class, on_error, nullptr, nullptr);
+    }
+
+    DAS_API void retry_pending_dynamic_modules();
+
+    struct DeferredDynamicModule {
+        string path, cpp_class, das_name;
+        int on_error = 0;
+    };
+    static vector<DeferredDynamicModule> g_deferred_dynamic_modules;    // src/ast/ARCHITECTURE.md sec.2
+    static std::recursive_mutex g_deferred_dynamic_modules_mutex;       // a run-time has_module reads while another thread's compile loads
+
+    DAS_API void defer_dynamic_module ( const char * path, const char * cpp_class, int on_error, const char * das_name ) {
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
+        g_deferred_dynamic_modules.push_back({path ? path : "", cpp_class ? cpp_class : "", das_name ? das_name : "", on_error});
+    }
+
+    DAS_API bool load_deferred_dynamic_module ( const char * das_name ) {
+        if ( !das_name ) return false;
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
+        auto it = find_if(g_deferred_dynamic_modules.begin(), g_deferred_dynamic_modules.end(),
+            [&](const DeferredDynamicModule & dm) { return dm.das_name == das_name; });
+        if ( it == g_deferred_dynamic_modules.end() ) return false;
+        auto dm = das::move(*it);
+        g_deferred_dynamic_modules.erase(it);
+        if ( trace_module_load() ) {
+            LOG(LogLevel::info) << "[module] require " << dm.das_name << ": loading the deferred " << dm.cpp_class << "\n";
+        }
+        return register_dynamic_module(dm.path.c_str(), dm.cpp_class.c_str(), dm.on_error, nullptr, nullptr) != nullptr;
+    }
+
+    DAS_API size_t load_all_deferred_dynamic_modules () {
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
+        vector<DeferredDynamicModule> all;
+        all.swap(g_deferred_dynamic_modules);
+        if ( trace_module_load() && !all.empty() ) {
+            LOG(LogLevel::info) << "[module] loading every deferred module (" << all.size() << ")\n";
+        }
+        for ( auto & dm : all ) {
+            register_dynamic_module(dm.path.c_str(), dm.cpp_class.c_str(), dm.on_error, nullptr, nullptr);
+        }
+        retry_pending_dynamic_modules();
+        return all.size();
+    }
+
+    DAS_API bool is_dynamic_module_deferred ( const char * das_name ) {
+        if ( !das_name ) return false;
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
+        return find_if(g_deferred_dynamic_modules.begin(), g_deferred_dynamic_modules.end(),
+            [&](const DeferredDynamicModule & dm) { return dm.das_name == das_name; }) != g_deferred_dynamic_modules.end();
+    }
+
+    DAS_API void clear_deferred_dynamic_modules () {
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
+        g_deferred_dynamic_modules.clear();
     }
 
     // Re-attempt modules whose dlopen was deferred (Quiet failure during the

@@ -36,10 +36,13 @@
   Option resolution before the first timer, and log lines, are not work.
 
 - **A change that can alter the machine code the JIT's DLL or split-obj cache serves back for
-  identical inputs bumps `LLVM_JIT_CODEGEN_VERSION`** (`daslib/llvm_jit_run.das`; what counts
-  as emitting: `ARCHITECTURE.md` sec.1.2). The constant folds only into those two keys;
-  selecting among existing generators' `[llvm_code]` arguments - the `[tune]` stamping - is not
-  such a change, because stamped arguments fold into the cache keys per function.
+  identical inputs - IR generation, target-machine setup, a `[llvm_code]` generator body, or the
+  call ABI the generated code binds: function signatures, the name scheme, the prologue, the
+  externs the install phase binds - bumps `LLVM_JIT_CODEGEN_VERSION`**
+  (`daslib/llvm_jit_run.das`); selecting among existing generators' `[llvm_code]` arguments, the
+  `[tune]` stamping, is not such a change. The caches are addressed by the AST hashes and this
+  constant, so such a change without the bump serves the old machine code back
+  (`ARCHITECTURE.md` sec.1.2).
 
 - **A diff that adds an environment or config input to a JIT cache key folds it inside
   `jit_env_salt` (`daslib/llvm_jit_run.das`), never directly into either JIT key - the DLL

@@ -1230,17 +1230,16 @@ namespace das {
         if ( guard ) {
             // Path guard (contains '/'): availability = the guard's OWN file resolves — the rail for
             // pure-das packages (nothing C++ to guard on) and cross-package dependencies the target's
-            // resolvability can't express. Plain-name guard: STRICT — the guard module is registered
-            // (a linked C++ module). No target-resolvability fallback: `require ?sqlite ...`-style
-            // guards mean "loaded only when <mod> is linked", and module source dirs are present in
-            // every checkout regardless of build config. Must match the require collector's rule
-            // (ast_parse.cpp getAllRequireReq).
+            // resolvability can't express. Plain-name guard: the build has the module
+            // (guardModuleAvailable, src/ast/ARCHITECTURE.md sec.2). No target-resolvability
+            // fallback: module source dirs are present in every checkout regardless of build config.
+            // Must match the require collector's rule (ast_parse.cpp getAllRequireReq).
             bool guardAvailable;
             if ( guard->find('/') != string::npos ) {
                 auto ginfo = yyextra->g_Access->getModuleInfo(*guard, yyextra->g_FileAccessStack.back()->name);
                 guardAvailable = !ginfo.fileName.empty() && yyextra->g_Access->getFileInfo(ginfo.fileName) != nullptr;
             } else {
-                guardAvailable = Module::requireEx(*guard, false) != nullptr;
+                guardAvailable = guardModuleAvailable(*guard);
             }
             delete guard;
             if ( !guardAvailable ) {
@@ -1250,7 +1249,14 @@ namespace das {
             }
         }
         auto info = yyextra->g_Access->getModuleInfo(*name, yyextra->g_FileAccessStack.back()->name);
-        if ( auto mod = yyextra->g_Program->addModule(info.moduleName) ) {
+        auto mod = yyextra->g_Program->addModule(info.moduleName);
+        if ( !mod ) {
+            // a parse with no prerequisite walk (compile of a string) meets a deferred module here (src/ast/ARCHITECTURE.md sec.2)
+            if ( auto loader = getDeferredModuleLoader(); loader && loader(info.moduleName) ) {
+                mod = yyextra->g_Program->addModule(info.moduleName);
+            }
+        }
+        if ( mod ) {
             yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*name,info.fileName,pub,atName));
             yyextra->g_Program->thisModule->addDependency(mod, pub);
             das_collect_all_keywords(mod,scanner);

@@ -5,13 +5,7 @@ require dastest/testing_boost public
 
 require strings
 require daslib/fio
-
-// argv[0] is the running interpreter; dastest is invoked as
-// `daslang(.exe) dastest/dastest.das ...`, so argv[0] is the daslang binary to spawn.
-def das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
+require _mc_common
 
 
 def run_argv(args : array<string>; var output : string&) : int {
@@ -20,19 +14,6 @@ def run_argv(args : array<string>; var output : string&) : int {
             output = fread(f)
         }
     }))
-}
-
-
-// A child that dies takes its diagnosis with it unless the parent prints what it said - the
-// exit code alone turns a one-line answer into an exit-code hunt. Echo the child's output on
-// any failure, and only then.
-def report_child(t : T?; phase : string; rc : int; out : string; marker : string) : bool {
-    let ok = rc == 0 && find(out, marker) >= 0
-    if (!ok) {
-        t |> failure("{phase} child: rc={rc}, marker '{marker}' {find(out, marker) >= 0 ? "found" : "MISSING"}")
-        t |> failure("{phase} child output follows:\n{out}")
-    }
-    return ok
 }
 
 

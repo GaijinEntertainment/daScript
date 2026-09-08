@@ -2846,7 +2846,7 @@ namespace das {
                         // also accepts shared das modules compiled earlier in the process
                         auto mod = Module::requireEx(evar->name, true);
                         reportAstChanged();
-                        return new ExprConstBool(expr->at, mod != nullptr);
+                        return new ExprConstBool(expr->at, mod != nullptr || guardModuleAvailable(evar->name));
                     } else {
                         error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
                               expr->at, CompilationError::invalid_typeinfo_module_subexpression);
