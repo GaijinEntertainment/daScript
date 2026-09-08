@@ -7,7 +7,7 @@ require strings
 require math
 require daslib/fio
 require daslib/strings_boost
-require _common
+require _mc_common
 
 //! the child shares dastest's cwd (argv[0] is a cwd-relative interpreter path), so the default
 //! cache lands in this tree's own .jitted_scripts/module_cache - the test removes what it wrote.

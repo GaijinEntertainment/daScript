@@ -1,7 +1,7 @@
 options gen2
 options indenting = 4
 
-module _common shared public
+module _mc_common shared public
 
 require dastest/testing_boost public
 

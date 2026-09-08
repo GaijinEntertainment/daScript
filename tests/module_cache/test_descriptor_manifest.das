@@ -6,7 +6,7 @@ require dastest/testing_boost public
 require strings
 require daslib/fio
 require daslib/strings_boost
-require _common
+require _mc_common
 
 let DESCRIPTOR = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"manifest_probe\", \"hello\", \"\{project_path\}/hello.das\")\n\}\n"
 let DESCRIPTOR_OPT_OUT = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    no_manifest()\n    register_native_path(\"manifest_probe\", \"hello\", \"\{project_path\}/hello.das\")\n\}\n"

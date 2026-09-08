@@ -52,7 +52,9 @@ this document states what the folder is and why its tests take the shape they do
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`); a case needing a macro-bearing module graph puts it here instead of
   writing the script inline.
-- `_common.das` - the spawn helpers every test here shares: the binary to spawn (`das_exe`),
+- `_mc_common.das` - the spawn helpers every test here shares (the name is the folder's, since
+  a sweep worker holds every shared module it met under one name and `tests/linq` has a
+  `_common` already): the binary to spawn (`das_exe`),
   the scan-trace command prefix (`trace_prefix`), the stderr-joining child run (`run_child`)
   and the failure report that echoes the child's output (`report_child`). A test whose child
   needs a different spawn shape - an argv spawn, an environment variable - keeps that one

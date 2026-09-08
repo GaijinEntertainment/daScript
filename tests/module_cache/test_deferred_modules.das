@@ -6,7 +6,7 @@ require dastest/testing_boost public
 require strings
 require daslib/fio
 require daslib/strings_boost
-require _common
+require _mc_common
 
 //! the whole scan trace line for a module's descriptor, timing clause included
 def descriptor_line(out : string; mod : string) : string {
@@ -64,6 +64,7 @@ struct Fixture {
     exists : string
     hasModule : string
     dollar : string
+    nested : string
     guarded : string
     guardedAfter : string
     guardedBefore : string
@@ -94,6 +95,7 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
         exists = path_join(tmp, "exists.das"),
         hasModule = path_join(tmp, "has_module.das"),
         dollar = path_join(tmp, "dollar.das"),
+        nested = path_join(tmp, "nested.das"),
         guarded = path_join(tmp, "guarded.das"),
         guardedAfter = path_join(tmp, "guarded_after.das"),
         guardedBefore = path_join(tmp, "guarded_before.das"),
@@ -107,6 +109,7 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
     fwrite(fx.exists, "options gen2\n[export]\ndef main \{\n    print(\"EXISTS \{typeinfo builtin_module_exists({UNIT_TEST_MODULE})\}\\n\")\n\}\n")
     fwrite(fx.hasModule, "options gen2\nrequire daslib/rtti\n[export]\ndef main \{\n    print(\"HAS \{has_module(\"{UNIT_TEST_MODULE}\")\}\\n\")\n\}\n")
     fwrite(fx.dollar, "options gen2\nrequire daslib/rtti\n[export]\ndef main \{\n    program_for_each_registered_module() $(mod) \{\n        if (mod.name == \"$\") \{\n            var n = 0\n            module_for_each_function(mod) $(fn) \{\n                n++\n            \}\n            print(\"DOLLAR \{n\}\\n\")\n        \}\n    \}\n\}\n")
+    fwrite(fx.nested, "options gen2\nrequire daslib/ast\n[export]\ndef main \{\n    compile(\"nested\", \"require {UNIT_TEST_MODULE}\\n[export]\\ndef main \\\{\\n\\\}\\n\", CodeOfPolicies()) $(ok; _prog; errors) \{\n        print(\"NESTED \{ok\}\\n\{errors\}\\n\")\n    \}\n\}\n")
     fwrite(fx.guarded, "options gen2\n{guardLine}{guardMain}")
     fwrite(fx.guardedAfter, "options gen2\nrequire {UNIT_TEST_MODULE}\n{guardLine}{guardMain}")
     fwrite(fx.guardedBefore, "options gen2\n{guardLine}require {UNIT_TEST_MODULE}\n{guardMain}")
@@ -169,6 +172,11 @@ def arms_deferred(t : T?; fx : Fixture) {
         t |> success(report_child(t, "dollar eager", run_child(child_cmd(fx, fx.dollar, "-ignore-manifest"), eager), eager, "DOLLAR "), "the eager start counts")
         t |> success(dollar_count(lazy) > 0, "the count is a count:\n{lazy}")
         t |> equal(dollar_count(lazy), dollar_count(eager), "a C++ module's load registers nothing into $:\nlazy:\n{lazy}\neager:\n{eager}")
+    }
+    t |> run("a compile of a string, which walks no prerequisites, meets the waiting module at its require") @(t : T?) {
+        var out : string
+        t |> success(report_child(t, "nested", run_child(child_cmd(fx, fx.nested), out), out, "NESTED true"), "the nested program compiles")
+        t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the parser's require loaded it:\n{out}")
     }
 }
 

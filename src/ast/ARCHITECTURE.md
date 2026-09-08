@@ -90,7 +90,10 @@ has. A row whose own dlopen fails takes the same road - every deferred module co
 pending retry runs - and the require then finds the module or fails as a cold start would. The
 rows and the loader are the scan's: `require_dynamic_modules` clears the rows before its
 walk and installs the loader, and `Module::Shutdown` clears both, so an environment that
-follows sees neither the last one's rows nor its loader. The load runs under one gc root of its own with the thread root's nodes parked meanwhile,
+follows sees neither the last one's rows nor its loader. A parse that no prerequisite walk
+precedes - the `compile` of a string - meets a deferred module at the parser's own require
+(`ast_requireModule`) and loads it there; the loader puts the parse's program back as the
+bound one, since a module's builtin das part parses under a program of its own. The load runs under one gc root of its own with the thread root's nodes parked meanwhile,
 because a constructor's nodes go to the active root while a builtin das module it compiles
 dumps its leftovers on the thread root, and a collect stops at a node owned by another root;
 after the load every module, not only the new ones, collects from that root, since a

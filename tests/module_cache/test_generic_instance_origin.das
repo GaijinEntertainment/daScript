@@ -5,7 +5,7 @@ require dastest/testing_boost public
 
 require strings
 require daslib/fio
-require _common
+require _mc_common
 
 
 def run_argv(args : array<string>; var output : string&) : int {

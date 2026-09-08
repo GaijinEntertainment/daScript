@@ -5,7 +5,7 @@ require dastest/testing_boost public
 
 require strings
 require daslib/fio
-require _common
+require _mc_common
 
 //! child env rides the command string (the portable set/prefix split popen_argv cannot carry)
 def env_run(dep, cmd : string; var output : string&) : int {

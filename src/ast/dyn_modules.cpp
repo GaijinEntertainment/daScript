@@ -586,6 +586,7 @@ static bool load_deferred_module_for_require(const string & name) {
     auto & threadRoot = gc_root::gc_get_thread_root();
     gc_root parked, loadRoot;
     move_all_nodes(threadRoot, parked);
+    auto boundProgram = daScriptEnvironment::getBound()->g_Program;    // a module's builtin das part parses under its own program; the caller may be mid-parse
     bool loaded = false;
     bool grown = false;     // the module set changed - the fixed point and the collect are owed whether or not `name` came in
     {
@@ -620,6 +621,7 @@ static bool load_deferred_module_for_require(const string & name) {
     }
     loadRoot.gc_sweep();
     move_all_nodes(parked, threadRoot);
+    daScriptEnvironment::getBound()->g_Program = boundProgram;
     return loaded;
 }
 

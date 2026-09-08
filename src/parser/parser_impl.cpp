@@ -1249,7 +1249,14 @@ namespace das {
             }
         }
         auto info = yyextra->g_Access->getModuleInfo(*name, yyextra->g_FileAccessStack.back()->name);
-        if ( auto mod = yyextra->g_Program->addModule(info.moduleName) ) {
+        auto mod = yyextra->g_Program->addModule(info.moduleName);
+        if ( !mod ) {
+            // a parse with no prerequisite walk (compile of a string) meets a deferred module here (src/ast/ARCHITECTURE.md sec.2)
+            if ( auto loader = getDeferredModuleLoader(); loader && loader(info.moduleName) ) {
+                mod = yyextra->g_Program->addModule(info.moduleName);
+            }
+        }
+        if ( mod ) {
             yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*name,info.fileName,pub,atName));
             yyextra->g_Program->thisModule->addDependency(mod, pub);
             das_collect_all_keywords(mod,scanner);
