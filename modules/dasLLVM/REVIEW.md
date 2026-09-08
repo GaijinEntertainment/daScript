@@ -52,10 +52,11 @@
   names no package, so a build that does not carry the package registers nothing and compiles
   unchanged.
 
-- **A function the jit finalizer reaches - `free_jit_context` (`daslib/llvm_jit_link.das`) and
-  anything it calls - calls externs only, never a das helper.** The finalizer is program code, so
-  a das helper on its path joins every jitted program's DLL, and the emitter cannot lower a block
-  passed to C++ with a `LineInfoArg`.
+- **A das function the jit finalizer reaches - `free_jit_context` (`daslib/llvm_jit_link.das`)
+  and anything it calls - is `[no_jit]` and reaches C++ through externs only, never through a
+  helper that passes a block to C++ (`call_in_context`, `daslib/cross_context`).** The finalizer
+  is program code, so a jittable function on its path joins every jitted program's DLL, and the
+  emitter cannot lower a block passed to C++ with a `LineInfoArg`.
 
 - **A diff that adds an environment or config input to a JIT cache key folds it inside
   `jit_env_salt` (`daslib/llvm_jit_plan.das`), never directly into either JIT key - the DLL
