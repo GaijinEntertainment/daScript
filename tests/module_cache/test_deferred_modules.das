@@ -135,7 +135,24 @@ def copy_module(fx : Fixture; folder : string; artifacts : array<string>) : stri
             }
         }
     }
+    dir(src) $(name) {                          // a library an artifact loads from beside itself
+        let ext = extension(name)
+        if (ext == ".dylib" || ext == ".so" || ext == ".dll") {
+            copy_file(path_join(src, name), path_join(dst, name), true, cerr)
+        }
+    }
     return dst
+}
+
+//! whether the cold run loaded the copied artifact - a build whose artifacts find their
+//! libraries relative to the tree cannot load a copy, and the arms on copies say so and return
+def copy_loaded(out : string; dir : string; artifact : string) : bool {
+    for (suffix in [".shared_module", "_debug.shared_module"]) {
+        if (find(out, "{path_join(dir, artifact)}{suffix} : loaded") >= 0) {
+            return true
+        }
+    }
+    return false
 }
 
 def child_cmd(fx : Fixture; script : string; flags : string = ""; cache : string = "-no-module-cache") : string {
@@ -279,6 +296,10 @@ def arm_fallback(t : T?; fx : Fixture) {
         copy_module(fx, "dasGlfw", ["dasModuleGlfw"])
         var cold : string
         t |> success(report_child(t, "half-warm cold", run_child(child_cmd(fx, fx.plain), cold), cold, "PLAIN"), "the copies record their manifests")
+        if (!copy_loaded(cold, imguiDir, "imguiApp")) {
+            to_log(LOG_INFO, "test_deferred_modules: the copied imguiApp does not load from {imguiDir} - its libraries sit outside the copy - so the half-warm arm has nothing to observe\n")
+            return
+        }
         remove_result(path_join(imguiDir, ".das_module.manifest"))
         var out : string
         t |> success(report_child(t, "half-warm", run_child(child_cmd(fx, fx.plain), out), out, "PLAIN"), "the program runs with imgui_app loaded on start and glfw waiting")

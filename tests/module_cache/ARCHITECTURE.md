@@ -50,7 +50,9 @@ this document states what the folder is and why its tests take the shape they do
   child that nothing made require it, and the reader loads it; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
   deferred module in because its `initDependencies` asks for two more, and a half-warm tree -
   copies of dasImgui and dasGlfw under the fixture, the imgui copy's manifest removed so its
-  modules load on start while glfw's row waits - initializes by bringing the rest in. A static host - the AOT
+  modules load on start while glfw's row waits - initializes by bringing the rest in; a build
+  whose copied artifact cannot find its libraries from the copy has nothing to observe there
+  and the arm says so. A static host - the AOT
   test binary, whose descriptors register no shared module, or a tree holding no
   `.shared_module` - has nothing to observe and the test says so and returns.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
