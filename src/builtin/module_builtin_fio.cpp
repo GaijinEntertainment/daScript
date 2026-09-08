@@ -315,7 +315,6 @@ namespace das {
     DAS_API void defer_dynamic_module ( const char *, const char *, int, const char * ) GENERATE_IO_STUB
     DAS_API bool load_deferred_dynamic_module ( const char * ) GENERATE_IO_STUB_RET
     DAS_API size_t load_all_deferred_dynamic_modules () GENERATE_IO_STUB_RET
-    DAS_API bool has_deferred_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API bool is_dynamic_module_deferred ( const char * ) GENERATE_IO_STUB_RET
     DAS_API void clear_deferred_dynamic_modules () GENERATE_IO_STUB
 
@@ -2456,10 +2455,6 @@ namespace das {
         }
         retry_pending_dynamic_modules();
         return all.size();
-    }
-
-    DAS_API bool has_deferred_dynamic_modules () {
-        return !g_deferred_dynamic_modules.empty();
     }
 
     DAS_API bool is_dynamic_module_deferred ( const char * das_name ) {

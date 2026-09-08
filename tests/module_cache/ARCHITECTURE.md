@@ -36,11 +36,17 @@ this document states what the folder is and why its tests take the shape they do
   so the copy's manifest is the test's to make cold or warm: a cold start compiles the
   descriptor, loads the module to record its name, and a `require ?UnitTest x` is taken; a
   warm start defers the row and loads nothing for a program that requires nothing; the first
-  `require UnitTest` loads it and the program calls into it; a guard alone loads the module
+  `require UnitTest` loads it and the program calls into it; `typeinfo builtin_module_exists`
+  loads it with no require naming it, while rtti `has_module` answers true and loads nothing;
+  a lazy start and an eager start count the same functions in `$`, so a load registers
+  nothing into another module; a guard alone loads the module
   and is taken, as it is with a `require UnitTest` above it, below it, or in the entry while
   the guard sits in a module walked earlier;
   `-ignore-manifest` compiles every descriptor, loads every C++ module on start and writes no
-  manifest; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
+  manifest; a manifest row hand-edited to an absent artifact makes the require bring every
+  deferred module in and then fail on the missing prerequisite; a module cache an eager start
+  wrote serves a lazy start, with `-log-compile-time` printing the reads and the startup
+  timeline; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
   deferred module in because its `initDependencies` asks for two more. A static build, whose
   tree holds no `.shared_module`, has nothing to observe and the test says so and returns.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,

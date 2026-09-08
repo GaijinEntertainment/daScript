@@ -20,6 +20,18 @@ def descriptor_line(out : string; mod : string) : string {
     return eol < 0 ? rest : slice(rest, 0, eol)
 }
 
+//! the `DOLLAR N` line the dollar.das child prints: the builtin module's function count
+def dollar_count(out : string) : int {
+    let marker = "DOLLAR "
+    let at = find(out, marker)
+    if (at < 0) {
+        return -1
+    }
+    let rest = slice(out, at + length(marker))
+    let eol = find(rest, "\n")
+    return to_int(eol < 0 ? rest : slice(rest, 0, eol))
+}
+
 let UNIT_TEST_MODULE = "UnitTest"
 let UNIT_TEST_CLASS = "Module_UnitTest"
 let UNIT_TEST_FOLDER = "dasUnitTest"
@@ -49,6 +61,9 @@ struct Fixture {
     utManifest : string
     plain : string
     uses : string
+    exists : string
+    hasModule : string
+    dollar : string
     guarded : string
     guardedAfter : string
     guardedBefore : string
@@ -76,6 +91,9 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
         utManifest = path_join(utDir, ".das_module.manifest"),
         plain = path_join(tmp, "plain.das"),
         uses = path_join(tmp, "uses.das"),
+        exists = path_join(tmp, "exists.das"),
+        hasModule = path_join(tmp, "has_module.das"),
+        dollar = path_join(tmp, "dollar.das"),
         guarded = path_join(tmp, "guarded.das"),
         guardedAfter = path_join(tmp, "guarded_after.das"),
         guardedBefore = path_join(tmp, "guarded_before.das"),
@@ -86,6 +104,9 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
     let guardMain = "[export]\ndef main \{\n    print(\"GUARD \{typeinfo module_exists(hello)\}\\n\")\n\}\n"
     fwrite(fx.plain, "options gen2\n[export]\ndef main \{\n    print(\"PLAIN\\n\")\n\}\n")
     fwrite(fx.uses, "options gen2\nrequire {UNIT_TEST_MODULE}\n[export]\ndef main \{\n    print(\"LENGTH \{test_string_arg_length(\"hello\")\}\\n\")\n\}\n")
+    fwrite(fx.exists, "options gen2\n[export]\ndef main \{\n    print(\"EXISTS \{typeinfo builtin_module_exists({UNIT_TEST_MODULE})\}\\n\")\n\}\n")
+    fwrite(fx.hasModule, "options gen2\nrequire daslib/rtti\n[export]\ndef main \{\n    print(\"HAS \{has_module(\"{UNIT_TEST_MODULE}\")\}\\n\")\n\}\n")
+    fwrite(fx.dollar, "options gen2\nrequire daslib/rtti\n[export]\ndef main \{\n    program_for_each_registered_module() $(mod) \{\n        if (mod.name == \"$\") \{\n            var n = 0\n            module_for_each_function(mod) $(fn) \{\n                n++\n            \}\n            print(\"DOLLAR \{n\}\\n\")\n        \}\n    \}\n\}\n")
     fwrite(fx.guarded, "options gen2\n{guardLine}{guardMain}")
     fwrite(fx.guardedAfter, "options gen2\nrequire {UNIT_TEST_MODULE}\n{guardLine}{guardMain}")
     fwrite(fx.guardedBefore, "options gen2\n{guardLine}require {UNIT_TEST_MODULE}\n{guardMain}")
@@ -94,8 +115,8 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
     return fx
 }
 
-def child_cmd(fx : Fixture; script : string; flags : string = "") : string {
-    return "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" -no-module-cache -project_root \"{fx.tmp}\" {flags} \"{script}\""
+def child_cmd(fx : Fixture; script : string; flags : string = ""; cache : string = "-no-module-cache") : string {
+    return "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" {cache} -project_root \"{fx.tmp}\" {flags} \"{script}\""
 }
 
 def has_shared_modules(dir : string; names : array<string>) : bool {
@@ -131,6 +152,27 @@ def arms_deferred(t : T?; fx : Fixture) {
         t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the trace names the require that loaded it:\n{out}")
         t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": loaded") >= 0, "the shared module loads:\n{out}")
     }
+    t |> run("builtin_module_exists loads a waiting module, with no require naming it") @(t : T?) {
+        var out : string
+        t |> success(report_child(t, "exists", run_child(child_cmd(fx, fx.exists), out), out, "EXISTS true"), "the build has the module")
+        t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the question loaded it:\n{out}")
+    }
+    t |> run("has_module answers true for a waiting module and loads nothing") @(t : T?) {
+        var out : string
+        t |> success(report_child(t, "has_module", run_child(child_cmd(fx, fx.hasModule), out), out, "HAS true"), "the build has the module")
+        t |> equal(-1, find(out, "{UNIT_TEST_CLASS} <- "), "nothing loads the shared module:\n{out}")
+    }
+    t |> run("a lazy start and an eager start build the same builtin module") @(t : T?) {
+        var lazy : string
+        t |> success(report_child(t, "dollar lazy", run_child(child_cmd(fx, fx.dollar), lazy), lazy, "DOLLAR "), "the lazy start counts")
+        var eager : string
+        t |> success(report_child(t, "dollar eager", run_child(child_cmd(fx, fx.dollar, "-ignore-manifest"), eager), eager, "DOLLAR "), "the eager start counts")
+        t |> success(dollar_count(lazy) > 0, "the count is a count:\n{lazy}")
+        t |> equal(dollar_count(lazy), dollar_count(eager), "a C++ module's load registers nothing into $:\nlazy:\n{lazy}\neager:\n{eager}")
+    }
+}
+
+def arms_guards_and_caches(t : T?; fx : Fixture) {
     t |> run("a require guard loads a waiting module, whatever else the compile requires") @(t : T?) {
         var alone : string
         t |> success(report_child(t, "guarded", run_child(child_cmd(fx, fx.guarded), alone), alone, "GUARD true"), "the guard alone takes its target")
@@ -166,6 +208,16 @@ def arms_deferred(t : T?; fx : Fixture) {
         t |> success(find(out, "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'") >= 0, "the require fails with the missing-module error:\n{out}")
         remove_result(fx.utManifest)
     }
+    t |> run("a module cache written by an eager start serves a lazy start, and -log-compile-time shows the reads and the timeline") @(t : T?) {
+        let cache = "-module-cache \"{path_join(fx.tmp, "mc.bin")}\""
+        var cold : string
+        t |> success(report_child(t, "cold cache", run_child(child_cmd(fx, fx.plain, "-ignore-manifest -log-compile-time", cache), cold), cold, "PLAIN"), "the eager start writes the cache")
+        t |> success(find(cold, "startup: main total") >= 0 && find(cold, "\tmodule scan") >= 0 && find(cold, "\tshutdown ") >= 0, "the timeline prints its laps:\n{cold}")
+        var warm : string
+        t |> success(report_child(t, "warm cache", run_child(child_cmd(fx, fx.plain, "-log-compile-time", cache), warm), warm, "PLAIN"), "the lazy start, which loads no C++ module, runs")
+        t |> equal(-1, find(warm, "cumulative hash"), "a builtin module's hash does not depend on the loaded set:\n{warm}")
+        t |> success(find(warm, "cache read took") >= 0, "the lazy start reads the eager start's records:\n{warm}")
+    }
 }
 
 def arm_fallback(t : T?; fx : Fixture) {
@@ -199,6 +251,7 @@ def test_deferred_modules(t : T?) {
     }
     let fx = make_fixture(tmp, artifact)
     arms_deferred(t, fx)
+    arms_guards_and_caches(t, fx)
     arm_fallback(t, fx)
     var err : string
     rmdir_rec(tmp, err)
