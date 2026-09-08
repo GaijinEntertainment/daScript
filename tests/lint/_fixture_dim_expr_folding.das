@@ -17,7 +17,8 @@ let SPAN = ROWS * STEP
 
 // A vector constructor is a call, so this one folds through neither the operators nor
 // an already-constant node -- the shape a shader spells a basis matrix's column in.
-let VEC_HALF = float4(1.0, 2.0, 3.0, 4.0) / 2.0
+//! a multiply, not a divide: a -ffast-math host divides a vector by a runtime splat through rcpps, one ULP off
+let VEC_HALF = float4(1.0, 2.0, 3.0, 4.0) * 0.5
 
 // A flat sum nests one operator per term, so this one is deeper than the bound that
 // stops a cycle of consts defined off each other.  Depth in the AST is not a cycle.
