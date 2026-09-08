@@ -303,6 +303,10 @@ def arm_fallback(t : T?; fx : Fixture) {
         remove_result(path_join(imguiDir, ".das_module.manifest"))
         var out : string
         t |> success(report_child(t, "half-warm", run_child(child_cmd(fx, fx.plain), out), out, "PLAIN"), "the program runs with imgui_app loaded on start and glfw waiting")
+        if (!copy_loaded(out, imguiDir, "imguiApp")) {
+            to_log(LOG_INFO, "test_deferred_modules: the copied imguiApp did not load on the half-warm start - its libraries sit outside the copy - so initialize had nothing to bring in:\n{out}\n")
+            return
+        }
         t |> success(find(out, "[module] loading every deferred module (") >= 0, "initialize brings the deferred glfw in:\n{out}")
     }
 }
