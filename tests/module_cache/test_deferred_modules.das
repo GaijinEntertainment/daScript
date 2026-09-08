@@ -118,6 +118,26 @@ def make_fixture(tmp : string; artifact : string) : Fixture {
     return fx
 }
 
+//! a copy of one of the tree's module folders - descriptor and the artifacts that exist, in
+//! either configuration's name - under the fixture's modules, where it shadows the tree's
+def copy_module(fx : Fixture; folder : string; artifacts : array<string>) : string {
+    let src = path_join(path_join(get_das_root(), "modules"), folder)
+    let dst = path_join(path_join(fx.tmp, "modules"), folder)
+    var merr : string
+    mkdir_rec(dst, merr)
+    var cerr : string
+    copy_file(path_join(src, ".das_module"), path_join(dst, ".das_module"), true, cerr)
+    for (name in artifacts) {
+        for (suffix in [".shared_module", "_debug.shared_module"]) {
+            let f = path_join(src, "{name}{suffix}")
+            if (stat(f).is_valid) {
+                copy_file(f, path_join(dst, "{name}{suffix}"), true, cerr)
+            }
+        }
+    }
+    return dst
+}
+
 def child_cmd(fx : Fixture; script : string; flags : string = ""; cache : string = "-no-module-cache") : string {
     return "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" {cache} -project_root \"{fx.tmp}\" {flags} \"{script}\""
 }
@@ -240,6 +260,16 @@ def arm_fallback(t : T?; fx : Fixture) {
         t |> success(report_child(t, "app", run_child(child_cmd(fx, fx.app), out), out, "APP"), "the program compiles against imgui_app")
         t |> success(find(out, "[module] require imgui_app: loading the deferred Module_imgui_app") >= 0, "imgui_app loads at its require:\n{out}")
         t |> success(find(out, "[module] loading every deferred module (") >= 0, "its initDependencies asks for glfw and imgui, so the rest loads:\n{out}")
+    }
+    t |> run("a half-warm tree - a descriptor compiled cold beside replayed ones - initializes by bringing every deferred module in") @(t : T?) {
+        let imguiDir = copy_module(fx, "dasImgui", ["dasModuleImgui", "imguiApp", "imguiAppHeadless"])
+        copy_module(fx, "dasGlfw", ["dasModuleGlfw"])
+        var cold : string
+        t |> success(report_child(t, "half-warm cold", run_child(child_cmd(fx, fx.plain), cold), cold, "PLAIN"), "the copies record their manifests")
+        remove_result(path_join(imguiDir, ".das_module.manifest"))
+        var out : string
+        t |> success(report_child(t, "half-warm", run_child(child_cmd(fx, fx.plain), out), out, "PLAIN"), "the program runs with imgui_app loaded on start and glfw waiting")
+        t |> success(find(out, "[module] loading every deferred module (") >= 0, "initialize brings the deferred glfw in:\n{out}")
     }
 }
 

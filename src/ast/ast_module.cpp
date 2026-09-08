@@ -204,7 +204,12 @@ namespace das {
 
         string notInitialized;
         if ( !InitializeDependencies(notInitialized) ) {
-            DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", notInitialized.c_str());
+            // a half-warm tree: a descriptor compiled cold loaded its module, its dependency's replayed row waits (ARCHITECTURE.md sec.2)
+            notInitialized.clear();
+            load_all_deferred_dynamic_modules();
+            if ( !InitializeDependencies(notInitialized) ) {
+                DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", notInitialized.c_str());
+            }
         }
         // Collect reachable TypeDecl from thread root into module roots, sweep the rest.
         auto & threadRoot = gc_root::gc_get_thread_root();
