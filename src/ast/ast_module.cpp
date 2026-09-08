@@ -8,6 +8,7 @@
 #include "daScript/misc/handle_registry.h"
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/ast/dyn_modules.h"
+#include "daScript/ast/ast_serializer.h"
 
 #include <atomic>
 #include <mutex>
@@ -194,6 +195,19 @@ namespace das {
         return g_deferredModuleLoader && g_deferredModuleLoader(name) && Module::requireEx(name, false);
     }
 
+    static vector<unique_ptr<ModuleFileCache>> g_lateModuleCaches;     // each outlives the modules it fed (ARCHITECTURE.md sec.3)
+    static mutex g_lateModuleCachesMutex;
+
+    void keepLateModuleCache ( unique_ptr<ModuleFileCache> cache ) {
+        lock_guard<mutex> guard(g_lateModuleCachesMutex);
+        g_lateModuleCaches.push_back(das::move(cache));
+    }
+
+    void freeLateModuleCaches () {
+        lock_guard<mutex> guard(g_lateModuleCachesMutex);
+        g_lateModuleCaches.clear();
+    }
+
     static das_map<string, vector<string>> g_moduleGroups;
     static mutex g_moduleGroupsMutex;
 
@@ -275,6 +289,7 @@ namespace das {
         // pointers in dasModule*.shared_module DLLs are still valid, and any
         // live job threads that were holding handles have exited. Dump here.
         if ( dumpHandleLeaks ) handleRegistry_dumpAll();
+        freeLateModuleCaches();     // after the modules: their ASTs point at the FileInfos the caches hold
         // Free allocated structures for dynamic modules (unloads DLLs).
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
         clear_deferred_dynamic_modules();

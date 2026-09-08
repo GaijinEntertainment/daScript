@@ -147,3 +147,30 @@ and a deferred load prints `[module] require <name>: loading the deferred <class
 fallback `[module] loading every deferred module (K)`. A replayed descriptor's time is its
 manifest read plus its rows, and the second number is the share the `.shared_module` dlopen and
 module constructor took.
+
+## 3. A require after the walk (`requireModuleNow`, `ast_parse.cpp`)
+
+`requireModuleNow(requireName, access, logs, policies)` is a `require` issued by code that runs
+after the prerequisite walk - a macro, a simulate macro, a running script - for a module the
+walk never saw. It answers the module already in the process when there is one (a promoted
+shared module, a linked C++ module, or a deferred manifest row, which it loads), and otherwise
+walks the target's own prerequisites under the caller's file access and policies, compiles the
+missing ones the way `compileDaScript` does - each parsed as a dependency, promoted when its
+program asks to be shared - and then the target itself, which must be `shared`: a module that
+is not promoted lives only in the walk's `ModuleGroup` and dies with it, so a non-shared
+target is refused by name rather than returned dangling. The module is not a dependency of
+any program: its symbols are not visible to the caller and its macros do not apply to the
+caller's program; the caller reaches it through its macro context (`Module::macroContext`,
+`daslib/cross_context`'s `macro_context_of`), which `find_macro_context` gives a context mutex
+because `invoke_in_context` locks its target. The call saves and restores the environment's
+bound program, compiler log and serializer pointers around the walk, since it may run
+mid-parse of another module, and one recursive mutex serializes every late require in the
+process. Its module cache is its own: the host's cache is finished before the program
+simulates, so the late walk would otherwise parse the same modules from source on every run.
+The host records its cache key inputs and whether a cache is in use at all on the environment
+(`lateModuleCache*`), the late walk installs a `ModuleFileCache` at
+`ModuleFileCache::defaultPath("late~<module>", ...)` - beside an explicit `-module-cache` file,
+in the default directory otherwise, nowhere under `-no-module-cache` - reads and writes it as
+the host does, and keeps the object for the life of the process (`keepLateModuleCache`,
+freed at `Module::Shutdown` after the modules), because a served module's line references
+point at the FileInfos the cache holds.

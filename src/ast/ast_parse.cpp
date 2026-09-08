@@ -1872,6 +1872,136 @@ namespace das {
         return parseDaScriptNoInfer(fileName, modName, access, logs, libGroup, policies.export_all, false, policies);
     }
 
+    static recursive_mutex g_requireModuleNowMutex;
+
+    static void logProgramErrors ( const ProgramPtr & program, TextWriter & logs ) {
+        for ( auto & err : program->errors ) {
+            logs << err.at.describe() << ": " << err.what << "\n";
+            if ( !err.extra.empty() ) logs << err.extra << "\n";
+        }
+    }
+
+    // ARCHITECTURE.md sec.3
+    Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access, TextWriter & logs, CodeOfPolicies policies ) {
+        lock_guard<recursive_mutex> guard(g_requireModuleNowMutex);
+        verifyCodeOfPoliciesStamp(policies);
+        auto info = access->getModuleInfo(requireName, "");
+        string modName = info.moduleName.empty() ? requireName : info.moduleName;
+        if ( auto mod = Module::requireEx(modName, true, requireName, info.fileName) ) return mod;
+        if ( info.fileName.empty() ) {
+            if ( auto loader = getDeferredModuleLoader(); loader && loader(modName) ) {
+                return Module::requireEx(modName, true, requireName, info.fileName);
+            }
+            logs << "require_module_now: module '" << requireName << "' not found\n";
+            return nullptr;
+        }
+        auto env = daScriptEnvironment::getBound();
+        auto savedProgram = env->g_Program;
+        auto savedRead = env->serializer_read;
+        auto savedWrite = env->serializer_write;
+        auto savedLog = env->g_compilerLog;
+        auto savedFileName = env->g_compilingFileName;
+        auto savedModuleName = env->g_compilingModuleName;
+        env->serializer_read = nullptr;
+        env->serializer_write = nullptr;
+        unique_ptr<ModuleFileCache> cache;
+        if ( env->lateModuleCacheEnabled ) {
+            cache = make_unique<ModuleFileCache>();
+            auto path = ModuleFileCache::defaultPath("late~" + modName, env->lateModuleCacheHostBinary, env->lateModuleCacheHostOptions);
+            if ( !env->lateModuleCacheDir.empty() ) {
+                auto slash = path.find_last_of("/\\");
+                path = env->lateModuleCacheDir + (slash == string::npos ? path : path.substr(slash + 1));
+            }
+            cache->install(path, path, env->lateModuleCacheQuiet);
+        }
+        Module * result = nullptr;
+        {
+            gc_guard compile_gc_scope;
+            GcCollectOnExit compile_gc_collect(compile_gc_scope);
+            ReuseCacheGuard rcg;
+            ModuleGroup libGroup;
+            vector<ModuleInfo> req;
+            vector<MissingRecord> missing;
+            vector<RequireRecord> circular, notAllowed;
+            vector<FileInfo *> chain;
+            das_set<string> dependencies;
+            das_hash_map<string, NamelessModuleReq> namelessReq;
+            vector<NamelessMismatch> namelessMismatches;
+            string fileModName;
+            bool ok = addExtraDependency("builtin", get_builtin_path(), missing, circular, notAllowed, req,
+                dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
+            ok = ok && getPrerequisits(info.fileName, access, fileModName, req, missing, circular, notAllowed, chain,
+                dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules);
+            if ( !ok ) {
+                logProgramErrors(reportPrerequisitesErrors(info.fileName, missing, circular, notAllowed, namelessMismatches, libGroup, policies), logs);
+            } else if ( !verifyModuleNamesUnique(req, logs) ) {
+                ok = false;
+            }
+            if ( ok ) {
+                if ( !fileModName.empty() ) modName = fileModName;
+                for ( auto & mod : req ) {
+                    if ( libGroup.findModule(mod.moduleName) ) continue;
+                    auto program = parseDaScript(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies);
+                    policies.threadlock_context |= program->options.getBoolOption("threadlock_context", false);
+                    if ( program->failed() ) {
+                        logProgramErrors(program, logs);
+                        ok = false;
+                        break;
+                    }
+                    if ( program->thisModule->name.empty() ) {
+                        program->library.renameModule(program->thisModule.get(), mod.moduleName);
+                        program->thisModule->wasParsedNameless = true;
+                    }
+                    program->thisModule->fileName = mod.fileName;
+                    program->thisModule->fromExtraDependency = mod.extraDepModule;
+                    if ( program->promoteToBuiltin ) {
+                        if ( !canShareModule(program) ) {
+                            logProgramErrors(program, logs);
+                            ok = false;
+                            break;
+                        }
+                        program->thisModule->promoteToBuiltin(access, mod.requireName);
+                    }
+                    addNewModules(libGroup, program);
+                }
+            }
+            if ( ok ) {
+                auto program = parseDaScript(info.fileName, modName, access, logs, libGroup, true, true, policies);
+                if ( program->failed() ) {
+                    logProgramErrors(program, logs);
+                } else if ( !program->promoteToBuiltin ) {
+                    logs << "require_module_now: module '" << requireName << "' is not shared - a module required after the walk needs `module " << modName << " shared`\n";
+                } else if ( !canShareModule(program) ) {
+                    logProgramErrors(program, logs);
+                } else {
+                    if ( program->thisModule->name.empty() ) {
+                        program->library.renameModule(program->thisModule.get(), modName);
+                        program->thisModule->wasParsedNameless = true;
+                    }
+                    program->thisModule->fileName = info.fileName;
+                    program->thisModule->promoteToBuiltin(access, requireName);
+                    result = program->thisModule.get();
+                    addNewModules(libGroup, program);
+                    if ( env->serializer_write != nullptr
+                        && (!env->serializer_read || env->serializer_read->failed || env->serializer_read->resumedCorrupt != 0) ) {
+                        writebackModules(libGroup);
+                    }
+                }
+            }
+        }
+        if ( cache ) {
+            cache->finish();
+            keepLateModuleCache(das::move(cache));
+        }
+        env->g_Program = savedProgram;
+        env->serializer_read = savedRead;
+        env->serializer_write = savedWrite;
+        env->g_compilerLog = savedLog;
+        env->g_compilingFileName = savedFileName;
+        env->g_compilingModuleName = savedModuleName;
+        return result;
+    }
+
     ProgramPtr compileDaScript ( const string & fileName,
                                 const FileAccessPtr & access,
                                 TextWriter & logs,

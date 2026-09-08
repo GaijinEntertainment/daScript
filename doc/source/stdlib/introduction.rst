@@ -97,6 +97,7 @@ Macros and metaprogramming
 * :doc:`templates <generated/templates>` — ``decltype`` macro and ``[template]`` function annotation
 * :doc:`templates_boost <generated/templates_boost>` — template application helpers: variable/type replacement, hygienic names
 * :doc:`macro_boost <generated/macro_boost>` — miscellaneous macro manipulation utilities
+* :doc:`cross_context <generated/cross_context>` — a ``shared`` module required after the walk, and calls into its macro context
 * :doc:`contracts <generated/contracts>` — function argument contract annotations (``[expect_any_array]``, ``[expect_any_table]``, etc.)
 * :doc:`apply <generated/apply>` — ``apply`` reflection pattern for struct field iteration
 * :doc:`enum_trait <generated/enum_trait>` — compile-time enumeration trait queries

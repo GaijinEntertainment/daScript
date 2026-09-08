@@ -1737,6 +1737,13 @@ namespace das
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
     DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
+    // a require from code that runs after the walk - compiles a `shared` module and its prerequisites
+    // into the process now, or answers the one already there; null with the errors in `logs` (src/ast/ARCHITECTURE.md sec.3)
+    DAS_CC_API Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access,
+        TextWriter & logs, CodeOfPolicies policies = CodeOfPolicies() );
+    struct ModuleFileCache;
+    DAS_API void keepLateModuleCache ( unique_ptr<ModuleFileCache> cache );  // the late walk's cache outlives the modules it fed
+    DAS_API void freeLateModuleCaches ();
 
     // optimization pass (compiler lib); runs after type inference
     void optimizeProgram ( Program * program, TextWriter & logs, ModuleGroup & libGroup );
@@ -1824,6 +1831,12 @@ namespace das
         inline static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;
         uint64_t        dataWalkerStringLimit = 0;
         bool            g_modulesInitialized = false;
+        // the module cache a late require (requireModuleNow) keeps for its own walk: the host's key inputs, or off (src/ast/ARCHITECTURE.md sec.3)
+        bool            lateModuleCacheEnabled = false;
+        bool            lateModuleCacheQuiet = true;
+        string          lateModuleCacheDir;         // empty: the default cache directory; else the directory of the host's explicit cache file
+        string          lateModuleCacheHostBinary;
+        string          lateModuleCacheHostOptions;
 
 
         static daScriptEnvironment *getBound();

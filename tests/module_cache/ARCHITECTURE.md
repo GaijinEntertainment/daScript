@@ -65,9 +65,19 @@ this document states what the folder is and why its tests take the shape they do
   module cache, a member joining the group after a requirer's record was written cuts the cache
   off at that requirer (`require set changed`) while the unchanged tree and the rewritten cache
   serve.
+- `test_require_module_now.das` - a `require` issued after the walk (`daslib/cross_context`),
+  in the test's own process for the API and in a child for the cache: a `shared` fixture with a
+  macro context compiles at the call and the same module answers after; `macro_context_of` and
+  `call_in_context` reach an `[export]`ed function there by name, the result through a pointer;
+  a file nothing serves, a module that is not `shared` and one that does not compile answer
+  null with the reason in the issues; and a child running under an explicit `-module-cache`
+  keeps the late walk's cache beside that file (`late~<module>-<hash>.dascache`), serves the
+  fixture from it on the second run, and compiles it under `-no-module-cache`, read off the
+  fixture's own per-module compile-time lines.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
-  `mc_generic_origin_*`); a case needing a macro-bearing module graph puts it here instead of
-  writing the script inline.
+  `mc_generic_origin_*`, the `mc_late_*` trio a late require targets: a shared module with a
+  macro context, one that is not shared, one that does not compile); a case needing a
+  macro-bearing module graph puts it here instead of writing the script inline.
 - `_mc_common.das` - the spawn helpers every test here shares (the name is the folder's, since
   a sweep worker holds every shared module it met under one name and `tests/linq` has a
   `_common` already): the binary to spawn (`das_exe`),

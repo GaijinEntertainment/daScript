@@ -64,6 +64,17 @@ dispatcher branch naming the contributor's symbols - `typeinfo module_exists(<ta
 target is a das module, so a tool's nested compile takes the same arm. Adapters may still *emit* code referencing
 those symbols by name - that resolves at the user's splice site and is unaffected.
 
+Two shapes replace the per-contributor guard line. **A `require [group]`** in A - one line, kept -
+expands to every module registered under the name; a contributor joins from its `.das_module`
+descriptor (`register_module_group("group", "pkg/registration")`) and A's source never changes
+(`skills/dynamic_modules.md`). **`daslib/cross_context`** goes the other way, after the walk: from a
+macro, a simulate macro or a running script, `require_module_now("pkg/mod")` compiles a `shared`
+module and its prerequisites into the process (or answers the one there), `macro_context_of` gives
+its macro context, and `call_in_context(ctx, "fn", args..., result)` calls an `[export]`ed function
+there by name with the result through a pointer. The module is not a dependency - its symbols and
+macros stay out of the caller - which is the point when the callee is expensive to bring up and
+only sometimes needed: a hit on a cache decides in the caller, and the emitter comes in on a miss.
+
 ## Pass macros - which hook sees what
 
 - `[infer_macro]` fires only AFTER inference succeeds - it never sees a program with errors, so it

@@ -1384,6 +1384,36 @@ namespace das {
     }
 #endif
 
+    // src/ast/ARCHITECTURE.md sec.3
+    void rtti_builtin_require_module_now ( char * name, smart_ptr<FileAccess> access, const CodeOfPolicies & cop,
+            const TBlock<void,Module *,const string> & block, Context * context, LineInfoArg * at ) {
+        if ( !name || !name[0] ) context->throw_error_at(at, "require_module_now: empty module name");
+#if !DAS_NO_FILEIO
+        if ( !access ) access = ::get_file_access((char *)"");
+#endif
+        if ( !access ) context->throw_error_at(at, "require_module_now: no file access");
+        TextWriter issues;
+        Module * mod = requireModuleNow(name, access, issues, cop);
+        string istr = issues.str();
+        vec4f args[2] = {
+            cast<Module *>::from(mod),
+            cast<string *>::from(&istr)
+        };
+        context->invoke(block, args, nullptr, at);
+    }
+
+    bool rtti_has_macro_context ( Module * mod ) {
+        return mod && mod->macroContext;
+    }
+
+    Context & rtti_find_macro_context ( Module * mod, Context * context, LineInfoArg * at ) {
+        if ( !mod ) context->throw_error_at(at, "find_macro_context: null module");
+        auto mctx = mod->macroContext.get();
+        if ( !mctx ) context->throw_error_at(at, "find_macro_context: module '%s' has no macro context", mod->name.c_str());
+        if ( !mctx->contextMutex ) mctx->contextMutex = new recursive_mutex;    // invoke_in_context locks the target
+        return *mctx;
+    }
+
     Module_Ast::Module_Ast() : Module("ast_core") {
         DAS_PROFILE_SECTION("Module_Ast");
         ModuleLibrary lib(this);
@@ -1416,6 +1446,15 @@ namespace das {
         addExtern<DAS_BIND_FUN(rtti_builtin_parse_file)>(*this, lib, "parse_file",
             SideEffects::modifyExternal, "rtti_builtin_parse_file")
                 ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_require_module_now)>(*this, lib, "require_module_now",
+            SideEffects::modifyExternal, "rtti_builtin_require_module_now")
+                ->args({"module_name","fileAccess","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_has_macro_context)>(*this, lib, "has_macro_context",
+            SideEffects::accessExternal, "rtti_has_macro_context")
+                ->arg("module");
+        addExtern<DAS_BIND_FUN(rtti_find_macro_context), SimNode_ExtFuncCallRef>(*this, lib, "find_macro_context",
+            SideEffects::accessExternal, "rtti_find_macro_context")
+                ->args({"module","context","line"});
         addExtern<DAS_BIND_FUN(thisProgram)>(*this, lib,  "this_program",
             SideEffects::accessExternal, "thisProgram")
                 ->arg("context");
