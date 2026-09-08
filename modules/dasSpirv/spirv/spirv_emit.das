@@ -3188,11 +3188,18 @@ def private has_loop_hint(args : AnnotationArgumentList; name : string) : bool {
     return false
 }
 
+// A literal, or an expression the compiler folds to one (`int(KHR_KHALF_WORDS)` over a module constant): the
+// no_optimizations compile leaves it unfolded, so the fold is asked for here, as the layout annotations ask.
 def private literal_int_of(e : ExpressionPtr) : tuple<ok : bool; value : int> {
     let ci = e ?as ExprConstInt
     if (ci != null) return (ok = true, value = ci.value)
     let cu = e ?as ExprConstUInt
     if (cu != null) return (ok = true, value = int(cu.value))
+    let ce = get_const_expr(compiling_program(), e)
+    let fi = ce ?as ExprConstInt
+    if (fi != null) return (ok = true, value = fi.value)
+    let fu = ce ?as ExprConstUInt
+    if (fu != null) return (ok = true, value = int(fu.value))
     return (ok = false, value = 0)
 }
 

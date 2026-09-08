@@ -53,10 +53,11 @@ l and m columns with the kq batch tile as the control row, over random block byt
 format's device block size, and it runs the four-wide decode's two arms (the twin served, then
 stripped through `vkd_pipes_rebuild`) interleaved in one process, two rounds each, so a format's
 `DECVEC` verdict comes from one instrument. The `khrx` arm is the second axis for the KHR kq
-tile: the staged k4 tile with its weight stage as the variable (a constant fill, the decode on
-the plane element, the plane's words read in place), then the structural variants (unstaged B
-fragments, a 64-deep k step, a separate edge-store slab), with the shipped KHR class and the
-sdot4 tile as control rows. The `mmqx` arm is the first axis for the integer tile: the sdot4
+tile: a copy of the shipped k4 tile with one lever moved at a time - its weight stage (a
+constant fill, the four-wide decode callback on the plane element), its accumulator width (f32)
+and its subgroup tiling (a 16-row strip across every token), plus the reference exe's 128-thread
+geometry - with the shipped KHR class and the sdot4 tile as control rows; `khrprof:<arm>` submits
+one arm once for a GPU profiler. The `mmqx` arm is the first axis for the integer tile: the sdot4
 k4 tile against register-block prototypes over the same planes. Both sweeps read every
 product-computing arm back against the shipped class, and time the served graph's shape:
 sixteen dispatches per submit over two alternating outputs with a fresh hazard each, the arms

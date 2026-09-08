@@ -92,48 +92,53 @@ announced on the `device ready` line.
 **The mm mode serves the kq formats through the same template's KHR arm.** A device with
 KHR_cooperative_matrix and no NV_coopmat2 (every AMD and Intel part, the GTX and Turing lines)
 has no decode-in-load tensor API, so the cm2 template carries a second body under its `KHR`
-axis: the f16 weight tile is staged by hand - each of the 256 threads copies one weight row's
-16-wide half of the 32-wide k step through the format's OWN decode (`decode_v4` where the format
-has one, else `decode`, the same methods the tensor load names as callbacks, here called
-directly), the activation half from the f16 plane as two 16-byte words (the plane aliased as
-`uint4` on the same binding; sixteen scalar f16 loads ran the tile at two thirds of the rate -
-the staging's global loads, not the multiply-adds, set the pace), both into `@workgroup` `uint`
-arrays of f16 pairs at a stride of 20 words (16 plus 4 pad, so the fragment loads spread across
-banks; the activation words land as they are, the decoded weights packed two halves to a word) -
-and eight subgroups each own a 16-row weight strip across the 128 tokens as eight 16x16 f32
-accumulators, two 16-deep multiply-adds per staged step. A whole tile stores its fragments
-straight into y column-major at stride `d` (y is token-major, so a fragment's (weight, token)
-is `y[token * d + weight]`); an edge tile bounces each fragment through the weight staging
-array - free once the k loop ends, and its 2560 words hold the eight subgroups' 256-word
-fragments - and writes under the row and column bounds through a bit cast. The two staging
-arrays are the whole footprint by design: a third array for the bounce cost the tile a
-seventh of its rate (the probe's `slab` arm, 28.5 against 33.0 TFLOP/s on the 4B gate shape),
-because 8 KB more shared memory per workgroup is one workgroup fewer per SM. The k step is 32
-(the reference exe's BK): a 64-deep step doubles the staging tiles, halves the workgroups an SM
-holds, and with the 8 KB iq2s grid beside them reaches the 49152 B of workgroup memory the tier
-requires of a device - its floor; a 32 KiB part is not a target, and no kernel here is sized
-for one. The arm exists at ONE geometry - 128 weights
-by 128 tokens, k step 32 - so in mode 3 the tile pick answers 128 and split-k never engages, and
-`cm2_cls_ensure/set/enc` route to the `khr_cls_*` ladders, the same `(fmt)` key on both. The
-f16 feed admits a kq format in mode 3 only on a 32-lane subgroup (`khr_kq_tile_on`): the body
-indexes eight subgroups over the 128 weight rows, so a wave64 device (four subgroups per
-256-thread workgroup) keeps its kq planes on the sdot4 batch tile until the wave64 twin lands. q8 never arrives here
-- its mm-mode GEMM is the q8-fed mul_mm L-tile. The direct call passes the plane element
-itself (`decode_v4(wq[i], ...)`): the emitter hands the callee the element's index and the
-body chains through the plane, so no block is ever copied. The copy form - a `let` of the
-element passed by value, which the emitter spills to a Function-storage local - ran the same
-tile at well under half the rate (8.0 against 19.3 TFLOP/s on the 4B gate shape with scalar
-activation loads, 29.6 with the 16-byte ones), the whole 128 to 176 B block loaded from the
-plane and stored to the local on every call, four calls per thread per k step; the
-plane-element form measures within noise of hand-inlined decode arithmetic. The measured
-alternatives that lost: B fragments loaded straight from the plane with no staging (17.1), a
-64-deep k step (15.7 - its 40 KB footprint halves the workgroups an SM holds), and the separate
-bounce slab (28.7). The rows are `harness/vk_gemm_probe.das -- khrx`, best of four interleaved
-rounds on the RTX 5060 Ti: the shipped class reads 32.1 on the 4B gate shape, the probe's copy
-of its body 33.2, and the weight stage replaced by a constant fill 41.2 - the ceiling the
-staging's global loads leave.
-Either way the decode body is authored once and serves the tensor load, the KHR staging and
-the CPU oracle alike.
+axis: the f16 weight tile is staged by hand - each of the 256 threads writes one weight row's
+16-wide half of the 32-wide k step through the format's `khr_stage16`, which reads the run's
+values from the quant plane as one or two 16-byte words (`wq4`, the plane aliased as `uint4` on
+its binding; the byte-granular grid formats read 32-bit words, `wqw`) and the row's scale words
+once, and the activation half from the f16 plane as two 16-byte words (that plane aliased as
+`uint4` on its binding) - both into `@workgroup` `uint` arrays of f16 pairs at a stride of 20
+words (16 plus 4 pad, so the fragment loads spread across banks; the activation words land as
+they are, the decoded weights packed two halves to a word). The eight subgroups tile the step two
+by four: each owns 64 weight rows against 32 tokens as eight 16x16 f16 accumulators (a
+`coopmatAcc_f16_16x16[8]` walked under `for [unroll_full]`, so every fragment sits in registers)
+and loads four weight fragments and two token fragments per 16-deep multiply-add round - 48
+fragment loads per workgroup per k step against 144 when every subgroup owned a 16-row strip
+across all 128 tokens. The accumulators widen to f32 (`coopmatConvert`) before the store: a
+whole tile stores its fragments straight into y column-major at stride `d` (y is token-major, so
+a fragment's (weight, token) is `y[token * d + weight]`); an edge tile bounces each widened
+fragment through the weight staging array - free once the k loop ends, and its 2560 words hold
+the eight subgroups' 256-word fragments - and writes under the row and column bounds through a
+bit cast. The two staging arrays are the whole footprint by design: a third array for the
+bounce cost the tile a seventh of its rate (the probe's `slab` arm), because 8 KB more shared
+memory per workgroup is one workgroup fewer per SM. The k step is 32 (the reference exe's BK):
+a 64-deep step doubles the staging tiles, halves the workgroups an SM holds, and with the 8 KB
+iq2s grid beside them reaches the 49152 B of workgroup memory the tier requires of a device -
+its floor; a 32 KiB part is not a target, and no kernel here is sized for one. The arm exists
+at ONE geometry - 128 weights by 128 tokens, k step 32 - so in mode 3 the tile pick answers 128
+and split-k never engages, and `cm2_cls_ensure/set/enc` route to the `khr_cls_*` ladders, the
+same `(fmt)` key on both. The f16 feed admits a kq format in mode 3 only on a 32-lane subgroup
+(`khr_kq_tile_on`): the body indexes eight subgroups over the tile, so a wave64 device (four
+subgroups per 256-thread workgroup) keeps its kq planes on the sdot4 batch tile until the wave64
+twin lands. q8 never arrives here - its mm-mode GEMM is the q8-fed mul_mm L-tile. What each
+lever is worth, measured from the shipped tile by moving one lever back
+(`harness/vk_gemm_probe.das -- khrx`, the RTX 5060 Ti, the 4B gate / down / q shapes,
+TFLOP/s): the shipped class 53.8 / 59.8 / 57.9 and its probe copy 58.7 / 63.8 / 60.3 (the class
+carries the region and split-k arithmetic the copy omits); the copy staging through the
+four-wide decode callback in place of the words - eight 16-bit lane loads and three scale words
+per 16 values - 35.4 / 35.9 / 35.2, the load-store pipe at 81% of its peak on that stage (Nsight
+GPU Trace); with f32 accumulators 42.4 / 44.2 / 43.3, the register file at 99% and two
+workgroups of eight warps per SM on the wider ones; on the 16-row strip tiling 54.1 / 57.2 /
+55.8; the reference exe's geometry - four subgroups of 64 x 64 in a 128-thread workgroup,
+sixteen accumulators each - 53.2 / 57.9 / 57.6, no better; a constant fill in place of the
+weight stage 65.4 / 66.4 / 64.6, the loop's ceiling. The reference exe's own KHR tile reads
+43-46 on the same shapes. The order mattered: while the callback stage held the load-store
+pipe, neither the f16 accumulators alone (32.7 against 33.4) nor the tiling alone (35.5) moved
+the tile, and the reference geometry ran at 22 (about 245 registers per lane, one workgroup per
+SM) - the stage had to go first. The decode body the tensor load names as its callback still
+serves the cm2 tiles and the CPU oracle; a kernel body can also call it on the plane element
+itself (`decode_v4(wq[i], ...)`, the element's index travels and the callee chains through the
+plane), the emitter capability `test_vkd_direct_decode` keeps.
 
 **The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is
 whole (`m0 + 128 <= d`), the token column is whole or stamped s, and K is a whole number of BK
