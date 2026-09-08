@@ -417,7 +417,8 @@ def normalize_rule_list(raw : array<string>; var dest : table<string>) : string 
 }
 
 def set_skip_reason(file : string; lint_fixtures : bool; var result : LintResult) : bool {
-    let content_skip = lint_file_skip_reason(file)
+    // --lint-fixtures lifts the `expect` skip; a lint-skip-file directive always wins
+    let content_skip = lint_file_skip_reason(file, !lint_fixtures)
     if (!empty(content_skip)) {
         result.skip_reason = content_skip
         return true
@@ -425,7 +426,7 @@ def set_skip_reason(file : string; lint_fixtures : bool; var result : LintResult
     // the lint tool's own rule fixtures violate rules BY DESIGN (warning-expectation
     // files carry no `expect` directive, so the content skip above misses them).
     // --lint-fixtures is how this tool's OWN tests ask to see those findings, so it
-    // lifts both arms; normalize() emits the platform's preferred separator.
+    // lifts this arm too; normalize() emits the platform's preferred separator.
     if (!lint_fixtures && (normalize(file) |> replace("\\", "/") |> find("utils/lint/tests/") >= 0
             || is_lint_fixture_name(base_name(file)))) {
         result.skip_reason = "(lint rule fixture)"

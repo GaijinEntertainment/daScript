@@ -428,15 +428,15 @@ def public is_lint_fixture_name(base : string) : bool {
 
 let public LINT_SKIP_HEADER_LINES = 16
 
-//! Content-based skip probe shared by the CLI runner and the MCP lint tool: ``expect <code>``
-//! files declare intentional compile errors (dastest), and a header ``// lint-skip-file: <reason>``
-//! opts a policy-conflicted file out entirely. Returns the skip reason, or "" to lint the file.
-def public lint_file_skip_reason(file : string) : string {
+//! Content-based skip probe shared by the CLI runner and the MCP lint tool. An ``expect <code>`` file
+//! (intentional compile errors) skips while ``expect_skips`` holds - a caller linting rule fixtures passes false;
+//! a header ``// lint-skip-file: <reason>`` opts a file out whatever the caller. Returns the skip reason, or "" to lint.
+def public lint_file_skip_reason(file : string; expect_skips : bool = true) : string {
     let text = fread(file)
     return "" if (empty(text))
     for (line, ln in split(text, "\n"), count()) {
         let trimmed = line |> strip
-        return "(intentional compile errors via `expect`)" if (trimmed |> starts_with("expect "))
+        return "(intentional compile errors via `expect`)" if (expect_skips && trimmed |> starts_with("expect "))
         if (ln < LINT_SKIP_HEADER_LINES && trimmed |> starts_with("// lint-skip-file")) {
             let colon = find(trimmed, ":")
             let reason = colon >= 0 ? strip(slice(trimmed, colon + 1)) : ""

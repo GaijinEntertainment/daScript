@@ -431,6 +431,12 @@ jobs:
       # TUs — the single biggest CI cost) via the run_tests_aot dependency and
       # sweeps all of tests/. Nightly + manual dispatch only; per-PR lanes get
       # the test_aot_subset compile+link gate from the Build step instead.
+      # Then the big C++ tests (tests-cpp/big): a generated standalone context
+      # linked and run, the nano context, concurrent init, the C API split init.
+      # Their binaries are in the default build every lane makes, but every
+      # per-PR ctest is -L small, so only this step executes a generated
+      # context. memory_model_4gb allocates a real 4 GB chunk and stays
+      # local-only.
       if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       run: |
         set -eux
@@ -451,6 +457,7 @@ jobs:
             cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_aot
             ;;
         esac
+        ctest --test-dir build --build-config ${{ matrix.cmake_preset }} -L big -E memory_model_4gb --output-on-failure
 
   ###########################################################
   build_windows_relwithdebinfo_nightly:
