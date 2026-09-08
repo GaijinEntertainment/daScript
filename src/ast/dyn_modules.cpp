@@ -114,6 +114,7 @@ struct ManifestRead {
     string why;
 };
 
+#if !DAS_NO_FILEIO   // the reader's helpers: a build with no file io reads no manifest
 static das::vector<string> split_tabs(const string & line) {
     das::vector<string> fields;
     size_t start = 0;
@@ -127,6 +128,7 @@ static das::vector<string> split_tabs(const string & line) {
         start = tab + 1;
     }
 }
+#endif
 
 static string hex64(uint64_t v) {
     char buf[32];
@@ -167,11 +169,13 @@ static bool dep_stamp(const smart_ptr<FileAccess> & fa, const string & path, uin
     return true;
 }
 
+#if !DAS_NO_FILEIO
 static bool parse_on_error(const string & s, int & value) {   // RegisterOnError: Quiet, ErrorMsg, Fail
     if ( s.size() != 1 || s[0] < '0' || s[0] > '2' ) return false;
     value = s[0] - '0';
     return true;
 }
+#endif
 
 // the inputs a descriptor's rows can depend on beyond its own bytes: its folder, the das root
 // (`get_das_root()`), and the cross-compile target (`get_cross_platform_name()`, read from argv)
