@@ -40,6 +40,26 @@ FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "test
 # Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
 
+# The nightly benchmark stand's AOT lane (utils/internal/bench-stand): the benchmark bodies get
+# their stubs linked into test_aot, so `test_aot -use-aot dastest/dastest.das -- --use-aot --bench`
+# measures native code instead of the interpreter. Predefined rather than globbed by the loop
+# below, because the tree is nested and the loop's convention is tests/<name>/*.das.
+FILE(GLOB_RECURSE AOT_BENCHMARKS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "benchmarks/*.das")
+# _-prefixed helper modules are required transitively, never standalone; benchmarks/sql/tests is
+# a dastest suite, not a benchmark.
+list(FILTER AOT_BENCHMARKS_FILES EXCLUDE REGEX "/_")
+list(FILTER AOT_BENCHMARKS_FILES EXCLUDE REGEX "^benchmarks/sql/tests/")
+# Suites whose require graph reaches a native module: each would need that module's own AOT half
+# linked here, so they measure in the interpreter and JIT lanes only. suite.json states the
+# reason per file, and widening this set is what lets a lane skip go away.
+list(FILTER AOT_BENCHMARKS_FILES EXCLUDE REGEX "^benchmarks/(audio|terminal|sql)/")
+list(FILTER AOT_BENCHMARKS_FILES EXCLUDE REGEX "benchmarks/core/math/scalar_crt\\.das$")
+list(FILTER AOT_BENCHMARKS_FILES EXCLUDE REGEX "benchmarks/micro/(join_select|single_last|sort_distinct_take)_shapes\\.das$")
+# benchmarks/core/jit_aot rides the language suite on purpose (see AOT_JIT_BENCH_FILES below), so
+# its stubs are already in both AOT binaries. Registering it twice emits two TUs for one file and
+# the anonymous-module namespaces collide at link (multiple definition of das::_anon_<hash>).
+list(FILTER AOT_BENCHMARKS_FILES EXCLUDE REGEX "^benchmarks/core/jit_aot/")
+
 FILE(GLOB AOT_BARE_BLOCK_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/bare_block/*.das")
 list(FILTER AOT_BARE_BLOCK_FILES EXCLUDE REGEX "failed_|cant_|invalid_")
 
@@ -394,7 +414,7 @@ set(DAS_AOT_SUITES
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests option promote quote
     reader_macro regex rtti safe_addr soa spoof strings stbimage table_packed template
-    tests type_lattice type_traits typemacro uri with_boost delegate)
+    tests type_lattice type_traits typemacro uri with_boost delegate benchmarks)
 foreach(_s IN LISTS DAS_AOT_SUITES)
     string(TOUPPER ${_s} _u)
     # suites with an irregular dir / a filter / a curated list define AOT_<UC>_FILES above;
@@ -405,9 +425,18 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     add_custom_target(test_aot_${_s})
     set(${_u}_AOT_GENERATED_SRC)
     list(LENGTH AOT_${_u}_FILES _nf)
+    # One process per benchmark: ten of the core/hash bodies install macros that make a LATER
+    # file in the same batch fail on `[benchmark]` (error[20600]). Batching is a speed knob, so
+    # the suite that trips it pays a process per file instead of losing the files.
+    if(_s STREQUAL "benchmarks")
+        set(DAS_AOT_BATCH_SIZE 1)
+    else()
+        unset(DAS_AOT_BATCH_SIZE)
+    endif()
     if(_nf GREATER 0)
         DAS_AOT("${AOT_${_u}_FILES}" ${_u}_AOT_GENERATED_SRC test_aot_${_s} daslang)
     endif()
+    unset(DAS_AOT_BATCH_SIZE)
     list(APPEND TEST_AOT_TARGETS test_aot_${_s})
     list(APPEND TEST_AOT_GENVARS ${_u}_AOT_GENERATED_SRC)
     list(APPEND TEST_AOT_ALL_DAS ${AOT_${_u}_FILES})

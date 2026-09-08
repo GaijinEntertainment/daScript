@@ -1,0 +1,149 @@
+name: nightly benchmark stand
+
+# Drives the benchmark stand on the web box (dasweb-1, the daslang.io origin) and
+# publishes the night at https://daslang.io/bench/. The box does the work - checkout,
+# Release build, every `[benchmark]` file in benchmarks/ in the interpreter and JIT
+# lanes, the report - so the numbers come from ONE machine night after night; this
+# runner only kicks it off over ssh, streams the log, and posts the summary.
+#
+# Red means the night is not a usable data point: the build failed, or at least one
+# benchmark file failed (compile error, failed assertion, crash, timeout, memory cap).
+# A regression is a warning in the step summary and on the site, not a red - flip
+# `fail_on_regression` on a dispatch to make it one.
+#
+# No self-hosted runner: this repository is public, and a self-hosted runner would
+# execute pull-request code on the production web box. The key reaches only the
+# stand's gate verbs - start, follow, status, summary - never a shell (a forced
+# command in the box's authorized_keys).
+
+on:
+  schedule:
+    # 05:00 UTC - after nightly_playground's 04:30, while the box is otherwise idle.
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'commit or branch to benchmark (default: master)'
+        required: false
+        default: 'master'
+      fail_on_regression:
+        description: 'turn a regression into a red run'
+        required: false
+        default: 'false'
+
+defaults:
+  run:
+    shell: bash
+
+# One night at a time: the box holds a run lock, so a second start would only be refused.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+# Empty on purpose: every step of the one job talks to the box over ssh. Nothing checks the
+# repository out and nothing calls the GitHub API, so the token needs no scope at all.
+permissions: {}
+
+jobs:
+  bench:
+    # The cron only runs on the canonical repo: it drives daslang.io's box, which a fork
+    # neither owns nor holds the key to, and a red nightly emails the fork owner.
+    if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
+    runs-on: ubuntu-latest
+    # Build (~20-40 min on the box) + two lanes of the suite (~1-2 h) + report.
+    timeout-minutes: 360
+    # SECRET SCOPE, like pages.yml: DASWEB_BENCH_KEY is an environment secret on
+    # `github-pages` (the repository has no repo-level secrets).
+    environment:
+      name: github-pages
+    env:
+      BOX: 89.167.63.131
+      BOX_USER: bench
+    steps:
+      - name: "Set up the ssh key"
+        id: key
+        env:
+          BENCH_KEY: ${{ secrets.DASWEB_BENCH_KEY }}
+        run: |
+          set -euo pipefail
+          # A fork has no access to the secret and legitimately skips, the way pages.yml's deploy
+          # step does; on the canonical repo an empty key means the nightly silently stopped
+          # measuring, so it is loud there.
+          if [ -z "$BENCH_KEY" ]; then
+              if [ "$GITHUB_REPOSITORY" = "GaijinEntertainment/daScript" ]; then
+                  echo "::error::DASWEB_BENCH_KEY is empty on the canonical repo - the stand was not driven."
+                  echo "It is an ENVIRONMENT secret on 'github-pages'; check the job still declares that environment."
+                  exit 1
+              fi
+              echo "DASWEB_BENCH_KEY not set (fork) - skipping the run"
+              echo "skipped=1" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$BENCH_KEY" > ~/.ssh/bench_key
+          chmod 600 ~/.ssh/bench_key
+          # Pinned host key - the same box and key pages.yml deploys to; no trust-on-first-use.
+          echo "$BOX ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILP2wzOeEGD2r7apldQlTe2gwR1dVTCXCfrD+pJooMmY" >> ~/.ssh/known_hosts
+          echo "RSH=ssh -i $HOME/.ssh/bench_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ConnectTimeout=30" >> "$GITHUB_ENV"
+
+      - name: "Start the night on the box"
+        id: start
+        if: steps.key.outputs.skipped != '1'
+        env:
+          REF: ${{ github.event.inputs.ref || 'master' }}
+          FAIL_ON_REGRESSION: ${{ github.event.inputs.fail_on_regression || 'false' }}
+        run: |
+          set -euo pipefail
+          # The forced command takes `start <ref> [fail-on-regression]`, and that second word is
+          # the ONLY way the input reaches the box: a forced command carries no environment, so
+          # exporting BENCH_STAND_FAIL_ON_REGRESSION here would reach nothing. A busy box answers
+          # exit 3 and names the run it is still working on.
+          FLAG=""
+          [ "$FAIL_ON_REGRESSION" = "true" ] && FLAG=" fail-on-regression"
+          RUN_ID=$($RSH "$BOX_USER@$BOX" "start $REF$FLAG")
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "started run $RUN_ID for $REF (regression fails the night: $FAIL_ON_REGRESSION)"
+
+      - name: "Follow the run"
+        if: steps.key.outputs.skipped != '1'
+        run: |
+          set -uo pipefail
+          # An ssh drop (exit 255) reconnects rather than failing the lane; every other code is
+          # the run's own, recorded for the summary step to raise.
+          for attempt in $(seq 1 60); do
+              $RSH "$BOX_USER@$BOX" "follow ${{ steps.start.outputs.run_id }}"
+              rc=$?
+              if [ $rc -ne 255 ]; then
+                  echo "run finished with exit $rc"
+                  echo "$rc" > run_exit
+                  exit 0
+              fi
+              echo "ssh dropped (attempt $attempt) - reconnecting"
+              sleep 30
+          done
+          echo "::error::could not stay connected to the box"
+          echo 255 > run_exit
+
+      - name: "Post the summary"
+        # always(), so a night that ended badly still publishes its summary here. The step's own
+        # exit code is the lane's verdict: the run's code when there is one, and a red when the
+        # summary could not be fetched at all - an unfetched summary is the one artifact this
+        # lane exists to deliver, so swallowing it would leave a green lane saying nothing.
+        if: always() && steps.key.outputs.skipped != '1'
+        run: |
+          set -uo pipefail
+          summary_rc=0
+          $RSH "$BOX_USER@$BOX" "summary" > summary.md || summary_rc=$?
+          if [ $summary_rc -ne 0 ] || [ ! -s summary.md ]; then
+              echo "::error::could not fetch the night's summary from the box (ssh exit $summary_rc)"
+              echo "The night's own verdict, if it reached one, is below." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          [ -s summary.md ] && cat summary.md >> "$GITHUB_STEP_SUMMARY"
+          rc=$(cat run_exit 2>/dev/null || echo 1)
+          case "$rc" in
+              0) echo "night ok" ;;
+              2) echo "::error::the night regressed and fail_on_regression is on - see the summary" ;;
+              *) echo "::error::the night failed (exit $rc) - see the summary and https://daslang.io/bench/" ;;
+          esac
+          [ "$rc" = 0 ] && exit "$summary_rc"
+          exit "$rc"
