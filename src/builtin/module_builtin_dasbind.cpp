@@ -618,6 +618,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             fun->stub = true;
             fun->userScenario = true;
             fun->noAot = true;         // TODO: generate custom C++ to invoke the call directly
+            fun->requestNoJit = true;  // the body is a placeholder - transformCall rewrites the call sites
             // parse annotation arguments
             auto [is_ok, ba] = parseExternArgs(args, err);
             if ( !is_ok ) {
@@ -699,42 +700,21 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             }
             return newCallExpr;
         }
-        virtual SimNode * simulate ( Context * /*context*/, Function * fun, const AnnotationArgumentList & /*args*/, string & /*err*/ ) override {
-            if (is_in_completion()) return nullptr;
-            DAS_FATAL_ERROR("Should be unreachable. We handled it in transformCall. Failed on: %s.", fun->name.c_str());
-            // // All validation is in apply(). This path is only reached for late/opengl functions.
-            // auto [is_ok, ba] = parseExternArgs(args, err);
-            // DAS_ASSERTF(is_ok, "Should have failed in apply");
-            // void * libhandle = nullptr;
-            // if ( !ba.library.empty() ) {
-            //     libhandle = bindDynamicLibrary(ba.library);
-            //     if ( !libhandle && !ba.late && ba.api!=ApiType::api_opengl ) {
-            //         err = "can't load library " + ba.library;
-            //         return nullptr;
-            //     }
-            // }
-            // void * funptr = nullptr;
-            // if ( !ba.late ) {
-            //     if ( ba.api==ApiType::api_opengl ) {
-            //         funptr = openGlGetFunctionAddress(ba.fn_name.c_str());
-            //     }
-            //     if ( !funptr ) {
-            //         funptr = getFunctionAddress(libhandle, ba.fn_name.c_str());
-            //     }
-            //     if ( !funptr ) {
-            //         err = "can't find function " + ba.fn_name + " in library " + ba.library;
-            //         return nullptr;
-            //     }
-            // }
-            // uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
-            // auto wrp = computeWrapper(fun);
-            // if ( ba.api==ApiType::api_opengl ) {
-            //     return context->code->makeNode<SimNode_ExtCallOpenGL>(fun->at,code,wrp,funptr);
-            // }
-            // if ( ba.late ) {
-            //     return context->code->makeNode<SimNode_ExtCallLate>(fun->at,code,wrp,funptr);
-            // }
-            // return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
+        // transformCall rewrites every CALL to the bound extern, so the body is reached only
+        // without a call site to rewrite - an address-taken extern. Simulating still has to
+        // SUCCEED (-aot-macros marks and simulates every function), but the body must refuse:
+        // an empty one answers uninitialized stack.
+        virtual SimNode * simulate ( Context * context, Function * fun, const AnnotationArgumentList &, string & ) override {
+            if ( is_in_completion() ) return nullptr;
+            struct SimNode_NoIndirect : SimNode {
+                SimNode_NoIndirect ( const LineInfo & at ) : SimNode(at) {}
+                virtual vec4f eval ( Context & ctx ) override {
+                    ctx.throw_error_at(debugInfo, "a dasbind extern has no body to call - it is reached "
+                        "through its call site, which transformCall rewrites, not through a function pointer");
+                    return v_zero();
+                }
+            };
+            return context->code->makeNode<SimNode_NoIndirect>(fun->at);
         }
 #endif
     };
