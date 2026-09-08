@@ -33,3 +33,9 @@
 - **A diff that moves the `setDeferredModuleLoader` call in `require_dynamic_modules` keeps it
   above the first `init_modules_for_folder` call, in the same change.** That call compiles the
   descriptors, and a descriptor can require a module an earlier replay deferred.
+
+- **A diff that changes how `Function::getMangledName` (`ast.cpp`) forms a name, or which module
+  `Module::addFunction` (`ast_module.cpp`) files a builtin function under, bumps
+  `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_run.das` (repo root), in the
+  same change.** The JIT's DLL cache key folds the codegen version and each function's AST hash,
+  never the name an extern binds under, so a cached DLL binds the old name and crashes on the hit.

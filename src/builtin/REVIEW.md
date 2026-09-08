@@ -46,6 +46,13 @@
   A replayed start never runs the descriptor, so an effect the recorder does not see is an
   effect every warm start silently lacks.
 
+- **A diff that moves a bind between modules - an `addExtern` or `addExternInline` call whose
+  module changes, or a builtin whose `vector<T>` functions follow a type to another module -
+  bumps `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_run.das` (repo root), in
+  the same change.** The JIT's DLL cache key folds the codegen version and each function's AST
+  hash, never the module an extern lives in, so a cached DLL binds the old name and crashes on
+  the hit.
+
 - **A diff that changes what `ModuleFileCache::defaultPath` folds into the module-cache key -
   the binary, the command line, the environment names, or which script arguments count - updates
   the cache-key paragraph of `ARCHITECTURE.md` in the same change.** The key is what stops a
