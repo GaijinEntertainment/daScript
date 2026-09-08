@@ -25,8 +25,10 @@ def test_solid_context_function_address(t : T?) {
     unsafe {
         let declared = reinterpret<uint64>(@@sa_add)
         let as_int64 = reinterpret<int64>(@@sa_add)
+        let as_ptr = reinterpret<void?>(@@sa_add)
         t |> equal(declared, handle_via_param, "declaration with initializer")
         t |> equal(as_int64, int64(handle_via_param), "cast to int64")
+        t |> equal(reinterpret<uint64>(as_ptr), handle_via_param, "cast to void?")
         t |> equal(invoke(reinterpret<SolidFn>(declared), 20, 22), 42, "a handle casts back to a callable")
     }
 }

@@ -56,13 +56,16 @@ def test_func_addr(t : T?) {
             slot.handle = reinterpret<uint64>(@@fa_add)
             let literal = FaSlot(handle = reinterpret<uint64>(@@fa_add))
             let arith = 0ul + reinterpret<uint64>(@@fa_add)
+            let as_ptr = reinterpret<void?>(@@fa_add)
             t |> equal(assigned, handle_via_param, "assignment to a local")
             t |> equal(declared, handle_via_param, "declaration with initializer")
             t |> equal(fixarr[1], handle_via_param, "fixed-array element store")
             t |> equal(slot.handle, handle_via_param, "struct field assignment")
             t |> equal(literal.handle, handle_via_param, "struct literal field")
             t |> equal(arith, handle_via_param, "arithmetic operand")
+            t |> equal(reinterpret<uint64>(as_ptr), handle_via_param, "cast to void?")
             t |> equal(reinterpret<int64>(@@fa_add), int64(handle_via_param), "cast to int64")
+            t |> equal(invoke(reinterpret<FaFn>(as_ptr), 20, 22), 42, "a void? handle casts back to a callable")
         }
         t |> equal(fa_inline_handle(), handle_via_param, "the direct spelling inside a return")
     }
