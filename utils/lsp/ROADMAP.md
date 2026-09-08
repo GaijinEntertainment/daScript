@@ -296,6 +296,12 @@ PR for the whole branch AFTER wave 4 (single preflight + CI round).
   needs no LSP wiring - its build already produces the binary `find_compiler`
   discovers (`build/daslang` et al.); setup's done-message now says so.
 
+## Follow-ups
+
+- The watchdog does not supervise `lsp_supervisor.py` yet; wire it in. With that, an exe form
+  of the subtools becomes possible again - the same item as the MCP server's
+  (`utils/mcp/ROADMAP.md`, Follow-ups).
+
 ## Non-goals
 
 - Completion (CC doesn't consume it), formatting-over-LSP (CC has the MCP/CLI
