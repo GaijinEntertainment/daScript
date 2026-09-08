@@ -813,7 +813,7 @@ def build_const_int_splat(elemT : LLVMOpaqueType?; lanes : int; value : int) : L
 
 def build_int_minmax_call(var ctx : JitCtx; iname : string; a, b : LLVMOpaqueValue?; vecT : LLVMOpaqueType?) : LLVMOpaqueValue? {
     var argTypes <- [vecT]
-    let id = LLVMLookupIntrinsicID(iname)
+    let id = intrinsic_id(iname)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     var typ = LLVMFunctionType(vecT, [vecT, vecT])
     var args <- [a, b]
@@ -848,7 +848,7 @@ def intrinsic_builtin_float16(var ctx : JitCtx; expr : ExprCallFunc?; arguments 
 }
 
 def intrinsic_half8_lo_hi(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    let base = expr.name == "half8_lo" ? 0 : 4
+    let base = expr.func.name == "half8_lo" ? 0 : 4
     let mask <- [for (i in range(4)); base + i]
     var quad = LLVMBuildShuffleVector(ctx.builder, ctx.types, arguments[0], arguments[0], mask, string(expr.name))
     return LLVMBuildFPExt(ctx.builder, quad, LLVMVectorType(ctx.types.t_float, 4u), "")
@@ -903,7 +903,7 @@ def build_op_name(op_name : string; opType : TypeDeclPtr) : string {
 def intrinsic_bit_nzp_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     var op_name : string
-    bit_op1_name |> get(string(expr.name)) $(pname) {
+    bit_op1_name |> get(string(expr.func.name)) $(pname) {
         op_name = pname
     }
     if (op_name == "") {
@@ -917,7 +917,7 @@ def intrinsic_bit_nzp_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
     }
     var args <- [ arguments[0], LLVMConstInt(ctx.types.t_int1, 0ul, 0)]
     var argTypes <- [ type_to_llvm_abi_type(expr.arguments[0]._type)]
-    let id = LLVMLookupIntrinsicID(sqrt_name)
+    let id = intrinsic_id(sqrt_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if (decl == null) {
         failed_E(expr, "missing intrinsic {sqrt_name}")
@@ -930,7 +930,7 @@ def intrinsic_bit_nzp_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
 def intrinsic_bit_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     var op_name : string
-    bit_op1_name |> get(string(expr.name)) $(pname) {
+    bit_op1_name |> get(string(expr.func.name)) $(pname) {
         op_name = pname
     }
     if (op_name == "") {
@@ -944,7 +944,7 @@ def intrinsic_bit_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<
     }
     var args <- [ arguments[0]]
     var argTypes <- [ type_to_llvm_abi_type(expr.arguments[0]._type)]
-    let id = LLVMLookupIntrinsicID(sqrt_name)
+    let id = intrinsic_id(sqrt_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if (decl == null) {
         failed_E(expr, "missing intrinsic {sqrt_name}")
@@ -963,7 +963,7 @@ let private op2_name <- {
 def intrinsic_op2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     var op_name : string
-    op2_name |> get(string(expr.name)) $(pname) {
+    op2_name |> get(string(expr.func.name)) $(pname) {
         op_name = pname
     }
     if (op_name == "") {
@@ -977,7 +977,7 @@ def intrinsic_op2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVM
     }
     var args <- [ arguments[0], arguments[1]]
     var argTypes <- [ type_to_llvm_abi_type(expr.arguments[0]._type)]
-    let id = LLVMLookupIntrinsicID(sqrt_name)
+    let id = intrinsic_id(sqrt_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if (decl == null) {
         failed_E(expr, "missing intrinsic {sqrt_name}")
@@ -987,39 +987,39 @@ def intrinsic_op2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVM
     return LLVMBuildCall2(ctx.builder, typ, decl, args, string(expr.name))
 }
 
-def build_math_minmax(g_builder : LLVMOpaqueBuilder?; exprName : string; expr : ExprCallFunc?; arg0, arg1 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+def build_math_minmax(g_builder : LLVMOpaqueBuilder?; math_op : string; expr : ExprCallFunc?; arg0, arg1 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     var op_name : string
     if (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
-        let pred = exprName == "min" ? LLVMRealPredicate.LLVMRealOLT : LLVMRealPredicate.LLVMRealOGT
+        let pred = math_op == "min" ? LLVMRealPredicate.LLVMRealOLT : LLVMRealPredicate.LLVMRealOGT
         var cond = LLVMBuildFCmp(g_builder, pred, arg0, arg1, "")
-        return LLVMBuildSelect(g_builder, cond, arg0, arg1, "{exprName}")
+        return LLVMBuildSelect(g_builder, cond, arg0, arg1, "{math_op}")
     } elif (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
-        op_name = exprName == "min" ? "min" : "max"
+        op_name = math_op == "min" ? "min" : "max"
         if (opType.isSignedIntegerOrIntVec) {
             op_name = "s{op_name}"
         } else {
             op_name = "u{op_name}"
         }
     } else {
-        failed_E(expr, "{exprName} {describe(expr._type)} is not supported (yet?)")
+        failed_E(expr, "{math_op} {describe(expr._type)} is not supported (yet?)")
         return null
     }
     let sqrt_name = build_op_name(op_name, opType)
     var args <- [ arg0, arg1]
     var argTypes <- [ type_to_llvm_abi_type(expr.arguments[0]._type)]
-    let id = LLVMLookupIntrinsicID(sqrt_name)
+    let id = intrinsic_id(sqrt_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if (decl == null) {
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
     }
     var typ = LLVMFunctionType(argTypes[0], [ argTypes[0], argTypes[0]])
-    return LLVMBuildCall2(g_builder, typ, decl, args, exprName)
+    return LLVMBuildCall2(g_builder, typ, decl, args, math_op)
 }
 
 def intrinsic_math_minmax(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return build_math_minmax(ctx.builder, string(expr.name), expr, arguments[0], arguments[1])
+    return build_math_minmax(ctx.builder, string(expr.func.name), expr, arguments[0], arguments[1])
 }
 
 def intrinsic_math_clamp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
@@ -1048,6 +1048,7 @@ def intrinsic_math_rsqrt(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arr
     if (argType.baseType == Type.tFloat || (argType.isVectorType && argType.vectorBaseType == Type.tFloat)) {
         var one = build_broadcast_vector(ctx.builder, argType, LLVMConstReal(ctx.types.t_float, 1.0lf))
         var sq = intrinsic_math_any_float_op1("sqrt", ctx.builder, expr, arguments)
+        return null if (sq == null)
         return LLVMBuildFDiv(ctx.builder, one, sq, "rsqrt")
     } else {
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
@@ -1055,44 +1056,46 @@ def intrinsic_math_rsqrt(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arr
     }
 }
 
-def intrinsic_math_any_float_op1(expr_name : string; g_builder : LLVMOpaqueBuilder?; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    var sqrt_name = "llvm.{expr_name}.f32"
+def intrinsic_math_any_float_op1(math_op : string; g_builder : LLVMOpaqueBuilder?; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    var sqrt_name = "llvm.{math_op}.f32"
     assume opType = expr.arguments[0]._type
     if (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
         if (opType.baseType == Type.tDouble) {
-            sqrt_name = "llvm.{expr_name}.f64"
+            sqrt_name = "llvm.{math_op}.f64"
         }
     } else {
-        failed_E(expr, "{expr_name}({describe(opType)}) is not supported (yet?)")
+        failed_E(expr, "{math_op}({describe(opType)}) is not supported (yet?)")
         return null
     }
     var args <- [ arguments[0]]
     var argTypes <- [ type_to_llvm_abi_type(expr.arguments[0]._type)]
-    let id = LLVMLookupIntrinsicID(sqrt_name)
+    let id = intrinsic_id(sqrt_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if (decl == null) {
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
     }
     var typ = LLVMFunctionType(argTypes[0], argTypes) // type : a -> a
-    return LLVMBuildCall2(g_builder, typ, decl, args, expr_name)
+    return LLVMBuildCall2(g_builder, typ, decl, args, math_op)
 }
 
 def intrinsic_math_float_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return intrinsic_math_any_float_op1(string(expr.name), ctx.builder, expr, arguments)
+    return intrinsic_math_any_float_op1(string(expr.func.name), ctx.builder, expr, arguments)
 }
 
 def intrinsic_math_float_op1_to_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var op_name = ""
-    peek(expr.name) $(s) {
+    peek(expr.func.name) $(s) {
         op_name = slice(s, 0, -1)
     }
     var res = intrinsic_math_any_float_op1(op_name, ctx.builder, expr, arguments)
+    return null if (res == null)
     return LLVMBuildFPToSI(ctx.builder, res, type_to_llvm_abi_type(expr._type), "")
 }
 
 def intrinsic_math_fract(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var fl = intrinsic_math_any_float_op1("floor", ctx.builder, expr, arguments)
+    return null if (fl == null)
     return LLVMBuildFSub(ctx.builder, arguments[0], fl, "fract")
 }
 
@@ -1208,7 +1211,7 @@ def private vmath_poly_gate(opType : TypeDeclPtr) : bool {
 }
 
 def private vmath_fma_decl(opType : TypeDeclPtr; lt : LLVMOpaqueType?) : LLVMOpaqueValue? {
-    let fid = LLVMLookupIntrinsicID(build_op_name("fmuladd", opType))
+    let fid = intrinsic_id(build_op_name("fmuladd", opType))
     return fid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, fid, [ lt]) : null
 }
 
@@ -1220,7 +1223,7 @@ def private vmath_poly_step(bld : LLVMOpaqueBuilder?; a, b, c : LLVMOpaqueValue?
 def private vmath_call1(ctx : JitCtx; opType : TypeDeclPtr; op_name : string; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let lt = type_to_llvm_type(opType)
     let intrin_name = build_op_name(op_name, opType)
-    let id = LLVMLookupIntrinsicID(intrin_name)
+    let id = intrinsic_id(intrin_name)
     let decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, [ lt]) : null
     if (decl == null) {
         failed("missing intrinsic {intrin_name}")
@@ -1231,7 +1234,7 @@ def private vmath_call1(ctx : JitCtx; opType : TypeDeclPtr; op_name : string; x 
 
 // overloaded on result AND operand type: the declaration takes both, result first (llvm.fptosi.sat.v4i32.v4f32)
 def private vmath_call1_2t(ctx : JitCtx; intrin_name : string; resTy, argTy : LLVMOpaqueType?; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-    let id = LLVMLookupIntrinsicID(intrin_name)
+    let id = intrinsic_id(intrin_name)
     var declTypes <- [ resTy, argTy]
     let decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, declTypes) : null
     if (decl == null) {
@@ -1348,11 +1351,11 @@ def private build_vector_sincos(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaq
 
 def intrinsic_math_sincos(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    let name = string(expr.name)
+    let func_name = string(expr.func.name)
     if (vmath_poly_gate(opType)) {
-        return build_vector_sincos(ctx, opType, arguments[0], name == "cos")
+        return build_vector_sincos(ctx, opType, arguments[0], func_name == "cos")
     }
-    return intrinsic_math_any_float_op1(name, ctx.builder, expr, arguments)
+    return intrinsic_math_any_float_op1(func_name, ctx.builder, expr, arguments)
 }
 
 // Vectorized tanf as inline IR - vecmath v_tan (dag_vecMath_trig.h), NOT sin/cos then divide:
@@ -1529,11 +1532,11 @@ def private build_vector_hyper(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqu
 
 def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    let name = string(expr.name)
+    let func_name = string(expr.func.name)
     if (vmath_poly_gate(opType)) {
-        return build_vector_hyper(ctx, opType, arguments[0], name)
+        return build_vector_hyper(ctx, opType, arguments[0], func_name)
     }
-    return intrinsic_math_any_float_op1(name, ctx.builder, expr, arguments)
+    return intrinsic_math_any_float_op1(func_name, ctx.builder, expr, arguments)
 }
 
 // ===== the idot family: exact integer dots on the 8-bit lattice =====
@@ -1601,7 +1604,7 @@ def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
         let v4i32 = ctx.types.LLVMInt4Type()
         var s = idot_wasm_simd128(ctx, null, arguments[0], arguments[1])
         if (s != null) {
-            let rid = LLVMLookupIntrinsicID("llvm.vector.reduce.add")
+            let rid = intrinsic_id("llvm.vector.reduce.add")
             var rtys <- [v4i32]
             var rdecl = rid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, rid, rtys) : null
             if (rdecl != null) {
@@ -1615,7 +1618,7 @@ def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
         let v4i32 = ctx.types.LLVMInt4Type()
         var s = idot_sdot_aarch64(ctx, LLVMConstNull(v4i32), arguments[0], arguments[1])
         if (s != null) {
-            let rid = LLVMLookupIntrinsicID("llvm.vector.reduce.add")
+            let rid = intrinsic_id("llvm.vector.reduce.add")
             var rtys <- [v4i32]
             var rdecl = rid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, rid, rtys) : null
             if (rdecl != null) {
@@ -1627,7 +1630,7 @@ def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
     }
     var prod = idot_products(ctx, expr, arguments[0], arguments[1], 0)
     let v16i32 = LLVMVectorType(ctx.types.t_int32, 16u)
-    let id = LLVMLookupIntrinsicID("llvm.vector.reduce.add")
+    let id = intrinsic_id("llvm.vector.reduce.add")
     var tys <- [v16i32]
     var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, tys) : null
     if (decl == null) {
@@ -1708,7 +1711,7 @@ def intrinsic_math_mad_op3(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
     if (bt == Type.tFloat || bt == Type.tDouble || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4) {
         // a*b+c as @llvm.fmuladd — the backend fuses to one fmla (mad is a MAC by contract)
         let lt = type_to_llvm_abi_type(expr._type)
-        let id = LLVMLookupIntrinsicID(build_op_name("fmuladd", expr._type))
+        let id = intrinsic_id(build_op_name("fmuladd", expr._type))
         var fatys <- [ lt]
         var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, fatys) : null
         if (decl != null) {
@@ -1751,7 +1754,7 @@ def intrinsic_math_abs_float(int_name : string; g_builder : LLVMOpaqueBuilder?; 
     assume opType = expr.arguments[0]._type
     var args <- [ arguments[0]]
     var argTypes <- [ type_to_llvm_abi_type(opType)]
-    let id = LLVMLookupIntrinsicID(int_name)
+    let id = intrinsic_id(int_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if (decl == null) {
         failed_E(expr, "missing intrinsic {int_name}")
@@ -1765,7 +1768,7 @@ def intrinsic_math_abs_int(abs_name : string; ctx : JitCtx; expr : ExprCallFunc?
     assume opType = expr.arguments[0]._type
     var args <- [ arguments[0], LLVMConstInt(ctx.types.t_int1, 0ul, 0)]
     var argTypes <- [ type_to_llvm_abi_type(opType)]
-    let id = LLVMLookupIntrinsicID(abs_name)
+    let id = intrinsic_id(abs_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if (decl == null) {
         failed_E(expr, "missing intrinsic {abs_name}")
@@ -1799,7 +1802,7 @@ def build_fadd(var ctx : JitCtx; opType : TypeDeclPtr; v2 : LLVMOpaqueValue?; na
     let neg_0 = LLVMConstReal(ctx.types.t_float, -double(0.))
     var args_fadd <- [ neg_0, v2]
     var argTypes_fadd <- [ type_to_llvm_abi_type(opType)]
-    let id = LLVMLookupIntrinsicID(fadd_name)
+    let id = intrinsic_id(fadd_name)
     var decl_fadd = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes_fadd)
     if (decl_fadd == null) {
         failed("missing intrinsic {fadd_name}")
@@ -1813,7 +1816,7 @@ def build_fsqrt(var ctx : JitCtx; v2 : LLVMOpaqueValue?; name : string) : LLVMOp
     let fsqrt_name = "llvm.sqrt.f32"
     var args_fsqrt <- [ v2]
     var argTypes_fsqrt <- [ ctx.types.t_float]
-    let id = LLVMLookupIntrinsicID(fsqrt_name)
+    let id = intrinsic_id(fsqrt_name)
     var decl_fsqrt = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes_fsqrt)
     if (decl_fsqrt == null) {
         failed("missing intrinsic {fsqrt_name}")
@@ -1855,10 +1858,10 @@ def intrinsic_math_dot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array
 def intrinsic_math_hminmax(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     assert(opType.isVectorType)
-    let op = expr.name == "hmin" ? "fmin" : "fmax"
+    let op = expr.func.name == "hmin" ? "fmin" : "fmax"
     let iname = "llvm.vector.reduce.{op}.v{opType.vectorDim}f32"
     var argTypes <- [ type_to_llvm_abi_type(opType)]
-    let id = LLVMLookupIntrinsicID(iname)
+    let id = intrinsic_id(iname)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if (decl == null) {
         failed("missing intrinsic {iname}")
@@ -2409,9 +2412,8 @@ def intrinsic_dot4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : arra
     var xvec = LLVMBuildLoad2(ctx.builder, v16i8, xptr, "")
     LLVMSetAlignment(xvec, 1u)
     // uw = |w| — generic @llvm.abs.v16i8 (lowers to PABSB); is_int_min_poison = false keeps -128 defined
-    let abs_id = LLVMLookupIntrinsicID("llvm.abs")
     var absTypes <- [v16i8]
-    var abs_decl = LLVMGetIntrinsicDeclaration(g_mod, abs_id, absTypes)
+    var abs_decl = LLVMGetIntrinsicDeclaration(g_mod, intrinsic_id("llvm.abs"), absTypes)
     var absArgTypes <- [v16i8, ctx.types.t_int1]
     var absTy = LLVMFunctionType(v16i8, absArgTypes)
     var absArgs <- [wvec, ctx.types.ConstI1(false)]
@@ -2645,9 +2647,8 @@ def emit_dot32_quads_v(var ctx : JitCtx; _expr : ExprCallFunc?; wvec, xvec : LLV
     let v16i16 = LLVMVectorType(ctx.types.t_int16, 16u)
     let v8i32 = LLVMVectorType(ctx.types.t_int32, 8u)
     // uw = |w| — generic @llvm.abs.v32i8 (lowers to VPABSB ymm); is_int_min_poison = false keeps -128 defined
-    let abs_id = LLVMLookupIntrinsicID("llvm.abs")
     var absTypes <- [v32i8]
-    var abs_decl = LLVMGetIntrinsicDeclaration(g_mod, abs_id, absTypes)
+    var abs_decl = LLVMGetIntrinsicDeclaration(g_mod, intrinsic_id("llvm.abs"), absTypes)
     var absArgTypes <- [v32i8, ctx.types.t_int1]
     var absTy = LLVMFunctionType(v32i8, absArgTypes)
     var absArgs <- [wvec, ctx.types.ConstI1(false)]
@@ -2730,9 +2731,8 @@ def emit_dot64_acc16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<
     var xvec = LLVMBuildLoad2(ctx.builder, v64i8, xptr, "")
     LLVMSetAlignment(xvec, 1u)
     // uw = |w| — generic @llvm.abs.v64i8 (lowers to VPABSB zmm); is_int_min_poison = false keeps -128 defined
-    let abs_id = LLVMLookupIntrinsicID("llvm.abs")
     var absTypes <- [v64i8]
-    var abs_decl = LLVMGetIntrinsicDeclaration(g_mod, abs_id, absTypes)
+    var abs_decl = LLVMGetIntrinsicDeclaration(g_mod, intrinsic_id("llvm.abs"), absTypes)
     var absArgTypes <- [v64i8, ctx.types.t_int1]
     var absTy = LLVMFunctionType(v64i8, absArgTypes)
     var absArgs <- [wvec, ctx.types.ConstI1(false)]

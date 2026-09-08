@@ -262,6 +262,10 @@ def public handle_each_is_jitable(src : ExpressionPtr) : bool {
     return get_jit_each(srcT.annotation) != null
 }
 
+def private is_int64_or_uint64(t : Type) : bool {
+    return t == Type.tInt64 || t == Type.tUInt64
+}
+
 //! The jit passes a handled index in its own C ABI, so the index has to be a primitive the
 //! emitter can put in a register. Anything else (a typed id, a struct key) gets no address and
 //! keeps the interpreter, whatever the annotation offers. Returns -1 when not passable.
@@ -2042,7 +2046,7 @@ class public LlvmJitVisitor : AstVisitor {
     // (N == TABLE_MAX_LINEAR_CAPACITY == 8, so the mask is exactly i8 and cttz.i8 fits.)
     def first_set_lane_or_neg1(maskI8 : LLVMOpaqueValue?) : LLVMOpaqueValue? {
         var argTypes <- [ types.t_int8 ]
-        let id = LLVMLookupIntrinsicID("llvm.cttz.i8")
+        let id = intrinsic_id("llvm.cttz.i8")
         var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
         var cttzTy = LLVMFunctionType(types.t_int8, [ types.t_int8, types.t_int1 ])
         var cttzArgs <- [ maskI8, LLVMConstInt(types.t_int1, 0ul, 0) ]
@@ -3371,7 +3375,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 var args <- [ left, left, right]
                 var argTypes <- [ base_type_to_llvm_type(shiftType.baseType)]
-                let id = LLVMLookupIntrinsicID(fshr_name)
+                let id = intrinsic_id(fshr_name)
                 var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
                 if (decl == null) {
                     failed_E(expr, "failed to get intrinsic {fshr_name}")
@@ -3390,7 +3394,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 var args <- [ r2v_left, r2v_left, right]
                 var argTypes <- [ base_type_to_llvm_type(shiftType.baseType)]
-                let id = LLVMLookupIntrinsicID(fshr_name)
+                let id = intrinsic_id(fshr_name)
                 var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
                 if (decl == null) {
                     failed_E(expr, "failed to get intrinsic {fshr_name}")
@@ -5718,8 +5722,16 @@ class public LlvmJitVisitor : AstVisitor {
             res = LLVMBuildPointerCast(g_builder, subE, type_to_llvm_type(ect), "cast_p")
         } elif (ect.baseType == Type.tFixedArray && subT.isPointer) {
             res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
-        } elif (ect.isInteger && (ect.baseType == Type.tInt64 || ect.baseType == Type.tUInt64) && subT.isPointer) {
+        } elif (is_int64_or_uint64(ect.baseType) && subT.isPointer) {
             res = LLVMBuildPtrToInt(g_builder, subE, type_to_llvm_type(ect), "cast_p_i")
+        } elif (subT.baseType == Type.tFunction && (ect.isPointer || is_int64_or_uint64(ect.baseType))) {
+            // reinterpret<uint64>(f)
+            let fn_ptr = LLVMBuildExtractValue(g_builder, subE, 0u, "fn_ptr")
+            res = ect.isPointer ? fn_ptr : LLVMBuildPtrToInt(g_builder, fn_ptr, type_to_llvm_type(ect), "cast_fn_i")
+        } elif (ect.baseType == Type.tFunction && (subT.isPointer || is_int64_or_uint64(subT.baseType))) {
+            // reinterpret<Fn>(h)
+            let fn_ptr = subT.isPointer ? subE : LLVMBuildIntToPtr(g_builder, subE, LLVMPointerType(g_t_simFunction, 0u), "fn_ptr")
+            res = LLVMBuildInsertValue(g_builder, LLVMGetUndef(g_t_function), fn_ptr, 0u, "cast_fn")
         } elif ((ect.isPointer || ect.isString) && subT.isInteger) {
             res = LLVMBuildIntToPtr(g_builder, subE, type_to_llvm_type(ect), "cast_i_p")
         } elif (!ect.isRefType && !subT.isRefType) {

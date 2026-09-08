@@ -112,18 +112,24 @@
   every box, so every perm that requires it silently declines to its fallback and no error names
   the cause.
 
+- **An emitter under `daslib/` that uses a call's name as a KEY - an intrinsic-name fragment, a
+  lookup-table key, a branch on one spelling - reads `expr.func.name`, never `expr.name`;
+  `expr.name` stays only in a diagnostic or an LLVM value name, where it is what the user
+  wrote.** The dispatch tables key off the declaration, so a call site can still spell itself
+  module-qualified.
+
 - **A diff that adds or changes a `build_vector_*` emitter (`daslib/llvm_jit_intrin.das`) emits
   each Horner step unfused, through `vmath_poly_step`, and calls `vmath_fma` only for the steps
   vecmath itself writes fused** (`ARCHITECTURE.md#vector-poly-fusion`). One fused step in a
   sign-alternating chain moves the last few bits of the result, and the interpreter and AOT
   answers do not move with it.
 
-- **A diff that adds or changes an intrinsic emitter whose daslang body is the reference
-  implementation - a `build_vector_*` emitter, an `idot` lowering - also adds a cell comparing
-  the emitted result with the interpreted result over the operand range the emitter serves
-  (every vector width for `build_vector_*`, the full int8 lattice for a dot), and for a float
-  emitter one asserting both answer NaN in the same lanes; a lowering only a cross target runs
-  states in the PR body the artifact that compared them.** A clamp or a conversion written with
+- **A diff that changes what an emitter whose daslang body is the reference implementation
+  produces - the emitter itself, or which of its arms a call selects - also adds a cell
+  comparing the emitted result with the interpreted result over the operand range that emitter
+  serves (every vector width for a vector emitter, the full int8 lattice for a dot), and for a
+  float emitter one asserting both answer NaN in the same lanes; a lowering only a cross target
+  runs states in the PR body the artifact that compared them.** A clamp or a conversion written with
   ordered compares turns a NaN lane into a number, and an accuracy bound reads that as success;
   an IR-shape test names the instruction and never a number.
 
