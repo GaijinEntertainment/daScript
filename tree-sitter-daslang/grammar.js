@@ -190,7 +190,6 @@ module.exports = grammar({
           field('module', $.require_module_name),
           optional(seq('as', field('alias', $.identifier))),
         ),
-        // `require [group]`: every module registered under the group name
         field('group', $.require_group_name),
       ),
       optional('public'),

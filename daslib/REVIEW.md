@@ -246,6 +246,10 @@ signed sum wraps, the bounds test passes, and the walk leaves the array silently
 and emit only the taken arm.** Nothing folds at macro-application time, so a generated
 `if ($v(flag))` keeps its dead arm and type-checks it.
 
+**Never call `call_in_context` (`cross_context.das`) with a target that calls back into the
+calling context - hand every value the caller needs back through the result pointer instead.**
+The call holds the target context's lock for its whole run.
+
 **A diff that adds or changes a buffer-I/O overload returns before taking `addr(buf[0])` on
 an empty buffer.** The address is out of bounds and the call sits inside `unsafe`, so an
 overload without the guard passes every non-empty test.

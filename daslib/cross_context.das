@@ -5,19 +5,6 @@ options strict_smart_pointers
 module cross_context shared public
 
 //! A module required after the walk, and calls into its macro context.
-//!
-//! ``require_module_now("llvm/daslib/llvm_macro")`` compiles a ``shared`` module and its
-//! prerequisites into the process at the point of the call - from a macro, a simulate
-//! macro or a running script - and answers the one already there on every later call.
-//! The module is not a dependency of the caller: its symbols stay out of the caller's
-//! scope and its macros do not apply to the caller's program. The caller reaches it
-//! through its macro context - ``macro_context_of`` - and calls a function there by
-//! name with ``call_in_context``, which passes a pointer to the result as the last
-//! argument, the way ``[apply_in_context]`` does. The module has a macro context when
-//! it declares a macro - a ``[_macro]`` function is the smallest - and a function called
-//! by name is ``[export]``ed, since the context keeps only exported, ``[init]`` and
-//! macro-init functions. A function called that way runs under the target context's
-//! lock, so it must not call back into the caller's context.
 
 require daslib/ast public
 require daslib/rtti public

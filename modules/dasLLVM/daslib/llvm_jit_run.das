@@ -34,9 +34,8 @@ module llvm_jit_run shared private
 var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole library; when false, only against runtime
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
-// (normalized to LF; file list in the test); the codegen version it pairs with is
-// LLVM_JIT_CODEGEN_VERSION in llvm_jit_plan.das
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x283385bc79d6616bul
+// (normalized to LF; file list in the test)
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xb7fb215c8f2e585ful
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -492,7 +491,6 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     // the disable pass consults target-gated intrinsic tables (has_intrinsic) — the
     // g_target_* truth must be set BEFORE it runs, not first at init_jit time below.
     init_jit_target_flags(target_triple, use_host_cpu)
-    // the content gate over the plan's candidates: what the emitter cannot lower stays interpreted
     var funcs : array<FunctionPtr>
     var visitorDisabled = 0
     var disableJitVisitor = new DisableJitVisitor()
@@ -609,7 +607,6 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                 if (res.fn == null) {
                     // before finalize_jit, which disposes the engine that owns g_mod
                     di_finalize()
-                    // the ctor pass that drains the codegen accumulators never runs on this path; the next program in the process must not inherit them
                     reset_codegen_accumulators()
                     finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
                     // JIT failed. Couldn't create executable.

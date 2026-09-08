@@ -116,7 +116,14 @@ require guard (`require ?mod`) and `builtin_module_exists` ask whether the build
 module (`guardModuleAvailable`): linked in, or waiting in a manifest row, which the guard
 loads then - so `require ?das_metal metal/das_metal_boost` still means "on a build with
 Metal", a cold start and a warm start answer alike, and `llvm`, a witness module no das file
-requires unguarded, comes in through the guards `daslib/tune` places on it. A load adds
+requires unguarded, comes in through the guards `daslib/tune` places on it. A guard whose name
+holds a `/` is a path instead: the guard is taken when the guard's own file resolves through the
+compile's `FileAccess` - the rail for a pure-das package, which has nothing C++ to guard on, and
+for a witness of a cross-package dependency. A guard the build does not have skips the require
+silently and without resolving the target, so a skipped require probes no file paths; a guard the
+build has over a target that does not resolve is the ordinary missing-module error. Neither form
+falls back to the target's own resolvability: a module's source directory sits in every checkout
+whatever the build configured. A load adds
 nothing to `$`: a module-cache record carries each builtin module's cumulative hash of
 mangled names, and a process that loaded a different set of C++ modules would otherwise fail
 every record on `$`, so a `vector<T>` of a handled element registers into the element's
@@ -158,14 +165,19 @@ walks the target's own prerequisites under the caller's file access and policies
 missing ones the way `compileDaScript` does - each parsed as a dependency, promoted when its
 program asks to be shared - and then the target itself, which must be `shared`: a module that
 is not promoted lives only in the walk's `ModuleGroup` and dies with it, so a non-shared
-target is refused by name rather than returned dangling. The module is not a dependency of
+target is refused by name rather than returned dangling. The answer is the module or null, and
+every error the walk, the dependency parses and the target's parse produced is written to the
+caller's `logs`, so a caller reports the text it got rather than the compiler's own log. The
+module is not a dependency of
 any program: its symbols are not visible to the caller and its macros do not apply to the
 caller's program; the caller reaches it through its macro context (`Module::macroContext`,
 `daslib/cross_context`'s `macro_context_of`), which `find_macro_context` gives a context mutex
 because `invoke_in_context` locks its target. The call saves and restores the environment's
 bound program, compiler log and serializer pointers around the walk, since it may run
-mid-parse of another module, and one recursive mutex serializes every late require in the
-process. Its module cache is its own: the host's cache is finished before the program
+mid-parse of another module, and it puts back the `used` flag of every function and global in
+the process as well: the walk's symbol-use passes rewrite those flags across every shared
+module, and the caller may be mid-simulate with a JIT that reads them. One recursive mutex
+serializes every late require in the process. Its module cache is its own: the host's cache is finished before the program
 simulates, so the late walk would otherwise parse the same modules from source on every run.
 The host records its cache key inputs and whether a cache is in use at all on the environment
 (`lateModuleCache*`), the late walk installs a `ModuleFileCache` at

@@ -46,6 +46,11 @@
   constant, so such a change without the bump serves the old machine code back
   (`ARCHITECTURE.md` sec.1.2).
 
+- **A function the jit finalizer reaches - `free_jit_context` (`daslib/llvm_jit_link.das`) and
+  anything it calls - calls externs only, never a das helper.** The finalizer is program code, so
+  a das helper on its path joins every jitted program's DLL, and the emitter cannot lower a block
+  passed to C++ with a `LineInfoArg`.
+
 - **A diff that adds an environment or config input to a JIT cache key folds it inside
   `jit_env_salt` (`daslib/llvm_jit_plan.das`), never directly into either JIT key - the DLL
   key or the split-obj key (`ARCHITECTURE.md` sec.2)** - salt feeds both keys, and a config

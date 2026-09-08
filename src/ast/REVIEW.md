@@ -26,12 +26,18 @@
   loop dispatches on `row.dynamic` and then on whether the row carries a das-visible name, so a
   kind it does not know replays as a native path or waits under a name nothing requires.
 
-- **A diff that gives `require` a new spelling - a guard form, a group form, a path prefix -
-  teaches the text collector `getAllRequireReq` (`ast_parse.cpp`) the same spelling, with the same
+- **A diff that gives `require` a new spelling - a guard form, a group form, a path prefix - or
+  changes when a guarded require is skipped (`ast_requireGuardAvailable`, `parser_impl.cpp`),
+  teaches the text collector `getAllRequireReq` (`ast_parse.cpp`) the same spelling and the same
   skip-or-take decision, in the same change.** The prerequisite walk collects requires from the
   source text before any parse, so a spelling only the parser reads is a module the walk never
   compiles, and a decision the two make differently is a require the parse takes with no module
   behind it.
+
+- **A diff that moves the `freeLateModuleCaches()` call in `Module::Shutdown`
+  (`ast_module.cpp`) keeps it below the loop that deletes the modules, in the same change.** A
+  served module's line references point at `FileInfo` objects those caches own, so a free above
+  the loop leaves every such reference dangling while the modules are still being destroyed.
 
 - **Removing the `setDeferredModuleLoader` call from `require_dynamic_modules`
   (`dyn_modules.cpp`) is a defect.** A descriptor compiled during the scan can require a module

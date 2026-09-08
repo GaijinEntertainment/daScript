@@ -1410,7 +1410,7 @@ namespace das {
         if ( !mod ) context->throw_error_at(at, "find_macro_context: null module");
         auto mctx = mod->macroContext.get();
         if ( !mctx ) context->throw_error_at(at, "find_macro_context: module '%s' has no macro context", mod->name.c_str());
-        if ( !mctx->contextMutex ) mctx->contextMutex = new recursive_mutex;    // invoke_in_context locks the target
+        if ( !mctx->contextMutex ) mctx->contextMutex = new recursive_mutex;
         return *mctx;
     }
 

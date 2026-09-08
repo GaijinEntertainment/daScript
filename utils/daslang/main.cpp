@@ -517,13 +517,12 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     }
     moduleCache.install(cacheReadPath, cacheWritePath, cacheQuiet);
     {
-        // a late require (require_module_now) keeps a cache of its own under the same key inputs, or none when this run has none
+        // src/ast/ARCHITECTURE.md sec.3
         auto env = daScriptEnvironment::getBound();
         env->lateModuleCacheEnabled = !cacheReadPath.empty() && cacheReadPath == cacheWritePath;
         env->lateModuleCacheQuiet = cacheQuiet;
         env->lateModuleCacheDir.clear();
         if ( env->lateModuleCacheEnabled && !cacheQuiet ) {
-            // an explicit -module-cache file: the late caches sit beside it, in the user's directory
             auto slash = cacheWritePath.find_last_of("/\\");
             env->lateModuleCacheDir = slash == string::npos ? string("./") : cacheWritePath.substr(0, slash + 1);
         }

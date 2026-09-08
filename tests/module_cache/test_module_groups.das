@@ -8,8 +8,6 @@ require daslib/fio
 require daslib/strings_boost
 require _mc_common
 
-//! two pure-das modules whose descriptors register their module into one group, and a third
-//! whose descriptor registers a member no require path serves
 let DESCRIPTOR_ALPHA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_alpha\", \"alpha\", \"\{project_path\}/alpha.das\")\n    register_module_group(\"probe_group\", \"grp_alpha/alpha\")\n\}\n"
 let DESCRIPTOR_BETA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n    register_module_group(\"probe_group\", \"grp_beta/beta\")\n\}\n"
 let DESCRIPTOR_BETA_OUTSIDE = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n\}\n"
@@ -123,8 +121,6 @@ def arms_expand(t : T?; fx : Fixture) {
     }
 }
 
-//! the module cache stamps the requires a parse took: a member joining a group changes a
-//! requirer's dependencies without touching its bytes, and the record must not serve
 def arm_cache_stamps_the_expansion(t : T?; fx : Fixture) {
     t |> run("a member joining the group after the record was written cuts the cache off at the requirer") @(t : T?) {
         let cache = "-module-cache \"{path_join(fx.tmp, "groups.dascache")}\""

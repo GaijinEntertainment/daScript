@@ -244,3 +244,12 @@ Three companions carry a concern each; a section number is unique across all fou
   reads one is framework-only and says so with that direct require. `daslib/just_in_time` keeps
   its direct require for the opposite reason: a static host that never registered the witness
   still runs the JIT through the LLVM library, and the guard would switch it off.
+
+## 38. cross_context
+
+- **A function reached by name in the context `macro_context_of` answers is `[export]`ed, a pair
+  with `Program::markMacroSymbolUse` (`src/ast/ast_export.cpp`), whose roots are `exports`, `init`,
+  `shutdown` and `macroInit` - every other function is dropped from the macro context.** Nothing
+  fails when one side moves alone: the tests name an `[export]`ed function, so a narrower or wider
+  C++ root set passes them. The module itself is not the caller's dependency (`src/ast/ARCHITECTURE.md`
+  sec.3): its macro context is the caller's only handle on it.

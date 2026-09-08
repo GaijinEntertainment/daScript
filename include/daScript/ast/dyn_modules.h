@@ -32,7 +32,7 @@ DAS_CC_API bool require_dynamic_modules(smart_ptr<FileAccess> file_access,
 
 // src/ast/ARCHITECTURE.md sec.2
 struct DynModuleManifestRow {
-    bool    dynamic = false;    // native path (a=mod_name, b=src, c=dst); true: dynamic module (a=path, b=cpp class, c=das name)
+    bool    dynamic = false;    // false: native path (a=mod_name, b=src, c=dst); true: dynamic module (a=path, b=cpp class, c=das name)
     bool    group = false;      // group member (a=group, b=member)
     string  a, b, c;
     int     on_error = 0;       // dynamic only: the RegisterOnError the descriptor used

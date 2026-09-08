@@ -195,7 +195,7 @@ namespace das {
         return g_deferredModuleLoader && g_deferredModuleLoader(name) && Module::requireEx(name, false);
     }
 
-    static vector<unique_ptr<ModuleFileCache>> g_lateModuleCaches;     // each outlives the modules it fed (ARCHITECTURE.md sec.3)
+    static vector<unique_ptr<ModuleFileCache>> g_lateModuleCaches;     // ARCHITECTURE.md sec.3
     static mutex g_lateModuleCachesMutex;
 
     void keepLateModuleCache ( unique_ptr<ModuleFileCache> cache ) {
@@ -289,7 +289,7 @@ namespace das {
         // pointers in dasModule*.shared_module DLLs are still valid, and any
         // live job threads that were holding handles have exited. Dump here.
         if ( dumpHandleLeaks ) handleRegistry_dumpAll();
-        freeLateModuleCaches();     // after the modules: their ASTs point at the FileInfos the caches hold
+        freeLateModuleCaches();
         // Free allocated structures for dynamic modules (unloads DLLs).
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
         clear_deferred_dynamic_modules();

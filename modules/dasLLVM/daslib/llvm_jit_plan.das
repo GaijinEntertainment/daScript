@@ -265,9 +265,6 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     return h
 }
 
-// the DLL key over the candidate set: the emitter's content gate drops some candidates to the
-// interpreter, but the gate is a function of the candidates, the emitter version and the target -
-// all folded - so one key names one DLL, and a hit binds the functions the DLL holds
 def public jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_level : int;
                             emit_prologue : bool; debug_info : bool; target_triple : string; split : bool;
                             use_host_cpu : bool) : string {
@@ -870,12 +867,8 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
     // box (same contract as the JIT), so bake host features — this force-appends +dotprod on aarch64,
     // without which the dasLLAMA Q8 SDOT kernels have no instruction to select and codegen aborts.
     plan.use_host_cpu = empty(plan.baseline) && (plan.emit_aot_object ? true : (!plan.gen_exe || plan.exe_host_cpu))
-    // the front end's log_compile_time option extends into the backend: per-phase wall below
     plan.log_jit_time = prog._options |> find_arg("log_compile_time") ?as tBool ?? prog.policies.log_compile_time
 
-    // the candidate set: every function the CONTEXT holds that the policy selects (`used` alone lies -
-    // a module compiled into the process after this program simulated marks shared functions used);
-    // `[no_jit]` functions are listed apart so the probe can refuse a DLL that holds one
     prog |> for_each_module() $(mod) {
         mod |> for_each_function("") $(fun) {
             // In object mode emit the whole used, non-noAot set (all modules +

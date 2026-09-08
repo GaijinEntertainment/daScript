@@ -83,13 +83,11 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
         delete uids
     }
     let t_finalize = get_time_usec(phase_tm)
-    // a pinned jit_output_path names its DLL by path, so its probe compares hashes only and the tier stays unknown
     jit_log_report(probe.bound, false, plan.opt_level, !empty(plan.dll_hash_basename), plan.jit_split, 0, plan.log_jit_time, totalTime,
         t_hash, 0, 0, t_probe, 0, 0, 0, t_install, t_finalize)
     return true
 }
 
-//! externs only: a das helper here would join the program's jitted set through the finalizer
 [no_jit]
 def private free_jit_engine_in_emitter(ee : void?; ctx : void?) {
     let emitter = get_module("llvm_macro")
@@ -103,7 +101,7 @@ def private free_jit_engine_in_emitter(ee : void?; ctx : void?) {
 
 //! Frees the jit state when the last context sharing it goes: the cached DLL closes here; an
 //! in-memory engine is the emitter's to dispose, and the emitter is in the process whenever
-//! there is one. Nothing this calls after the disposal may be jitted code.
+//! there is one.
 [finalize(late), no_jit]
 def public free_jit_context {
     if (get_context_share_counter() == 1ul) {

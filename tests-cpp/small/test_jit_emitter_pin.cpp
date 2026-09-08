@@ -32,8 +32,8 @@ static const char * EMITTER_FILES[] = {
     "llvm_cpu_class.das",
     "llvm_tune_fat_word.das",
     "llvm_code_shell.das",
-    "llvm_jit_plan.das",    // the DLL key fold and the install phase's extern-slot resolution
-    "llvm_jit_link.das",    // the cache-hit install path
+    "llvm_jit_plan.das",
+    "llvm_jit_link.das",
 };
 
 // normalized to LF so Windows and Linux checkouts agree

@@ -12,7 +12,7 @@ def fixture(name : string) : string {
     return "%/tests/module_cache/_fixtures/{name}.das"
 }
 
-//! the script a child runs: a late require at runtime, the fixture's compile logged per module
+//! a late require at runtime, with the fixture's compile logged per module
 def late_driver() : string {
     return "options gen2\nrequire daslib/cross_context\n\n[export]\ndef main \{\n    var answer = 0\n    var inscope no_access : smart_ptr<FileAccess>\n    using() $(var cop : CodeOfPolicies) \{\n        cop.log_module_compile_time = true\n        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) $(var mod : Module?; issues : das_string) \{\n            print(\"LATE LOG \{issues\}\\n\")\n            if (mod != null) \{\n                call_in_context(unsafe(addr(find_macro_context(mod))), \"late_answer\", answer)\n            \}\n        \}\n    \}\n    print(\"LATE \{answer\}\\n\")\n\}\n"
 }

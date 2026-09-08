@@ -5,9 +5,7 @@ require daslib/strings_boost
 require strings
 require math
 
-// The JIT's entry (llvm_jit_link) takes a DLL cache hit without the emitter: the plan names
-// the DLL, the probe binds what it holds, and llvm_macro stays out of the process. A miss, an
-// in-memory run and a stale pinned DLL bring the emitter in through require_module_now.
+// the hit path and its misses: modules/dasLLVM/ARCHITECTURE_JIT_ENTRY.md sec.1-2
 
 def private das_exe() : string {
     let argv <- get_command_line_arguments()
@@ -24,7 +22,6 @@ def private fixture(bound : int) : string {
     return "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n[export]\ndef main \{\n    var s = 0\n    for (i in range({bound})) \{\n        s += i * i\n    \}\n    print(\"PROBE \{s\}\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
 }
 
-//! the child's command line: a pinned DLL and an explicit module cache, both inside the test's directory
 def private jit_argv(script, cache, pinned : string; in_memory : bool) : array<string> {
     var argv <- [das_exe(), "-jit", "-log-compile-time", "-module-cache", cache, "-output", pinned, script]
     if (in_memory) {

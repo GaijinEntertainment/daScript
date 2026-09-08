@@ -247,13 +247,7 @@ namespace das {
                                     continue;
                                 }
                             }
-                            // guarded optional require. Path guard (contains '/'): proceed only when
-                            // the guard's OWN file resolves — the rail for pure-das packages (nothing
-                            // C++ to guard on) and cross-package dependency witnesses. Plain-name
-                            // guard: proceed only when the build has the module (guardModuleAvailable,
-                            // src/ast/ARCHITECTURE.md sec.2); no target-resolvability fallback (module
-                            // source dirs exist in every checkout regardless of build config).
-                            // Otherwise skip silently. Must match ast_requireGuardAvailable (parser_impl.cpp).
+                            // ARCHITECTURE.md sec.2
                             auto guardTaken = [&]() {
                                 if ( !hasReqGuard ) return true;
                                 if ( reqGuard.find('/')!=string::npos ) {
@@ -269,7 +263,7 @@ namespace das {
                                 return src + 6 < src_end && memcmp(src, "public", 6) == 0;
                             };
                             if ( isReq && src[0]=='[' ) {
-                                // `require [group]`: one record per registered member (src/ast/ARCHITECTURE.md sec.2)
+                                // ARCHITECTURE.md sec.2
                                 src ++;
                                 while ( src < src_end && (src[0]==' ' || src[0]=='\t') ) {
                                     src ++;
@@ -813,9 +807,7 @@ namespace das {
             }
             return false;
         }
-        // the requires the source takes today - guards and groups re-applied - against the set the
-        // record was written under: a member a group gained or a guard a build flipped changes
-        // the module's dependencies without touching its bytes (ARCHITECTURE.md sec.1)
+        // ARCHITECTURE.md sec.1
         {
             vector<string> currentReq;
             if ( auto fi = access->getFileInfo(fileName) ) {
@@ -1601,7 +1593,7 @@ namespace das {
                 *serializer_write << get<1>(dep);
                 *serializer_write << get<2>(dep);
             }
-            // the requires the parse took, guards and groups already applied (ARCHITECTURE.md sec.1)
+            // ARCHITECTURE.md sec.1
             uint32_t reqCount = uint32_t(program->allRequireDecl.size());
             *serializer_write << reqCount;
             for ( auto & req : program->allRequireDecl ) {
@@ -1904,8 +1896,6 @@ namespace das {
         auto savedModuleName = env->g_compilingModuleName;
         env->serializer_read = nullptr;
         env->serializer_write = nullptr;
-        // the walk's symbol-use passes rewrite `used` on every shared function and global; the caller
-        // may be mid-simulate with a JIT reading those flags, so they come back as they were
         vector<pair<Function *, bool>> usedFunctions;
         vector<pair<Variable *, bool>> usedVariables;
         Module::foreach([&](Module * mod) {

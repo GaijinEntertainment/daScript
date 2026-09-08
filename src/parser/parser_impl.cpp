@@ -1222,16 +1222,7 @@ namespace das {
         }
     }
 
-    // Optional require `require ?guard target`: when the guard module is not available, skip the
-    // require entirely (no error) — WITHOUT resolving the target (matches the collector; a
-    // skipped require must not probe file paths). A present guard with a missing target still
-    // errors in the require itself.
-    // Path guard (contains '/'): availability = the guard's OWN file resolves — the rail for
-    // pure-das packages (nothing C++ to guard on) and cross-package dependencies the target's
-    // resolvability can't express. Plain-name guard: the build has the module
-    // (guardModuleAvailable, src/ast/ARCHITECTURE.md sec.2). No target-resolvability
-    // fallback: module source dirs are present in every checkout regardless of build config.
-    // Must match the require collector's rule (ast_parse.cpp getAllRequireReq).
+    // src/ast/ARCHITECTURE.md sec.2
     static bool ast_requireGuardAvailable ( yyscan_t scanner, string * guard ) {
         if ( !guard ) return true;
         bool guardAvailable;
@@ -1255,8 +1246,7 @@ namespace das {
         if ( modalias ) delete modalias;
     }
 
-    // `require [group]`: one require per registered member, in registration order; an empty or
-    // unknown group adds nothing (src/ast/ARCHITECTURE.md sec.2)
+    // src/ast/ARCHITECTURE.md sec.2
     void ast_requireModuleGroup ( yyscan_t scanner, string * group, bool pub, const LineInfo & atName, string * guard ) {
         if ( ast_requireGuardAvailable(scanner, guard) ) {
             for ( const auto & member : getModuleGroupMembers(*group) ) {
