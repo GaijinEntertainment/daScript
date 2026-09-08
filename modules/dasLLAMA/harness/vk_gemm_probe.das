@@ -786,7 +786,6 @@ class KhrPxBase : MoeCmBase {
         }
     }
 
-    //! the shipped tile's loop with f32 accumulators, stored as they are: the accumulator width alone
     def body_f32 {
         let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
         let wblk0 = sched[rb]
@@ -808,8 +807,8 @@ class KhrPxBase : MoeCmBase {
         let skh = (tid & 1u) * 16u
         let sbase = srow * KHRPX_STRIDE + skh
         let wrow = m0 + srow
-        let arow = (sg & 1u) * 64u    //! the subgroup's 64 weight rows
-        let bcol0 = (sg >> 1u) * 32u   //! the subgroup's 32 tokens
+        let arow = (sg & 1u) * 64u
+        let bcol0 = (sg >> 1u) * 32u
         var acc00, acc01, acc10, acc11, acc20, acc21, acc30, acc31 : coopmatAcc_f32_16x16
         var k = 0u
         while (k < pa.n) {
@@ -851,8 +850,6 @@ class KhrPxBase : MoeCmBase {
         coopmatStore(acc31, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
     }
 
-    //! the shipped tile's stage and accumulators on the earlier tiling - every subgroup a 16-row strip across all
-    //! 128 tokens, 1 A + 8 B fragment loads per 8 MMAs: the subgroup tiling alone
     def body_strip {
         let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
         let wblk0 = sched[rb]
@@ -927,8 +924,7 @@ class KhrPxBase : MoeCmBase {
         coopmatStore(o, y, int(yb + 112u * pa.d), int(pa.d), 1)
     }
 
-    //! the shipped tile's loop: eight subgroups as two rows of 64 weights by four columns of 32 tokens, 4 A + 2 B
-    //! fragment loads per 8 MMAs, f16 accumulators widened for the store; the staging is the half-row per thread
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
     def body {
         let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
         let wblk0 = sched[rb]
@@ -950,8 +946,8 @@ class KhrPxBase : MoeCmBase {
         let skh = (tid & 1u) * 16u
         let sbase = srow * KHRPX_STRIDE + skh
         let wrow = m0 + srow
-        let arow = (sg & 1u) * 64u    //! the subgroup's 64 weight rows
-        let bcol0 = (sg >> 1u) * 32u   //! the subgroup's 32 tokens
+        let arow = (sg & 1u) * 64u
+        let bcol0 = (sg >> 1u) * 32u
         var acc00, acc01, acc10, acc11, acc20, acc21, acc30, acc31 : coopmatAcc_f16_16x16
         var k = 0u
         while (k < pa.n) {
@@ -1005,16 +1001,14 @@ class KhrPxBase : MoeCmBase {
 
 [vk_dispatch(name = "khrpx_nil", grid = "wgs", params = "wgs : int64")]
 class KhrPxNil : KhrPxBase {
-    @ssbo @binding = 0 @role = "alias" @readonly wq : array<VkK4Blk>   //! bound, never read: the ceiling stages a constant
+    @ssbo @binding = 0 @role = "alias" @readonly wq : array<VkK4Blk>
 
-    [spirv_kernel(local_size_x = 256, name = "khrpx_nil_spv")]
+    [spirv_kernel(local_size_x = 256, name = "khrpx_nil_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout")]
     def run {
         body()
     }
 }
 
-//! the weight stage through the four-wide decode callback on the plane element - eight 16-bit lane loads and
-//! three scale words per 16 values, the stage the tile shipped with before the word stage
 [vk_dispatch(name = "khrpx_dec4", grid = "wgs", params = "wgs : int64")]
 class KhrPxDec4 : KhrPxBase {
     @ssbo @binding = 0 @readonly wq : array<VkK4Blk>
@@ -1036,8 +1030,7 @@ class KhrPxDec4 : KhrPxBase {
     }
 }
 
-//! the shipped tile's weight stage: a row's 16 values of one half-step are the low or the high nibbles of ONE
-//! 16-byte word (sub-block g = word g of the block's eight), the scale words read once
+//! the shipped tile's weight stage, copied: every lever arm below inherits it unmoved
 class KhrPxW4Base : KhrPxBase {
     @ssbo @binding = 0 @readonly wq4 : array<uint4>
 
@@ -1060,7 +1053,7 @@ class KhrPxW4Base : KhrPxBase {
     }
 }
 
-//! the shipped tile, copied: the control row every lever's arm is read against
+//! the shipped tile, copied: the control row every lever's arm is timed against
 [vk_dispatch(name = "khrpx_ship", grid = "wgs", params = "wgs : int64")]
 class KhrPxShip : KhrPxW4Base {
     [spirv_kernel(local_size_x = 256, name = "khrpx_ship_spv")]
@@ -1069,7 +1062,6 @@ class KhrPxShip : KhrPxW4Base {
     }
 }
 
-//! the shipped stage and loop with f32 accumulators
 [vk_dispatch(name = "khrpx_f32a", grid = "wgs", params = "wgs : int64")]
 class KhrPxF32a : KhrPxW4Base {
     [spirv_kernel(local_size_x = 256, name = "khrpx_f32a_spv")]
@@ -1078,7 +1070,6 @@ class KhrPxF32a : KhrPxW4Base {
     }
 }
 
-//! the shipped stage and accumulators on the 16-row strip tiling
 [vk_dispatch(name = "khrpx_strip", grid = "wgs", params = "wgs : int64")]
 class KhrPxStrip : KhrPxW4Base {
     [spirv_kernel(local_size_x = 256, name = "khrpx_strip_spv")]
@@ -1087,9 +1078,6 @@ class KhrPxStrip : KhrPxW4Base {
     }
 }
 
-//! the reference exe's geometry on the shipped stage: 128 threads, four subgroups as 2 x 2 of 64 x 64, sixteen
-//! f16 accumulators each, 4 A + 4 B fragment loads per 16 MMAs over one B stage; one thread stages a whole 32-k
-//! row of A and of B (about 245 registers per lane on the RTX 5060 Ti, one workgroup per SM)
 [vk_dispatch(name = "khrpx_wg128", grid = "wgs", params = "wgs : int64")]
 class KhrPxWg128 : KhrPxW4Base {
     [spirv_kernel(local_size_x = 128, name = "khrpx_wg128_spv")]
@@ -1112,8 +1100,8 @@ class KhrPxWg128 : KhrPxW4Base {
         let sg = gl_SubgroupID
         let sbase = srow * KHRPX_STRIDE
         let wrow = m0 + srow
-        let arow = (sg & 1u) * 64u    //! the subgroup's 64 weight rows
-        let bcol0 = (sg >> 1u) * 64u   //! the subgroup's 64 tokens
+        let arow = (sg & 1u) * 64u
+        let bcol0 = (sg >> 1u) * 64u
         var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13 : coopmatAcc_f16_16x16
         var acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
         var k = 0u
@@ -1197,7 +1185,7 @@ class KhrPxWg128 : KhrPxW4Base {
 
 let private KHR_ARMS = 8
 let private MMQ_ARMS = 5
-var private g_prof_arm = ""   //! `khrprof:<arm>` submits that arm alone, so a whole-trace profile reads one kernel
+var private g_prof_arm = ""
 
 //! the interleaved timing of one sweep's arms: after a two-submit warm-up each, every round times
 //! SUBMITS / ROUNDS submits of every arm in turn, and an arm's figure is its best round
@@ -1296,7 +1284,6 @@ def private khr_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var
     }
 }
 
-//! prof: one submit per arm in table order and no timing - the shape a GPU profiler's trace maps dispatches back from
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {   // nolint:STYLE038 — one interleaved measurement sweep over eight arms
     let fmt = int(KqFmt.k4)
@@ -1385,7 +1372,7 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
             raws |> push(raw)
         }
         if (prof) {
-            for (v in range(KHR_ARMS)) {   //! every arm in table order, or the one arm named after `khrprof:` so a whole-trace metric is that arm's
+            for (v in range(KHR_ARMS)) {
                 if (g_prof_arm == "" || strip(vnames[v]) == g_prof_arm) {
                     submit_wait(raws[v])
                 }

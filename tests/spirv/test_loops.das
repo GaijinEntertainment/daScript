@@ -98,9 +98,9 @@ def test_unroll_full(t : T?) {
         t |> equal(count_op(words, SpvOp.LoopMerge), 0, "ufor: no loop construct survives the unroll")
         t |> equal(count_op(words, SpvOp.IMul), 0, "ufor: every index multiply folded at emission")
         t |> equal(count_op(words, SpvOp.IAdd), 8, "ufor: one add per copy takes the invocation id; the index adds folded")
-        let fc = function_chain_indices(words)
+        let fc = function_storage_chain_indices(words)
         t |> equal(fc.chains, 23, "ufor: 8 + 8 + 7 element chains into the register block")
-        t |> equal(fc.dynamic, 0, "ufor: every chain into the block indexes with an OpConstant")
+        t |> equal(fc.dynamic_indices, 0, "ufor: every chain into the block indexes with an OpConstant")
         t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_3, "ufor: SPIR-V header version stays 1.3")
         validate(t, words, "ufor")
         delete words

@@ -225,21 +225,22 @@ differ, so a struct already at the plain type passes through untouched.
 
 ### 3.6 `for [unroll_full]` unrolls at emission {#unroll-full}
 
-A `for [unroll_full] (i in range(lo, hi))` with literal bounds emits `hi - lo` copies of its
-body and no loop construct: the visitor walks the body once per copy with the induction variable
-bound to that copy's `OpConstant`, then cuts the function section back to where the copies ended,
-discarding the walk the visitor makes on its own (the body's ids are consumed once more; no word
-survives). Integer arithmetic on such a constant folds at emission - a literal, the induction
-constant or an earlier fold on either side - so `acc[t * 16 + c]` chains an `OpConstant` index,
-the shape every driver's scalar-replacement pass promotes to registers; that is what lets a
-register block be written as a fixed array. A rolled loop, or the `Unroll` loop control
-`[unroll]` emits, leaves the same array a Function-storage variable indexed by the counter unless
-the driver both unrolls and scalarizes. The fold takes no operand the unroll did not derive, so a
-body without the hint emits word for word what it did. `break` and `continue` in the unrolled
-body are refused - there is no loop construct to target - and so is a bound that is not a literal:
-`[unroll]` is the driver's hint, `[unroll_full]` the emitter's guarantee. dasMetal lowers the same
-hint to `#pragma clang loop unroll(full)` and the JIT to `llvm.loop.unroll.full`; the interpreter
-ignores loop hints, so the kernel's CPU run is the same body rolled.
+A `for [unroll_full] (i in range(lo, hi))` over literal bounds emits `hi - lo` copies of its body
+and no loop construct: the visitor walks the body once per copy with the induction variable bound
+to that copy's `OpConstant`, then rewinds the function section past the walk it makes on its own.
+Integer arithmetic on such a constant folds at emission - a literal, the induction constant or an
+earlier fold on either side - so `acc[t * 16 + c]` chains an `OpConstant` index, the shape drivers
+promote to registers: a fixed array of cooperative-matrix tiles (`coopmatAcc_f16_16x16[16]`) is
+one Function-storage `OpTypeArray` over the tile type, each element reached through a constant
+`OpAccessChain`, so a 2-D subgroup tiling's accumulators stay in registers where a rolled loop or
+the driver hint `[unroll]` leaves them indexed by the counter. The fold takes no operand the unroll
+did not derive, so a body without the hint emits word for word what it did. A bound the compiler
+folds counts as a literal (lint and LSP compiles run with optimizations off, so `range(N)` and
+`int(KHR_KHALF_WORDS)` arrive unfolded and the emitter asks for the fold), so a bound may be a named
+module constant; a bound it cannot fold, and `break` or `continue` in the body, are refused; an error
+the body raises is reported once, not per copy. dasMetal lowers the hint to `#pragma clang loop
+unroll(full)`, the JIT to `llvm.loop.unroll.full`; the interpreter ignores it: the CPU run is the
+same body rolled.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 

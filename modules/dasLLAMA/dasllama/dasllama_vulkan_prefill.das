@@ -553,12 +553,12 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let np = g_rd.pf_np
     let eps = g_rd.eps
     let x6 = pf_dnx6(l)
-    let dnk = !x6 && kq_sb(L.fqkv)   // off the f16 feed a K-quant qkv/z pair reads the Q8_K activation form, the attention head's fqk twin
+    let xq8k = !x6 && kq_sb(L.fqkv)
     if (x6) {
         var pcc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
     }
-    if (dnk) {
+    if (xq8k) {
         var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
         enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
     } elif (!x6 || !g_rd.dn_ba_f32) {
@@ -582,7 +582,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         enc_dn_ba_cls(raw, h, L.pf_dn_ba_set, pcb, dn_ba_wgs(wlen, nvh))
         pfq_ts(raw)
     } else {
-        if (dnk) {   // the qkv/z GEMMs read the rows as Q8_K; the q8 beta/alpha GEMMs read them as Q8_0
+        if (xq8k) {   // the qkv/z GEMMs read the rows as Q8_K; the q8 beta/alpha GEMMs read them as Q8_0
             var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
             enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pcq, (wlen * dim / 4l + 255l) / 256l)
         }

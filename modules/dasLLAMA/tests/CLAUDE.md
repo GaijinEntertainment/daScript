@@ -353,7 +353,7 @@ tile (mode 3), and the bars hold there too. The mixed twin (`Qwen3.5-0.8B-Q4_K_M
 same recipe with `--tensor-type ssm_out=q8_0` - the unsloth UD files' shape) runs the two K-quant
 cells with the out plane Q8_0 beside K-quant qkv/z: the one fixture where a recurrent layer's x feed
 and o feed part ways, and the cells hold that its prefill never requantized the block input to Q8_K
-where a coopmat feed serves the K-quant planes (the KHR arm's routing witness - a per-layer feed
+where the f16 feed admits the K-quant planes (the KHR arm's routing witness - a per-layer feed
 decision would send qkv/z to the sdot4 tile for the out plane's sake).
 `test_gpu_resident_qwen2.das` - stocked suite; the whole-model resident driver on a qwen2
 (Qwen2.5-0.5B-Instruct-Q8_0, `DASLLAMA_GPU=1`): the q/k/v projection bias folded into the rope

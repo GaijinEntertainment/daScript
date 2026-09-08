@@ -4682,8 +4682,8 @@ class template KqCm2BatchT : MoeCmBase {
     @ssbo @binding = 1 @role = "weight" ws : array<ST>    // the scale plane (q8: f16 per block; kq: 5 words per superblock)
     @ssbo @binding = 3 @role = "alias" xf16 : array<float16>    // f16 activation plane (the tensor loads' view)
     @ssbo @binding = 3 @role = "alias" xf16w4 : array<uint4>    // the same plane as 16-byte words: the KHR arm's activation stage
-    @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wq4 : array<uint4>   //! the quant plane as 16-byte words: the KHR weight stage of a format whose 16-value run is one such word
-    @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wqw : array<uint>    //! the quant plane as 32-bit words: the KHR weight stage of the byte-granular grid formats
+    @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wq4 : array<uint4>
+    @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wqw : array<uint>
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                             // the region's block base, staged for the decode
     @template_constant BN : uint = 256u                   // the token column
@@ -4931,8 +4931,8 @@ class template KqCm2BatchT : MoeCmBase {
         let sbase = srow * KHR_STRIDE + khalf * KHR_KHALF_WORDS
         let wrow_in_d = wrow < pa.d
         let trow_in_cnt = trow < cnt
-        let arow = (sg & 1u) * 64u    //! the subgroup's 64 weight rows of the tile's 128
-        let bcol0 = (sg >> 1u) * 32u   //! the subgroup's 32 tokens of the tile's 128
+        let arow = (sg & 1u) * 64u
+        let bcol0 = (sg >> 1u) * 32u
         var acc : coopmatAcc_f16_16x16[8]   //! [r * 2 + c]: weight fragment r against token fragment c
         var k = k0
         while (k < k1) {

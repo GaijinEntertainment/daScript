@@ -33,7 +33,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltanet bar test_deltanet.das holds too
 //! the K-quant bar on the f16 mirror: CPU-vs-device rounding sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file 0.19-0.36), with no growth and the one-step-off control well past it
 let private DN_LOGIT_BAR_REL_KQ = 0.06
-//! the K-quant bar on the quant feed (no coopmat tile serves the planes, the prefill's activations ride Q8_K): the mixed twin's two-window cell reads 0.084 of an 11.6 max logit at one step, argmax unchanged, the rest under 0.05
+//! the K-quant bar on the quant feed (no coopmat tile serves the planes, the prefill's activations ride Q8_K): the mixed twin's two-window cell under `DASLLAMA_COOPMAT=sdot4` on the RTX 5060 Ti reads 0.084 of an 11.6 max logit at one step, argmax unchanged, the rest under 0.05
 let private DN_LOGIT_BAR_REL_KQ_QUANT = 0.10
 let private PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
 
@@ -72,8 +72,7 @@ def private q8k_requants() : int64 {
     }
 }
 
-//! true where the prefill's f16 feed admits the K-quant planes: an NV_coopmat2 device, or the KHR kq tile at subgroup 32
-def private kq_coopmat_feed() : bool {
+def private f16_feed_admits_kq() : bool {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return g_gpu.coopmat_mode == COOPMAT_CM2 || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on())
     } else {
@@ -145,13 +144,12 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; kq : bool; q8ou
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
         if (kq && gpu.prefill_q8k_rq >= 0l) {
-            // the x feed's routing witness: a recurrent layer's qkv/z pair rides the coopmat tiles off an f16 feed,
-            // or requantizes the block input to Q8_K for the sdot4 tile - one requant per layer per window
-            to_log(LOG_INFO, "prefill ({n} tokens) [{tile_arm_tag()}]: {gpu.prefill_q8k_rq} Q8_K requants over {nrec} recurrent layers, coopmat feed {kq_coopmat_feed()}\n")
-            if (kq_coopmat_feed()) {
-                t |> success(gpu.prefill_q8k_rq < nrec, "on the coopmat feed the prefill never requantized the block input to Q8_K for the qkv/z pair ({gpu.prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
+            //! off the f16 feed the x route requants once per recurrent layer per window - the threshold both arms read
+            to_log(LOG_INFO, "prefill ({n} tokens) [{tile_arm_tag()}]: {gpu.prefill_q8k_rq} Q8_K requants over {nrec} recurrent layers, f16 feed admits kq {f16_feed_admits_kq()}\n")
+            if (f16_feed_admits_kq()) {
+                t |> success(gpu.prefill_q8k_rq < nrec, "on the f16 feed the prefill never requantized the block input to Q8_K for the qkv/z pair ({gpu.prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
             } else {
-                t |> success(gpu.prefill_q8k_rq >= nrec, "off the coopmat feed the K-quant qkv/z pair reads the Q8_K form ({gpu.prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
+                t |> success(gpu.prefill_q8k_rq >= nrec, "off the f16 feed the K-quant qkv/z pair reads the Q8_K form ({gpu.prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
             }
         }
         delete sg
@@ -159,7 +157,7 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; kq : bool; q8ou
         var sc <- create_session(tr, mirror_kv_dtype())
         var cpu <- feed_logits(tr, sc, prompt, toks)
         delete sc
-        let rel = kq ? (kq_coopmat_feed() ? DN_LOGIT_BAR_REL_KQ : DN_LOGIT_BAR_REL_KQ_QUANT) : DN_LOGIT_BAR_REL
+        let rel = kq ? (f16_feed_admits_kq() ? DN_LOGIT_BAR_REL_KQ : DN_LOGIT_BAR_REL_KQ_QUANT) : DN_LOGIT_BAR_REL
         for (st in range64(long_length(cpu.rows))) {
             let diff = logits_maxdiff(gpu.rows[st], cpu.rows[st])
             let bar = rel * logits_maxabs(cpu.rows[st])
@@ -219,8 +217,6 @@ def test_gpu_resident_hybrid_kq(t : T?) {
     }
 }
 
-// the mixed twin (K-quant qkv/z, the out plane Q8_0 - the unsloth UD files' shape): a recurrent
-// layer whose x feed and o feed part ways on the KHR arm - the kq tiles for qkv/z, the q8 route for out
 [test]
 def test_gpu_resident_hybrid_kq_q8out(t : T?) {
     t |> run("Qwen3.5-0.8B-Q4_K_M-q8out: K-quant qkv/z with a Q8_0 out plane on the resident driver vs the CPU chain, one window") @(t : T?) {

@@ -136,3 +136,10 @@ buffer form puts every grid GEMV in the k-format band (iq2s 388, iq2xs 407, iq2x
 iq3s 415 GB/s on the reference card, `harness/vk_gemv_probe.das`). The buffer dies in the
 model-drop sweep with every other device buffer, and its handle zeroes there, so the next
 model's first kq set rebuilds it.
+
+### 2.2ac The tile probe's arms share one descriptor set layout {#khrx-shared-set-layout}
+
+The `khrx` arms of `harness/vk_gemm_probe.das` bind one descriptor set layout, so an arm's figure
+differs from the shipped class's by its body alone and never by a binding difference. The `nil`
+ceiling arm therefore binds a weight plane its constant-fill stage never reads - the rig's one
+deliberately unread buffer.

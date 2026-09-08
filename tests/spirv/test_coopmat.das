@@ -107,9 +107,9 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         t |> equal(count_op(words, SpvOp.CooperativeMatrixMulAddKHR), 4, "four OpCooperativeMatrixMulAddKHR, one per copy")
         t |> equal(count_op(words, SpvOp.FConvert), 4, "four OpFConvert widenings")
         t |> equal(count_op(words, SpvOp.CooperativeMatrixStoreKHR), 4, "four stores")
-        let fc = function_chain_indices(words)
+        let fc = function_storage_chain_indices(words)
         t |> equal(fc.chains, 12, "twelve element chains into the tile array (read, write and convert per copy)")
-        t |> equal(fc.dynamic, 0, "every chain into the tile array indexes with an OpConstant")
+        t |> equal(fc.dynamic_indices, 0, "every chain into the tile array indexes with an OpConstant")
         t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_6, "SPIR-V header version 1.6")
         let r = validate_spirv(words, "vulkan1.3")
         if (r.ran) {

@@ -298,9 +298,7 @@ def public rfor_words : array<uint> {
     return clone_to_move(rfor_spv)
 }
 
-// [unroll_full] with literal bounds unrolls at emission: no loop construct, the induction variable an OpConstant
-// per copy, its integer arithmetic folded so every `acc[...]` chains a literal index. The nested pair folds across
-// two induction constants and a `uint()` re-type of one; the read loop starts at a non-zero bound.
+//! three loops, three folds: the bare induction constant, a nested pair through a `uint()` re-type, a non-zero lower bound.
 [compute_shader(local_size_x=64, name="ufor_spv"), marker(no_coverage)]
 def ufor {
     let gi = gl_GlobalInvocationID.x
@@ -2332,9 +2330,6 @@ def public coopmat_f16acc_words : array<uint> {
     return clone_to_move(coopmat_f16acc_spv)
 }
 
-// ===== an ARRAY of accumulator tiles under [unroll_full]: the accumulator block a 2-D subgroup tiling holds
-// (llama.cpp's `sums[]`). The array is one OpTypeArray over the tile type in Function storage; every element
-// access chains a constant index, so the block stays in registers. =====
 var @ssbo @binding = 0 cma_a : array<float16>
 var @ssbo @binding = 1 cma_b : array<float16>
 var @ssbo @binding = 2 cma_c : array<float>
@@ -2360,9 +2355,7 @@ def public coopmat_arr_words : array<uint> {
     return clone_to_move(coopmat_arr_spv)
 }
 
-// Every OpAccessChain rooted in a Function-storage variable indexes with OpConstant ids alone - the register-block
-// shape [unroll_full] exists to produce. Returns the chain count and how many index operands were not constants.
-def public function_chain_indices(words : array<uint>) : tuple<chains : int; dynamic : int> {
+def public function_storage_chain_indices(words : array<uint>) : tuple<chains : int; dynamic_indices : int> {
     var consts : table<uint>
     var fvars : table<uint>
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
@@ -2373,18 +2366,18 @@ def public function_chain_indices(words : array<uint>) : tuple<chains : int; dyn
         }
     }
     var chains = 0
-    var dynamic = 0
+    var dynamic_indices = 0
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (opcode == uint(SpvOp.AccessChain) && n >= 4 && key_exists(fvars, w[s + 2])) {
             chains++
             for (i in range(3, n)) {
                 if (!key_exists(consts, w[s + i])) {
-                    dynamic++
+                    dynamic_indices++
                 }
             }
         }
     }
-    return (chains = chains, dynamic = dynamic)
+    return (chains = chains, dynamic_indices = dynamic_indices)
 }
 
 // ===== packed integer dot product: sdot4 -> OpSDot with the PackedVectorFormat4x8Bit literal.
