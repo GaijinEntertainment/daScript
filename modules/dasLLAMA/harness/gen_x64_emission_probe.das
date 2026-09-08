@@ -15,6 +15,7 @@ options _dasllama_internal = true
 // per-variant instruction-count gates).
 
 require dasllama/dasllama_math_gen
+require llvm   // nolint:STYLE030 - the witness, unguarded on purpose: the `_variants()` registries below exist only with dasLLVM, so a host without it skips this program as missing its prerequisite
 
 [export]
 def main {

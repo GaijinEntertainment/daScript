@@ -26,7 +26,7 @@ def modes_add(a, b : int) : int {
 [export]
 def main {
     static_if (typeinfo module_exists(llvm_tune)) {
-        var n = 2  // nolint:LINT003 — var defeats const-fold so the calls survive to codegen
+        var n = 2  // nolint:LINT003,LINT019 — var defeats const-fold so the calls survive to codegen; the line sits in the llvm_tune static_if half, so a host without dasLLVM never compiles it
         var vs <- modes_add_variants()
         for (v in vs) {
             print("VARIANT {v._0} -> {invoke(v._1, n, 3)}\n")
@@ -42,7 +42,7 @@ def main {
 
 [test]
 def test_modes_client_fallback(t : T?) {
-    var n = 2  // nolint:LINT003 — var defeats const-fold so the calls survive to codegen
+    var n = 2  // nolint:LINT003,LINT019 — var defeats const-fold so the calls survive to codegen; the line sits in the llvm_tune static_if half, so a host without dasLLVM never compiles it
     let r = modes_add(n, 3)
     t |> success(r == 6 || r == 5)  // stamped fallback k1 tier (jit) or reference tier
     let kv = modes_kv()

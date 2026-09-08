@@ -2188,6 +2188,44 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
+    //! every module the require reaches, public or not - what vanishes with the require
+    def st029_collect_all_deps(mod : Module?; var reached : table<string; Module?>) : void {
+        module_for_each_dependency(mod) $(dep, _is_pub) {
+            if (dep == null) return
+            let dn = "{dep.name}"
+            if (dn == "" || dn == "$" || dn == "builtin") return
+            if (!key_exists(reached, dn)) {
+                reached |> insert(dn, dep)
+                st029_collect_all_deps(dep, reached)
+            }
+        }
+    }
+
+    def st029_cached_has_hook(mod : Module?; var hook_cache : table<string; bool>) : bool {
+        let mn = "{mod.name}"
+        if (key_exists(hook_cache, mn)) return hook_cache?[mn] ?? false
+        let has = st029_module_has_lifecycle_hook(mod)
+        hook_cache |> insert(mn, has)
+        return has
+    }
+
+    //! true when a lifecycle hook rides only through this require: a hook-bearing module in
+    //! `closure` that no other require of the file reaches, and that `keep` - the module the
+    //! rule would have the file require instead - does not reach either
+    def st029_hook_only_through(closure : table<string; Module?>; hook_reach : table<string; int>;
+                                var keep : Module?) : bool {
+        var kept : table<string; Module?>
+        if (keep != null) {
+            kept |> insert("{keep.name}", keep)
+            st029_collect_all_deps(keep, kept)
+        }
+        for (mn, reach in keys(hook_reach), values(hook_reach)) {
+            if (reach > 1 || !key_exists(closure, mn) || key_exists(kept, mn)) continue
+            return true
+        }
+        return false
+    }
+
     def st029_check_requires(prog : ProgramPtr) : void {
         if (!analyze_requires || this_module == null) return
         let this_name = "{this_module.name}"
@@ -2212,6 +2250,20 @@ class StyleLintVisitor : AstVisitor {
                 if (!key_exists(module_files, fname)) module_files |> insert(fname)
             }
         }
+        // per hook-bearing module, how many of this file's requires reach it - one means it rides only through that require
+        var hook_cache : table<string; bool>
+        var hook_reach : table<string; int>
+        prog |> for_each_require_declaration() $ [unused_argument(req_name, file, pub)] (mod, req_name, file, pub, at) {
+            if (mod == null || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
+            var reached : table<string; Module?>
+            reached |> insert("{mod.name}", mod)
+            st029_collect_all_deps(mod, reached)
+            for (mn, m in keys(reached), values(reached)) {
+                if (st029_cached_has_hook(m, hook_cache)) {
+                    hook_reach[mn] = (hook_reach?[mn] ?? 0) + 1
+                }
+            }
+        }
         prog |> for_each_require_declaration() $ [unused_argument(file)] (mod, req_name, file, pub, at) {
             if (mod == null || pub
                 || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
@@ -2231,12 +2283,16 @@ class StyleLintVisitor : AstVisitor {
                 if (closure?[cm] ?? false) via |> push(cm)
             }
             var line_at = at
+            var reached : table<string; Module?>
+            reached |> insert(mname, mod)
+            st029_collect_all_deps(mod, reached)
             if (used_count == 1 && !empty(via)) {
                 let mods = via[0]
+                return if (st029_hook_only_through(reached, hook_reach, reached?[mods] ?? null))
                 style_warning("STYLE029: require {req_name} is used only for the module it re-exports ({mods}); require it directly and drop {req_name}", line_at)
                 return
             }
-            return if (used_count > 0)
+            return if (used_count > 0 || st029_hook_only_through(reached, hook_reach, null))
             style_warning("STYLE030: require {req_name} is unused - no symbol from it (or a module it re-exports) is referenced; drop it", line_at)
         }
     }

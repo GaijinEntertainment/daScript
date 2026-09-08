@@ -11,6 +11,7 @@ require dasllama/dasllama_math_gen
 require dasllama/dasllama_math
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema
+require llvm   // nolint:STYLE030 - the witness, unguarded on purpose: the `_variants()` registries this bench runs exist only with dasLLVM, so a host without it skips this program as missing its prerequisite
 require llvm/daslib/llvm_env
 require math
 require strings

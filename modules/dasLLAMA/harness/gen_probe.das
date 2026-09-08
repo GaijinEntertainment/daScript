@@ -6,7 +6,7 @@ options _dasllama_internal = true
 // Greedy continuation probe: renders one user turn through the model's chat template (thinking
 // off), prints the rendered prompt and the greedy continuation - the text two engines must agree on
 // before their speculative acceptance rates can be compared.
-require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // nolint:STYLE029,LINT019 — umbrella fires each arch [init] registration; on a host without dasMetal only dasllama_common's symbols remain, the das_metal half reaches the generation API it re-exports
 require dasllama/dasllama_common
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require dasllama/dasllama_image   // load_model_cached - the .dlim rail

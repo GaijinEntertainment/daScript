@@ -11,7 +11,7 @@ require dasllama/dasllama_load
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 — load_model_cached, used only inside the das_metal static_if half
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — g_env_harness, read only inside the das_metal static_if half
 require ?das_metal dasllama/dasllama_metal_prefill
-require ../performance/profile_common.das   // tune_gate + apply_box_profile_runtime — the standing pre-measure stack
+require ../performance/profile_common.das   // nolint:STYLE029,LINT019 — tune_gate + apply_box_profile_runtime, the standing pre-measure stack, used only inside the das_metal static_if half
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join, used only inside the das_metal static_if half
 require math

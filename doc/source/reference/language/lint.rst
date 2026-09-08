@@ -2831,7 +2831,10 @@ A non-public ``require X`` whose only referenced symbols come from modules
 that ``X`` re-exports (``require ... public``) — none from ``X`` itself — is
 an indirect dependency. Require those modules directly and drop ``X``. Skipped
 when ``X`` provides macros or an ``[init]`` (requiring it has a side effect
-beyond symbol visibility).
+beyond symbol visibility), and when a lifecycle hook (``[init]``, ``[finalize]``,
+``[before_reload]``, ``[after_reload]``, ``[live_command]``) is reachable only
+through ``X`` - an umbrella whose side-effect requires register arches, say -
+because the direct require would drop the hook.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -2848,8 +2851,9 @@ STYLE030 — entirely-unused ``require``
 
 A non-public ``require X`` where no symbol from ``X`` (or any module it
 re-exports) is referenced anywhere in the file. Remove it. Skipped when ``X``
-provides any macro or an ``[init]``, or only re-exports builtins used through
-it. Suppress a deliberate keep with ``// nolint:STYLE030``.
+provides any macro or an ``[init]``, when a lifecycle hook is reachable only
+through ``X`` (as for STYLE029), or when ``X`` only re-exports builtins used
+through it. Suppress a deliberate keep with ``// nolint:STYLE030``.
 
 .. das-doc: alt
 .. code-block:: das
