@@ -44,6 +44,7 @@ foreach(_pair "01_pure/pure_math.das" "02_heap/heap_demo.das"
             "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
+            "${PROJECT_SOURCE_DIR}/daslib/c_api_header.das"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         COMMENT "Standalone AOT (nano): ${_das_name}"
         VERBATIM

@@ -26,12 +26,12 @@ DECLARE_MODULE(Module_HV);
 
 static int run_contexts ( char * self ) {
     int failures = 0;
-    standalone_modules_fixture::Standalone fio_only;
+    ctx_standalone_modules_fixture::Standalone fio_only;
     if ( !fio_only.has_path_variable() ) {
         printf("has_path_variable() = false, expected true\n");
         failures ++;
     }
-    service_probe::Standalone probe;
+    ctx_service_probe::Standalone probe;
     const int status = probe.http_status((char *)"http://127.0.0.1:1/");
     if ( status != -1 ) {
         printf("http_status(dead port) = %d, expected -1\n", status);

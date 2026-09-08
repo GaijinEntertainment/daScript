@@ -925,6 +925,18 @@ def convert_to_expression(value : auto ==const) {
     return <- convert_to_expression(value, LineInfo())
 }
 
+def find_annotation(var fn : Function?; ann_name : string) : AnnotationDeclaration? {
+    if (fn == null) {
+        return null
+    }
+    for (ann in fn.annotations) {
+        if (ann != null && ann.annotation.name == ann_name) {
+            return ann
+        }
+    }
+    return null
+}
+
 def find_annotation(mod_name, ann_name : string) : Annotation const? {
     //! Finds an annotation by module name and annotation name in the compiling program.
     var mod = find_compiling_module(mod_name)

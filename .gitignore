@@ -48,6 +48,8 @@ modules/**/*.shared_module
 examples/**/*.shared_module
 _aot_generated/
 _llvm_aot_generated/
+# the -ctx driver writes each fixture's daslang bindings beside the host that requires them
+tests-cpp/big/standalone_ctx/_*_c.das
 .vscode/
 .cache/
 

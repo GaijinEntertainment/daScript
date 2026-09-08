@@ -37,6 +37,7 @@ if(TARGET libDasModuleHV AND TARGET libDasModuleStdDlg AND TARGET libDasModuleSt
             "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
+        "${PROJECT_SOURCE_DIR}/daslib/c_api_header.das"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         COMMENT "Standalone AOT (full runtime): watchdog"
         VERBATIM

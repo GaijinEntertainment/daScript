@@ -1471,7 +1471,7 @@ namespace das {
 
     void Program::setPrintFlags() {
 #if defined(STANDALONE_MODE)
-        ast_print::Standalone ctx;
+        ctx_ast_print::Standalone ctx;
         ctx.setFlags(this);
 #else
         ClearPrinterFlags cflags;

@@ -33,6 +33,7 @@ function(das_nano_example name dir das_file)
             ${ARGN}
             "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
+            "${PROJECT_SOURCE_DIR}/daslib/c_api_header.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         COMMENT "Standalone AOT: ${das_file}"
@@ -69,6 +70,7 @@ if(NOT DAS_HV_DISABLED)
             "${CMAKE_CURRENT_SOURCE_DIR}/06_full_runtime/service_probe.das"
             "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
+            "${PROJECT_SOURCE_DIR}/daslib/c_api_header.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         COMMENT "Standalone AOT (full runtime): service_probe.das"
