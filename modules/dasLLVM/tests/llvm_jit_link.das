@@ -1,0 +1,92 @@
+options gen2
+require dastest/testing_boost public
+require daslib/fio
+require daslib/strings_boost
+require strings
+require math
+
+// The JIT's entry (llvm_jit_link) takes a DLL cache hit without the emitter: the plan names
+// the DLL, the probe binds what it holds, and llvm_macro stays out of the process. A miss, an
+// in-memory run and a stale pinned DLL bring the emitter in through require_module_now.
+
+def private das_exe() : string {
+    let argv <- get_command_line_arguments()
+    return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
+}
+
+def private tail(s : string) : string {
+    return slice(s, max(0, length(s) - 600))
+}
+
+//! the fixture prints its answer and whether the emitter module is in the process; `options
+//! log_compile_time` is what turns the backend's phase line on
+def private fixture(bound : int) : string {
+    return "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n[export]\ndef main \{\n    var s = 0\n    for (i in range({bound})) \{\n        s += i * i\n    \}\n    print(\"PROBE \{s\}\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
+}
+
+//! the child's command line: a pinned DLL and an explicit module cache, both inside the test's directory
+def private jit_argv(script, cache, pinned : string; in_memory : bool) : array<string> {
+    var argv <- [das_exe(), "-jit", "-log-compile-time", "-module-cache", cache, "-output", pinned, script]
+    if (in_memory) {
+        argv |> push("-jit-no-cache")
+    }
+    return <- argv
+}
+
+def private count_prefix(dir : string; prefix : string) : int {
+    var n = 0
+    fio::dir(dir) $(name) {
+        if (name |> starts_with(prefix)) {
+            n++
+        }
+    }
+    return n
+}
+
+[test]
+def test_jit_link(t : T?) {
+    var terr : string
+    let tmp = create_temp_directory("das_jit_link", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let script = path_join(tmp, "use_jit.das")
+    let cache = path_join(tmp, "mc.dascache")
+    let pinned = path_join(tmp, "jit_probe")
+    fwrite(script, fixture(10))
+    t |> run("a cold run misses the pinned DLL, brings the emitter in and emits") @(t : T?) {
+        var out = ""
+        let rc = run_and_capture(jit_argv(script, cache, pinned, false), out, 300.0)
+        t |> equal(0, rc, "the fixture runs: {tail(out)}")
+        t |> success(find(out, "PROBE 285") >= 0, "the fixture answered: {tail(out)}")
+        t |> success(find(out, "LLVM JIT: DLL cache miss") >= 0 && find(out, "(codegen") >= 0, "the cold run is a miss that emits: {tail(out)}")
+        t |> success(find(out, "EMITTER true") >= 0, "the emitter module joined the process for the miss: {tail(out)}")
+        t |> equal(1, count_prefix(tmp, "late~llvm_macro-"), "the emitter's late walk kept its cache beside the explicit module cache")
+    }
+    t |> run("a warm run binds the pinned DLL from the link module alone") @(t : T?) {
+        var out = ""
+        let rc = run_and_capture(jit_argv(script, cache, pinned, false), out, 300.0)
+        t |> equal(0, rc, "the fixture runs: {tail(out)}")
+        t |> success(find(out, "PROBE 285") >= 0, "the fixture answered: {tail(out)}")
+        t |> success(find(out, "LLVM JIT: DLL cache hit") >= 0 && find(out, "(cache") >= 0, "the warm run is a hit: {tail(out)}")
+        t |> success(find(out, "EMITTER false") >= 0, "the emitter module never entered the process on the hit: {tail(out)}")
+        t |> success(find(out, "LLVM JIT time: hash ") >= 0 && find(out, " probe ") >= 0 && find(out, " install ") >= 0, "the hit path prints its phases: {tail(out)}")
+    }
+    t |> run("an in-memory run takes the emitter path and its finalizer frees the engine there") @(t : T?) {
+        var out = ""
+        let rc = run_and_capture(jit_argv(script, cache, pinned, true), out, 300.0)
+        t |> equal(0, rc, "the fixture runs and exits cleanly: {tail(out)}")
+        t |> success(find(out, "PROBE 285") >= 0 && find(out, "EMITTER true") >= 0 && find(out, "(codegen") >= 0, "in-memory codegen ran in the emitter: {tail(out)}")
+    }
+    t |> run("a changed fixture makes the pinned DLL stale, and the miss re-emits") @(t : T?) {
+        fwrite(script, fixture(11))
+        var out = ""
+        let rc = run_and_capture(jit_argv(script, cache, pinned, false), out, 300.0)
+        t |> equal(0, rc, "the fixture runs: {tail(out)}")
+        t |> success(find(out, "PROBE 385") >= 0, "the new body answered: {tail(out)}")
+        t |> success(find(out, "LLVM JIT: DLL cache miss") >= 0 && find(out, "EMITTER true") >= 0, "the stale DLL is a miss that emits: {tail(out)}")
+    }
+    var err : string
+    rmdir_rec(tmp, err)
+}

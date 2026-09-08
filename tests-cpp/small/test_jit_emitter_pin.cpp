@@ -32,6 +32,8 @@ static const char * EMITTER_FILES[] = {
     "llvm_cpu_class.das",
     "llvm_tune_fat_word.das",
     "llvm_code_shell.das",
+    "llvm_jit_plan.das",    // the DLL key fold and the install phase's extern-slot resolution
+    "llvm_jit_link.das",    // the cache-hit install path
 };
 
 // normalized to LF so Windows and Linux checkouts agree
@@ -78,6 +80,6 @@ TEST_CASE("jit emitter sources match the pinned hash") {
     char pinLiteral[32];
     snprintf(pinLiteral, sizeof(pinLiteral), "0x%llxul", (unsigned long long) emitterHash);
     INFO("emitter sources changed: set LLVM_JIT_EMITTER_HASH = " << pinLiteral
-        << " in llvm_jit_run.das, and bump LLVM_JIT_CODEGEN_VERSION beside it if emitted code changed");
+        << " in llvm_jit_run.das, and bump LLVM_JIT_CODEGEN_VERSION in llvm_jit_plan.das if emitted code changed");
     CHECK_EQ(emitterHash, pinned);
 }

@@ -1,0 +1,1 @@
+Registers ``member`` - a require path, spelled the way a ``require`` would spell it - under the group name ``group``, so ``require [group]`` in any module brings it in. A ``.das_module`` descriptor calls it beside ``register_native_path``; the scan records the row in the manifest and replays it on a warm start.

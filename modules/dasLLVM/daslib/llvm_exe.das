@@ -1031,7 +1031,8 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     var any_pinvoke = false
     var used_modules : table<string; bool>
     prog |> for_each_module() $(m) {
-        if (m.name == "llvm_func" || m.name == "llvm_macro") return
+        // the JIT's own entry modules carry the [no_jit] finalizer that frees the jit state; an exe has no jit state
+        if (m.name == "llvm_func" || m.name == "llvm_macro" || m.name == "llvm_jit_link") return
         m |> for_each_function("") $(fun) {
             if (fun.flags.used) {
                 if (!fun.flags.builtIn && fun.moreFlags.requestNoJit) {

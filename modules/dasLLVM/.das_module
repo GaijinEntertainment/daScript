@@ -10,6 +10,8 @@ def initialize(project_path : string) {
         "llvm_jit_intrin", "llvm_jit_common", "llvm_jit_lower", "llvm_dll_utils",
         "llvm_jit_di",
         "llvm_exe", "llvm_macro", "llvm_jit_cli", "llvm_jit_run", "llvm_aot",
+        "llvm_jit_plan",      // the emitter-free half of the driver: plan, DLL key, probe, install
+        "llvm_jit_link",      // the JIT entry: a DLL cache hit binds here, a miss brings llvm_macro in
         "llvm_env",     // [EnvConfig] environment-knob registry (ENVIRONMENT.md generates from it)
         "llvm_cpu_class",     // the CPU classes profiles are keyed by, and the DAS_JIT_BASELINE target
         "llvm_code",          // [llvm_code] user-side annotation

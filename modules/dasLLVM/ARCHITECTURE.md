@@ -2,21 +2,25 @@
 
 The design document `REVIEW.md` cites. Numbered sections are the stable reference targets;
 usage and installation live in `README.md`, the debugger rail and its roadmap in `DEBUGGING.md`.
-Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU classes),
-`ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12).
+Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU
+classes), `ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12),
+`ARCHITECTURE_JIT_ENTRY.md` (the entry module, the cache hit without the emitter, the
+candidate-set key).
 
 ## 1. The jit backend pipeline
 
-`run_jit` (`llvm_jit_run.das`) drives one linear pipeline per program: **hash** (content-address
-the DLL - first per-function AOT hash plus the loop-hint/llvm-code folds), **init** (engine +
-target machine), **declare** (LLVM function declarations for the jit set), **probe** (open the
-cached DLL, compare per-function hashes), **irgen** (the das IR emitter over every function),
+`run_jit_linked` (`llvm_jit_link.das`, the `jit_llvm` simulate macro's body) takes a DLL cache
+hit by itself - **hash**, **probe**, **install**, **finalize** - and hands every other run to
+`run_jit` (`llvm_jit_run.das`) in the emitter's macro context (`ARCHITECTURE_JIT_ENTRY.md`).
+`run_jit` drives one linear pipeline per program: **hash** (the plan - the DLL key over the
+candidate set, first per-function AOT hash plus the hint folds), **init** (engine + target
+machine), **declare** (LLVM function declarations for the jit set), **probe** (open the cached
+DLL, compare per-function hashes), **irgen** (the das IR emitter over every function),
 **optimize** (the LLVM pass pipeline at the requested level, plus the opt-in IR dump and the
 post-opt verify), **emit+link** (artifact production - for the DLL path `write_dll` in
 `llvm_jit_common.das`, which itself splits into **emit-obj**, machine-code emission, and
 **link**, the lld-link spawn), **install** (resolve externs, instrument sim nodes), and
-**finalize** (engine teardown / state install). On a cache hit irgen, optimize, and emit+link
-are skipped and read as zero.
+**finalize** (engine teardown / state install). On a hit irgen, optimize and emit+link read as zero.
 
 ### 1.1 The timing contract
 
@@ -64,9 +68,10 @@ on the tuner to mint them.
 
 ## 2. Codegen identity - the DLL cache
 
-Jit DLLs are content-addressed: `jit_dll_basename` folds the per-function AOT hashes,
-`LLVM_JIT_CODEGEN_VERSION`, the opt/size levels, prologue and debug-info flags, and the target
-triple - same inputs, same filename, cache hit. AST-level changes therefore self-invalidate
+Jit DLLs are content-addressed: `jit_dll_basename` (`llvm_jit_plan.das`) folds the per-function
+AOT hashes of the candidate set (`ARCHITECTURE_JIT_ENTRY.md` sec.2), `LLVM_JIT_CODEGEN_VERSION`,
+the opt/size levels, prologue and debug-info flags, and the target triple - same inputs, same
+filename, cache hit. AST-level changes therefore self-invalidate
 through the function hashes; **emitter-level changes do not** - a change that alters generated
 machine code for identical inputs (IR generation, target-machine setup, `[llvm_code]`
 generators, the jit ABI) is invisible to the key and silently serves stale code from cache

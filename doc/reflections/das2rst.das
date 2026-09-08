@@ -231,7 +231,7 @@ def document_module_fio(_root : string) {
         group_by_regex("Filesystem queries", mod, %regex~(temp_directory|temp_directory_result|create_temp_file|create_temp_file_result|create_temp_directory|create_temp_directory_result|disk_space)$%%),
         group_by_regex("Terminal queries", mod, %regex~(is_terminal|terminal_width)$%%),
         group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|spawn_argv|popen_argv|popen_argv_pipe|popen_timed_out|run_and_capture|spawn_process|process_drain|process_poll|process_wait|process_terminate|process_kill|process_pid|process_alive|close_process|process_running|with_process|get_env_variable|set_env_variable|sanitize_command_line|has_env_variable)$%%),
-        group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path|describe_pending_dynamic_modules|no_manifest)$%%)
+        group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path|register_module_group|describe_pending_dynamic_modules|no_manifest)$%%)
     )
     documents("File input output library", mod, "fio.rst", groups)
 }
@@ -468,14 +468,14 @@ def document_module_rtti(_root : string) {
 def document_module_ast(_root : string) {
     var mod = [get_module("ast_core"), find_module("ast")]
     var groups <- array<DocGroup>(
-        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|parse_file|make_file_access)$%%),
+        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|parse_file|make_file_access|require_module_now)$%%),
         group_by_regex("Call generation", mod, %regex~(make_call)$%%),
         group_by_regex("Visitor pattern", mod, %regex~visit.*%%),
         group_by_regex("Expression generation", mod, %regex~(force_generated|get_expression_annotation|make_type_info_structure|stamp_missing_at)%%),
         group_by_regex("Adapter generation", mod, %regex~make_.*%%),
         group_by_regex("Adapter application", mod, %regex~(add_.*_(annotation|macro)|add_new_comment_reader|add_comment_reader|add_module_option)%%),
         group_by_regex("Adding objects to objects", mod, %regex~add_.*%%),
-        group_by_regex("Program and module access", mod, %regex~(this_program|this_module|compiling_program|compiling_module)$%%),
+        group_by_regex("Program and module access", mod, %regex~(this_program|this_module|compiling_program|compiling_module|has_macro_context|find_macro_context)$%%),
         group_by_regex("Textual descriptions of the objects", mod, %regex~(describe.*|das_to_string)%%),
         group_by_regex("Searching", mod, %regex~find.*%%),
         group_by_regex("Iterating", mod, %regex~(for_each.*|.*_foreach)%%),

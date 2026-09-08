@@ -1904,6 +1904,19 @@ namespace das {
         auto savedModuleName = env->g_compilingModuleName;
         env->serializer_read = nullptr;
         env->serializer_write = nullptr;
+        // the walk's symbol-use passes rewrite `used` on every shared function and global; the caller
+        // may be mid-simulate with a JIT reading those flags, so they come back as they were
+        vector<pair<Function *, bool>> usedFunctions;
+        vector<pair<Variable *, bool>> usedVariables;
+        Module::foreach([&](Module * mod) {
+            mod->functions.foreach([&](auto fn) {
+                usedFunctions.emplace_back(fn, bool(fn->used));
+            });
+            mod->globals.foreach([&](auto var) {
+                usedVariables.emplace_back(var, bool(var->used));
+            });
+            return true;
+        });
         unique_ptr<ModuleFileCache> cache;
         if ( env->lateModuleCacheEnabled ) {
             cache = make_unique<ModuleFileCache>();
@@ -1993,6 +2006,8 @@ namespace das {
             cache->finish();
             keepLateModuleCache(das::move(cache));
         }
+        for ( auto & [fn, used] : usedFunctions ) fn->used = used;
+        for ( auto & [var, used] : usedVariables ) var->used = used;
         env->g_Program = savedProgram;
         env->serializer_read = savedRead;
         env->serializer_write = savedWrite;

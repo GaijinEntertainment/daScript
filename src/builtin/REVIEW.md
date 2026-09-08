@@ -48,7 +48,7 @@
 
 - **A diff that moves a bind between modules - an `addExtern` or `addExternInline` call whose
   module changes, or a builtin whose `vector<T>` functions follow a type to another module -
-  bumps `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_run.das` (repo root), in
+  bumps `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in
   the same change.** The JIT's DLL cache key folds the codegen version and each function's AST
   hash, never the module an extern lives in, so a cached DLL binds the old name and crashes on
   the hit.

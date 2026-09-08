@@ -31,23 +31,23 @@
   the host, so a target-triple branch is checked only by the artifact built for that target.
 
 - **A diff that adds work to, or moves work within, what `run_jit`
-  (`daslib/llvm_jit_run.das`) executes - its own body or any callee - also prints an
-  `LLVM JIT time:` number for that work: its own line, or the number of a phase that includes
-  it, while that phase's line still prints** (phase inventory: `ARCHITECTURE.md` sec.1).
-  Only work on the path that reaches the report is timed: option resolution before the first
-  timer, log lines, and failure-path teardown are not.
+  (`daslib/llvm_jit_run.das`) or `run_jit_linked` (`daslib/llvm_jit_link.das`) executes - its
+  own body or any callee - also prints an `LLVM JIT time:` number for that work: its own line,
+  or the number of a phase that includes it, while that phase's line still prints** (phase
+  inventory: `ARCHITECTURE.md` sec.1). Only work on the path that reaches the report is timed:
+  option resolution before the first timer, log lines, and failure-path teardown are not.
 
 - **A change that can alter the machine code the JIT's DLL or split-obj cache serves back for
   identical inputs - IR generation, target-machine setup, a `[llvm_code]` generator body, or the
   call ABI the generated code binds: function signatures, the name scheme, the prologue, the
   externs the install phase binds - bumps `LLVM_JIT_CODEGEN_VERSION`**
-  (`daslib/llvm_jit_run.das`); selecting among existing generators' `[llvm_code]` arguments, the
+  (`daslib/llvm_jit_plan.das`); selecting among existing generators' `[llvm_code]` arguments, the
   `[tune]` stamping, is not such a change. The caches are addressed by the AST hashes and this
   constant, so such a change without the bump serves the old machine code back
   (`ARCHITECTURE.md` sec.1.2).
 
 - **A diff that adds an environment or config input to a JIT cache key folds it inside
-  `jit_env_salt` (`daslib/llvm_jit_run.das`), never directly into either JIT key - the DLL
+  `jit_env_salt` (`daslib/llvm_jit_plan.das`), never directly into either JIT key - the DLL
   key or the split-obj key (`ARCHITECTURE.md` sec.2)** - salt feeds both keys, and a config
   folded into one but not the other links stale objects. Inputs that vary per function set
   (AOT hashes) fold into the key directly, not through the salt.
