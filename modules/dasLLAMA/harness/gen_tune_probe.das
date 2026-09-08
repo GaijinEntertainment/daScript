@@ -42,6 +42,7 @@ require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_convert
 require dasllama/dasllama_gguf   // transcode_q*k_superblock — the kq fixture pack rail
 require daslib/f16_cvt   // f32_to_f16 — the kq fixtures pack disk superblock headers
+require llvm   // nolint:STYLE030 - the witness, unguarded on purpose: the `_variants()` registries this probe races exist only with dasLLVM, so a host without it skips this program as missing its prerequisite
 require llvm/daslib/llvm_tune
 require daslib/tune             // [tune_policy] - inert without dasLLVM
 require daslib/random

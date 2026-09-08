@@ -9,7 +9,7 @@ options _dasllama_internal = true
 // prompt raw through /completion (greedy, fixed n, ignore_eos), its timings read back. The identical
 // continuation text is the control that makes the two acceptance columns comparable; llama-bench has
 // no speculative arm and llama-cli re-wraps a raw prompt as a chat turn, which is why the server.
-require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // nolint:STYLE029,LINT019 — umbrella fires each arch [init] registration; on a host without dasMetal only dasllama_common's symbols remain, the das_metal half reaches the generation API it re-exports
 require dasllama/dasllama_common
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require dasllama/dasllama_image   // load_model_cached - the .dlim rail

@@ -3833,7 +3833,7 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
 
 // ===== the exchange surface (GET /exchange + the apply/submit/retune levers) =====
 
-def private exchange_absent(var resp : HttpResponse?) : http_status {   // nolint:LINT022 — reached only from the no-framework static_if arm, which a build with dasLLVM drops
+def private exchange_absent(var resp : HttpResponse?) : http_status {   // nolint:LINT022,LINT019 — reached only from the no-framework static_if arm, which a build with dasLLVM drops; on a host without dasLLVM the arm compiles and the rule is silent
     return resp |> JSON(error_body("the sidecar exchange is not in this build (no tune framework)", "not_found"), http_status.NOT_FOUND)
 }
 
@@ -3912,7 +3912,7 @@ def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpRespo
 
 // A fat release bakes one kernel clone per CPU class and never tunes, so the exchange has nothing
 // to apply, share or redo on it; the read-only status and matches stay, the levers answer this.
-def private fat_exe_exchange_refusal(var resp : HttpResponse?) : http_status {
+def private fat_exe_exchange_refusal(var resp : HttpResponse?) : http_status {   // nolint:LINT012,LINT022,LINT019 — resp and every caller sit in llvm_tune static_if halves; a host without dasLLVM compiles the bare-OK arm alone
     static_if (typeinfo module_exists(llvm_tune)) {
         if (!tune_fat_built()) return http_status.OK
         return resp |> JSON(error_body("this is a fat release: the kernels are baked per CPU class, so there is no tune of this box to share, apply or redo - the SDK's daslang -jit run tunes the box", "invalid_request_error"), http_status.BAD_REQUEST)
