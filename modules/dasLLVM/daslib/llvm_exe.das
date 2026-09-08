@@ -43,6 +43,10 @@ bitfield TabOperation {
 class public CollectExternVisitor : AstVisitor {
     uid : UidNodes?
 
+    //! every function registered with the exe's context, once each - the set its function lookup carries
+    registered : array<tuple<index : int; mnh : uint64; name : string>>
+    registered_index : table<int>
+
     // Let's keep order of traversal during initialization.
     // In this way we need `seen` table to not initialize twice.
     table_calls : array<tuple<t_type : Type; dll_name : DllName; tab_operation : TabOperation>>
@@ -250,6 +254,10 @@ class public CollectExternVisitor : AstVisitor {
         let fnmna = uid.get_dll_fn_name_ptr(fn)
         let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
         if (fn_publ == null) return null
+        if (!(registered_index |> key_exists(fn.index))) {
+            registered_index |> insert(fn.index)
+            registered |> push((index = fn.index, mnh = fn.getMangledNameHash, name = string(fn.name)))
+        }
         let fn_ptr_cast = LLVMBuildPointerCast(builder, fn_publ, types.LLVMVoidPtrType(), "")
         var reg_args = fixed_array<LLVMOpaqueValue?>(
             standalone_ctx,
@@ -610,7 +618,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                var funcs : array<FunctionPtr>; var uids : UidNodes?;
                                var used_modules : table<string; bool>&;
                                dynamic_modules : table<string; bool>;
-                               prog : Program?; register_all_modules : bool = false) : bool {
+                               prog : Program?; register_all_modules : bool = false) : tuple<needs_whole_lib : bool; registered : array<tuple<index : int; mnh : uint64; name : string>>> {
     var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules, LlvmJitMode.EXE)
     extern_resolver.dynamic_modules := dynamic_modules
     make_visitor(*extern_resolver) $(adapter_resolve) {
@@ -628,7 +636,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                 }
             }
         }
-        // Register [pinvoke]/[export] functions in tabMnLookup so they're findable by name at runtime.
+        // Register [pinvoke]/[export] functions with the exe's context so they're findable by name at runtime.
         for (fn in funcs) {
             if (!fn.flags.builtIn && (fn.moreFlags.pinvoke || fn.flags.exports)) {
                 extern_resolver.uid.reset(fn)
@@ -691,8 +699,85 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     LLVMDisposeBuilder(ib)
     extern_resolver.uid = null
     extern_resolver.types = null
+    var registered <- extern_resolver.registered
     unsafe { delete extern_resolver; }
-    return whole_lib
+    return (needs_whole_lib = whole_lib, registered <- registered)
+}
+
+def private emit_const_words(name : string; words : array<uint64>; elem : LLVMOpaqueType?; var types : PrimitiveTypes?) : LLVMOpaqueValue? {
+    let wide = elem == types.t_int64
+    var consts <- [for (w in words); wide ? types.ConstI64(w) : types.ConstI32(w)]
+    let arr_type = LLVMArrayType(elem, uint(length(consts)))
+    var glob = LLVMAddGlobal(g_mod, arr_type, name)
+    LLVMSetInitializer(glob, LLVMConstArray(elem, unsafe(addr(consts[0])), uint(length(consts))))
+    LLVMSetGlobalConstant(glob, 1)
+    LLVMSetLinkage(glob, LLVMLinkage.LLVMPrivateLinkage)
+    LLVMSetAlignment(glob, 16u)
+    return glob
+}
+
+//! one sealed lookup as the exe carries it: the four constant arrays and the NameLookup::StaticTable that
+//! points at them, in the word layout name_lookup.h pins - an entry is {mnh, value | index << 32, next}, a
+//! name slot {nameHash, head}, the table six 32-bit counts then four pointers
+def private emit_static_lookup(prefix : string; lookup : NameLookup?; var types : PrimitiveTypes?; ctx : LLVMContextRef) : LLVMOpaqueValue? {
+    var entries : array<uint64>
+    entries |> reserve(int(name_lookup_mnh_slots(lookup)) * 3)
+    for (i in urange(name_lookup_mnh_slots(lookup))) {
+        entries |> push(name_lookup_entry_mnh(lookup, i))
+        entries |> push(uint64(name_lookup_entry_value(lookup, i)) | (uint64(name_lookup_entry_index(lookup, i)) << 32ul))
+        entries |> push(uint64(uint(name_lookup_entry_next(lookup, i))))
+    }
+    var names : array<uint64>
+    names |> reserve(int(name_lookup_name_slots(lookup)) * 2)
+    for (i in urange(name_lookup_name_slots(lookup))) {
+        names |> push(name_lookup_name_hash(lookup, i))
+        names |> push(uint64(uint(name_lookup_name_head(lookup, i))))
+    }
+    let mnh_disp <- [for (i in urange(name_lookup_mnh_buckets(lookup))); uint64(name_lookup_mnh_disp(lookup, i))]
+    let name_disp <- [for (i in urange(name_lookup_name_buckets(lookup))); uint64(name_lookup_name_disp(lookup, i))]
+    var g_entries = emit_const_words(".{prefix}_entries", entries, types.t_int64, types)
+    var g_names = emit_const_words(".{prefix}_names", names, types.t_int64, types)
+    var g_mnh_disp = emit_const_words(".{prefix}_mnh_disp", mnh_disp, types.t_int32, types)
+    var g_name_disp = emit_const_words(".{prefix}_name_disp", name_disp, types.t_int32, types)
+    var fields <- array<LLVMOpaqueValue?>(
+        types.ConstI32(uint64(name_lookup_mnh_buckets(lookup))),
+        types.ConstI32(uint64(name_lookup_mnh_slots(lookup))),
+        types.ConstI32(uint64(name_lookup_name_buckets(lookup))),
+        types.ConstI32(uint64(name_lookup_name_slots(lookup))),
+        types.ConstI32(uint64(name_lookup_count(lookup))),
+        types.ConstI32(0ul),
+        g_mnh_disp, g_name_disp, g_entries, g_names)
+    let static_table = LLVMConstStructInContext(ctx, unsafe(addr(fields[0])), uint(length(fields)), 0)
+    var glob = LLVMAddGlobal(g_mod, LLVMTypeOf(static_table), ".{prefix}_table")
+    LLVMSetInitializer(glob, static_table)
+    LLVMSetGlobalConstant(glob, 1)
+    LLVMSetLinkage(glob, LLVMLinkage.LLVMPrivateLinkage)
+    LLVMSetAlignment(glob, 8u)
+    return glob
+}
+
+//! the exe's function and global lookups, sealed here at code-generation time and adopted by the runtime
+//! context as constant data: the functions are the registered set, the globals every one of the program's
+def private emit_exe_lookups(builder : LLVMBuilderRef; ctx : LLVMContextRef; var types : PrimitiveTypes?; global_context : LLVMOpaqueValue?; registered : array<tuple<index : int; mnh : uint64; name : string>>; program_context : Context?) {
+    var fns = unsafe(name_lookup_create())
+    for (fn in registered) {
+        name_lookup_insert(fns, fn.mnh, fn.name, uint(fn.index), uint(fn.index))
+    }
+    name_lookup_seal(fns)
+    var vars = unsafe(name_lookup_create())
+    for (i in range(program_context.totalVariables)) {
+        name_lookup_insert(vars, get_global_variable_mnh(program_context, i), get_global_variable_name(program_context, i), uint(i), uint(get_global_variable_offset(program_context, i)))
+    }
+    name_lookup_seal(vars)
+    let g_fns = emit_static_lookup("fn_lookup", fns, types, ctx)
+    let g_vars = emit_static_lookup("var_lookup", vars, types, ctx)
+    unsafe {
+        name_lookup_destroy(fns)
+        name_lookup_destroy(vars)
+    }
+    let adopt_type = LLVMFunctionType(types.t_void, fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
+    let adopt_fn = LLVMAddFunctionWithType(g_mod, "jit_adopt_standalone_lookups", adopt_type)
+    LLVMBuildCall2(builder, adopt_type, adopt_fn, fixed_array(global_context, g_fns, g_vars), "")
 }
 
 // --jit-check-abi: emit into initialize_modules() a host-vs-target layout safe-check for every handled
@@ -1190,9 +1275,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         clone_init_glob = cpair._0
     }
 
-    let sort_needs_whole_lib = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog, register_all_modules)
+    let collected <- collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog, register_all_modules)
     // Determine if exe needs the whole compiler lib (rtti, ast, debugger, jit, sort-with-cblock)
-    var needs_whole_lib = sort_needs_whole_lib
+    var needs_whole_lib = collected.needs_whole_lib
     // ast_core / network_core live in the compiler lib, so registering them pulls compiler-only
     // symbols -> whole-lib link. (rtti_core used to be here but its compile builtins moved to ast,
     // so it's now self-contained in the runtime lib.)
@@ -1242,12 +1327,15 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         LLVMBuildCall2(builder, reg_fusion_type, reg_fusion_fn, array<LLVMValueRef>(), "")
     }
 
-    // void jit_register_standalone_variable ( Context * ctx, uint64_t mnh, uint64_t offset )
+    // void jit_register_standalone_variable ( Context * ctx, uint64_t index, const char * name, uint64_t mnh, uint64_t offset, int shared )
     let init_global_var_type = LLVMFunctionType(types.t_void,
         fixed_array<LLVMTypeRef>(
             types.LLVMVoidPtrType(),  // Context *
+            types.t_int64,            // uint64_t index
+            types.LLVMVoidPtrType(),  // const char * name
             types.t_int64,            // uint64_t mnh
             types.t_int64,            // uint64_t offset
+            types.t_int32,            // int shared
         )
     )
     var init_global_var = LLVMAddFunctionWithType(
@@ -1257,10 +1345,21 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     for (i in range(vars)) {
         var var_params = fixed_array(
             global_context,
+            types.ConstI64(i |> uint64),
+            get_string_constant_ptr(builder, get_global_variable_name(program_context, i)),
             types.ConstI64(get_global_variable_mnh(program_context, i)),
             types.ConstI64(get_global_variable_offset(program_context, i)),
+            types.ConstI32(uint64(get_global_variable_shared(program_context, i))),
         )
         LLVMBuildCall2(builder, init_global_var_type, init_global_var, var_params, "")
+    }
+    // the sealed lookups are adopted right after the context is created - before any registration
+    // call, so no JIT code can ever probe an unadopted table, however LLVM orders the calls
+    {
+        let resume_block = LLVMGetInsertBlock(builder)
+        LLVMPositionBuilderBefore(builder, LLVMGetNextInstruction(global_context))
+        emit_exe_lookups(builder, ctx, types, global_context, collected.registered, program_context)
+        LLVMPositionBuilderAtEnd(builder, resume_block)
     }
 
 

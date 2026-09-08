@@ -49,6 +49,41 @@ reads as zero, so two such keys merge wherever they meet in the probe sequence. 
 for the bit compare with the `0.0 == -0.0` tie, which its two distinct hashes never honoured
 anyway. `tests/language/table_vector_keys.das` covers both patterns.
 
+## Function and global lookup
+
+A `Context` finds a function or a global by mangled-name hash and by plain name through one
+object each, `functionLookup` and `variableLookup` (`name_lookup.h`, shared between a context and
+its forks and clones the way the functions array is). A simulated program builds them:
+`Program::buildMNLookup` / `buildGMNLookup` insert every entry and seal once, and the sealed blob is
+owned by the object and freed with it. A standalone exe and a standalone AOT context adopt them:
+the emitter (`modules/dasLLVM/daslib/llvm_exe.das` and `daslib/aot_standalone.das`, repo root)
+builds the same object at code-generation time through the `name_lookup_*` builtins of the
+`rtti_core` module, writes the sealed arrays into the artifact as constant data in the word layout
+the header pins, and the generated constructor hands that `StaticTable` to `adopt` - nothing is
+built or allocated at startup and the object owns nothing. The standalone C++ constructor also
+verifies every global's runtime offset against the emitted table, since the emitter computes those
+offsets with `InitGlobalVariable`'s rule rather than reading them back. An insert or an adopt after
+the seal stops the program, and a seal that finds two entries on one mangled-name hash, or two
+different names on one name hash, fails and names both entries - the same footing the runtime
+already gives every 64-bit string hash.
+
+The seal builds two perfect hashes (compress-hash-displace over the distinct keys, five keys per
+bucket, five percent empty slots), so a lookup is one probe and one 64-bit compare with no
+collision chain: `fnByMangledName` and `globalOffsetByMangledName` - the latter on the hot path of
+every global access by hash in all three tiers - read one entry, and a by-name lookup hashes the
+string, reads one slot, and walks the same-name chain the seal linked in function-index order.
+`findFunction(name, isUnique)` answers from the head's link, `findFunctions` is the walk, and a
+missing key of either kind answers `NOT_FOUND` / `-1` without touching a name string. The
+entry's `value` is what the hash probe hands back - a function index, a global's byte offset -
+and `index` is the position in `functions` / `globalVariables`, which is what the by-name API
+returns. Measured against `das_hash_map` on 8 000 keys the hash probe is 2.2 ns against 5.8 and
+the by-name probe 25 ns against 41, in one eighth and one half the memory; sealing both hashes
+for 8 000 entries takes single-digit milliseconds, paid once per `Program::simulate` and never at
+the startup of an artifact that adopts. A fresh object, and one whose seal failed, points at a
+static empty table and answers every probe with a miss, so a context that never simulated, a
+compile that failed at the seal, and a standalone exe between its creation and its adopt all
+answer `NOT_FOUND` rather than reading through a null pointer.
+
 ## Sanctioned hot-path additions
 
 The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why

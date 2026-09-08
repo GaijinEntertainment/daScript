@@ -72,7 +72,8 @@ cannot silently get a runtime nano was not built to be - the panic path in parti
 `setjmp`/`longjmp`, not a C++ exception, and there is no second version of it here.
 
 `daScript/simulate/simulate.h` - the `Context` subset standalone AOT actually touches: a stack,
-two heaps, the function and global tables, the three mangled-name lookups, and a panic path.
+two heaps, the function and global tables, their two sealed name lookups
+(`name_lookup.h`, upstream and unmodified) plus the annotation-data table, and a panic path.
 Gone: debug agents, stack walkers, GC roots, job-fork pools, the profiler, JIT hooks,
 instrumentation, context cloning, code relocation, the init and shutdown scripts (the generated
 constructor runs the init script itself).
@@ -97,7 +98,7 @@ The header is upstream and unmodified; only fmt had to go, and it was reached th
 
 ## What nano reuses verbatim
 
-Fourteen sources compile straight out of `src/`, listed in `nano/CMakeLists.txt`. Adding one is a
+Fifteen sources compile straight out of `src/`, listed in `nano/CMakeLists.txt`. Adding one is a
 decision: it must compile with no edit to the shared tree. When it needs an edit, the fix goes
 upstream as a **carve** - splitting the runtime half of a file away from its compiler half - not
 into a fork here. `src/simulate/simulate_gc_pod.cpp`, `src/simulate/annotation_arguments.cpp`,

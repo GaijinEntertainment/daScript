@@ -8,6 +8,7 @@
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_info.h"
 #include "daScript/simulate/heap.h"
+#include "daScript/simulate/name_lookup.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
 
@@ -528,9 +529,9 @@ namespace das
         }
 
         __forceinline uint32_t globalOffsetByMangledName ( uint64_t mnh ) const {
-            auto it = tabGMnLookup->find(mnh);
-            DAS_ASSERT(it!=tabGMnLookup->end());
-            return it->second;
+            auto offset = variableLookup->valueByMnh(mnh);
+            DAS_ASSERT(offset!=NameLookup::NOT_FOUND);
+            return offset;
         }
         __forceinline uint64_t adBySid ( uint64_t sid ) const {
             auto it = tabAdLookup->find(sid);
@@ -539,8 +540,8 @@ namespace das
         }
         __forceinline SimFunction * fnByMangledName ( uint64_t mnh ) {
             if ( mnh==0 ) return nullptr;
-            auto it = tabMnLookup->find(mnh);
-            return it!=tabMnLookup->end() ? it->second : nullptr;
+            auto index = functionLookup->valueByMnh(mnh);
+            return index!=NameLookup::NOT_FOUND ? functions + index : nullptr;
         }
 
         SimFunction * findFunction ( const char * name ) const;
@@ -898,8 +899,8 @@ namespace das
     public:
         bool            debugger = false;
     public:
-        shared_ptr<das_hash_map<uint64_t,SimFunction *>> tabMnLookup;
-        shared_ptr<das_hash_map<uint64_t,uint32_t>> tabGMnLookup;
+        shared_ptr<NameLookup> functionLookup;
+        shared_ptr<NameLookup> variableLookup;
         shared_ptr<das_hash_map<uint64_t,uint64_t>> tabAdLookup;
     public:
         class Program * thisProgram = nullptr;

@@ -86,36 +86,24 @@ namespace das {
     }
 
     SimFunction * Context::findFunction ( const char * name ) const {
-        for ( int fni = 0; fni != totalFunctions; ++fni ) {
-            if ( strcmp(functions[fni].name, name)==0 ) {
-                return functions + fni;
-            }
-        }
-        return nullptr;
+        if ( !functionLookup || !name ) return nullptr;
+        auto slot = functionLookup->headByName(name);
+        return slot>=0 ? functions + functionLookup->indexAt(slot) : nullptr;
     }
 
     SimFunction * Context::findFunction ( const char * name, bool & isUnique ) const {
-        SimFunction * found = nullptr;
-        isUnique = true;
-        for ( int fni = 0; fni != totalFunctions; ++fni ) {
-            if ( strcmp(functions[fni].name, name)==0 ) {
-                if ( found ) {
-                    isUnique = false;
-                    return found;
-                }
-                found = functions + fni;
-            }
-        }
-        return found;
+        isUnique = false;
+        if ( !functionLookup || !name ) return nullptr;
+        auto slot = functionLookup->headByName(name);
+        if ( slot<0 ) return nullptr;
+        isUnique = functionLookup->nextSameName(slot) < 0;
+        return functions + functionLookup->indexAt(slot);
     }
 
     int Context::findVariable ( const char * name ) const {
-        for ( int vi = 0; vi != totalVariables; ++vi ) {
-            if ( strcmp(globalVariables[vi].name, name)==0 ) {
-                return vi;
-            }
-        }
-        return -1;
+        if ( !variableLookup || !name ) return -1;
+        auto slot = variableLookup->headByName(name);
+        return slot>=0 ? int(variableLookup->indexAt(slot)) : -1;
     }
 
     void Context::to_out ( const LineInfo *, int level, const char * message ) {

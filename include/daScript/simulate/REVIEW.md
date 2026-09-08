@@ -1,7 +1,8 @@
 # Simulate Headers Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`. A diff changing a `debug_info.h` struct layout applies
+`ARCHITECTURE.md`. A diff that changes a `debug_info.h` struct layout, or removes, renames or
+retypes a public member of a struct or class under this folder, applies
 `skills/internal/abi_break_sweep.md` too. A diff that changes or removes a name under this
 folder that a `daslib/*.das` file spells out - a struct or member the AOT C++ emitter writes
 into generated code, a flag or field a daslib predicate reads - applies `daslib/REVIEW.md`
@@ -30,14 +31,18 @@ checklist on its own.
   template under this folder that generated code runs for every evaluated expression. An added
   load, branch, call, copy, or counter, a direct call becoming indirect, a static dispatch
   becoming virtual, or an unboxed value becoming a boxed round-trip is that defect unless the
-  PR names the check showing the shipped build's codegen unchanged - the burden is the
-  author's, because a diff cannot show optimized codegen.
+  PR names the check showing the shipped build costs no more: its codegen unchanged, or a
+  measurement of the new code against the code it replaces - a diff cannot show optimized
+  codegen.
 
 - **A diff that adds work to the hot path - whether or not the shipped build flattens it -
   lands its entry under `ARCHITECTURE.md`'s sanctioned hot-path additions in the same diff:
   what was added, where, why correctness required it, and the alternative that was rejected.**
-  A change that costs more only under a relaxed-math or otherwise non-default compiler flag
-  states which flavor and how much in its PR description.
+  Replacing a hot-path body with code that performs the same per-evaluation operations - no
+  load, branch, call, copy, or counter the old body did not have - and measures no slower on
+  the build the repo ships is not added work. A body that gains one of those operations is
+  added work, even at no measured cost. A change that costs more only under a relaxed-math or
+  otherwise non-default compiler flag states which flavor and how much in its PR description.
 
 - **A diff that changes the layout of a `debug_info.h` struct - a field added, removed,
   reordered, or retyped, or a base changed - states a per-consumer verdict (updated / no

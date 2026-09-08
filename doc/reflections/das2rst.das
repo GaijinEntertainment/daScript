@@ -454,6 +454,7 @@ def document_module_rtti(_root : string) {
         group_by_regex("Data walking and printing", mod, %regex~(sprint_data|sprint_json_at|sscan_json_at|describe|get_mangled_name)$%%),
         group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%),
         group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%),
+        group_by_regex("Name lookup builder", mod, %regex~name_lookup_.*%%),
         group_by_regex("Runtime data access", mod, %regex~(get_table_key_index)$%%),
         group_by_regex("Tuple and variant access", mod, %regex~(get_tuple_field_offset|get_variant_field_offset)$%%),
         group_by_regex("Lint suppression", mod, %regex~(rtti_get_source_line|rtti_is_nolint_suppressed|is_lint_suppressed|was_nolint_consumed|extract_lint_code)$%%),

@@ -162,9 +162,9 @@ namespace das
         if ( code ) {
             tw << "\tcode: " << code->bytesAllocated() << " of " << code->totalAlignedMemoryAllocated()
                 << ", depth = " << code->depth() << "\n";
-            tw << "\t\ttableMN[" << tabMnLookup->size() << "]\n";
-            tw << "\t\ttableGMN[" << tabGMnLookup->size() << "]\n";
-            tw << "\t\ttableAd[" << tabAdLookup->size() << "]\n";
+            tw << "\t\tfunctionLookup[" << (functionLookup ? functionLookup->size() : 0u) << "]\n";
+            tw << "\t\tvariableLookup[" << (variableLookup ? variableLookup->size() : 0u) << "]\n";
+            tw << "\t\ttableAd[" << (tabAdLookup ? tabAdLookup->size() : 0u) << "]\n";
             int aotf = 0;
             for ( int i=0, is=totalFunctions; i!=is; ++i ) {
                 if ( functions[i].aotFunction ) aotf++;
@@ -246,8 +246,8 @@ namespace das
         totalFunctions = ctx.totalFunctions;
 
         // mangled name table
-        tabMnLookup = ctx.tabMnLookup;
-        tabGMnLookup = ctx.tabGMnLookup;
+        functionLookup = ctx.functionLookup;
+        variableLookup = ctx.variableLookup;
         tabAdLookup = ctx.tabAdLookup;
     }
 
@@ -343,8 +343,8 @@ namespace das
         initFunctions = ctx.initFunctions;
         totalInitFunctions = ctx.totalInitFunctions;
         // mangled name table
-        tabMnLookup = ctx.tabMnLookup;
-        tabGMnLookup = ctx.tabGMnLookup;
+        functionLookup = ctx.functionLookup;
+        variableLookup = ctx.variableLookup;
         tabAdLookup = ctx.tabAdLookup;
         // jit init script
         jitInitScript = ctx.jitInitScript;
@@ -481,7 +481,6 @@ namespace das
         }
         rel.newCode->prefixWithHeader = pwh;
         rel.newCode->setInitialSize(codeSize);
-        SimFunction * oldFunctions = functions;
         if ( totalFunctions ) {
             SimFunction * newFunctions = (SimFunction *) rel.newCode->allocate(totalFunctions*sizeof(SimFunction));
             memcpy ( newFunctions, functions, totalFunctions*sizeof(SimFunction));
@@ -498,19 +497,6 @@ namespace das
                 newVariables[i].name = rel.newCode->allocateName(globalVariables[i].name);
             }
             globalVariables = newVariables;
-        }
-        // relocate mangle-name lookup
-        for ( auto & kv : *tabMnLookup ) {
-            auto fn = kv.second;
-            if ( fn!=nullptr ) {
-                if ( fn>=oldFunctions && fn<(oldFunctions+totalFunctions) ) {
-                    ptrdiff_t index = fn - oldFunctions;
-                    kv.second = functions + index;
-                    DAS_ASSERT(fn->mangledNameHash == kv.second->mangledNameHash);
-                    DAS_ASSERT(kv.second>=functions && kv.second<(functions+totalFunctions));
-                    // printf("%3i - MNH 0x%8x: %s [move %p -> %p]\n", i, fn->mangledNameHash, fn->name, fn, kv.second );
-                }
-            }
         }
         // relocate variables
         if ( totalVariables ) {
@@ -657,46 +643,32 @@ namespace das
 
     vector<SimFunction *> Context::findFunctions ( const char * fnname ) const {
         vector<SimFunction *> res;
-        for ( auto & kv : *tabMnLookup ) {
-            auto fn = kv.second;
-            if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
-                res.push_back(fn);
-            }
+        if ( !functionLookup || !fnname ) return res;
+        for ( auto slot=functionLookup->headByName(fnname); slot>=0; slot=functionLookup->nextSameName(slot) ) {
+            res.push_back(functions + functionLookup->indexAt(slot));
         }
         return res;
     }
 
     SimFunction * Context::findFunction ( const char * fnname ) const {
-        for ( auto & kv : *tabMnLookup ) {
-            auto fn = kv.second;
-            if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
-                return fn;
-            }
-        }
-        return nullptr;
+        if ( !functionLookup || !fnname ) return nullptr;
+        auto slot = functionLookup->headByName(fnname);
+        return slot>=0 ? functions + functionLookup->indexAt(slot) : nullptr;
     }
 
     SimFunction * Context::findFunction ( const char * fnname, bool & isUnique ) const {
-        int candidates = 0;
-        SimFunction * found = nullptr;
-        for ( auto & kv : *tabMnLookup ) {
-            auto fn = kv.second;
-            if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
-                found = fn;
-                candidates++;
-            }
-        }
-        isUnique = candidates == 1;
-        return found;
+        isUnique = false;
+        if ( !functionLookup || !fnname ) return nullptr;
+        auto slot = functionLookup->headByName(fnname);
+        if ( slot<0 ) return nullptr;
+        isUnique = functionLookup->nextSameName(slot) < 0;
+        return functions + functionLookup->indexAt(slot);
     }
 
-    int Context::findVariable ( const char * fnname ) const {
-        for ( int vni=0, vnis=totalVariables; vni!=vnis; ++vni ) {
-            if ( strcmp(globalVariables[vni].name, fnname)==0 ) {
-                return vni;
-            }
-        }
-        return -1;
+    int Context::findVariable ( const char * name ) const {
+        if ( !variableLookup || !name ) return -1;
+        auto slot = variableLookup->headByName(name);
+        return slot>=0 ? int(variableLookup->indexAt(slot)) : -1;
     }
 
     void Context::stackWalk( const LineInfo * at, bool showArguments, bool showLocalVariables ) {

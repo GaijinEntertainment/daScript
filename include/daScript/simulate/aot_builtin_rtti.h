@@ -89,6 +89,24 @@ namespace das {
     DAS_API vec4f rtti_contextVariableInfo ( Context & context, SimNode_CallBase *, vec4f * );
     DAS_API int32_t rtti_contextTotalFunctions(Context & context);
     DAS_API int32_t rtti_contextTotalVariables(Context & context);
+    struct NameLookup;
+    DAS_API NameLookup * rtti_name_lookup_create ();
+    DAS_API void rtti_name_lookup_destroy ( NameLookup * lookup );
+    DAS_API void rtti_name_lookup_insert ( NameLookup * lookup, uint64_t mnh, const char * name, uint32_t index, uint32_t value );
+    DAS_API void rtti_name_lookup_seal ( NameLookup * lookup, Context * context, LineInfoArg * at );
+    DAS_API uint32_t rtti_name_lookup_count ( NameLookup * lookup );
+    DAS_API uint32_t rtti_name_lookup_mnh_buckets ( NameLookup * lookup );
+    DAS_API uint32_t rtti_name_lookup_mnh_slots ( NameLookup * lookup );
+    DAS_API uint32_t rtti_name_lookup_name_buckets ( NameLookup * lookup );
+    DAS_API uint32_t rtti_name_lookup_name_slots ( NameLookup * lookup );
+    DAS_API uint32_t rtti_name_lookup_mnh_disp ( NameLookup * lookup, uint32_t bucket );
+    DAS_API uint32_t rtti_name_lookup_name_disp ( NameLookup * lookup, uint32_t bucket );
+    DAS_API uint64_t rtti_name_lookup_entry_mnh ( NameLookup * lookup, uint32_t slot );
+    DAS_API uint32_t rtti_name_lookup_entry_value ( NameLookup * lookup, uint32_t slot );
+    DAS_API uint32_t rtti_name_lookup_entry_index ( NameLookup * lookup, uint32_t slot );
+    DAS_API int32_t rtti_name_lookup_entry_next ( NameLookup * lookup, uint32_t slot );
+    DAS_API uint64_t rtti_name_lookup_name_hash ( NameLookup * lookup, uint32_t slot );
+    DAS_API int32_t rtti_name_lookup_name_head ( NameLookup * lookup, uint32_t slot );
 
     __forceinline Context  & thisContext ( Context * context ) { return *context; }
 

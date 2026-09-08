@@ -46,6 +46,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(CodeOfPolicies,CodeOfPolicies)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(recursive_mutex,das::recursive_mutex)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AstSerializer,das::AstSerializerState)
+MAKE_TYPE_FACTORY(NameLookup,das::NameLookup)
 
 class EnumerationCompilationError : public das::Enumeration {
 private:
@@ -1134,6 +1135,69 @@ namespace das {
         return context.getTotalVariables();
     }
 
+    // the emitters build a context's function and global lookups here, at code-generation time,
+    // and read the sealed state back to write it into the artifact as constant data
+    // a null lookup or an out-of-range slot stops the emitter: it is writing an artifact, and a
+    // silently wrong word would only surface in the artifact's run
+    static NameLookup & nameLookupOf ( NameLookup * lookup, const char * what ) {
+        if ( !lookup ) DAS_FATAL_ERROR("%s: null NameLookup\n", what);
+        return *lookup;
+    }
+    static uint32_t nameLookupAt ( uint32_t at, uint32_t count, const char * what ) {
+        if ( at >= count ) DAS_FATAL_ERROR("%s: %u is past the %u the sealed table holds\n", what, at, count);
+        return at;
+    }
+    NameLookup * rtti_name_lookup_create () {
+        return new NameLookup();
+    }
+    void rtti_name_lookup_destroy ( NameLookup * lookup ) {
+        delete lookup;
+    }
+    void rtti_name_lookup_insert ( NameLookup * lookup, uint64_t mnh, const char * name, uint32_t index, uint32_t value ) {
+        nameLookupOf(lookup, "name_lookup_insert").insert(mnh, name, index, value);
+    }
+    void rtti_name_lookup_seal ( NameLookup * lookup, Context * context, LineInfoArg * at ) {
+        string failure;
+        if ( !nameLookupOf(lookup, "name_lookup_seal").seal(&failure) ) context->throw_error_at(at, "name lookup: %s", failure.c_str());
+    }
+    uint32_t rtti_name_lookup_count ( NameLookup * lookup ) { return nameLookupOf(lookup, "name_lookup_count").count; }
+    uint32_t rtti_name_lookup_mnh_buckets ( NameLookup * lookup ) { return nameLookupOf(lookup, "name_lookup_mnh_buckets").byMnh.nbuckets; }
+    uint32_t rtti_name_lookup_mnh_slots ( NameLookup * lookup ) { return nameLookupOf(lookup, "name_lookup_mnh_slots").byMnh.nslots; }
+    uint32_t rtti_name_lookup_name_buckets ( NameLookup * lookup ) { return nameLookupOf(lookup, "name_lookup_name_buckets").byName.nbuckets; }
+    uint32_t rtti_name_lookup_name_slots ( NameLookup * lookup ) { return nameLookupOf(lookup, "name_lookup_name_slots").byName.nslots; }
+    uint32_t rtti_name_lookup_mnh_disp ( NameLookup * lookup, uint32_t bucket ) {
+        auto & l = nameLookupOf(lookup, "name_lookup_mnh_disp");
+        return l.byMnh.disp[nameLookupAt(bucket, l.byMnh.nbuckets, "name_lookup_mnh_disp")];
+    }
+    uint32_t rtti_name_lookup_name_disp ( NameLookup * lookup, uint32_t bucket ) {
+        auto & l = nameLookupOf(lookup, "name_lookup_name_disp");
+        return l.byName.disp[nameLookupAt(bucket, l.byName.nbuckets, "name_lookup_name_disp")];
+    }
+    uint64_t rtti_name_lookup_entry_mnh ( NameLookup * lookup, uint32_t slot ) {
+        auto & l = nameLookupOf(lookup, "name_lookup_entry_mnh");
+        return l.entries[nameLookupAt(slot, l.byMnh.nslots, "name_lookup_entry_mnh")].mnh;
+    }
+    uint32_t rtti_name_lookup_entry_value ( NameLookup * lookup, uint32_t slot ) {
+        auto & l = nameLookupOf(lookup, "name_lookup_entry_value");
+        return l.entries[nameLookupAt(slot, l.byMnh.nslots, "name_lookup_entry_value")].value;
+    }
+    uint32_t rtti_name_lookup_entry_index ( NameLookup * lookup, uint32_t slot ) {
+        auto & l = nameLookupOf(lookup, "name_lookup_entry_index");
+        return l.entries[nameLookupAt(slot, l.byMnh.nslots, "name_lookup_entry_index")].index;
+    }
+    int32_t rtti_name_lookup_entry_next ( NameLookup * lookup, uint32_t slot ) {
+        auto & l = nameLookupOf(lookup, "name_lookup_entry_next");
+        return l.entries[nameLookupAt(slot, l.byMnh.nslots, "name_lookup_entry_next")].next;
+    }
+    uint64_t rtti_name_lookup_name_hash ( NameLookup * lookup, uint32_t slot ) {
+        auto & l = nameLookupOf(lookup, "name_lookup_name_hash");
+        return l.names[nameLookupAt(slot, l.byName.nslots, "name_lookup_name_hash")].nameHash;
+    }
+    int32_t rtti_name_lookup_name_head ( NameLookup * lookup, uint32_t slot ) {
+        auto & l = nameLookupOf(lookup, "name_lookup_name_head");
+        return l.names[nameLookupAt(slot, l.byName.nslots, "name_lookup_name_head")].head;
+    }
+
     void rtti_builtin_context_for_each_init_function ( Context & ctx, const TBlock<void,uint64_t> & block, Context * context, LineInfoArg * at ) {
         for ( int i=0, is=ctx.getTotalInitFunctions(); i!=is; ++i ) {
             vec4f args[1] = { cast<uint64_t>::from(ctx.getInitFunction(i)->mangledNameHash) };
@@ -1813,6 +1877,42 @@ namespace das {
                 addCtor<LineInfo,FileInfo *,int,int,int,int>(*this,lib,"LineInfo","LineInfo");
             addAnnotation(new DummyTypeAnnotation("recursive_mutex","recursive_mutex",sizeof(recursive_mutex),alignof(recursive_mutex)));
             addUsing<recursive_mutex>(*this, lib, "das::recursive_mutex");
+            // name lookup builder for the standalone emitters
+            addAnnotation(new DummyTypeAnnotation("NameLookup","das::NameLookup",sizeof(NameLookup),alignof(NameLookup)));
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_create)>(*this, lib, "name_lookup_create",
+                SideEffects::modifyExternal, "rtti_name_lookup_create")->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_destroy)>(*this, lib, "name_lookup_destroy",
+                SideEffects::modifyExternal, "rtti_name_lookup_destroy")->arg("lookup")->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_insert)>(*this, lib, "name_lookup_insert",
+                SideEffects::modifyExternal, "rtti_name_lookup_insert")->args({"lookup","mnh","name","index","value"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_seal)>(*this, lib, "name_lookup_seal",
+                SideEffects::modifyExternal, "rtti_name_lookup_seal")->args({"lookup","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_count)>(*this, lib, "name_lookup_count",
+                SideEffects::none, "rtti_name_lookup_count")->arg("lookup");
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_mnh_buckets)>(*this, lib, "name_lookup_mnh_buckets",
+                SideEffects::none, "rtti_name_lookup_mnh_buckets")->arg("lookup");
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_mnh_slots)>(*this, lib, "name_lookup_mnh_slots",
+                SideEffects::none, "rtti_name_lookup_mnh_slots")->arg("lookup");
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_name_buckets)>(*this, lib, "name_lookup_name_buckets",
+                SideEffects::none, "rtti_name_lookup_name_buckets")->arg("lookup");
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_name_slots)>(*this, lib, "name_lookup_name_slots",
+                SideEffects::none, "rtti_name_lookup_name_slots")->arg("lookup");
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_mnh_disp)>(*this, lib, "name_lookup_mnh_disp",
+                SideEffects::none, "rtti_name_lookup_mnh_disp")->args({"lookup","bucket"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_name_disp)>(*this, lib, "name_lookup_name_disp",
+                SideEffects::none, "rtti_name_lookup_name_disp")->args({"lookup","bucket"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_entry_mnh)>(*this, lib, "name_lookup_entry_mnh",
+                SideEffects::none, "rtti_name_lookup_entry_mnh")->args({"lookup","slot"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_entry_value)>(*this, lib, "name_lookup_entry_value",
+                SideEffects::none, "rtti_name_lookup_entry_value")->args({"lookup","slot"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_entry_index)>(*this, lib, "name_lookup_entry_index",
+                SideEffects::none, "rtti_name_lookup_entry_index")->args({"lookup","slot"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_entry_next)>(*this, lib, "name_lookup_entry_next",
+                SideEffects::none, "rtti_name_lookup_entry_next")->args({"lookup","slot"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_name_hash)>(*this, lib, "name_lookup_name_hash",
+                SideEffects::none, "rtti_name_lookup_name_hash")->args({"lookup","slot"});
+            addExtern<DAS_BIND_FUN(rtti_name_lookup_name_head)>(*this, lib, "name_lookup_name_head",
+                SideEffects::none, "rtti_name_lookup_name_head")->args({"lookup","slot"});
             addAnnotation(new ContextAnnotation(lib));
             addAnnotation(new ErrorAnnotation(lib));
             addAnnotation(new FileAccessAnnotation(lib));

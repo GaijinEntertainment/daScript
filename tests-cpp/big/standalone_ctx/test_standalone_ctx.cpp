@@ -34,5 +34,23 @@ int main( int, char * [] ) {
     expect("apply_lambda(10)", ctx.apply_lambda(10), 16);
     expect("call_through_pointer(21)", ctx.call_through_pointer(21), 42);
     expect("sum_generator(5)", ctx.sum_generator(5), 10);
+    auto getFirst = ctx.findFunction("get_first");
+    expect("findFunction(get_first)", getFirst != nullptr ? 1 : 0, 1);
+    expect("fnByMangledName(get_first)", getFirst && ctx.fnByMangledName(getFirst->mangledNameHash) == getFirst ? 1 : 0, 1);
+    bool unique = false;
+    expect("findFunction(get_first, unique)", ctx.findFunction("get_first", unique) == getFirst && unique ? 1 : 0, 1);
+    expect("findFunctions(get_first).size()", int32_t(ctx.findFunctions("get_first").size()), 1);
+    expect("findFunction(nope)", ctx.findFunction("nope") == nullptr ? 1 : 0, 1);
+    expect("findFunctions(nope).size()", int32_t(ctx.findFunctions("nope").size()), 0);
+    int later = ctx.findVariable("g_later");
+    expect("findVariable(g_later)", later >= 0 ? 1 : 0, 1);
+    expect("getVariable(g_later)", later >= 0 ? *(int32_t *) ctx.getVariable(later) : -1, 7);
+    expect("findVariable(nope)", ctx.findVariable("nope"), -1);
+    // a shared global sits in the shared block: its emitted offset is the shared running size
+    expect("get_shared_total()", ctx.get_shared_total(), 6);
+    int sharedTaps = ctx.findVariable("g_shared_taps");
+    expect("findVariable(g_shared_taps)", sharedTaps >= 0 ? 1 : 0, 1);
+    expect("getVariable(g_shared_taps)[0]", sharedTaps >= 0 ? ((int32_t *) ctx.getVariable(sharedTaps))[0] : -1, 1);
+    expect("getVariable(g_shared_taps)[2]", sharedTaps >= 0 ? ((int32_t *) ctx.getVariable(sharedTaps))[2] : -1, 3);
     return failures ? 1 : 0;
 }
