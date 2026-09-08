@@ -607,7 +607,6 @@ static bool load_deferred_module_for_require(const string & name) {
         if ( grown ) {
             string notInitialized;
             if ( !Module::InitializeDependencies(notInitialized) ) {
-                notInitialized.clear();
                 load_all_deferred_dynamic_modules();
                 if ( !Module::InitializeDependencies(notInitialized) ) {
                     DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", notInitialized.c_str());

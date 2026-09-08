@@ -137,6 +137,7 @@ namespace das {
     }
 
     bool Module::InitializeDependencies ( string & notInitialized ) {
+        notInitialized.clear();
         // InitDependencies do not add new modules.
         vector<bool> mod_state;
         bool any = true;
@@ -205,7 +206,6 @@ namespace das {
         string notInitialized;
         if ( !InitializeDependencies(notInitialized) ) {
             // a half-warm tree: a descriptor compiled cold loaded its module, its dependency's replayed row waits (ARCHITECTURE.md sec.2)
-            notInitialized.clear();
             load_all_deferred_dynamic_modules();
             if ( !InitializeDependencies(notInitialized) ) {
                 DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", notInitialized.c_str());

@@ -2436,6 +2436,7 @@ namespace das {
     }
 
     DAS_API bool load_deferred_dynamic_module ( const char * das_name ) {
+        if ( !das_name ) return false;
         lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
         auto it = find_if(g_deferred_dynamic_modules.begin(), g_deferred_dynamic_modules.end(),
             [&](const DeferredDynamicModule & dm) { return dm.das_name == das_name; });
