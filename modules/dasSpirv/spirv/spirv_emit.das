@@ -3067,6 +3067,18 @@ def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : Variab
         ctx.local_vars |> insert(intptr(v), LocalVar(ptr_id = cmid, value_type = cmt))
         return
     }
+    // A fixed array of cooperative-matrix tiles (`var acc : coopmatAcc_f16_16x16[16]`, the accumulator block
+    // of a 2-D subgroup tiling): OpTypeArray over the tile type. An element is reached through an OpAccessChain
+    // whose index a `for [unroll_full]` makes a constant, so the block stays in registers (ARCHITECTURE.md 3.6).
+    if (bt == Type.tFixedArray && v._type.firstType != null && coopmat_info(v._type.firstType).ok) {
+        let elt = coopmat_type_of(m, v._type.firstType)
+        let arrt = type_array(m, elt, v._type.fixedDim)
+        let arrpt = type_pointer(m, SpvStorageClass.Function, arrt)
+        let arrid = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.Variable, arrpt, arrid, uint(SpvStorageClass.Function))
+        ctx.local_vars |> insert(intptr(v), LocalVar(ptr_id = arrid, value_type = arrt))
+        return
+    }
     // a matrix is a tHandle, so numeric_info does not see it -- emit_type lowers it to OpTypeMatrix,
     // which is a perfectly good Function-storage pointee (glslang gives a local `mat4` an OpVariable too)
     if (!is_emittable_value_type(v._type) && bt != Type.tFixedArray && bt != Type.tStructure &&
@@ -3914,7 +3926,8 @@ class SpirvEmit : AstVisitor {
             }
             let idx = value_of(index_expr)
             if (idx == 0u) return   // index failed to lower (error already pushed) — no 0-operand access chain
-            let pointee = emit_type(bm, result_expr._type)
+            let cmt = coopmat_type_of(bm, result_expr._type)   // an element of a coopmat tile array is the tile type
+            let pointee = cmt != 0u ? cmt : emit_type(bm, result_expr._type)
             let ptr_t = type_pointer(bm, SpvStorageClass.Function, pointee)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, lv.ptr_id, idx)

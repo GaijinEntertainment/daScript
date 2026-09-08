@@ -12,6 +12,7 @@ module _spirv_common shared public
 
 require spirv/spirv_shader
 require spirv/spirv_grammar
+require spirv/spirv_dis
 require spirv/spirv_builtins public
 require daslib/fio
 require math
@@ -2329,6 +2330,61 @@ def coopmat_f16acc_kernel {
 
 def public coopmat_f16acc_words : array<uint> {
     return clone_to_move(coopmat_f16acc_spv)
+}
+
+// ===== an ARRAY of accumulator tiles under [unroll_full]: the accumulator block a 2-D subgroup tiling holds
+// (llama.cpp's `sums[]`). The array is one OpTypeArray over the tile type in Function storage; every element
+// access chains a constant index, so the block stays in registers. =====
+var @ssbo @binding = 0 cma_a : array<float16>
+var @ssbo @binding = 1 cma_b : array<float16>
+var @ssbo @binding = 2 cma_c : array<float>
+
+[compute_shader(local_size_x=32, name="coopmat_arr_spv"), marker(no_coverage)]
+def coopmat_arr_kernel {
+    var a : coopmatA_f16_16x16
+    var b : coopmatB_f16_16x16
+    var acc : coopmatAcc_f16_16x16[4]
+    coopmatLoad(a, cma_a, 0, 16, 0)
+    for [unroll_full] (c in range(4)) {
+        coopmatLoad(b, cma_b, c * 256, 16, 1)
+        acc[c] = coopmatMulAdd(a, b, acc[c])
+    }
+    var accw : coopmatAcc_f32_16x16
+    for [unroll_full] (c in range(4)) {
+        coopmatConvert(accw, acc[c])
+        coopmatStore(accw, cma_c, c * 256, 16, 1)
+    }
+}
+
+def public coopmat_arr_words : array<uint> {
+    return clone_to_move(coopmat_arr_spv)
+}
+
+// Every OpAccessChain rooted in a Function-storage variable indexes with OpConstant ids alone - the register-block
+// shape [unroll_full] exists to produce. Returns the chain count and how many index operands were not constants.
+def public function_chain_indices(words : array<uint>) : tuple<chains : int; dynamic : int> {
+    var consts : table<uint>
+    var fvars : table<uint>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.Constant) && n >= 2) {
+            consts |> insert(w[s + 1])
+        } elif (opcode == uint(SpvOp.Variable) && n >= 3 && w[s + 2] == uint(SpvStorageClass.Function)) {
+            fvars |> insert(w[s + 1])
+        }
+    }
+    var chains = 0
+    var dynamic = 0
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.AccessChain) && n >= 4 && key_exists(fvars, w[s + 2])) {
+            chains++
+            for (i in range(3, n)) {
+                if (!key_exists(consts, w[s + i])) {
+                    dynamic++
+                }
+            }
+        }
+    }
+    return (chains = chains, dynamic = dynamic)
 }
 
 // ===== packed integer dot product: sdot4 -> OpSDot with the PackedVectorFormat4x8Bit literal.

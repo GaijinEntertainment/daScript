@@ -91,33 +91,6 @@ def test_early_return_in_loop(t : T?) {
     }
 }
 
-// Every OpAccessChain rooted in a Function-storage variable indexes with OpConstant ids alone - the register-block
-// shape [unroll_full] exists to produce. Returns the chain count and how many index operands were not constants.
-def private function_chain_indices(words : array<uint>) : tuple<chains : int; dynamic : int> {
-    var consts : table<uint>
-    var fvars : table<uint>
-    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
-        if (opcode == uint(SpvOp.Constant) && n >= 2) {
-            consts |> insert(w[s + 1])
-        } elif (opcode == uint(SpvOp.Variable) && n >= 3 && w[s + 2] == uint(SpvStorageClass.Function)) {
-            fvars |> insert(w[s + 1])
-        }
-    }
-    var chains = 0
-    var dynamic = 0
-    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
-        if (opcode == uint(SpvOp.AccessChain) && n >= 4 && key_exists(fvars, w[s + 2])) {
-            chains++
-            for (i in range(3, n)) {
-                if (!key_exists(consts, w[s + i])) {
-                    dynamic++
-                }
-            }
-        }
-    }
-    return (chains = chains, dynamic = dynamic)
-}
-
 [test]
 def test_unroll_full(t : T?) {
     t |> run("for [unroll_full] with literal bounds: emitted as copies, indices folded to constants") <| @(t : T?) {
