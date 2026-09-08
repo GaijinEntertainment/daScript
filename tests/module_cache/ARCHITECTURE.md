@@ -47,8 +47,9 @@ this document states what the folder is and why its tests take the shape they do
   deferred module in and then fail on the missing prerequisite; a module cache an eager start
   wrote serves a lazy start, with `-log-compile-time` printing the reads and the startup
   timeline; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
-  deferred module in because its `initDependencies` asks for two more. A static build, whose
-  tree holds no `.shared_module`, has nothing to observe and the test says so and returns.
+  deferred module in because its `initDependencies` asks for two more. A static host - the AOT
+  test binary, whose descriptors register no shared module, or a tree holding no
+  `.shared_module` - has nothing to observe and the test says so and returns.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`); a case needing a macro-bearing module graph puts it here instead of
   writing the script inline.

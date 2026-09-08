@@ -246,6 +246,10 @@ def arm_fallback(t : T?; fx : Fixture) {
 //! the arms share one root and run in this order
 [test]
 def test_deferred_modules(t : T?) {
+    if (!das_is_dll_build()) {
+        to_log(LOG_INFO, "test_deferred_modules: {das_exe()} is a static build - its descriptors register no shared module, so it defers nothing\n")
+        return
+    }
     let artifact = unit_test_artifact()
     if (empty(artifact)) {
         to_log(LOG_INFO, "test_deferred_modules: no {UNIT_TEST_ARTIFACT}.shared_module under {get_das_root()}/modules/{UNIT_TEST_FOLDER} - a static build defers nothing\n")
