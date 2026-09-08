@@ -791,26 +791,40 @@ module) is independent and can land any time - it is pure structure.
     UD-IQ4_XS row's re-measure is owed: at 1.2 GB held by other processes the resident plan's
     KV room fell to 147 MB, under the 2048-position minimum, and the driver declined - the row
     needs the box the board's 395.2 was taken on (about 650 MB held).
-    WHERE THE REST IS: llama.cpp's non-cm2 path does not
-    run K-quants on tensor cores at all - `quantize_y` (ggml-vulkan.cpp, needs integer dot and no
-    coopmat2) routes them to the integer MMQ tile (`matmul_q4_k_q8_1`: 128 threads, 128 x 128 x 32,
-    Q8_1 activations with a per-32 (d, sum), a 4 x 32 f32 register block per thread over
-    dotPacked4x8, the sub-block (d*sc, dmin*m) folded per 32-k block), measured 43-46 TFLOP/s-eq
-    on the 9728/4096 x 2560 shapes and 27-31 on the 80-workgroup ones (its Vulkan build under
-    `GGML_VK_PERF_LOGGER=1`, the 4B prefill on the 5060 Ti) against our f16 KHR tile's 32 on the
-    large shapes (`harness/vk_gemm_probe.das -- khrx`, same card, after the slab fix above; 25 before it). The road to parity on the KHR arm is that tile on our side - a new body with
-    per-format int8 word decodes (the sdot4 `KqBatch` tier's `stage_w` is the same decode at a
-    32 x 32 superblock shape) - and it lifts every integer-dot card with or without coopmat.
-    THE FIRST PROTOTYPES (2026-09-07, `harness/vk_gemm_probe.das -- mmqx`): three register-block
-    shapes over the sdot4 k4 staging (64 x 32 at 4 x 8 per thread staged per superblock; the
-    reference exe's one-block stage at 64 x 128, 4 x 16; that stage at 4 x 4 as named scalars)
-    all read 8.8-9.2 TFLOP/s against the shipped tile's 12.2, and the named-scalar twin with
-    CONSTANTS in place of the plane reads reads 11.0 - the inner loop caps the shape, not the
-    memory: per block a thread issues 24 shared loads and 160 sdot4 for 16 outputs, the reference
-    exe's 4 x 32 block 40 loads for 1024. Two prerequisites before the next prototype: (a) the
-    SPIR-V emitter unrolls `for [unroll] (i in range(N))` at emission (today it emits a hinted
-    loop, and a fixed-array local stays a Function-storage variable indexed by the loop counter -
-    `plans/shader_emitter_followups.md`), so a 128-accumulator block can be written as an array
-    with constant indices the driver promotes to registers; (b) a hardware profile of the ceiling
-    twin (Nsight, not another blind bisect) to see whether the sdot4 issue rate, the shared-load
-    rate or the barrier stalls at two workgroups per SM hold it at 11.
+    WHERE THE REST IS (the 2026-09-07 reading of `quantize_y` was wrong; corrected 2026-09-08 from
+    `ggml_vk_load_shaders` and `ggml_vk_get_mul_mat_mat_pipeline`): on a device with KHR cooperative
+    matrix llama.cpp creates no integer tile - `CREATE_MMQ` sits only in the shader loader's two
+    scalar arms, the q8_1 pipeline set is empty, and every mat-mat product falls to the f16
+    KHR-coopmat `mul_mm.comp` tile with the format decoded into shared memory (`load_a_to_shmem`),
+    the 4221 and 675 t/s bars included. That tile on the NVIDIA card (`warptile_mmq` for a quantized
+    A, the `aligned` variant on every shape of ours, split-k off): 128 threads, a 128 x 128 x 32 block,
+    four subgroups as 2 x 2 tiles of 64 x 64 over 16 x 16 x 16 fragments (sixteen accumulators per
+    subgroup, one B stage shared by all four), f16 accumulators (`coopmat_acc_f16_support` with
+    default precision picks the f16acc pipeline: 64 accumulator registers per lane), two 128-row
+    stages at a 20-word stride - our stride - plus a 2 KB store stage, 22 KB in all, and a direct
+    `coopMatStore` of a whole tile; the per-shape rates its perf logger reads (43-46 TFLOP/s-eq on
+    the 9728/4096 x 2560 shapes, 27-31 on the 80-workgroup ones, the 4B prefill on the 5060 Ti) are
+    that tile's, against our f16 KHR tile's 32 on the large shapes (`harness/vk_gemm_probe.das --
+    khrx`, same card, after the slab fix above). The same hardware path, the same shared footprint
+    and barrier cadence, so the road to parity is the subgroup tiling and the accumulator: their
+    four subgroups each load 4 A + 4 B fragments per 16 MMAs over one shared B stage, our eight each
+    reload all 8 B fragments against 1 A - 144 fragment loads per workgroup per k step against their
+    64 to 96 - and our accumulators are f32, 128 registers per lane against their 64. The integer MMQ tile
+    (`matmul_q4_k_q8_1`: 128 threads, 128 x 128 x 32 over four staged k blocks, Q8_1 activations
+    with a per-32 (d, d x sum), a 4 x 32 f32 register block per thread over dotPacked4x8, the
+    sub-block (d*sc, dmin*m) folded per 32-k block; no IQ format has one) is the coopmat-less arm's
+    path (`GGML_VK_DISABLE_COOPMAT=1`) and the lever for our sdot4 mode; its rates on this card are
+    unmeasured - the perf logger names no pipeline, `GGML_VK_PIPELINE_STATS=q8_1` proves the tile
+    was reached.
+    THE FIRST INTEGER-TILE PROTOTYPES (2026-09-07, `harness/vk_gemm_probe.das -- mmqx`, the sdot4
+    arm's lever): three register-block shapes over the sdot4 k4 staging (64 x 32 at 4 x 8 per
+    thread staged per superblock; the reference exe's one-block stage at 64 x 128, 4 x 16; that
+    stage at 4 x 4 as named scalars) all read 8.8-9.2 TFLOP/s against the shipped tile's 12.2, and
+    the named-scalar twin with CONSTANTS in place of the plane reads reads 11.0 - the inner loop
+    caps the shape, not the memory: per block a thread issues 24 shared loads and 160 sdot4 for 16
+    outputs, the reference exe's 4 x 32 block 40 loads for 1024. Two prerequisites before the next
+    prototype of either tile: (a) the SPIR-V emitter unrolls `for [unroll_full] (i in range(N))`
+    at emission (`plans/shader_emitter_followups.md` item 2), so a fragment or accumulator block
+    written as a fixed array chains constant indices the driver promotes to registers - the
+    coopmat tile's sixteen accumulators need it as much as the integer tile's 128; (b) a hardware
+    profile (Nsight) of our KHR tile beside llama.cpp's on one shape, not another blind bisect.
