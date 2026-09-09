@@ -161,6 +161,38 @@ the rest is the per-layer host glue the span would remove, and the span declines
    (the conv tail and the state across the seam), the same bar and controls.
 5. **The expert GEMMs at small M.** The last term (192 ms on the 30B): a tile pick for
    32-row buckets, or a mul_mat_id-shaped kernel; measured on the probe first.
+   5a DONE 2026-09-09 - the decode, not the tile. llama.cpp's coopmat2 branch creates no
+   integer-dot `mul_mat_id` pipeline (`ggml-vulkan.cpp`, the `CREATE_MMQ ... _id_q8_1` block
+   sits in the KHR branch), so every harness figure above is its cm2 tile, and its pick
+   (`ggml_vk_guess_matmul_id_pipeline`) takes the l pipeline by the TOTAL token count (512 >
+   64) whose `enable_smaller_matrices` shrinks a 32-row bucket's column to BN/4 = 32: the
+   same 128 x 32 x 64 geometry as our s tile. The new probe arm (`harness/vk_gemm_probe.das
+   -- moe:<fmt>`: the 30B schedule, 128 buckets of 32 rows, gate/up d 768 K 2048 and down
+   d 2048 K 768, the device bound with its sentinel tail) put our tile beside theirs per
+   format, gate/up plane in us: q8 892 (theirs 998), k4 728 (1009), iq4xs 632 (959), iq2xs 664
+   (744) - ahead - but iq2xxs 955 (754), iq3xxs 728 (788), iq3s 1141 (870), iq2s 830 (797).
+   The tile was not the term; the decode bodies were: iq2xs's decode reads one 16-bit lane
+   while the four slow formats selected bytes out of lanes (`unpack8(lane)[i & 1]`) and built
+   the IQ2_XXS / IQ3_XXS sign index from two selected bytes. Respelled as lane shifts (the
+   aux32 assembled from two lanes): iq2xxs 749, iq3xxs 585, iq3s 767, iq2s 772. The rows:
+   the 30B window 221.2 -> 187.7 ms (expert tiles 166 -> 133), pp512 2670.7 (0.76x), tg128
+   124.6; the 35B 2542.7 (0.89x), tg128 95.3; the twin (k4) unchanged at 5208.4 / 143.1.
+   5b NEXT - the schedule's shape. llama.cpp's own per-op logger on the real 30B window
+   (`GGML_VK_PERF_LOGGER=1 llama-bench -p 512`) reads its iq2_xxs gate/up plane at 594 us -
+   FASTER than its 754 on uniform buckets - because the l pipeline's column widens to 64 or
+   128 rows on a big bucket, so the real router's skew (a few experts with hundreds of rows,
+   many with a dozen) amortizes each A decode over more rows; our s tile decodes the 128-row
+   weight tile once per 32 rows whatever the bucket, so the same skew costs us: the real
+   window's gate plane read 1211 us per layer against the probe's 955 on uniform buckets
+   before 5a (966 against 749 after). The lever: split every bucket into whole 128-row chunks
+   for the m class and a remainder of at most 127 rows for the s class - one schedule pass
+   writing both record lists (records [0, ne) for the s pieces, [ne, 2 ne) for the m pieces,
+   the map offset moved to 2048 words, one packed two-way scan for the two tile counts), two
+   dispatches per plane over the same planes (the m dispatch's y plane under its own hazard
+   bit so the two co-run and the act's barrier covers both), no new kernel: the m class is
+   the dense chain's, and every m column is whole by construction, so it never takes the
+   edge path. `moesk:<fmt>` (a 1 / (rank + 8) profile over the 128 experts) measures the
+   whole-s schedule against the split before the sched kernel changes.
 
 Slices 1 and 2 are small and land the shared-expert families' rows; slice 3 is the arc's body.
 

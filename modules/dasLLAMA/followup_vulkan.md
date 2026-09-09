@@ -300,7 +300,8 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    the killer was ONE byte4 DYNAMIC select in the sub-scale extract (unpack8(word)[i&3]),
    the same death shape the Q8 chase found; byte2 [i&1] selects are fine. Respelled as
    shift + arithmetic-shift sign extension: 12.8 -> 32.9 TF/s. RULE for every future
-   decode: NEVER index unpack8 of a 32-bit word dynamically - shift+mask, or byte2 [i&1].
+   decode: NEVER index unpack8 of a 32-bit word dynamically - shift+mask, or byte2 [i&1]
+   (and the byte2 select costs against the lane shift too: item 36's 2026-09-09 status).
    k6 UNPINNED: Qwen3-4B Q4_K_M pp 1626 (mode 3) -> 2669 (k4) -> 3188 (k4+k6) = +96%.
    NEXT: k5/q40 stamps (mechanical now the trap is named), then (d) driver-blocked.
    (ngfx GPU Trace, our gate loop vs their GEMM loop; counters now read UNELEVATED):
@@ -664,6 +665,18 @@ module) is independent and can land any time - it is pure structure.
     twins do one grid lookup per four elements and beat the scalar arm by 30-65% at the tile
     (iq3s 43-48 vs 29-30 TF/s at the gate shape, iq2s 49-50 vs 30-32, iq2xxs 44-46 vs 34-35);
     the `DECVEC` opt-outs are gone.
+    2026-09-09 (the MoE arc): the byte selects of those decodes respelled as lane shifts. A
+    `unpack8(lane)[i & 1]` byte2 select reads the same 16-bit lane as `(lane >> ((i & 1) * 8))
+    & 0xFF` but costs against it, and the IQ2_XXS / IQ3_XXS sign index was built from two
+    selected bytes where the aux32 word assembled from its two lanes and shifted serves.
+    `harness/vk_gemm_probe.das -- moe:<fmt>` (the 30B expert schedule: 128 buckets of 32
+    rows, gate/up d 768 K 2048, per plane, RTX 5060 Ti): iq2xxs 955 -> 749 us, iq3xxs 728 ->
+    585, iq3s 1141 -> 767, iq2s 830 -> 772, against llama.cpp's cm2 `mul_mat_id` tile at 754 /
+    788 / 870 / 797 on the same uniform buckets (its `test-backend-ops perf`); iq2xs 664, iq4xs
+    632, k4 728 and q8 892 already sat under its 744 / 959 / 1009 / 998. The rule in
+    `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k. The selects left: k5's qh byte in its twin,
+    the k3 and K-quant scalar decodes (the edge path and the scalar-callback arm) - the same
+    lever, unmeasured.
 
 37. **Device embed gather over a kq tied plane.** `vulkan_embed_gpu_gate` admits a model only
     when `rdec_set_emb` placed a q8 tied plane or the f32 table fit under `RDEC_EMB_F32_CAP`;

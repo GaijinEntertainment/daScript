@@ -155,10 +155,13 @@ sec.2.2n), and the window then never leaves the device between layers: the CPU's
 bucketing and combine of the per-op tier (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q) become
 five device stages over the window's FFN-normed rows.
 
-- **The router GEMM** (`RouterGemm`) is the span's router GEMV batched: 16 positions by 16
-  router rows per workgroup, K in 32-wide steps through shared memory. The router plane holds
-  every MoE layer's f32 rows, and a gated shared expert's gate vector rides as one more row past
-  the experts, so one dispatch writes the logits row `[ne | gate]` per position.
+- **The router GEMM** (`RouterGemm`) is the span's router GEMV batched: a 32 x 32 tile of
+  positions by router rows per workgroup, each invocation a 2 x 2 block, K in 64-wide steps
+  through shared memory (a 16 x 16 tile of one output each, stepping K by 32, was
+  barrier-bound at 243 us per layer for 268 MFLOP on the 30B; the 32 x 32 tile reads 142),
+  which is why the MoE seats ask for a 64-multiple row width. The router plane holds every MoE
+  layer's f32 rows, and a gated shared expert's gate vector rides as one more row past the
+  experts, so one dispatch writes the logits row `[ne | gate]` per position.
 - **The per-row select** (`TopKRows`, one workgroup per position) is the decode top-k's core
   over each row: the softmax, k picks largest-first with ties to the lower index, the
   renormalized or scaled weights - the host `moe_select_core`'s arithmetic - written
@@ -170,8 +173,10 @@ five device stages over the window's FFN-normed rows.
   fixed map offset (4 words for up to 256 experts). The dispatch is sized for the worst case -
   a partial tile per expert - and the map's tail past the real workgroup count carries the
   sentinel (`SCHED_NONE`): a tile workgroup that reads it sees a zero-row region and returns
-  before its first barrier. The slot-to-bucket-row map lands in slot order, the CPU walk's
-  order, so the device buckets equal the host's.
+  before its first barrier. The two slot walks (the counts, the slot-to-bucket-row map) stage
+  the picks through workgroup memory in 256-slot chunks rather than reading every slot from
+  global memory per thread (258 us per layer to 163 on the 30B). The slot-to-bucket-row map
+  lands in slot order, the CPU walk's order, so the device buckets equal the host's.
 - **The gather, the expert tiles and the act** are the per-op chain's: the f16 gather scatters
   each position's row into its bucket rows, gate and up run the cm2 tiles at the 32-row column
   over the gathered image, the act writes the f16 hidden rows, and down runs the tiles again.

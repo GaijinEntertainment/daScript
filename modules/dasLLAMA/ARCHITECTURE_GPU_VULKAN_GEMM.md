@@ -16,12 +16,20 @@ sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 ### 2.2k The cm2 decode callbacks read their quant bytes as 16-bit lanes {#cm2-decode-16bit-lanes}
 
 A cm2 tile's decode callback runs inside the driver's block load, and the vendor driver's shader
-compiler pattern-matches only one spelling into that path: a 16-bit load (`int16[N]` block
-members) followed by `unpack8(w)[i & 1u]` - a byte2 lane select - with sub-fields pulled out by
-shift and mask. A 32-bit word with a variable shift runs slower; an `unpack8` of a 32-bit word
-indexed by a runtime value (a byte4 dynamic select) drops the whole kernel off the block-load
-path, to about a third of the rate. Every cm2 decode - q8 and every kq superblock format - is
-spelled the 16-bit way, which is why the block structs are `int16` arrays over the same bytes.
+compiler pattern-matches only one load width into that path: a 16-bit load (`int16[N]` block
+members), with sub-fields pulled out by shift and mask. A 32-bit word with a variable shift runs
+slower; an `unpack8` of a 32-bit word indexed by a runtime value (a byte4 dynamic select) drops
+the whole kernel off the block-load path, to about a third of the rate. Every cm2 decode - q8
+and every kq superblock format - is spelled the 16-bit way, which is why the block structs are
+`int16` arrays over the same bytes. A byte the decode needs at a runtime position comes out of
+its lane by a shift - `(uint(int(blk.qs[i >> 1u])) & 0xFFFFu) >> ((i & 1u) * 8u)` - not by an
+`unpack8(w)[i & 1u]` byte2 lane select: the select reads the same lane, but a decode built on
+selects runs 1.1x to 1.5x slower than the shift form on the expert-schedule shape
+(`harness/vk_gemm_probe.das -- moe:<fmt>`, RTX 5060 Ti, per gate/up plane: iq2xxs 955 -> 749
+us, iq3xxs 728 -> 585, iq3s 1141 -> 767, iq2s 830 -> 772, against llama.cpp's cm2
+`mul_mat_id` tile at 754 / 788 / 870 / 797). A sign index that straddles two bytes (the
+IQ2_XXS and IQ3_XXS aux32 words) is assembled from its two lanes and shifted, never built from
+two selected bytes.
 Every table a decode reads at a runtime index is staged into a `@workgroup` array ahead of the
 tile loop, never selected out of a register vector per element: the iq4 formats' 16-entry
 codebook (`kvalues_iq4nl`, shared by IQ4_XS and IQ4_NL) as f16, each grid format's codebook as
