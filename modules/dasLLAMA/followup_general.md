@@ -1420,3 +1420,17 @@
     itself shows `reinterpret<void?>(13)`, an `int` widened to a pointer - a const node's whole
     vec4f is zero so it happens to work; that example wants a same-size spelling once the rule
     lands.
+124. **Pocket TTS at 4 bits - part 2 of the Pocket arc (ruled 2026-09-09).** The q8 lane held
+    the reference's quality on the rig (alba, 200 sentences: WER 4.13 / UTMOS 4.330 on the
+    published Q8_0 file against the package's 5.00 / 4.393, the f32 lane at 4.13 / 4.368), and
+    that margin is the reason to expect a 4-bit lane to hold too. Try the engine's 4-bit weight
+    formats on the same GEMMs the q8 lane quantizes - the backbone's four matrices per layer,
+    the codec transformers, the 32-wide codec convs - through the kq plane machinery the LLM
+    prefill already runs (`matmul_kq_batch` over a Q8_K-requantized activation row block;
+    `dasllama_kqformat.das` names the formats: Q4_0, Q4_K, IQ4_NL, IQ4_XS and the rest): a
+    `wkq` plane beside `wq` on `TtsLinear` / `TtsConv1d`, `linear_rows_kq` and a
+    `conv1d_rows_dense_kq` over the same stacked tap rows, the decode step on the kq GEMV, the
+    published file as the winning format. One format at a time, each a rig row on both
+    lanes, the flow head left f32 throughout (it is the graph's sensitive part - a 1e-5
+    epsilon in its timestep norm moved every latent one percent). The prize: the English file
+    from 152 MB to about 80, and the backbone's per-frame read from 75 MB to 38.

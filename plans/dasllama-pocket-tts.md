@@ -264,6 +264,14 @@ Training data includes Emilia (original release CC BY-NC 4.0); Kyutai declared C
 regardless, which is their call and the field's norm - noted, not actionable. SentencePiece
 the library is Apache-2.0; the tokenizer model file is part of the weights.
 
+## Part 2 (ruled 2026-09-09): the 4-bit lane
+
+The Hugging Face upload of the Q8_0 files happens at the END of the arc, once every language is
+converted, not per milestone. Part 2 is followup_general.md row 124: the engine's 4-bit weight
+formats on the same GEMMs the q8 lane quantizes, one format at a time, each a rig row on both
+lanes, the flow head f32 throughout; the winning format becomes the published file (about 80 MB
+for English against the Q8_0 file's 152).
+
 ## Not this arc
 
 Hindi (not a Pocket language; stays on the Kokoro ledger row), the Kyutai training rail
