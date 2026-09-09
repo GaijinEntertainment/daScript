@@ -27,15 +27,16 @@ class JIT_LLVM : AstSimulateMacro {
     }
 }
 
-//! the emitter's load is JIT work, so it prints its own `LLVM JIT time:` line
-def private run_jit_in_emitter(prog : Program?; var ctx : Context?; log_jit_time : bool) : bool {
+//! the link side's plan, its probe and the emitter's load are JIT work the emitter's own report
+//! never covers, so the miss path prints them on one line
+def private run_jit_in_emitter(prog : Program?; var ctx : Context?; log_jit_time : bool; t_plan, t_probe : int) : bool {
     let load_tm = ref_time_ticks()
     let mctx = macro_context_of(EMITTER_MODULE)
     if (mctx == null) {
         panic("LLVM JIT: the emitter module {EMITTER_MODULE} did not load")
     }
     if (log_jit_time) {
-        to_log(LOG_INFO, "LLVM JIT time: emitter load {jit_sec(get_time_usec(load_tm))}\n")
+        to_log(LOG_INFO, "LLVM JIT time: plan {jit_sec(t_plan)} probe {jit_sec(t_probe)} emitter load {jit_sec(get_time_usec(load_tm))}\n")
     }
     var ok = false
     call_in_context(mctx, "run_jit_codegen", prog, ctx, ok)
@@ -62,7 +63,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     var plan <- make_jit_plan(prog, ctx, true)
     let t_hash = get_time_usec(phase_tm)
     if (!plan.use_dll) {
-        return run_jit_in_emitter(prog, ctx, plan.log_jit_time)
+        return run_jit_in_emitter(prog, ctx, plan.log_jit_time, t_hash, 0)
     }
     if (empty(plan.candidates)) {
         to_log(LOG_INFO, "LLVM JIT: 0 functions to jit ({length(plan.disabled)} marked no_jit) - the WHOLE program runs interpreted\n")
@@ -77,7 +78,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     // `-output` path another program wrote
     if (dll.handle == null || probe.mismatched != 0 || empty(probe.bound)) {
         drop_probe(dll, uids)
-        return run_jit_in_emitter(prog, ctx, plan.log_jit_time)
+        return run_jit_in_emitter(prog, ctx, plan.log_jit_time, t_hash, t_probe)
     }
     phase_tm = ref_time_ticks()
     mark_jit_selection(prog, probe.bound)
@@ -91,7 +92,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
         }
         to_log(LOG_WARNING, "LLVM JIT: the cached {plan.output_path}.dll cannot be linked into this process - {length(errors)} extern(s) unresolved, codegen\n")
         drop_probe(dll, uids)
-        return run_jit_in_emitter(prog, ctx, plan.log_jit_time)
+        return run_jit_in_emitter(prog, ctx, plan.log_jit_time, t_hash, t_probe)
     }
     to_log(LOG_INFO, "LLVM JIT: DLL cache hit {plan.output_path}.dll\n")
     install_dll_functions(dll, ctx, uids, probe.bound)

@@ -22,6 +22,18 @@ def private fixture(bound : int) : string {
     return "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n[export]\ndef main \{\n    var s = 0\n    for (i in range({bound})) \{\n        s += i * i\n    \}\n    print(\"PROBE \{s\}\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
 }
 
+//! a helper the DLL holds; `no_jit` on it after the cold run makes the DLL hold a function the
+//! plan disables, which the probe calls a miss
+def private fixture_with_helper(no_jit_helper : bool) : string {
+    let ann = no_jit_helper ? "[no_jit]\n" : ""
+    return "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n{ann}def sq(i : int) : int \{\n    return i * i\n\}\n\n[export]\ndef main \{\n    var s = 0\n    for (i in range(10)) \{\n        s += sq(i)\n    \}\n    print(\"PROBE \{s\}\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
+}
+
+//! nothing to jit: the only function is `[no_jit]`, so the plan's candidate set is empty
+def private fixture_nothing_to_jit() : string {
+    return "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n[no_jit, export]\ndef main \{\n    print(\"PROBE none\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
+}
+
 def private jit_argv(script, cache, pinned : string; in_memory : bool) : array<string> {
     var argv <- [das_exe(), "-jit", "-log-compile-time", "-module-cache", cache, "-output", pinned, script]
     if (in_memory) {
@@ -60,7 +72,7 @@ def test_jit_link(t : T?) {
         t |> success(find(out, "LLVM JIT: DLL cache miss") >= 0 && find(out, "(codegen") >= 0, "the cold run is a miss that emits: {tail(out)}")
         t |> success(find(out, "EMITTER true") >= 0, "the emitter module joined the process for the miss: {tail(out)}")
         t |> equal(0, count_prefix(tmp, "late~"), "the emitter's modules are records of the script's own module cache, not a cache of their own")
-        t |> success(find(out, "LLVM JIT time: emitter load ") >= 0, "the emitter's load prints its time: {tail(out)}")
+        t |> success(find(out, "LLVM JIT time: plan ") >= 0 && find(out, " emitter load ") >= 0, "the link side's plan and the emitter's load print their times: {tail(out)}")
     }
     t |> run("a warm run binds the pinned DLL from the link module alone") @(t : T?) {
         var out = ""
@@ -84,6 +96,25 @@ def test_jit_link(t : T?) {
         t |> equal(0, rc, "the fixture runs: {tail(out)}")
         t |> success(find(out, "PROBE 385") >= 0, "the new body answered: {tail(out)}")
         t |> success(find(out, "LLVM JIT: DLL cache miss") >= 0 && find(out, "EMITTER true") >= 0, "the stale DLL is a miss that emits: {tail(out)}")
+    }
+    t |> run("a `[no_jit]` function the DLL holds is a miss, and a program with nothing to jit never loads the emitter") @(t : T?) {
+        let helper = path_join(tmp, "use_helper.das")
+        let helperPin = path_join(tmp, "jit_helper")
+        fwrite(helper, fixture_with_helper(false))
+        var out = ""
+        var rc = run_and_capture(jit_argv(helper, path_join(tmp, "mc_helper.dascache"), helperPin, false), out, 300.0)
+        t |> equal(0, rc, "the helper fixture runs: {tail(out)}")
+        t |> success(find(out, "PROBE 285") >= 0 && find(out, "(codegen") >= 0, "the cold run emits the helper: {tail(out)}")
+        fwrite(helper, fixture_with_helper(true))
+        rc = run_and_capture(jit_argv(helper, path_join(tmp, "mc_helper.dascache"), helperPin, false), out, 300.0)
+        t |> equal(0, rc, "the fixture with the disabled helper runs: {tail(out)}")
+        t |> success(find(out, "LLVM JIT: DLL cache miss") >= 0 && find(out, "EMITTER true") >= 0, "the DLL holding a now-disabled function is a miss: {tail(out)}")
+        t |> success(find(out, "LLVM JIT time: plan ") >= 0 && find(out, " probe ") >= 0 && find(out, " emitter load ") >= 0, "the miss prints the link side's plan and probe times with the emitter's load: {tail(out)}")
+        let nothing = path_join(tmp, "use_nothing.das")
+        fwrite(nothing, fixture_nothing_to_jit())
+        rc = run_and_capture(jit_argv(nothing, path_join(tmp, "mc_nothing.dascache"), path_join(tmp, "jit_nothing"), false), out, 300.0)
+        t |> equal(0, rc, "the fixture with nothing to jit runs: {tail(out)}")
+        t |> success(find(out, "PROBE none") >= 0 && find(out, "0 functions to jit") >= 0 && find(out, "EMITTER false") >= 0, "an empty candidate set is answered in the link module, no emitter loaded: {tail(out)}")
     }
     t |> run("a pinned DLL another program wrote holds none of this one's functions, and that is a miss") @(t : T?) {
         let other = path_join(tmp, "use_other.das")

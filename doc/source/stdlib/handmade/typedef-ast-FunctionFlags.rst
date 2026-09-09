@@ -9,7 +9,6 @@ Function moves return value.
 Its an exported function.
 Its an init function.
 Function has address requested.
-Function is used.
 Function is fast call.
 Function has known side effects (user defined).
 Function has to run at compile time.

@@ -268,14 +268,14 @@ namespace das {
                             if ( isReq && src[0]=='[' ) {
                                 // ARCHITECTURE.md sec.2
                                 src ++;
-                                while ( src < src_end && (src[0]==' ' || src[0]=='\t') ) {
+                                while ( src < src_end && isspace(src[0]) ) {    // the parser reads tokens, so a newline inside the brackets is nothing
                                     src ++;
                                 }
                                 string group;
                                 while ( src < src_end && (isalnumE(src[0]) || src[0]=='_') ) {
                                     group += *src ++;
                                 }
-                                while ( src < src_end && (src[0]==' ' || src[0]=='\t') ) {
+                                while ( src < src_end && isspace(src[0]) ) {
                                     src ++;
                                 }
                                 if ( src < src_end && src[0]==']' && !group.empty() && guardTaken() ) {
@@ -844,11 +844,13 @@ namespace das {
         // threshold, so a line here prints once per warm module; the verdict line and the
         // failure branches below carry everything a human needs
         deriveSourcePolicies(access, fileName, program->policies);
+        serializer_read->readingRecord ++;
         bool read_ok = serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer.thisModuleGroup = &libGroup;
             serializer.fileAccess = access.get();
             serializer.serializeProgram(program, libGroup);
         });
+        serializer_read->readingRecord --;
 
         if ( read_ok && !program->failed() && !serializer_read->failed ) {
             serializer_read->servedModules ++;
@@ -1456,7 +1458,7 @@ namespace das {
                 logs << "compiler took " << dt << ", " << fileName << "\n";
             }
             auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
-            if ( serializer_write != nullptr ) {
+            if ( serializer_write != nullptr && !program->failed() ) {    // a failed module is no record (a persistent stream's later writeback would carry it)
                 serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(),
                     collectRequireNames(access->getFileInfo(fileName), access)});
             }
@@ -1887,20 +1889,35 @@ namespace das {
         }
     }
 
-    // ARCHITECTURE.md sec.3 - what a nested compile rebinds on the environment, put back on every exit
+    // ARCHITECTURE.md sec.3 - what a nested compile rebinds on the environment, put back on every exit;
+    // a walk nested in a parse or a record read also hides the stream for its duration
     struct LateRequireEnvScope {
         daScriptEnvironment *   env;
         ProgramPtr              program;
         TextWriter *            log;
         const char *            fileName;
         const char *            moduleName;
+        AstSerializer *         read = nullptr;
+        AstSerializer *         write = nullptr;
+        bool                    streamHidden = false;
         LateRequireEnvScope ( daScriptEnvironment * e ) : env(e), program(e->g_Program), log(e->g_compilerLog),
             fileName(e->g_compilingFileName), moduleName(e->g_compilingModuleName) {}
+        void hideStream () {
+            read = env->serializer_read;
+            write = env->serializer_write;
+            env->serializer_read = nullptr;
+            env->serializer_write = nullptr;
+            streamHidden = true;
+        }
         ~LateRequireEnvScope () {
             env->g_Program = program;
             env->g_compilerLog = log;
             env->g_compilingFileName = fileName;
             env->g_compilingModuleName = moduleName;
+            if ( streamHidden ) {
+                env->serializer_read = read;
+                env->serializer_write = write;
+            }
         }
     };
 
@@ -1908,7 +1925,9 @@ namespace das {
     Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access, TextWriter & logs, CodeOfPolicies policies ) {
         lock_guard<recursive_mutex> guard(g_requireModuleNowMutex);
         verifyCodeOfPoliciesStamp(policies);
-        auto info = access->getModuleInfo(requireName, "");
+        auto env = daScriptEnvironment::getBound();
+        // a relative target resolves against the file issuing the require, as a written require would
+        auto info = access->getModuleInfo(requireName, env->g_compilingFileName ? env->g_compilingFileName : "");
         string modName = info.moduleName.empty() ? requireName : info.moduleName;
         if ( auto mod = Module::requireEx(modName, true, requireName, info.fileName) ) return mod;
         if ( info.fileName.empty() ) {
@@ -1918,8 +1937,11 @@ namespace das {
             logs << "require_module_now: module '" << requireName << "' not found\n";
             return nullptr;
         }
-        auto env = daScriptEnvironment::getBound();
         LateRequireEnvScope envScope(env);
+        // ARCHITECTURE.md sec.3 - a walk nested in a parse or a record read leaves the stream alone
+        bool nested = (env->g_Program && env->g_Program->isCompiling)
+            || (env->serializer_read && env->serializer_read->readingRecord > 0);
+        if ( nested ) envScope.hideStream();
         Module * result = nullptr;
         {
             gc_guard compile_gc_scope;

@@ -56,36 +56,46 @@ this document states what the folder is and why its tests take the shape they do
   test binary, whose descriptors register no shared module, or a tree holding no
   `.shared_module` - has nothing to observe and the test says so and returns.
 - `test_module_groups.das` - `require [group]` on a project root the test writes: two pure-das
-  modules whose descriptors register themselves under one group, a third whose descriptor
-  registers a member no require path serves, and a fourth joins under a guard the build lacks
-  with no file behind it. A cold start writes each descriptor's group row, its guard with it,
-  beside its path row and the group brings both members in, the guarded-out row adding and
-  resolving nothing; a warm start replays the rows; `require[group]` with no space is the same
-  require; a guard the build lacks drops the group and one it has takes it; a group nothing registered
-  adds nothing; `public` on the group re-exports every member and its absence keeps them
-  private; the unserved member fails as a hand-written require would; `call_module_group`
-  (`daslib/module_group`) calls both members' entry with its argument, sorted by member path,
-  and a member without the entry is a compile error naming the member's call; the lint reads a
-  group require as one unit - one used member draws nothing, no used member is a single
-  STYLE030 naming every member; and, on an explicit module cache, a member joining the group after a requirer's record was written cuts
-  the cache off at that requirer (`require set changed`) while the unchanged tree and the
-  rewritten cache serve.
+  modules whose descriptors register themselves under one group (one guarded on a module the
+  build has) and under a second group behind path guards, one the fixture has and one it lacks;
+  a third whose descriptor registers a member no require path serves; and a fourth that joins
+  under a guard the build lacks with no file behind it and registers the first member a second
+  time. A cold start writes each descriptor's group rows, their guards with them, beside its
+  path row and the group brings both members in, the guarded-out row adding and resolving
+  nothing; a warm start replays the rows; `require[group]` with no space and the name on its
+  own line are the same require; the path-guarded group takes the member whose guard resolves
+  in the walk, the parse and the calls alike; a guard the build lacks drops the group and one it
+  has takes it; a group nothing registered adds nothing; `public` on the group re-exports every
+  member and its absence keeps them private; the unserved member fails as a hand-written
+  require would; `call_module_group` (`daslib/module_group`) calls both members' entry with its
+  argument, sorted by member path, once per member however many times a member registered, an
+  argument with a side effect evaluated once, and a member without the entry or a call without
+  its entry name is a compile error; a descriptor registering an empty member is refused by
+  name while the run goes on; the lint reads a group require as one unit - one used member
+  draws nothing, no used member is a single STYLE030 naming every member; and, on an explicit
+  module cache, a member joining the group after a requirer's record was written cuts the cache
+  off at that requirer (`require set changed`) while the unchanged tree and the rewritten cache
+  serve.
 - `test_require_module_now.das` - a `require` issued after the walk (`daslib/cross_context`),
   from the test module's own `[init]` for the API - a require after the walk is a compile's, and
   a test body runs after the compile - and in a child for the cache: a `shared` fixture with a
   macro context compiles at the call and the same module answers after; `macro_context_of` and
   `call_in_context` reach an `[export]`ed function there by name, the result through a pointer;
-  a file nothing serves, a module that is not `shared`, one that does not compile and one whose
-  declared name is not its file's answer null with the reason in the issues; a child whose
+  a shared module without a macro context is required and `macro_context_of` answers null for
+  it; a file nothing serves, a module that is not `shared`, one that does not compile and one
+  whose declared name is not its file's answer null with the reason in the issues; a child whose
   `[init]` requires the fixture under an explicit `-module-cache` writes the fixture's record
   into that one file (no `late~` cache beside it), serves it from there on the second run
   without rewriting, and compiles it under `-no-module-cache`, read off the fixture's own
-  per-module compile-time lines; and a child calling the wrapper from `main` fails with the
-  no-compile reason.
+  per-module compile-time lines; a child calling the wrapper or the block form from `main`
+  fails with the no-compile reason; and a child whose call macro issues the late require during
+  its own compile reads clean on two warm runs, rewrites nothing, and keeps the good cache when
+  a later edit breaks the compile.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
-  `mc_generic_origin_*`, the `mc_late_*` trio a late require targets: a shared module with a
-  macro context, one that is not shared, one that does not compile); a case needing a
-  macro-bearing module graph puts it here instead of writing the script inline.
+  `mc_generic_origin_*`, the `mc_late_*` set a late require targets: a shared module with a
+  macro context, one without, one that is not shared, one that does not compile, one declaring
+  another name, and a macro module whose call macro requires the first from inside a compile);
+  a case needing a macro-bearing module graph puts it here instead of writing the script inline.
 - `_mc_common.das` - the spawn helpers every test here shares (the name is the folder's, since
   a sweep worker holds every shared module it met under one name and `tests/linq` has a
   `_common` already): the binary to spawn (`das_exe`),

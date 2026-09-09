@@ -40,10 +40,11 @@ the route that answers with that key first.**
 **A diff that adds a key to what a route answers lists it in that route's `README.md` row, in
 the same change.** The row is where a consumer learns the key exists.
 
-**A reference in this folder to a symbol of a module the folder requires only under
-`require ?llvm` or `require [tune_framework]` (`dasllama_exchange`, `llvm_tune`)
-outside a `static_if (typeinfo module_exists(<that module>))` arm is a defect** - the unguarded
-reference fails the compile of a build without dasLLVM.
+**A reference in this folder to a symbol of a module the folder requires conditionally - a
+`require ?<guard>` or a `require [<group>]` line (today `dasllama_exchange` and `llvm_tune`) -
+outside a `static_if (typeinfo module_exists(...))` arm on that module, or on a module whose own
+`require` brings it in, is a defect** - the unguarded reference fails the compile of a build
+without dasLLVM.
 
 **A function signature in this folder never names a type from one of those modules - those
 types stay inside the guarded arm, and plain types cross the boundary.** A signature cannot sit

@@ -1,8 +1,8 @@
 # daslib linq family Code Review Checklist
 
-**A diff touching the linq family - `linq*.das`, `sql_*.das` - applies this checklist
-together with `REVIEW.md`.** `REVIEW_COMMON.md` (repo root) binds this file too.
-Architecture doc: `ARCHITECTURE_LINQ.md`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+doc: `ARCHITECTURE_LINQ.md`. A diff touching the linq family - `linq*.das`, `sql_*.das` -
+applies this checklist together with `REVIEW.md`.
 
 **A fused emit that binds a terminator's default or compare argument lazily, more than once, or
 below the top of the generated invoke, every `*_or_default` decs lane included, is a defect** -
@@ -71,8 +71,9 @@ a projected adapter is a defect - skip the row instead.** The row's emit assumes
 element, so running it on the un-projected adapter orders or dedups raw rows - a wrong result,
 not a missed splice.
 
-**A diff that reorders the `build_*_rows()` calls in `register_all_linq_fold_rows` without
-naming the chains whose matching arm changes is a defect.** Rows land in `splice_patterns` in
+**A diff that reorders the registration calls in `register_all_linq_fold_rows` - the
+`build_*_rows()` calls, the group call that registers the sources - without naming the chains
+whose matching arm changes is a defect.** Rows land in `splice_patterns` in
 call order, the walker takes the first match, and that registrar is the only place the order
 exists.
 

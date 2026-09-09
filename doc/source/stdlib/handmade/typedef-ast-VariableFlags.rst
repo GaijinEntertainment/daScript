@@ -1,7 +1,6 @@
 properties of the `Variable` object.
 Variable is initialized via move <-
 Variable is initialized via clone :=
-Variable is used
 Variable is an alias for CMRES return value
 Variable is marked as used (to suppress unused warnings)
 Variable is a global shared variable

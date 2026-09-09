@@ -3,12 +3,16 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-- **Weakening the text a test in this folder compares a spawned child's output against - an
-  assertion literal, or the helper that produces the compared text - is a defect; an edit
-  weakens when it accepts an output the old one rejected, and re-pinning a count or the fixed
-  words of a scan or cache line to the child's new true output does not. A timing the child
-  newly prints leaves the compared text; every other field stays compared.** A child's output is
-  the only instrument a human has for what the cache and the scan served.
+- **Editing an assertion literal, or the helper that produces the text a test in this folder
+  compares a spawned child's output or the files it wrote against, so it accepts an output the
+  old text rejected is a defect; re-pinning a count or the fixed words of the scan-trace
+  `[module] descriptor ...` line or the cache's verdict line to the child's new true output is
+  not.** A child's output is the only instrument a human has for what the cache and the scan
+  served.
+
+- **A helper that trims a child's line before the compare drops only its elapsed times - every
+  other field on the line, a count included, stays in the compared text.** A dropped field is
+  a change the test can no longer see.
 
 - **A test in this folder writes only under a directory it created for this process - its own
   files and its children's - and removes that directory.**

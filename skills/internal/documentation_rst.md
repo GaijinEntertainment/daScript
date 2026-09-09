@@ -69,9 +69,10 @@ Per-symbol `handmade/*.rst` files serve only C++ builtin modules (`audio`, `stri
 `stbimage`, `raster` - declared C++-side with no daslang source). For `daslib/*.das` and
 `modules/*/*.das`, a `// stub` means **add a `//!` in the `.das` source**, not fill the stub; then
 regenerate and it disappears. Verify: `grep -rl "// stub" doc/source/stdlib/handmade/ | grep <module>`
-must be empty. The one handmade artifact allowed there is a trivial one-line `module-<name>.rst`
-header (`module-strudel_midi.rst` is just `Module strudel_midi`); the real module description is the
-`//!` at the top of the `.das`. Do not convert existing C++-module handmade content (dasAudio's ~200
+must be empty. A daslib module's `module-<name>.rst` there is its page header plus the prose a
+`//!` cannot carry - a usage example, a contract paragraph - and a bare one-line header
+(`module-strudel_midi.rst` is just `Module strudel_midi`) is the minimum; the module description
+itself is the `//!` at the top of the `.das`. Do not convert existing C++-module handmade content (dasAudio's ~200
 `function-audio-*.rst`) to the daslang flow.
 
 **`//!` placement is INSIDE the body, not above the `def`.** `daslib/rst_comment.das` attaches a

@@ -1261,9 +1261,11 @@ namespace das {
     static bool moduleGroupMemberAvailable ( const ModuleGroupMember & m ) {
         if ( m.guard.empty() ) return true;
         if ( m.guard.find('/') == string::npos ) return guardModuleAvailable(m.guard);
-        auto program = daScriptEnvironment::getBound()->g_Program;
+        auto env = daScriptEnvironment::getBound();
+        auto program = env->g_Program;
         if ( !program || !program->access ) return false;
-        auto ginfo = program->access->getModuleInfo(m.guard, "");
+        // the base the collector and the parser resolve a relative guard against: the file being compiled
+        auto ginfo = program->access->getModuleInfo(m.guard, env->g_compilingFileName ? env->g_compilingFileName : "");
         return !ginfo.fileName.empty() && program->access->getFileInfo(ginfo.fileName) != nullptr;
     }
 

@@ -8,10 +8,13 @@ require daslib/fio
 require daslib/strings_boost
 require _mc_common
 
-// alpha joins under a guard the build has; delta under one it lacks, with no file behind it
-let DESCRIPTOR_ALPHA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_alpha\", \"alpha\", \"\{project_path\}/alpha.das\")\n    register_module_group(\"probe_group\", \"grp_alpha/alpha\", \"math\")\n\}\n"
-let DESCRIPTOR_DELTA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_module_group(\"probe_group\", \"grp_delta/delta\", \"zz_absent_guard\")\n\}\n"
-let DESCRIPTOR_BETA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n    register_module_group(\"probe_group\", \"grp_beta/beta\")\n\}\n"
+// alpha joins probe_group under a guard the build has and path_group under a path guard the
+// fixture has; beta joins probe_group unguarded and path_group under a path it lacks; delta joins
+// under a guard the build lacks, with no file behind it, and registers alpha's row a second time
+let DESCRIPTOR_ALPHA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_alpha\", \"alpha\", \"\{project_path\}/alpha.das\")\n    register_module_group(\"probe_group\", \"grp_alpha/alpha\", \"math\")\n    register_module_group(\"path_group\", \"grp_alpha/alpha\", \"grp_beta/beta\")\n\}\n"
+let DESCRIPTOR_DELTA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_module_group(\"probe_group\", \"grp_delta/delta\", \"zz_absent_guard\")\n    register_module_group(\"probe_group\", \"grp_alpha/alpha\", \"math\")\n\}\n"
+let DESCRIPTOR_BETA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n    register_module_group(\"probe_group\", \"grp_beta/beta\")\n    register_module_group(\"path_group\", \"grp_beta/beta\", \"grp_nowhere/none\")\n\}\n"
+let DESCRIPTOR_EMPTY = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_module_group(\"probe_group\", \"\")\n\}\n"
 let DESCRIPTOR_BETA_OUTSIDE = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n\}\n"
 let DESCRIPTOR_GAMMA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_module_group(\"broken_group\", \"grp_gamma/missing\")\n\}\n"
 
@@ -19,6 +22,9 @@ let ALPHA = "options gen2\nmodule alpha\ndef alpha_value() : int \{\n    return 
 let BETA = "options gen2\nmodule beta\ndef beta_value() : int \{\n    return 10\n\}\ndef probe_entry(k : int) \{\n    print(\"ENTRY beta \{k\}\\n\")\n\}\n"
 let CALL_GROUP = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\n[export]\ndef main \{\n    call_module_group(\"probe_group\", \"probe_entry\", 7)\n    print(\"PROBE done\\n\")\n\}\n"
 let CALL_GROUP_MISSING = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\n[export]\ndef main \{\n    call_module_group(\"probe_group\", \"no_such_entry\")\n\}\n"
+let CALL_GROUP_BAD_ARGS = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\n[export]\ndef main \{\n    call_module_group(\"probe_group\")\n\}\n"
+let CALL_GROUP_SIDE_EFFECT = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\nvar counter = 0\ndef bump() : int \{\n    counter++\n    return counter\n\}\n[export]\ndef main \{\n    call_module_group(\"probe_group\", \"probe_entry\", bump())\n    print(\"PROBE \{counter\}\\n\")\n\}\n"
+let CALL_PATH_GROUP = "options gen2\nrequire daslib/module_group\nrequire [path_group]\n[export]\ndef main \{\n    call_module_group(\"path_group\", \"probe_entry\", 3)\n    print(\"PROBE done\\n\")\n\}\n"
 let MID_PUBLIC = "options gen2\nmodule mid\nrequire [probe_group] public\n"
 let MID_PRIVATE = "options gen2\nmodule mid_private\nrequire [probe_group]\n"
 
@@ -70,7 +76,8 @@ def run_driver(fx : Fixture; script : string; var out : string&; cache : string 
     return run_child("{fx.cmdPrefix} {cache} \"{script}\"", out)
 }
 
-//! the scan trace line for a module's descriptor, its timings dropped
+//! the scan trace line for a module's descriptor; a replay verdict keeps its deferred count and
+//! drops the two timings
 def descriptor_verdict(out : string; mod : string) : string {
     let marker = "{mod}/.das_module: "
     let at = find(out, marker)
@@ -81,7 +88,21 @@ def descriptor_verdict(out : string; mod : string) : string {
     let eol = find(rest, "\n")
     let line = eol < 0 ? rest : slice(rest, 0, eol)
     let timing = find(line, " in ")
-    return timing < 0 ? line : slice(line, 0, timing)
+    if (timing < 0) {
+        return line
+    }
+    let deferred = find(line, ", deferred ")
+    return "{slice(line, 0, timing)} ({slice(line, deferred + 2)}"
+}
+
+def count_of(text : string; needle : string) : int {
+    var n = 0
+    var at = find(text, needle)
+    while (at >= 0) {
+        n++
+        at = find(text, needle, at + length(needle))
+    }
+    return n
 }
 
 def arms_expand(t : T?; fx : Fixture) {
@@ -89,7 +110,7 @@ def arms_expand(t : T?; fx : Fixture) {
     t |> run("a cold start compiles the descriptors and the group brings both members in, a member row's guard the build lacks left out") @(t : T?) {
         var out : string
         t |> success(report_child(t, "cold", run_driver(fx, useGroup, out), out, "PROBE 11"), "both members resolve")
-        t |> equal("compiled (no manifest), manifest written (2 row(s))", descriptor_verdict(out, "grp_alpha"), "alpha's manifest carries its path row and its group row:\n{out}")
+        t |> equal("compiled (no manifest), manifest written (3 row(s))", descriptor_verdict(out, "grp_alpha"), "alpha's manifest carries its path row and its two group rows:\n{out}")
         let manifest = fread(path_join(fx.alphaDir, ".das_module.manifest"))
         t |> success(find(manifest, "\ngrp\tprobe_group\tgrp_alpha/alpha\tmath\n") >= 0, "the group row is written with its guard:\n{manifest}")
         t |> success(find(out, "grp_delta/delta") < 0, "delta's row, guarded on a module the build lacks, adds nothing and resolves nothing:\n{out}")
@@ -97,14 +118,28 @@ def arms_expand(t : T?; fx : Fixture) {
     t |> run("a warm start replays the group rows and the group still brings both members in") @(t : T?) {
         var out : string
         t |> success(report_child(t, "warm", run_driver(fx, useGroup, out), out, "PROBE 11"), "both members resolve from the replayed rows")
-        t |> equal("replayed 2 row(s)", descriptor_verdict(out, "grp_alpha"), "alpha's descriptor replays:\n{out}")
-        t |> equal("replayed 2 row(s)", descriptor_verdict(out, "grp_beta"), "beta's descriptor replays:\n{out}")
-        t |> equal("replayed 1 row(s)", descriptor_verdict(out, "grp_delta"), "delta's guarded row replays and stays out:\n{out}")
+        t |> equal("replayed 3 row(s) (deferred 0)", descriptor_verdict(out, "grp_alpha"), "alpha's descriptor replays:\n{out}")
+        t |> equal("replayed 3 row(s) (deferred 0)", descriptor_verdict(out, "grp_beta"), "beta's descriptor replays:\n{out}")
+        t |> equal("replayed 2 row(s) (deferred 0)", descriptor_verdict(out, "grp_delta"), "delta's guarded row and its duplicate of alpha's replay:\n{out}")
     }
-    t |> run("`require[group]` with no space is the same require") @(t : T?) {
+    t |> run("`require[group]` with no space, and the group name on its own line, are the same require") @(t : T?) {
         var out : string
         let script = write_driver(fx, "use_nospace.das", "require[probe_group]", "alpha_value() + beta_value()")
         t |> success(report_child(t, "no space", run_driver(fx, script, out), out, "PROBE 11"), "the collector and the parser read the spelling alike")
+        let multi = write_driver(fx, "use_multiline.das", "require [\n    probe_group\n]", "alpha_value() + beta_value()")
+        t |> success(report_child(t, "multi-line", run_driver(fx, multi, out), out, "PROBE 11"), "a newline inside the brackets is nothing to the walk, as to the parser")
+    }
+    t |> run("a member row's path guard is resolved as the require's would be, in the walk, the parser and the calls") @(t : T?) {
+        var out : string
+        let taken = write_driver(fx, "use_path_group.das", "require [path_group]", "alpha_value()")
+        t |> success(report_child(t, "path guard taken", run_driver(fx, taken, out), out, "PROBE 1"), "alpha's row, guarded on a path the fixture has, joins")
+        let dropped = write_driver(fx, "use_path_group_dropped.das", "require [path_group]", "beta_value()")
+        let rc = run_driver(fx, dropped, out)
+        t |> success(rc != 0 && find(out, "beta_value") >= 0, "beta's row, guarded on a path the fixture lacks, is dropped: rc={rc}\n{out}")
+        let calls = path_join(fx.tmp, "use_path_calls.das")
+        fwrite(calls, CALL_PATH_GROUP)
+        t |> success(report_child(t, "path calls", run_driver(fx, calls, out), out, "PROBE done"), "call_module_group over the path-guarded group runs")
+        t |> success(find(out, "ENTRY alpha 3") >= 0 && find(out, "ENTRY beta") < 0, "the calls take the same members the require took:\n{out}")
     }
     t |> run("a guard the build lacks drops the group; a guard the build has takes it") @(t : T?) {
         var out : string
@@ -133,6 +168,9 @@ def arms_expand(t : T?; fx : Fixture) {
         let rc = run_driver(fx, script, out)
         t |> success(rc != 0 && find(out, "grp_gamma/missing") >= 0, "the missing prerequisite names the member: rc={rc}\n{out}")
     }
+}
+
+def arms_calls(t : T?; fx : Fixture) {
     t |> run("call_module_group calls every member's entry with the arguments, members sorted by path") @(t : T?) {
         var out : string
         let script = path_join(fx.tmp, "use_call.das")
@@ -141,10 +179,32 @@ def arms_expand(t : T?; fx : Fixture) {
         let alphaAt = find(out, "ENTRY alpha 7")
         let betaAt = find(out, "ENTRY beta 7")
         t |> success(alphaAt >= 0 && betaAt >= 0 && alphaAt < betaAt, "both entries ran with the argument, alpha first:\n{out}")
+        t |> equal(1, count_of(out, "ENTRY alpha 7"), "a member registered twice is one member:\n{out}")
         let missing = path_join(fx.tmp, "use_call_missing.das")
         fwrite(missing, CALL_GROUP_MISSING)
-        let rc = run_driver(fx, missing, out)
+        var rc = run_driver(fx, missing, out)
         t |> success(rc != 0 && find(out, "alpha::no_such_entry") >= 0, "a member without the entry is a compile error naming the member's call: rc={rc}\n{out}")
+        let badArgs = path_join(fx.tmp, "use_call_bad_args.das")
+        fwrite(badArgs, CALL_GROUP_BAD_ARGS)
+        rc = run_driver(fx, badArgs, out)
+        t |> success(rc != 0 && find(out, "call_module_group expects") >= 0, "a call without the entry name is a macro error: rc={rc}\n{out}")
+        let sideEffect = path_join(fx.tmp, "use_call_side_effect.das")
+        fwrite(sideEffect, CALL_GROUP_SIDE_EFFECT)
+        t |> success(report_child(t, "side effect", run_driver(fx, sideEffect, out), out, "PROBE 1"), "an argument with a side effect is evaluated once for every member")
+        t |> success(find(out, "ENTRY alpha 1") >= 0 && find(out, "ENTRY beta 1") >= 0, "every member receives the one value:\n{out}")
+    }
+    t |> run("a descriptor registering an empty member is refused by name, and the run goes on") @(t : T?) {
+        var out : string
+        let emptyDir = path_join(path_join(fx.tmp, "modules"), "grp_empty")
+        var merr : string
+        mkdir_rec(emptyDir, merr)
+        fwrite(path_join(emptyDir, ".das_module"), DESCRIPTOR_EMPTY)
+        let script = write_driver(fx, "use_group_beside_empty.das", "require [probe_group]", "alpha_value() + beta_value()")
+        let rc = run_driver(fx, script, out)
+        t |> success(find(out, "register_module_group needs a group name and a member require path") >= 0, "the descriptor's error names the missing member: rc={rc}\n{out}")
+        t |> success(find(out, "PROBE 11") >= 0, "the other descriptors' rows still serve the run:\n{out}")
+        var err : string
+        rmdir_rec(emptyDir, err)
     }
     t |> run("the lint reads a group require as one unit: a used member keeps it, no used member reports it once") @(t : T?) {
         var out : string
@@ -185,6 +245,7 @@ def test_module_groups(t : T?) {
     }
     let fx = make_fixture(tmp)
     arms_expand(t, fx)
+    arms_calls(t, fx)
     arm_cache_stamps_the_expansion(t, fx)
     var err : string
     rmdir_rec(tmp, err)

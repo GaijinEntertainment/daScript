@@ -108,6 +108,10 @@
 (require_declaration
   (require_module_name) @module)
 
+; `require [group]` - the group name is a module set
+(require_group_name
+  (identifier) @module)
+
 ; Struct/class names
 (structure_declaration
   name: (identifier) @type.definition)

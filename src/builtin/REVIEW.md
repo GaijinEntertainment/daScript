@@ -12,20 +12,18 @@
   that diff before the folder's gate runs** - the scan reads the binds compiled into the running
   binary, so a stale binary is a false green.
 
-- **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require` list in
-  the same change - directly, or through the daslib wrapper that requires it.** A module the list
-  does not reach is a module the scan never sees.
-
-- **Never drop a module from `review_nttp.das`'s `require` list.** The list is what sets the
-  modules the scan covers.
+- **`review_nttp.das`'s `require` list gains a row in the change that adds a module under this
+  folder - directly, or through the daslib wrapper that requires it - and loses one only in the
+  change that removes the module.** The list is what sets the modules the scan covers: a module
+  the list does not reach is a module the scan never sees.
 
 - **A diff that changes the bytes a module-cache record carries or what they resolve to - a
-  field added, removed, reordered, re-typed or given a new meaning in
-  `module_builtin_ast_serialize.cpp`, or a change anywhere to which module owns a streamed
-  annotation, function or type - bumps the version `getVersion()` returns in
-  `include/daScript/ast/ast_serializer.h`, in the same change** - a reader accepts a stream only
-  when its stored version equals `getVersion()`, so without the bump an older cache passes that
-  check and decodes the changed bytes as something else.
+  field added, removed, reordered, re-typed or given a new meaning, wherever the edit lives, or
+  a change anywhere to which module owns a streamed annotation, function or type - bumps the
+  version `getVersion()` returns in `include/daScript/ast/ast_serializer.h`, in the same
+  change** - a reader accepts a stream only when its stored version equals `getVersion()`, so
+  without the bump an older cache passes that check and decodes the changed bytes as something
+  else.
 
 - **A diff that streams or compares a `CodeOfPolicies` field in `module_builtin_ast_serialize.cpp`
   outside `DAS_MODULE_CACHE_POLICY_FIELDS` is a defect - put the field on the list instead** - the
@@ -39,12 +37,13 @@
   print on the serializer's `quietCache`** - the default cache is on unasked for an ordinary run,
   so an ungated line becomes output every user sees.
 
-- **A diff that adds a builtin a `.das_module` descriptor can call to change the require
-  resolver or the module registry records the call between `begin_dynamic_module_recording`
-  and `end_dynamic_module_recording` (`module_builtin_fio.cpp`) as a row `read_manifest`
-  reads back and `init_dyn_modules` replays (`src/ast/dyn_modules.cpp`), in the same change.**
-  A replayed start never runs the descriptor, so an effect the recorder does not see is an
-  effect every warm start silently lacks.
+- **A diff that adds a builtin a `.das_module` descriptor can call whose effect outlives the
+  descriptor's own program - a row in a process-wide registration table a warm start must
+  reproduce without running the descriptor - records the call between
+  `begin_dynamic_module_recording` and `end_dynamic_module_recording` (`module_builtin_fio.cpp`)
+  as a row `read_manifest` reads back and `init_dyn_modules` replays (`src/ast/dyn_modules.cpp`),
+  in the same change.** A replayed start never runs the descriptor, so an effect the recorder
+  does not see is an effect every warm start silently lacks.
 
 - **A diff that moves a bind between modules - an `addExtern` or `addExternInline` call whose
   module changes, or a builtin whose `vector<T>` functions follow a type to another module -

@@ -21,3 +21,10 @@ def public late_add(a, b : int; var out : int?) {
         *out = a + b
     }
 }
+
+[export]
+def public late_add3(a, b, c : int; var out : int?) {
+    unsafe {
+        *out = a + b + c
+    }
+}

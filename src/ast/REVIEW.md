@@ -26,18 +26,28 @@
   loop dispatches on `row.dynamic` and then on whether the row carries a das-visible name, so a
   kind it does not know replays as a native path or waits under a name nothing requires.
 
-- **A diff that gives `require` a new spelling - a guard form, a group form, a path prefix - or
-  changes when a guarded require is skipped (`ast_requireGuardAvailable`, `parser_impl.cpp`),
-  teaches the text collector `getAllRequireReq` (`ast_parse.cpp`) the same spelling and the same
-  skip-or-take decision, in the same change.** The prerequisite walk collects requires from the
-  source text before any parse, so a spelling only the parser reads is a module the walk never
-  compiles, and a decision the two make differently is a require the parse takes with no module
-  behind it.
+- **A diff that gives `require` a new spelling - a guard form, a group form, a path prefix, the
+  whitespace a form allows - or changes when a guarded require or a guarded group member is
+  skipped, teaches every site that decides it the same spelling and the same skip-or-take
+  decision, in the same change: the text collector `getAllRequireReq` (`ast_parse.cpp`), the
+  parser's `ast_requireGuardAvailable` (`parser_impl.cpp`), and the member walk
+  `moduleGroupMemberAvailable` (`module_builtin_rtti.cpp`).** The prerequisite walk collects
+  requires from the source text before any parse, so a spelling only the parser reads is a
+  module the walk never compiles, a decision the two make differently is a require the parse
+  takes with no module behind it, and a member the calls take but the require did not is a call
+  into a module that is not there.
 
-- **A diff that adds a field `requireModuleNow` (`ast_parse.cpp`) rebinds on the environment
-  adds it to `LateRequireEnvScope`, in the same change.** The late walk runs mid-parse of
-  another module, and a field restored by a plain statement after the walk is not restored by
-  an unwind through it.
+- **A diff that makes `requireModuleNow` (`ast_parse.cpp`) rebind another environment field
+  the walk must put back puts that field in `LateRequireEnvScope`, in the same change.** The
+  late walk runs mid-parse of another module, and a field restored by a plain statement after
+  the walk is not restored by an unwind through it.
+
+- **A diff that changes the module-cache record header `writebackModules` writes and
+  `trySerializeProgramModule` reads (`ast_parse.cpp`) - a field added, removed, reordered or
+  re-typed - bumps `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`,
+  repo root) in the same change.** A reader accepts a stream whose stored version equals
+  `getVersion()`, so without the bump an older cache decodes the changed header as the old one
+  with no diagnostic.
 
 - **Removing the `setDeferredModuleLoader` call from `require_dynamic_modules`
   (`dyn_modules.cpp`) is a defect.** A descriptor compiled during the scan can require a module

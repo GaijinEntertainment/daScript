@@ -222,6 +222,7 @@ def arms_rejections(t : T?; fx : Fixture) {
         expect_rewrite(t, cmd, manifest, with_line(lines, np, "dm\ta\tb"), "dm field count")
         expect_rewrite(t, cmd, manifest, with_line(lines, np, "dm\ta\tb\tx\tc"), "dm on_error field")
         expect_rewrite(t, cmd, manifest, with_line(lines, np, "dm\ta\tb\t3\tc"), "dm on_error field")
+        expect_rewrite(t, cmd, manifest, with_line(lines, np, "grp\tg\tm"), "grp field count")
         expect_rewrite(t, cmd, manifest, with_line(lines, np, "no_manifest\tx"), "no_manifest field count")
         expect_rewrite(t, cmd, manifest, with_line(lines, np, "xx\ta\tb\tc"), "unknown row kind")
         expect_rewrite(t, cmd, manifest, with_line(lines, end, "end\t2"), "end row count")

@@ -40,13 +40,13 @@ a stack, never in a bare scalar.** A saved value kept in a scalar survives into 
 construct's exit path and unbalances it.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
-decided by a C++-side definition, with no test, lint, or compile error failing when the two
-sides no longer match, records the pair, naming both sides, in whichever `ARCHITECTURE*.md` in
-this folder holds the daslib file's section - adding that section to `ARCHITECTURE.md` when no
-doc holds one.**
+decided by a definition outside this folder - a C++ definition, or another module's descriptor
+- with no test, lint, or compile error failing when the two sides no longer match, records the
+pair, naming both sides, in whichever `ARCHITECTURE*.md` in this folder holds the daslib file's
+section - adding that section to `ARCHITECTURE.md` when no doc holds one.**
 
-**When a diff changes one side of a recorded daslib/C++ pair so the two no longer match, it
-changes the other side in the same diff.**
+**When a diff changes one side of a recorded pair so the two no longer match, it changes the
+other side in the same diff.**
 
 **A diff that renames, deletes, or changes the behavior of a daslib name that an
 `ARCHITECTURE*.md` in this folder spells updates that entry in the same change.** The doc is
@@ -246,9 +246,10 @@ signed sum wraps, the bounds test passes, and the walk leaves the array silently
 and emit only the taken arm.** Nothing folds at macro-application time, so a generated
 `if ($v(flag))` keeps its dead arm and type-checks it.
 
-**Never call `call_in_context` (`cross_context.das`) with a target that calls back into the
-calling context - hand every value the caller needs back through the result pointer instead.**
-The call holds the target context's lock for its whole run.
+**A diff that adds a `call_in_context` overload (`cross_context.das`) states in its `//!` that
+the target must not call back into the calling context and hands its answer back through the
+result pointer.** The call holds the target context's lock for its whole run, and the callers
+live outside this folder, so the contract travels on the function.
 
 **A diff that adds or changes a buffer-I/O overload returns before taking `addr(buf[0])` on
 an empty buffer.** The address is out of bounds and the call sits inside `unsafe`, so an

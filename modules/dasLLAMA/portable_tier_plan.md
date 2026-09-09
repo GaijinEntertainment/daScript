@@ -74,7 +74,8 @@ with LLVM on the host only; wasm32 cross is unsupported by design (pointer-width
   borrowed from the IR generator (`pm1_of`, `vbmi_alphabet`, `vbmi_pack_word`) moved to
   `dasllama_gemm_schema.das` for the same reason.
 - **`require ?G target` names a guard module, never the target** (`ds2_parser.ypp:849-861`,
-  `parser_impl.cpp:1225-1279`). The guard for everything LLVM is `?llvm`: dasLLVM is a pure-das
+  `parser_impl.cpp:1225-1279`). The guard for everything LLVM is `?llvm` - written by hand, or
+  carried by the `tune_framework` group row `require [tune_framework]` expands: dasLLVM is a pure-das
   dasbind package, so it now carries one C++ witness module named `llvm`
   (`modules/dasLLVM/src/dasLLVM.cpp`), compiled in exactly when the build is configured with
   dasLLVM. The build configuration decides, never the files on disk - a wasm build never
@@ -492,15 +493,18 @@ the honest wasm candidates, and smaller is on the table.
   with `-DDAS_LLVM_DISABLED=ON` still loaded the framework. The two scenarios that matter - a
   wasm build, where no tuning may exist, and a console build (PS5 in dagor) with the LLVM
   sources on disk for the PC build but configured out - both need the configure to decide. The
-  `llvm` C++ witness module (see "Settled decisions") is that word; every guard is `?llvm`.
+  `llvm` C++ witness module (see "Settled decisions") is that word; every guard is `?llvm`, the
+  hand-written ones and the guard on the `tune_framework` group's member row alike.
 - **RULED: a second trait.** `builtin_module_exists` on a shared das module flipped under
   tool-driven compiles (`Module::requireEx` scans the process's promoted-module list, which a
   nested compile never populates), so lint, ast-verify and the MCP checks audited the
   no-framework arm of every guarded file. The ruling keeps `builtin_module_exists` as it was
   (the process registry) and adds `typeinfo module_exists(X)`: the compiling program's own
-  library, the same answer on both rails. Every path-guarded das target in the tree
-  (`llvm_tune`, `llvm_code`, `dasllama_exchange`, `dasllama_gemm_gen`) now asks `module_exists`;
-  C++-module guards keep `builtin_module_exists`. Gate: `tests/language/optional_require.das`.
+  library, the same answer on both rails. Every conditionally required das target in the tree
+  asks `module_exists` - `dasllama_exchange` under its hand-written `?llvm`, `llvm_tune` (and
+  `llvm_code` through it) under the `tune_framework` group's guarded row, `dasllama_gemm_gen`
+  through the `llvm_code_generator` group; C++-module guards keep `builtin_module_exists`.
+  Gate: `tests/language/optional_require.das`.
 
 - Which small-LLM carrier gets the parity fixture for stages 1 and 2 (SmolLM2-135M already has
   a cls_q8 parity cell, `test_parity.das:76`).

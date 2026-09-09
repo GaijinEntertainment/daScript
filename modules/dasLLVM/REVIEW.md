@@ -32,10 +32,12 @@
 
 - **A diff that adds work to, or moves work within, what `run_jit`
   (`daslib/llvm_jit_run.das`) or `run_jit_linked` (`daslib/llvm_jit_link.das`) executes - its
-  own body or any callee - also prints an `LLVM JIT time:` number for that work: its own line,
-  or the number of a phase that includes it, while that phase's line still prints** (phase
-  inventory: `ARCHITECTURE.md` sec.1). Only work on the path that reaches the report is timed:
-  option resolution before the first timer, log lines, and failure-path teardown are not.
+  own body or any callee - also prints an `LLVM JIT time:` number for that work on every path
+  that executes it: its own line, or the number of a phase that includes it, while that phase's
+  line still prints; a number a second, independent computation of the same work prints (the
+  emitter's plan after the link module's) does not cover the first** (phase inventory:
+  `ARCHITECTURE.md` sec.1). Only work on the path that reaches the report is timed: option
+  resolution before the first timer, log lines, and failure-path teardown are not.
 
 - **A change that can alter the machine code the JIT's DLL or split-obj cache serves back for
   identical inputs - IR generation, target-machine setup, a `[llvm_code]` generator body, or the
@@ -46,17 +48,18 @@
   constant, so such a change without the bump serves the old machine code back
   (`ARCHITECTURE.md` sec.1.2).
 
-- **A `[llvm_code]` generator package joins the `llvm_code_generator` group from its own
-  descriptor and defines `register_llvm_code_generators` - a diff that adds a `require` line
-  naming a generator package to `daslib/llvm_user_modules.das` is a defect.** The wiring module
+- **A diff that adds a `require` line naming a `[llvm_code]` generator module outside this
+  module - a package's, dasLLAMA's - to `daslib/llvm_user_modules.das` is a defect; the package
+  joins the `llvm_code_generator` group from its own descriptor instead.** The wiring module
   names no package, so a build that does not carry the package registers nothing and compiles
-  unchanged.
+  unchanged; the generators this module ships stay named.
 
 - **A das function the jit finalizer reaches - `free_jit_context` (`daslib/llvm_jit_link.das`)
-  and anything it calls - is `[no_jit]` and reaches C++ through externs only, never through a
-  helper that passes a block to C++ (`call_in_context`, `daslib/cross_context`).** The finalizer
-  is program code, so a jittable function on its path joins every jitted program's DLL, and the
-  emitter cannot lower a block passed to C++ with a `LineInfoArg`.
+  and anything it calls - is `[no_jit]` and calls only externs or other `[no_jit]` das
+  functions; a das helper on that path (`macro_context_of` and the rest of
+  `daslib/cross_context`) is a defect - call the externs directly.** The finalizer is program
+  code, so a jittable function on its path joins every jitted program's DLL (the block-passing
+  helpers cannot be lowered: `ARCHITECTURE_JIT_ENTRY.md` sec.4).
 
 - **A diff that adds an environment or config input to a JIT cache key folds it inside
   `jit_env_salt` (`daslib/llvm_jit_plan.das`), never directly into either JIT key - the DLL
@@ -71,7 +74,8 @@
 
 - **A change to a `[tune]`-family annotation is reviewed with `skills/tune.md`.**
 
-- **A change to the tune framework - `daslib/llvm_tune.das` or its tests - is reviewed with
+- **A change to the tune framework - `daslib/llvm_tune.das`, its tests, or the descriptor and
+  C++ rows that join it to a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with
   `skills/internal/llvm_tune_internals.md`.**
 
 - **A test under `tests/` here whose child compiles through the front-end module cache - any

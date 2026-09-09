@@ -201,13 +201,18 @@ module and an unwind must put them back; the symbol state its passes compute liv
 `Program` (sec.4), so the caller's - which may be mid-simulate with a JIT reading it - is
 untouched. One recursive mutex serializes every late require in the process. The late walk has
 no module cache of its own: a stream holds many compiles in order, shared modules written once
-(a persistent serializer, dastest's `--ser`), and the late modules are the records of the compile
-that issued the require, read from the environment's bound serializer where the walk reached
-them and written back through the same writer from its cursor (`writtenModules`), so the host's
-writeback at its end repeats nothing. The hosts keep their cache armed through `simulate`
-(`utils/daslang`, `utils/daslang-live`), where a simulate macro's or an `[init]`'s late require
-lands - the JIT's emitter is that case - and a compile with no serializer bound parses the late
-modules from source, once per process.
+(a persistent serializer, dastest's `--ser`), read at a parse's start and written at its end.
+A late require issued after the compile - a simulate macro, an `[init]` of the program - finds
+the reader between records, so its modules are the next records of that compile, read from the
+environment's bound serializer and written back through the same writer from its cursor
+(`writtenModules`), and the host's writeback at its end repeats nothing; the hosts keep their
+cache armed through `simulate` (`utils/daslang`, `utils/daslang-live`), where that case lands -
+the JIT's emitter is it. A late require nested in a compile - a macro during a parse (the bound
+program's `isCompiling`), a macro module's `[init]` during its record's read (the reader's
+`readingRecord`) - would write its records ahead of the requirer's, which the reader meets at
+the requirer's position, or read mid-record; so a nested walk hides the stream for its duration
+(`LateRequireEnvScope`), parses its modules from source, once per process, and pushes no
+record. A module whose parse failed pushes no record either, whatever the walk.
 
 ## 4. Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`)
 
@@ -235,4 +240,8 @@ read, nothing is used and nothing holds a slot. The index tables are per allocat
 folding round's slots do not survive into the final pass. A compile nested inside another - a
 macro calling `compile`, a late `require` (sec.3), the folding program - fills its own tables
 and leaves the outer program's answers standing. The stream a module-cache record carries has
-neither the flag nor the slot: both are recomputed by the reading program.
+neither the flag nor the slot: both are recomputed by the reading program. Three per-compile
+values still live on the objects: `Variable::stackTop` and `Function::totalStackSize` /
+`totalGenLabel`, which `allocateStack` writes and the same program's simulate reads before any
+nested compile can run, and `Function::requestJit`, which the JIT's `mark_jit_selection` stamps
+per program and reads within one plan (ledgered in `plans/jit_compile_time.md`).

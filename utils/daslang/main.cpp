@@ -660,6 +660,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
             }
         }
     }
+    finishModuleCache();    // every path unbinds the stream, a compile that produced no program included
     return exitCode;
 }
 

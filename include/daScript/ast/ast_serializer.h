@@ -132,6 +132,7 @@ namespace das {
         bool                builtinHashDrift = false;   // last record failed on a builtin cumulative-hash mismatch (lazily populated builtin, e.g. dasbind) - deterministic per process, a rewrite changes nothing
         bool                quietCache = false;
         uint64_t            servedModules = 0;
+        int                 readingRecord = 0;      // >0 while a record's payload deserializes (a late require nested in it cannot read)
         string              cutoffFile;
         string              cutoffReason;
         bool                policyMismatch = false;
