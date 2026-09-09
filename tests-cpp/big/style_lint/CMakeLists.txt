@@ -1,6 +1,7 @@
-# Big test: utils/lint must surface STYLE014/STYLE015 on the canonical
-# comment-hygiene fixtures. Catches regressions in the option/flag plumbing
-# and the scan_long_comment_blocks pass.
+# utils/lint must surface STYLE014/STYLE015 on the canonical comment-hygiene
+# fixtures. Catches regressions in the option/flag plumbing and the
+# scan_long_comment_blocks pass. Labelled small: each run is one lint of one
+# fixture, well under a second, so every per-PR ctest runs it.
 
 file(GLOB STYLE_LINT_FIXTURES CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/utils/lint/tests/style014_*.das
@@ -15,8 +16,8 @@ foreach(_fixture ${STYLE_LINT_FIXTURES})
                 -- --comment-hygiene true --lint-fixtures true ${_fixture}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(style_lint_${_name} PROPERTIES
-        LABELS "big;style_lint"
+        LABELS "small;style_lint"
         PASS_REGULAR_EXPRESSION "STYLE014|STYLE015")
 endforeach()
 
-add_dependencies(test-big daslang)
+add_dependencies(test-small daslang)
