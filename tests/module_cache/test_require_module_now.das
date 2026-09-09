@@ -145,7 +145,7 @@ def test_require_module_now_children(t : T?) {
         let script = path_join(tmp, "use_late.das")
         fwrite(script, late_driver())
         let cacheFile = path_join(tmp, "late.dascache")
-        let cached = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" -module-cache \"{cacheFile}\" \"{script}\""
+        let cached = "{das_exe()} -dasroot {get_das_root()} -module-cache \"{cacheFile}\" \"{script}\""
         var out : string
         t |> success(report_child(t, "cold", run_child(cached, out), out, "LATE 42"), "the cold run answers through the late module")
         t |> success(find(out, "compiler took") >= 0 && find(out, "mc_late_mod") >= 0, "the cold run compiles the fixture:\n{out}")
@@ -154,16 +154,16 @@ def test_require_module_now_children(t : T?) {
         t |> success(report_child(t, "warm", run_child(cached, out), out, "LATE 42"), "the warm run answers through the late module")
         t |> success(find(out, "cache read took") >= 0 && find(out, "mc_late_mod") >= 0 && find(out, "compiler took") < 0, "the warm run serves the fixture from the host's cache:\n{out}")
         t |> equal(long_length(fread(cacheFile)), coldSize, "the warm run rewrites nothing")
-        let uncached = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" -no-module-cache \"{script}\""
+        let uncached = "{das_exe()} -dasroot {get_das_root()} -no-module-cache \"{script}\""
         t |> success(report_child(t, "no cache", run_child(uncached, out), out, "LATE 42"), "the run with no module cache answers too")
         t |> success(find(out, "compiler took") >= 0 && find(out, "cache read took") < 0, "with no module cache the late walk compiles:\n{out}")
         let running = path_join(tmp, "use_running.das")
         fwrite(running, running_driver())
-        var rc = run_child("\"{das_exe()}\" -dasroot \"{get_das_root()}\" -no-module-cache \"{running}\"", out)
+        var rc = run_child("{das_exe()} -dasroot {get_das_root()} -no-module-cache \"{running}\"", out)
         t |> success(rc != 0 && find(out, "no program is compiling") >= 0, "a running script's late require panics with the reason: rc={rc}\n{out}")
         let runningBlock = path_join(tmp, "use_running_block.das")
         fwrite(runningBlock, running_block_driver())
-        rc = run_child("\"{das_exe()}\" -dasroot \"{get_das_root()}\" -no-module-cache \"{runningBlock}\"", out)
+        rc = run_child("{das_exe()} -dasroot {get_das_root()} -no-module-cache \"{runningBlock}\"", out)
         t |> success(rc != 0 && find(out, "no program is compiling") >= 0, "the block form from a running script is refused by the builtin itself: rc={rc}\n{out}")
         var err : string
         rmdir_rec(tmp, err)
@@ -178,7 +178,7 @@ def test_require_module_now_children(t : T?) {
         let script = path_join(tmp, "use_macro.das")
         fwrite(script, macro_driver(""))
         let cacheFile = path_join(tmp, "nested.dascache")
-        let cached = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" -module-cache \"{cacheFile}\" \"{script}\""
+        let cached = "{das_exe()} -dasroot {get_das_root()} -module-cache \"{cacheFile}\" \"{script}\""
         var out : string
         t |> success(report_child(t, "cold", run_child(cached, out), out, "LATE 42"), "the macro's late require answers on the cold run")
         let coldSize = long_length(fread(cacheFile))
