@@ -8,8 +8,7 @@ facade, the same `txt2wav` verb, the same `/v1/audio/speech` route and the same 
 score Kitten and Kokoro today. Every language Kokoro is blocked on by the espeak data question
 (ledger row 109) except Hindi lands here with no lexicon at all.
 
-Status: DRAFT for discussion (2026-09-09). Nothing below is ruled unless the rulings section
-says so. Base: master bebb5dd02.
+Status: RULED 2026-09-09 (the rulings section). Base: master bebb5dd02.
 
 ## Why this model, in one paragraph
 
@@ -187,24 +186,33 @@ sentence (the reference's torch path is framework-bound per 80 ms frame; ours is
 GEMV plus 260M MAC of GEMM per frame), first audio chunk under 100 ms after the text prompt.
 Kokoro sits at 0.069-0.075 on the same box.
 
-## Rulings needed (Boris)
+## Design rulings (Boris, 2026-09-09)
 
-1. One PR, long arc, on the M1 (as the TTS arc), or phased PRs.
-2. Family file shape: `dasllama_pocket.das` holds family + assembly (no second family shares
-   this lineage), against the StyleTTS2 split.
-3. Tokenizer home: a unigram arm in `dasllama_spm.das` or a new `dasllama_ugm.das`.
-4. Voice roster: the voice-zero WAVs as `voice.<name>` PCM tensors in the GGUF (mirrors
-   Kokoro's packs; encoded at load) versus WAVs in the store beside the file.
-5. Cloning on the server: `voice` by name only (a voices directory the config points at),
-   or an upload route; and where the gate's acceptable-use text is shown (the card, the
-   server README, the control page's tts card). Legal has the consent-gate precedent.
-6. `TtsTimings`: family-neutral slots, or a per-family record.
-7. Languages in the first landing: English alone, or all six (five converters' worth of
-   receipts, one 24-layer French at 672 MB).
-8. q8 from the first parity run (the StyleTTS2 lesson says no: "format / kernel / perf work
-   waits until everything works").
-9. Watermark: none (CC BY 4.0 carries no duty; Kyutai ships none either) - legal's call to
-   confirm.
+1. ONE PR, long arc, on the M1 Max; the phases are checkpoints inside it.
+2. One family file, `dasllama_pocket.das`, holding the family rules and the assembly; the
+   StyleTTS2 split is not repeated until a second model shares this lineage.
+3. The unigram tokenizer is an arm inside `dasllama_spm.das`, keyed on the GGUF value `t5`
+   (llama.cpp's name for a unigram SentencePiece model) so the reader also serves any
+   llama.cpp-converted T5-class model; piece table, scores and byte fallback shared with the
+   BPE arm, only the segmentation differs.
+4. The voice-zero WAVs ride the GGUF as `voice.<name>` PCM tensors (Kokoro's pack pattern),
+   encoded into a voice state on first use and cached for the session; the file stays
+   self-contained and the image serves without its GGUF.
+5. Server cloning by NAMED voices only in this arc: the GGUF roster plus a `tts_voices_dir`
+   config key whose WAVs join `caps().voices` at boot; an upload route is a ledger row. The
+   gate's acceptable-use text goes on the model card, the server README and the control
+   page's tts card beside the voice picker; legal sees the wording once.
+6. `TtsTimings` keeps its fields (the server stats and the studio read them) and gains four:
+   `prompt_us`, `backbone_us`, `head_us`, `codec_us`; a family leaves the stages it lacks at
+   zero and `timings_line` prints the non-zero ones.
+7. All six languages ship in the PR: English carries the parity rails and the rig; the five
+   others get the converter run, a tokenizer-parity cell and a waveform check against the
+   reference. A per-language WER arm through the engine's own multilingual Whisper is
+   possible without new tooling and does not gate the PR.
+8. q8 after parity on the f32 lane, never before.
+9. No watermark (CC BY 4.0 carries no duty; Kyutai ships none); legal confirms.
+10. Each language's default temperature (0.3 English, 0.7 the rest) rides as GGUF metadata
+    and is `synthesize`'s default.
 
 ## Licensing (verified 2026-09-09)
 
