@@ -557,6 +557,15 @@ namespace das {
             }
             padded.push_back(newArg);
         }
+        for (int ai = p; ai != k; ++ai) {
+            const auto & argType = winner->arguments[ai]->type;
+            if (!argType->isAutoOrAlias()) continue;
+            AliasMap aliases;
+            OptionsMap options;
+            if (!isMatchingArgument(winner, argType, padded[ai - p]->type, useGenerics, true, &aliases, &options)) {
+                return false;
+            }
+        }
         for (int ai = k - 1; ai >= p; --ai) {
             expr->arguments.insert(expr->arguments.begin() + p, padded[ai - p]);
             types.insert(types.begin() + p, padded[ai - p]->type);
@@ -1908,7 +1917,6 @@ namespace das {
                         if (!anyFailed)
                             break;
                         if (totalAliases == aliases.size()) {
-                            DAS_ASSERTF(0, "we should not be here. function matched arguments!");
                             break;
                         }
                     }
