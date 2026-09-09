@@ -840,9 +840,9 @@ def private word_count(cps : array<int>) : int {
     return words
 }
 
-//! The reference driver's preparation of one chunk: whitespace folded, an initial capital, a
-//! terminal mark, the short-input padding; and the frames it keeps generating after EOS. An
-//! empty text is refused, as the reference refuses it.
+//! The reference driver's preparation of one chunk: line breaks to spaces and ONE pass of two
+//! spaces to one (its own rule, not a whitespace fold), an initial capital, a terminal mark, the
+//! short-input padding; the frames it keeps generating after EOS. An empty text is refused, as there.
 def pocket_prepare(m : PocketModel; text : string) : tuple<prepared : string; frames_after_eos : int> {
     var s = strip(text) |> replace("\n", " ") |> replace("\r", " ") |> replace("  ", " ")
     if (empty(s)) {
