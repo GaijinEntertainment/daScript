@@ -912,12 +912,12 @@ module) is independent and can land any time - it is pure structure.
     serving census (`coverage-vk`) with no carrier the tier declines. The fully-resident MoE
     chain landed 2026-09-09: the whole-model driver admits a MoE whose expert stacks fit the arena
     (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n), the window chain's routed block
-    (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2af) and the token command's (`ARCHITECTURE_GPU_VULKAN_DECODE.md`
+    (`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af) and the token command's (same document,
     sec.2.2ag); the per-op tier keeps the files that stream. The 30B and 35B rows ride the driver
     whole (the plan forgoes the per-op reserves for a fitting file), the hybrid MoE registers its
     routed block after the deltanet head, and the expert tiles took two levers: the grid decodes'
     lane shifts (item 36's 2026-09-09 status) and the schedule's tile ladder (a bucket past the s
-    column takes m columns, the last partial: `ARCHITECTURE_GPU_VULKAN.md` sec.2.2af; the real
+    column takes m columns, the last partial: `ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af; the real
     window's skew put 4096 rows in 175 s tiles where the ladder runs 85). The rows on the RTX
     5060 Ti against llama.cpp b357x, pp512 / tg128: Qwen3-30B-A3B UD-IQ2_XXS 3242.0 / 123.6
     (3520.0 / 116.6: 0.92x / 1.06x; the window 153.9 ms against 142.3, the expert tiles 97.7),

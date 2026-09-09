@@ -70,7 +70,7 @@ and `DASLLAMA_CM2_TILE` - so the class the pipeline binds and the tile rule the 
 can never disagree; `cnt` is the AVERAGE rows per active region of the dispatch, so one tile
 serves every region of a per-op MoE schedule. The resident MoE block makes no pick: its device
 schedule cuts every bucket into s and m pieces by size and dispatches both classes per plane
-(`ARCHITECTURE_GPU_VULKAN.md` sec.2.2af), which is what a real window's skew needs - one tile
+(`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af), which is what a real window's skew needs - one tile
 per bucket costs the same whatever its fill, and a 467-row bucket is 15 s tiles or 4 m
 columns. A region below the s tile's row count goes to the decode GEMV family, not to a tile.
 The s and m tiles' fast path loads a partial column UNCLAMPED (the layout's row dimension

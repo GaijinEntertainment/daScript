@@ -49,10 +49,10 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i, 2.2u-2.2v, 2.2aa: the Metal prefill driver's
   GEMM form ladder, dev-W knee map, attention slab, MoE bucket rail, chunked submission, the
   f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm scaffold.
-- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2af: the Vulkan resident
+- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad: the Vulkan resident
   driver's prefill chain and byte stores - the prefill window chain, the Q8 requant byte store,
   the decode GEMV family's grid codebook buffer, the tile probe's shared descriptor set layout,
-  the recurrent block of the prefill window, and its MoE block.
+  and the recurrent block of the prefill window.
 - `ARCHITECTURE_GPU_VULKAN_GEMM.md` - sec.2.2k-2.2m, 2.2q, 2.2ae: the cooperative-matrix tiles
   the Vulkan tier's GEMMs run on - the cm2 decode lanes, the tile pick and the coopmat mode
   ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and the KHR arm's
@@ -60,11 +60,14 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - sec.2.2n-2.2o: what a model has to fit on the card
   before the driver runs - the residency plan, and the GPU-slot marks swap that lets one slot
   serve many models.
-- `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2v, 2.2ag: the per-op tier's decode era - the decode
+- `ARCHITECTURE_GPU_VULKAN_DECODE.md` - sec.2.2r-2.2v: the per-op tier's decode era - the decode
   attention block over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the
-  whole-token decode span, the deltanet decode step's per-session resident state, the
+  whole-token decode span, the deltanet decode step's per-session resident state, and the
   whole-model driver's hybrid token command and prefill (recurrent layers, gated attention,
-  partial rotary, the prefill-to-decode state handoff), and its MoE token command.
+  partial rotary, the prefill-to-decode state handoff).
+- `ARCHITECTURE_GPU_VULKAN_MOE.md` - sec.2.2af, 2.2ag: the resident driver's routed block in its
+  two eras - the MoE block of the prefill window, and the whole-model driver's MoE token
+  command.
 - `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39: the Metal speculative round over the batch driver's
   same-slab verify, the box knob that sets the depth a round drafts, and the kernel
   argument-alignment contract enforced at every dispatch.

@@ -656,7 +656,7 @@ def private pf_roles_per_layer(L : RLayer) : int64 {
 let private PF_MOE_ROLES = 8l   //! router topk sched gather e_gate e_up e_act e_down (the combine rides the layer's ar2 stamp)
 let private PF_MOE_MAP_OFF = 2_048l   //! the schedules' first per-wg map word offset: 4-word records for up to 256 experts, the s pieces' then the m pieces'
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def vk_rdec_moe_ok(f1, f3, f2 : int) : bool {
     if (!vk_moe_init() || !g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
         return false
@@ -675,7 +675,7 @@ def private pf_moe_bounds(nk : int64) : tuple<gu : int64; dn : int64; mgu : int6
 }
 
 //! the window chain's MoE block buffers and class rails, once per residency
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_setup {
     let np = g_rd.pf_np
     let dim = g_rd.dim
@@ -702,7 +702,7 @@ def private pf_moe_setup {
     g_rd.pf_midx_host = make_host_buf(nk * 4l, false, [cached = true])
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_layer_sets(l : int64) {
     var L & = unsafe(g_rd.layers[l])
     let np = g_rd.pf_np
@@ -752,7 +752,7 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim   // nolint:LINT021 — composed into the plane offsets and the push words as int64
@@ -802,7 +802,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
 }
 
 //! the next layer's fused Q8 head skips its own requant, so this step encodes it.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim

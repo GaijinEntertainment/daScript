@@ -262,7 +262,7 @@ class ArCombBase : ArBase {
 class ClsArComb : ArCombBase {
     @ssbo @binding = 3 yo : array<float>   //! the normed output rows
 
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
         let ss = accum_row(base)
@@ -279,7 +279,7 @@ class ClsArComb : ArCombBase {
 class ClsArCombF16B : ArCombBase {
     @ssbo @binding = 3 outh : array<float16>   //! the normed rows, f16
 
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let rbase = gl_WorkGroupID.x * pa.dim
         let ss = accum_row(rbase)
@@ -974,7 +974,7 @@ class TopKRows : TopKCore {
     @ssbo @binding = 2 w : array<float>        //! ... and its routing weight
     @push_constant pa : TopkRowsArgs
 
-    [spirv_kernel(local_size_x = 256, name = "topk_rows_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+    [spirv_kernel(local_size_x = 256, name = "topk_rows_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let tid = gl_LocalInvocationID.x
         let p = gl_WorkGroupID.x
@@ -1046,7 +1046,7 @@ class RouterGemm {
         return s
     }
 
-    [spirv_kernel(local_size_x = 256, name = "router_gemm_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+    [spirv_kernel(local_size_x = 256, name = "router_gemm_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let tid = gl_LocalInvocationID.x
         let egroups = (pa.ne + ROUTER_TE - 1u) / ROUTER_TE
@@ -1251,7 +1251,7 @@ class MoeSched {
         return scan[tid] - v
     }
 
-    [spirv_kernel(local_size_x = 256, name = "moe_sched_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+    [spirv_kernel(local_size_x = 256, name = "moe_sched_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let tid = gl_LocalInvocationID.x
         let mine = tid < pa.ne

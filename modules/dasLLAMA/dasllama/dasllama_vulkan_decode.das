@@ -311,7 +311,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
 
 let private MOE_MAX_EXPERTS = 256l   //! the select kernels' one-workgroup reach: one thread per expert
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>) : bool {
     let reach = ne <= MOE_MAX_EXPERTS && k <= MAX_ROUTED_SLOTS && nfe % 32l == 0l
     if (g_gpu != null && g_gpu.dry) {
@@ -368,7 +368,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     return true
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def private rd_moe_sets(var L : RLayer) {
     let dim = g_rd.dim
     let nfe = g_rd.nfe
@@ -429,7 +429,7 @@ def private rd_tail_sets_bare(var L : RLayer; f1, f3, f2 : int) {
 }
 
 //! `moe_li` is the layer's slot in the router plane.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def vk_rdec_set_moe_experts(l, moe_li, be1, be3, be2 : int64; fe1, fe3, fe2 : int) {
     if (g_gpu != null && g_gpu.dry) {
         return
@@ -448,7 +448,7 @@ def vk_rdec_set_moe_experts(l, moe_li, be1, be3, be2 : int64; fe1, fe3, fe2 : in
 }
 
 //! the dense triple is the shared expert's; b1 < 0 = the layer has none.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def vk_rdec_set_moe_layer(l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int) {
     if (g_gpu != null && g_gpu.dry) {
         return
@@ -882,7 +882,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     pfq_ts(raw)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
                           var pc_rq_dim : RqArgs; var pc_rq_dim_k : RqArgs; rqwg_dim, rqwg_dim_k : int64) {
     let dim = g_rd.dim
