@@ -1293,6 +1293,31 @@ namespace das {
         return ast_variable_index(program.get(), var, context, at);
     }
 
+    bool ast_is_jit_selected ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return fn && symbolStateProgram(program, "is_jit_selected", context, at)->isJitSelected(fn);
+    }
+
+    void ast_set_jit_selected ( const Program * program, const Function * fn, bool selected, Context * context, LineInfoArg * at ) {
+        auto prog = const_cast<Program *>(symbolStateProgram(program, "set_jit_selected", context, at));
+        if ( fn ) prog->setJitSelected(fn, selected);
+    }
+
+    void ast_clear_jit_selection ( const Program * program, Context * context, LineInfoArg * at ) {
+        const_cast<Program *>(symbolStateProgram(program, "clear_jit_selection", context, at))->clearJitSelection();
+    }
+
+    bool ast_is_jit_selected_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return ast_is_jit_selected(program.get(), fn, context, at);
+    }
+
+    void ast_set_jit_selected_sp ( smart_ptr_raw<Program> program, const Function * fn, bool selected, Context * context, LineInfoArg * at ) {
+        ast_set_jit_selected(program.get(), fn, selected, context, at);
+    }
+
+    void ast_clear_jit_selection_sp ( smart_ptr_raw<Program> program, Context * context, LineInfoArg * at ) {
+        ast_clear_jit_selection(program.get(), context, at);
+    }
+
     Function * findCompilingFunctionByMangledNameHash(char * module_name, uint64_t mnh, Context * context, LineInfoArg * at) {
         if ( !module_name ) context->throw_error_at(at, "expecting module name");
         auto program = daScriptEnvironment::getBound()->g_Program;
@@ -2074,6 +2099,24 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_variable_index_sp)>(*this, lib,  "variable_index",
             SideEffects::accessExternal, "ast_variable_index_sp")
                 ->args({"program","variable","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_jit_selected)>(*this, lib,  "is_jit_selected",
+            SideEffects::accessExternal, "ast_is_jit_selected")
+                ->args({"program","function","context","at"});
+        addExtern<DAS_BIND_FUN(ast_set_jit_selected)>(*this, lib,  "set_jit_selected",
+            SideEffects::modifyExternal, "ast_set_jit_selected")
+                ->args({"program","function","selected","context","at"});
+        addExtern<DAS_BIND_FUN(ast_clear_jit_selection)>(*this, lib,  "clear_jit_selection",
+            SideEffects::modifyExternal, "ast_clear_jit_selection")
+                ->args({"program","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_jit_selected_sp)>(*this, lib,  "is_jit_selected",
+            SideEffects::accessExternal, "ast_is_jit_selected_sp")
+                ->args({"program","function","context","at"});
+        addExtern<DAS_BIND_FUN(ast_set_jit_selected_sp)>(*this, lib,  "set_jit_selected",
+            SideEffects::modifyExternal, "ast_set_jit_selected_sp")
+                ->args({"program","function","selected","context","at"});
+        addExtern<DAS_BIND_FUN(ast_clear_jit_selection_sp)>(*this, lib,  "clear_jit_selection",
+            SideEffects::modifyExternal, "ast_clear_jit_selection_sp")
+                ->args({"program","context","at"});
         addExtern<DAS_BIND_FUN(isCppKeyword)>(*this, lib, "is_cpp_keyword",
             SideEffects::none, "isCppKeyword")
                 ->args({"str"});

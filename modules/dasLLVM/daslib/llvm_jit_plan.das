@@ -447,16 +447,12 @@ def public probe_dll(var candidates : array<FunctionPtr>; disabled : array<Funct
     return <- (bound <- bound, mismatched = mismatched)
 }
 
-//! `requestJit` on every function of the program: set on `selected`, cleared elsewhere - the
-//! extern resolver reads it to tell a call into the DLL from a call through a slot
+//! the program's jit selection becomes `selected` and nothing else - the emitter and the extern
+//! resolver read it to tell a call into the DLL from a call through a slot
 def public mark_jit_selection(prog : Program?; var selected : array<FunctionPtr>) {
-    prog |> for_each_module() $(mod) {
-        mod |> for_each_function("") $(fun) {
-            fun.moreFlags.requestJit = false
-        }
-    }
+    clear_jit_selection(prog)
     for (fn in selected) {
-        fn.moreFlags.requestJit = true
+        set_jit_selected(prog, fn, true)
     }
 }
 
@@ -464,6 +460,7 @@ def public mark_jit_selection(prog : Program?; var selected : array<FunctionPtr>
 //! called, interpreter addresses of the callees the DLL lacks, the handled-type and table helpers.
 //! A slot the DLL lacks was lowered inline and is skipped; one nothing can fill lands in `errors`.
 class public DllExternResolver : AstVisitor {
+    @do_not_delete prog : Program?
     @do_not_delete dll : DLLHandle?
     @do_not_delete jit_context : Context?
     @do_not_delete thisFunc : Function?
@@ -486,7 +483,8 @@ class public DllExternResolver : AstVisitor {
         return fun
     }
 
-    def DllExternResolver(var _dll : DLLHandle?; ctx : Context?; uids : UidNodes?) {
+    def DllExternResolver(_prog : Program?; var _dll : DLLHandle?; ctx : Context?; uids : UidNodes?) {
+        prog = _prog
         dll = _dll
         jit_context = ctx
         uid = uids
@@ -511,7 +509,7 @@ class public DllExternResolver : AstVisitor {
             if (dll.set_glob_address(slot, FUNC_PTR) && FUNC_PTR == null && !is_dasbind_late(expr.func)) {
                 fail("missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {get_mangled_name(expr.func)} at {describe(expr.at)}")
             }
-        } elif (!expr.func.moreFlags.requestJit) {
+        } elif (!is_jit_selected(prog, expr.func)) {
             set_slot(slot, interpreter_function_addr(jit_context, expr.func)) {
                 return "function pointer for {expr.func.name} at {describe(expr.at)}"
             }
@@ -584,7 +582,7 @@ class public DllExternResolver : AstVisitor {
     }
 
     def override preVisitExprMakeStructIndex(expr : ExprMakeStruct?; index : int; last : bool) : void {
-        if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
+        if (expr.constructor != null && !is_jit_selected(prog, expr.constructor)) {
             set_slot(uid.get_ctor(expr), interpreter_function_addr(jit_context, expr.constructor)) {
                 return "function pointer for {expr.constructor.name}"
             }
@@ -684,8 +682,8 @@ class public DllExternResolver : AstVisitor {
 }
 
 //! fills the DLL's extern slots for `funcs`; the errors, empty on success
-def public resolve_dll_externs(var dll : DLLHandle?; var ctx : Context?; var uids : UidNodes?; funcs : array<FunctionPtr>) : array<string> {
-    var resolver = new DllExternResolver(dll, ctx, uids)
+def public resolve_dll_externs(prog : Program?; var dll : DLLHandle?; var ctx : Context?; var uids : UidNodes?; funcs : array<FunctionPtr>) : array<string> {
+    var resolver = new DllExternResolver(prog, dll, ctx, uids)
     make_visitor(*resolver) $(adapter) {
         for (fn in funcs) {
             visit(fn, adapter)

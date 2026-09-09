@@ -103,9 +103,6 @@ carry the simulated context's tables); a `[_macro]`-free module skipping the con
 - **The in-memory engine's finalizer runs through the emitter's macro context**
   (`free_jit_engine_in_emitter`), so a host whose context outlives module shutdown reaches a
   context that is gone; a C++ `free_jit_engine` in the `jit` module would not.
-- **`requestJit` is still a bit on the shared `Function`** (`mark_jit_selection`), the shape
-  the per-program tables removed for `used` and `index`; two programs JIT-ing in one process
-  re-stamp each other's answer between plan and resolve.
 - **A late require nested in a parse or a record read is never cached.** `requireModuleNow`
   hides the stream (`LateRequireEnvScope::hideStream`) when the bound program is compiling or
   the reader is inside a record, so a `[call_macro]`'s or a macro module's `[init]`'s late

@@ -264,6 +264,7 @@ class public LlvmJitVisitor : AstVisitor {
     loop_stack : array<LoopBlock>
     block_stack : array<ExprBlock?>
     jit_context : Context?
+    @do_not_delete prog : Program?
     function_entry : LLVMOpaqueBasicBlock?
     function_body : LLVMOpaqueBasicBlock?
     monad2block : table<Expression?; LLVMOpaqueBasicBlock?>
@@ -294,7 +295,8 @@ class public LlvmJitVisitor : AstVisitor {
     ldu_hint : bool
     attributes : Attributes?
 
-    def LlvmJitVisitor(ctx : Context?; types_ : PrimitiveTypes?; uids : UidNodes?; flags_ : LlvmJitFlags; mode_ : LlvmJitMode; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+    def LlvmJitVisitor(prog_ : Program?; ctx : Context?; types_ : PrimitiveTypes?; uids : UidNodes?; flags_ : LlvmJitFlags; mode_ : LlvmJitMode; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+        prog = prog_
         jit_context = ctx
         types = types_
         g_builder = LLVMCreateBuilderInContext(g_ctx)
@@ -1846,7 +1848,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             }
         } else {
-            if (expr.func.moreFlags.requestJit) {
+            if (is_jit_selected(prog, expr.func)) {
                 var params <- build_call_params(expr)
                 params |> push(get_context_param())
                 if (cmresEval != null) {
@@ -4491,7 +4493,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprMakeStruct
     def callConstructor(expr : ExprMakeStruct?; cmresEval : LLVMOpaqueValue?) {
         assume expr_func = expr.constructor
-        if (expr_func.moreFlags.requestJit) {
+        if (is_jit_selected(prog, expr_func)) {
             var params <- [
                 get_context_param(),
                 LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), "")
@@ -6689,7 +6691,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def make_block_function(expr : ExprMakeBlock?; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
-        var astVisitor = new LlvmJitVisitor(jit_context, types, uid, flags, mode, g_di_builder, attributes)
+        var astVisitor = new LlvmJitVisitor(prog, jit_context, types, uid, flags, mode, g_di_builder, attributes)
         var result : LLVMOpaqueValue?
         var impl : LLVMOpaqueValue?
         make_visitor(*astVisitor) $(mv_adapter) {
@@ -7735,7 +7737,7 @@ def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLV
 // It's best to just avoid all such dependencies
 // Main function. Generates LLVM IR for `FunctionPtr`.
 [macro_function]
-def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNodes?;
+def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes?; uids : UidNodes?;
                          attrs : Attributes?; fn : FunctionPtr; flags : LlvmJitFlags; mode : LlvmJitMode) : bool {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
@@ -7748,7 +7750,7 @@ def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNode
         // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
         globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
     }
-    var astVisitor = new LlvmJitVisitor(ctx, types, uids, flags, mode, null, attrs)
+    var astVisitor = new LlvmJitVisitor(prog, ctx, types, uids, flags, mode, null, attrs)
     var handled_by_generator = false
     if (find_llvm_code_annotation(fn) != null) {
         ast_gc_guard() {
@@ -7788,7 +7790,7 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     // globals — they belong to the owner, and writing them corrupts the parent's shared buffer. Matches
     // the interpreter's `if (sharedOwner || !pv.shared)` gate (context.cpp Context::runInitScript).
     let attrs = new Attributes(g_ctx)
-    var visitor = new LlvmJitVisitor(ctx, types, uids, flags, mode, null, attrs)
+    var visitor = new LlvmJitVisitor(prog, ctx, types, uids, flags, mode, null, attrs)
     var globals_fn : LLVMOpaqueValue?
     var globals_fn_type : LLVMOpaqueType?
     make_visitor(*visitor) $(adapter) {

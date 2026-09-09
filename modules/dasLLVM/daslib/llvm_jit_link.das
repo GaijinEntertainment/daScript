@@ -82,7 +82,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     }
     phase_tm = ref_time_ticks()
     mark_jit_selection(prog, probe.bound)
-    let errors <- resolve_dll_externs(dll, ctx, uids, probe.bound)
+    let errors <- resolve_dll_externs(prog, dll, ctx, uids, probe.bound)
     if (!empty(errors)) {
         // a process fact the DLL name does not fold - a builtin with no interop address here, a
         // handled type's helper from a module this process lacks: the emitter's content gate

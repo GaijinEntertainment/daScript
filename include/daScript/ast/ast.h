@@ -1684,6 +1684,10 @@ namespace das
         __forceinline int32_t indexOf ( const Variable * var ) const { auto it = variableIndices.find(var); return it != variableIndices.end() ? it->second : -1; }
         __forceinline void setIndex ( const Function * fn, int32_t index ) { functionIndices[fn] = index; }
         __forceinline void setIndex ( const Variable * var, int32_t index ) { variableIndices[var] = index; }
+        das_hash_set<const Function *>          jitSelected;
+        __forceinline bool isJitSelected ( const Function * fn ) const { return jitSelected.find(fn) != jitSelected.end(); }
+        __forceinline void setJitSelected ( const Function * fn, bool selected ) { if ( selected ) jitSelected.insert(fn); else jitSelected.erase(fn); }
+        __forceinline void clearJitSelection () { jitSelected.clear(); }
         int                         newLambdaIndex = 1;
         int                         inferPassesUsed = 0;   // sum of inferTypesDirty inner-loop pass counts across all inferTypes calls (incl. restartInfer legs) for this module; reset by parseDaScript once per module-compile; used by per-module compile-time log
         vector<Error>               errors;

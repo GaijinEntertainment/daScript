@@ -38,4 +38,11 @@ TEST_CASE("symbol use and context slots are per program, not per shared function
     CHECK_FALSE(a->isUsed(usedByB));
     CHECK_GE(a->indexOf(usedByA), 0);
     CHECK_EQ(a->indexOf(usedByB), -2);
+
+    a->setJitSelected(usedByA, true);
+    CHECK(a->isJitSelected(usedByA));
+    CHECK_FALSE(b->isJitSelected(usedByA));
+    CHECK_FALSE(bool(usedByA->requestJit));
+    a->clearJitSelection();
+    CHECK_FALSE(a->isJitSelected(usedByA));
 }

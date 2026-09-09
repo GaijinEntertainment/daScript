@@ -243,5 +243,7 @@ and leaves the outer program's answers standing. The stream a module-cache recor
 neither the flag nor the slot: both are recomputed by the reading program. Three per-compile
 values still live on the objects: `Variable::stackTop` and `Function::totalStackSize` /
 `totalGenLabel`, which `allocateStack` writes and the same program's simulate reads before any
-nested compile can run, and `Function::requestJit`, which the JIT's `mark_jit_selection` stamps
-per program and reads within one plan (ledgered in `plans/jit_compile_time.md`).
+nested compile can run. The JIT's selection - which functions of a program a DLL holds - is a
+third table, `jitSelected`, read through `is_jit_selected` and written through
+`set_jit_selected` / `clear_jit_selection`; `Function::requestJit` is the `[jit]` annotation
+only, an author's request the selection reads and never writes.

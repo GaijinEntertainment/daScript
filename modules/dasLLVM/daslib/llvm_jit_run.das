@@ -35,7 +35,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x66cb26a70e662fdul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x5e2f7021098b8fb7ul
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -170,7 +170,7 @@ def private irgen_functions(ctx : Context?; var uids : UidNodes?; attrs : Attrib
                             prog : Program?) : bool {
     var has_externals = false
     for (fun in part) {
-        has_externals = generate_llvm(ctx, g_prim_t, uids, attrs, fun, jit_flags, jit_mode) || has_externals
+        has_externals = generate_llvm(prog, ctx, g_prim_t, uids, attrs, fun, jit_flags, jit_mode) || has_externals
         let fnmna = uids.get_dll_fn_name(fun)
         var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
         var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())
@@ -332,7 +332,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         first_miss = false
         let attrs = new Attributes(g_ctx)
         // eager declare covers OWN pairs only; out-of-partition callees declare-on-reference
-        var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, LlvmJitMode.JIT, null, attrs)
+        var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, LlvmJitMode.JIT, null, attrs)
         ast_gc_guard() {
             for (fun in buckets[pname]) {
                 fake_visitor->add_llvm_functions(fun)
@@ -543,7 +543,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         // split mode declares per partition inside run_split_codegen (eager-declaring all
         // functions into every partition module would be O(funcs x partitions) dead work)
         if (!jit_split) {
-            var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, jit_mode, null, attrs)
+            var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, jit_mode, null, attrs)
             ast_gc_guard() {
                 for (fun in funcs) {
                     fake_visitor->add_llvm_functions(fun)
@@ -682,7 +682,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         }
         if (use_dll) {
             assert(g_dynamic_lib_handle.handle != null)
-            let extern_errors <- resolve_dll_externs(g_dynamic_lib_handle, ctx, uids, funcs)
+            let extern_errors <- resolve_dll_externs(prog, g_dynamic_lib_handle, ctx, uids, funcs)
             for (e in extern_errors) {
                 failed(e)
             }

@@ -501,7 +501,7 @@ class public CollectExternVisitor : AstVisitor {
     }
 
     def override preVisitExprMakeStructIndex(expr : ExprMakeStruct?; index : int; last : bool) : void {
-        if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
+        if (expr.constructor != null && !is_jit_selected(prog, expr.constructor)) {
             register_function(expr.constructor)
         }
     }

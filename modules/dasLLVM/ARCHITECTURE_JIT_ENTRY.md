@@ -22,8 +22,8 @@ root). This document carries how a program reaches the JIT and what a DLL cache 
   requires it from a program.
 
 `run_jit_linked` computes the plan, and when the plan is a content-addressed or pinned DLL with
-candidates it opens the DLL and probes it. A hit binds in place: `mark_jit_selection` sets
-`requestJit` on the functions the DLL holds and clears it elsewhere, `resolve_dll_externs` fills
+candidates it opens the DLL and probes it. A hit binds in place: `mark_jit_selection` makes the
+program's jit selection (`Program::jitSelected`) the functions the DLL holds, `resolve_dll_externs` fills
 the DLL's extern slots, `install_dll_functions` points the sim nodes at the DLL's code, and
 `set_jit_state` records the handle. Everything else - a miss, an exe, a wasm, an AOT object,
 compile-only, an in-memory run, a static host - goes to the emitter:
@@ -68,7 +68,7 @@ second line, for the window inside one plan.
 
 `DllExternResolver` walks each bound function and fills the DLL's extern slots: the interop
 address of every builtin called, the interpreter address of every callee the DLL does not hold
-(`requestJit` false), the handled-type and table helpers. The emitter's resolver used to consult
+(not in the program's jit selection), the handled-type and table helpers. The emitter's resolver used to consult
 `has_intrinsic` to skip calls it had lowered inline; the DLL already knows - a lowered call has no
 slot - so the resolver asks `set_glob_address`, which returns false for a slot the DLL lacks, and
 only a slot the DLL holds and nothing can fill is an error. The emitter and the hit path share the
