@@ -23,7 +23,8 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // tokens through the resident driver and the all-CPU chain, the prefill logits and every step's
 // within the bar, the one-step-off control past it, and the census witnesses that the routed
 // block ran on the device for every MoE layer (the window's per window, the token command's once
-// at its recording). Two prompt lengths: one window, two windows.
+// at its recording). Two prompt lengths: one window, two windows. Two fixtures: the twin, and the
+// Qwen3.6-35B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block after the deltanet head.
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -31,6 +32,7 @@ def private allow_cpu_prefill_intent() {
 }
 
 let private TWIN = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"   //! the Q4_K_M mint of the Q8_0 carrier (its recipe row in ../performance/model_specs.das)
+let private HYBRID = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf"   //! the deltanet hybrid MoE with a gated shared expert, the 16 GB card's whole-model fit
 //! of the step's max |logit| - the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's reading): the arms
 //! agree to 1e-8 at layer 0 and part from layer 1 on, where the device chain's summation order moves the residual by ulps,
 //! the next layer's Q8 requant rounds a few elements the other way and the router flips a near-tie; against the all-CPU
@@ -86,25 +88,31 @@ def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks
 // prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
 // prefill logits and every step's within the bar, the one-step-off control past it, the routed
 // block's census growing by the MoE layer count per window and per step
-def private moe_forced_feed(t : T?; n : int64) {
+def private moe_forced_feed(t : T?; n : int64; file : string) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return
     }
-    let path = path_join(models_dir(), TWIN)
+    let path = path_join(models_dir(), file)
     if (!model_available(t, path)) return
     if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
         t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
         return
     }
     var tr <- load_model_(path, QuantMode.q8)
-    t |> success(tr.config.n_expert > 0l && tr.config.n_ff_shexp > 0l, "the twin routes experts beside a shared expert")
+    t |> success(tr.config.n_expert > 0l && tr.config.n_ff_shexp > 0l, "the fixture routes experts beside a shared expert")
     if (!moe_gpu_resident_active()) {
-        t |> skip("the whole-model driver declined the twin (the load log names why: the plan, the tile family or a seat)")
+        t |> skip("the whole-model driver declined {file} (the load log names why: the plan, the tile family or a seat)")
         delete tr
         return
     }
     let layers = tr.config.n_layers
+    var nrec = 0l
+    for (l in range64(layers)) {
+        if (layer_is_recurrent(tr.config, l)) {
+            nrec++
+        }
+    }
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
     with_job_que() {
         setup_dasllama_jobque_()
@@ -117,7 +125,7 @@ def private moe_forced_feed(t : T?; n : int64) {
         let topk0 = census("topk_cls_spv")
         var gpu <- feed_logits(tr, sg, prompt, toks)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
+        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt ({nrec} recurrent layers of {layers})")
         if (sched0 != NO_CENSUS) {
             t |> equal(census("moe_sched_cls_spv") - sched0, layers * windows, "the device bucket schedule ran once per MoE layer per window ({windows} windows)")
             t |> equal(census("topk_rows_cls_spv") - rows0, layers * windows, "the window's per-row select ran once per MoE layer per window")
@@ -155,12 +163,22 @@ def private moe_forced_feed(t : T?; n : int64) {
 [test]
 def test_gpu_resident_moe(t : T?) {
     t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the resident MoE prefill window + the routed token command vs the CPU chain, one window") @(t : T?) {
-        moe_forced_feed(t, 40l)
+        moe_forced_feed(t, 40l, TWIN)
     }
     t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the same across two windows") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
         }
-        moe_forced_feed(t, PF_WINDOW_ROWS + 88l)
+        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, TWIN)
+    }
+}
+
+[test]
+def test_gpu_resident_moe_hybrid(t : T?) {
+    t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS: the deltanet hybrid MoE - the recurrent head beside the routed block, one window") @(t : T?) {
+        moe_forced_feed(t, 40l, HYBRID)
+    }
+    t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS: the same across two windows (the conv tail and the state carry the seam)") @(t : T?) {
+        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, HYBRID)
     }
 }

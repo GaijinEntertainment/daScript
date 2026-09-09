@@ -422,9 +422,46 @@ def private rd_moe_sets(var L : RLayer) {
     }
 }
 
-//! Register an MoE layer: the attention quad and the dense triple as set_layer does (the dense
-//! triple is the shared expert's; b1 < 0 = the layer has none), the expert triple, and `moe_li`,
-//! the layer's slot in the router plane.
+// a layer without a dense triple (an MoE layer with no shared expert): the tail sets the token
+// command encodes around the routed block - the FFN norm, its requant and the residual step
+def private rd_tail_sets_bare(var L : RLayer; f1, f3, f2 : int) {
+    let dim = g_rd.dim
+    L.b1 = -1l; L.b3 = -1l; L.b2 = -1l
+    L.f1 = f1; L.f3 = f3; L.f2 = f2
+    L.s_addr_ffn = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xb_dev),
+        fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l),
+        fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
+    L.s_quant_xb2 = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
+        fixed_array(dim * 4l, dim, (dim / 32l) * 4l),
+        fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    L.s_addr_next = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
+        fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l),
+        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+}
+
+//! Register the routed block on a layer already registered (an attention or a recurrent layer
+//! whose dense triple is the shared expert's, or none): the expert triple and `moe_li`, the
+//! layer's slot in the router plane.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
+def vk_rdec_set_moe_experts(l, moe_li, be1, be3, be2 : int64; fe1, fe3, fe2 : int) {
+    if (g_gpu != null && g_gpu.dry) {
+        return
+    }
+    assert(g_rd != null && g_rd.moe, "vk_rdec_set_moe_experts before prepare_moe")
+    unsafe {
+        var L & = g_rd.layers[l]
+        assert(L.made, "vk_rdec_set_moe_experts before the layer's own registration")
+        L.moe = true
+        L.moe_li = moe_li
+        L.be1 = be1; L.be3 = be3; L.be2 = be2
+        L.fe1 = fe1; L.fe3 = fe3; L.fe2 = fe2
+        rd_moe_sets(L)
+    }
+    g_rd.tok_recorded = false
+}
+
+//! Register an MoE attention layer: the attention quad and the dense triple as set_layer does
+//! (the dense triple is the shared expert's; b1 < 0 = the layer has none), then the routed block.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
 def vk_rdec_set_moe_layer(l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int) {
     if (g_gpu != null && g_gpu.dry) {
@@ -434,31 +471,15 @@ def vk_rdec_set_moe_layer(l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, be1, b
     rd_layer_slot(l)
     unsafe {
         var L & = g_rd.layers[l]
-        L.moe = true
-        L.moe_li = moe_li
-        L.be1 = be1; L.be3 = be3; L.be2 = be2
-        L.fe1 = fe1; L.fe3 = fe3; L.fe2 = fe2
         rd_attn_sets(L, mir_idx, bq, bk, bv, bo, fq, fk, fv, fo, f1, f3, f2)
         if (b1 >= 0l) {
             rd_ffn_sets(L, b1, b3, b2, f1, f3, f2)
         } else {
-            L.b1 = -1l; L.b3 = -1l; L.b2 = -1l
-            L.f1 = f1; L.f3 = f3; L.f2 = f2
-            // the dense-tail sets the token command encodes around the routed block: the FFN norm and the residual step
-            L.s_addr_ffn = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xb_dev),
-                fixed_array(g_rd.dim * 4l, g_rd.dim * 4l, g_rd.norms_bytes, g_rd.dim * 4l),
-                fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
-            L.s_quant_xb2 = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
-                fixed_array(g_rd.dim * 4l, g_rd.dim, (g_rd.dim / 32l) * 4l),
-                fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
-            L.s_addr_next = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
-                fixed_array(g_rd.dim * 4l, g_rd.dim * 4l, g_rd.norms_bytes, g_rd.dim * 4l),
-                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+            rd_tail_sets_bare(L, f1, f3, f2)
         }
-        rd_moe_sets(L)
         L.made = true
     }
-    g_rd.tok_recorded = false
+    vk_rdec_set_moe_experts(l, moe_li, be1, be3, be2, fe1, fe3, fe2)
 }
 
 //! one recurrent layer's constants (conv taps, out-norm weights, a, dt) into its smalls
@@ -582,7 +603,11 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         L.s_dnout = gemv_cls_set(fout, fixed_array(pout.wq, pout.ws, L.m_dnout.buf, g_rd.dn_oq_dev, g_rd.dn_os_dev, g_rd.xb2_dev),
             fixed_array(pout.wqb, pout.wsb, META_BYTES, di, (di / 32l) * 4l, dim * 4l),
             fixed_array(0u, 0u, 0u, VHZ_DNO, VHZ_DNO, VHZ_XB2))
-        rd_ffn_sets(L, b1, b3, b2, f1, f3, f2)
+        if (b1 >= 0l) {
+            rd_ffn_sets(L, b1, b3, b2, f1, f3, f2)
+        } else {
+            rd_tail_sets_bare(L, f1, f3, f2)   // a recurrent MoE layer without a shared expert
+        }
         L.made = true
     }
     g_rd.tok_recorded = false

@@ -290,6 +290,13 @@ shared row already there, the plain combine from zero on a layer without one - s
 step never learns which FFN ran. The slot regions are device buffers the top-k fills each token;
 the dense triple's host-filled regions stay what they are.
 
+**A recurrent MoE layer takes the routed block after its deltanet head** (the hybrid MoE, sec.2.2v's
+head with this section's tail): the deltanet registration builds the layer, its shared expert
+rides as the dense triple, and the routed block registers on the built layer through its own
+seat (`vk_rdec_set_moe_experts`, the seat the attention form calls after its quad); the
+window chain's recurrent block precedes the same routed block (`ARCHITECTURE_GPU_VULKAN.md`
+sec.2.2af, the tail every head shares).
+
 **The routed block is the decode span's FFN half transplanted, not a second copy of the span.**
 The kernels are the span's (sec.2.2t); what differs is the home: the arena's expert planes and
 the resident driver's activation row instead of the per-op tier's stacks and the span's own row.

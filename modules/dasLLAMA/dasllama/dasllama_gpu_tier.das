@@ -225,8 +225,10 @@ def public rdec_upload_bias(rows : array<float>) { invoke(g_rdec_upload_bias, ro
 typedef RdecMoeOkFn = function<(f1 : int; f3 : int; f2 : int) : bool>
 //! The MoE geometry and the router plane (every MoE layer's [ne x dim] rows, then its gate row when the shared expert is gated) after the prepare; false = the class rails declined.
 typedef RdecPrepareMoeFn = function<(ne : int64; k : int64; nfe : int64; nsh : int64; n_moe : int64; sh_gated : bool; norm_topk : bool; is_gelu : bool; wscale : float; router : array<float>) : bool>
-//! Register an MoE layer: the attention quad, the dense triple (the shared expert's, or -1 blocks for none) and the expert triple.
+//! Register an MoE attention layer: the attention quad, the dense triple (the shared expert's, or -1 blocks for none) and the expert triple.
 typedef RdecSetMoeLayerFn = function<(l : int64; mir_idx : int64; moe_li : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; be1 : int64; be3 : int64; be2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; fe1 : int; fe3 : int; fe2 : int) : void>
+//! Register the routed block on a layer already registered by its own seat (a recurrent MoE layer after its deltanet registration): the expert triple and the layer's router-plane slot.
+typedef RdecSetMoeExpertsFn = function<(l : int64; moe_li : int64; be1 : int64; be3 : int64; be2 : int64; fe1 : int; fe3 : int; fe2 : int) : void>
 
 [unused_argument(f1, f3, f2)]
 def private rdec_unset_moe_ok(f1, f3, f2 : int) : bool => false
@@ -234,17 +236,21 @@ def private rdec_unset_moe_ok(f1, f3, f2 : int) : bool => false
 def private rdec_unset_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>) : bool => false
 [unused_argument(l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2)]
 def private rdec_unset_set_moe_layer(l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int) {}
+[unused_argument(l, moe_li, be1, be3, be2, fe1, fe3, fe2)]
+def private rdec_unset_set_moe_experts(l, moe_li, be1, be3, be2 : int64; fe1, fe3, fe2 : int) {}
 
 var g_rdec_moe_ok = @@rdec_unset_moe_ok
 var g_rdec_prepare_moe = @@rdec_unset_prepare_moe
 var g_rdec_set_moe_layer = @@rdec_unset_set_moe_layer
+var g_rdec_set_moe_experts = @@rdec_unset_set_moe_experts
 var g_rdec_moe_installed = false
 
 //! Install the resident driver's MoE seats - separately, so a tier without them declines a MoE by name.
-def public install_moe_gpu_resident_moe(moe_ok : RdecMoeOkFn; prepare_moe : RdecPrepareMoeFn; set_moe_layer : RdecSetMoeLayerFn) {
+def public install_moe_gpu_resident_moe(moe_ok : RdecMoeOkFn; prepare_moe : RdecPrepareMoeFn; set_moe_layer : RdecSetMoeLayerFn; set_moe_experts : RdecSetMoeExpertsFn) {
     g_rdec_moe_ok = moe_ok
     g_rdec_prepare_moe = prepare_moe
     g_rdec_set_moe_layer = set_moe_layer
+    g_rdec_set_moe_experts = set_moe_experts
     g_rdec_moe_installed = true
 }
 
@@ -252,6 +258,7 @@ def public rdec_moe_installed() : bool => g_rdec_moe_installed
 def public rdec_moe_ok(f1, f3, f2 : int) : bool => invoke(g_rdec_moe_ok, f1, f3, f2)
 def public rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>) : bool => invoke(g_rdec_prepare_moe, ne, k, nfe, nsh, n_moe, sh_gated, norm_topk, is_gelu, wscale, router)
 def public rdec_set_moe_layer(l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int) { invoke(g_rdec_set_moe_layer, l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2) }
+def public rdec_set_moe_experts(l, moe_li, be1, be3, be2 : int64; fe1, fe3, fe2 : int) { invoke(g_rdec_set_moe_experts, l, moe_li, be1, be3, be2, fe1, fe3, fe2) }
 
 var private g_gpu_resident_route = true
 
@@ -1750,6 +1757,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_set_moe_layer == null) {
         g_rdec_set_moe_layer = @@rdec_unset_set_moe_layer
+    }
+    if (g_rdec_set_moe_experts == null) {
+        g_rdec_set_moe_experts = @@rdec_unset_set_moe_experts
     }
     if (g_moe_gpu_binding_cap == null) {
         g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap

@@ -33,6 +33,8 @@ After slice 3 (2026-09-09, the same instruments; the whole-model driver on both)
 |---|---|---|---|---|---|
 | Qwen1.5-MoE-A2.7B Q4_K_M (local mint) | 9.50 | 5069.2 / 142.2 | 5099.8 / 173.8 | 0.99x / 0.82x | whole: 10107 MB, mirror 3069 MB at ctx 16368 |
 | Qwen3-30B-A3B-Instruct-2507 UD-IQ2_XXS | 10.34 | 2176.7 / 124.4 | 3520.0 / 116.6 | 0.62x / 1.07x | whole: 10296 MB, mirror 2841 MB at ctx 30305 |
+| the same after the routing retile | 10.34 | 2270.5 / 124.6 | 3520.0 / 116.6 | 0.65x / 1.07x | |
+| Qwen3.6-35B-A3B UD-IQ2_XXS (hybrid) | 10.76 | 2252.3 / 95.8 | 2853.1 / 71.6 | 0.79x / 1.34x | whole: 11110 MB, mirror 1992 MB at ctx 102011 |
 
 The 512-token window on the 30B (`--prof --jobque-profiling`, `DASLLAMA_GPU_PROF=1`, the two
 timed reps agreeing within a few ms; wall 560 ms, llama.cpp's whole window 275 ms):
@@ -148,7 +150,15 @@ the rest is the per-layer host glue the span would remove, and the span declines
    1.6x gap per plane, not the 1.6x the whole window shows, so the rest of the window (the
    attention head 28.5 ms, the act, combine, norm and requant dispatches ~12 ms, the router
    and schedule 14.6) carries the other half of the distance to their 145 ms.
-4. **The hybrid MoE.** The 35B rides slice 3 with the deltanet block already in the chain.
+4. **The hybrid MoE.** DONE 2026-09-09: a recurrent MoE layer takes the routed block after its
+   deltanet head - the deltanet registration builds the layer with the shared expert as its
+   dense triple, and the routed block registers on it through its own seat
+   (`rdec_set_moe_experts`); the window chain's tail already served both heads. The UD-IQ3_S
+   files (13.7 GB) do not plan on the 16 GB card, so the fitting file is Qwen3.6-35B-A3B
+   UD-IQ2_XXS (10.76 GB; its Qwen3.5 twin is stocked too): whole on the card at 11110 MB with a
+   1992 MB mirror at ctx 102011, pp512 2252.3 / tg128 95.8 against llama.cpp's 2853.1 / 71.6
+   (0.79x / 1.34x). Gate: `test_gpu_resident_moe.das`'s hybrid fixture at one and two windows
+   (the conv tail and the state across the seam), the same bar and controls.
 5. **The expert GEMMs at small M.** The last term (192 ms on the 30B): a tile pick for
    32-row buckets, or a mul_mat_id-shaped kernel; measured on the probe first.
 

@@ -726,7 +726,6 @@ def resident_unserved_features(c : Config) : string {
         name_list_add(names, c.ffn_act == FfnAct.swiglu_oai, "the clamped swiglu expert activation")
         name_list_add(names, c.n_expert > 256l, "{c.n_expert} experts (the select kernels reach 256)")
         name_list_add(names, c.n_expert_used > 64l, "{c.n_expert_used} routed experts (the slot metas hold 64)")
-        name_list_add(names, c.n_layer_nextn > 0l, "a NextN block on an MoE")
         name_list_add(names, c.layer_out_scale, "a layer output scale")
     }
     return names
@@ -1047,6 +1046,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                     addr<float const?>(t.fblob[t.dn_dt_off + l * dng.nvh]))
             }
             rec_idx++
+            if (moe) {   // a recurrent MoE layer: the routed block after its deltanet head
+                let eb = resident_place_experts(t, l, mr, kg, wb)
+                if (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) return rdec_decline("arena placement failed at recurrent layer {l} (the expert stacks)")
+                rdec_set_moe_experts(l, moe_li, eb.be1, eb.be3, eb.be2, int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)))
+                moe_li++
+            }
             continue
         }
         let cq = rdec_quant_class(lf.fq)

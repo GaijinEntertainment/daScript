@@ -402,9 +402,11 @@ chain's routed block and the token command's routed block - the hybrid file's fo
 logits-tolerance form at the routed chain's 12% bar (the arms part on the router's near-ties from
 layer 1 on, the bar's `//!` carries the reading) with the one-step-off control, at one window and
 two windows, plus the census witnesses: the device bucket schedule and the per-row select ran once
-per MoE layer per window, the token command's top-k once per MoE layer per fed step; the twin is
-large-tier (`DASLLAMA_PARITY_FULL=1`), and the cells skip without it, the armed tier, or the driver
-declining the twin (the load log names why).
+per MoE layer per window, the token command's top-k once per MoE layer per fed step; the second
+fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
+after the deltanet head, at the same two lengths; both are large-tier (`DASLLAMA_PARITY_FULL=1`),
+and the cells skip without the file, the armed tier, or the driver declining it (the load log
+names why).
 `test_gpu_moe_shexp.das` - stocked suite; the shared expert's prefill on the device
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
 shexp triple as one region over every position of the routed experts' chain, gated by the tier's
