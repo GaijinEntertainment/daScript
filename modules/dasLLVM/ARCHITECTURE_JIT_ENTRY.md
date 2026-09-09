@@ -33,8 +33,7 @@ and `call_in_context` runs `run_jit_codegen` there with the program and context 
 emitter recomputes the same plan - its inputs are the program and the command line - and takes
 the pipeline `ARCHITECTURE.md` sec.1 describes; on a warm run the emitter's ~40 modules are never
 read from the module cache and its macro contexts never simulated, which is the whole of the
-saving (a warm `-jit` hello world: total 0.20 s to 0.08 s, compile 0.17 s to 0.065 s). The
-emitter's load is JIT work and prints its own `LLVM JIT time: emitter load` line; its modules
+saving. The emitter's load is JIT work and prints its own `LLVM JIT time: emitter load` line; its modules
 are records of the script's own module cache (`src/ast/ARCHITECTURE.md` sec.3), written on the
 first miss and served on the next.
 
