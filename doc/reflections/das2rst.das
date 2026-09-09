@@ -476,7 +476,7 @@ def document_module_ast(_root : string) {
         group_by_regex("Adapter generation", mod, %regex~make_.*%%),
         group_by_regex("Adapter application", mod, %regex~(add_.*_(annotation|macro)|add_new_comment_reader|add_comment_reader|add_module_option)%%),
         group_by_regex("Adding objects to objects", mod, %regex~add_.*%%),
-        group_by_regex("Program and module access", mod, %regex~(this_program|this_module|compiling_program|compiling_module|has_macro_context|find_macro_context|is_used|function_index|variable_index)$%%),
+        group_by_regex("Program and module access", mod, %regex~(this_program|this_module|compiling_program|compiling_module|has_macro_context|find_macro_context|is_used|function_index|variable_index|is_jit_selected|set_jit_selected|clear_jit_selection)$%%),
         group_by_regex("Textual descriptions of the objects", mod, %regex~(describe.*|das_to_string)%%),
         group_by_regex("Searching", mod, %regex~find.*%%),
         group_by_regex("Iterating", mod, %regex~(for_each.*|.*_foreach)%%),
