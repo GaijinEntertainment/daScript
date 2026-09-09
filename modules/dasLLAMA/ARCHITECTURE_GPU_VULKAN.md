@@ -201,11 +201,20 @@ five device stages over the window's FFN-normed rows.
   again. The window planes carry 128 rows of read slack past the last bucket row (the s and m
   tiles load a partial column unclamped, `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l) and hold a
   whole window of `PF_WINDOW x k` bucket rows, so the block never chunks.
-- **The combine** lands the routed slots' weighted down rows on the layer's FFN rows. A layer
-  with a shared expert runs the dense tail first - the shared triple is the layer's dense
-  triple, at the shared width - and the gated combine (`MoeCombineSh`) starts from those rows
-  scaled by the sigmoid of the gate logit; a layer without one takes the plain combine from
-  zero. The residual step after it never learns which FFN ran.
+- **The combine rides the residual step.** The add+rms that follows the block (`ClsArComb`,
+  its f16 twin `ClsArCombF16B` where the next layer's head takes the f16 feed) adds the shared
+  expert's down rows at the sigmoid of the gate logit - the dense tail ran the shared triple
+  first, as the layer's dense triple at the shared width - and the k weighted expert rows
+  through the slot map, straight into the residual, then norms the row for the next layer. A
+  layer without a shared expert takes the same step with the add partner off. The step sums
+  the FFN row first - the gated shared row, then the slots in order - and adds it to the
+  residual, the order the separate combine dispatch and the plain add it replaced took, so the
+  resident-vs-CPU bars of the MoE files keep their calibration: the fold's natural order - the
+  residual first - moves the rounding enough to flip a router near-tie downstream, and one step
+  of the 35B two-window cell reads 1.50 logits off the CPU chain against a 1.39 bar where the
+  chain's order reads 0.39. The token command's tail folds the same way
+  (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2ag); the residual step read those rows anyway,
+  and the fold took one dispatch per layer out of both chains.
 
 The router reads the f32 normed rows, so an MoE layer takes the split add+rms arm at the FFN
 site (the fused twins never store `xb`), and the last-layer FFN slice of sec.2.2j does not apply

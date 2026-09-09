@@ -341,7 +341,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     if (g_gpu.dry) {
         return true
     }
-    if (!(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_combine_cls() && ensure_combine_sh_cls()
+    if (!(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_cls_ar_comb()
             && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls())) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the routing class rails declined on this device\n")
         return false
@@ -373,7 +373,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
 
 // the routed block's decode sets: the router GEMV and top-k over the driver's routing smalls, the
 // three expert GEMVs over the arena expert planes through the top-k's slot regions, the act, and
-// the combine that lands the layer's FFN row in ffnout (over the shared expert's row when the layer has one)
+// the residual step with the combine folded in (the layer's s_addr_next)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
 def private rd_moe_sets(var L : RLayer) {
     let dim = g_rd.dim
@@ -411,15 +411,12 @@ def private rd_moe_sets(var L : RLayer) {
     L.s_edown = gemv_cls_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev),
         fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
-    if (L.b1 >= 0l) {
-        L.s_ecomb = set_combine_sh_cls(fixed_array(g_rd.ffnout_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev),
-            fixed_array(dim * 4l, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, k * dim * 4l, g_rd.ner * 4l),
-            fixed_array(VHZ_FFO, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT))
-    } else {
-        L.s_ecomb = set_combine_cls(fixed_array(g_rd.ffnout_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev),
-            fixed_array(dim * 4l, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, k * dim * 4l),
-            fixed_array(VHZ_FFO, 0u, VHZ_MRT, VHZ_MDN))
-    }
+    // the residual step after the routed block folds the combine in (the shared row at its gate, the k weighted expert rows)
+    verify(ensure_cls_ar_comb(), "vk decode: the combine-folded residual class rail must engage on a live device")
+    L.s_addr_next = set_cls_ar_comb(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
+            g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev),
+        fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, k * dim * 4l, g_rd.ner * 4l),
+        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT))
 }
 
 // a layer without a dense triple (an MoE layer with no shared expert): the tail sets the token
@@ -896,8 +893,8 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 }
 
 //! The routed block of an MoE layer's token command: the router GEMV over the normed row, the
-//! top-k writing the three expert GEMVs' slot regions, gate/up over k slots, the act, down, and the
-//! combine onto ffnout - over the shared expert's row already there when the layer has one.
+//! top-k writing the three expert GEMVs' slot regions, gate/up over k slots, the act, down; the
+//! combine onto the residual rides the ar2 step that follows (`rd_ar_comb_args`).
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
 def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; rpw : int64;
                           var pc_rq_dim : RqArgs; var pc_rq_dim_k : RqArgs; rqwg_dim, rqwg_dim_k : int64) {
@@ -940,14 +937,13 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k), ybase = 0u)
     gemv_cls_enc(L.fe2, raw, h, L.s_edown, pcd, (k * dim + rpw - 1l) / rpw)
     pfq_ts(raw)
-    if (L.b1 >= 0l) {
-        var pcc = CombineShArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(k), lstride = uint(g_rd.ner), gidx = uint(g_rd.ne), gated = g_rd.sh_gated ? 1u : 0u)
-        enc_combine_sh_cls(raw, h, L.s_ecomb, pcc, 1l)
-    } else {
-        var pcc = CombineArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(k))
-        enc_combine_cls(raw, h, L.s_ecomb, pcc, 1l)
-    }
-    pfq_ts(raw)
+}
+
+//! The residual step's push block over a MoE layer's combine: the shared row at its gate when the layer has
+//! one, the k routed rows through the slot map, then the norm at `woff`.
+def rd_ar_comb_args(L : RLayer; woff : int64) : ArArgs {
+    return ArArgs(dim = uint(g_rd.dim), add_on = L.b1 >= 0l ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
+        k = uint(g_rd.k), lstride = uint(g_rd.ner), gidx = uint(g_rd.ne), gated = g_rd.sh_gated ? 1u : 0u)
 }
 
 // the stamps of an MoE layer's tail after the attention head, in the order rd_encode_token records them
@@ -962,7 +958,7 @@ def private rd_moe_tail_names(L : RLayer) : array<string> {
     if (L.xe_own) {
         names |> push("rq_e")
     }
-    var routed <- ["router", "topk", "e_gate", "e_up", "e_act", "e_down", "comb", "ar2"]
+    var routed <- ["router", "topk", "e_gate", "e_up", "e_act", "e_down", "ar2"]   // ar2 carries the combine
     names |> push_from(routed)
     delete routed
     return <- names
@@ -1043,9 +1039,12 @@ def private rd_encode_token {
             if (L.moe) {
                 rd_encode_moe(raw, h, L, rpw, pc_rq_dim, pc_rq_dim_k, rqwg_dim, rqwg_dim_k)
             }
-            let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — rms_att[l+1]|final, composed from int64 layout offsets
+            let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // rms_att[l+1] | final
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
-            if (fuse) {
+            if (L.moe) {   // the routed block's combine rides the residual step (a MoE runs the split rail: the router reads xb)
+                var pc14c = rd_ar_comb_args(L, nxt)
+                enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)
+            } elif (fuse) {
                 enc_cls_ar_rq(raw, h, L.s_addr_next_rq, pc14, 1l)
             } else {
                 enc_cls_ar(raw, h, L.s_addr_next, pc14, 1l)

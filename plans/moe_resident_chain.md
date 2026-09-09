@@ -225,6 +225,29 @@ the rest is the per-layer host glue the span would remove, and the span declines
    1.33x). A post-reboot run had read every role 5-15% slower and the 30B's tg128 at 119.7 - a
    throttled clock state (`nvidia-smi` beside the re-run showed the SM at 2827 MHz under load
    again), so a whole-row regression is re-measured before it is believed.
+   5d DONE 2026-09-09 - the remainder pass, first lever: the routed combine folds into the
+   residual step that follows it in both chains (`ClsArComb`, its f16 twin `ClsArCombF16B` for
+   a next layer on the f16 feed; the residual step already read the FFN rows, so the fold takes
+   one dispatch per layer out of the window and the token command, and `MoeCombineSh` goes). The
+   fused step sums the FFN row first - the gated shared row, then the slots in order - and adds
+   it to the residual, the order the two kernels took: the natural order (the residual first)
+   moved every step's resident-vs-CPU difference and one step of the 35B two-window cell from
+   0.39 to 1.50 logits against its 1.39 bar (a router near-tie downstream of the rounding); in
+   the chain's order that step reads 0.39063567 again, the pre-fold value to the digit. The
+   twin's token: ar2 360 us where ar2 + comb read 199 + 233, tg128 163.4 -> 165.4 (0.95x),
+   pp512 5461.8 (1.07x); the 35B 2976.1 / 99.9 (1.04x / 1.40x); the 30B 3455.7 / 127.7 (0.98x
+   / 1.10x), its window 143.7 ms against 142.3. A reading of the window profile: the stamp
+   after the down tiles (`ar2+comb`, 4.7 ms; `comb` 4.1-4.8 before) absorbs the tiles' tail -
+   the same kernel at one row costs 15 us, and 512 rows over 36 SMs cannot take 4 ms - so the
+   window's remaining terms against the reference are the expert tiles (~98 ms against ~88),
+   the attention head (~27), the router (4.3 against 1.2), the act 2.8, ar1 1.8, the gather
+   1.6, and nothing in the combine. The store cleanup rode along: the cm2 tile picks its store
+   layout by the column, not the stamp (a whole column stores unclamped on every stamp), and
+   the per-stamp `FLO` typedef goes; the clamp on a whole column measured free (48.0 against
+   48.1 TFLOP/s on the k4 m tile). A kernel-suite run during the pass read every cm2 cell 40x
+   slow (k5 111 s against 1.1) while other programs held the box, and dastest's 1400 s timeout
+   then died in its own watchdog (`timeout_tests` under the JIT reads a null); the same suite
+   on the quiet box ran in 87 s - a run that looks 40x slow is the box, not the change.
 
 Slices 1 and 2 are small and land the shared-expert families' rows; slice 3 is the arc's body.
 

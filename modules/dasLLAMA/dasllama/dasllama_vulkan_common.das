@@ -2161,11 +2161,11 @@ struct RLayer {
     s_egate, s_eup : VkDescriptorSet
     s_eact : VkDescriptorSet
     s_edown : VkDescriptorSet
-    s_ecomb : VkDescriptorSet       // the combine (the shared-expert form or the plain one)
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   // the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   // the expert tiles over the device-written schedules: the s column's
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   // ... and the m column's, over the same planes
-    pf_eact_set, pf_ecomb_set : VkDescriptorSet
+    pf_eact_set : VkDescriptorSet
+    pf_arcomb_set, pf_arcomb_f16_set : VkDescriptorSet   // the residual step with the combine folded in: the f32 and f16 normed-row forms
 }
 
 struct RDec {

@@ -8226,21 +8226,29 @@ def private moe_sched_arm(t : T?) {
 }
 
 // the gated combine: the shared rows scaled by the gate's sigmoid plus the routed slots, over two accumulating windows
-def private moe_combine_sh_arm(t : T?; gated : bool) {
+// the residual step with the combine folded in: x += [g *] shared row + the k weighted expert rows
+// through the slot map, then the next norm - the f32 and the f16 normed-row forms against one CPU
+// oracle; `with_sh` = the layer has a shared expert (its rows ride the add partner)
+def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = 64
         let k = 3
         let npos = 5
         let nrows = npos * k
+        let eps = 1.0e-6
         var sidx : array<uint>
         var sw : array<float>
         var rows : array<float>
-        var accs : array<float>
+        var xs : array<float>
+        var sh : array<float>
+        var wn : array<float>
         var lg : array<float>
         sidx |> resize(nrows)
         sw |> resize(nrows)
         rows |> resize(nrows * n)
-        accs |> resize(npos * n)
+        xs |> resize(npos * n)
+        sh |> resize(npos * n)
+        wn |> resize(n)
         lg |> resize(npos * MR_NER)
         for (i in range(nrows)) {
             sidx[i] = uint((i * 7) % nrows)   // a permutation of the bucket rows
@@ -8250,81 +8258,134 @@ def private moe_combine_sh_arm(t : T?; gated : bool) {
             rows[i] = float((i * 7) % 93) * 0.13 - 5.5
         }
         for (i in range(npos * n)) {
-            accs[i] = float((i * 5) % 41) * 0.2 - 3.0
+            xs[i] = float((i * 11) % 37) * 0.1 - 1.7
+            sh[i] = float((i * 5) % 41) * 0.2 - 3.0
+        }
+        for (i in range(n)) {
+            wn[i] = 0.5 + float(i % 7) * 0.125
         }
         for (i in range(npos * MR_NER)) {
             lg[i] = hash_unit(uint(i) + 9u)
         }
         let si_bytes = int64(nrows) * 4l
-        let ac_bytes = int64(npos * n) * 4l
+        let x_bytes = int64(npos * n) * 4l
+        let ro_bytes = int64(nrows * n) * 4l
+        let wn_bytes = int64(n) * 4l
         let lg_bytes = int64(npos * MR_NER) * 4l
-        // two windows over the bucket rows, each window's down rows a plane of its own from row 0 (the chain's chunk form): the first scales the shared rows, the second accumulates onto them
-        let r_mid = 6
-        let ro0_bytes = int64(r_mid * n) * 4l
-        let ro1_bytes = int64((nrows - r_mid) * n) * 4l
         let sid = make_device_buf(si_bytes)
         let swd = make_device_buf(si_bytes)
-        let rod0 = make_device_buf(ro0_bytes)
-        let rod1 = make_device_buf(ro1_bytes)
-        let acd = make_device_buf(ac_bytes)
+        let rod = make_device_buf(ro_bytes)
+        let xd = make_device_buf(x_bytes)
+        let shd = make_device_buf(x_bytes)
+        let wnd = make_device_buf(wn_bytes)
         let lgd = make_device_buf(lg_bytes)
-        var host = make_host_buf(ac_bytes, true, [cached = true])
-        var got : array<float>
-        got |> resize(npos * n)
+        let yod = make_device_buf(x_bytes)
+        let yhd = make_device_buf(x_bytes / 2l)
+        var host = make_host_buf(3l * x_bytes, true, [cached = true])
+        var got_x : array<float>
+        var got_y : array<float>
+        var got_h : array<uint>
+        got_x |> resize(npos * n)
+        got_y |> resize(npos * n)
+        got_h |> resize(npos * n / 2)
+        var pc = ArArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
+            k = uint(k), lstride = uint(MR_NER), gidx = uint(MR_NE), gated = gated ? 1u : 0u)
         unsafe {
             upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
             upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
-            upload_region_at(rod0, 0l, addr<uint8 const?>(rows[0]), ro0_bytes)
-            upload_region_at(rod1, 0l, addr<uint8 const?>(rows[r_mid * n]), ro1_bytes)
-            upload_region_at(acd, 0l, addr<uint8 const?>(accs[0]), ac_bytes)
+            upload_region_at(rod, 0l, addr<uint8 const?>(rows[0]), ro_bytes)
+            upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
+            upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), wn_bytes)
             upload_region_at(lgd, 0l, addr<uint8 const?>(lg[0]), lg_bytes)
-            var sc0 = set_combine_sh_cls(fixed_array(acd, sid, swd, rod0, lgd),
-                fixed_array(ac_bytes, si_bytes, si_bytes, ro0_bytes, lg_bytes), fixed_array(1u, 2u, 4u, 8u, 16u))
-            var sc1 = set_combine_sh_cls(fixed_array(acd, sid, swd, rod1, lgd),
-                fixed_array(ac_bytes, si_bytes, si_bytes, ro1_bytes, lg_bytes), fixed_array(1u, 2u, 4u, 32u, 16u))
+            // the f32 form: x updated in place, the normed row to yo
+            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
+            var sc = set_cls_ar_comb(fixed_array(xd, shd, wnd, yod, sid, swd, rod, lgd),
+                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes, si_bytes, si_bytes, ro_bytes, lg_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
-            var pc0 = CombineShArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(r_mid), lstride = uint(MR_NER), gidx = uint(MR_NE), gated = gated ? 1u : 0u)
-            enc_combine_sh_cls(raw, h, sc0, pc0, int64(npos))
-            var pc1 = CombineShArgs(n = uint(n), k = uint(k), r0 = uint(r_mid), r1 = uint(nrows), lstride = uint(MR_NER), gidx = uint(MR_NE), gated = gated ? 1u : 0u)
-            enc_combine_sh_cls(raw, h, sc1, pc1, int64(npos))
-            vkd_run_copy(raw, h, acd, host, ac_bytes, 1u)
-            memcpy(addr<void?>(got[0]), host.mapped, ac_bytes)
+            enc_cls_ar_comb(raw, h, sc, pc, int64(npos))
+            vhz_dep(raw, h, 1u | 4u, 0u, true)
+            cmd_copy_range(raw, xd, 0l, host.buf, 0l, x_bytes)
+            cmd_copy_range(raw, yod, 0l, host.buf, x_bytes, x_bytes)
+            vk_check(vkEndCommandBuffer(raw), null)
+            submit_wait(raw)
+            memcpy(addr<void?>(got_x[0]), host.mapped, x_bytes)
+            memcpy(addr<void?>(got_y[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
+            // the f16 form over a fresh x
+            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
+            var sc16 = set_cls_ar_comb_f16_b(fixed_array(xd, shd, wnd, yhd, sid, swd, rod, lgd),
+                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes / 2l, si_bytes, si_bytes, ro_bytes, lg_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u))
+            var raw2 = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(raw2, begin), null)
+            var h2 : VkHaz
+            enc_cls_ar_comb_f16_b(raw2, h2, sc16, pc, int64(npos))
+            vkd_run_copy(raw2, h2, yhd, host, x_bytes / 2l, 4u)
+            memcpy(addr<void?>(got_h[0]), host.mapped, x_bytes / 2l)
         }
-        var want : array<float>
-        want |> resize(npos * n)
+        var want_x : array<float>
+        var want_y : array<float>
+        want_x |> resize(npos * n)
+        want_y |> resize(npos * n)
         for (p in range(npos)) {
-            let g = gated ? 1.0 / (1.0 + exp(-lg[p * MR_NER + MR_NE])) : 1.0
+            let g = with_sh && gated ? 1.0 / (1.0 + exp(-lg[p * MR_NER + MR_NE])) : 1.0
+            var ss = 0.0
             for (i in range(n)) {
-                var acc = g * accs[p * n + i]
-                for (j in range(k)) {
-                    acc += sw[p * k + j] * rows[int(sidx[p * k + j]) * n + i]
+                var v = xs[p * n + i]
+                if (with_sh) {
+                    v += g * sh[p * n + i]
                 }
-                want[p * n + i] = acc
+                for (j in range(k)) {
+                    v += sw[p * k + j] * rows[int(sidx[p * k + j]) * n + i]
+                }
+                want_x[p * n + i] = v
+                ss += v * v
+            }
+            let inv = 1.0 / sqrt(ss / float(n) + eps)
+            for (i in range(n)) {
+                want_y[p * n + i] = wn[i] * (want_x[p * n + i] * inv)
             }
         }
-        let bad = mismatch_approx(got, want)
-        let arm = gated ? "gated" : "ungated"
-        t |> success(bad == 0, "the {arm} combine over two accumulating windows matches the CPU oracle ({bad} of {npos * n} off)")
-        want[2 * n + 9] += 0.5
-        t |> success(mismatch_approx(got, want) == 1, "combine control: the bar reds one poisoned element")
+        let arm = (with_sh ? (gated ? "gated shared" : "ungated shared") : "no shared") + " expert"
+        let bad_x = mismatch_approx(got_x, want_x)
+        t |> success(bad_x == 0, "the combine-folded residual step ({arm}): the residual rows match the CPU oracle ({bad_x} of {npos * n} off)")
+        let bad_y = mismatch_approx(got_y, want_y)
+        t |> success(bad_y == 0, "the combine-folded residual step ({arm}): the f32 normed rows match the CPU oracle ({bad_y} of {npos * n} off)")
+        var got_yf : array<float>
+        got_yf |> resize(npos * n)
+        for (i in range(npos * n / 2)) {
+            let pr = unpackHalf2x16(got_h[i])
+            got_yf[2 * i] = pr.x
+            got_yf[2 * i + 1] = pr.y
+        }
+        let bad_h = mismatch_bars(got_yf, want_y, 2.0e-3, 2.0e-3 * max_abs(want_y))
+        t |> success(bad_h == 0, "the combine-folded residual step ({arm}): the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
+        want_x[2 * n + 9] += 0.5
+        t |> success(mismatch_approx(got_x, want_x) == 1, "combine-folded residual control: the bar reds one poisoned element")
         delete sidx
         delete sw
         delete rows
-        delete accs
+        delete xs
+        delete sh
+        delete wn
         delete lg
-        delete got
-        delete want
+        delete got_x
+        delete got_y
+        delete got_h
+        delete got_yf
+        delete want_x
+        delete want_y
     }
 }
 
 [test]
 def test_vkd_moe_routing(t0 : T?) {
-    t0 |> run("the resident MoE block's routing kernels == the CPU oracles: router GEMM, per-row top-k, the bucket schedule, the gated combine") <| @(t : T?) {
+    t0 |> run("the resident MoE block's routing kernels == the CPU oracles: router GEMM, per-row top-k, the bucket schedule, the combine-folded residual step") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_combine_sh_cls())) {
+            if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b())) {
                 feint("no Vulkan device - skipping\n")
                 return
             }
@@ -8332,8 +8393,9 @@ def test_vkd_moe_routing(t0 : T?) {
             moe_topk_rows_arm(t, true, 0.0)
             moe_topk_rows_arm(t, false, 2.5)
             moe_sched_arm(t)
-            moe_combine_sh_arm(t, true)
-            moe_combine_sh_arm(t, false)
+            moe_ar_comb_arm(t, true, true)
+            moe_ar_comb_arm(t, false, true)
+            moe_ar_comb_arm(t, false, false)
         } else {
             feint("dasVulkan not present - skipping\n")
         }

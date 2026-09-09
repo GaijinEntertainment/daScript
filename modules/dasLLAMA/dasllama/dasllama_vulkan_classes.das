@@ -39,6 +39,10 @@ struct ArArgs {
     eps : float
     ascale : float
     row0 : uint
+    k : uint        // the combine twins: routed slots per position
+    lstride : uint  // ... the logits row stride, the shared expert's gate logit index, and whether that gate scales the shared row
+    gidx : uint
+    gated : uint
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -186,6 +190,80 @@ class ClsArAddRmsRqB : ArRqBase {
     [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv")]
     def run {
         rq_row(gl_WorkGroupID.x * pa.dim, gl_WorkGroupID.x * (pa.dim / 32u))
+    }
+}
+
+// the MoE layer's combine folded into the residual step that follows it: the row's add partner is
+// the shared expert's down row at its gate (add_on: the layer has one) plus the routed slots'
+// weighted down rows, read through the slot map - the combine dispatch and its ffnout round trip
+// gone. The leaves are the add+rms kernels' f32 and f16 output forms (the Q8 requant form would
+// take a ninth binding, past the hazard rail's eight: that feed requants the f32 form's row instead).
+class ArCombBase : ArBase {
+    @ssbo @binding = 4 slot_idx : array<uint>    // position -> its k slot rows
+    @ssbo @binding = 5 slot_w : array<float>     // ... and their routing weights
+    @ssbo @binding = 6 down_rows : array<float>  // the routed down-GEMM output rows
+    @ssbo @binding = 7 logits : array<float>     // [npos x lstride]; the gate logit sits at gidx
+
+    def override accum_row(base : uint) : float {
+        let p = base / pa.dim
+        var g = 1.0
+        if (pa.add_on != 0u && pa.gated != 0u) {
+            g = 1.0 / (1.0 + exp(-logits[p * pa.lstride + pa.gidx]))
+        }
+        var ss = 0.0
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            // the FFN row first, then onto the residual: the combine-then-add chain's sum order, bit for bit
+            var f = 0.0
+            if (pa.add_on != 0u) {
+                f = g * aa[base + k]
+            }
+            var j = 0u
+            while (j < pa.k) {
+                f += slot_w[p * pa.k + j] * down_rows[slot_idx[p * pa.k + j] * pa.dim + k]
+                j++
+            }
+            let vv = (xs[base + k] + f) * pa.ascale
+            xs[base + k] = vv
+            row[k] = vv
+            ss += vv * vv
+            k += 256u
+        }
+        return ss
+    }
+}
+
+[vk_dispatch(name = "cls_ar_comb", grid = "nrows", params = "nrows : int64")]
+class ClsArComb : ArCombBase {
+    @ssbo @binding = 3 yo : array<float>   // the normed output rows
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+    def run {
+        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
+        let ss = accum_row(base)
+        let inv = rms_inv(ss)
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            yo[base + k] = wn[pa.woff + k] * (row[k] * inv)
+            k += 256u
+        }
+    }
+}
+
+[vk_dispatch(name = "cls_ar_comb_f16_b", grid = "nrows", params = "nrows : int64")]
+class ClsArCombF16B : ArCombBase {
+    @ssbo @binding = 3 outh : array<float16>   // the normed rows, f16
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+    def run {
+        let rbase = gl_WorkGroupID.x * pa.dim
+        let ss = accum_row(rbase)
+        let inv = rms_inv(ss)
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            outh[rbase + k] = float16(wn[pa.woff + k] * (row[k] * inv))
+            k += 256u
+        }
     }
 }
 
@@ -1196,52 +1274,6 @@ class MoeSched {
         i = tid
         while (i < pa.nk) {   // each slot takes the next row of its expert's bucket
             inv[i] = atomicAdd(cnt[idx[i]], 1u)
-            i += 256u
-        }
-    }
-}
-
-struct CombineShArgs {
-    n : uint         // row width
-    k : uint         // slots per position
-    r0 : uint        // this dispatch's bucket-row window [r0, r1); r0 == 0 starts the sum from the shared rows
-    r1 : uint
-    lstride : uint   // the logits row stride (elements)
-    gidx : uint      // the shared expert's gate logit index in the row
-    gated : uint     // 1 = the shared row scales by sigmoid(the gate logit); 0 = it adds at weight 1
-}
-
-// the combine of a layer with a shared expert: the accumulator rows come in as the shared expert's
-// down rows and go out as the layer's FFN rows - the routed slots' weighted down rows over the
-// shared row at its gate; a later window (r0 > 0) accumulates onto the scaled rows
-[vk_dispatch(name = "combine_sh_cls", grid = "npos", params = "npos : int64")]
-class MoeCombineSh {
-    @ssbo @binding = 0 acc_rows : array<float>   // in: the shared expert's down rows; out: the FFN rows
-    @ssbo @binding = 1 slot_idx : array<uint>    // position -> its k slot rows
-    @ssbo @binding = 2 slot_w : array<float>     // ... and their routing weights
-    @ssbo @binding = 3 down_rows : array<float>  // the window's routed down-GEMM output rows
-    @ssbo @binding = 4 logits : array<float>     // [npos x lstride]; the gate logit sits at gidx
-    @push_constant pa : CombineShArgs
-
-    [spirv_kernel(local_size_x = 256, name = "combine_sh_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
-    def run {
-        let p = gl_WorkGroupID.x
-        var g = 1.0
-        if (pa.r0 == 0u && pa.gated != 0u) {
-            g = 1.0 / (1.0 + exp(-logits[p * pa.lstride + pa.gidx]))
-        }
-        var i = gl_LocalInvocationID.x
-        while (i < pa.n) {
-            var acc = g * acc_rows[p * pa.n + i]
-            var j = 0u
-            while (j < pa.k) {
-                let jb = slot_idx[p * pa.k + j]
-                if (jb >= pa.r0 && jb < pa.r1) {
-                    acc += slot_w[p * pa.k + j] * down_rows[(jb - pa.r0) * pa.n + i]
-                }
-                j++
-            }
-            acc_rows[p * pa.n + i] = acc
             i += 256u
         }
     }
@@ -5241,10 +5273,16 @@ class template KqCm2BatchT : MoeCmBase {
             tensorLayoutCreate(flb)
             tensorLayoutSetDimension(flb, row0 + (STILE ? ((cnt + BN - 1u) & ~(BN - 1u)) : cnt), pa.n)
             tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            var flo : FLO
-            tensorLayoutCreate(flo)
-            tensorLayoutSetDimension(flo, row0 + cnt, pa.d)
-            tensorLayoutSetStride(flo, pa.d & ~7u, 1u)
+            // the store: unclamped over a whole column, clamped over the partial column an s / m stamp loads unclamped
+            let whole = xt * BN + BN <= cnt
+            var flw : tensorLayout2D
+            tensorLayoutCreate(flw)
+            tensorLayoutSetDimension(flw, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flw, pa.d & ~7u, 1u)
+            var flp : tensorLayout2DPad
+            tensorLayoutCreate(flp)
+            tensorLayoutSetDimension(flp, row0 + cnt, pa.d)
+            tensorLayoutSetStride(flp, pa.d & ~7u, 1u)
             if (pa.ksplit == 0u) {
                 var k = 0u
                 for (_i in range(int(pa.n / 512u))) {
@@ -5272,7 +5310,11 @@ class template KqCm2BatchT : MoeCmBase {
                 coopmatClamp(acc, -65504.0, 65504.0)
                 var accw : ACCW
                 coopmatConvert(accw, acc)
-                coopmatStoreTensor(accw, y, 0u, flo, t0, BN, m0, 128u, tv)
+                if (whole) {
+                    coopmatStoreTensor(accw, y, 0u, flw, t0, BN, m0, 128u, tv)
+                } else {
+                    coopmatStoreTensor(accw, y, 0u, flp, t0, BN, m0, 128u, tv)
+                }
                 return
             }
             var k = k0
@@ -5301,7 +5343,11 @@ class template KqCm2BatchT : MoeCmBase {
             coopmatClamp(acc, -65504.0, 65504.0)
             var accw : ACCW
             coopmatConvert(accw, acc)
-            coopmatStoreTensor(accw, y, ybase, flo, t0, BN, m0, 128u, tv)
+            if (whole) {
+                coopmatStoreTensor(accw, y, ybase, flw, t0, BN, m0, 128u, tv)
+            } else {
+                coopmatStoreTensor(accw, y, ybase, flp, t0, BN, m0, 128u, tv)
+            }
             return
         }
         // EDGE PATH — clamp-Constant layouts everywhere (store discard load-bearing)
@@ -6379,7 +6425,6 @@ class Q8Cm2LBatch : Q8Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "q8_batch_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6389,7 +6434,6 @@ class Q8Cm2MBatch : Q8Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "q8_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6399,7 +6443,6 @@ class Q8Cm2SBatch : Q8Cm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6407,7 +6450,6 @@ class K4Cm2LBatch : K4Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_k4_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6417,7 +6459,6 @@ class K4Cm2MBatch : K4Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k4_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6427,7 +6468,6 @@ class K4Cm2SBatch : K4Cm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k6_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6435,7 +6475,6 @@ class K6Cm2LBatch : K6Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_k6_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6445,7 +6484,6 @@ class K6Cm2MBatch : K6Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k6_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6455,7 +6493,6 @@ class K6Cm2SBatch : K6Cm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k5_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6463,7 +6500,6 @@ class K5Cm2LBatch : K5Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_k5_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6473,7 +6509,6 @@ class K5Cm2MBatch : K5Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k5_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6483,7 +6518,6 @@ class K5Cm2SBatch : K5Cm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_q40_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6491,7 +6525,6 @@ class Q40Cm2LBatch : Q40Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_q40_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6501,7 +6534,6 @@ class Q40Cm2MBatch : Q40Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_q40_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6511,7 +6543,6 @@ class Q40Cm2SBatch : Q40Cm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4xs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6519,7 +6550,6 @@ class Iq4xsCm2LBatch : Iq4xsCm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_iq4xs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6529,7 +6559,6 @@ class Iq4xsCm2MBatch : Iq4xsCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4xs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6539,7 +6568,6 @@ class Iq4xsCm2SBatch : Iq4xsCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k3_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6547,7 +6575,6 @@ class K3Cm2LBatch : K3Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_k3_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6557,7 +6584,6 @@ class K3Cm2MBatch : K3Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k3_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6567,7 +6593,6 @@ class K3Cm2SBatch : K3Cm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6575,7 +6600,6 @@ class Iq3sCm2LBatch : Iq3sCm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_iq3s_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6585,7 +6609,6 @@ class Iq3sCm2MBatch : Iq3sCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3s_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6595,7 +6618,6 @@ class Iq3sCm2SBatch : Iq3sCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3xxs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6603,7 +6625,6 @@ class Iq3xxsCm2LBatch : Iq3xxsCm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_iq3xxs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6613,7 +6634,6 @@ class Iq3xxsCm2MBatch : Iq3xxsCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3xxs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6623,7 +6643,6 @@ class Iq3xxsCm2SBatch : Iq3xxsCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4nl_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6631,7 +6650,6 @@ class Iq4nlCm2LBatch : Iq4nlCm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_iq4nl_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6641,7 +6659,6 @@ class Iq4nlCm2MBatch : Iq4nlCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4nl_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6651,7 +6668,6 @@ class Iq4nlCm2SBatch : Iq4nlCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k2_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6659,7 +6675,6 @@ class K2Cm2LBatch : K2Cm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_k2_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6669,7 +6684,6 @@ class K2Cm2MBatch : K2Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k2_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6679,7 +6693,6 @@ class K2Cm2SBatch : K2Cm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6687,7 +6700,6 @@ class Iq2sCm2LBatch : Iq2sCm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_iq2s_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6697,7 +6709,6 @@ class Iq2sCm2MBatch : Iq2sCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2s_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6707,7 +6718,6 @@ class Iq2sCm2SBatch : Iq2sCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6715,7 +6725,6 @@ class Iq2xsCm2LBatch : Iq2xsCm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_iq2xs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6725,7 +6734,6 @@ class Iq2xsCm2MBatch : Iq2xsCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6735,7 +6743,6 @@ class Iq2xsCm2SBatch : Iq2xsCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xxs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6743,7 +6750,6 @@ class Iq2xxsCm2LBatch : Iq2xxsCm2T {
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
-    typedef FLO = tensorLayout2D
 }
 
 [vk_dispatch(name = "kq_batch_iq2xxs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6753,7 +6759,6 @@ class Iq2xxsCm2MBatch : Iq2xxsCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xxs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6763,7 +6768,6 @@ class Iq2xxsCm2SBatch : Iq2xxsCm2T {
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
-    typedef FLO = tensorLayout2DPad
 }
 
 // the KHR arm of every kq format (KHR, BN 128); the cm2 typedefs belong to the template's uncalled
@@ -6776,7 +6780,6 @@ class K4KhrBatch : K4Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k5_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6787,7 +6790,6 @@ class K5KhrBatch : K5Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k6_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6798,7 +6800,6 @@ class K6KhrBatch : K6Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_q40_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6809,7 +6810,6 @@ class Q40KhrBatch : Q40Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6820,7 +6820,6 @@ class Iq4xsKhrBatch : Iq4xsCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k3_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6831,7 +6830,6 @@ class K3KhrBatch : K3Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3s_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6842,7 +6840,6 @@ class Iq3sKhrBatch : Iq3sCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3xxs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6853,7 +6850,6 @@ class Iq3xxsKhrBatch : Iq3xxsCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4nl_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6864,7 +6860,6 @@ class Iq4nlKhrBatch : Iq4nlCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k2_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6875,7 +6870,6 @@ class K2KhrBatch : K2Cm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2s_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6886,7 +6880,6 @@ class Iq2sKhrBatch : Iq2sCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6897,7 +6890,6 @@ class Iq2xsKhrBatch : Iq2xsCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xxs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6908,7 +6900,6 @@ class Iq2xxsKhrBatch : Iq2xxsCm2T {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2DPad
 }
 
 struct SkRedArgs {

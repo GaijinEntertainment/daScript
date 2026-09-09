@@ -121,8 +121,11 @@ created clamp-Undefined and the B and output strides are masked to a multiple of
 (`stride &= ~7`). The mask changes nothing while `n` and `d` are 32-multiples, which every
 served shape is; it exists to make the alignment PROVABLE to the driver's address analysis,
 which is what keeps the loads on the wide path. A partial-column stamp gates only the weight
-tile: its partial token column loads unclamped and its store clamps (`tensorLayout2DPad`).
-Everything else takes the edge path with clamped layouts.
+tile: its partial token column loads unclamped and that column's store clamps
+(`tensorLayout2DPad`), while a whole column stores unclamped on every stamp (the clamp on a
+whole column measured free on the k4 m tile, 48.0 against 48.1 TFLOP/s at the gate shape, so
+the branch is there for the layout's meaning, not its cost). Everything else takes the edge
+path with clamped layouts.
 
 **The no-split arm keeps literal loop bounds and a literal store base.** Where `ksplit` is zero
 the k loop runs the literal `0 .. n` with the store at the row base rather than the general

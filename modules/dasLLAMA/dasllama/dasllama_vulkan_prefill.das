@@ -647,13 +647,13 @@ def private pf_roles_per_layer(L : RLayer) : int64 {
         return 7l + (g_rd.dn_ba_f32 ? 10l : 11l)
     }
     var n = g_rd.qk_norm ? 16l : 15l
-    if (L.moe) {   // the routed block's nine stamps; a layer without a shared expert has no dense-block stamps
+    if (L.moe) {   // the routed block's eight stamps; a layer without a shared expert has no dense-block stamps
         n += PF_MOE_ROLES - (L.b1 < 0l ? 4l : 0l)
     }
     return n
 }
 
-let private PF_MOE_ROLES = 9l   // router topk sched gather e_gate e_up e_act e_down comb
+let private PF_MOE_ROLES = 8l   // router topk sched gather e_gate e_up e_act e_down (the combine rides the layer's ar2 stamp)
 let private PF_MOE_MAP_OFF = 2_048l   // the schedules' first per-wg map word offset: 4-word records for up to 256 experts, the s pieces' then the m pieces'
 
 //! Does the resident MoE block admit an expert triple of these formats: the f16-fed cm2 tiles
@@ -685,7 +685,7 @@ def private pf_moe_setup {
     let nk = np * g_rd.k
     g_rd.pf_nk = nk
     verify(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_gather_f16_cls()
-        && ensure_actf16_cls() && ensure_combine_cls() && ensure_combine_sh_cls(),
+        && ensure_actf16_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b(),
         "vk prefill: the MoE block's class rails must engage on a live device")
     let bounds = pf_moe_bounds(nk)
     assert((PF_MOE_MAP_OFF + max(bounds.gu + bounds.mgu, bounds.dn + bounds.mdn)) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: the MoE block's schedule exceeds its plane")
@@ -749,20 +749,17 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
     L.pf_e2m_set = cm2_cls_set(L.fe2, tcm, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
         fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN_M))
-    if (L.b1 >= 0l) {
-        L.pf_ecomb_set = set_combine_sh_cls(fixed_array(g_rd.pf_ffnout, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
-            fixed_array(np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
-            fixed_array(VHZ_FFO, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
-    } else {
-        L.pf_ecomb_set = set_combine_cls(fixed_array(g_rd.pf_ffnout, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn),
-            fixed_array(np * dim * 4l, nk * 4l, nk * 4l, dn_bytes),
-            fixed_array(VHZ_FFO, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M))
-    }
+    L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
+        fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
+        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
+    L.pf_arcomb_f16_set = set_cls_ar_comb_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
+        fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
+        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
 }
 
 //! The routed block of an MoE layer's window: the router GEMM over the FFN-normed rows, the per-row
-//! select, the bucket schedule, the f16 gather, the expert tiles over the device-written schedules
-//! (gate, up, the act, down) and the combine onto the FFN rows, over the shared expert's rows when the layer has one
+//! select, the bucket schedule, the f16 gather, and the expert tiles over the device-written schedules
+//! (gate, up, the act, down); the combine onto the FFN rows rides the residual step that follows (`pf_moe_addr_next`)
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
 def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -811,14 +808,33 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     cm2_cls_enc(L.fe2, tcm, raw, h, L.pf_e2m_set, pc2m, bounds.mdn)
     cm2_cls_enc(L.fe2, tcs, raw, h, L.pf_e2_set, pc2, bounds.dn)
     pfq_ts(raw)
-    if (L.b1 >= 0l) {
-        var pcc = CombineShArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk), lstride = uint(ner), gidx = uint(ne), gated = g_rd.sh_gated ? 1u : 0u)
-        enc_combine_sh_cls(raw, h, L.pf_ecomb_set, pcc, wlen)
-    } else {
-        var pcc = CombineArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
-        enc_combine_cls(raw, h, L.pf_ecomb_set, pcc, wlen)
+}
+
+//! The residual step after a MoE layer's routed block, with the combine folded in: the f16 row when
+//! the next layer's head reads the f16 feed, else the f32 normed row - requantized here when that
+//! head takes the fused Q8 feed and skips its own requant.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
+    var L & = unsafe(g_rd.layers[l])
+    let dim = g_rd.dim
+    var pcc = ArArgs(dim = uint(dim), add_on = L.b1 >= 0l ? 1u : 0u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
+        k = uint(g_rd.k), lstride = uint(g_rd.ner), gidx = uint(g_rd.ne), gated = g_rd.sh_gated ? 1u : 0u)
+    let next_fused = l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)
+    if (next_fused && pf_qkv6(l + 1l)) {
+        enc_cls_ar_comb_f16_b(raw, h, L.pf_arcomb_f16_set, pcc, wlen)
+        return
     }
-    pfq_ts(raw)
+    enc_cls_ar_comb(raw, h, L.pf_arcomb_set, pcc, wlen)
+    if (next_fused) {   // the Q8 feed's requant, the next layer's own quant_xb set
+        let nb = int((l + 1l) * PF_ROLES)
+        if (kq_sb(g_rd.layers[l + 1l].fq)) {
+            var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
+            enc_cls_q8k_rq(raw, h, g_rd.pf_sets[nb], pcq, (wlen * dim / 8l + 255l) / 256l)
+        } else {
+            var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
+            enc_cls_dn_rq(raw, h, g_rd.pf_sets[nb], pcq, (wlen * dim / 4l + 255l) / 256l)
+        }
+    }
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]   // once per residency — buffers, sets, fa arming
@@ -1444,10 +1460,12 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 if (moe) {
                     pf_moe_block(raw, h, l, wlen)
                 }
-                let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
+                let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0, row0 = uint(ffn_row0))
                 let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
-                if (l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)) {
+                if (moe) {   // the routed block's combine rides the residual step
+                    pf_moe_addr_next(raw, h, l, wlen, nxt)
+                } elif (l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)) {
                     if (next_qkv6) {
                         enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int(l * 2l + 1l)], pc14, wlen)
                     } else {
@@ -1616,7 +1634,7 @@ def private pf_prof_report(npos : int64) {
         let shexp = sh > 0 ? "sh_gate {int(moe[a0])} sh_up {int(moe[a0 + 1])} sh_act {int(moe[a0 + 2])} sh_down {int(moe[a0 + 3])} " : ""
         let qkn = q > 0 ? "qkn {int(moe[4])} " : ""
         let m0 = a0 + sh
-        to_log(LOG_INFO, "vk_rdpf moe rq_x {int(moe[0])} q {int(moe[1])} k {int(moe[2])} v {int(moe[3])} {qkn}rope_kv {int(moe[4 + q])} attn {int(moe[5 + q])} rq_a {int(moe[6 + q])} wo {int(moe[7 + q])} ar1 {int(moe[8 + q])} rq_f {int(moe[9 + q])} {shexp}router {int(moe[m0])} topk {int(moe[m0 + 1])} sched {int(moe[m0 + 2])} gather {int(moe[m0 + 3])} e_gate {int(moe[m0 + 4])} e_up {int(moe[m0 + 5])} e_act {int(moe[m0 + 6])} e_down {int(moe[m0 + 7])} comb {int(moe[m0 + 8])} ar2 {int(moe[m0 + 9])}\n")
+        to_log(LOG_INFO, "vk_rdpf moe rq_x {int(moe[0])} q {int(moe[1])} k {int(moe[2])} v {int(moe[3])} {qkn}rope_kv {int(moe[4 + q])} attn {int(moe[5 + q])} rq_a {int(moe[6 + q])} wo {int(moe[7 + q])} ar1 {int(moe[8 + q])} rq_f {int(moe[9 + q])} {shexp}router {int(moe[m0])} topk {int(moe[m0 + 1])} sched {int(moe[m0 + 2])} gather {int(moe[m0 + 3])} e_gate {int(moe[m0 + 4])} e_up {int(moe[m0 + 5])} e_act {int(moe[m0 + 6])} e_down {int(moe[m0 + 7])} ar2+comb {int(moe[m0 + 8])}\n")
     }
     if (natt > 0l) {
         // the qkn dispatch stamps between v and rope_kv, shifting every later role by one

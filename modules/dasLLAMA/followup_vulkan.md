@@ -929,11 +929,19 @@ module) is independent and can land any time - it is pure structure.
     0.94x), the schedule's slot walks are an atomic tally and cursor (8.1 -> 0.46 ms on the 30B
     window), the router tile prefetches its stage as a 64 x 32 tile (6.6 -> 4.3 ms): the 30B
     3448.9 / 124.6 (0.98x / 1.07x, the window 144.9 ms against 142.3), the 35B 2946.0 / 95.2
-    (1.03x / 1.33x), the twin 5348.3 / 163.4 (1.05x / 0.94x). Still open under this
-    item: the 30B prefill's last 2% (the gate/up tiles ~70 us per plane over the reference's -
-    a 64-wide column for the 33-64-row buckets - the router's 4.3 ms, the combine, act and gather
-    8), the twin's decode 6% (the expert GEMVs at 63% of bandwidth, the twelve small dispatches
-    per layer), the fused add+rms twin that also stores the normed row (the router's feed, so a
-    MoE could take the fused rail), the CPU chain's shared expert on the same K-quant planes
-    (it reads the q8 transcode, so the resident-vs-CPU bar carries the two forms' rounding), and
-    an LPT order for the device schedule's pieces (the m dispatch already leads the s one).
+    (1.03x / 1.33x), the twin 5348.3 / 163.4 (1.05x / 0.94x). The remainder pass's first
+    lever: the routed combine rides the residual step in both chains (`ClsArComb`, sec.2.2af /
+    sec.2.2ag), one dispatch per layer fewer, in the two kernels' sum order so the MoE files'
+    bars keep their calibration: the 30B 3455.7 / 127.7 (0.98x / 1.10x, the window 143.7 ms
+    against 142.3), the 35B 2976.1 / 99.9 (1.04x / 1.40x), the twin 5461.8 / 165.4 (1.07x /
+    0.95x). Still open under this item: the 30B prefill's last 2% (the expert tiles ~98 ms
+    against the reference's ~88 - a 64-wide column for the 33-64-row buckets - the router's 4.3
+    ms against 1.2, the act 2.8 and the gather 1.6; the profile stamp after the down tiles
+    absorbs their tail, so the residual step's own cost does not read there), the twin's decode
+    5% (the expert GEMVs at 73% of bandwidth and the shared expert's at 81%, the eleven small
+    dispatches per layer - the one-row residual step reads 15 us per layer, a latency chain of
+    the slot loads), the fused add+rms twin that also stores the normed row (the router's feed,
+    so a MoE could take the fused rail; ar1 + rq_f read 2.3 ms of the 30B window), the CPU
+    chain's shared expert on the same K-quant planes (it reads the q8 transcode, so the
+    resident-vs-CPU bar carries the two forms' rounding), and an LPT order for the device
+    schedule's pieces (the m dispatch already leads the s one).

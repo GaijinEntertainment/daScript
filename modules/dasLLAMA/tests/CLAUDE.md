@@ -288,7 +288,8 @@ against its CPU twin - the records and maps word for word over the whole planes 
 ladder's two piece lists over a whole m column with an s remainder, partial m columns and
 s-column buckets; empty experts; the four sentinel tails), the slot-to-bucket-row map as a
 permutation of each bucket's rows (its atomic cursor fixes no order within a bucket) - and the
-gated combine over two accumulating windows - every bar with its own poison.
+combine-folded residual step (the shared row at its gate, ungated, and no shared expert; the f32
+normed row and the f16 twin against one oracle) - every bar with its own poison.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
