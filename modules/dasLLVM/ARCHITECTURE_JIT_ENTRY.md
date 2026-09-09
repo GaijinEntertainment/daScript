@@ -53,7 +53,7 @@ loads the emitter - the link module logs the interpreted run and returns. An ext
 process cannot fill on a hit - a builtin with no interop address here, a handled type's helper
 from a module this process lacks, process facts the key does not fold - is logged and handed to
 the emitter, whose content gate decides again and rewrites the DLL, where a panic would repeat
-on every run against the same name. `LLVM_JIT_CODEGEN_VERSION` 0x79 is the key's change of
+on every run against the same name. `LLVM_JIT_CODEGEN_VERSION` 0x7d is the key's change of
 shape.
 
 The candidate set reads the CONTEXT, not the `used` flag alone: `get_function_by_mangled_name_hash`

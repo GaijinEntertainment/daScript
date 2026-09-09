@@ -105,7 +105,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
         delete uids
     }
     let t_finalize = get_time_usec(phase_tm)
-    jit_log_report(probe.bound, false, plan.opt_level, !empty(plan.dll_hash_basename), plan.jit_split, 0, plan.log_jit_time, totalTime,
+    jit_log_report(probe.bound, false, plan.opt_level, !empty(plan.dll_hash_basename), plan.jit_split, 0, plan.debug_info, plan.log_jit_time, totalTime,
         t_hash, 0, 0, t_probe, 0, 0, 0, t_install, t_finalize)
     return true
 }
