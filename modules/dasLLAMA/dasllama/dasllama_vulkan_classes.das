@@ -210,17 +210,47 @@ class ArCombBase : ArBase {
         if (pa.add_on != 0u && pa.gated != 0u) {
             g = 1.0 / (1.0 + exp(-logits[p * pa.lstride + pa.gidx]))
         }
+        let pk = p * pa.k
         var ss = 0.0
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            // the FFN row first, then onto the residual: the combine-then-add chain's sum order, bit for bit
-            var f = 0.0
+            var f = 0.0   // the FFN row first, then onto the residual: the combine-then-add chain's sum order, bit for bit
             if (pa.add_on != 0u) {
                 f = g * aa[base + k]
             }
             var j = 0u
+            while (j + 8u <= pa.k) {   // eight slots' rows in flight together: one load wait per eight, not per slot
+                let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
+                let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
+                let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
+                let d3 = down_rows[slot_idx[pk + j + 3u] * pa.dim + k]
+                let d4 = down_rows[slot_idx[pk + j + 4u] * pa.dim + k]
+                let d5 = down_rows[slot_idx[pk + j + 5u] * pa.dim + k]
+                let d6 = down_rows[slot_idx[pk + j + 6u] * pa.dim + k]
+                let d7 = down_rows[slot_idx[pk + j + 7u] * pa.dim + k]
+                f += slot_w[pk + j] * d0
+                f += slot_w[pk + j + 1u] * d1
+                f += slot_w[pk + j + 2u] * d2
+                f += slot_w[pk + j + 3u] * d3
+                f += slot_w[pk + j + 4u] * d4
+                f += slot_w[pk + j + 5u] * d5
+                f += slot_w[pk + j + 6u] * d6
+                f += slot_w[pk + j + 7u] * d7
+                j += 8u
+            }
+            if (j + 4u <= pa.k) {   // ... and four
+                let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
+                let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
+                let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
+                let d3 = down_rows[slot_idx[pk + j + 3u] * pa.dim + k]
+                f += slot_w[pk + j] * d0
+                f += slot_w[pk + j + 1u] * d1
+                f += slot_w[pk + j + 2u] * d2
+                f += slot_w[pk + j + 3u] * d3
+                j += 4u
+            }
             while (j < pa.k) {
-                f += slot_w[p * pa.k + j] * down_rows[slot_idx[p * pa.k + j] * pa.dim + k]
+                f += slot_w[pk + j] * down_rows[slot_idx[pk + j] * pa.dim + k]
                 j++
             }
             let vv = (xs[base + k] + f) * pa.ascale
@@ -979,20 +1009,20 @@ struct RouterGemmArgs {
 
 let ROUTER_TP = 64u   //! the router tile's positions per workgroup
 let ROUTER_TE = 32u   //! ... and router rows
-let ROUTER_LD = 68u   //! the stage's row stride: 64 k plus a float4 of pad, so the sixteen rows of a fetch spread the banks
+let ROUTER_LD = 17u   //! the stage's row stride in float4: a 64-wide step's 16 plus one of pad, so the sixteen rows a warp reads (and a fetch writes) spread the eight bank groups
 
 // the span's router GEMV batched over the window: a 64 x 32 tile of positions by router rows per
-// workgroup, each invocation a 4 x 2 block, K in 64-wide steps through shared memory, the next
-// step's rows fetched into registers as float4 while the current step computes (a 64-multiple
-// row width); logits[p * ostride + e]
+// workgroup, each invocation a 4 x 2 block (its two rows 16 apart), K in 64-wide steps through a
+// float4 stage in shared memory, the next step's rows fetched into registers while the current
+// step computes (a 64-multiple row width); logits[p * ostride + e]
 [vk_dispatch(name = "router_gemm_cls", grid = "wgs", params = "wgs : int64")]
 class RouterGemm {
     @ssbo @binding = 0 @role = "weight" w4 : array<float4>   // the router rows, row-major [ne x dim] per layer, as the stage's float4
     @ssbo @binding = 1 x4 : array<float4>      // the FFN-normed rows, as float4
     @ssbo @binding = 2 logits : array<float>   // [npos x ostride]
     @push_constant pa : RouterGemmArgs
-    @workgroup xs : float[4352]                // 64 positions x 64 k at the stage stride
-    @workgroup ws : float[2176]                // 32 rows x 64 k
+    @workgroup xs : float4[1088]               // 64 positions x 17 float4
+    @workgroup ws : float4[544]                // 32 rows x 17
 
     //! the stage's float4 of slot `s` (row s / 16, k4 s % 16) of x rows from `p0` at step `kb`; zero past the window
     def fetch_x(p0, kb, s : uint) : float4 {
@@ -1010,19 +1040,21 @@ class RouterGemm {
 
     //! a fetched float4 into its stage row at k4 `s % 16`
     def stage_x(s : uint; v : float4) {
-        let at = (s / 16u) * ROUTER_LD + (s % 16u) * 4u
-        xs[at] = v.x
-        xs[at + 1u] = v.y
-        xs[at + 2u] = v.z
-        xs[at + 3u] = v.w
+        xs[(s / 16u) * ROUTER_LD + (s % 16u)] = v
     }
 
     def stage_w(s : uint; v : float4) {
-        let at = (s / 16u) * ROUTER_LD + (s % 16u) * 4u
-        ws[at] = v.x
-        ws[at + 1u] = v.y
-        ws[at + 2u] = v.z
-        ws[at + 3u] = v.w
+        ws[(s / 16u) * ROUTER_LD + (s % 16u)] = v
+    }
+
+    //! `a` plus the four products in k order - the scalar loop's sums to the bit
+    def acc4(a : float; x, w : float4) : float {
+        var s = a
+        s += x.x * w.x
+        s += x.y * w.y
+        s += x.z * w.z
+        s += x.w * w.w
+        return s
     }
 
     [spirv_kernel(local_size_x = 256, name = "router_gemm_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
@@ -1032,7 +1064,7 @@ class RouterGemm {
         let p0 = (gl_WorkGroupID.x / egroups) * ROUTER_TP
         let eg0 = (gl_WorkGroupID.x % egroups) * ROUTER_TE
         let tp = tid / 16u         // the invocation's four positions 4tp..4tp+3
-        let te = tid % 16u         // ... and row pair 2te, 2te+1
+        let te = tid % 16u         // ... and rows te, te + 16
         var a00 = 0.0
         var a01 = 0.0
         var a10 = 0.0
@@ -1067,44 +1099,45 @@ class RouterGemm {
                 wr1 = fetch_w(eg0, nb, tid + 256u)
             }
             let xb = (4u * tp) * ROUTER_LD
-            let wb = (2u * te) * ROUTER_LD
+            let wb = te * ROUTER_LD
+            let wb1 = wb + 16u * ROUTER_LD
             var kk = 0u
-            while (kk < 64u) {
+            while (kk < 16u) {
                 let x0 = xs[xb + kk]
                 let x1 = xs[xb + ROUTER_LD + kk]
                 let x2 = xs[xb + 2u * ROUTER_LD + kk]
                 let x3 = xs[xb + 3u * ROUTER_LD + kk]
                 let w0 = ws[wb + kk]
-                let w1 = ws[wb + ROUTER_LD + kk]
-                a00 += x0 * w0
-                a01 += x0 * w1
-                a10 += x1 * w0
-                a11 += x1 * w1
-                a20 += x2 * w0
-                a21 += x2 * w1
-                a30 += x3 * w0
-                a31 += x3 * w1
+                let w1 = ws[wb1 + kk]
+                a00 = acc4(a00, x0, w0)
+                a01 = acc4(a01, x0, w1)
+                a10 = acc4(a10, x1, w0)
+                a11 = acc4(a11, x1, w1)
+                a20 = acc4(a20, x2, w0)
+                a21 = acc4(a21, x2, w1)
+                a30 = acc4(a30, x3, w0)
+                a31 = acc4(a31, x3, w1)
                 kk++
             }
             barrier()
             kb = nb
         }
         let pa0 = p0 + 4u * tp
-        let ea0 = eg0 + 2u * te
+        let ea0 = eg0 + te
         store_pair(pa0, ea0, a00, a01)
         store_pair(pa0 + 1u, ea0, a10, a11)
         store_pair(pa0 + 2u, ea0, a20, a21)
         store_pair(pa0 + 3u, ea0, a30, a31)
     }
 
-    //! position p's two logits at rows e, e + 1, each within the window and the experts
+    //! position p's two logits at rows e, e + 16, each within the window and the experts
     def store_pair(p, e : uint; v0, v1 : float) {
         if (p >= pa.npos) return
         if (e < pa.ne) {
             logits[p * pa.ostride + e] = v0
         }
-        if (e + 1u < pa.ne) {
-            logits[p * pa.ostride + e + 1u] = v1
+        if (e + 16u < pa.ne) {
+            logits[p * pa.ostride + e + 16u] = v1
         }
     }
 }

@@ -1412,7 +1412,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 } else {
                     enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
                     pfq_ts(raw)
-                    if (gu6) {
+                    if (moe && g_rd.layers[l].b1 < 0l) {   // no dense triple reads the feed: the routed block takes the f32 rows
+                    } elif (gu6) {
                         var pc9 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
                     } elif (guk) {

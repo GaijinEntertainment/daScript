@@ -932,16 +932,21 @@ module) is independent and can land any time - it is pure structure.
     (1.03x / 1.33x), the twin 5348.3 / 163.4 (1.05x / 0.94x). The remainder pass's first
     lever: the routed combine rides the residual step in both chains (`ClsArComb`, sec.2.2af /
     sec.2.2ag), one dispatch per layer fewer, in the two kernels' sum order so the MoE files'
-    bars keep their calibration: the 30B 3455.7 / 127.7 (0.98x / 1.10x, the window 143.7 ms
-    against 142.3), the 35B 2976.1 / 99.9 (1.04x / 1.40x), the twin 5461.8 / 165.4 (1.07x /
-    0.95x). Still open under this item: the 30B prefill's last 2% (the expert tiles ~98 ms
-    against the reference's ~88 - a 64-wide column for the 33-64-row buckets - the router's 4.3
-    ms against 1.2, the act 2.8 and the gather 1.6; the profile stamp after the down tiles
-    absorbs their tail, so the residual step's own cost does not read there), the twin's decode
-    5% (the expert GEMVs at 73% of bandwidth and the shared expert's at 81%, the eleven small
-    dispatches per layer - the one-row residual step reads 15 us per layer, a latency chain of
-    the slot loads), the fused add+rms twin that also stores the normed row (the router's feed,
-    so a MoE could take the fused rail; ar1 + rq_f read 2.3 ms of the 30B window), the CPU
-    chain's shared expert on the same K-quant planes (it reads the q8 transcode, so the
-    resident-vs-CPU bar carries the two forms' rounding), and an LPT order for the device
-    schedule's pieces (the m dispatch already leads the s one).
+    bars keep their calibration; then the router tile's float4 stage (its scalar stage was
+    bank-conflict bound: 4.3 -> 2.4 ms per 30B window), the residual step's slot groups (eight
+    rows in flight, then four: the twin's one-row step 360 -> 290 us per token) and the
+    FFN-norm requant skipped on a layer with no shared expert (540 us per 30B window that
+    nothing read). The rows on the final kernels: the 30B 3482.6 / 126.2 (0.99x / 1.08x, the
+    window 143.4 ms against 142.3), the 35B 2962.8 / 99.0 (1.04x / 1.38x), the twin 5395.3 /
+    163.9 (1.06x / 0.94x; its token 6.05 ms on the device = 165 t/s, the bench's tg wandering
+    163-169 across the day on the same kernels). Still open under this item: the 30B prefill's
+    last 1% (the expert tiles ~99 ms against the reference's ~88 - a 64-wide column for the
+    33-64-row buckets - the router's 2.4 ms against 1.2 on 32 workgroups over 36 SMs, the act
+    2.8 and the gather 1.6; the profile stamp after the down tiles absorbs their tail, so the
+    residual step's own cost does not read there), the twin's decode 6% (the expert GEMVs at 73%
+    of bandwidth and the shared expert's at 81% - the remaining lever is the kq GEMV family's
+    rate, which every dense row shares), the fused add+rms twin that also stores the normed row
+    (the router's feed, so a MoE could take the fused rail; ar1 reads 1.8-2.0 ms of the 30B
+    window), the CPU chain's shared expert on the same K-quant planes (it reads the q8
+    transcode, so the resident-vs-CPU bar carries the two forms' rounding), and an LPT order for
+    the device schedule's pieces (the m dispatch already leads the s one).

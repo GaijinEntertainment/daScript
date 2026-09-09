@@ -288,11 +288,14 @@ up run the class GEMV over k regions, the act writes k hidden rows, down runs k 
 routed rows; and the residual step that follows folds the combine in (`ClsArComb`, the prefill's
 sec.2.2af kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
 logit, the k weighted routed rows through the top-k's slot map, then the next layer's norm - a
-layer without a shared expert takes the same step with the add partner off. On the Qwen1.5-MoE
-twin's 24 layers the fused step reads 360 us per token where the add and the separate combine
-read 199 and 233: a one-row dispatch is latency, and the fold pays one instead of two. The slot
-regions are device buffers the top-k fills each token; the dense triple's host-filled regions
-stay what they are.
+layer without a shared expert takes the same step with the add partner off. A one-row dispatch is
+latency: the step loads eight slots' rows together, then four, then one at a time (the sums
+still in slot order), so an element waits on one load round per group rather than per slot - on
+the Qwen1.5-MoE twin's 24 layers at four slots the step reads about 290 us per token where a
+plain slot loop read 360 and the add plus the separate combine 199 and 233; on the 30B's 48
+layers at eight slots 440 where a four-slot group alone read 490 (the compiler's own unroll of
+the plain loop served eight slots but left four to a scalar tail). The slot regions are device
+buffers the top-k fills each token; the dense triple's host-filled regions stay what they are.
 
 **A recurrent MoE layer takes the routed block after its deltanet head** (the hybrid MoE, sec.2.2v's
 head with this section's tail): the deltanet registration builds the layer, its shared expert

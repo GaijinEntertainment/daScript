@@ -248,6 +248,32 @@ the rest is the per-layer host glue the span would remove, and the span declines
    slow (k5 111 s against 1.1) while other programs held the box, and dastest's 1400 s timeout
    then died in its own watchdog (`timeout_tests` under the JIT reads a null); the same suite
    on the quiet box ran in 87 s - a run that looks 40x slow is the box, not the change.
+   The pass's second half, three small levers: (1) the router tile was shared-memory
+   bank-conflict bound - its weight reads at rows 2te, 2te+1 on a 68-float stride put four of
+   every sixteen lanes on one bank, about 17 FMAs per cycle per SM; the stage is float4 rows at
+   a stride of 17 with each lane's two rows 16 apart (sixteen lanes over all eight bank groups)
+   and the four products of a float4 added in k order, so the sums are the scalar loop's to
+   the bit: 4.29 -> 2.43 ms per 30B window (the reference's 1.2; 32 workgroups on 36 SMs is what
+   is left). (2) The residual step's slot loop loads eight slots' rows together, then four, then
+   one: the token command's one-row form is latency, and the plain loop read 360 us per twin
+   token (k = 4) where the four-group reads 282 - but 490 on the 30B (k = 8) where the plain
+   loop read 437, because the compiler's own unroll of the plain loop serves eight slots and
+   leaves four to a scalar tail; the eight-then-four form reads 440 / 281-293. A slot-major
+   pass through the row stash (the slot's map entry and weight loaded once) was the wrong
+   shape: +2.4 ms on the 30B window and its tg128 127.7 -> 121.7, the shared-memory
+   read-modify-write per slot costing what the register sum does not. (3) The FFN-norm requant
+   (`rq_f`, 540 us per 30B window) feeds the dense triple alone and the gather takes the f32
+   rows, so a layer with no shared expert skips it: 540 -> 9. The resident MoE file gains the
+   30B as its third fixture (no shared expert: the residual step's add partner off, the requant
+   skipped) at one and two windows, and every fixture's per-step differences read the same
+   digits through all three levers (the 35B two-window step 4 at 0.39063567 on every run).
+   Rows on the final kernels: the 30B 3482.6 / 126.2 (0.99x / 1.08x; five reps, the window
+   143.4 ms against 142.3 - a three-rep read during a disturbed stretch gave 3299 +- 118 /
+   122.1), the 35B 2962.8 / 99.0 (1.04x / 1.38x), the twin 5395.3 / 163.9 (1.06x / 0.94x; its
+   token's device time 6.05 ms = 165 t/s in every profile, the bench's tg wandering 163-169
+   across the day's runs with the same kernels). The 30B token by role (48 layers, us): e_down
+   1085, e_gate 803, e_up 480, ar2 446, ar1 310, topk 278, router 146, e_act 139, rq_f 115;
+   the attention head q 864, wo 882, attn 441; the head 609; total 7173.
 
 Slices 1 and 2 are small and land the shared-expert families' rows; slice 3 is the arc's body.
 

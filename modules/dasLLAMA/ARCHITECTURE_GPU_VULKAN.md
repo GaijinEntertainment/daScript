@@ -156,12 +156,18 @@ bucketing and combine of the per-op tier (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.
 five device stages over the window's FFN-normed rows.
 
 - **The router GEMM** (`RouterGemm`) is the span's router GEMV batched: a 64 x 32 tile of
-  positions by router rows per workgroup, each invocation a 4 x 2 block, K in 64-wide steps
-  through shared memory with the next step's rows fetched into registers as float4 while the
-  current step computes (a 16 x 16 tile of one output each, stepping K by 32, was
-  barrier-bound at 243 us per layer for 268 MFLOP on the 30B; a 32 x 32 tile of 2 x 2 blocks
-  staging each step before computing it read 142, latency-bound on the stage), which is why the
-  MoE seats ask for a 64-multiple row width. The router plane holds every MoE layer's f32 rows,
+  positions by router rows per workgroup, each invocation a 4 x 2 block whose two rows sit 16
+  apart, K in 64-wide steps through a float4 stage in shared memory at a row stride of 17
+  float4, the next step's rows fetched into registers while the current step computes, and each
+  output's four products per float4 added in k order (the scalar loop's sums to the bit). The
+  stride and the row split are the bank rule: sixteen lanes reading sixteen rows land on all
+  eight 16-byte bank groups, so a warp's two weight loads take two wavefronts each and its four
+  activation loads (two distinct rows) one. The scalar stage this replaced - rows 2te and 2te+1
+  at a stride of 68 floats - put four of every sixteen lanes on one bank, and the tile ran at
+  about 17 FMAs per cycle per SM: 4.3 ms per 30B window against 2.4 now (a 16 x 16 tile of one
+  output each, stepping K by 32, was barrier-bound at 243 us per layer for 268 MFLOP; a 32 x
+  32 tile of 2 x 2 blocks staging each step before computing it read 142). The 64-wide K step
+  is why the MoE seats ask for a 64-multiple row width. The router plane holds every MoE layer's f32 rows,
   and a gated shared expert's gate vector rides as one more row past the experts, so one
   dispatch writes the logits row `[ne | gate]` per position.
 - **The per-row select** (`TopKRows`, one workgroup per position) is the decode top-k's core
@@ -212,13 +218,18 @@ five device stages over the window's FFN-normed rows.
   resident-vs-CPU bars of the MoE files keep their calibration: the fold's natural order - the
   residual first - moves the rounding enough to flip a router near-tie downstream, and one step
   of the 35B two-window cell reads 1.50 logits off the CPU chain against a 1.39 bar where the
-  chain's order reads 0.39. The token command's tail folds the same way
-  (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2ag); the residual step read those rows anyway,
-  and the fold took one dispatch per layer out of both chains.
+  chain's order reads 0.39. The slot loop loads eight rows together, then four, then one at a
+  time - the token command's one-row form is latency, and the groups are its shape
+  (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2ag); a slot-major pass through the row stash
+  instead read 2.4 ms more on the 30B window, the shared-memory read-modify-write per slot
+  costing what the register sum does not. The token command's tail folds the same way; the
+  residual step read those rows anyway, and the fold took one dispatch per layer out of both
+  chains.
 
 The router reads the f32 normed rows, so an MoE layer takes the split add+rms arm at the FFN
 site (the fused twins never store `xb`), and the last-layer FFN slice of sec.2.2j does not apply
-to the routed block. The tile family is the f16-fed cm2 tiles, so the plan admits a MoE only in
+to the routed block. The arm's requant of the normed rows feeds the dense triple alone - the
+gather takes the f32 rows - so a layer with no shared expert skips it. The tile family is the f16-fed cm2 tiles, so the plan admits a MoE only in
 cm2 mode on a coopmat2 device with every expert format the f16 feed admits (`rdec_moe_ok`).
 
 ### 2.2ad The recurrent block of the prefill window {#vk-prefill-dn-block}
