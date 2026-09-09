@@ -224,11 +224,11 @@ def vk_rdec_set_layer(l, mir_idx : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq
         rd_ffn_sets(L, b1, b3, b2, f1, f3, f2)
         L.made = true
     }
-    g_rd.tok_recorded = false   // the recorded chain references the replaced sets
+    g_rd.tok_recorded = false   //! the recorded chain references the replaced sets
 }
 
-// the attention half of a layer's registration: the quad's blocks, formats and sets (f1 / f3 / f2
-// name the layer's FFN feed forms for the class-rail check)
+//! the attention half of a layer's registration: the quad's blocks, formats and sets (f1 / f3 / f2
+//! name the layer's FFN feed forms for the class-rail check)
 def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64; fq, fk, fv, fo, f1, f3, f2 : int) {
     unsafe {
         L.recurrent = false
@@ -242,7 +242,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let pk = arena_planes(fk, bk)
         let pv = arena_planes(fv, bv)
         let po = arena_planes(fo, bo)
-        let anykq = kq_sb(fq) || kq_sb(fo) || kq_sb(f1) || kq_sb(f2)   // kq consumers take the Q8_K quant/act forms
+        let anykq = kq_sb(fq) || kq_sb(fo) || kq_sb(f1) || kq_sb(f2)   //! kq consumers take the Q8_K quant/act forms
         let kv16 = g_rd.kv16
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
@@ -266,7 +266,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         L.s_v = gemv_cls_set(fv, fixed_array(pv.wq, pv.ws, L.m_v.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
             fixed_array(pv.wqb, pv.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVV))
-        L.kv_merged = fk == fv && arena_slab_idx(bk) == arena_slab_idx(bv)   // same-format k/v in one slab: one two-region dispatch fills both halves
+        L.kv_merged = fk == fv && arena_slab_idx(bk) == arena_slab_idx(bv)   //! same-format k/v in one slab: one two-region dispatch fills both halves
         if (L.kv_merged) {
             L.s_kv = gemv_cls_set(fk, fixed_array(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
                 fixed_array(pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
@@ -309,20 +309,17 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
 
 // ===== the MoE form: the router plane, the routed block of the token command =====
 
-let private MOE_MAX_EXPERTS = 256l   // the select kernels' one-workgroup reach: one thread per expert
+let private MOE_MAX_EXPERTS = 256l   //! the select kernels' one-workgroup reach: one thread per expert
 
-//! The MoE geometry and the router plane after the prepare: `router` holds every MoE layer's
-//! [ne x dim] rows and then, when the shared expert is gated, its gate row - [n_moe x ner x dim]
-//! f32. false = the geometry is past the routing kernels' reach or their class rails declined.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
 def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>) : bool {
     let reach = ne <= MOE_MAX_EXPERTS && k <= MAX_ROUTED_SLOTS && nfe % 32l == 0l
     if (g_gpu != null && g_gpu.dry) {
-        return reach   // the reach IS the plan decision; everything below is device state
+        return reach   //! the reach IS the plan decision; everything below is device state
     }
     assert(g_rd != null, "vk_rdec_prepare_moe before prepare")
     let dim = g_rd.dim
-    if (!reach || k * max(nfe, dim) * 4l > Y_BYTES || dim % 64l != 0l) {   // the router tile steps K by 64
+    if (!reach || k * max(nfe, dim) * 4l > Y_BYTES || dim % 64l != 0l) {   //! the router tile steps K by 64
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the MoE geometry ({ne} experts, {k} routed, expert width {nfe}, dim {dim}) is outside the routing kernels' reach\n")
         return false
     }
@@ -371,9 +368,6 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     return true
 }
 
-// the routed block's decode sets: the router GEMV and top-k over the driver's routing smalls, the
-// three expert GEMVs over the arena expert planes through the top-k's slot regions, the act, and
-// the residual step with the combine folded in (the layer's s_addr_next)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
 def private rd_moe_sets(var L : RLayer) {
     let dim = g_rd.dim
@@ -386,7 +380,6 @@ def private rd_moe_sets(var L : RLayer) {
         && (kq_sb(L.fe1) ? ensure_cls_q8k_rq() : ensure_cls_dn_rq())
         && (kq_sb(L.fe2) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()),
         "vk decode: the expert class rails must engage on a live device")
-    // the experts' feed: the layer's image when the forms agree, else their own second requant of xb
     L.xe_own = L.b1 >= 0l && kq_sb(L.fe1) != kq_sb(L.f1)
     let xqb = L.xe_own ? g_rd.moe_xq_dev : g_rd.xq_dev
     let xsb = L.xe_own ? g_rd.moe_xs_dev : g_rd.xs_dev
@@ -411,7 +404,6 @@ def private rd_moe_sets(var L : RLayer) {
     L.s_edown = gemv_cls_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev),
         fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
-    // the residual step after the routed block folds the combine in (the shared row at its gate, the k weighted expert rows)
     verify(ensure_cls_ar_comb(), "vk decode: the combine-folded residual class rail must engage on a live device")
     L.s_addr_next = set_cls_ar_comb(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
             g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev),
@@ -419,8 +411,8 @@ def private rd_moe_sets(var L : RLayer) {
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT))
 }
 
-// a layer without a dense triple (an MoE layer with no shared expert): the tail sets the token
-// command encodes around the routed block - the FFN norm, its requant and the residual step
+//! a layer without a dense triple (an MoE layer with no shared expert): the tail sets the token
+//! command encodes around the routed block - the FFN norm, its requant and the residual step
 def private rd_tail_sets_bare(var L : RLayer; f1, f3, f2 : int) {
     let dim = g_rd.dim
     L.b1 = -1l; L.b3 = -1l; L.b2 = -1l
@@ -436,9 +428,7 @@ def private rd_tail_sets_bare(var L : RLayer; f1, f3, f2 : int) {
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
 }
 
-//! Register the routed block on a layer already registered (an attention or a recurrent layer
-//! whose dense triple is the shared expert's, or none): the expert triple and `moe_li`, the
-//! layer's slot in the router plane.
+//! `moe_li` is the layer's slot in the router plane.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
 def vk_rdec_set_moe_experts(l, moe_li, be1, be3, be2 : int64; fe1, fe3, fe2 : int) {
     if (g_gpu != null && g_gpu.dry) {
@@ -457,8 +447,7 @@ def vk_rdec_set_moe_experts(l, moe_li, be1, be3, be2 : int64; fe1, fe3, fe2 : in
     g_rd.tok_recorded = false
 }
 
-//! Register an MoE attention layer: the attention quad and the dense triple as set_layer does
-//! (the dense triple is the shared expert's; b1 < 0 = the layer has none), then the routed block.
+//! the dense triple is the shared expert's; b1 < 0 = the layer has none.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
 def vk_rdec_set_moe_layer(l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int) {
     if (g_gpu != null && g_gpu.dry) {
@@ -603,7 +592,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         if (b1 >= 0l) {
             rd_ffn_sets(L, b1, b3, b2, f1, f3, f2)
         } else {
-            rd_tail_sets_bare(L, f1, f3, f2)   // a recurrent MoE layer without a shared expert
+            rd_tail_sets_bare(L, f1, f3, f2)   //! a recurrent MoE layer without a shared expert
         }
         L.made = true
     }
@@ -729,7 +718,7 @@ def private rd_record_token {
             }
             fill_gemv_regions(L.m_wo, L.bo)
         }
-        if (L.b1 >= 0l) {   // an MoE layer without a shared expert has no dense triple
+        if (L.b1 >= 0l) {   //! an MoE layer without a shared expert has no dense triple
             fill_gemv_regions(L.m_gate, L.b1)
             fill_gemv_regions(L.m_up, L.b3)
             fill_gemv_regions(L.m_down, L.b2)
@@ -867,13 +856,14 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     pfq_ts(raw)
 }
 
-//! The token command's fuse gates, one source for the recorder and the profiler's stamp count: `fuse` = the add+rms+requant twins (b32 quants, no hybrid, no MoE - the router reads the normed row the twins never store), `fuse_qkr` = the fused qk-norm+rope pair (also the gated and partial-rope arms, which the split pair lacks)
+//! The token command's fuse gates, one source for the recorder and the profiler's stamp count: `fuse` = the
+//! add+rms+requant twins (b32 quants, no hybrid, no MoE - the router reads the normed row the twins never
+//! store), `fuse_qkr` = the fused qk-norm+rope pair (also the gated and partial-rope arms the split pair lacks)
 def private rd_fuse_gates : tuple<fuse : bool; fuse_qkr : bool> {
     let fuse = vk_fuse_on() && rd_x_quants_b32() && !g_rd.hybrid && !g_rd.moe
     return (fuse = fuse, fuse_qkr = g_rd.qk_norm && (fuse || g_rd.q_gated || g_rd.rot != g_rd.head_size))
 }
 
-// the dense FFN tail of the token command: gate and up GEMVs, the fused act+requant, the down GEMV into ffnout
 def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; hid : int64; var pc_act : ActArgs; var pc_act_k : ActArgs) {
     let dim = g_rd.dim
     var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u)
@@ -892,9 +882,6 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     pfq_ts(raw)
 }
 
-//! The routed block of an MoE layer's token command: the router GEMV over the normed row, the
-//! top-k writing the three expert GEMVs' slot regions, gate/up over k slots, the act, down; the
-//! combine onto the residual rides the ar2 step that follows (`rd_ar_comb_args`).
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
 def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
                           var pc_rq_dim : RqArgs; var pc_rq_dim_k : RqArgs; rqwg_dim, rqwg_dim_k : int64) {
@@ -945,7 +932,7 @@ def rd_ar_comb_args(L : RLayer; woff : int64) : ArArgs {
         k = uint(g_rd.k), lstride = uint(g_rd.ner), gidx = uint(g_rd.ne), gated = g_rd.sh_gated ? 1u : 0u)
 }
 
-// the stamps of an MoE layer's tail after the attention head, in the order rd_encode_token records them
+//! the stamps of an MoE layer's tail after the attention head, in the order rd_encode_token records them
 def private rd_moe_tail_names(L : RLayer) : array<string> {
     var names <- ["ar1", "rq_f"]
     if (L.b1 >= 0l) {
@@ -957,7 +944,7 @@ def private rd_moe_tail_names(L : RLayer) : array<string> {
     if (L.xe_own) {
         names |> push("rq_e")
     }
-    var routed <- ["router", "topk", "e_gate", "e_up", "e_act", "e_down", "ar2"]   // ar2 carries the combine
+    var routed <- ["router", "topk", "e_gate", "e_up", "e_act", "e_down", "ar2"]   //! ar2 carries the combine
     names |> push_from(routed)
     delete routed
     return <- names
@@ -1031,15 +1018,15 @@ def private rd_encode_token {
                 }
                 pfq_ts(raw)
             }
-            if (L.b1 >= 0l) {   // the dense triple: the layer's FFN, or an MoE layer's shared expert
+            if (L.b1 >= 0l) {   //! the dense triple: the layer's FFN, or an MoE layer's shared expert
                 rd_encode_ffn(raw, h, L, hid, pc_act, pc_act_k)
             }
             if (L.moe) {
                 rd_encode_moe(raw, h, L, pc_rq_dim, pc_rq_dim_k, rqwg_dim, rqwg_dim_k)
             }
-            let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // rms_att[l+1] | final
+            let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   //! rms_att[l+1] | final
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
-            if (L.moe) {   // the routed block's combine rides the residual step (a MoE runs the split rail: the router reads xb)
+            if (L.moe) {   //! a MoE never takes the fused arm: the router reads xb
                 var pc14c = rd_ar_comb_args(L, nxt)
                 enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)
             } elif (fuse) {
@@ -1088,7 +1075,7 @@ def private rdq_sample {
     var want = fuse ? 3 : 4   // anchor + prologue + [fin_rq — split rail only] + cls
     // per ATTENTION layer counting the split v stamp: fused 13, split rail with the fused qk-norm+rope 15, plain 16 / 15
     let att_rpl = fuse ? 13 : (fuse_qkr ? 15 : (g_rd.qk_norm ? 16 : 15))
-    let dense_tail = fuse ? 6 : 7   // ar1, rq_f, gate, up, actrq, down, ar2 (the fused rail folds rq_f into ar1)
+    let dense_tail = fuse ? 6 : 7   //! ar1, rq_f, gate, up, actrq, down, ar2 (the fused rail folds rq_f into ar1)
     for (L in g_rd.layers) {
         if (L.recurrent) {
             want += RDQ_DN_ROLES
@@ -1140,7 +1127,7 @@ def private rdq_sample {
             continue
         }
         var s = 0
-        let head = L.moe ? nroles - dense_tail : nroles   // an MoE layer's tail stamps land by name below
+        let head = L.moe ? nroles - dense_tail : nroles   //! an MoE layer's tail stamps land by name below
         while (s < head) {
             g_rdq_role[s] += pfq_us(qi)
             qi++
@@ -1906,7 +1893,6 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
         ensure_gemv_scratch(SL.sh1)
         ensure_gemv_scratch(SL.sh3)
         ensure_gemv_scratch(SL.sh2)
-        // one fixed region per shared stack: the host writes these metas once; the top-k never touches them
         var reg1 = fixed_array(a.wsh1[li], 0l, 1l)
         var reg3 = fixed_array(a.wsh3[li], 0l, 1l)
         var reg2 = fixed_array(a.wsh2[li], 0l, 1l)
@@ -1940,7 +1926,7 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
 }
 
 let private SPAN_MAX_EXPERTS = 256l   // the top-k kernel's one-workgroup reach
-let private SPAN_LOGITS_BYTES = (SPAN_MAX_EXPERTS + 1l) * 4l   // the router logits, then the shared expert's gate logit
+let private SPAN_LOGITS_BYTES = (SPAN_MAX_EXPERTS + 1l) * 4l   //! the router logits, then the shared expert's gate logit
 
 def private rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescriptorSet; fmt : int; dim : int64) {
     if (kq_sb(fmt)) {
@@ -1996,7 +1982,6 @@ def private span_record(a : MoeSpanDec) {
         var fc = g_gpu.ffn_cmds[ffn_cmd_key(SL.s1, SL.s3, SL.s2)]
         ffn_chain_enc(raw, h, fc, SL.s1, SL.s3, SL.s2, a.k, dim, a.nfe, a.is_gelu)
         if (a.nsh > 0l) {
-            // the shared expert beside the routed slots: its feed off the same normed row, one combine over both
             rq_enc(raw, h, SL.s_rq_sh1, int(KqFmt.q8), dim)
             rq_enc(raw, h, SL.s_rq_sh3, int(KqFmt.q8), dim)
             vhz_dep(raw, h, VHS_GACTS, 0u)

@@ -709,7 +709,7 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
                 push_repack_kq(regs, fmt_at(t.w2_fmt, l), t.w2_offs[l], c.hidden_dim, dim)
                 push_repack_kq(regs, fmt_at(t.w3_fmt, l), t.w3_offs[l], dim, c.hidden_dim)
             }
-            if (c.n_ff_shexp > 0l && l < long_length(t.wshk1_offs)) {   // the shared expert's K-quant planes beside its q8 transcode
+            if (c.n_ff_shexp > 0l && l < long_length(t.wshk1_offs)) {
                 if (t.wshk1_offs[l] >= 0l) {
                     push_repack_kq(regs, fmt_at(t.wsh1_fmt, l), t.wshk1_offs[l], dim, c.n_ff_shexp)
                 }

@@ -462,16 +462,7 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
     delete axsh
 }
 
-// ===== the expert schedule (args "moe:<fmt>", "moesk:<fmt>") - the cm2 tiles over the Qwen3-30B-A3B
-// window's routed buckets (512 tokens x 8 routed over 128 experts, 4096 bucket rows), the gate/up
-// shape (d 768, K 2048) and the down shape (d 2048, K 768), dispatched to the bound the device
-// schedule dispatches (the sentinel tail included), both decode arms interleaved like cm2:<fmt>.
-// Two bucket profiles: uniform (32 rows each, the reference harness's), and skewed (moesk: the
-// Qwen3-30B window's own shape - 69 experts route, nine hold 250 rows, eight 96, four 48, the
-// rest 18). Two schedule forms per profile: the whole buckets at the s column, and the ladder -
-// a bucket past 32 rows takes m columns (the last one partial) and a remainder of at most 32
-// rows past whole m columns takes the s column. The reference row is test-backend-ops perf
-// MUL_MAT_ID at n_mats=128,n_used=8,m=768,n=512,k=2048 =====
+// ===== the expert schedule (args "moe:<fmt>", "moesk:<fmt>") =====
 let private MOE_NE = 128
 let private MOE_ROWS = 32   //! the s column: rows per expert region on the uniform profile
 let private MOE_READ_SLACK = 128   //! the m column's unclamped partial-column load: rows of slack past the last region
@@ -497,7 +488,7 @@ def private moe_bucket_counts(skew : bool) : array<int> {
     for (e in range(MOE_NE)) {
         cnt[e] = e < 9 ? 250 : (e < 17 ? 96 : (e < 21 ? 48 : (e < 69 ? 18 : 0)))
     }
-    cnt[0] += MOE_NE * MOE_ROWS - 9 * 250 - 8 * 96 - 4 * 48 - 48 * 18   // the rows left onto the biggest bucket
+    cnt[0] += MOE_NE * MOE_ROWS - 9 * 250 - 8 * 96 - 4 * 48 - 48 * 18   //! the rows left onto the biggest bucket
     return <- cnt
 }
 
@@ -542,9 +533,10 @@ def private moe_sched_words(cnt : array<int>; plane_blk, wtiles, tc, bound : int
     return <- sched
 }
 
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool) {   // nolint:STYLE038 — one linear measurement sweep
     let unit = fmt == 0 ? 32 : 256
-    let plane_blk = d * (n / unit)   // one expert's plane, in blocks
+    let plane_blk = d * (n / unit)   //! one expert's plane, in blocks
     let totblk = MOE_NE * plane_blk
     let bb = arena_block_bytes(fmt)
     let wq_words = int(bb.wq / 4l)
@@ -583,8 +575,6 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     let wtiles = (d + 127) / 128
     let map_off = MOE_NE * 4
     var cnt <- moe_bucket_counts(skew)
-    // the three schedules: the whole-bucket form at the s column, and the ladder's m and s halves;
-    // each dispatched to the bound the device schedule would size
     let bound_whole = (nk / MOE_ROWS + MOE_NE) * wtiles   //! every bucket may straddle a column
     let bound_chunks = (nk / MOE_CHUNK + MOE_NE) * wtiles   //! every bucket may own a partial m column
     let bound_rest = MOE_NE * wtiles   //! at most one s tile per bucket

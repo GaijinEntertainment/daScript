@@ -87,7 +87,7 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lpr : uint) : tuple<mb : double; 
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(copies), ybase = 0u, lpr = lpr)
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(copies), ybase = 0u, lanes_per_row = lpr)
         for (_i in range(DISPATCHES)) {
             gemv_cls_enc(int(fmt), raw, h, s_cls, pc, wgs)
             vhz_dep(raw, h, YBIT, 0u, true)   //! the next dispatch waits on this one's y

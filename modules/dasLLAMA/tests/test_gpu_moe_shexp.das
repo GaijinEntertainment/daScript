@@ -49,7 +49,7 @@ def private argmax_of(v : array<float>) : int64 {
     return bi
 }
 
-// prefill `prompt`, then feed `toks` one per step; the logits after the prefill and after each step
+//! prefill `prompt`, then feed `toks` one per step; the logits after the prefill and after each step
 def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
     let n = long_length(prompt)
     var rows : array<array<float>>
@@ -63,7 +63,7 @@ def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks
     return <- rows
 }
 
-// one prompt of `n` tokens plus the fed steps through both arms of the route lever
+//! one prompt of `n` tokens plus the fed steps through both arms of the route lever
 def private shexp_forced_feed(t : T?; n : int64) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
@@ -75,9 +75,9 @@ def private shexp_forced_feed(t : T?; n : int64) {
         t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the MoE tier")
         return
     }
-    set_gpu_resident_route(false)   // the per-op rails' claims: the whole-model driver would take the twin (test_gpu_resident_moe.das holds that arm)
+    set_gpu_resident_route(false)   //! the per-op rails' claims: the whole-model driver would take the twin (test_gpu_resident_moe.das holds that arm)
     var tr <- load_model_(path, QuantMode.q8)
-    set_gpu_resident_route(true)   // the lever reads at the load alone
+    set_gpu_resident_route(true)   //! the lever reads at the load alone
     t |> success(tr.config.n_ff_shexp > 0l && !tr.config.moe_dense_shexp, "the twin carries a gated shared expert")
     let layers = tr.config.n_layers
     var marked = 0l
@@ -107,7 +107,7 @@ def private shexp_forced_feed(t : T?; n : int64) {
         var sc <- create_session(tr)
         var cpu <- feed_logits(tr, sc, prompt, toks)
         delete sc
-        set_moe_gpu_shexp_route(true)   // the tier as found
+        set_moe_gpu_shexp_route(true)   //! the tier as found
         t |> equal(shexp_gpu_prefill_layers(), served0 + layers, "the CPU arm served no shared expert on the device")
         t |> equal(span_tokens(), span0 + FED_STEPS, "the CPU arm's steps took the per-layer path - the span declines a shared expert off the device")
         for (st in range64(long_length(cpu))) {
@@ -118,7 +118,7 @@ def private shexp_forced_feed(t : T?; n : int64) {
             let what = st == 0l ? "prefill ({n} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})"
             to_log(LOG_INFO, "{what}: argmax cpu {ac} ({cpu[st][ac]}), device {ad} ({dev[st][ad]}); logits maxdiff {diff} (bar {bar})\n")
             t |> success(diff <= bar, "{what} logits: the device shared expert within {bar} of the CPU form (maxdiff {diff})")
-            if (st > 0l) {   // the control: the previous step's CPU logits are a disconnected mechanism the bar must RED
+            if (st > 0l) {   //! the control: the previous step's CPU logits are a disconnected mechanism the bar must RED
                 let off = logits_maxdiff(dev[st], cpu[st - 1l])
                 to_log(LOG_INFO, "{what}: one-step-off control maxdiff {off} (bar {bar})\n")
                 t |> success(off > bar, "{what} control: the bar discriminates a one-step-off compare (maxdiff {off} vs bar {bar})")

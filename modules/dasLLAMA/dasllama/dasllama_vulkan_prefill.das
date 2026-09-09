@@ -647,17 +647,15 @@ def private pf_roles_per_layer(L : RLayer) : int64 {
         return 7l + (g_rd.dn_ba_f32 ? 10l : 11l)
     }
     var n = g_rd.qk_norm ? 16l : 15l
-    if (L.moe) {   // the routed block's eight stamps; a layer without a shared expert has no dense-block stamps
+    if (L.moe) {   //! the routed block's eight stamps; a layer without a shared expert has no dense-block stamps
         n += PF_MOE_ROLES - (L.b1 < 0l ? 4l : 0l)
     }
     return n
 }
 
-let private PF_MOE_ROLES = 8l   // router topk sched gather e_gate e_up e_act e_down (the combine rides the layer's ar2 stamp)
-let private PF_MOE_MAP_OFF = 2_048l   // the schedules' first per-wg map word offset: 4-word records for up to 256 experts, the s pieces' then the m pieces'
+let private PF_MOE_ROLES = 8l   //! router topk sched gather e_gate e_up e_act e_down (the combine rides the layer's ar2 stamp)
+let private PF_MOE_MAP_OFF = 2_048l   //! the schedules' first per-wg map word offset: 4-word records for up to 256 experts, the s pieces' then the m pieces'
 
-//! Does the resident MoE block admit an expert triple of these formats: the f16-fed cm2 tiles
-//! serve it, so a coopmat2 device in cm2 mode with every format the f16 feed admits.
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
 def vk_rdec_moe_ok(f1, f3, f2 : int) : bool {
     if (!vk_moe_init() || !g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
@@ -676,7 +674,7 @@ def private pf_moe_bounds(nk : int64) : tuple<gu : int64; dn : int64; mgu : int6
     return (gu = g_rd.ne * wt_gu, dn = g_rd.ne * wt_dn, mgu = rt_m * wt_gu, mdn = rt_m * wt_dn)
 }
 
-// the window chain's MoE block buffers and class rails, once per residency
+//! the window chain's MoE block buffers and class rails, once per residency
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
 def private pf_moe_setup {
     let np = g_rd.pf_np
@@ -704,9 +702,6 @@ def private pf_moe_setup {
     g_rd.pf_midx_host = make_host_buf(nk * 4l, false, [cached = true])
 }
 
-// one MoE layer's window sets: the router GEMM and per-row select over the routing planes, the
-// schedule, the gather, the three expert planes' s and m tiles over the device-written schedules,
-// the act, the combine
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
 def private pf_moe_layer_sets(l : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -757,9 +752,6 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
 }
 
-//! The routed block of an MoE layer's window: the router GEMM over the FFN-normed rows, the per-row
-//! select, the bucket schedule, the f16 gather, and the expert tiles over the device-written schedules
-//! (gate, up, the act, down); the combine onto the FFN rows rides the residual step that follows (`pf_moe_addr_next`)
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
 def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -778,7 +770,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let bounds = pf_moe_bounds(nk)
     let tcs = int64(SCHED_S_ROWS)
     let tcm = int64(SCHED_M_ROWS)
-    let map_m_gu = uint(PF_MOE_MAP_OFF + bounds.gu)   // the m dispatch's maps follow the s dispatch's
+    let map_m_gu = uint(PF_MOE_MAP_OFF + bounds.gu)   //! the m dispatch's maps follow the s dispatch's
     let map_m_dn = uint(PF_MOE_MAP_OFF + bounds.dn)
     var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint((nfe + 127l) / 128l), wt_dn = uint((dim + 127l) / 128l),
         map_off = uint(PF_MOE_MAP_OFF), map_off_mgu = map_m_gu, map_off_mdn = map_m_dn,
@@ -791,7 +783,6 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     var pcg = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
     enc_moe_gather_f16_cls(raw, h, L.pf_gather_set, pcg, nk)
     pfq_ts(raw)
-    // each plane's m dispatch first (the long columns), its s dispatch beside it: disjoint rows under separate hazard bits
     var pc1 = BatchArgs(n = uint(dim), d = uint(nfe), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
     var pc1m = BatchArgs(n = uint(dim), d = uint(nfe), map_off = map_m_gu, ksplit = 0u)
     cm2_cls_enc(L.fe1, tcm, raw, h, L.pf_e1m_set, pc1m, bounds.mgu)
@@ -810,9 +801,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     pfq_ts(raw)
 }
 
-//! The residual step after a MoE layer's routed block, with the combine folded in: the f16 row when
-//! the next layer's head reads the f16 feed, else the f32 normed row - requantized here when that
-//! head takes the fused Q8 feed and skips its own requant.
+//! the next layer's fused Q8 head skips its own requant, so this step encodes it.
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -825,7 +814,7 @@ def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt 
         return
     }
     enc_cls_ar_comb(raw, h, L.pf_arcomb_set, pcc, wlen)
-    if (next_fused) {   // the Q8 feed's requant, the next layer's own quant_xb set
+    if (next_fused) {   //! the Q8 feed's requant, the next layer's own quant_xb set
         let nb = int((l + 1l) * PF_ROLES)
         if (kq_sb(g_rd.layers[l + 1l].fq)) {
             var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
@@ -1401,7 +1390,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen, fo6)
                 }
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
-                let moe = g_rd.layers[l].moe   // the routed block reads the normed rows the fused twin never stores
+                let moe = g_rd.layers[l].moe   //! the routed block reads the normed rows the fused twin never stores
                 if (fuse_arq && !guk && !moe) {
                     if (gu6) {
                         enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int(l * 2l)], pc8, wlen)
@@ -1412,7 +1401,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 } else {
                     enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
                     pfq_ts(raw)
-                    if (moe && g_rd.layers[l].b1 < 0l) {   // no dense triple reads the feed: the routed block takes the f32 rows
+                    if (moe && g_rd.layers[l].b1 < 0l) {   //! no dense triple reads the feed: the routed block takes the f32 rows
                     } elif (gu6) {
                         var pc9 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
@@ -1427,7 +1416,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
                 let ffn_row0 = pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
                 let ffn_rows = wlen - ffn_row0
-                if (g_rd.layers[l].b1 >= 0l) {   // the dense triple: the layer's FFN, or an MoE layer's shared expert
+                if (g_rd.layers[l].b1 >= 0l) {   //! the dense triple: the layer's FFN, or an MoE layer's shared expert
                     let p1 = arena_planes(g_rd.layers[l].f1, g_rd.layers[l].b1)
                     let p3 = arena_planes(g_rd.layers[l].f3, g_rd.layers[l].b3)
                     let gqb = gu6 ? g_rd.pf_xf : g_rd.pf_xq
@@ -1464,7 +1453,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0, row0 = uint(ffn_row0))
                 let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
-                if (moe) {   // the routed block's combine rides the residual step
+                if (moe) {
                     pf_moe_addr_next(raw, h, l, wlen, nxt)
                 } elif (l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)) {
                     if (next_qkv6) {
@@ -1494,7 +1483,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             if (vk_prof()) {
                 to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
-                if (g_rd.moe) {   // the last MoE layer's picks, for the bucket report
+                if (g_rd.moe) {
                     vhz_dep(raw, h, VHZ_MRT, 0u, true)
                     cmd_copy_whole(raw, g_rd.pf_midx, g_rd.pf_midx_host.buf, wlen * g_rd.k * 4l)
                 }
@@ -1622,7 +1611,8 @@ def private pf_prof_report(npos : int64) {
     tot += tatt + tdn + tmoe
     to_log(LOG_INFO, "vk_rdpf gpu ({npos} tokens, last window) prologue {int(pfq_us(2u))} fin_rq {int(pfq_us(qi))} cls {int(pfq_us(qi + 1u))} attention layers {natt}: {int(tatt)} recurrent layers {ndn}: {int(tdn)} MoE layers {nmoe}: {int(tmoe)} total {int(tot)} us\n")
     if (nmoe > 0l) {
-        // an MoE layer's stamps: the attention roles (the qkn one shifts them by one), ar1, rq_f, the shared expert's four when the layer has one, then the routed block's nine and ar2
+        //! an MoE layer's stamps: the attention roles (the qkn one shifts them by one), ar1, rq_f,
+        //! the shared expert's four when the layer has one, then the routed block's nine and ar2
         let q = g_rd.qk_norm ? 1 : 0
         var sh = 0
         for (L in g_rd.layers) {
@@ -1630,7 +1620,7 @@ def private pf_prof_report(npos : int64) {
                 sh = 4
             }
         }
-        let a0 = 10 + q   // the first stamp past ar1 / rq_f
+        let a0 = 10 + q   //! the first stamp past ar1 / rq_f
         let shexp = sh > 0 ? "sh_gate {int(moe[a0])} sh_up {int(moe[a0 + 1])} sh_act {int(moe[a0 + 2])} sh_down {int(moe[a0 + 3])} " : ""
         let qkn = q > 0 ? "qkn {int(moe[4])} " : ""
         let m0 = a0 + sh
@@ -2952,7 +2942,7 @@ def private ensure_xf_state {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 expert chain engaged\n")
 }
 
-let private TILE_READ_SLACK = 128l   // rows of read slack past a region's last row: the m column's unclamped partial load
+let private TILE_READ_SLACK = 128l   //! rows of read slack past a region's last row: the m column's unclamped partial load
 
 //! chunk row cap of the cm2 chain: the gathered f16 image (batch_xq window), the f16 hidden plane
 //! (hq_dev) and the f32 output planes must all fit; 128-aligned like the tiles' columns

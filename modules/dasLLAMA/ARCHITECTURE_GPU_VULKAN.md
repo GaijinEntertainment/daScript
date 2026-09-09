@@ -224,7 +224,9 @@ five device stages over the window's FFN-normed rows.
   instead read 2.4 ms more on the 30B window, the shared-memory read-modify-write per slot
   costing what the register sum does not. The token command's tail folds the same way; the
   residual step read those rows anyway, and the fold took one dispatch per layer out of both
-  chains.
+  chains. There is no Q8 requant leaf: a third form would bind a ninth buffer, past the eight
+  the hazard rail carries, so where the next layer's head takes the Q8 feed the f32 leaf writes
+  the normed row and a separate requant follows it.
 
 The router reads the f32 normed rows, so an MoE layer takes the split add+rms arm at the FFN
 site (the fused twins never store `xb`), and the last-layer FFN slice of sec.2.2j does not apply

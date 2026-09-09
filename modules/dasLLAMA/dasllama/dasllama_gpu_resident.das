@@ -432,7 +432,7 @@ let private RDEC_VRAM_HEADROOM_PCT = 27l
 let private RDEC_OS_RESERVE = 1_073_741_824l
 let private RDEC_MISC_BYTES = 67_108_864l          // decode smalls + batch act planes + metas
 
-let private RDEC_MOE_TILE_SLACK = 32l   // rows of read slack past the MoE block's last bucket row (the s tile's unclamped column)
+let private RDEC_MOE_TILE_SLACK = 32l   //! rows of read slack past the MoE block's last bucket row (the s tile's unclamped column)
 
 //! Layer `l` routes through expert stacks: past the dense lead, with its expert planes present.
 def layer_is_moe(t : Model; l : int64) : bool => (t.config.n_expert > 0l && l >= t.config.n_layer_dense_lead
@@ -449,7 +449,7 @@ def private resident_hidden(t : Model) : int64 {
     return w > 0l ? w : t.config.n_ff_exp
 }
 
-// an MoE layer's device bytes: the expert triple and the shared expert's q8 triple when it has one
+//! an MoE layer's device bytes: the expert triple and the shared expert's q8 triple when it has one
 def private resident_moe_layer_bytes(t : Model; l : int64) : int64 {
     let c = t.config
     let ne = c.n_expert
@@ -481,11 +481,11 @@ def private resident_shexp_plane(t : Model; l : int64; kind : int) : tuple<f : K
     return (f = KqFmt.q8, off = t.wsh2_off + l * she)
 }
 
-// the router plane: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated
+//! the router plane: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated
 def private resident_router_bytes(c : Config; n_moe : int64) : int64 => (
     n_moe * (c.n_expert + (c.n_ff_shexp > 0l && c.moe_shexp_gated ? 1l : 0l)) * c.dim * 4l)
 
-// a recurrent layer's device bytes: the deltanet triple and the beta/alpha rows (f16 on the f32 arm, q8 planes otherwise); 0 on an attention layer
+//! a recurrent layer's device bytes: the deltanet triple and the beta/alpha rows (f16 on the f32 arm, q8 planes otherwise); 0 on an attention layer
 def private resident_dn_layer_bytes(t : Model; l : int64) : int64 {
     let c = t.config
     if (!(layer_is_recurrent(c, l) && l < long_length(t.dnqkv_offs) && t.dnqkv_offs[l] >= 0l)) {
@@ -507,7 +507,7 @@ def private rdec_scratch_bytes(t : Model) : int64 {
     let hid = resident_hidden(t)
     let wide = max(max(c.dim, qd), hid)
     var moe = 0l
-    if (c.n_expert > 0l) {   // the MoE block's window planes: the gathered f16 rows, gate/up, the f16 hidden rows, the routed down rows, the routing smalls
+    if (c.n_expert > 0l) {
         let nk = RDEC_PF_ROWS * c.n_expert_used
         let nfe = c.n_ff_exp
         moe = ((nk + RDEC_MOE_TILE_SLACK) * (c.dim + nfe) * 2l + nk * (2l * nfe + c.dim) * 4l
@@ -572,8 +572,6 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     p.kv_bytes = seq_cap * (krow + vrow)
     p.scratch_bytes = rdec_scratch_bytes(t)
     fill_plan_room(p)
-    // every 2D plane a forward reads: the attention quad, the FFN triple (an MoE layer's shared
-    // expert), the expert stacks, the classifier; then the MoE router plane
     var n_moe = 0l
     for (l in range64(c.n_layers)) {
         let qd = layer_qd(c, l)
@@ -595,7 +593,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         if (t.wo_offs[l] >= 0l) {
             p.weight_bytes += moe_gpu_plane_bytes(qd, c.dim, int(fmt_at(t.wo_fmt, l)))
         }
-        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l) {   // a pure MoE carries no dense FFN offsets at all
+        if (l < long_length(t.w1_offs) && t.w1_offs[l] >= 0l) {   //! a pure MoE carries no dense FFN offsets at all
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
             p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
@@ -669,7 +667,7 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
                            mr, kgroup, wbias : int64; slice_rows : int64 = -1l) : int64 {
     var wq : array<uint8>
     var ws : array<uint8>
-    let srows = slice_rows > 0l ? slice_rows : rows   // an expert stack slices per expert, as the per-op walk gathers it
+    let srows = slice_rows > 0l ? slice_rows : rows
     if (f == KqFmt.q8) {
         moe_gpu_gather_stack(t, woff, n, rows, srows, mr, kgroup, wbias, wq, ws)
     } else {
@@ -735,7 +733,7 @@ def resident_unserved_features(c : Config) : string {
     name_list_add(names, c.pre_post_norm, "pre/post norms")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
     name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
-    if (c.n_expert > 0l) {   // the routed block's reach: the softmax router with the top-k kernels' geometry, no router bias or selection bias, plain expert planes
+    if (c.n_expert > 0l) {
         name_list_add(names, c.moe_gate != MoeGate.softmax, "a non-softmax router")
         name_list_add(names, c.moe_router_bias, "a router bias")
         name_list_add(names, c.moe_exp_probs, "an expert selection bias")
@@ -1040,8 +1038,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         var b3 = -1l
         var b2 = -1l
         if (moe) {
-            // the dense triple is the shared expert's planes (the file's K-quant where the loader kept it, else
-            // the q8 transcode); a layer without one keeps -1 blocks and the experts' feed form
+            //! a layer with no shared expert keeps -1 dense blocks and takes the experts' feed form
             if (c.n_ff_shexp > 0l) {
                 let p1 = resident_shexp_plane(t, l, 1)
                 let p3 = resident_shexp_plane(t, l, 3)
@@ -1088,7 +1085,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                     addr<float const?>(t.fblob[t.dn_dt_off + l * dng.nvh]))
             }
             rec_idx++
-            if (moe) {   // a recurrent MoE layer: the routed block after its deltanet head
+            if (moe) {
                 let eb = resident_place_experts(t, l, mr, kg, wb)
                 if (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) return rdec_decline("arena placement failed at recurrent layer {l} (the expert stacks)")
                 rdec_set_moe_experts(l, moe_li, eb.be1, eb.be3, eb.be2, int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)))
@@ -1177,8 +1174,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     return true
 }
 
-// the MoE seats' prepare: the router plane gathered from the model's f32 rows - every MoE layer's
-// [ne x dim] router rows and, when the shared expert is gated, its gate row - handed over with the geometry
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bool {
     let c = t.config
@@ -1205,7 +1200,7 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
     return ok
 }
 
-// the expert triple of an MoE layer into the arena, sliced per expert as the per-op walk gathers it
+//! the expert triple of an MoE layer into the arena, sliced per expert as the per-op walk gathers it
 def private resident_place_experts(t : Model; l : int64; mr, kg, wb : int64) : tuple<be1 : int64; be3 : int64; be2 : int64> {
     let c = t.config
     let ne = c.n_expert
@@ -1766,8 +1761,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         return   // tier absent or nothing requested
     }
     // models that fully fit, MoE included: the whole-stack resident driver is tried FIRST - it
-    // subsumes every rail below; its plan is sized before the per-op reserves, which a fitting plan
-    // forgoes (the streamed slot and the decode mirrors would only shrink its room); a decline falls through
+    // subsumes every rail below; a decline falls through
     let resident_try = (moe_gpu_resident_installed() && gpu_want_auto() && gpu_want_resident()
         && (t.config.n_expert == 0l || rdec_moe_installed()))
     // the mirror codec: f16 rows by default (native fa feed, ~2x plannable ctx);
@@ -1960,8 +1954,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 delete uploads
                 break
             }
-            // the shexp mark, not set_moe_gpu_dense_off: the prefill's shared expert rides the
-            // expert chain as one region (dasllama_blocks), never the dense rail's three submits
+            //! the shexp mark, not set_moe_gpu_dense_off: the shared triple rides the expert chain, not the dense rail
             set_moe_gpu_shexp_layer(l)
             sh_marked++
             delete uploads

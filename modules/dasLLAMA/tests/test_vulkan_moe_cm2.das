@@ -78,7 +78,7 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     delete h16
 }
 
-// ident = the shared expert's call shape: one region over every row, the identity slot map at unit weight
+//! ident = the shared expert's call shape: one region over every row, the identity slot map at unit weight
 def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_only : bool = false; ident : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var wq1 : array<uint8>
@@ -129,7 +129,7 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         }
         let ege1 = nfe * n
         let ege2 = n * nfe
-        let nreg = cnt_a == nk ? 1l : 2l   // every row in region A: one region, as the shared expert calls it
+        let nreg = cnt_a == nk ? 1l : 2l   //! every row in region A: one region, as the shared expert calls it
         var offs1 <- [woff1 + ege1, 0l, cnt_a, woff1, cnt_a, nk - cnt_a]
         var offs3 <- [woff3 + ege1, 0l, cnt_a, woff3, cnt_a, nk - cnt_a]
         var offs2 <- [woff2 + ege2, 0l, cnt_a, woff2, cnt_a, nk - cnt_a]
@@ -216,9 +216,9 @@ def test_vulkan_moe_cm2_one_region(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
             set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
-            // k = 1 and every row in region A (cnt_a == nk): the one-region form; 40 rows = one s-tile column plus a partial
+            //! k = 1 and every row in region A (cnt_a == nk): the one-region form; 40 rows = one s-tile column plus a partial
             chain_cell(t, "one-region", 512l, 512l, 40l, 1l, 40l, 71000000l, 1000000l, false, false, true)
-            // the same over a 2048-wide dim at 300 rows: the multi-row-tile region and the down GEMM's l-tile pick
+            //! the same over a 2048-wide dim at 300 rows: the multi-row-tile region and the down GEMM's l-tile pick
             chain_cell(t, "one-region-big", 2048l, 512l, 300l, 1l, 300l, 81000000l, 4000000l, false, false, true)
         } else {
             t |> skip("dasVulkan not installed; the cm2 expert chain is untestable here")

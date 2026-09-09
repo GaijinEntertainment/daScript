@@ -253,8 +253,8 @@ def private ffn_up(t : T?; var f : Ffn; base : int64 = 30l) : bool {
     return true
 }
 
-// a shared expert's q8 triple (dequantized for the reference), its plane offsets and the two
-// layers' gate rows; width NFE like the routed experts
+//! a shared expert's q8 triple (dequantized for the reference), its plane offsets and the two
+//! layers' gate rows; width NFE like the routed experts
 struct private Shexp {
     w1 : array<float>
     w3 : array<float>
@@ -262,7 +262,7 @@ struct private Shexp {
     off1 : int64
     off3 : int64
     off2 : int64
-    gate : array<float>   // 2 x N, layer-major
+    gate : array<float>   //! 2 x N, layer-major
 }
 
 def private shexp_up(t : T?; var sh : Shexp; base : int64) : bool {
@@ -574,7 +574,7 @@ def private span_args(qa, qb : Quad; f : Ffn) : MoeSpanDec {
     return <- a
 }
 
-// the span's arguments with a gated shared expert beside the routed pair (both layers share its triple)
+//! the span's arguments with a gated shared expert beside the routed pair (both layers share its triple)
 def private span_args_sh(qa, qb : Quad; f : Ffn; sh : Shexp) : MoeSpanDec {
     var a <- span_args(qa, qb, f)
     a.nsh = NFE
@@ -585,9 +585,9 @@ def private span_args_sh(qa, qb : Quad; f : Ffn; sh : Shexp) : MoeSpanDec {
     return <- a
 }
 
-// one span layer's reference with a shared expert: span_layer_ref's steps, the shared gate on the
-// same f32 normed row, then the shared FFN on the Q8_0 feed (its hidden row requantized Q8_0 as
-// the q8 down GEMV reads it) scaled by sigmoid(gate) onto the residual
+//! one span layer's reference with a shared expert: span_layer_ref's steps, the shared gate on the
+//! same f32 normed row, then the shared FFN on the Q8_0 feed (its hidden row requantized Q8_0 as
+//! the q8 down GEMV reads it) scaled by sigmoid(gate) onto the residual
 def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<float>; li : int64; var x : array<float>; pos : int64; cossin : array<float>; var kraw : array<float>) {
     var xb2 : array<float>
     block_ref(q, x, pos, cossin, xb2, kraw)
@@ -756,17 +756,17 @@ def test_vulkan_dec_span(t : T?) {
     }
 }
 
-// the span with a gated shared expert: the routed slots plus sigmoid(gate) times the shared down
-// row in one combine, the shared feed off the same normed row, one submit per position
+//! the span with a gated shared expert: the routed slots plus sigmoid(gate) times the shared down
+//! row in one combine, the shared feed off the same normed row, one submit per position
 [test]
 def test_vulkan_dec_span_shexp(t : T?) {   // nolint:STYLE038 — one span cell: the fixture, the hooks, two positions and the two controls, in the plain span cell's shape
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        vk_span_reset()   // the span records once per model: this cell is the second model in the process
+        vk_span_reset()   //! the span records once per model: this cell is the second model in the process
         install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
         set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
         set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
-        // bases past every other cell's (the tail pairs sit at 10-23, 40-53 and 80-93 x STRIDE, the
-        // routed stacks at 30-32, the plain span's quads at 60-73): first-hit stack lookup
+        //! bases past every other cell's (the tail pairs sit at 10-23, 40-53 and 80-93 x STRIDE, the
+        //! routed stacks at 30-32, the plain span's quads at 60-73): first-hit stack lookup
         var f : Ffn
         if (!ffn_up(t, f, 100l)) {
             t |> skip("dec span shexp: no Vulkan device (or probe/budget refused the upload)")
@@ -824,10 +824,10 @@ def test_vulkan_dec_span_shexp(t : T?) {   // nolint:STYLE038 — one span cell:
             span_layer_ref_sh(qb, f, sh, router, 1l, x_ref, pos, cossin, kraw_b)
             check_row(t, "span shexp pos {pos} residual row after both layers", x, x_ref)
             if (pos == 0l) {
-                var poison := x   // the bar's control: one element pushed past both bars must red
+                var poison := x   //! the bar's control: one element pushed past both bars must red
                 poison[0] += 1.0 + 2.0 * max_abs(x_ref)
                 t |> success(count_bad(poison, x_ref, ABS_BAR, REL_BAR * max_abs(x_ref)) == 1, "span shexp: the bars catch a poisoned element")
-                // the shared expert is load-bearing: the reference without it must miss the device row
+                //! the shared expert is load-bearing: the reference without it must miss the device row
                 var x_no : array<float>
                 fill_row(x_no, N, 0.5)
                 var ka : array<float>

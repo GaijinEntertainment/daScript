@@ -1048,9 +1048,9 @@ struct Model {
     wsh1_off : int64        // ffn_gate_shexp: layers x (dim x n_ff_shexp)
     wsh2_off : int64        // ffn_down_shexp: layers x (n_ff_shexp x dim)
     wsh3_off : int64        // ffn_up_shexp:   layers x (dim x n_ff_shexp)
-    // the shared expert's K-quant planes beside its q8 transcode (the CPU and Metal chains' form): per
-    // layer, the file's format and its plane offset, the whole-model driver's form; -1 / q8 where the
-    // file's shexp is not a K-quant the dense rail serves (an empty table = q8 alone)
+    //! the shared expert's K-quant planes beside its q8 transcode: per layer, the file's format and
+    //! its plane offset; -1 / q8 where the file's shexp is not a K-quant the dense rail serves (an
+    //! empty table = q8 alone)
     wsh1_fmt : array<KqFmt>
     wsh2_fmt : array<KqFmt>
     wsh3_fmt : array<KqFmt>
@@ -2161,9 +2161,9 @@ struct Session {
     @scratch moe_w_cpu : array<float>      // ... and with the GPU slots zeroed (the CPU reduce's)
     @scratch moe_exp_gpu : array<int8>   // per expert: 1 = this layer's GPU share (n_expert)
     @scratch @exact_size moe_gpu_out : array<float>  // the GPU half's combined rows (npos x dim), joined after the CPU half
-    @scratch @exact_size moe_shout : array<float>    // the shared expert's rows off the device chain (npos x dim)
-    @scratch moe_sh_inv : array<uint>      // the device shared expert's identity slot map (npos; the f16-fed arm)
-    @scratch moe_sh_w : array<float>       // ... and its unit combine weights (npos)
+    @scratch @exact_size moe_shout : array<float>    //! the shared expert's rows off the device chain (npos x dim)
+    @scratch moe_sh_inv : array<uint>      //! the device shared expert's identity slot map (npos; the f16-fed arm)
+    @scratch moe_sh_w : array<float>       //! ... and its unit combine weights (npos)
     ffn_offs : array<int64>     // dense/shexp gate+up fuse: 2 region (weight, activation) offset pairs
     ffn_gu : array<float>       // dense/shexp gate+up fuse output — gate half then up half (2 x max_ffn_width)
     mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)

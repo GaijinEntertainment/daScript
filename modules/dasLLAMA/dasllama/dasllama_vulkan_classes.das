@@ -39,8 +39,8 @@ struct ArArgs {
     eps : float
     ascale : float
     row0 : uint
-    k : uint        // the combine twins: routed slots per position
-    lstride : uint  // ... the logits row stride, the shared expert's gate logit index, and whether that gate scales the shared row
+    k : uint        //! the combine twins: routed slots per position
+    lstride : uint  //! ... the logits row stride, the shared expert's gate logit index, and whether that gate scales the shared row
     gidx : uint
     gated : uint
 }
@@ -193,16 +193,11 @@ class ClsArAddRmsRqB : ArRqBase {
     }
 }
 
-// the MoE layer's combine folded into the residual step that follows it: the row's add partner is
-// the shared expert's down row at its gate (add_on: the layer has one) plus the routed slots'
-// weighted down rows, read through the slot map - the combine dispatch and its ffnout round trip
-// gone. The leaves are the add+rms kernels' f32 and f16 output forms (the Q8 requant form would
-// take a ninth binding, past the hazard rail's eight: that feed requants the f32 form's row instead).
 class ArCombBase : ArBase {
-    @ssbo @binding = 4 slot_idx : array<uint>    // position -> its k slot rows
-    @ssbo @binding = 5 slot_w : array<float>     // ... and their routing weights
-    @ssbo @binding = 6 down_rows : array<float>  // the routed down-GEMM output rows
-    @ssbo @binding = 7 logits : array<float>     // [npos x lstride]; the gate logit sits at gidx
+    @ssbo @binding = 4 slot_idx : array<uint>    //! position -> its k slot rows
+    @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights
+    @ssbo @binding = 6 down_rows : array<float>  //! the routed down-GEMM output rows
+    @ssbo @binding = 7 logits : array<float>     //! [npos x lstride]; the gate logit sits at gidx
 
     def override accum_row(base : uint) : float {
         let p = base / pa.dim
@@ -214,12 +209,12 @@ class ArCombBase : ArBase {
         var ss = 0.0
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            var f = 0.0   // the FFN row first, then onto the residual: the combine-then-add chain's sum order, bit for bit
+            var f = 0.0
             if (pa.add_on != 0u) {
                 f = g * aa[base + k]
             }
             var j = 0u
-            while (j + 8u <= pa.k) {   // eight slots' rows in flight together: one load wait per eight, not per slot
+            while (j + 8u <= pa.k) {
                 let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
                 let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
                 let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
@@ -238,7 +233,7 @@ class ArCombBase : ArBase {
                 f += slot_w[pk + j + 7u] * d7
                 j += 8u
             }
-            if (j + 4u <= pa.k) {   // ... and four
+            if (j + 4u <= pa.k) {
                 let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
                 let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
                 let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
@@ -265,7 +260,7 @@ class ArCombBase : ArBase {
 
 [vk_dispatch(name = "cls_ar_comb", grid = "nrows", params = "nrows : int64")]
 class ClsArComb : ArCombBase {
-    @ssbo @binding = 3 yo : array<float>   // the normed output rows
+    @ssbo @binding = 3 yo : array<float>   //! the normed output rows
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
     def run {
@@ -282,7 +277,7 @@ class ClsArComb : ArCombBase {
 
 [vk_dispatch(name = "cls_ar_comb_f16_b", grid = "nrows", params = "nrows : int64")]
 class ClsArCombF16B : ArCombBase {
-    @ssbo @binding = 3 outh : array<float16>   // the normed rows, f16
+    @ssbo @binding = 3 outh : array<float16>   //! the normed rows, f16
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
     def run {
@@ -654,20 +649,20 @@ class DecCombine {
 }
 
 struct DecCombineShArgs {
-    n : uint      // row width
-    k : uint      // routed slots
-    gidx : uint   // the shared expert's gate logit index in `gate`
-    gated : uint  // 1 = the shared row scales by sigmoid(gate[gidx]); 0 = it adds at weight 1
+    n : uint      //! row width
+    k : uint      //! routed slots
+    gidx : uint   //! the shared expert's gate logit index in `gate`
+    gated : uint
 }
 
 [vk_dispatch(name = "dec_combine_sh_cls", grid = "wgs", params = "wgs : int64")]
 class DecCombineSh {
-    @ssbo @binding = 0 xin : array<float>        // the residual row before the FFN
-    @ssbo @binding = 1 w : array<float>          // the k routing weights
-    @ssbo @binding = 2 down_rows : array<float>  // the routed down GEMV's k rows
-    @ssbo @binding = 3 sh_row : array<float>     // the shared expert's down GEMV row
-    @ssbo @binding = 4 gate : array<float>       // the shared expert's gate logit sits at pa.gidx
-    @ssbo @binding = 5 xout : array<float>       // the residual row after the FFN
+    @ssbo @binding = 0 xin : array<float>        //! the residual row before the FFN
+    @ssbo @binding = 1 w : array<float>          //! the k routing weights
+    @ssbo @binding = 2 down_rows : array<float>  //! the routed down GEMV's k rows
+    @ssbo @binding = 3 sh_row : array<float>     //! the shared expert's down GEMV row
+    @ssbo @binding = 4 gate : array<float>       //! the logits row carrying the gate at pa.gidx
+    @ssbo @binding = 5 xout : array<float>       //! the residual row after the FFN
     @push_constant pa : DecCombineShArgs
 
     [spirv_kernel(local_size_x = 256, name = "dec_combine_sh_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
@@ -827,9 +822,9 @@ struct TopkArgs {
     xnb2 : uint      // the down feed's blocks per hidden row: slot j reads row j (gate/up read the one feed row)
 }
 
-// the softmax over one logit row and its k picks (largest first, ties to the lower index), shared
-// by the decode's single-row select and the window's per-row select; thread tid holds logit lg,
-// live = tid < ne, the picks land in pick / pickw for the derived class's write
+//! the select over one logit row, shared by the decode's single-row and the window's per-row
+//! classes: thread tid holds logit lg, live = tid < ne, the picks land in pick / pickw for the
+//! deriving class to write
 class TopKCore {
     @workgroup part : float[64]
     @workgroup parti : uint[64]
@@ -907,7 +902,7 @@ class TopKCore {
         }
     }
 
-    // pick jj's routing weight: renormalized to a unit sum when norm is set, then scaled
+    //! pick jj's routing weight: renormalized to a unit sum when norm is set, then scaled
     def pick_weight(jj, k, norm : uint; wscale : float) : float {
         var ws = 0.0
         var i = 0u
@@ -930,10 +925,10 @@ class TopKCore {
 [vk_dispatch(name = "topk_cls", grid = "one", params = "one : int64")]
 class TopK : TopKCore {
     @ssbo @binding = 0 logits : array<float>
-    @ssbo @binding = 1 meta1 : array<uint>   // the gate stack's (wblock, xblock) per slot row
+    @ssbo @binding = 1 meta1 : array<uint>   //! the gate stack's (wblock, xblock) per slot row
     @ssbo @binding = 2 meta3 : array<uint>
     @ssbo @binding = 3 meta2 : array<uint>
-    @ssbo @binding = 4 w : array<float>      // the k routing weights
+    @ssbo @binding = 4 w : array<float>      //! the k routing weights
     @push_constant pa : TopkArgs
 
     [spirv_kernel(local_size_x = 256, name = "topk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
@@ -967,18 +962,16 @@ struct TopkRowsArgs {
     npos : uint
     ne : uint
     k : uint
-    norm : uint      // renormalize the selected weights to sum 1
-    lstride : uint   // the logits row stride (elements)
-    wscale : float   // 0 or 1 = none
+    norm : uint      //! renormalize the selected weights to sum 1
+    lstride : uint   //! the logits row stride (elements)
+    wscale : float   //! 0 or 1 = none
 }
 
-// the window's select: one workgroup per position over its logit row, the picked experts and
-// weights position-major (the bucket schedule and the combine read them)
 [vk_dispatch(name = "topk_rows_cls", grid = "npos", params = "npos : int64")]
 class TopKRows : TopKCore {
-    @ssbo @binding = 0 logits : array<float>   // [npos x lstride]
-    @ssbo @binding = 1 idx : array<uint>       // [npos x k] the picked expert per slot
-    @ssbo @binding = 2 w : array<float>        // ... and its routing weight
+    @ssbo @binding = 0 logits : array<float>   //! [npos x lstride]
+    @ssbo @binding = 1 idx : array<uint>       //! [npos x k] the picked expert per slot
+    @ssbo @binding = 2 w : array<float>        //! ... and its routing weight
     @push_constant pa : TopkRowsArgs
 
     [spirv_kernel(local_size_x = 256, name = "topk_rows_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
@@ -1000,29 +993,25 @@ class TopKRows : TopKCore {
 }
 
 struct RouterGemmArgs {
-    npos : uint      // rows
-    ne : uint        // router rows (the experts, plus the shared expert's gate row when it rides along)
-    dim : uint       // row width
-    woff : uint      // this layer's row base in w (elements)
-    ostride : uint   // the logits row stride (elements)
+    npos : uint      //! rows
+    ne : uint        //! router rows (the experts, plus the shared expert's gate row when it rides along)
+    dim : uint       //! row width
+    woff : uint      //! this layer's row base in w (elements)
+    ostride : uint   //! the logits row stride (elements)
 }
 
 let ROUTER_TP = 64u   //! the router tile's positions per workgroup
 let ROUTER_TE = 32u   //! ... and router rows
 let ROUTER_LD = 17u   //! the stage's row stride in float4: a 64-wide step's 16 plus one of pad, so the sixteen rows a warp reads (and a fetch writes) spread the eight bank groups
 
-// the span's router GEMV batched over the window: a 64 x 32 tile of positions by router rows per
-// workgroup, each invocation a 4 x 2 block (its two rows 16 apart), K in 64-wide steps through a
-// float4 stage in shared memory, the next step's rows fetched into registers while the current
-// step computes (a 64-multiple row width); logits[p * ostride + e]
 [vk_dispatch(name = "router_gemm_cls", grid = "wgs", params = "wgs : int64")]
 class RouterGemm {
-    @ssbo @binding = 0 @role = "weight" w4 : array<float4>   // the router rows, row-major [ne x dim] per layer, as the stage's float4
-    @ssbo @binding = 1 x4 : array<float4>      // the FFN-normed rows, as float4
-    @ssbo @binding = 2 logits : array<float>   // [npos x ostride]
+    @ssbo @binding = 0 @role = "weight" w4 : array<float4>   //! the router rows, row-major [ne x dim] per layer, as the stage's float4
+    @ssbo @binding = 1 x4 : array<float4>      //! the FFN-normed rows, as float4
+    @ssbo @binding = 2 logits : array<float>   //! [npos x ostride]
     @push_constant pa : RouterGemmArgs
-    @workgroup xs : float4[1088]               // 64 positions x 17 float4
-    @workgroup ws : float4[544]                // 32 rows x 17
+    @workgroup xs : float4[int(ROUTER_TP * ROUTER_LD)]
+    @workgroup ws : float4[int(ROUTER_TE * ROUTER_LD)]
 
     //! the stage's float4 of slot `s` (row s / 16, k4 s % 16) of x rows from `p0` at step `kb`; zero past the window
     def fetch_x(p0, kb, s : uint) : float4 {
@@ -1063,8 +1052,8 @@ class RouterGemm {
         let egroups = (pa.ne + ROUTER_TE - 1u) / ROUTER_TE
         let p0 = (gl_WorkGroupID.x / egroups) * ROUTER_TP
         let eg0 = (gl_WorkGroupID.x % egroups) * ROUTER_TE
-        let tp = tid / 16u         // the invocation's four positions 4tp..4tp+3
-        let te = tid % 16u         // ... and rows te, te + 16
+        let tp = tid / 16u         //! the invocation's four positions 4tp..4tp+3
+        let te = tid % 16u         //! ... and rows te, te + 16
         var a00 = 0.0
         var a01 = 0.0
         var a10 = 0.0
@@ -1073,7 +1062,7 @@ class RouterGemm {
         var a21 = 0.0
         var a30 = 0.0
         var a31 = 0.0
-        // the stage: 64 x rows x 16 float4 = four per invocation, 32 w rows x 16 = two
+        //! the stage: 64 x rows x 16 float4 = four per invocation, 32 w rows x 16 = two
         var xr0 = fetch_x(p0, 0u, tid)
         var xr1 = fetch_x(p0, 0u, tid + 256u)
         var xr2 = fetch_x(p0, 0u, tid + 512u)
@@ -1090,7 +1079,7 @@ class RouterGemm {
             stage_w(tid + 256u, wr1)
             barrier()
             let nb = kb + 64u
-            if (nb < pa.dim) {   // the next step's rows in flight while this step computes
+            if (nb < pa.dim) {
                 xr0 = fetch_x(p0, nb, tid)
                 xr1 = fetch_x(p0, nb, tid + 256u)
                 xr2 = fetch_x(p0, nb, tid + 512u)
@@ -1143,19 +1132,19 @@ class RouterGemm {
 }
 
 struct SchedArgs {
-    nk : uint          // slot rows (npos x k)
-    ne : uint          // experts (at most 256: one thread per expert)
-    wt_gu : uint       // the gate/up GEMMs' weight tiles (ceil(nfe / 128))
-    wt_dn : uint       // the down GEMM's (ceil(dim / 128))
-    map_off : uint     // the s dispatch's per-wg map word offset in every sched plane; the records precede it
-    map_off_mgu : uint // the m dispatch's map offset in the gate/up planes
-    map_off_mdn : uint // ... and in the down plane
-    bound_gu : uint    // the s dispatch's workgroups per gate/up plane; the map's tail past the schedule reads the sentinel
+    nk : uint          //! slot rows (npos x k)
+    ne : uint          //! experts (at most 256: one thread per expert)
+    wt_gu : uint       //! the gate/up GEMMs' weight tiles (ceil(nfe / 128))
+    wt_dn : uint       //! the down GEMM's (ceil(dim / 128))
+    map_off : uint     //! the s dispatch's per-wg map word offset in every sched plane; the records precede it
+    map_off_mgu : uint //! the m dispatch's map offset in the gate/up planes
+    map_off_mdn : uint //! ... and in the down plane
+    bound_gu : uint    //! the s dispatch's workgroups per gate/up plane; the map's tail past the schedule reads the sentinel
     bound_dn : uint
-    bound_mgu : uint   // the m dispatch's
+    bound_mgu : uint   //! the m dispatch's
     bound_mdn : uint
-    base1 : uint       // expert 0's block base in the gate plane (slab-local, in the plane's units)
-    stride1 : uint     // blocks per expert
+    base1 : uint       //! expert 0's block base in the gate plane (slab-local, in the plane's units)
+    stride1 : uint     //! blocks per expert
     base3 : uint
     stride3 : uint
     base2 : uint
@@ -1172,27 +1161,20 @@ def sched_ladder_m_rows(c : uint) : uint {
     return (c % SCHED_M_ROWS) > SCHED_S_ROWS ? c : (c / SCHED_M_ROWS) * SCHED_M_ROWS
 }
 
-// the window's bucket schedule on the device, one workgroup: the experts' slot counts are an atomic
-// tally over the window (the threads stride the slots), the scans place each bucket's rows and its
-// tiles, the three GEMMs' region records and per-wg maps land in the layout the host fill writes
-// (regions in expert order, empty experts skipped) - the s pieces' records at [0, ne), the m
-// pieces' at [ne, 2 ne), each dispatch's map at its own offset - the map tails past the real
-// workgroup counts read the sentinel, and inv hands every slot row the next row of its expert's
-// bucket through an atomic cursor (the rows within a bucket land in an order nothing downstream reads)
 [vk_dispatch(name = "moe_sched_cls", grid = "one", params = "one : int64")]
 class MoeSched {
-    @ssbo @binding = 0 idx : array<uint>       // [nk] the picked expert per slot row
-    @ssbo @binding = 1 inv : array<uint>       // [nk] slot row -> bucket row
-    @ssbo @binding = 2 sched1 : array<uint>    // the gate plane's records + maps
+    @ssbo @binding = 0 idx : array<uint>       //! [nk] the picked expert per slot row
+    @ssbo @binding = 1 inv : array<uint>       //! [nk] slot row -> bucket row
+    @ssbo @binding = 2 sched1 : array<uint>    //! the gate plane's records + maps
     @ssbo @binding = 3 sched3 : array<uint>
     @ssbo @binding = 4 sched2 : array<uint>
     @push_constant pa : SchedArgs
     @workgroup scan : uint[256]
-    @workgroup cnt : uint[256]    // the experts' slot counts, then their bucket cursors
+    @workgroup cnt : uint[256]    //! the experts' slot counts, then their bucket cursors
 
-    // one piece's record and per-wg map on the three planes: expert `tid`'s `rows` from `row0`,
-    // record `ri`, its `rt` column tiles from workgroup `wg_gu` / `wg_dn` of the dispatch whose
-    // maps sit at `map_gu` / `map_dn`
+    //! one piece's record and per-wg map on the three planes: expert `tid`'s `rows` from `row0`,
+    //! record `ri`, its `rt` column tiles from workgroup `wg_gu` / `wg_dn` of the dispatch whose
+    //! maps sit at `map_gu` / `map_dn`
     def write_piece(ri, row0, rows, rt, wg_gu, wg_dn, map_gu, map_dn : uint) {
         let tid = gl_LocalInvocationID.x
         let rb = ri * 4u
@@ -1221,8 +1203,8 @@ class MoeSched {
         }
     }
 
-    // the sentinel tails of the four maps, from the live workgroup counts (the s count in the low
-    // half of each total, the m count in the high) to the dispatch bounds
+    //! the sentinel tails of the four maps, from the live workgroup counts (the s count in the low
+    //! half of each total, the m count in the high) to the dispatch bounds
     def write_tails(total_gu, total_dn : uint) {
         let tid = gl_LocalInvocationID.x
         var t = (total_gu & 0xFFFFu) + tid
@@ -1249,10 +1231,10 @@ class MoeSched {
         }
     }
 
-    // the exclusive prefix over the 256 threads' v; scan[255] holds the total after the call
+    //! the exclusive prefix over the 256 threads' v; scan[255] holds the total after the call
     def excl_scan(v : uint) : uint {
         let tid = gl_LocalInvocationID.x
-        barrier()   // the previous scan's readers are done with scan
+        barrier()   //! the previous scan's readers are done with scan
         scan[tid] = v
         barrier()
         var off = 1u
@@ -1276,7 +1258,7 @@ class MoeSched {
         cnt[tid] = 0u
         barrier()
         var i = tid
-        while (i < pa.nk) {   // the counts: one atomic per slot, the picks read coalesced (the top-k clamps them under ne)
+        while (i < pa.nk) {   //! the top-k clamps every pick under ne, so the tally stays inside cnt
             let _c = atomicAdd(cnt[idx[i]], 1u)
             i += 256u
         }
@@ -1289,7 +1271,7 @@ class MoeSched {
         let ri_m = pa.ne + excl_scan(mrows > 0u ? 1u : 0u)
         let rt_s = (srows + SCHED_S_ROWS - 1u) / SCHED_S_ROWS
         let rt_m = (mrows + SCHED_M_ROWS - 1u) / SCHED_M_ROWS
-        // the two dispatches' tile counts scanned as one packed word: the s count in the low half, the m count in the high
+        //! the packed word each scan carries: the s tile count in the low half, the m count in the high
         let g_gu = excl_scan(rt_s * pa.wt_gu | ((rt_m * pa.wt_gu) << 16u))
         let total_gu = scan[255u]
         let g_dn = excl_scan(rt_s * pa.wt_dn | ((rt_m * pa.wt_dn) << 16u))
@@ -1301,11 +1283,11 @@ class MoeSched {
             write_piece(ri_m, st, mrows, rt_m, g_gu >> 16u, g_dn >> 16u, pa.map_off_mgu, pa.map_off_mdn)
         }
         write_tails(total_gu, total_dn)
-        barrier()   // every thread has read its count
-        cnt[tid] = st   // the bucket cursors
+        barrier()   //! every thread has read its count
+        cnt[tid] = st
         barrier()
         i = tid
-        while (i < pa.nk) {   // each slot takes the next row of its expert's bucket
+        while (i < pa.nk) {
             inv[i] = atomicAdd(cnt[idx[i]], 1u)
             i += 256u
         }
@@ -5224,7 +5206,7 @@ class template KqCm2BatchT : MoeCmBase {
         let row0 = reg.y
         let cnt = reg.z
         if (cnt == 0u) {
-            return   // the sentinel region of a device-written schedule (the whole workgroup, before its first barrier)
+            return
         }
         let ttiles = (cnt + BN - 1u) / BN
         // split-k: wgs stack nsplit planes of (wtiles x ttiles); plane ks covers k [k0, k1) and
@@ -5306,7 +5288,6 @@ class template KqCm2BatchT : MoeCmBase {
             tensorLayoutCreate(flb)
             tensorLayoutSetDimension(flb, row0 + (STILE ? ((cnt + BN - 1u) & ~(BN - 1u)) : cnt), pa.n)
             tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
-            // the store: unclamped over a whole column, clamped over the partial column an s / m stamp loads unclamped
             let whole = xt * BN + BN <= cnt
             var flw : tensorLayout2D
             tensorLayoutCreate(flw)
@@ -7323,7 +7304,7 @@ struct GemvArgs {
     d : uint       // output rows per region
     nreg : uint    // region count
     ybase : uint   // output base row
-    lpr : uint     // lanes per output row in the kq family: 8, 16, or 0 = the whole subgroup (the q8 GEMV ignores it)
+    lanes_per_row : uint   //! 8, 16, or 0 = the whole subgroup (the q8 GEMV ignores it)
 }
 
 // ===== the Q8_0 decode GEMV pair =====
@@ -7378,8 +7359,7 @@ class Q8Gemv {
 }
 
 // ===== the K-quant decode GEMV family: one base shell, per-format block contributions =====
-// ONE LANE PER 32-BLOCK via uint4 loads (one scale decode per block), a subgroup over one, two or
-// four rows by the row length (`gemv_lanes_per_row`), each row's lanes a cluster of the fold.
+// ONE LANE PER 32-BLOCK via uint4 loads (one scale decode per block).
 // The formats share the region walk, the lane->block map, and the subgroup fold — only the
 // block's dot + scale fold differ, so each format is an override of blk_contrib and the
 // devirtualizer inlines the family back to standalone kernels at emission.
@@ -7464,10 +7444,8 @@ class KqGemvBase {
         return dm.x * float(sc * idot) - dm.y * float(mn * bs)
     }
 
-    // a subgroup takes 32 / lpr rows at once, each row's lanes a cluster: a short row (the expert
-    // rows of a MoE, K 512-1408) keeps every lane loading where one row per subgroup left most idle
     def gemv_shell {
-        let lpr = pa.lpr == 0u ? gl_SubgroupSize : pa.lpr
+        let lpr = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
         let lane = gl_SubgroupInvocationID
         let li = lane % lpr
         let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lpr) + lane / lpr
@@ -7489,7 +7467,7 @@ class KqGemvBase {
                 b0 += lpr
             }
         }
-        var total = 0.0   // every lane reduces, a dead row at zero: the clusters stay whole
+        var total = 0.0
         if (lpr == 8u) {
             total = subgroupClusteredAdd(acc, 8u)
         } elif (lpr == 16u) {
@@ -7743,10 +7721,10 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
     }
 }
 
-//! the GEMV family's dispatch grid over `rows` output rows at `lpr` lanes per row (0 = a whole subgroup per
-//! row, the q8 GEMV's only form): a workgroup's subgroups each take subgroup_size / lpr rows
-def gemv_wgs(rows : int64; lpr : uint) : int64 {
-    let l = lpr == 0u ? g_gpu.subgroup_size : int64(lpr)
+//! the GEMV family's dispatch grid over `rows` output rows at `lanes` per row (0 = a whole subgroup per
+//! row, the q8 GEMV's only form): a workgroup's subgroups each take subgroup_size / lanes rows
+def gemv_wgs(rows : int64; lanes : uint) : int64 {
+    let l = lanes == 0u ? g_gpu.subgroup_size : int64(lanes)
     let rpw = g_gpu.rows_per_wg * (g_gpu.subgroup_size / l)
     return (rows + rpw - 1l) / rpw
 }
@@ -7756,7 +7734,6 @@ def gemv_grid_fmt(fmt : int) : bool {
     return fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl)
 }
 
-//! lanes per output row of the kq GEMV family by the row's 32-blocks; the q8 GEMV has the one form
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
     if (fmt == int(KqFmt.q8)) return 0u
@@ -7770,8 +7747,8 @@ def gemv_lanes_per_row(fmt : int; n : int64) : uint {
 
 //! the family's dispatch over `rows` output rows: the lanes per row by the row length, the grid to match
 def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; rows : int64) {
-    pc.lpr = gemv_lanes_per_row(fmt, int64(pc.n))
-    gemv_cls_enc(fmt, raw, h, set_, pc, gemv_wgs(rows, pc.lpr))
+    pc.lanes_per_row = gemv_lanes_per_row(fmt, int64(pc.n))
+    gemv_cls_enc(fmt, raw, h, set_, pc, gemv_wgs(rows, pc.lanes_per_row))
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).

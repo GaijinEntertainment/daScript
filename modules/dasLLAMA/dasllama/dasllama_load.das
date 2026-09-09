@@ -394,7 +394,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             cur.wo += layers * she
             t.wsh3_off = cur.wo
             cur.wo += layers * she
-            // the K-quant planes beside the transcode, where the tags kept the file's format
+            //! the K-quant plane offsets beside the transcode's, where the tags kept the file's format
             t.wshk1_offs |> clear(); t.wshk1_offs |> reserve(layers)
             for (l in range64(layers)) { t.wshk1_offs |> push(fmt_at(t.wsh1_fmt, l) == KqFmt.q8 ? -1l : kq_take(cur, fmt_at(t.wsh1_fmt, l), she)) }
             t.wshk2_offs |> clear(); t.wshk2_offs |> reserve(layers)
@@ -1556,7 +1556,7 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
             any ||= t.we1_fmt[l] != KqFmt.q8 || t.we2_fmt[l] != KqFmt.q8 || t.we3_fmt[l] != KqFmt.q8
         }
     }
-    // the shared expert's tags: its K-quant planes ride beside the q8 transcode the CPU and Metal chains read
+    // the shared expert's tags: its K-quant planes ride beside the q8 transcode
     if (t.config.n_expert > 0l && t.config.n_ff_shexp > 0l && (t.config.dim * t.config.n_ff_shexp) % 256l == 0l) {
         t.wsh1_fmt |> resize(layers)
         t.wsh2_fmt |> resize(layers)
@@ -2670,7 +2670,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch)
                     load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch)
                     load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch)
-                    if (l < long_length(t.wshk1_offs)) {   // the K-quant planes beside the transcode: the whole-model driver's form
+                    if (l < long_length(t.wshk1_offs)) {   //! the same planes again in the file's K-quant form, beside the transcode above
                         if (t.wshk1_offs[l] >= 0l) {
                             load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wshk1_offs[l], she, scratch, 0l, fmt_at(t.wsh1_fmt, l))
                         }

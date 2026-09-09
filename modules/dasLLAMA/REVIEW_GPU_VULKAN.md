@@ -101,9 +101,10 @@ on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
 
 **A diff that changes how many GPU timestamps the resident decode's token command records - the
 `pfq_ts` calls in `dasllama/dasllama_vulkan_decode.das` - updates the stamp count `rdq_sample`
-expects and, for every layer kind whose count moved, that file's role-name table
-(`rdq_role_names`, `RDQ_DN_NAMES`) and its accumulator in `dasllama/dasllama_vulkan_common.das`
-(`g_rdq_role`, `g_rdq_dn`), in the same change.** `rdq_sample` indexes a fixed count per layer,
+expects and, for every layer kind whose count moved, that file's role-name tables
+(`rdq_role_names`, `RDQ_DN_NAMES`, `rd_moe_tail_names`) and its accumulators in
+`dasllama/dasllama_vulkan_common.das` (`g_rdq_role`, `g_rdq_dn`, `g_rdq_moe`), in the same
+change.** `rdq_sample` indexes a fixed count per layer,
 so one extra or missing timestamp reports every later stamp under the wrong role name.
 
 **A decode GEMV class - a `KqGemvBase` leaf in `dasllama/dasllama_vulkan_classes.das` - that

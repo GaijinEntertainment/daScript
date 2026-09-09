@@ -768,14 +768,14 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     let cs = fixed_array(wq_bytes, ws_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, y_bytes)
                     let cg = fixed_array(1u, 2u, 4u, 8u, 16u, 32u)
                     var s_cls = gemv_cls_set(fmt, cb, cs, cg)
-                    // the three lane splits of a subgroup: one row, two rows, four rows (the 16-block row keeps every lane busy at eight)
+                    //! the three lane splits of a subgroup: one row, two rows, four rows (the 16-block row keeps every lane busy at eight)
                     for (lpr in fixed_array(0u, 16u, 8u)) {
                         let wgs = gemv_wgs(int64(rows), lpr)
                         var raw2 = alloc_cmd()
                         let begin = VkCommandBufferBeginInfo()
                         vk_check(vkBeginCommandBuffer(raw2, begin), null)
                         var h2 : VkHaz
-                        var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u, lpr = lpr)
+                        var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lpr)
                         if (fmt == int(KqFmt.k4)) {
                             enc_kq_gemv_k4_cls(raw2, h2, s_cls, pc, wgs)
                         } elif (fmt == int(KqFmt.q40)) {
@@ -2069,7 +2069,7 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 32)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 32)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary nibble bytes
             }
@@ -2081,7 +2081,7 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
                     wsuh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + 613u)   // sc / mn bytes
                 }
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 128l
@@ -2208,7 +2208,7 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 40)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 40)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2220,7 +2220,7 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
                     wsuh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + 613u)   // sc / mn bytes
                 }
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 160l
@@ -2347,7 +2347,7 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 32)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 32)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2358,7 +2358,7 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
                 }
                 wsuh[sb * 5 + 4] = 0u
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 128l
@@ -2485,7 +2485,7 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 16)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 16)) {
                 wqh[i] = hash_word(uint(i) + 31u)     // arbitrary quant bytes
             }
@@ -2495,7 +2495,7 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
                     wsuh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + 91u)
                 }
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 7u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 64l
@@ -2622,7 +2622,7 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 32)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 32)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2633,7 +2633,7 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
                 }
                 wsuh[sb * 5 + 4] = 0u
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 128l
@@ -2760,7 +2760,7 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 32)
             wsuh |> resize(totsb * 2)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 32)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2768,7 +2768,7 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
                 wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d | the row's high bits
                 wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit sub-scale fields
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 128l
@@ -2895,7 +2895,7 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 24)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 24)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2905,7 +2905,7 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
                 }
                 wsuh[sb * 5 + 4] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0))   // cool d
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 96l
@@ -3032,7 +3032,7 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 26)
             wsuh |> resize(totsb * 2)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 26)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3040,7 +3040,7 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
                 wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d | the row's high bits
                 wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit sub-scale fields
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 104l
@@ -3167,7 +3167,7 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 18)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 18)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3178,7 +3178,7 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
                 wsuh[sb * 5 + 3] = hash_word(uint(sb * 4 + 2) + 613u)
                 wsuh[sb * 5 + 4] = hash_word(uint(sb * 4 + 3) + 613u)
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 72l
@@ -3305,7 +3305,7 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 16)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 16)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3316,7 +3316,7 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
                 wsuh[sb * 5 + 3] = hash_word(uint(sb * 4 + 2) + 613u)
                 wsuh[sb * 5 + 4] = hash_word(uint(sb * 4 + 3) + 613u)
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 64l
@@ -3443,7 +3443,7 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 16)
             wsuh |> resize(totsb * 2)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 16)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3451,7 +3451,7 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
                 wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d8 | the row's high bits
                 wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit (2ls + 1) fields
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 64l
@@ -3578,7 +3578,7 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 24)
             wsuh |> resize(totsb * 2)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 24)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3586,7 +3586,7 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
                 wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d | the row's high bits
                 wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit sub-scale fields
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 96l
@@ -3713,7 +3713,7 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 48)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totsb * 48)) {
                 wqh[i] = hash_word(uint(i) + 41u)     // arbitrary ql/qh bytes
             }
@@ -3723,7 +3723,7 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
                 }
                 wsuh[sb * 5 + 4] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0))   // cool d: the f16 acc must stay far from 65504
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)
             }
             let wq_bytes = int64(totsb) * 192l
@@ -3847,14 +3847,14 @@ def test_vkd_cm2m_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totblk * 8)
             wsh |> resize((totblk + 1) / 2)
-            xfh |> resize((rows + 128) * n / 2)   // + the m tile's 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totblk * 8)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary bytes — s8 quants
             }
             for (i in range((totblk + 1) / 2)) {
                 wsh[i] = ws_word(uint(i) + 733u)      // f16 scale pairs, finite halves
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 5u + 11u)  // f16 activation pairs
             }
             let wq_bytes = int64(totblk) * 32l
@@ -3951,14 +3951,14 @@ def test_vkd_cm2s_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totblk * 8)
             wsh |> resize((totblk + 1) / 2)
-            xfh |> resize((rows + 128) * n / 2)   // + the s and m tiles' 128-row read slack (the partial column loads unclamped)
+            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
             for (i in range(totblk * 8)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary bytes — s8 quants
             }
             for (i in range((totblk + 1) / 2)) {
                 wsh[i] = ws_word(uint(i) + 733u)      // f16 scale pairs, finite halves
             }
-            for (i in range((rows + 128) * n / 2)) {
+            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 5u + 11u)  // f16 activation pairs
             }
             let wq_bytes = int64(totblk) * 32l
@@ -7837,9 +7837,10 @@ def test_vkd_ar_f16_fused(t0 : T?) {
 let private MR_NPOS = 37
 let private MR_NE = 20
 let private MR_K = 3
-let private MR_DIM = 128   // the router tile steps K by 64
-let private MR_NER = MR_NE + 1   // the shared expert's gate row rides past the experts
-let private MR_SENT = 0x5A5A5A5Au   // the schedule planes' fill: a word the kernel never writes stays this on both sides
+let private MR_DIM = 128   //! the router tile steps K by 64
+let private MR_NER = MR_NE + 1   //! the shared expert's gate row rides past the experts
+let private MR_SENT = 0x5A5A5A5Au   //! the schedule planes' fill: a word the kernel never writes stays this on both sides
+let private TILE_READ_SLACK = 128   //! the cm2 fixtures' rows past the last: the s and m tiles load a partial column unclamped
 
 //! one 32-bit word to a float in [-2, 2)
 def private hash_unit(i : uint) : float => float(hash_word(i) % 4096u) / 1024.0 - 2.0
@@ -7917,9 +7918,9 @@ def private oracle_piece(var s1, s3, s2 : array<uint>; bases : uint[6]; e : int;
     }
 }
 
-// the CPU twin of MoeSched: the s pieces' records at [0, ne) and the m pieces' at [ne, 2 ne), each in
-// expert order (empty pieces skipped), the two dispatches' per-wg maps, the sentinel tails past the
-// real workgroup counts, and inv in slot order
+//! the CPU twin of MoeSched: the s pieces' records at [0, ne) and the m pieces' at [ne, 2 ne), each in
+//! expert order (empty pieces skipped), the two dispatches' per-wg maps, the sentinel tails past the
+//! real workgroup counts, and inv in slot order
 def private sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedShape; bases : uint[6];
                          var inv : array<uint>; var s1, s3, s2 : array<uint>) {
     let nk = length(idx)
@@ -7994,7 +7995,7 @@ def private sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedSh
     delete cursor
 }
 
-// the router GEMM: two layers' [ner x dim] rows, the second layer's dispatched through woff; logits at the ner stride
+//! the router GEMM: two layers' [ner x dim] rows, the second layer's dispatched through woff; logits at the ner stride
 def private moe_router_arm(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nw = 2 * MR_NER * MR_DIM
@@ -8043,7 +8044,7 @@ def private moe_router_arm(t : T?) {
         }
         let bad = mismatch_rel(got, want, 1e-4)
         t |> success(bad == 0, "router GEMM matches the CPU oracle at the second layer's offset ({bad} of {MR_NPOS * MR_NER} off)")
-        want[5 * MR_NER + 3] += 0.5   // the poison: a value added to one expected element must miss
+        want[5 * MR_NER + 3] += 0.5   //! the poison: a value added to one expected element must miss
         t |> success(mismatch_rel(got, want, 1e-4) == 1, "router GEMM control: the bar reds one poisoned element")
         delete wh
         delete xh
@@ -8052,13 +8053,13 @@ def private moe_router_arm(t : T?) {
     }
 }
 
-// the per-row select against moe_select_core over the same rows: norm on with no scale, norm off with a scale
+//! the per-row select against moe_select_core over the same rows: norm on with no scale, norm off with a scale
 def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var lh : array<float>
         lh |> resize(MR_NPOS * MR_NER)
         for (i in range(MR_NPOS * MR_NER)) {
-            lh[i] = hash_unit(uint(i) * 3u + 101u) * 2.0 + float(i % 7) * 0.0625   // spread past any near-tie
+            lh[i] = hash_unit(uint(i) * 3u + 101u) * 2.0 + float(i % 7) * 0.0625   //! spread past any near-tie
         }
         let l_bytes = int64(MR_NPOS * MR_NER) * 4l
         let s_bytes = int64(MR_NPOS * MR_K) * 4l
@@ -8123,7 +8124,7 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
     }
 }
 
-// the bucket schedule against its CPU twin, word for word over the whole planes (three empty experts, a sentinel fill)
+//! the bucket schedule against its CPU twin, word for word over the whole planes (three empty experts, a sentinel fill)
 def private moe_sched_arm(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nk = 4 * MR_NPOS * MR_K
@@ -8133,8 +8134,8 @@ def private moe_sched_arm(t : T?) {
         var idx : array<uint>
         idx |> resize(nk)
         for (r in range(nk)) {
-            // the ladder's four shapes: expert 0 a whole m column plus an s remainder, 1 and 2 one partial
-            // m column each, 3 within the s column; the rest spread thin, the last three route nothing
+            //! the ladder's four shapes: expert 0 a whole m column plus an s remainder, 1 and 2 one partial
+            //! m column each, 3 within the s column; the rest spread thin, the last three route nothing
             idx[r] = r < 150 ? 0u : (r < 250 ? 1u : (r < 290 ? 2u : (r < 310 ? 3u : 4u + hash_word(uint(r) + 55u) % uint(MR_NE - 7))))
         }
         let bases = fixed_array(1_000u, 96u, 2_000u, 96u, 3_000u, 48u)
@@ -8192,8 +8193,7 @@ def private moe_sched_arm(t : T?) {
             memcpy(addr<void?>(g3[0]), reinterpret<void?>(hp + uint64(i_bytes + s_bytes)), s_bytes)
             memcpy(addr<void?>(g2[0]), reinterpret<void?>(hp + uint64(i_bytes + 2l * s_bytes)), s_bytes)
         }
-        // the map hands each slot a row of its expert's bucket through an atomic cursor, so the rows within
-        // a bucket land in an order the schedule does not fix: the check is per bucket, a permutation of its rows
+        //! the atomic cursor fixes no order within a bucket, so the check is per bucket: a permutation of its rows
         var inv_bad = 0
         var seen : array<bool>
         seen |> resize(nk)
@@ -8213,7 +8213,7 @@ def private moe_sched_arm(t : T?) {
         t |> success(mismatch_qbytes(g1, w1, 0) == 0, "the gate plane's s and m records, maps and sentinel tails match the CPU twin word for word ({length(w1)} words)")
         t |> success(mismatch_qbytes(g3, w3, 0) == 0, "the up plane's schedule matches")
         t |> success(mismatch_qbytes(g2, w2, 0) == 0, "the down plane's schedule matches (its own tile counts and tails)")
-        w2[sh.map_off_mdn + sh.bound_mdn - 1] = 0u   // the poison: the m map's last sentinel word flipped must miss
+        w2[sh.map_off_mdn + sh.bound_mdn - 1] = 0u   //! the poison: the m map's last sentinel word flipped must miss
         t |> success(mismatch_qbytes(g2, w2, 0) > 0, "schedule control: one flipped tail word reds the compare")
         delete idx
         delete winv
@@ -8228,10 +8228,9 @@ def private moe_sched_arm(t : T?) {
     }
 }
 
-// the gated combine: the shared rows scaled by the gate's sigmoid plus the routed slots, over two accumulating windows
-// the residual step with the combine folded in: x += [g *] shared row + the k weighted expert rows
-// through the slot map, then the next norm - the f32 and the f16 normed-row forms against one CPU
-// oracle; `with_sh` = the layer has a shared expert (its rows ride the add partner)
+//! the residual step with the combine folded in: x += [g *] shared row + the k weighted expert rows
+//! through the slot map, then the next norm - the f32 and the f16 normed-row forms against one CPU
+//! oracle; `with_sh` = the layer has a shared expert (its rows ride the add partner)
 def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = 64
@@ -8254,7 +8253,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
         wn |> resize(n)
         lg |> resize(npos * MR_NER)
         for (i in range(nrows)) {
-            sidx[i] = uint((i * 7) % nrows)   // a permutation of the bucket rows
+            sidx[i] = uint((i * 7) % nrows)   //! a permutation of the bucket rows
             sw[i] = 0.125 + float(i % 5) * 0.25
         }
         for (i in range(nrows * n)) {
@@ -8300,7 +8299,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
             upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
             upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), wn_bytes)
             upload_region_at(lgd, 0l, addr<uint8 const?>(lg[0]), lg_bytes)
-            // the f32 form: x updated in place, the normed row to yo
+            //! the f32 form: x updated in place, the normed row to yo
             upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
             var sc = set_cls_ar_comb(fixed_array(xd, shd, wnd, yod, sid, swd, rod, lgd),
                 fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes, si_bytes, si_bytes, ro_bytes, lg_bytes),
@@ -8317,7 +8316,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
             submit_wait(raw)
             memcpy(addr<void?>(got_x[0]), host.mapped, x_bytes)
             memcpy(addr<void?>(got_y[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
-            // the f16 form over a fresh x
+            //! the f16 form over a fresh x
             upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
             var sc16 = set_cls_ar_comb_f16_b(fixed_array(xd, shd, wnd, yhd, sid, swd, rod, lgd),
                 fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes / 2l, si_bytes, si_bytes, ro_bytes, lg_bytes),

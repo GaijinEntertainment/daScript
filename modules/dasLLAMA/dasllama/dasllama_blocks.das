@@ -739,10 +739,10 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
             a.f1[li] = int(fmt_at(t.we1_fmt, l))
             a.f3[li] = int(fmt_at(t.we3_fmt, l))
             a.f2[li] = int(fmt_at(t.we2_fmt, l))
-            let she = l * dim * c.n_ff_shexp   // the shared expert's planes are q8, one triple per layer
-            a.wsh1[li] = c.n_ff_shexp > 0l ? t.wsh1_off + she : -1l
-            a.wsh3[li] = c.n_ff_shexp > 0l ? t.wsh3_off + she : -1l
-            a.wsh2[li] = c.n_ff_shexp > 0l ? t.wsh2_off + she : -1l
+            let sh_off = l * dim * c.n_ff_shexp   //! the shared expert's q8 triple
+            a.wsh1[li] = c.n_ff_shexp > 0l ? t.wsh1_off + sh_off : -1l
+            a.wsh3[li] = c.n_ff_shexp > 0l ? t.wsh3_off + sh_off : -1l
+            a.wsh2[li] = c.n_ff_shexp > 0l ? t.wsh2_off + sh_off : -1l
             a.rmsq[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null
             a.rmsk[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null
             a.bq[li] = c.attn_qkv_bias ? addr<float const?>(t.bq[l * a.qd]) : null
@@ -1606,7 +1606,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
     }
 
-    // 2b. the shared expert on the device: one region over every position on the routed chain's arm
+    // 2b. the shared expert on the device
     let sh_gpu = (nsh > 0l && !c.moe_dense_shexp && moe_gpu_shexp_on_gpu(l) && npos >= 32l && gpu_prefill_route_on())
     if (sh_gpu) {
         trace_tag(TRACE_TAG_SHEXP)

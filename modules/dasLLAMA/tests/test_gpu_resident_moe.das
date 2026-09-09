@@ -87,10 +87,10 @@ def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks
     return <- out
 }
 
-// prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
-// prefill logits and every step's within the bar, the one-step-off control past it, the routed
-// block's census growing by the MoE layer count per window and per step; `shexp` = the fixture
-// carries a shared expert
+//! prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
+//! prefill logits and every step's within the bar, the one-step-off control past it, the routed
+//! block's census growing by the MoE layer count per window and per step; `shexp` = the fixture
+//! carries a shared expert
 def private moe_forced_feed(t : T?; n : int64; file : string; shexp : bool) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
@@ -132,7 +132,7 @@ def private moe_forced_feed(t : T?; n : int64; file : string; shexp : bool) {
         if (sched0 != NO_CENSUS) {
             t |> equal(census("moe_sched_cls_spv") - sched0, layers * windows, "the device bucket schedule ran once per MoE layer per window ({windows} windows)")
             t |> equal(census("topk_rows_cls_spv") - rows0, layers * windows, "the window's per-row select ran once per MoE layer per window")
-            // the token command records once and resubmits: the census counts its recording, one top-k per MoE layer
+            //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer
             let topk = census("topk_cls_spv") - topk0
             t |> success(topk >= layers && topk % layers == 0l, "the token command recorded a top-k per MoE layer ({topk} over {layers} layers)")
         }

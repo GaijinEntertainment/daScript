@@ -1325,12 +1325,12 @@ struct MoeSpanDec {
     f1 : array<int>
     f3 : array<int>
     f2 : array<int>
-    nsh : int64                  // the shared expert's width (0 = the model has none)
-    sh_gated : bool              // the shared expert's row scales by sigmoid(gate . xb)
-    wsh1 : array<int64>          // the shared expert's gate/up/down plane offsets per layer (q8)
+    nsh : int64                  //! the shared expert's width (0 = the model has none)
+    sh_gated : bool              //! the shared expert's row scales by sigmoid(gate . xb)
+    wsh1 : array<int64>          //! the shared expert's gate/up/down plane offsets per layer (q8)
     wsh3 : array<int64>
     wsh2 : array<int64>
-    shgate : float const?        // [nl x dim] f32 gate rows, layer-major (null when ungated or absent)
+    shgate : float const?        //! [nl x dim] f32 gate rows, layer-major (null when ungated or absent)
     rmsq : array<float const?>   // the qk-norm rows (null when off)
     rmsk : array<float const?>
     bq : array<float const?>     // the q/k/v projection bias rows (null when the model has none)
