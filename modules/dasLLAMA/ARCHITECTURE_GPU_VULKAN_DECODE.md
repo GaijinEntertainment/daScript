@@ -5,8 +5,9 @@ document carries sections 2.2r-2.2v: the decode attention block over per-layer K
 the streamed expert layer's GPU/CPU split, the whole-token decode span, the deltanet decode
 step's per-session resident state, and the whole-model driver's hybrid token command. The
 prefill window chain and byte stores these build on are `ARCHITECTURE_GPU_VULKAN.md` sections
-2.2j, 2.2p and 2.2ab; the cm2 tiles and the MoE expert chain on them are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m and 2.2q; the residency plan and the marks
+2.2j, 2.2p, 2.2ab, 2.2ac and 2.2ad; the cm2 tiles, the MoE expert chain on them and the KHR
+arm's kq tile are `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the
+residency plan and the marks
 swap under them are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o.
 
 ### 2.2r The per-op tier's decode attention block {#decode-attention-block}
@@ -243,7 +244,7 @@ arm, so a gated or partial-rope model takes the fused kernel whatever the fuse g
 two arms need qk-norm, and a model with either but without it declines by name.
 
 **The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md`
-sec.2.2j): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
+sec.2.2ad): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
 rows into the layer's own smalls, the conv, the sequential scan over the layer's own device
 state slot (the raw o rows in the tier's workspace), the o requant and the out GEMM into the block
 output, so the window command needs no host round trip per layer. The state slots are the

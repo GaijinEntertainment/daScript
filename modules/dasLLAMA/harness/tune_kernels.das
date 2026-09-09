@@ -2343,7 +2343,7 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
 
 let CONFIRM_TG_MARGIN = 1.005lf
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private confirm_serving_crown(crown : string; var wins : array<string>) {
     let model = confirm_decode_model()
     if (empty(model)) {
@@ -2430,7 +2430,7 @@ def private confirm_assistant_model() : string {
     return empty(best) ? "" : "{md}{best}"
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private confirm_tg_run(model : string; wins : array<string>; extra : string; bench_args : string = ""; tag : string = "tg128: ") : double {
     var crowns = join(wins, ",")
     if (!empty(extra)) {

@@ -25,6 +25,7 @@ require dasllama/dasllama_vulkan_prefill
 require dasllama/dasllama_kqformat
 require daslib/typemacro_boost
 require _vk_probe_fixture   // hash_word, cool_f16_pair: the synthetic planes both probes build
+require ../tests/_vkd_oracles.das   // k4f16_gemm_oracle: the CPU reference the khrx baseline arm is checked against
 
 let private MM_TILE = 128
 let private DISPATCHES = 16
@@ -786,7 +787,7 @@ class KhrPxBase : MoeCmBase {
         }
     }
 
-    def body {
+    def body_f32a {
         let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
         let wblk0 = sched[rb]
         let row0 = sched[rb + 1u]
@@ -807,14 +808,71 @@ class KhrPxBase : MoeCmBase {
         let skh = (tid & 1u) * 16u
         let sbase = srow * KHRPX_STRIDE + skh
         let wrow = m0 + srow
-        var acc0 : coopmatAcc_f32_16x16
-        var acc1 : coopmatAcc_f32_16x16
-        var acc2 : coopmatAcc_f32_16x16
-        var acc3 : coopmatAcc_f32_16x16
-        var acc4 : coopmatAcc_f32_16x16
-        var acc5 : coopmatAcc_f32_16x16
-        var acc6 : coopmatAcc_f32_16x16
-        var acc7 : coopmatAcc_f32_16x16
+        let wrow0 = (sg & 1u) * 64u
+        let trow0 = (sg >> 1u) * 32u
+        var acc00, acc01, acc10, acc11, acc20, acc21, acc30, acc31 : coopmatAcc_f32_16x16
+        var k = 0u
+        while (k < pa.n) {
+            let kk = k + skh
+            let bcol = kk >> 8u
+            stage_a(wblk0, wrow, bcol, kk - bcol * 256u, sbase)
+            stage_b((t0 + srow) * pa.n + kk, sbase)
+            barrier()
+            for (ks in range(2)) {
+                let ko = uint(ks) * 16u
+                var a0, a1, a2, a3 : coopmatA_f16_16x16
+                coopmatLoad(a0, khr_a, int(wrow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a1, khr_a, int((wrow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a2, khr_a, int((wrow0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a3, khr_a, int((wrow0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                var b0, b1 : coopmatB_f16_16x16
+                coopmatLoad(b0, khr_b, int(trow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b1, khr_b, int((trow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                acc00 = coopmatMulAdd(a0, b0, acc00)
+                acc01 = coopmatMulAdd(a0, b1, acc01)
+                acc10 = coopmatMulAdd(a1, b0, acc10)
+                acc11 = coopmatMulAdd(a1, b1, acc11)
+                acc20 = coopmatMulAdd(a2, b0, acc20)
+                acc21 = coopmatMulAdd(a2, b1, acc21)
+                acc30 = coopmatMulAdd(a3, b0, acc30)
+                acc31 = coopmatMulAdd(a3, b1, acc31)
+            }
+            barrier()
+            k += 32u
+        }
+        let yb = (t0 + trow0) * pa.d + m0 + wrow0
+        coopmatStore(acc00, y, int(yb), int(pa.d), 1)
+        coopmatStore(acc01, y, int(yb + 16u * pa.d), int(pa.d), 1)
+        coopmatStore(acc10, y, int(yb + 16u), int(pa.d), 1)
+        coopmatStore(acc11, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+        coopmatStore(acc20, y, int(yb + 32u), int(pa.d), 1)
+        coopmatStore(acc21, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
+        coopmatStore(acc30, y, int(yb + 48u), int(pa.d), 1)
+        coopmatStore(acc31, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
+    }
+
+    def body_strip {
+        let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
+        let wblk0 = sched[rb]
+        let row0 = sched[rb + 1u]
+        let cnt = sched[rb + 2u]
+        let ttiles = (cnt + 127u) / 128u
+        let tix = gl_WorkGroupID.x - sched[rb + 3u]
+        let xt = tix % ttiles
+        let wt = tix / ttiles
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_blk0 = wblk0
+        }
+        barrier()
+        let t0 = row0 + xt * 128u
+        let m0 = wt * 128u
+        let tid = gl_LocalInvocationID.x
+        let sg = gl_SubgroupID
+        let srow = tid >> 1u
+        let skh = (tid & 1u) * 16u
+        let sbase = srow * KHRPX_STRIDE + skh
+        let wrow = m0 + srow
+        var acc0, acc1, acc2, acc3, acc4, acc5, acc6, acc7 : coopmatAcc_f16_16x16
         var k = 0u
         while (k < pa.n) {
             let kk = k + skh
@@ -848,79 +906,27 @@ class KhrPxBase : MoeCmBase {
             k += 32u
         }
         let yb = t0 * pa.d + m0 + sg * 16u
-        coopmatStore(acc0, y, int(yb), int(pa.d), 1)
-        coopmatStore(acc1, y, int(yb + 16u * pa.d), int(pa.d), 1)
-        coopmatStore(acc2, y, int(yb + 32u * pa.d), int(pa.d), 1)
-        coopmatStore(acc3, y, int(yb + 48u * pa.d), int(pa.d), 1)
-        coopmatStore(acc4, y, int(yb + 64u * pa.d), int(pa.d), 1)
-        coopmatStore(acc5, y, int(yb + 80u * pa.d), int(pa.d), 1)
-        coopmatStore(acc6, y, int(yb + 96u * pa.d), int(pa.d), 1)
-        coopmatStore(acc7, y, int(yb + 112u * pa.d), int(pa.d), 1)
-    }
-}
-
-[vk_dispatch(name = "khrpx_nil", grid = "wgs", params = "wgs : int64")]
-class KhrPxNil : KhrPxBase {
-    @ssbo @binding = 0 @role = "alias" @readonly wq : array<VkK4Blk>   //! bound, never read: the ceiling stages a constant
-
-    [spirv_kernel(local_size_x = 256, name = "khrpx_nil_spv")]
-    def run {
-        body()
-    }
-}
-
-class KhrPxShipBase : KhrPxBase {
-    @ssbo @binding = 0 @readonly wq : array<VkK4Blk>
-
-    //! the shipped tile's weight stage: four decodes on the plane element into the row's 16 halves
-    def stage_decoded(wblk0, wrow, bcol, e0, sbase : uint) {
-        for (j in range(4)) {
-            let v4 = decode_v4(wq[wblk0 + wrow * (pa.n >> 8u) + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 4u))
-            let o = sbase + uint(j) * 4u
-            khr_a[o] = v4.x
-            khr_a[o + 1u] = v4.y
-            khr_a[o + 2u] = v4.z
-            khr_a[o + 3u] = v4.w
-        }
+        var accf32 : coopmatAcc_f32_16x16
+        coopmatConvert(accf32, acc0)
+        coopmatStore(accf32, y, int(yb), int(pa.d), 1)
+        coopmatConvert(accf32, acc1)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc2)
+        coopmatStore(accf32, y, int(yb + 32u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc3)
+        coopmatStore(accf32, y, int(yb + 48u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc4)
+        coopmatStore(accf32, y, int(yb + 64u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc5)
+        coopmatStore(accf32, y, int(yb + 80u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc6)
+        coopmatStore(accf32, y, int(yb + 96u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc7)
+        coopmatStore(accf32, y, int(yb + 112u * pa.d), int(pa.d), 1)
     }
 
-    def override stage_a(wblk0, wrow, bcol, e0, sbase : uint) {
-        stage_decoded(wblk0, wrow, bcol, e0, sbase)
-    }
-}
-
-[vk_dispatch(name = "khrpx_ship", grid = "wgs", params = "wgs : int64")]
-class KhrPxShip : KhrPxShipBase {
-    [spirv_kernel(local_size_x = 256, name = "khrpx_ship_spv")]
-    def run {
-        body()
-    }
-}
-
-//! ship plus the shipped tile's 8 KB edge-store slab, touched on a path no dispatch takes: the occupancy cost of the third workgroup array alone
-[vk_dispatch(name = "khrpx_slab", grid = "wgs", params = "wgs : int64")]
-class KhrPxSlab : KhrPxShipBase {
-    @workgroup khr_o : float[2048]
-
-    def override stage_a(wblk0, wrow, bcol, e0, sbase : uint) {
-        stage_decoded(wblk0, wrow, bcol, e0, sbase)
-        if (pa.map_off == 0u) {
-            khr_o[sbase] = float(khr_a[sbase])
-            khr_a[sbase] = float16(khr_o[sbase + 1u])
-        }
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "khrpx_slab_spv")]
-    def run {
-        body()
-    }
-}
-
-[vk_dispatch(name = "khrpx_nob", grid = "wgs", params = "wgs : int64")]
-class KhrPxNoB : KhrPxShipBase {
-    @ssbo @binding = 3 @role = "alias" @readonly xf16 : array<float16>   //! the B fragments load straight from the plane's half view
-
-    def override body {
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+    def body {
         let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
         let wblk0 = sched[rb]
         let row0 = sched[rb + 1u]
@@ -941,90 +947,142 @@ class KhrPxNoB : KhrPxShipBase {
         let skh = (tid & 1u) * 16u
         let sbase = srow * KHRPX_STRIDE + skh
         let wrow = m0 + srow
-        var acc0 : coopmatAcc_f32_16x16
-        var acc1 : coopmatAcc_f32_16x16
-        var acc2 : coopmatAcc_f32_16x16
-        var acc3 : coopmatAcc_f32_16x16
-        var acc4 : coopmatAcc_f32_16x16
-        var acc5 : coopmatAcc_f32_16x16
-        var acc6 : coopmatAcc_f32_16x16
-        var acc7 : coopmatAcc_f32_16x16
+        let wrow0 = (sg & 1u) * 64u
+        let trow0 = (sg >> 1u) * 32u
+        var acc00, acc01, acc10, acc11, acc20, acc21, acc30, acc31 : coopmatAcc_f16_16x16
         var k = 0u
         while (k < pa.n) {
             let kk = k + skh
             let bcol = kk >> 8u
             stage_a(wblk0, wrow, bcol, kk - bcol * 256u, sbase)
+            stage_b((t0 + srow) * pa.n + kk, sbase)
             barrier()
             for (ks in range(2)) {
                 let ko = uint(ks) * 16u
-                var a : coopmatA_f16_16x16
-                coopmatLoad(a, khr_a, int(sg * 16u * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
-                let bb = t0 * pa.n + k + ko
-                var b : coopmatB_f16_16x16
-                coopmatLoad(b, xf16, int(bb), int(pa.n), 1)
-                acc0 = coopmatMulAdd(a, b, acc0)
-                coopmatLoad(b, xf16, int(bb + 16u * pa.n), int(pa.n), 1)
-                acc1 = coopmatMulAdd(a, b, acc1)
-                coopmatLoad(b, xf16, int(bb + 32u * pa.n), int(pa.n), 1)
-                acc2 = coopmatMulAdd(a, b, acc2)
-                coopmatLoad(b, xf16, int(bb + 48u * pa.n), int(pa.n), 1)
-                acc3 = coopmatMulAdd(a, b, acc3)
-                coopmatLoad(b, xf16, int(bb + 64u * pa.n), int(pa.n), 1)
-                acc4 = coopmatMulAdd(a, b, acc4)
-                coopmatLoad(b, xf16, int(bb + 80u * pa.n), int(pa.n), 1)
-                acc5 = coopmatMulAdd(a, b, acc5)
-                coopmatLoad(b, xf16, int(bb + 96u * pa.n), int(pa.n), 1)
-                acc6 = coopmatMulAdd(a, b, acc6)
-                coopmatLoad(b, xf16, int(bb + 112u * pa.n), int(pa.n), 1)
-                acc7 = coopmatMulAdd(a, b, acc7)
+                var a0, a1, a2, a3 : coopmatA_f16_16x16
+                coopmatLoad(a0, khr_a, int(wrow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a1, khr_a, int((wrow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a2, khr_a, int((wrow0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a3, khr_a, int((wrow0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                var b0, b1 : coopmatB_f16_16x16
+                coopmatLoad(b0, khr_b, int(trow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b1, khr_b, int((trow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                acc00 = coopmatMulAdd(a0, b0, acc00)
+                acc01 = coopmatMulAdd(a0, b1, acc01)
+                acc10 = coopmatMulAdd(a1, b0, acc10)
+                acc11 = coopmatMulAdd(a1, b1, acc11)
+                acc20 = coopmatMulAdd(a2, b0, acc20)
+                acc21 = coopmatMulAdd(a2, b1, acc21)
+                acc30 = coopmatMulAdd(a3, b0, acc30)
+                acc31 = coopmatMulAdd(a3, b1, acc31)
             }
             barrier()
             k += 32u
         }
-        let yb = t0 * pa.d + m0 + sg * 16u
-        coopmatStore(acc0, y, int(yb), int(pa.d), 1)
-        coopmatStore(acc1, y, int(yb + 16u * pa.d), int(pa.d), 1)
-        coopmatStore(acc2, y, int(yb + 32u * pa.d), int(pa.d), 1)
-        coopmatStore(acc3, y, int(yb + 48u * pa.d), int(pa.d), 1)
-        coopmatStore(acc4, y, int(yb + 64u * pa.d), int(pa.d), 1)
-        coopmatStore(acc5, y, int(yb + 80u * pa.d), int(pa.d), 1)
-        coopmatStore(acc6, y, int(yb + 96u * pa.d), int(pa.d), 1)
-        coopmatStore(acc7, y, int(yb + 112u * pa.d), int(pa.d), 1)
+        let yb = (t0 + trow0) * pa.d + m0 + wrow0
+        var accf32 : coopmatAcc_f32_16x16
+        coopmatConvert(accf32, acc00)
+        coopmatStore(accf32, y, int(yb), int(pa.d), 1)
+        coopmatConvert(accf32, acc01)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc10)
+        coopmatStore(accf32, y, int(yb + 16u), int(pa.d), 1)
+        coopmatConvert(accf32, acc11)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+        coopmatConvert(accf32, acc20)
+        coopmatStore(accf32, y, int(yb + 32u), int(pa.d), 1)
+        coopmatConvert(accf32, acc21)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
+        coopmatConvert(accf32, acc30)
+        coopmatStore(accf32, y, int(yb + 48u), int(pa.d), 1)
+        coopmatConvert(accf32, acc31)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
     }
+}
 
-    [spirv_kernel(local_size_x = 256, name = "khrpx_nob_spv")]
+[vk_dispatch(name = "khrpx_nil", grid = "wgs", params = "wgs : int64")]
+class KhrPxNil : KhrPxBase {
+    @ssbo @binding = 0 @role = "alias" @readonly wq : array<VkK4Blk>
+
+    [spirv_kernel(local_size_x = 256, name = "khrpx_nil_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout")]
     def run {
         body()
     }
 }
 
-[vk_dispatch(name = "khrpx_k64", grid = "wgs", params = "wgs : int64")]
-class KhrPxK64 : MoeCmBase {   //! its own base: the 32-step staging arrays would count against its footprint
+[vk_dispatch(name = "khrpx_dec4", grid = "wgs", params = "wgs : int64")]
+class KhrPxDec4 : KhrPxBase {
     @ssbo @binding = 0 @readonly wq : array<VkK4Blk>
-    @ssbo @binding = 1 @readonly ws : array<uint>
-    @ssbo @binding = 3 @readonly xf16 : array<float16>
-    @ssbo @binding = 5 y : array<float>
-    @workgroup wg_blk0 : uint
-    @workgroup khr_a64 : float16[9216]
-    @workgroup khr_b64 : float16[9216]
 
-    [spirv_decode]
-    def decode_v4(blk : VkK4Blk; bc, cib : uint2) : half4 {
-        let g = cib.y >> 5u
-        let e = cib.y & 31u
-        let li = int((g * 16u + (e & 15u)) >> 1u)
-        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
-        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
-        let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+    def override stage_a(wblk0, wrow, bcol, e0, sbase : uint) {
+        for (j in range(4)) {
+            let v4 = decode_v4(wq[wblk0 + wrow * (pa.n >> 8u) + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 4u))
+            let o = sbase + uint(j) * 4u
+            khr_a[o] = v4.x
+            khr_a[o + 1u] = v4.y
+            khr_a[o + 2u] = v4.z
+            khr_a[o + 3u] = v4.w
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "khrpx_dec4_spv")]
+    def run {
+        body()
+    }
+}
+
+//! the shipped tile's weight stage, copied: every lever arm below inherits it unmoved
+class KhrPxW4Base : KhrPxBase {
+    @ssbo @binding = 0 @readonly wq4 : array<uint4>
+
+    def override stage_a(wblk0, wrow, bcol, e0, sbase : uint) {
+        let g = e0 >> 5u
+        let sh = ((e0 >> 4u) & 1u) * 4u
+        let w4 = wq4[(wblk0 + wrow * (pa.n >> 8u) + bcol) * 8u + g]
+        let srow = (wg_blk0 + wrow * (pa.n >> 8u) + bcol) * 5u
         let dm = unpackHalf2x16(ws[srow])
         let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
         let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        return half4(float4(ds * float((l0 >> sh) & 0xFu) - dmn, ds * float((l0 >> (sh + 8u)) & 0xFu) - dmn,
-            ds * float((l1 >> sh) & 0xFu) - dmn, ds * float((l1 >> (sh + 8u)) & 0xFu) - dmn))
+        for [unroll_full] (c in range(4)) {
+            let w = w4[c]
+            let o = sbase + uint(c) * 4u
+            khr_a[o] = float16(ds * float((w >> sh) & 0xFu) - dmn)
+            khr_a[o + 1u] = float16(ds * float((w >> (sh + 8u)) & 0xFu) - dmn)
+            khr_a[o + 2u] = float16(ds * float((w >> (sh + 16u)) & 0xFu) - dmn)
+            khr_a[o + 3u] = float16(ds * float((w >> (sh + 24u)) & 0xFu) - dmn)
+        }
     }
+}
 
-    def body {   // nolint:STYLE038 — the whole-tile path at the 64-deep step, one register set
+//! the shipped tile, copied: the control row every lever's arm is timed against
+[vk_dispatch(name = "khrpx_ship", grid = "wgs", params = "wgs : int64")]
+class KhrPxShip : KhrPxW4Base {
+    [spirv_kernel(local_size_x = 256, name = "khrpx_ship_spv")]
+    def run {
+        body()
+    }
+}
+
+[vk_dispatch(name = "khrpx_f32a", grid = "wgs", params = "wgs : int64")]
+class KhrPxF32a : KhrPxW4Base {
+    [spirv_kernel(local_size_x = 256, name = "khrpx_f32a_spv")]
+    def run {
+        body_f32a()
+    }
+}
+
+[vk_dispatch(name = "khrpx_strip", grid = "wgs", params = "wgs : int64")]
+class KhrPxStrip : KhrPxW4Base {
+    [spirv_kernel(local_size_x = 256, name = "khrpx_strip_spv")]
+    def run {
+        body_strip()
+    }
+}
+
+[vk_dispatch(name = "khrpx_wg128", grid = "wgs", params = "wgs : int64")]
+class KhrPxWg128 : KhrPxW4Base {
+    [spirv_kernel(local_size_x = 128, name = "khrpx_wg128_spv")]
+    def run {   // nolint:STYLE038 — one measurement body, its sixteen accumulators named
         let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u
         let wblk0 = sched[rb]
         let row0 = sched[rb + 1u]
@@ -1039,115 +1097,105 @@ class KhrPxK64 : MoeCmBase {   //! its own base: the 32-step staging arrays woul
         barrier()
         let t0 = row0 + xt * 128u
         let m0 = wt * 128u
-        let tid = gl_LocalInvocationID.x
+        let srow = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
-        let srow = tid >> 1u
-        let skh = (tid & 1u) * 32u
-        let sbase = srow * 72u + skh
+        let sbase = srow * KHRPX_STRIDE
         let wrow = m0 + srow
-        let nbk = pa.n >> 8u
-        var acc0 : coopmatAcc_f32_16x16
-        var acc1 : coopmatAcc_f32_16x16
-        var acc2 : coopmatAcc_f32_16x16
-        var acc3 : coopmatAcc_f32_16x16
-        var acc4 : coopmatAcc_f32_16x16
-        var acc5 : coopmatAcc_f32_16x16
-        var acc6 : coopmatAcc_f32_16x16
-        var acc7 : coopmatAcc_f32_16x16
+        let wrow0 = (sg & 1u) * 64u
+        let trow0 = (sg >> 1u) * 64u
+        var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13 : coopmatAcc_f16_16x16
+        var acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
         var k = 0u
         while (k < pa.n) {
-            let kk = k + skh
-            let bcol = kk >> 8u
-            let e0 = kk - bcol * 256u
-            for (j in range(8)) {
-                let v4 = decode_v4(wq[wblk0 + wrow * nbk + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 4u))
-                let o = sbase + uint(j) * 4u
-                khr_a64[o] = v4.x
-                khr_a64[o + 1u] = v4.y
-                khr_a64[o + 2u] = v4.z
-                khr_a64[o + 3u] = v4.w
-            }
-            let xb = (t0 + srow) * pa.n + kk
-            for (j in range(32)) {
-                khr_b64[sbase + uint(j)] = xf16[xb + uint(j)]
-            }
+            let bcol = k >> 8u
+            let e0 = k - bcol * 256u
+            stage_a(wblk0, wrow, bcol, e0, sbase)
+            stage_a(wblk0, wrow, bcol, e0 + 16u, sbase + 16u)
+            let xb = (t0 + srow) * pa.n + k
+            stage_b(xb, sbase)
+            stage_b(xb + 16u, sbase + 16u)
             barrier()
-            for (ks in range(4)) {
+            for (ks in range(2)) {
                 let ko = uint(ks) * 16u
-                var a : coopmatA_f16_16x16
-                coopmatLoad(a, khr_a64, int(sg * 16u * 72u + ko), 72, 0)
-                var b : coopmatB_f16_16x16
-                coopmatLoad(b, khr_b64, int(ko), 72, 1)
-                acc0 = coopmatMulAdd(a, b, acc0)
-                coopmatLoad(b, khr_b64, int(16u * 72u + ko), 72, 1)
-                acc1 = coopmatMulAdd(a, b, acc1)
-                coopmatLoad(b, khr_b64, int(32u * 72u + ko), 72, 1)
-                acc2 = coopmatMulAdd(a, b, acc2)
-                coopmatLoad(b, khr_b64, int(48u * 72u + ko), 72, 1)
-                acc3 = coopmatMulAdd(a, b, acc3)
-                coopmatLoad(b, khr_b64, int(64u * 72u + ko), 72, 1)
-                acc4 = coopmatMulAdd(a, b, acc4)
-                coopmatLoad(b, khr_b64, int(80u * 72u + ko), 72, 1)
-                acc5 = coopmatMulAdd(a, b, acc5)
-                coopmatLoad(b, khr_b64, int(96u * 72u + ko), 72, 1)
-                acc6 = coopmatMulAdd(a, b, acc6)
-                coopmatLoad(b, khr_b64, int(112u * 72u + ko), 72, 1)
-                acc7 = coopmatMulAdd(a, b, acc7)
+                var a0, a1, a2, a3 : coopmatA_f16_16x16
+                coopmatLoad(a0, khr_a, int(wrow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a1, khr_a, int((wrow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a2, khr_a, int((wrow0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                coopmatLoad(a3, khr_a, int((wrow0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 0)
+                var b0, b1, b2, b3 : coopmatB_f16_16x16
+                coopmatLoad(b0, khr_b, int(trow0 * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b1, khr_b, int((trow0 + 16u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b2, khr_b, int((trow0 + 32u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                coopmatLoad(b3, khr_b, int((trow0 + 48u) * KHRPX_STRIDE + ko), int(KHRPX_STRIDE), 1)
+                acc00 = coopmatMulAdd(a0, b0, acc00)
+                acc01 = coopmatMulAdd(a0, b1, acc01)
+                acc02 = coopmatMulAdd(a0, b2, acc02)
+                acc03 = coopmatMulAdd(a0, b3, acc03)
+                acc10 = coopmatMulAdd(a1, b0, acc10)
+                acc11 = coopmatMulAdd(a1, b1, acc11)
+                acc12 = coopmatMulAdd(a1, b2, acc12)
+                acc13 = coopmatMulAdd(a1, b3, acc13)
+                acc20 = coopmatMulAdd(a2, b0, acc20)
+                acc21 = coopmatMulAdd(a2, b1, acc21)
+                acc22 = coopmatMulAdd(a2, b2, acc22)
+                acc23 = coopmatMulAdd(a2, b3, acc23)
+                acc30 = coopmatMulAdd(a3, b0, acc30)
+                acc31 = coopmatMulAdd(a3, b1, acc31)
+                acc32 = coopmatMulAdd(a3, b2, acc32)
+                acc33 = coopmatMulAdd(a3, b3, acc33)
             }
             barrier()
-            k += 64u
+            k += 32u
         }
-        let yb = t0 * pa.d + m0 + sg * 16u
-        coopmatStore(acc0, y, int(yb), int(pa.d), 1)
-        coopmatStore(acc1, y, int(yb + 16u * pa.d), int(pa.d), 1)
-        coopmatStore(acc2, y, int(yb + 32u * pa.d), int(pa.d), 1)
-        coopmatStore(acc3, y, int(yb + 48u * pa.d), int(pa.d), 1)
-        coopmatStore(acc4, y, int(yb + 64u * pa.d), int(pa.d), 1)
-        coopmatStore(acc5, y, int(yb + 80u * pa.d), int(pa.d), 1)
-        coopmatStore(acc6, y, int(yb + 96u * pa.d), int(pa.d), 1)
-        coopmatStore(acc7, y, int(yb + 112u * pa.d), int(pa.d), 1)
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "khrpx_k64_spv")]
-    def run {
-        body()
-    }
-}
-
-[vk_dispatch(name = "khrpx_inline", grid = "wgs", params = "wgs : int64")]
-class KhrPxInline : KhrPxBase {
-    @ssbo @binding = 0 @readonly wq32 : array<uint>   //! the k4 plane as words: one block = 64 lanes = 32 words
-
-    def override stage_a(wblk0, wrow, bcol, e0, sbase : uint) {
-        let bw = (wblk0 + wrow * (pa.n >> 8u) + bcol) * 32u
-        let srow = (wg_blk0 + wrow * (pa.n >> 8u) + bcol) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        for (j in range(4)) {
-            let e = e0 + uint(j) * 4u
-            let g = e >> 5u
-            let ee = e & 31u
-            let w = wq32[bw + ((g * 16u + (ee & 15u)) >> 2u)]   //! lanes li, li + 1 share one word (li even)
-            let l0 = w & 0xFFFFu
-            let l1 = w >> 16u
-            let sh = (ee >> 4u) * 4u
-            let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-            let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-            let o = sbase + uint(j) * 4u
-            khr_a[o] = float16(ds * float((l0 >> sh) & 0xFu) - dmn)
-            khr_a[o + 1u] = float16(ds * float((l0 >> (sh + 8u)) & 0xFu) - dmn)
-            khr_a[o + 2u] = float16(ds * float((l1 >> sh) & 0xFu) - dmn)
-            khr_a[o + 3u] = float16(ds * float((l1 >> (sh + 8u)) & 0xFu) - dmn)
-        }
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "khrpx_inline_spv")]
-    def run {
-        body()
+        let yb = (t0 + trow0) * pa.d + m0 + wrow0
+        var accf32 : coopmatAcc_f32_16x16
+        coopmatConvert(accf32, acc00)
+        coopmatStore(accf32, y, int(yb), int(pa.d), 1)
+        coopmatConvert(accf32, acc01)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc02)
+        coopmatStore(accf32, y, int(yb + 32u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc03)
+        coopmatStore(accf32, y, int(yb + 48u * pa.d), int(pa.d), 1)
+        coopmatConvert(accf32, acc10)
+        coopmatStore(accf32, y, int(yb + 16u), int(pa.d), 1)
+        coopmatConvert(accf32, acc11)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+        coopmatConvert(accf32, acc12)
+        coopmatStore(accf32, y, int(yb + 32u * pa.d + 16u), int(pa.d), 1)
+        coopmatConvert(accf32, acc13)
+        coopmatStore(accf32, y, int(yb + 48u * pa.d + 16u), int(pa.d), 1)
+        coopmatConvert(accf32, acc20)
+        coopmatStore(accf32, y, int(yb + 32u), int(pa.d), 1)
+        coopmatConvert(accf32, acc21)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
+        coopmatConvert(accf32, acc22)
+        coopmatStore(accf32, y, int(yb + 32u * pa.d + 32u), int(pa.d), 1)
+        coopmatConvert(accf32, acc23)
+        coopmatStore(accf32, y, int(yb + 48u * pa.d + 32u), int(pa.d), 1)
+        coopmatConvert(accf32, acc30)
+        coopmatStore(accf32, y, int(yb + 48u), int(pa.d), 1)
+        coopmatConvert(accf32, acc31)
+        coopmatStore(accf32, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
+        coopmatConvert(accf32, acc32)
+        coopmatStore(accf32, y, int(yb + 32u * pa.d + 48u), int(pa.d), 1)
+        coopmatConvert(accf32, acc33)
+        coopmatStore(accf32, y, int(yb + 48u * pa.d + 48u), int(pa.d), 1)
     }
 }
 
 let private KHR_ARMS = 8
+let private KHR_ARM_NAMES = fixed_array("nil   ", "ship  ", "dec4  ", "khr   ", "kq    ", "f32a  ", "strip ", "wg128 ")
+let private KHR_ARM_KHR = 3   //! the shipped class: the compared arms' reference and the CPU check's subject
+let private KHR_ARM_KQ = 4    //! the sdot4 kq tile, 32 x 32 where every other arm tiles 128 x 128
+let private KHR_ARM_COMPARED = fixed_array(false, true, true, false, false, true, true, true)   //! khr is the reference; nil stages constants and kq reads its own Q8 activation fixture: timing-only
+let private KHR_ARM_REL_BOUND = 2e-2lf   //! a compared arm passes within this relative difference of the shipped class; the copies read 0, the f32-accumulator arm 0.005-0.009
+
+//! the bisect arms stage and store whole 128-row tiles - only the two shipped tiles clamp token rows to the window's count, so only they run on a partial window
+def private khr_arm_clamps(v : int) : bool => v == KHR_ARM_KHR || v == KHR_ARM_KQ
 let private MMQ_ARMS = 5
+var private g_prof_arm = ""
+var private g_probe_exit = 0   //! the process exit code: a decline, a compared arm over its bound, or a profiler run that dispatched nothing
 
 //! the interleaved timing of one sweep's arms: after a two-submit warm-up each, every round times
 //! SUBMITS / ROUNDS submits of every arm in turn, and an arm's figure is its best round
@@ -1156,11 +1204,17 @@ def private sweep_best_us(var raws : array<VkCommandBuffer>) : array<double> {
     best |> resize(length(raws))
     for (raw, bv in raws, best) {
         bv = 1.0e30lf
+        if (raw == null) {
+            continue
+        }
         submit_wait(raw)
         submit_wait(raw)
     }
     for (_r in range(ROUNDS)) {
         for (raw, bv in raws, best) {
+            if (raw == null) {
+                continue
+            }
             let t0 = ref_time_ticks()
             for (_s in range(SUBMITS / ROUNDS)) {
                 submit_wait(raw)
@@ -1213,16 +1267,16 @@ def private khr_arm_set(v, fmt : int; wqd, wsd, scd, xfd, xqd, axsd, yd : uint64
     } elif (v == 1) {
         return set_khrpx_ship(bufs, sizes, gbits)
     } elif (v == 2) {
-        return set_khrpx_inline(bufs, sizes, gbits)
+        return set_khrpx_dec4(bufs, sizes, gbits)
     } elif (v == 3) {
         return set_kq_batch_k4_khr_cls(bufs, sizes, gbits)
     } elif (v == 5) {
-        return set_khrpx_nob(bufs, sizes, gbits)
+        return set_khrpx_f32a(bufs, sizes, gbits)
     } elif (v == 6) {
-        return set_khrpx_k64(bufs, sizes, gbits)
+        return set_khrpx_strip(bufs, sizes, gbits)
     }
     verify(v == 7, "khrx: the arm table has eight arms")
-    return set_khrpx_slab(bufs, sizes, gbits)
+    return set_khrpx_wg128(bufs, sizes, gbits)
 }
 
 def private khr_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
@@ -1231,23 +1285,105 @@ def private khr_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var
     } elif (v == 1) {
         enc_khrpx_ship(raw, hz, s, pc, wgs)
     } elif (v == 2) {
-        enc_khrpx_inline(raw, hz, s, pc, wgs)
+        enc_khrpx_dec4(raw, hz, s, pc, wgs)
     } elif (v == 3) {
         enc_kq_batch_k4_khr_cls(raw, hz, s, pc, wgs)
     } elif (v == 4) {
         kq_batch_cls_enc_for(fmt, false, raw, hz, s, pc, wgs)
     } elif (v == 5) {
-        enc_khrpx_nob(raw, hz, s, pc, wgs)
+        enc_khrpx_f32a(raw, hz, s, pc, wgs)
     } elif (v == 6) {
-        enc_khrpx_k64(raw, hz, s, pc, wgs)
+        enc_khrpx_strip(raw, hz, s, pc, wgs)
     } else {
         verify(v == 7, "khrx: the arm table has eight arms")
-        enc_khrpx_slab(raw, hz, s, pc, wgs)
+        enc_khrpx_wg128(raw, hz, s, pc, wgs)
+    }
+}
+
+//! the baseline arm against the CPU oracle over six corners of the output - eight weight rows by sixteen tokens at the
+//! first, middle and last rows, at the first and last tokens - on the kernel cell's bar: |gpu - cpu| <= 2e-2 |cpu| + 4e-3 max|y|
+def private khr_cpu_check(wqh, wsuh, xfh : array<uint>; y_gpu : array<float>; d, n, cnt : int) : tuple<samples : int; off : int; max_abs : double> {
+    let nsb = n / 256
+    var ymax = 0.0
+    for (v in y_gpu) {
+        ymax = max(ymax, abs(v))
+    }
+    var samples = 0
+    var off = 0
+    var max_abs = 0.0lf
+    for (r0 in [0, (d / 2) & ~7, d - 8]) {
+        for (t0 in [0, cnt - 16]) {
+            let recs = [uint(r0 * nsb), uint(t0), 16u, 0u]
+            var ys : array<float>
+            ys |> resize((t0 + 16) * 8)
+            k4f16_gemm_oracle(wqh, wsuh, xfh, recs, 1, n, 8, ys)
+            for (r in range(16)) {
+                for (c in range(8)) {
+                    let cpu = ys[(t0 + r) * 8 + c]
+                    let gpu = y_gpu[(t0 + r) * d + r0 + c]
+                    let diff = abs(gpu - cpu)
+                    samples++
+                    if (diff > 2e-2 * abs(cpu) + 4e-3 * ymax) {
+                        off++
+                    }
+                    max_abs = max(max_abs, double(diff))
+                }
+            }
+            delete ys
+        }
+    }
+    return (samples = samples, off = off, max_abs = max_abs)
+}
+
+//! one line per arm: its best rate, and for a compared arm its distance from the shipped class - bit-exact, within the bound,
+//! or OVER it (the exit code); the shipped class's output stays in `y_ref` for the CPU check
+def private khr_report(name : string; var raws : array<VkCommandBuffer>; best : array<double>; last_out : uint64; y_bytes : int64; flop : double; var y_ref : array<float>) {
+    read_back_y(raws[KHR_ARM_KHR], last_out, y_bytes, y_ref)
+    var y_arm : array<float>
+    for (v in range(KHR_ARMS)) {
+        if (raws[v] == null) {
+            print("{name} {KHR_ARM_NAMES[v]}: not run - a whole-tile arm on a partial window\n")
+            continue
+        }
+        let tf = flop / (best[v] * 1000000.0lf)
+        var tail = "timing-only"
+        if (KHR_ARM_COMPARED[v]) {
+            read_back_y(raws[v], last_out, y_bytes, y_arm)
+            let mrd = max_rel_diff(y_arm, y_ref)
+            if (mrd == 0.0lf) {
+                tail = "bit-exact vs khr"
+            } else {
+                let within = mrd <= KHR_ARM_REL_BOUND
+                tail = "max rel diff {mrd:.5f} vs khr ({within ? "within" : "OVER"} {KHR_ARM_REL_BOUND})"
+                if (!within) {
+                    g_probe_exit = 1
+                }
+            }
+        }
+        print("{name} {KHR_ARM_NAMES[v]}: {best[v] / 1000.0lf} ms/dispatch  {tf} TFLOP/s  {tail}\n")
+    }
+    delete y_arm
+}
+
+//! the khrprof mode: one submit per arm - or the one arm named - so a GPU profiler sees a single kernel's dispatches
+def private khr_prof_submit(name : string; var raws : array<VkCommandBuffer>) {
+    var submitted = 0
+    for (v in range(KHR_ARMS)) {
+        if (raws[v] != null && (g_prof_arm == "" || strip(KHR_ARM_NAMES[v]) == g_prof_arm)) {
+            submit_wait(raws[v])
+            submitted++
+        }
+    }
+    let which = g_prof_arm == "" ? "all {KHR_ARMS}" : g_prof_arm
+    print("{name}: one submit per arm ({which}), {DISPATCHES} dispatches each\n")
+    if (submitted == 0) {
+        print("khrprof: no arm named '{g_prof_arm}' - nothing was dispatched\n")
+        g_probe_exit = 1
     }
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def private run_khr_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one interleaved measurement sweep over eight arms
+def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {   // nolint:STYLE038 — one interleaved measurement sweep over eight arms, its compare and its CPU check
     let fmt = int(KqFmt.k4)
     let nsb = n / 256
     let totsb = d * nsb
@@ -1302,12 +1438,16 @@ def private run_khr_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038
         upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
         upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
         let yd2 = make_device_buf(y_bytes)   //! consecutive dispatches alternate outputs, as the served graph overlaps them
-        let vnames = fixed_array("nil   ", "ship  ", "inline", "khr   ", "kq    ", "nob   ", "k64   ", "slab  ")
-        let compared = fixed_array(false, true, true, false, false, false, true, true)   //! khr is the reference; nil stages constants, nob no B, and kq reads its own Q8 activation fixture: timing-only
+        let partial = cnt % MM_TILE != 0
         var raws : array<VkCommandBuffer>
         raws |> reserve(KHR_ARMS)
         for (v in range(KHR_ARMS)) {
-            let tile = v == 4 ? 32 : 128
+            if (partial && !khr_arm_clamps(v)) {
+                var none : VkCommandBuffer
+                raws |> push(none)
+                continue
+            }
+            let tile = v == KHR_ARM_KQ ? 32 : 128
             let wgs = ((cnt + tile - 1) / tile) * ((d + tile - 1) / tile)
             var sched : array<uint>
             sched |> resize(4 + wgs)
@@ -1333,23 +1473,21 @@ def private run_khr_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038
             vk_check(vkEndCommandBuffer(raw), null)
             raws |> push(raw)
         }
-        var best <- sweep_best_us(raws)
-        let last_out = DISPATCHES % 2 == 0 ? yd2 : yd
-        var y_ref : array<float>
-        read_back_y(raws[3], last_out, y_bytes, y_ref)
-        var y_arm : array<float>
-        for (v in range(KHR_ARMS)) {
-            let tf = flop / (best[v] * 1000000.0lf)
-            var tail = "timing-only"
-            if (compared[v]) {
-                read_back_y(raws[v], last_out, y_bytes, y_arm)
-                tail = "max rel diff {max_rel_diff(y_arm, y_ref):.5f} vs khr"
+        if (prof) {
+            khr_prof_submit(name, raws)
+        } else {
+            var best <- sweep_best_us(raws)
+            let last_out = DISPATCHES % 2 == 0 ? yd2 : yd
+            var y_ref : array<float>
+            khr_report(name, raws, best, last_out, y_bytes, flop, y_ref)
+            let cpu = khr_cpu_check(wqh, wsuh, xfh, y_ref, d, n, cnt)
+            print("{name} khr vs CPU oracle: {cpu.off} of {cpu.samples} sampled outputs off the cell bar, max |diff| {cpu.max_abs:.5f}\n")
+            if (cpu.off != 0) {
+                g_probe_exit = 1
             }
-            print("{name} {vnames[v]}: {best[v] / 1000.0lf} ms/dispatch  {tf} TFLOP/s  {tail}\n")
+            delete y_ref
+            delete best
         }
-        delete y_ref
-        delete y_arm
-        delete best
         delete raws
     }
     delete wqh
@@ -2548,6 +2686,7 @@ def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear 
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape dispatcher
+    g_probe_exit = 1   //! every early return below is a run with no result row; the sweeps clear it
     if (!ensure_q8_batch_cls()) {
         print("no Vulkan device\n")
         return
@@ -2569,14 +2708,28 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "mmqx") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
             var pf : KqFmt
             cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
+        } elif (a |> starts_with("khrprof:")) {
+            only = "khrprof"
+            g_prof_arm = slice(a, 8)
         }
     }
+    if (only == "khrprof" && g_prof_arm != "") {
+        var known = false
+        for (vn in KHR_ARM_NAMES) {
+            known = known || strip(vn) == g_prof_arm
+        }
+        if (!known) {
+            print("khrprof: no arm named '{g_prof_arm}' - the arms are {KHR_ARM_NAMES}\n")
+            return
+        }
+    }
+    g_probe_exit = 0
     if (only == "cm2:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
@@ -2669,12 +2822,20 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         return
     }
     if (only == "khrx") {
-        verify(ensure_khrpx_nil() && ensure_khrpx_ship() && ensure_khrpx_inline() && ensure_kq_batch_k4_khr_cls()
-            && ensure_khrpx_nob() && ensure_khrpx_k64() && ensure_khrpx_slab()
+        verify(ensure_khrpx_nil() && ensure_khrpx_ship() && ensure_khrpx_dec4() && ensure_kq_batch_k4_khr_cls()
+            && ensure_khrpx_f32a() && ensure_khrpx_strip() && ensure_khrpx_wg128()
             && kq_batch_cls_ensure(int(KqFmt.k4), false), "KHR probe pipelines must engage")
         run_khr_shape("q4k gate", 9728, 2560, 512)
         run_khr_shape("q4k down", 2560, 9728, 512)
         run_khr_shape("q4k q/wo", 4096, 2560, 512)
+        run_khr_shape("q4k gate 300", 9728, 2560, 300)   //! a partial window: the last token tile takes the edge store
+        return
+    }
+    if (only == "khrprof") {
+        verify(ensure_khrpx_nil() && ensure_khrpx_ship() && ensure_khrpx_dec4() && ensure_kq_batch_k4_khr_cls()
+            && ensure_khrpx_f32a() && ensure_khrpx_strip() && ensure_khrpx_wg128()
+            && kq_batch_cls_ensure(int(KqFmt.k4), false), "KHR probe pipelines must engage")
+        run_khr_shape("q4k gate", 9728, 2560, 512, true)
         return
     }
     if (only == "cm2x") {
@@ -2709,6 +2870,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
 }
 
 [export]
-def main {
+def main : int {
     run_probe()
+    return g_probe_exit
 }

@@ -3,9 +3,9 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
 document carries sections 2.2n-2.2o: the residency plan that sizes a whole model before a byte
 uploads, and the marks swap that lets one GPU slot serve many models. The prefill chain and byte
-stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p
-and 2.2ab, and the cooperative-matrix GEMM tiles under them are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m and 2.2q; the per-op tier's decode era is
+stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p,
+2.2ab, 2.2ac and 2.2ad, and the cooperative-matrix GEMM tiles under them are
+`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the per-op tier's decode era is
 `ARCHITECTURE_GPU_VULKAN_DECODE.md` sections 2.2r-2.2v. The GPU backend role table these
 sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
@@ -48,8 +48,8 @@ at 4.35 tok/s, and with 4 GiB more the device returned all-zero logits with no e
 manager never demotes the idle other process; ours is the victim, so the room left is the only
 honest input. A pinned `VRAM_MB` takes no headroom and reads no room: the number is the user's
 contract, and the plan fills it. Every rate in this section is a `benchmarks/lcpp_bench.das`
-tg128 reading (`-jit --for-debug-purposes`, `DASLLAMA_IMAGE=0`, the rig `plans/qwen_arc_board.md`
-states) on the zen2 box's RTX 5060 Ti 16 GB, driver 616.56.
+tg128 reading (`-jit --for-debug-purposes -r 5 -p 512 -n 128`, `DASLLAMA_IMAGE=0`,
+`DASLLAMA_GPU=1`, 16 threads) on the zen2 box's RTX 5060 Ti 16 GB, driver 616.56.
 
 **Where no OS answers, the auto arm's headroom is the larger of 2 GiB and 27% of the tier's
 cap.** That share keeps a 16 GB card's plan near 10.7 GB and leaves an 8 GB card's plan where

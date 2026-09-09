@@ -220,15 +220,21 @@ device-form CPU oracle
 an l/m/s cell in `tests/test_vulkan_kernels.das`. Payoff on the 1B: iq4xs pp512 5161 -> 15334,
 k3 5174 -> 14031 (0.90x / 0.80x llama.cpp's Vulkan, from 0.30x).
 
-The KHR instantiation rides the same decode (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l, the mm-mode
-paragraph): `<Fmt>KhrBatch : <Fmt>Cm2T` with `override KHR = true`, `override BN = 128u`, the
-four cm2 typedefs the uncalled tensor body still names (`BT`, `ACC`, `ACCW`, `FLO` - copy k4's),
-a `[vk_dispatch(name = "kq_batch_<fmt>_khr_cls", ...)]`, an arm in each of `khr_cls_ensure/set/enc`
+The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ae, its first
+paragraph): on the format template a `def override khr_stage16(blk, e0, sbase : uint) : void`
+under `static_if (KHR)` that writes the weight row's 16 values `e0 .. e0 + 16` of block `blk`
+into `khr_ao[sbase .. sbase + 8)` as f16 pairs, reading the plane as words - `wq4[...]` (`uint4`,
+one or two loads where the run's bytes are 16-byte aligned: the nibble and byte formats) or
+`wqw[...]` (`uint`, the byte-granular grid formats) - and the scale words once; the base declares
+it `abstract`, so a stamp without one fails to compile. The k4 override is the pattern; the
+decode methods' index math is the same, only read sixteen at a time. Then `<Fmt>KhrBatch :
+<Fmt>Cm2T` with `override KHR = true`, `override BN = 128u`, the four cm2 typedefs the uncalled
+tensor body still names (`BT`, `ACC`, `ACCW`, `FLO` - copy k4's), a
+`[vk_dispatch(name = "kq_batch_<fmt>_khr_cls", ...)]`, an arm in each of `khr_cls_ensure/set/enc`
 (`dasllama_vulkan_prefill.das`), and the format's kernel cell runs its fourth arm (`ml == 3`, tile
 128) wherever the device has KHR coopmat at subgroup 32 - on the 5060 Ti the same run covers the
-cm2 l/m/s tiles and the KHR tile. No new decode, no new oracle: the KHR arm calls the format's
-`decode`/`decode_v4` directly on the plane element (`decode_v4(wq[i], ...)` - never on a `let`
-copy of it, which runs at a third of the rate) and the `<fmt>f16_gemm_oracle` already holds it.
+cm2 l/m/s tiles and the KHR tile. No new oracle: the `<fmt>f16_gemm_oracle` already holds the KHR
+arm, whose f16 accumulation sits inside the cell's 2e-2 relative bar.
 
 ## 7. Metal - `dasllama_metal_kernels.das`, `_common`, `_prefill`, `_shapes`, `dasllama_layout.das`
 

@@ -135,7 +135,7 @@ def cm2_splitk_env : int64 {
 }
 
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
@@ -240,7 +240,7 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 let DN_MAX_DS = 128l
 
 //! The sequential scan's workgroup count for a head count and state width
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
 def dn_scan_wgs(nvh, ds : int64) : int64 {
     let cpg = 8l * (32l / (ds / 16l))
     return nvh * ((ds + cpg - 1l) / cpg)
@@ -2726,6 +2726,21 @@ def public vk_kernel_coverage() : table<string; int64> {
         out[g_pipe_names?[k] ?? "pipe_{k}"] += n
     }
     return <- out
+}
+
+//! One kernel's dispatch count under its census name - a class kernel's is its SPIR-V name, `<vk_dispatch name>_spv`.
+//! A name no kernel seeded panics, so a misspelt key cannot read as a zero count.
+def public vk_kernel_coverage_of(kernel : string) : int64 {
+    if (!key_exists(g_kernel_access, kernel)) {
+        panic("dasLLAMA vulkan tier: no seeded kernel named '{kernel}' in the coverage census")
+    }
+    var n = 0l
+    for (k, c in keys(g_vk_kcov), values(g_vk_kcov)) {
+        if ((g_pipe_names?[k] ?? "") == kernel) {
+            n += c
+        }
+    }
+    return n
 }
 
 def public vk_kernel_coverage_reset {

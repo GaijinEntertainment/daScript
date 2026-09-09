@@ -119,7 +119,7 @@ that a question answered for one backend has an obvious address in the other. Th
 
 **PSO lifecycle - the family shares ONE device and queue** (`metal_common_init`; the second-device
 question was surveyed and closed against; the tune-time race arms' transient queue is
-`ARCHITECTURE_MEASUREMENT.md` sec.2.21's). The decode PSO set lives as `g_pso_*` in
+`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` sec.2.21's). The decode PSO set lives as `g_pso_*` in
 `dasllama_metal_common`, is compiled by `metal_decode_init` in `dasllama_metal_kernels` and
 released by `metal_kernels_release` there - the kernels module owns its set's lifecycle even
 though the vars live with the device state. Prefill's `g_pf_pso_*` set is prefill-private end to
@@ -260,10 +260,10 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
 
-Sections 2.2j, 2.2p and 2.2ab, the Vulkan resident driver's prefill chain and byte stores, are
-`ARCHITECTURE_GPU_VULKAN.md`; its 2.2k-2.2m and 2.2q - the cooperative-matrix GEMM tiles - are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md`; its 2.2n-2.2o - the residency plan and the marks swap - are
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
+Sections 2.2j, 2.2p, 2.2ab, 2.2ac and 2.2ad, the Vulkan resident driver's prefill chain and
+byte stores, are `ARCHITECTURE_GPU_VULKAN.md`; its 2.2k-2.2m, 2.2q and 2.2ae - the cooperative-matrix
+GEMM tiles - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`; its 2.2n-2.2o - the residency plan and the
+marks swap - are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 

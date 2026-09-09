@@ -4852,7 +4852,7 @@ let KQ_ROWS_RACE_FORMATS <- [
 ]
 
 //! needs the decode PSOs - the caller runs `metal_decode_init` first
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : int; sform : KqRaceScaleForm) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = "kq_rows_{fmt}", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let n = 2048
@@ -4875,7 +4875,7 @@ def private race_kq_rows(queue : MetalCommandQueue?; fmt : KqFmt; qu_per_sb : in
     return res
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = "kq_mvb2_k4_r2", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let n = 2048
@@ -4947,7 +4947,7 @@ def private kq_race_verdict(var res : MetalTensorRaceResult; by_a, by_b : MetalB
 
 //! Decode-side tuner entry (the runtime.metal_tensor crown): the batch q8 GEMM families and the
 //! K-quant small-batch form per format.
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def metal_tensor_race_decode : array<MetalTensorRaceResult> {
     var results : array<MetalTensorRaceResult>
     results |> reserve(8 + length(KQ_ROWS_RACE_FORMATS))
@@ -5004,7 +5004,7 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
 
 //! A GEMV f4-slab twin race over the split-scale fixture: base (constant-table, rows/4) vs
 //! the f4-slab twin. Winner "tensor" = the twin takes the family crown.
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;   // nolint:STYLE038 - one-shot A/B race harness; buffers + PSOs stay live to the release tail
                               base_src, base_entry : string; base_fm : bool;
                               twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
@@ -9252,7 +9252,7 @@ class template MetalKqGemvIq2xxsFam {
 class MetalKqGemvIq2xxs : MetalKqGemvIq2xxsFam {
 }
 
-// the F4 twin serves only under the box's serving-confirm crown (ARCHITECTURE_MEASUREMENT.md sec.2.21)
+// the F4 twin serves only under the box's serving-confirm crown (ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md sec.2.21)
 [metal_dispatch(name = "enc_kq_iq2xxs_f4_c", pso = "g_pso_kq_iq2xxs_f4", tgmem = "MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq2xxsF4 : MetalKqGemvIq2xxsFam {
     override F4 = true

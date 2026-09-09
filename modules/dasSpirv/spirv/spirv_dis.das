@@ -153,7 +153,7 @@ def private memory_access_extra_words(mask : uint) : int {
 
 //! Downgrades a finished module for a device without the four-wide decode: the scalar callback
 //! serves every load afterwards. True when anything was removed.
-[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector")]
 def public strip_decode_vector(var words : array<uint>) : bool {
     var out : array<uint>
     out |> reserve(length(words))

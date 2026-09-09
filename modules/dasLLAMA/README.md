@@ -102,7 +102,7 @@ modules/dasLLAMA/
   ARCHITECTURE_GPU.md         # companion: the GPU backend role table, the backend asymmetries, the refuted kernel shapes
   ARCHITECTURE_GPU_PREFILL.md # companion: the Metal prefill driver's GEMM ladder
   ARCHITECTURE_GPU_VULKAN.md  # companion: the Vulkan resident driver - window chain, Q8 requant store, GEMV grid codebooks
-  ARCHITECTURE_GPU_VULKAN_GEMM.md # companion: the Vulkan GEMM tiles - cm2 decode lanes, tile pick, class pipelines, expert chain
+  ARCHITECTURE_GPU_VULKAN_GEMM.md # companion: the Vulkan GEMM tiles - cm2 decode lanes, tile pick, class pipelines, expert chain, the KHR kq tile
   ARCHITECTURE_GPU_VULKAN_RESIDENCY.md # companion: the Vulkan residency plan and the GPU-slot marks swap
   ARCHITECTURE_MEDIA.md       # companion: the encoder-tower, audio, ASR and vision charters
   ARCHITECTURE_IMAGE.md       # companion: the prepared-image (.dlim) rail

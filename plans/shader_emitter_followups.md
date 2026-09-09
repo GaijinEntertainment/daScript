@@ -35,21 +35,38 @@ the binding rules in `modules/REVIEW_SHADER_EMITTERS.md`. This file holds what i
    Done = the operators and `select` documented in `skills/daslang/`, the emitter heuristic gone,
    the census sites converted with the two measurements beside them.
 
-2. **`for [unroll]` unrolls at emission; a fixed-array local with constant indices becomes
+2. **`for [unroll_full]` unrolls at emission; a fixed-array local with constant indices becomes
    registers.** Found 2026-09-07 by the integer GEMM tile prototypes
    (`modules/dasLLAMA/harness/vk_gemm_probe.das -- mmqx`, `modules/dasLLAMA/followup_vulkan.md`
-   item 42): dasSpirv emits `for [unroll] (i in range(N))` as a loop carrying the `Unroll` loop
-   control and a `var acc : float[64]` local as a Function-storage `OpVariable` indexed by the
-   loop counter - a register block written as an array runs through local memory unless the
-   driver both unrolls and scalarizes, and the 5060 Ti's measured the same rate with the block
-   as named scalars, which says the shape, not the array, capped that kernel, but the array form
-   is what a 128-accumulator block (the reference exe's 4 x 32 register block) needs to be
-   writable at all. The plan: dasSpirv clones the body N times for a constant `range(N)` with the
-   counter bound to `OpConstant`, so every `arr[expr(i)]` chains a constant index (SROA-friendly in
-   every driver), and reports the unroll it performed in the same note channel item 1 gives the
-   branched operators; dasMetal needs nothing - MSL's `#pragma unroll` and the Metal compiler's
-   scalarization already do this, which is why the Metal GEMV twins carry `sumf : float[NR]`
-   arrays. Gate: a `tests/spirv` fixture pinning zero `OpLoopMerge` under an unrolled body and a
-   constant-index `OpAccessChain` per element, the kernel suite byte-identical elsewhere, and the
-   `mmqx` probe's ceiling twin re-measured with the block as an array.
-   Done = the fixture, the note, and the probe row.
+   item 42): a hinted loop leaves a `var acc : float[64]` local a Function-storage `OpVariable`
+   indexed by the loop counter unless the driver both unrolls and scalarizes, and a 128-accumulator
+   block - or a coopmat tile's sixteen accumulator fragments - is writable only as an array.
+   LANDED 2026-09-08 (`modules/dasSpirv/ARCHITECTURE_COOPMAT.md` section 3.6): `[unroll_full]` with
+   literal bounds emits the body once per copy with the induction variable an `OpConstant`, folds
+   the integer arithmetic on it so `acc[t * 16 + c]` chains a literal index, and refuses `break`,
+   `continue` and a runtime bound; `[unroll]` stays the driver's `Unroll` hint. The spelling is the
+   one the JIT (`llvm.loop.unroll.full`) and dasMetal (`#pragma clang loop unroll(full)`) already
+   lower, so a kernel source reads the same on every tier, and no shipped SPIR-V kernel changed (the
+   golden set is byte-identical). Fixture `ufor` in `tests/spirv` (zero `OpLoopMerge`, 23
+   constant-index chains, the fold assertions) and two fail-closed fixtures. Still owed: the note
+   channel - the unroll's copy count and item 1's per-operator note share one channel once item 1
+   lands (a `to_log` at `LOG_DEBUG` prints on every kernel compile, so nothing is reported today);
+   and the first kernel written on it, the KHR coopmat tile's accumulator block (item 42), whose
+   device cells are the runtime gate a fixture cannot be.
+   Done = the note, and the tile's cells green on the array form.
+   - Measured 2026-09-08 (moved here from `modules/dasSpirv/ARCHITECTURE.md`): the `Unroll` loop
+     control on `coopmatClamp`'s hand-emitted element walk is worth 34.2 TFLOP/s rolled against
+     57.8 unrolled, on the cm2 l-tile min-kernel, RTX 5060 Ti, driver 610.74.
+
+3. **Add the missing fixtures to the `tests/spirv` census roster.** Found 2026-09-08 by the KHR
+   tile round: 111 `*_words` fixture defs against 87 `add_set` rows in `test_census.das`, so
+   about 25 fixtures' opcodes are outside the census sum, and an opcode nothing declares can be
+   emitted unnoticed. `tests/spirv/REVIEW.md` binds a diff that adds a fixture (ruled 2026-09-08:
+   the rule lands in the KHR tile PR, the backlog is the follow-up PR); the gap itself is the
+   `REVIEW.das` candidate - a gate that reads the fixture defs and the roster and fails on the
+   difference.
+   Same PR: the suite's skip line `spirv-val not found locally; skipping (CI enforces)` claims a
+   CI check no lane makes - the run is local by rule (`modules/dasSpirv/REVIEW.md`), so the feint
+   text says so instead.
+   Done = the unrostered fixtures rostered, the suite green, the gate in place so the roster
+   cannot drift again, and the skip line true.

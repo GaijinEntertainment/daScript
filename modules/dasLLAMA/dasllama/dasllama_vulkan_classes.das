@@ -617,7 +617,7 @@ class DnBaGemm {
     @workgroup xs : float[528]                 // 16 positions x 32 k, stride 33 (bank-spread)
     @workgroup ws : float[528]                 // 16 rows x 32 k, stride 33
 
-    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
     def run {
         let tid = gl_LocalInvocationID.x
         let ne = 2u * pa.nvh
@@ -4682,6 +4682,8 @@ class template KqCm2BatchT : MoeCmBase {
     @ssbo @binding = 1 @role = "weight" ws : array<ST>    // the scale plane (q8: f16 per block; kq: 5 words per superblock)
     @ssbo @binding = 3 @role = "alias" xf16 : array<float16>    // f16 activation plane (the tensor loads' view)
     @ssbo @binding = 3 @role = "alias" xf16w4 : array<uint4>    // the same plane as 16-byte words: the KHR arm's activation stage
+    @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wq4 : array<uint4>
+    @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wqw : array<uint>
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                             // the region's block base, staged for the decode
     @template_constant BN : uint = 256u                   // the token column
@@ -4911,7 +4913,11 @@ class template KqCm2BatchT : MoeCmBase {
         coopmatStoreTensor(accw, y, ybase, tlo, t0, BN, m0, 128u, tv)
     }
 
-    def khr_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE037,STYLE038 — the staged k loop and its fast/edge store are one register set
+    //! a KHR stamp's format writes weight row `blk`'s 16 values e0 .. e0 + 16 into khr_ao[sbase .. sbase + 8) as f16 pairs, read from the plane's words; the cm2 stamps never call it
+    def abstract khr_stage16(blk, e0, sbase : uint) : void
+
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
+    def khr_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the staged k loop and its fast/edge store are one register set
         static_if (KHR) {   // the gated staging arrays exist on the KHR instantiations alone
         let t0 = row0 + xt * BN
         let m0 = wt * 128u
@@ -4926,33 +4932,15 @@ class template KqCm2BatchT : MoeCmBase {
         let sbase = srow * KHR_STRIDE + khalf * KHR_KHALF_WORDS
         let wrow_in_d = wrow < pa.d
         let trow_in_cnt = trow < cnt
-        var acc0 : coopmatAcc_f32_16x16
-        var acc1 : coopmatAcc_f32_16x16
-        var acc2 : coopmatAcc_f32_16x16
-        var acc3 : coopmatAcc_f32_16x16
-        var acc4 : coopmatAcc_f32_16x16
-        var acc5 : coopmatAcc_f32_16x16
-        var acc6 : coopmatAcc_f32_16x16
-        var acc7 : coopmatAcc_f32_16x16
+        let wrow0 = (sg & 1u) * 64u    //! the subgroup's first weight row of the tile's 128
+        let trow0 = (sg >> 1u) * 32u   //! the subgroup's first token row of the tile's 128
+        var acc : coopmatAcc_f16_16x16[8]   //! [r * 2 + c]: weight fragment r against token fragment c
         var k = k0
         while (k < k1) {
             let kk = k + skh
             if (wrow_in_d && kk < k1) {
                 let bcol = kk / BLKW
-                let e0 = kk - bcol * BLKW
-                static_if (DECV4) {
-                    for (j in range(4)) {
-                        let v4 = float4(decode_v4(wq[wblk0 + wrow * nbk + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 4u)))
-                        khr_ao[sbase + uint(j) * 2u] = packHalf2x16(v4.xy)
-                        khr_ao[sbase + uint(j) * 2u + 1u] = packHalf2x16(v4.zw)
-                    }
-                } else {
-                    for (j in range(int(KHR_KHALF_WORDS))) {
-                        let lo = decode(wq[wblk0 + wrow * nbk + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 2u))
-                        let hi = decode(wq[wblk0 + wrow * nbk + bcol], uint2(wrow, bcol), uint2(0u, e0 + uint(j) * 2u + 1u))
-                        khr_ao[sbase + uint(j)] = packHalf2x16(float2(float(lo), float(hi)))
-                    }
-                }
+                khr_stage16(wblk0 + wrow * nbk + bcol, kk - bcol * BLKW, sbase)
             } else {
                 for (j in range(int(KHR_KHALF_WORDS))) {
                     khr_ao[sbase + uint(j)] = 0u
@@ -4972,74 +4960,52 @@ class template KqCm2BatchT : MoeCmBase {
                 }
             }
             barrier()
-            for (ks in range(2)) {
+            for [unroll_full] (ks in range(2)) {
                 let ko = uint(ks) * 8u
-                var a : coopmatA_f16_16x16
-                coopmatLoad(a, khr_ao, int(sg * 16u * KHR_STRIDE + ko), int(KHR_STRIDE), 0)
-                var b : coopmatB_f16_16x16
-                coopmatLoad(b, khr_b, int(ko), int(KHR_STRIDE), 1)
-                acc0 = coopmatMulAdd(a, b, acc0)
-                coopmatLoad(b, khr_b, int(16u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
-                acc1 = coopmatMulAdd(a, b, acc1)
-                coopmatLoad(b, khr_b, int(32u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
-                acc2 = coopmatMulAdd(a, b, acc2)
-                coopmatLoad(b, khr_b, int(48u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
-                acc3 = coopmatMulAdd(a, b, acc3)
-                coopmatLoad(b, khr_b, int(64u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
-                acc4 = coopmatMulAdd(a, b, acc4)
-                coopmatLoad(b, khr_b, int(80u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
-                acc5 = coopmatMulAdd(a, b, acc5)
-                coopmatLoad(b, khr_b, int(96u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
-                acc6 = coopmatMulAdd(a, b, acc6)
-                coopmatLoad(b, khr_b, int(112u * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
-                acc7 = coopmatMulAdd(a, b, acc7)
+                var a : coopmatA_f16_16x16[4]
+                for [unroll_full] (r in range(4)) {
+                    coopmatLoad(a[r], khr_ao, int((wrow0 + uint(r) * 16u) * KHR_STRIDE + ko), int(KHR_STRIDE), 0)
+                }
+                for [unroll_full] (c in range(2)) {
+                    var b : coopmatB_f16_16x16
+                    coopmatLoad(b, khr_b, int((trow0 + uint(c) * 16u) * KHR_STRIDE + ko), int(KHR_STRIDE), 1)
+                    for [unroll_full] (r in range(4)) {
+                        acc[r * 2 + c] = coopmatMulAdd(a[r], b, acc[r * 2 + c])
+                    }
+                }
             }
             barrier()
             k += 32u
         }
-        let mrow0 = m0 + sg * 16u
         let tile_whole = m0 + 128u <= pa.d && xt * BN + BN <= cnt
         if (tile_whole) {
-            let yb = ybase + t0 * pa.d + mrow0
-            coopmatStore(acc0, y, int(yb), int(pa.d), 1)
-            coopmatStore(acc1, y, int(yb + 16u * pa.d), int(pa.d), 1)
-            coopmatStore(acc2, y, int(yb + 32u * pa.d), int(pa.d), 1)
-            coopmatStore(acc3, y, int(yb + 48u * pa.d), int(pa.d), 1)
-            coopmatStore(acc4, y, int(yb + 64u * pa.d), int(pa.d), 1)
-            coopmatStore(acc5, y, int(yb + 80u * pa.d), int(pa.d), 1)
-            coopmatStore(acc6, y, int(yb + 96u * pa.d), int(pa.d), 1)
-            coopmatStore(acc7, y, int(yb + 112u * pa.d), int(pa.d), 1)
+            let yb = ybase + (t0 + trow0) * pa.d + m0 + wrow0
+            var accf32 : coopmatAcc_f32_16x16
+            for [unroll_full] (r in range(4)) {
+                for [unroll_full] (c in range(2)) {
+                    coopmatConvert(accf32, acc[r * 2 + c])
+                    coopmatStore(accf32, y, int(yb + uint(c) * 16u * pa.d + uint(r) * 16u), int(pa.d), 1)
+                }
+            }
         } else {
             let lane = gl_SubgroupInvocationID
             let ob = sg * 256u
-            for (fi in range(8)) {
-                if (fi == 0) {
-                    coopmatStore(acc0, khr_ao, int(ob), 16, 0)
-                } elif (fi == 1) {
-                    coopmatStore(acc1, khr_ao, int(ob), 16, 0)
-                } elif (fi == 2) {
-                    coopmatStore(acc2, khr_ao, int(ob), 16, 0)
-                } elif (fi == 3) {
-                    coopmatStore(acc3, khr_ao, int(ob), 16, 0)
-                } elif (fi == 4) {
-                    coopmatStore(acc4, khr_ao, int(ob), 16, 0)
-                } elif (fi == 5) {
-                    coopmatStore(acc5, khr_ao, int(ob), 16, 0)
-                } elif (fi == 6) {
-                    coopmatStore(acc6, khr_ao, int(ob), 16, 0)
-                } else {
-                    coopmatStore(acc7, khr_ao, int(ob), 16, 0)
-                }
-                barrier()
-                for (e in range(8)) {
-                    let idx = lane * 8u + uint(e)
-                    let mr = mrow0 + idx / 16u
-                    let tc = xt * BN + uint(fi) * 16u + idx % 16u
-                    if (mr < pa.d && tc < cnt) {
-                        y[ybase + (row0 + tc) * pa.d + mr] = uint_bits_to_float(khr_ao[ob + idx])
+            var accf32 : coopmatAcc_f32_16x16
+            for [unroll_full] (r in range(4)) {
+                for [unroll_full] (c in range(2)) {
+                    coopmatConvert(accf32, acc[r * 2 + c])
+                    coopmatStore(accf32, khr_ao, int(ob), 16, 0)
+                    barrier()
+                    for (e in range(8)) {
+                        let idx = lane * 8u + uint(e)
+                        let mr = m0 + wrow0 + uint(r) * 16u + idx / 16u
+                        let tc = xt * BN + trow0 + uint(c) * 16u + idx % 16u
+                        if (mr < pa.d && tc < cnt) {
+                            y[ybase + (row0 + tc) * pa.d + mr] = uint_bits_to_float(khr_ao[ob + idx])
+                        }
                     }
+                    barrier()
                 }
-                barrier()
             }
         }
         }
@@ -5065,6 +5031,23 @@ class template K4Cm2T : KqCm2BatchT {
     typedef BLK = VkK4Blk
     typedef ST = uint
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let sh = ((e0 >> 4u) & 1u) * 4u   //! the low or the high nibbles of sub-block g's 16 bytes
+            let w4 = wq4[blk * 8u + g]
+            let srow = blk * 5u
+            let dm = unpackHalf2x16(ws[srow])
+            let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+            let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+            for [unroll_full] (c in range(4)) {
+                let w = w4[c] >> sh
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(w & 0xFu) - dmn, ds * float((w >> 8u) & 0xFu) - dmn))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float((w >> 16u) & 0xFu) - dmn, ds * float((w >> 24u) & 0xFu) - dmn))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
@@ -5102,6 +5085,31 @@ class template K6Cm2T : KqCm2BatchT {
     typedef BLK = VkK6Blk
     typedef ST = uint
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let bu = e0 >> 5u
+            let hh = (e0 >> 4u) & 1u
+            let lw4 = wq4[blk * 12u + bu]                            //! the low-nibble bytes bu * 16 + j
+            let hw4 = wq4[blk * 12u + 8u + (bu >> 2u) * 2u + hh]   //! the high-2-bit bytes (bu >> 2) * 32 + hh * 16 + j
+            let ls = hh * 4u
+            let hs = (bu & 3u) * 2u
+            let srow = blk * 5u
+            let sidx = e0 >> 4u
+            let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+            let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
+            for [unroll_full] (c in range(4)) {
+                let lw = lw4[c] >> ls
+                let hw = hw4[c] >> hs
+                let q0 = int((lw & 0xFu) | ((hw & 3u) << 4u)) - 32
+                let q1 = int(((lw >> 8u) & 0xFu) | (((hw >> 8u) & 3u) << 4u)) - 32
+                let q2 = int(((lw >> 16u) & 0xFu) | (((hw >> 16u) & 3u) << 4u)) - 32
+                let q3 = int(((lw >> 24u) & 0xFu) | (((hw >> 24u) & 3u) << 4u)) - 32
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(q0), ds * float(q1)))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(q2), ds * float(q3)))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK6Blk; bc, cib : uint2) : float16 {
@@ -5153,6 +5161,30 @@ class template K5Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let h = (e0 >> 4u) & 1u
+            let sh = h * 4u
+            let w4 = wq4[blk * 10u + g]
+            let hw = wq4[blk * 10u + 8u + (g >> 2u)][int(g & 3u)] >> sh   //! sub-block g's four 5th-bit bytes; byte c holds j = 4c .. 4c + 3 at bit (j & 3) + h * 4
+            let srow = blk * 5u
+            let dm = unpackHalf2x16(ws[srow])
+            let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+            let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+            for [unroll_full] (c in range(4)) {
+                let w = w4[c] >> sh
+                let hb = hw >> (uint(c) * 8u)
+                let q0 = (w & 0xFu) | ((hb & 1u) << 4u)
+                let q1 = ((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
+                let q2 = ((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u)
+                let q3 = ((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(q0) - dmn, ds * float(q1) - dmn))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(q2) - dmn, ds * float(q3) - dmn))
+            }
+        }
+    }
+
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK5Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
@@ -5201,6 +5233,21 @@ class template Q40Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let sh = ((e0 >> 4u) & 1u) * 4u
+            let w4 = wq4[blk * 8u + g]
+            let dp = unpackHalf2x16(ws[blk * 5u + (g >> 1u)])
+            let d = (g & 1u) == 0u ? dp.x : dp.y
+            for [unroll_full] (c in range(4)) {
+                let w = w4[c] >> sh
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * (float(w & 0xFu) - 8.0), d * (float((w >> 8u) & 0xFu) - 8.0)))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * (float((w >> 16u) & 0xFu) - 8.0), d * (float((w >> 24u) & 0xFu) - 8.0)))
+            }
+        }
+    }
+
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
@@ -5236,6 +5283,22 @@ class template Iq4xsCm2T : KqCm2BatchT {
     typedef ST = uint
     override IQLUT = true
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let sh = ((e0 >> 4u) & 1u) * 4u
+            let w4 = wq4[blk * 8u + g]
+            let srow = blk * 2u
+            let w0 = ws[srow]
+            let ds = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, ws[srow + 1u], g))
+            for [unroll_full] (c in range(4)) {
+                let w = w4[c] >> sh
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(iq4lut[int(w & 0xFu)]), ds * float(iq4lut[int((w >> 8u) & 0xFu)])))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(iq4lut[int((w >> 16u) & 0xFu)]), ds * float(iq4lut[int((w >> 24u) & 0xFu)])))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
@@ -5274,6 +5337,30 @@ class template K3Cm2T : KqCm2BatchT {
     typedef BLK = VkK3Blk
     typedef ST = uint
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let l0 = e0 & 31u
+            let qw4 = wq4[blk * 6u + (g >> 2u) * 2u + (l0 >> 4u)]   //! the qs bytes (g >> 2) * 32 + l
+            let hw4 = wq4[blk * 6u + 4u + (l0 >> 4u)]               //! the hmask bytes l
+            let qs2 = (g & 3u) * 2u
+            let srow = blk * 5u
+            let sidx = e0 >> 4u
+            let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+            let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
+            for [unroll_full] (c in range(4)) {
+                let qw = qw4[c] >> qs2
+                let hw = hw4[c] >> g
+                let q0 = int(qw & 3u) - ((hw & 1u) == 0u ? 4 : 0)
+                let q1 = int((qw >> 8u) & 3u) - (((hw >> 8u) & 1u) == 0u ? 4 : 0)
+                let q2 = int((qw >> 16u) & 3u) - (((hw >> 16u) & 1u) == 0u ? 4 : 0)
+                let q3 = int((qw >> 24u) & 3u) - (((hw >> 24u) & 1u) == 0u ? 4 : 0)
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(q0), ds * float(q1)))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(q2), ds * float(q3)))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK3Blk; bc, cib : uint2) : float16 {
@@ -5321,6 +5408,24 @@ class template K2Cm2T : KqCm2BatchT {
     typedef ST = uint
     override DECV4 = true
 
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 4u
+            let qw4 = wq4[blk * 4u + (g >> 3u) * 2u + (g & 1u)]   //! the qs bytes (g >> 3) * 32 + (g & 1) * 16 + l
+            let qs2 = ((g >> 1u) & 3u) * 2u
+            let srow = blk * 5u
+            let dm = unpackHalf2x16(ws[srow])
+            let pb = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
+            let ds = dm.x * float(pb & 15u)
+            let dmn = dm.y * float(pb >> 4u)
+            for [unroll_full] (c in range(4)) {
+                let qw = qw4[c] >> qs2
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(qw & 3u) - dmn, ds * float((qw >> 8u) & 3u) - dmn))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float((qw >> 16u) & 3u) - dmn, ds * float((qw >> 24u) & 3u) - dmn))
+            }
+        }
+    }
+
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK2Blk; bc, cib : uint2) : float16 {
         let e = cib.y
@@ -5360,6 +5465,31 @@ class template Iq3sCm2T : KqCm2BatchT {
     typedef ST = uint
     override IQ3GRID = true
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let r0 = e0 & 31u
+            let bw = blk * 26u
+            let qsw = wqw[bw + g * 2u + (r0 >> 4u)]                             //! the four grid-index bytes g * 8 + (r >> 2)
+            let qh = (wqw[bw + 16u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu   //! the ninth-bit byte g
+            let sgw = wqw[bw + 18u + g] >> ((r0 >> 3u) * 8u)                   //! the two sign bytes g * 4 + (r >> 3) in the low half
+            let srow = blk * 2u
+            let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
+            for [unroll_full] (i in range(4)) {
+                let wj = (r0 >> 2u) + uint(i)
+                let qb = (qsw >> (uint(i) * 8u)) & 0xFFu
+                let gw = iq3s_gridc[qb | ((qh << (8u - wj)) & 256u)]
+                let sgn = sgw >> ((uint(i) >> 1u) * 8u + (uint(i) & 1u) * 4u)
+                let g0 = float(gw & 0xFFu)
+                let g1 = float((gw >> 8u) & 0xFFu)
+                let g2 = float((gw >> 16u) & 0xFFu)
+                let g3 = float(gw >> 24u)
+                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
+                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3sBlk; bc, cib : uint2) : float16 {
@@ -5412,6 +5542,33 @@ class template Iq3xxsCm2T : KqCm2BatchT {
     typedef ST = uint
     override IQ3XGRID = true
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let r0 = e0 & 31u
+            let bw = blk * 24u
+            let qsw = wqw[bw + g * 2u + (r0 >> 4u)]   //! the four grid-index bytes g * 8 + (r >> 2)
+            let aux = wqw[bw + 16u + g]               //! sub-block g's aux32: four 7-bit ksigns indices and the ls nibble
+            let srow = blk * 2u
+            let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
+            for [unroll_full] (i in range(4)) {
+                let l = (r0 >> 3u) + (uint(i) >> 1u)
+                let sidx = (aux >> (7u * l)) & 127u
+                var tt = sidx ^ (sidx >> 4u)
+                tt = tt ^ (tt >> 2u)
+                tt = tt ^ (tt >> 1u)
+                let sgn = (sidx | ((tt & 1u) << 7u)) >> ((uint(i) & 1u) * 4u)
+                let gw = iq3x_gridc[(qsw >> (uint(i) * 8u)) & 0xFFu]
+                let g0 = float(gw & 0xFFu)
+                let g1 = float((gw >> 8u) & 0xFFu)
+                let g2 = float((gw >> 16u) & 0xFFu)
+                let g3 = float(gw >> 24u)
+                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
+                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3xxsBlk; bc, cib : uint2) : float16 {
@@ -5479,6 +5636,21 @@ class template Iq4nlCm2T : KqCm2BatchT {
     override IQLUT = true
     override DECV4 = true
 
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let sh = ((e0 >> 4u) & 1u) * 4u
+            let w4 = wq4[blk * 8u + g]
+            let dp = unpackHalf2x16(ws[blk * 5u + (g >> 1u)])
+            let d = (g & 1u) == 0u ? dp.x : dp.y
+            for [unroll_full] (c in range(4)) {
+                let w = w4[c] >> sh
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)])))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * float(iq4lut[int((w >> 16u) & 0xFu)]), d * float(iq4lut[int((w >> 24u) & 0xFu)])))
+            }
+        }
+    }
+
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK4Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
@@ -5514,6 +5686,34 @@ class template Iq2sCm2T : KqCm2BatchT {
     typedef ST = uint
     override IQ2SGRID = true
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let r0 = e0 & 31u
+            let l0 = r0 >> 3u
+            let bw = blk * 18u
+            let qsw = wqw[bw + g] >> (l0 * 8u)                                //! the grid-index bytes g * 4 + l, this run's two in the low half
+            let sgw = wqw[bw + 8u + g] >> (l0 * 8u)                           //! the sign bytes 32 + g * 4 + l
+            let qh = (wqw[bw + 16u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu   //! the qh byte g
+            let srow = blk * 5u
+            let si = g * 2u + (r0 >> 4u)
+            let ds = unpackHalf2x16(ws[srow]).x * float((ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+            for [unroll_full] (i in range(4)) {
+                let li = uint(i) >> 1u
+                let l = l0 + li
+                let qb = (qsw >> (li * 8u)) & 0xFFu
+                let sgn = (sgw >> (li * 8u + (uint(i) & 1u) * 4u)) & 0xFu
+                let gw = iq2s_gridc[(qb | ((qh << (8u - 2u * l)) & 0x300u)) * 2u + (uint(i) & 1u)]
+                let g0 = float(gw & 0xFFu)
+                let g1 = float((gw >> 8u) & 0xFFu)
+                let g2 = float((gw >> 16u) & 0xFFu)
+                let g3 = float(gw >> 24u)
+                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
+                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2sBlk; bc, cib : uint2) : float16 {
@@ -5568,6 +5768,30 @@ class template Iq2xsCm2T : KqCm2BatchT {
     override IQ2XSGRID = true
     override DECV4 = true
 
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let qw = wqw[blk * 16u + (e0 >> 4u)]   //! two u16 qs words: the run's 8-value windows
+            let srow = blk * 5u
+            let si = e0 >> 4u
+            let ds = unpackHalf2x16(ws[srow]).x * float((ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+            for [unroll_full] (i in range(4)) {
+                let w16 = (qw >> ((uint(i) >> 1u) * 16u)) & 0xFFFFu
+                let sidx = w16 >> 9u
+                var tt = sidx ^ (sidx >> 4u)
+                tt = tt ^ (tt >> 2u)
+                tt = tt ^ (tt >> 1u)
+                let sgn = (sidx | ((tt & 1u) << 7u)) >> ((uint(i) & 1u) * 4u)
+                let gw = iq2xs_gridc[(w16 & 511u) * 2u + (uint(i) & 1u)]
+                let g0 = float(gw & 0xFFu)
+                let g1 = float((gw >> 8u) & 0xFFu)
+                let g2 = float((gw >> 16u) & 0xFFu)
+                let g3 = float(gw >> 24u)
+                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
+                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+            }
+        }
+    }
+
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
@@ -5620,6 +5844,35 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     typedef ST = uint
     override IQ2XXSGRID = true
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let g = e0 >> 5u
+            let l0 = (e0 & 31u) >> 3u
+            let bw = blk * 16u
+            let qsw = wqw[bw + g * 2u] >> (l0 * 8u)   //! sub-block g's four grid-index bytes, this run's two in the low half
+            let aux = wqw[bw + g * 2u + 1u]           //! its aux32: four 7-bit ksigns indices and the ls nibble
+            let srow = blk * 2u
+            let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
+            for [unroll_full] (i in range(4)) {
+                let li = uint(i) >> 1u
+                let l = l0 + li
+                let qb = (qsw >> (li * 8u)) & 0xFFu
+                let sidx = (aux >> (7u * l)) & 127u
+                var tt = sidx ^ (sidx >> 4u)
+                tt = tt ^ (tt >> 2u)
+                tt = tt ^ (tt >> 1u)
+                let sgn = (sidx | ((tt & 1u) << 7u)) >> ((uint(i) & 1u) * 4u)
+                let gw = iq2xxs_gridc[qb * 2u + (uint(i) & 1u)]
+                let g0 = float(gw & 0xFFu)
+                let g1 = float((gw >> 8u) & 0xFFu)
+                let g2 = float((gw >> 16u) & 0xFFu)
+                let g3 = float(gw >> 24u)
+                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
+                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xxsBlk; bc, cib : uint2) : float16 {

@@ -220,6 +220,17 @@ struct LoopTargets {
     cont  : uint
 }
 
+//! the targets a `for [unroll_full]` body runs under: no merge and no continue block exist
+def private unrolled_loop_targets : LoopTargets => LoopTargets(merge = 0u, cont = 0u)
+def private is_unrolled_body(lt : LoopTargets) : bool => lt.merge == 0u
+
+struct UnrollRewind {
+    funcs_len  : int
+    decor_len  : int
+    errs_len   : int
+    terminated : bool
+}
+
 // ===== per-control-flow-node label ids (visitor side-maps; allocated to match the hand-walker's
 // linear id order so the emitted blob stays byte-identical) =====
 struct IteIds {
@@ -534,7 +545,7 @@ def private is_subpass_input_type(t : TypeDecl?) : bool {
 }
 
 // The caller already verified the "coopmatWg" prefix. One peek_data pass; `good` fails the parse closed.
-[arch(at="../ARCHITECTURE.md#cm2-tile-markers")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-tile-markers")]
 def private coopmat_wg_info(n : string) : tuple<ok : bool; is_float : bool; signed : bool; comp_width : uint; rows : uint; cols : uint; use : uint> {
     var ok = false
     var isf = false
@@ -3009,7 +3020,8 @@ def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, 
 // SPIR-V requires every Function-storage OpVariable to be among the first instructions of the
 // function's first block. So we pre-scan the whole body (one walk, all scopes — SPIR-V locals are
 // function-scoped, not block-scoped) BEFORE emitting any body code, declaring an OpVariable for each
-// mutable local (`var`) and loop-induction variable. Reads/writes then resolve to OpLoad/OpStore.
+// mutable local (`var`) and the induction variable of a rolled loop. Reads/writes then resolve to OpLoad/OpStore.
+[arch(at="../ARCHITECTURE_COOPMAT.md#unroll-full")]
 def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; var errors : array<string>) {
     // A REFERENCE local aliases storage that already has an address, so it gets no OpVariable of its
     // own: visitExprLetVariable binds it to the pointer its initializer lowered to. Declaring one
@@ -3059,6 +3071,15 @@ def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : Variab
         ctx.local_vars |> insert(intptr(v), LocalVar(ptr_id = cmid, value_type = cmt))
         return
     }
+    if (bt == Type.tFixedArray && v._type.firstType != null && coopmat_info(v._type.firstType).ok) {
+        let elt = coopmat_type_of(m, v._type.firstType)
+        let arrt = type_array(m, elt, v._type.fixedDim)
+        let arrpt = type_pointer(m, SpvStorageClass.Function, arrt)
+        let arrid = alloc_id(m)
+        emit(m, SEC_FUNCS, SpvOp.Variable, arrpt, arrid, uint(SpvStorageClass.Function))
+        ctx.local_vars |> insert(intptr(v), LocalVar(ptr_id = arrid, value_type = arrt))
+        return
+    }
     // a matrix is a tHandle, so numeric_info does not see it -- emit_type lowers it to OpTypeMatrix,
     // which is a perfectly good Function-storage pointee (glslang gives a local `mat4` an OpVariable too)
     if (!is_emittable_value_type(v._type) && bt != Type.tFixedArray && bt != Type.tStructure &&
@@ -3081,6 +3102,7 @@ def private declare_local_var(var m : SpirvModule; var ctx : EmitCtx; v : Variab
     ctx.local_vars |> insert(intptr(v), LocalVar(ptr_id = pid, value_type = vt))
 }
 
+[arch(at="../ARCHITECTURE_COOPMAT.md#unroll-full")]
 def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : ExpressionPtr; var errors : array<string>) {
     if (e == null) return
     let blk = e ?as ExprBlock
@@ -3114,8 +3136,10 @@ def private collect_locals(var m : SpirvModule; var ctx : EmitCtx; e : Expressio
     }
     let fr = e ?as ExprFor
     if (fr != null) {
-        for (fv in fr.iteratorVariables) {
-            declare_local_var(m, ctx, fv, errors)
+        if (!unrolls_at_emission(fr)) {
+            for (fv in fr.iteratorVariables) {
+                declare_local_var(m, ctx, fv, errors)
+            }
         }
         collect_locals(m, ctx, fr.body, errors)
         return
@@ -3157,6 +3181,116 @@ def private const_int_for(var m : SpirvModule; cls : int; v : int) : uint {
     return const_int(m, v)
 }
 
+def private has_loop_hint(args : AnnotationArgumentList; name : string) : bool {
+    for (a in args) {
+        if (a.name == name) return true
+    }
+    return false
+}
+
+[arch(at="../ARCHITECTURE_COOPMAT.md#unroll-full")]
+def private literal_int_of(e : ExpressionPtr) : tuple<ok : bool; value : int> {
+    let ci = e ?as ExprConstInt
+    if (ci != null) return (ok = true, value = ci.value)
+    let cu = e ?as ExprConstUInt
+    if (cu != null) return (ok = true, value = int(cu.value))
+    let ce = get_const_expr(compiling_program(), e)
+    let fi = ce ?as ExprConstInt
+    if (fi != null) return (ok = true, value = fi.value)
+    let fu = ce ?as ExprConstUInt
+    if (fu != null) return (ok = true, value = int(fu.value))
+    return (ok = false, value = 0)
+}
+
+//! the induction variable of such a loop is a constant in every copy: it gets no OpVariable
+def private unrolls_at_emission(fr : ExprFor?) : bool => has_loop_hint(fr.annotations, "unroll_full") && length(fr.sources) == 1 && literal_range_of(fr.sources[0]).ok
+
+[arch(at="../ARCHITECTURE_COOPMAT.md#unroll-full")]
+def private literal_range_of(src : ExpressionPtr) : tuple<ok : bool; lo : int; hi : int> {
+    let cr = src ?as ExprConstRange
+    if (cr != null) {
+        let ft = unsafe(reinterpret<int2>(cr.value))
+        return (ok = true, lo = ft.x, hi = ft.y)
+    }
+    let cur = src ?as ExprConstURange
+    if (cur != null) {
+        let ft = unsafe(reinterpret<uint2>(cur.value))
+        return (ok = true, lo = int(ft.x), hi = int(ft.y))
+    }
+    let call = src ?as ExprCall
+    if (call == null || ("{call.name}" != "range" && "{call.name}" != "urange")) return (ok = false, lo = 0, hi = 0)
+    let na = length(call.arguments)
+    if (na != 1 && na != 2) return (ok = false, lo = 0, hi = 0)
+    var lo = 0
+    if (na == 2) {
+        let lv = literal_int_of(call.arguments[0])
+        if (!lv.ok) return (ok = false, lo = 0, hi = 0)
+        lo = lv.value
+    }
+    let hv = literal_int_of(call.arguments[na - 1])
+    if (!hv.ok) return (ok = false, lo = 0, hi = 0)
+    return (ok = true, lo = lo, hi = hv.value)
+}
+
+def private fold_uint_op(op : string; ua, ub : uint) : tuple<ok : bool; value : int64> {
+    var r = 0u
+    if (op == "+") {
+        r = ua + ub
+    } elif (op == "-") {
+        r = ua - ub
+    } elif (op == "*") {
+        r = ua * ub
+    } elif (op == "/" || op == "%") {
+        if (ub == 0u) return (ok = false, value = 0l)
+        r = op == "/" ? ua / ub : ua % ub
+    } elif (op == "<<" || op == ">>") {
+        if (ub >= 32u) return (ok = false, value = 0l)
+        r = op == "<<" ? ua << ub : ua >> ub
+    } elif (op == "&") {
+        r = ua & ub
+    } elif (op == "|") {
+        r = ua | ub
+    } elif (op == "^") {
+        r = ua ^ ub
+    } else {
+        return (ok = false, value = 0l)
+    }
+    return (ok = true, value = int64(r))
+}
+
+let private INT32_MIN = -2147483647 - 1
+
+def private fold_sint_op(op : string; ia, ib : int) : tuple<ok : bool; value : int64> {
+    var r = 0
+    if (op == "+") {
+        r = ia + ib
+    } elif (op == "-") {
+        r = ia - ib
+    } elif (op == "*") {
+        r = ia * ib
+    } elif (op == "/" || op == "%") {
+        if (ib == 0 || (ib == -1 && ia == INT32_MIN)) return (ok = false, value = 0l)
+        r = op == "/" ? ia / ib : ia % ib
+    } elif (op == "<<" || op == ">>") {
+        if (ib < 0 || ib >= 32) return (ok = false, value = 0l)
+        r = op == "<<" ? ia << ib : ia >> ib
+    } elif (op == "&") {
+        r = ia & ib
+    } elif (op == "|") {
+        r = ia | ib
+    } elif (op == "^") {
+        r = ia ^ ib
+    } else {
+        return (ok = false, value = 0l)
+    }
+    return (ok = true, value = int64(r))
+}
+
+def private fold_int_op(op : string; cls : int; a, b : int64) : tuple<ok : bool; value : int64> {
+    if (cls == 1) return fold_uint_op(op, uint(a), uint(b))
+    return fold_sint_op(op, int(a), int(b))
+}
+
 // ===== SpirvEmit : AstVisitor =====
 // The body-codegen visitor (modeled on llvm_jit). generate_spirv builds the module scaffold (caps /
 // entry-point / OpFunction / trailing return) and drives this visitor over fn.body for all codegen.
@@ -3180,6 +3314,10 @@ class SpirvEmit : AstVisitor {
     lazy_ids : table<uint64; IteIds>     //!< intptr(ExprOp3 / ExprOp2 &&,||) lowered as a branch (ctx.lazy_temps) -> its labels
     loop_ids : table<uint64; LoopIds>    // intptr(ExprWhile/ExprFor) -> its 5 loop-skeleton labels
     for_src : table<uint64>              // for-source range() call ptrs to intercept in visitExprCall (6.3)
+    unroll_binds  : table<uint64; uint>       //!< intptr(Variable) of an unrolled induction variable -> the OpConstant of the copy being emitted
+    unroll_consts : table<uint; int64>        //!< OpConstant ids an unrolled copy derives (the induction constant, the folds on it) -> value
+    lit_consts    : table<uint; int64>        //!< every 32-bit integer literal's OpConstant id -> value: the operand a fold may take beside a derived one
+    unroll_rewinds : table<uint64; UnrollRewind>   //!< intptr(ExprFor) unrolled at emission -> the emitter state the visitor's own walk of its body rewinds to
     copy_dst : uint64                    // intptr(ExprCopy.left) while that destination subtree is walked
     suppress_bounds_arg : bool = false   // next node is a `.[]` call's __context__/__lineinfo__ tail — elide
     suppress_fn_addr : bool = false      // next node is coopmatLoadTensorDecode's trailing @@decode — read structurally by the cm2 load arm, not lowered
@@ -3528,12 +3666,16 @@ class SpirvEmit : AstVisitor {
     // ----- constants -----
     def override visitExprConstInt(var expr : ExprConstInt?) : ExpressionPtr {
         var bm & = unsafe(*m)
-        e2id[intptr(expr)] = const_int(bm, expr.value)
+        let cid = const_int(bm, expr.value)
+        lit_consts[cid] = int64(expr.value)
+        e2id[intptr(expr)] = cid
         return expr
     }
     def override visitExprConstUInt(var expr : ExprConstUInt?) : ExpressionPtr {
         var bm & = unsafe(*m)
-        e2id[intptr(expr)] = const_uint(bm, expr.value)
+        let cid = const_uint(bm, expr.value)
+        lit_consts[cid] = int64(expr.value)
+        e2id[intptr(expr)] = cid
         return expr
     }
     def override visitExprConstFloat(var expr : ExprConstFloat?) : ExpressionPtr {
@@ -3646,6 +3788,10 @@ class SpirvEmit : AstVisitor {
             let vk = intptr(expr.variable)
             if (ctx.self_arg != 0ul && vk == ctx.self_arg) {
                 return expr   // the kernel class's self: every use resolves via member_var_of at the access site
+            }
+            if (key_exists(unroll_binds, vk)) {
+                e2id[k] = unroll_binds?[vk] ?? 0u
+                return expr
             }
             if (key_exists(ctx.local_vars, vk)) {
                 let lv = ctx.local_vars?[vk] ?? LocalVar()
@@ -3782,7 +3928,8 @@ class SpirvEmit : AstVisitor {
             }
             let idx = value_of(index_expr)
             if (idx == 0u) return   // index failed to lower (error already pushed) — no 0-operand access chain
-            let pointee = emit_type(bm, result_expr._type)
+            let cmt = coopmat_type_of(bm, result_expr._type)
+            let pointee = cmt != 0u ? cmt : emit_type(bm, result_expr._type)
             let ptr_t = type_pointer(bm, SpvStorageClass.Function, pointee)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.AccessChain, ptr_t, res, lv.ptr_id, idx)
@@ -3939,6 +4086,17 @@ class SpirvEmit : AstVisitor {
         }
         let v = value_of(expr.subexpr)
         if (v == 0u) return expr
+        if (!empty(unroll_binds) && key_exists(unroll_consts, v) && (op == "-" || op == "~")) {
+            let ucls = scalar_class(expr.subexpr._type.baseType)
+            if ((ucls == 0 || ucls == 1) && arith_lanes(expr.subexpr._type.baseType) == 1) {
+                let bits = int(unroll_consts?[v] ?? 0l)
+                let r = op == "-" ? (ucls == 1 ? int64(0u - uint(bits)) : int64(-bits)) : (ucls == 1 ? int64(~uint(bits)) : int64(~bits))
+                let cid = const_int_for(bm, ucls, int(r))
+                unroll_consts[cid] = r
+                e2id[intptr(expr)] = cid
+                return expr
+            }
+        }
         if (op == "!") {
             let bt = type_bool(bm)
             let res = alloc_id(bm)
@@ -3956,6 +4114,25 @@ class SpirvEmit : AstVisitor {
         emit(bm, SEC_FUNCS, uo.code, rt, res, v)
         e2id[intptr(expr)] = res
         return expr
+    }
+
+    [arch(at="../ARCHITECTURE_COOPMAT.md#unroll-full")]
+    def fold_unrolled_op2(op : string; cls : int; lbt : Type; l, r : uint; k : uint64) : bool {
+        if (empty(unroll_binds) || (cls != 0 && cls != 1) || arith_lanes(lbt) != 1) return false
+        let l_derived = key_exists(unroll_consts, l)
+        let r_derived = key_exists(unroll_consts, r)
+        let l_known = l_derived || key_exists(lit_consts, l)
+        let r_known = r_derived || key_exists(lit_consts, r)
+        if (!(l_derived || r_derived) || !l_known || !r_known) return false
+        let a = l_derived ? (unroll_consts?[l] ?? 0l) : (lit_consts?[l] ?? 0l)
+        let b = r_derived ? (unroll_consts?[r] ?? 0l) : (lit_consts?[r] ?? 0l)
+        let fv = fold_int_op(op, cls, a, b)
+        if (!fv.ok) return false
+        var bm & = unsafe(*m)
+        let cid = const_int_for(bm, cls, int(fv.value))
+        unroll_consts[cid] = fv.value
+        e2id[k] = cid
+        return true
     }
 
     [arch(at="../ARCHITECTURE.md#operand-laziness")]
@@ -4026,7 +4203,7 @@ class SpirvEmit : AstVisitor {
         let cls = arith_class(lbt)
         let l = value_of(expr.left)
         let r = value_of(expr.right)
-        if (l == 0u || r == 0u) return expr
+        if (l == 0u || r == 0u || fold_unrolled_op2(op, cls, lbt, l, r, intptr(expr))) return expr
         if (op == "*") {
             let mr = emit_mul(bm, expr, expr, l, r, errs)
             if (mr.handled) {
@@ -4286,6 +4463,10 @@ class SpirvEmit : AstVisitor {
     // block with OpUnreachable so the blob stays structurally valid (one terminator per block).
     def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
         var bm & = unsafe(*m)
+        if (!empty(ctx.loop_stack) && is_unrolled_body(ctx.loop_stack[length(ctx.loop_stack) - 1])) {
+            errs |> push("return inside a `for [unroll_full]` body: the loop is unrolled at emission and a return in one copy leaves the copies after it unreachable - restructure the body or take [unroll]")
+            return expr
+        }
         if (expr.subexpr != null) {
             let v = value_of(expr.subexpr)
             if (v != 0u) {
@@ -4508,7 +4689,7 @@ class SpirvEmit : AstVisitor {
     // remaining arguments sit AHEAD of f.arguments — a method invoke is [Cls.method field,
     // receiver, args...] against f.arguments [self, params...], so skip=2 / fshift=1 pairs
     // args[i] with f.arguments[i-1] (and the callee's self was dropped at registration).
-    [arch(at="../ARCHITECTURE.md#direct-decode-call")]
+    [arch(at="../ARCHITECTURE_COOPMAT.md#direct-decode-call")]
     def emit_call_core(var bm : SpirvModule; uf : UserFunc; arguments : dasvector`ptr`Expression; skip, fshift : int; resKey : uint64) {
         let f = uf.fn
         let res = alloc_id(bm)
@@ -4618,7 +4799,7 @@ class SpirvEmit : AstVisitor {
     // ----- calls: texture / vector constructors / dot / GLSL.std.450 math (args pre-visited) -----
     // Mirrors emit_call but reads operand ids via value_of (children already visited). for-source
     // range()/urange() calls are consumed by preVisitExprForBody and skipped here.
-    [arch(at="../ARCHITECTURE.md#files-and-emission"), arch(at="../ARCHITECTURE.md#small-int-surface"), arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+    [arch(at="../ARCHITECTURE.md#files-and-emission"), arch(at="../ARCHITECTURE.md#small-int-surface"), arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector")]
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         if (key_exists(for_src, intptr(expr))) return expr
         var bm & = unsafe(*m)
@@ -6043,6 +6224,13 @@ class SpirvEmit : AstVisitor {
             if (aid == 0u) return expr
             let src_cls = sn.cls
             let src_w = sn.width
+            if (!empty(unroll_binds) && key_exists(unroll_consts, aid) && dst.width == 32 && (dst.cls == 0 || dst.cls == 1) && (src_cls == 0 || src_cls == 1) && src_w == 32) {
+                let bits = int(unroll_consts?[aid] ?? 0l)
+                let cid = const_int_for(bm, dst.cls, bits)
+                unroll_consts[cid] = dst.cls == 1 ? int64(uint(bits)) : int64(bits)
+                e2id[k] = cid
+                return expr
+            }
             if (src_cls == dst.cls && src_w == dst.width) {  // same class+width no-op, e.g. float(someFloat)
                 e2id[k] = aid
                 return expr
@@ -6456,6 +6644,8 @@ class SpirvEmit : AstVisitor {
         for (a in args) {
             if (a.name == "unroll") {
                 mask |= uint(SpvLoopControl.Unroll)
+            } elif (a.name == "unroll_full") {
+                errs |> push("loop hint [unroll_full] applies to a `for (i in range(lo, hi))` with literal bounds, which unrolls at emission; a while loop takes [unroll], the driver's hint")
             } elif (a.name == "dont_unroll") {
                 mask |= uint(SpvLoopControl.DontUnroll)
             } elif (a.name == "dependency_infinite") {
@@ -6579,14 +6769,18 @@ class SpirvEmit : AstVisitor {
             return
         }
         let iv = expr.iteratorVariables[0]
-        let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
-        if (lvr.ptr_id == 0u) {
-            errs |> push("for: induction variable '{iv.name}' was not declared")
-            return
-        }
         let cls = scalar_class(iv._type.baseType)
         if (cls != 0 && cls != 1) {
             errs |> push("for: induction variable '{iv.name}' must be int or uint (got {iv._type.baseType})")
+            return
+        }
+        if (has_loop_hint(expr.annotations, "unroll_full")) {
+            unroll_at_emission(expr, iv, cls)
+            return
+        }
+        let lvr = ctx.local_vars?[intptr(iv)] ?? LocalVar()
+        if (lvr.ptr_id == 0u) {
+            errs |> push("for: induction variable '{iv.name}' was not declared")
             return
         }
         var lo = 0u
@@ -6637,7 +6831,21 @@ class SpirvEmit : AstVisitor {
         ctx.loop_stack |> push(LoopTargets(merge = ids.merge, cont = ids.cont_l))
     }
 
+    [arch(at="../ARCHITECTURE_COOPMAT.md#unroll-full")]
     def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
+        if (key_exists(unroll_rewinds, intptr(expr))) {
+            let um = unroll_rewinds?[intptr(expr)] ?? UnrollRewind()
+            var bm & = unsafe(*m)
+            resize(bm.sections[SEC_FUNCS], um.funcs_len)
+            resize(bm.sections[SEC_DECOR], um.decor_len)
+            if (length(errs) > um.errs_len) {
+                resize(errs, um.errs_len)
+            }
+            ctx.terminated = um.terminated
+            if (!empty(ctx.loop_stack)) pop(ctx.loop_stack)
+            unroll_binds |> erase(intptr(expr.iteratorVariables[0]))
+            return expr
+        }
         if (!key_exists(loop_ids, intptr(expr))) return expr   // setup failed; errors already pushed
         let ids = loop_ids?[intptr(expr)] ?? LoopIds()
         var bm & = unsafe(*m)
@@ -6659,6 +6867,67 @@ class SpirvEmit : AstVisitor {
         return expr
     }
 
+    [arch(at="../ARCHITECTURE_COOPMAT.md#unroll-full")]
+    def unroll_at_emission(var expr : ExprFor?; iv : VariablePtr; cls : int) {
+        var bm & = unsafe(*m)
+        if (!unroll_hints_ok(expr.annotations)) return
+        let rg = literal_range_of(expr.sources[0])
+        if (!rg.ok) {
+            errs |> push("for [unroll_full]: the range must have literal bounds - range(N) or range(lo, hi) - to unroll at emission; a runtime bound takes [unroll], the driver's hint")
+            return
+        }
+        let vk = intptr(iv)
+        ctx.loop_stack |> push(unrolled_loop_targets())
+        for (kv in range(rg.lo, rg.hi)) {
+            let cid = const_int_for(bm, cls, kv)
+            unroll_consts[cid] = cls == 1 ? int64(uint(kv)) : int64(kv)
+            unroll_binds[vk] = cid
+            let errs_before = length(errs)
+            visit(expr.body, adapter)
+            drop_repeated_errors(errs_before)
+        }
+        unroll_binds[vk] = const_int_for(bm, cls, rg.lo)   //!< the binding outlives the copies: the discarded walk resolves the induction variable too
+        unroll_rewinds[intptr(expr)] = UnrollRewind(funcs_len = length(bm.sections[SEC_FUNCS]), decor_len = length(bm.sections[SEC_DECOR]),
+            errs_len = length(errs), terminated = ctx.terminated)
+    }
+
+    //! an error a copy raises is reported once: a copy's error already on the list from an earlier copy goes, a new one stays
+    def drop_repeated_errors(start : int) {
+        var kept : array<string>
+        for (i in range(start, length(errs))) {
+            var seen = false
+            for (j in range(start)) {
+                if (errs[j] == errs[i]) {
+                    seen = true
+                    break
+                }
+            }
+            if (!seen) {
+                kept |> push(errs[i])
+            }
+        }
+        resize(errs, start)
+        errs |> push_from(kept)
+    }
+
+    //! the hints beside [unroll_full]: an unknown name, or a driver loop control that has no loop construct to attach to, is refused
+    def unroll_hints_ok(hints : AnnotationArgumentList) : bool {
+        var ok = true
+        for (a in hints) {
+            let n = "{a.name}"
+            if (n == "unroll_full") continue
+            if (n == "unroll" || n == "dont_unroll" || n == "dependency_infinite" || n == "dependency_length" || n == "min_iterations"
+                    || n == "max_iterations" || n == "iteration_multiple" || n == "peel_count" || n == "partial_count") {
+                errs |> push("loop hint [{n}] beside [unroll_full]: the loop is unrolled at emission and emits no loop construct to carry it - drop it, or take [unroll] alone for the driver's hint")
+                ok = false
+            } else {
+                errs |> push("unknown vulkan loop hint '{n}'")
+                ok = false
+            }
+        }
+        return ok
+    }
+
     // ----- break / continue -> branch to the innermost loop's merge / continue block -----
     def override preVisitExprBreak(var expr : ExprBreak?) : void {
         var bm & = unsafe(*m)
@@ -6666,7 +6935,12 @@ class SpirvEmit : AstVisitor {
             errs |> push("break outside of a loop")
             return
         }
-        emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].merge)
+        let lt = ctx.loop_stack[length(ctx.loop_stack) - 1]
+        if (is_unrolled_body(lt)) {
+            errs |> push("break inside a `for [unroll_full]` body: the loop is unrolled at emission and has no merge block to branch to - restructure the body or take [unroll]")
+            return
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Branch, lt.merge)
         ctx.terminated = true
     }
 
@@ -6676,7 +6950,12 @@ class SpirvEmit : AstVisitor {
             errs |> push("continue outside of a loop")
             return
         }
-        emit(bm, SEC_FUNCS, SpvOp.Branch, ctx.loop_stack[length(ctx.loop_stack) - 1].cont)
+        let lt = ctx.loop_stack[length(ctx.loop_stack) - 1]
+        if (is_unrolled_body(lt)) {
+            errs |> push("continue inside a `for [unroll_full]` body: the loop is unrolled at emission and has no continue block to branch to - restructure the body or take [unroll]")
+            return
+        }
+        emit(bm, SEC_FUNCS, SpvOp.Branch, lt.cont)
         ctx.terminated = true
     }
 
@@ -7067,7 +7346,7 @@ def private register_decode_func(var m : SpirvModule; var ctx : EmitCtx; f : Fun
 
 //! Returns the twin's id; 0 is both the `false` form and a rejection - the caller tells them apart
 //! by the error count.
-[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector")]
 def private resolve_decode_vector_arg(var m : SpirvModule; var ctx : EmitCtx; va0 : ExpressionPtr; sf : Function const?; var errors : array<string>) : uint {
     let r2v = va0 ?as ExprRef2Value
     let va = r2v != null ? r2v.subexpr : va0
@@ -7107,7 +7386,7 @@ def private resolve_decode_vector_arg(var m : SpirvModule; var ctx : EmitCtx; va
     return df.valid ? df.fn_id : 0u
 }
 
-[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector")]
 def private register_decode_vector_synth(var m : SpirvModule; var ctx : EmitCtx; sf : Function const?) : uint {
     if (key_exists(ctx.decode_vec_funcs, intptr(sf))) {
         let ex = ctx.decode_vec_funcs?[intptr(sf)] ?? DecodeFn()
@@ -7130,7 +7409,7 @@ def private register_decode_vector_synth(var m : SpirvModule; var ctx : EmitCtx;
     return df.valid ? df.fn_id : 0u
 }
 
-[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector")]
 def private validate_decode_func(var m : SpirvModule; ctx : EmitCtx; f : Function const?; vector_twin : bool; var errors : array<string>) : DecodeFn {
     var df = DecodeFn(fn = f, valid = true)
     if (vector_twin) {
@@ -7264,7 +7543,7 @@ def private emit_decode_function(var m : SpirvModule; var ctx : EmitCtx; df : De
     ctx.self_arg = saved_self
 }
 
-[arch(at="../ARCHITECTURE.md#cm2-decode-vector")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-decode-vector")]
 def private emit_decode_vector_synth_body(var m : SpirvModule; ctx : EmitCtx; df : DecodeFn; p0 : uint; coord_pids : uint[2]) {
     let sdf = ctx.decode_funcs?[df.synth_of] ?? DecodeFn()
     let ut = type_uint(m)
@@ -7483,7 +7762,7 @@ class private SpirvMethodScan : AstVisitor {
         ctx.invoke_fields |> insert(intptr(da0))
         found_decode |> push(mfn)
     }
-    [arch(at="../ARCHITECTURE.md#direct-decode-call")]
+    [arch(at="../ARCHITECTURE_COOPMAT.md#direct-decode-call")]
     def note_decode_elem_arg(mfn : FunctionPtr; expr : ExprInvoke const?) : void {
         if (!function_has_annotation(mfn, "spirv_decode") || length(expr.arguments) < 3) return
         let a0 = expr.arguments[2]
@@ -7757,7 +8036,7 @@ def private alloc_call_temps(var m : SpirvModule; var ctx : EmitCtx; f : Functio
     }
 }
 
-[arch(at="../ARCHITECTURE.md#direct-decode-call")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#direct-decode-call")]
 def private spills_struct_param(var m : SpirvModule; at : TypeDecl?) : bool {
     if (at == null || at.baseType != Type.tStructure || at.structType == null
             || coopmat_info(at).ok || sampler_info(at).ok || "{at.structType.name}" == "rayQueryEXT"
@@ -7776,7 +8055,7 @@ def private spills_struct_param(var m : SpirvModule; at : TypeDecl?) : bool {
 // SSA id, a struct value param additionally spills into a Function local; ref params bind a Function
 // pointer), the entry block (locals + ref-arg temps + the spill stores), the body, and the trailing
 // return. The result id / type were pre-allocated by register_user_func.
-[arch(at="../ARCHITECTURE.md#direct-decode-call")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#direct-decode-call")]
 def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : UserFunc; var errors : array<string>) {
     let f = unsafe(reinterpret<FunctionPtr>(uf.fn))   // read-only emission; strip pointee const
     emit(m, SEC_FUNCS, SpvOp.Function, uf.ret_type, uf.fn_id, 0u, uf.type_id)

@@ -121,6 +121,7 @@ def test_golden_disassembly(t : T?) { // nolint:STYLE038 - flat list of golden f
         check(t, "echain", echain_words())
         check(t, "eret", eret_words())
         check(t, "rfor", rfor_words())
+        check(t, "ufor", ufor_words())
         // resource / composite fixtures: ids legitimately renumber (call/composite result allocated
         // before operands in the hand-walker, after them in the post-order visitor) -> id-isomorphic.
         check_iso(t, "tri_vert", tri_vert_words())

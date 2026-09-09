@@ -169,7 +169,7 @@ rebuilt binary aged the sidecar; Boris ruled no re-mint until Vulkan is fully fu
    - Gate: `test_gpu_resident_hybrid` gains the K-quant fixture (Qwen3.5-0.8B-Q4_K_M, minted
      from the Q8_0 with llama-quantize), the declines test names the out-plane case, the 9B
      UD pair against a same-day llama-bench control, the profiled window's dn GEMM roles.
-   - Docs: 2.2j / 2.2v say the planes ride their file formats; the loader's tag comment follows.
+   - Docs: 2.2ad / 2.2v say the planes ride their file formats; the loader's tag comment follows.
 
 ## Measurement
 

@@ -41,4 +41,4 @@ twin exactly when that PSO is non-null, so a box with no crown never compiles it
 
 The `kq_gemv_iq3s_f4` and `kq_gemv_iq3xxs_f4` crowns are raced (`race_gemv_f4_twin`).
 `kq_gemv_iq2xxs_f4` cannot be settled by an isolated race at all and is minted from a serving
-A/B instead - `ARCHITECTURE_MEASUREMENT.md` sec.2.21.
+A/B instead - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` sec.2.21.

@@ -1381,3 +1381,27 @@
    read). The disk was full because the comparison bench mints an image per model and per flavor
    by default - 37 debug-jit images, 293 GB, in one day's walk; the bench under
    `--for-debug-purposes` should run `DASLLAMA_IMAGE=0` itself, since its flavor serves no rig.
+
+121. **`tests/CLAUDE.md` splits into a rule file and an architecture doc.** The file is 915
+   lines: about fifteen binding rules (the runner rule, the iteration loop, the poison rules, the
+   image-rail ban, the tier and family filters, log discipline) and then some 550 lines of
+   present-tense per-file census under "The per-PR suites - model-free and stocked". The census
+   is architecture content under a CLAUDE.md name, outside LINT027's reach. Done = the census
+   moves to `tests/ARCHITECTURE.md` in sections (anchors where a cell cites one), `CLAUDE.md`
+   keeps the discipline and routes to it, and `tests/REVIEW.md`'s cites of the CLAUDE.md
+   headings follow the move. Ruled 2026-09-08: the next follow-up arc, not the KHR tile PR.
+
+122. **New MoE architectures for the files that fully fit a 16 GB card.** Found 2026-09-08 by the
+   MoE fit survey (every MoE GGUF at or under 14.0 GB, from the Hugging Face file listings): the
+   loader takes five MoE families with a fully fitting file - gpt-oss, qwen2moe, qwen3moe with
+   qwen3vlmoe, qwen35moe, gemma4 - and about sixteen more families fit for one new arch each. By
+   downloads: `deepseek2` first (DeepSeek-Coder-V2-Lite Q5_K_M 11.85 GB, Moonlight-16B-A3B,
+   Kimi-VL-A3B; MLA attention, two shared experts), `cohere2moe` second (North Mini Code 1.0
+   Q3_K_S 13.57 GB; 128 experts top-8, sigmoid router), then `bailingmoe2` / `bailingmoe3`
+   (Ling-mini-2.0, Ling-3.0-tiny), `ernie4_5-moe`, `lfm2moe`, `afmoe` (Trinity-Mini), `olmoe`,
+   `granitemoe` / `granitehybrid`, `smallthinker`, `kimi-linear`, `laguna`; `phimoe` and Mixtral
+   fit only at 2-bit. The loader also takes no Q4_1, IQ1_S, IQ1_M, TQ1_0 or TQ2_0 plane, so every
+   `UD-IQ1_*` and `UD-TQ1_0` file is out whatever its arch. Ruled 2026-09-08: after the 0.6.4
+   release, and after the Vulkan tier covers every carrier the module already serves
+   (`followup_vulkan.md` item 43) - no new family before either. Done = one arc per arch,
+   `deepseek2` first, each with its board rows.

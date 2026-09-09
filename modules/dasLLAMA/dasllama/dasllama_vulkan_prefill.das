@@ -38,8 +38,9 @@ let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn qu
 
 var private @scratch g_pf_ids_stage : array<uint>
 
+//! whether the prefill's f16 feed admits a plane of format `f` on the armed coopmat mode - the tests read the same answer the driver acts on
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
-def private pf_f16_feed(f : int) : bool {
+def public pf_f16_feed(f : int) : bool {
     if (g_gpu.coopmat_mode == COOPMAT_CM2) {
         return f == int(KqFmt.q8) || kq_sb(f)
     }
@@ -51,16 +52,17 @@ def private pf_qkv6(l : int64) : bool => (pf_f16_feed(g_rd.layers[l].fq)
     && pf_f16_feed(g_rd.layers[l].fk) && pf_f16_feed(g_rd.layers[l].fv))
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_gu6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].f1) && pf_f16_feed(g_rd.layers[l].f3)
-[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
-def private pf_dn6(l : int64) : bool => (pf_f16_feed(g_rd.layers[l].fqkv)
-    && pf_f16_feed(g_rd.layers[l].fz) && pf_f16_feed(g_rd.layers[l].fout))
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+def private pf_dnx6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].fqkv) && pf_f16_feed(g_rd.layers[l].fz)
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+def private pf_dno6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].fout)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_qkv_feed_fused(l : int64) : bool => !g_rd.layers[l].recurrent && g_env_vulkan.vk_fuse && (pf_qkv6(l) || !kq_sb(g_rd.layers[l].fq))
 
 let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from it
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_ensure(fmt : int) : bool {
     if (fmt == int(KqFmt.k4)) return ensure_kq_batch_k4_khr_cls()
     if (fmt == int(KqFmt.k5)) return ensure_kq_batch_k5_khr_cls()
@@ -78,7 +80,7 @@ def khr_cls_ensure(fmt : int) : bool {
     return ensure_kq_batch_iq2xxs_khr_cls()
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     if (fmt == int(KqFmt.k4)) return set_kq_batch_k4_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.k5)) return set_kq_batch_k5_khr_cls(bufs, sizes, gbits)
@@ -96,7 +98,7 @@ def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits
     return set_kq_batch_iq2xxs_khr_cls(bufs, sizes, gbits)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     if (fmt == int(KqFmt.k4)) {
         enc_kq_batch_k4_khr_cls(raw, h, s, pc, groups)
@@ -494,7 +496,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
 }
 
 //! one recurrent layer's prefill window sets; the o feed sets (`pf_dnof_set` / `pf_dnrq_set`) are shared by every recurrent layer
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
 def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     var L & = unsafe(g_rd.layers[l])
     let np = g_rd.pf_np
@@ -520,7 +522,7 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
             fixed_array(g_rd.dn_ba_bytes, np * dim * 4l, DND_SMALLS_BYTES),
             fixed_array(0u, VHZ_XB, VHZ_DNSM))
     }
-    if (pf_dn6(l)) {
+    if (pf_dnx6(l)) {
         L.pf_dn_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
             fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
     }
@@ -537,7 +539,7 @@ def private pf_dn_zero(raw : VkCommandBuffer; var h : VkHaz) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen : int64; last : bool) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
@@ -551,37 +553,37 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let taps = dconv - 1l
     let np = g_rd.pf_np
     let eps = g_rd.eps
-    let dn6 = pf_dn6(l)
-    let dnk = !dn6 && kq_sb(L.fqkv)   // off the f16 feed a K-quant qkv/z pair reads the Q8_K activation form, the attention head's fqk twin
-    if (dn6) {
+    let x6 = pf_dnx6(l)
+    let xq8k = !x6 && kq_sb(L.fqkv)
+    if (x6) {
         var pcc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
     }
-    if (dnk) {
+    if (xq8k) {
         var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
         enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 8l + 255l) / 256l)
-    } elif (!dn6 || !g_rd.dn_ba_f32) {
+    } elif (!x6 || !g_rd.dn_ba_f32) {
         var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
         enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
     }
     pfq_ts(raw)
-    let xqb = dn6 ? g_rd.pf_xf : g_rd.pf_xq
-    let xsb = dn6 ? g_rd.dummy : g_rd.pf_xs
-    let xqn = dn6 ? np * dim * 2l : np * dim
-    let xsn = dn6 ? 256l : np * (dim / 32l) * 4l
+    let xqb = x6 ? g_rd.pf_xf : g_rd.pf_xq
+    let xsb = x6 ? g_rd.dummy : g_rd.pf_xs
+    let xqn = x6 ? np * dim * 2l : np * dim
+    let xsn = x6 ? 256l : np * (dim / 32l) * 4l
     let pqkv = arena_planes(L.fqkv, L.bqkv)
     pf_gemm_enc(raw, h, b + 1, L.fqkv, pqkv.wq, pqkv.ws, xqb, xsb, g_rd.pf_dnqkv,
-        pqkv.wqb, pqkv.wsb, xqn, xsn, np * cd * 4l, VHZ_XQ, VHZ_DNP, dim, cd, L.bqkv, wlen, dn6, cm2_tiles(di, wlen))
+        pqkv.wqb, pqkv.wsb, xqn, xsn, np * cd * 4l, VHZ_XQ, VHZ_DNP, dim, cd, L.bqkv, wlen, x6, cm2_tiles(di, wlen))
     let pz = arena_planes(L.fz, L.bz)
     pf_gemm_enc(raw, h, b + 2, L.fz, pz.wq, pz.ws, xqb, xsb, g_rd.pf_dnz,
-        pz.wqb, pz.wsb, xqn, xsn, np * di * 4l, VHZ_XQ, VHZ_DNZ, dim, di, L.bz, wlen, dn6, cm2_tiles(cd, wlen))
+        pz.wqb, pz.wsb, xqn, xsn, np * di * 4l, VHZ_XQ, VHZ_DNZ, dim, di, L.bz, wlen, x6, cm2_tiles(cd, wlen))
     if (g_rd.dn_ba_f32) {
         var pcb = DnBaArgs(npos = uint(wlen), dim = uint(dim), nvh = uint(nvh), woff = uint(L.ba_off), xstride = uint(dim),
             obase_b = uint(DN_SM_BETA), obase_g = uint(DN_SM_G), ostride = uint(nvh))
         enc_dn_ba_cls(raw, h, L.pf_dn_ba_set, pcb, dn_ba_wgs(wlen, nvh))
         pfq_ts(raw)
     } else {
-        if (dnk) {   // the qkv/z GEMMs read the rows as Q8_K; the q8 beta/alpha GEMMs read them as Q8_0
+        if (xq8k) {   // the qkv/z GEMMs read the rows as Q8_K; the q8 beta/alpha GEMMs read them as Q8_0
             var pcq = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
             enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 0], pcq, (wlen * dim / 4l + 255l) / 256l)
         }
@@ -621,7 +623,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         cmd_copy_range(raw, g_rd.pf_dnqkv, (wlen - taps) * cd * 4l, L.dn.smalls_dev, DN_SM_HIST * 4l, taps * cd * 4l)
     }
     pfq_ts(raw)
-    if (dn6) {
+    let o6 = pf_dno6(l)
+    if (o6) {
         var pco = ActArgs(nelem = uint(wlen * di), gelu = 0u, nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_dnof_set, pco, (wlen * di / 4l + 255l) / 256l)
     } elif (kq_sb(L.fout)) {
@@ -633,8 +636,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     }
     pfq_ts(raw)
     let pout = arena_planes(L.fout, L.bout)
-    pf_gemm_enc(raw, h, b + 7, L.fout, pout.wq, pout.ws, dn6 ? g_rd.pf_dnof : g_gpu.hq_dev, dn6 ? g_rd.dummy : g_gpu.hs_dev, g_rd.pf_xb2,
-        pout.wqb, pout.wsb, dn6 ? np * di * 2l : BATCH_HQ_BYTES, dn6 ? 256l : BATCH_HS_BYTES, np * dim * 4l, VHZ_HQ, VHZ_XB2, di, dim, L.bout, wlen, dn6)
+    pf_gemm_enc(raw, h, b + 7, L.fout, pout.wq, pout.ws, o6 ? g_rd.pf_dnof : g_gpu.hq_dev, o6 ? g_rd.dummy : g_gpu.hs_dev, g_rd.pf_xb2,
+        pout.wqb, pout.wsb, o6 ? np * di * 2l : BATCH_HQ_BYTES, o6 ? 256l : BATCH_HS_BYTES, np * dim * 4l, VHZ_HQ, VHZ_XB2, di, dim, L.bout, wlen, o6)
 }
 
 // the prefill profile's stamps per layer: the attention head's roles (+ qkn), or the recurrent head's

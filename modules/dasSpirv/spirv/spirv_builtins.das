@@ -447,7 +447,7 @@ struct coopmatWgB_f16_32x32 {}
 struct coopmatWgB_f16_32x128 {}
 struct coopmatWgB_f16_64x64 {}
 struct coopmatWgB_f16_128x32 {}
-[arch(at="../ARCHITECTURE.md#cm2-tile-markers")]
+[arch(at="../ARCHITECTURE_COOPMAT.md#cm2-tile-markers")]
 struct coopmatWgAcc_f16_64x128 {}
 struct coopmatWgAcc_f32_64x128 {}
 // the h256 flash tiles (Br=64, Bc=32): Q & O 64x256, Qf16 as A, K^T as B 256x32, V as B 32x256

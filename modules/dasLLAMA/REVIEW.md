@@ -9,11 +9,11 @@ companions belong to the routed checklists). Planned work: `followup_general.md`
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
 
-**A timing rig - a file that times a run and reports a wall-clock time or rate as its result,
-printed or returned to a caller that prints it - a kernel race - a run that times two kernel
-variants (arms) against each other in one process - or a function a `benchmarks/lcpp_bench.das`
-cell's timed body calls, wherever it lives, answers to this folder's `benchmarks/REVIEW.md` in
-addition to its own folder's checklist.**
+**A timing rig (a file that times a run and reports a wall-clock time or rate as its result,
+printed or returned to a caller that prints it), a kernel race (a run that times two kernel
+variants - arms - against each other in one process), or a function a
+`benchmarks/lcpp_bench.das` cell's timed body calls, wherever it lives, answers to this
+folder's `benchmarks/REVIEW.md` in addition to its own folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
 code comment, checked-in data a run produced, or a PR body - or adds a serving path or moves
@@ -73,17 +73,16 @@ schedules such a stream, applies `REVIEW_VISION.md`.**
 function does not thereby pick up the other modality's checklist.
 
 **A change to `dasllama/dasllama_tts.das`, `dasllama/dasllama_tts_types.das`,
-`dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_styletts2.das`, a TTS family file -
-one `dasllama/dasllama_<family>.das` holding a single speech-synthesis family - a text
-front-end file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
+`dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_styletts2.das`, a TTS family file - one
+`dasllama/dasllama_<family>.das` holding a single speech-synthesis family - a text front-end
+file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
 `dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - the front-end packs' mint
 (`harness/build_g2p_data.py`, `harness/train_postag.py`, `harness/mint_postag_silver.py`,
 `performance/build_tts_data.das`), or a call that pins the TTS weight lane (`set_tts_q8` /
 `set_styletts2_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
-**A diff that adds a file under `dasllama/`, moves code between files, or lands a kernel,
-codec, transform, tokenizer, tool-wire, media-IO or registration concern in a new place
-applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
+**A diff that adds a file under `dasllama/`, or adds or moves a def, a `require`, or a module
+global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
 
 **A `[test]` file that requires any `dasllama/*` module and sits under `modules/dasLLAMA/`
 outside `tests/` (beside this file) is a defect - move it into `tests/`.**
@@ -99,10 +98,10 @@ into the class as a `@template_constant` instead.**
 
 **A function-typed global a serialized exe must re-establish lands in a `dasllama/` file with
 the `[init]` that establishes it at boot; landing one where `REVIEW.das`'s restore-check walk
-over `dasllama/` cannot reach it, or weakening that walk, is a defect.** A serialized exe
-restores globals as data, so a declaration initializer arrives null and dies at the first invoke
-while every `-jit` gate stays green; a global another file's `[init]` arms (`set_runtime_race_hook`)
-has no initializer, and its null default is the declared "no hook".
+over `dasllama/` cannot reach it is a defect.** A serialized exe restores globals as data, so
+a declaration initializer arrives null and dies at the first invoke while every `-jit` gate
+stays green; a global another file's `[init]` arms (`set_runtime_race_hook`) has no
+initializer, and its null default is the declared "no hook".
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
@@ -135,36 +134,39 @@ kernel race report, is a defect** - instrumentation goes through the
 profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan
 tier's `vk_prof()`-gated ledgers), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
 
-**A clock value that changes what the program DOES - control flow, eviction, a generated
-name; not a reported wall-clock time or a best-of reduction over reported wall-clock times -
-is marked `// clock: control`, in an engine file (`dasllama/`)** - unmarked, it cannot be told
+**In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
+flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over
+reported wall-clock times - is marked `// clock: control`** - unmarked, it cannot be told
 apart from the ad-hoc profiling an engine file may not carry.
 
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
-quantum - one batch of prompt tokens the prefill path processes in a single pass - is COVERED
-by an annotated region entry** - `[hot_path]`, any of the `[no_alloc]` / `[no_env]` /
-`[no_io]` contracts, or `[cold_path]` on its only reaching entry. Covered means an annotated
-entry reaches it: an annotation binds every function the entry calls, so an interior function
-carries nothing of its own except a `[cold_path]` that exempts a rarely-taken branch (a guard
-that logs once) from the entry's contracts; an entry no annotated entry reaches carries the
-annotation itself, and a function reached only through a registered function value is reached
-by none. A region
-entry is the outermost such function (a kernel `*_encode` / `*_decode`, a step driver, the CPU
-decoder's `forward_*` entries); a loop reached only from a load, stage, bake, or convert path is
-not one. A driver that calls the `forward_*` entries and is reached only by a measurement - a
-benchmark row, a rig's loop - and never by a served request carries `[cold_path]`, which covers
-only the functions below it that carry no annotation of their own.
+quantum - one batch of prompt tokens the prefill path processes in a single pass - is reached
+by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]`
+contracts, or `[cold_path]` on its only reaching entry; a renamed per-token function is not
+new, and its annotation moves with the name in the same change.** An annotation binds every
+function the entry calls; an unreached loop has no contract (`ARCHITECTURE_RUNTIME.md` sec.2.11).
 
-**A renamed per-token function is not new: its annotation moves with the name in the same change.**
+**The annotation sits on the region entry - the outermost function the runtime re-enters per
+token, per frame, or per prefill quantum: a kernel `*_encode` / `*_decode`, a step driver, the
+CPU decoder's `forward_*` entries, or a function reached only through a registered function
+value - and an interior function carries an annotation only when it is a `[cold_path]` on a
+rarely-taken branch (a guard that logs once).**
 
-**A change to `encode`/`bpe_encode`, or to a function they call, in `dasllama/dasllama_spm.das` /
-`dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`, ships before/after `--tok` rows
-(this folder's `benchmarks/lcpp_bench.das`) for a model using the affected tokenizer.** A
-change confined to the load path - a metadata default the encode reads as a value - is the
-tokenizer-suite rule's below, not this one's.
+**A loop reached only from a load, stage, bake, or convert path is not a region entry: it
+carries no `[hot_path]` and none of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts; a
+`[cold_path]` may sit on it.**
 
-**A tokenizer wall-clock time that grows faster than linearly with input size is a defect** -
-the `--tok` rows cover at least two input sizes so the growth is readable.
+**A driver that calls the `forward_*` entries and is reached only by a measurement - a
+benchmark row, a rig's loop - and never by a served request carries `[cold_path]`, which
+covers only the functions below it that carry no annotation of their own.**
+
+**A change to `encode`/`bpe_encode`, or to a function they call, in
+`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`,
+ships before/after `--tok` rows (this folder's `benchmarks/lcpp_bench.das`) at two or more
+input sizes, for a model using the affected tokenizer.** A change confined to the load path -
+a metadata default the encode reads as a value - does not fire this rule.
+
+**A tokenizer wall-clock time that grows faster than linearly with input size is a defect.**
 
 **A change to code or data in `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das`, or `dasllama/dasllama_pretok.das`, or to the special-token or
@@ -188,9 +190,10 @@ depend on - what it calls, types, requires, or parses (facade functions, CLI fla
 knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
 rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
 
-**A diff that makes a statement in an `ARCHITECTURE_*.md` companion, a module-root document, a
-`//!` docstring, or a document outside this folder whose own checklist routed this diff here,
-false updates it in the same change** - a section no `[arch]` cites is the reviewer's alone.
+**A diff that falsifies a statement in an `ARCHITECTURE_*.md` companion, a module-root
+document, a `//!` docstring, or a document outside this folder whose own checklist routed this
+diff here, updates it in the same change** - no lint checks a section no `[arch]` cites; only
+the reviewer does.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
@@ -220,9 +223,9 @@ edit that text asks for. What the gate enforces is read from the gate itself; ea
 finding text states its own rule.
 
 **A new `REVIEW.das` check ships its line on the checked file's sec.1 charter - in an
-`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The line names the check and the names it
-licenses. A licensed name is one that check does not flag. When the check licenses no names,
-the line says so.
+`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The line names
+the check and the names it licenses. A licensed name is one that check does not flag. When the
+check licenses no names, the line says so.
 
 **Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language -
 that describes a mechanism of the reference build, or names that build, its binaries or its
@@ -241,30 +244,30 @@ page published beside a released model or pack - or in a ledger row naming a lic
 reason to adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a
 defect.**
 
-**A def of a facade file, and a new OVERLOAD of one, is TAUGHT: demonstrated in runnable code
-in a `tutorials/dasLLAMA/*.das` source and narrated on a
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** The facade files are
-`dasllama/dasllama.das` and `dasllama/dasllama_tts.das` - a facade file's defs reach a consumer
-through `require dasllama/dasllama`, and a diff that makes another file's defs reach that way
-adds it here and to `check_tutorial_floor` in the same change. `REVIEW.das`'s
-`check_tutorial_floor` matches def NAMES only, so an overload passes on a sibling's tutorial -
-the reviewer confirms a tutorial calls the NEW signature, and a mention that only names it (a
-comment, a passing reference) does not count.
+**A def of a facade file - one whose defs reach a consumer through `require dasllama/dasllama`;
+`REVIEW.das`'s `FACADE_FILES` is the list - and a new OVERLOAD of one, is TAUGHT: demonstrated
+in runnable code in a `tutorials/dasLLAMA/*.das` source and narrated on a
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page.**
+`REVIEW.das`'s `check_tutorial_floor` matches def NAMES only, so an overload passes on a
+sibling's tutorial - the reviewer confirms a tutorial calls the NEW signature, and a mention
+that only names it (a comment, a passing reference) does not count.
 
-**A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
-struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
-a struct the renderer emits but the registry does not is caught by
-`tests/test_env_registry.das`.
+**A diff that makes another file's defs reach a consumer through `require dasllama/dasllama`
+adds that file to `REVIEW.das`'s `FACADE_FILES` in the same change.**
+
+**A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A struct
+the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test; a struct
+the renderer emits but the registry does not is caught by `tests/test_env_registry.das`.
 
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff the placement routing line above routes, or one that changes what a file owns, lands
-the sec.1 edit that keeps the charters true - in an `ARCHITECTURE_*.md` companion, never
-`ARCHITECTURE.md` - in the same change.** A diff that adds a file to any
-folder where another file has its own sec.1 charter line lands the new file's charter line
-too. A module-root doc file - a ledger, a plan - has no charter line and needs no charter
-edit.
+**A diff that adds a file under `dasllama/`, moves a def, a `require`, or a module global
+between files there, or changes what a file owns, lands the sec.1 edit that keeps the
+charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same
+change.** A diff that adds a file to any folder where another file has its own
+sec.1 charter line lands the new file's charter line too. A module-root doc file - a ledger, a
+plan - has no charter line and needs no charter edit.
 
 **A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds
 or removes a companion, lands `ARCHITECTURE.md`'s index line and section range, the
@@ -278,9 +281,9 @@ changes none of its arithmetic.** The CPU form serves every box with no driver.
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
 `TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it
-there in the same change.** The `features` fingerprint saved with every sidecar is this box's pass/fail over
-that list, so a name outside it is never recorded and a box adopting a shipped profile re-runs
-the tuning the profile was meant to save.
+there in the same change.** The `features` fingerprint saved with every sidecar is this box's
+pass/fail over that list, so a name outside it is never recorded and a box adopting a shipped
+profile re-runs the tuning the profile was meant to save.
 
 **A value that a team-lane kernel reads - anything reachable from a `team_parallel_for` /
 `team_parallel_for_indexed` / `team_parallel_stages` body (`daslib/jobque_boost.das`, repo

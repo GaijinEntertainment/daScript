@@ -295,7 +295,7 @@ def private build_oracle(fmt; n, d, nsb : int; kq, ks : array<uint8>; xf : array
     delete wrow
 }
 
-[arch(at="../../ARCHITECTURE_MEASUREMENT.md#kernel-race-fidelity")]
+[arch(at="../../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
 def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : int;
                       arms : array<KqRaceArm>; args : Args; ref_tab : table<string; double>) : int {
     let is_mm = tier == "mm"

@@ -1,15 +1,17 @@
 # dasLLAMA Architecture - the Vulkan tier's GEMM tile family
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2k-2.2m and 2.2q, the cooperative-matrix tiles the Vulkan tier's
-GEMMs run on: how a cm2 tile decodes its quant bytes, how a tile and the served GEMM mode are
-picked, the class-pipeline build seat both shader instruments hang on, and the MoE expert chain
-on those tiles. The prefill window chain that dispatches them, the Q8 requant byte store and the
-decode GEMV family's grid codebook buffer are `ARCHITECTURE_GPU_VULKAN.md`'s sections 2.2j, 2.2p
-and 2.2ab. What a model has to fit on the card before any of this runs is
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The decode-era mechanisms of the
-per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections 2.2r-2.2v. The GPU backend role
-table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
+document carries sections 2.2k-2.2m, 2.2q and 2.2ae, the cooperative-matrix tiles the Vulkan
+tier's GEMMs run on: how a cm2 tile decodes its quant bytes, how a tile and the served GEMM
+mode are picked, the class-pipeline build seat both shader instruments hang on, the MoE expert
+chain on those tiles, and the KHR arm's hand-staged tile. `ARCHITECTURE_GPU_VULKAN.md` carries
+the prefill window chain that dispatches them (sec.2.2j) and its recurrent block (sec.2.2ad),
+the Q8 requant byte store (sec.2.2p), the decode GEMV family's grid codebook buffer
+(sec.2.2ab), and the tile probe's shared descriptor set layout (sec.2.2ac). What a model has to
+fit on the card before any of this runs is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections
+2.2n-2.2o. The decode-era mechanisms of the per-op tier are
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections 2.2r-2.2v. The GPU backend role table these
+sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
 ### 2.2k The cm2 decode callbacks read their quant bytes as 16-bit lanes {#cm2-decode-16bit-lanes}
 
@@ -18,52 +20,63 @@ compiler pattern-matches only one spelling into that path: a 16-bit load (`int16
 members) followed by `unpack8(w)[i & 1u]` - a byte2 lane select - with sub-fields pulled out by
 shift and mask. A 32-bit word with a variable shift runs slower; an `unpack8` of a 32-bit word
 indexed by a runtime value (a byte4 dynamic select) drops the whole kernel off the block-load
-path, to about a third of the rate. Every cm2 decode - q8 and the thirteen kq superblock formats -
-is spelled the 16-bit way, which is why the block structs are `int16` arrays over the same
-bytes. The IQ4_XS codebook is the one runtime-indexed read a decode makes: it is staged into a
-16-entry `@workgroup` f16 table ahead of the tile loop (the reference exe's shared-memory table-staging form),
-never selected out of a register vector per element.
+path, to about a third of the rate. Every cm2 decode - q8 and every kq superblock format - is
+spelled the 16-bit way, which is why the block structs are `int16` arrays over the same bytes.
+Every table a decode reads at a runtime index is staged into a `@workgroup` array ahead of the
+tile loop, never selected out of a register vector per element: the iq4 formats' 16-entry
+codebook (`kvalues_iq4nl`, shared by IQ4_XS and IQ4_NL) as f16, each grid format's codebook as
+its own word array. That is the shared-memory table-staging form of the reference exe -
+llama.cpp's Vulkan build, the upstream binary `benchmarks/lcpp_bench.das` measures against
+(`ARCHITECTURE_MEASUREMENT.md` sec.2.5).
 
-Every kq format's four-wide twin is hand-laid (`decode_v4`, the template's `DECV4` axis): it
+Every kq format's four-wide twin is hand-written (`decode_v4`, the template's `DECV4` axis): it
 keeps the same spelling and shares what four consecutive elements share. A K-quant twin reads
 its four quant bytes as two 16-bit lanes and extracts the sub-block's scale pair once; a grid
 format's twin looks its grid word up once and takes the four bytes and the four sign bits from
 it. The synthesized twin (`DECVEC`, the axis a new format starts on) repeats the whole scalar
 body four times - the lane selects, the scale-plane words, the grid lookup and the sign parity
-- and on the grid formats it lost to the scalar callback for exactly that reason. The twin
-computes each element in the scalar's operation order, so the tile's CPU oracle holds under
+- and on the grid formats it runs slower than the scalar callback for exactly that reason. The
+twin computes each element in the scalar's operation order, so the tile's CPU oracle holds under
 either callback; which callback a box runs is the `device ready` line's `four-wide decode`.
+
+One decode body serves the tensor load's callback, the cm2 tiles and the CPU oracle. A kernel
+body can also call it on the plane element itself - `decode_v4(wq[i], ...)`, where the
+element's index travels and the callee chains through the plane, so no block is copied. The
+test `test_vkd_direct_decode` in `tests/test_vulkan_kernels.das` keeps that emitter capability.
 
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
 
 **The l/m tile pick is a wave-efficiency comparison.** For a GEMM of width `d` over `cnt` rows
-the l tile (256-row columns) and the m tile (128-row columns) each need some number of
-workgroups; each grid runs in whole waves over the device's SM count, and the pick compares
-occupied slots over allocated slots, cross-multiplied. The m tile wins only on a strict win; a
-tie goes to l, whose bigger tile carries twice the arithmetic intensity. Three rules sit ahead
-of the comparison: a region of 64 rows or fewer takes the s tile (32-row columns - the MoE
-expert-bucket shape, where a 512-token window routes ~32 rows to each of 128 experts and an m
-column would pad three quarters of every tile and take the edge path on all of them), a window
-of 128 rows or fewer takes m (the l column would run half empty), and a device that reports no
-SM count takes l and never splits k. The pick is PURE in `(d, cnt, sm_count)`, so the class the
-pipeline binds and the tile rule the meta fill writes can never disagree; `cnt` is the AVERAGE
-rows per active region of the dispatch, so one tile serves every region of a MoE schedule. The
-narrow-n end below s is GEMV's. The s tile's fast path loads a partial 32-row column UNCLAMPED
-and clamps only the store, so every f16 plane the chain feeds it - the gathered activation
-image and the hidden plane - is sized with 32 rows of slack past its last region
-(`ffn_cm2_chunk_rows`).
+the l tile (256-row columns) and the m tile (128-row columns) each take some number of
+workgroups. Each grid runs in whole waves over the device's SM count, so a grid's wave count
+times that SM count is the slots it allocates. The pick takes the tile whose workgroups fill
+the larger share of its allocated slots, the two ratios compared by cross-multiplying. The m
+tile wins only on a strict win; a tie goes to l, whose bigger tile carries twice the arithmetic
+intensity. Three rules sit ahead of the comparison: a region of 64 rows or fewer takes the s
+tile (32-row columns - the MoE expert-bucket shape, where a 512-token window routes ~32 rows to
+each of 128 experts and an m column would pad three quarters of every tile and take the edge
+path on all of them), a window of 128 rows or fewer takes m (the l column would run half
+empty), and a device that reports no SM count takes l and never splits k. Beyond `(d, cnt,
+sm_count)` the pick reads only two values fixed at init - the served mode and
+`DASLLAMA_CM2_TILE` - so the class the pipeline binds and the tile rule the meta fill writes
+can never disagree; `cnt` is the AVERAGE rows per active region of the dispatch, so one tile
+serves every region of a MoE schedule. A region below the s tile's row count goes to the decode
+GEMV family, not to a tile. The s tile's fast path loads a partial 32-row column UNCLAMPED and
+clamps only the store, so every f16 plane the chain feeds it - the gathered activation image and
+the hidden plane - is sized with 32 rows of slack past its last region (`ffn_cm2_chunk_rows`).
 
-**The split-k pick counts the dispatch group, not the GEMM.** Long K (2048 and up) on a grid
-that would fill under half the SMs splits the reduction across f32 partial planes that
-`SplitKReduce` sums (three chunks up to two thirds full, at most eight, each chunk 256-aligned
-and a split that would strand an empty tail shed). The grid it measures is the role's own
-workgroups PLUS those of the chain neighbours it runs beside - q with k and v, gate with up
-(`cm2_tiles`, the same pick each neighbour's own dispatch makes) - because the hazard-mask rail
-lets independent roles co-run, while every split role serializes through the one scratch plane
-(`VHZ_SK`) its neighbours would also claim. Counted alone, a 512-wide k or v projection over a
-512-row window fills 16 of 36 SMs and splits in two; counted beside q it runs whole, and k and v
-fill the device together. Split-k is left to the lone role - wo, down, a small model's
-classifier - whose grid nothing else pads.
+**The split-k pick counts the dispatch group, not the GEMM.** With long K (2048 and up), a grid
+that fills at most half the SMs splits its reduction across f32 partial planes that
+`SplitKReduce` sums, into as many chunks as fill the device (SM count over workgroups); a grid
+that fills up to two thirds splits into three. Eight chunks is the ceiling. Each chunk is
+256-aligned, and a chunk count whose last chunk would then be empty drops by one. The grid it
+measures is the role's own workgroups PLUS those of the chain neighbours it runs beside - q
+with k and v, gate with up (`cm2_tiles`, the same pick each neighbour's own dispatch makes) -
+because the hazard-mask rail lets independent roles co-run, while every split role serializes
+through the one scratch plane (`VHZ_SK`) its neighbours would also claim. Counted alone, a
+512-wide k or v projection over a 512-row window fills 16 of 36 SMs and splits in two; counted
+beside q it runs whole, and k and v fill the device together. Split-k is left to the lone
+role - wo, down, a small model's classifier - whose grid nothing else pads.
 
 **The f16 feed admits q8 and every kq superblock format** (`kq_sb`) - the set the cm2 decode
 callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class. The
@@ -79,82 +92,35 @@ NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4;
 `DASLLAMA_COOPMAT` overrides the ladder by name, and a cm2 request or force on a device without
 the extension lands on mm. The same resolver stamps the mode into the `.dlim` flavor
 configuration, so the recorded mode and the running mode cannot drift. The four-wide decode
-callback is NOT in that configuration: a cm2 tile names both callbacks
-(`coopmatLoadTensorDecode`'s tenth argument: the format's own `decode_v4` where the template's
-`DECV4` axis is on - every kq superblock format today, sec.2.2k - else the `DECVEC` axis,
-which synthesizes the twin from the scalar body and is where a new format starts, its
-`cm2:<fmt>` probe row deciding whether a hand-laid twin is owed), the device created with
-`DASLLAMA_VK_DECVEC` and the extension decides which
-one the driver runs, and neither choice shapes an image byte, so the bake identity ignores it
-(the configuration's own rule: a serve-only knob is never a field). `decvec_on` is the run's arm,
-announced on the `device ready` line.
-
-**The mm mode serves the kq formats through the same template's KHR arm.** A device with
-KHR_cooperative_matrix and no NV_coopmat2 (every AMD and Intel part, the GTX and Turing lines)
-has no decode-in-load tensor API, so the cm2 template carries a second body under its `KHR`
-axis: the f16 weight tile is staged by hand - each of the 256 threads copies one weight row's
-16-wide half of the 32-wide k step through the format's OWN decode (`decode_v4` where the format
-has one, else `decode`, the same methods the tensor load names as callbacks, here called
-directly), the activation half from the f16 plane as two 16-byte words (the plane aliased as
-`uint4` on the same binding; sixteen scalar f16 loads ran the tile at two thirds of the rate -
-the staging's global loads, not the multiply-adds, set the pace), both into `@workgroup` `uint`
-arrays of f16 pairs at a stride of 20 words (16 plus 4 pad, so the fragment loads spread across
-banks; the activation words land as they are, the decoded weights packed two halves to a word) -
-and eight subgroups each own a 16-row weight strip across the 128 tokens as eight 16x16 f32
-accumulators, two 16-deep multiply-adds per staged step. A whole tile stores its fragments
-straight into y column-major at stride `d` (y is token-major, so a fragment's (weight, token)
-is `y[token * d + weight]`); an edge tile bounces each fragment through the weight staging
-array - free once the k loop ends, and its 2560 words hold the eight subgroups' 256-word
-fragments - and writes under the row and column bounds through a bit cast. The two staging
-arrays are the whole footprint by design: a third array for the bounce cost the tile a
-seventh of its rate (the probe's `slab` arm, 28.5 against 33.0 TFLOP/s on the 4B gate shape),
-because 8 KB more shared memory per workgroup is one workgroup fewer per SM. The k step is 32
-(the reference exe's BK): a 64-deep step doubles the staging tiles, halves the workgroups an SM
-holds, and with the 8 KB iq2s grid beside them reaches the 49152 B of workgroup memory the tier
-requires of a device - its floor; a 32 KiB part is not a target, and no kernel here is sized
-for one. The arm exists at ONE geometry - 128 weights
-by 128 tokens, k step 32 - so in mode 3 the tile pick answers 128 and split-k never engages, and
-`cm2_cls_ensure/set/enc` route to the `khr_cls_*` ladders, the same `(fmt)` key on both. The
-f16 feed admits a kq format in mode 3 only on a 32-lane subgroup (`khr_kq_tile_on`): the body
-indexes eight subgroups over the 128 weight rows, so a wave64 device (four subgroups per
-256-thread workgroup) keeps its kq planes on the sdot4 batch tile until the wave64 twin lands. q8 never arrives here
-- its mm-mode GEMM is the q8-fed mul_mm L-tile. The direct call passes the plane element
-itself (`decode_v4(wq[i], ...)`): the emitter hands the callee the element's index and the
-body chains through the plane, so no block is ever copied. The copy form - a `let` of the
-element passed by value, which the emitter spills to a Function-storage local - ran the same
-tile at well under half the rate (8.0 against 19.3 TFLOP/s on the 4B gate shape with scalar
-activation loads, 29.6 with the 16-byte ones), the whole 128 to 176 B block loaded from the
-plane and stored to the local on every call, four calls per thread per k step; the
-plane-element form measures within noise of hand-inlined decode arithmetic. The measured
-alternatives that lost: B fragments loaded straight from the plane with no staging (17.1), a
-64-deep k step (15.7 - its 40 KB footprint halves the workgroups an SM holds), and the separate
-bounce slab (28.7). The rows are `harness/vk_gemm_probe.das -- khrx`, best of four interleaved
-rounds on the RTX 5060 Ti: the shipped class reads 32.1 on the 4B gate shape, the probe's copy
-of its body 33.2, and the weight stage replaced by a constant fill 41.2 - the ceiling the
-staging's global loads leave.
-Either way the decode body is authored once and serves the tensor load, the KHR staging and
-the CPU oracle alike.
+callback is not in that configuration. A cm2 tile names both callbacks
+(`coopmatLoadTensorDecode`'s tenth argument): the format's own `decode_v4` where the template's
+`DECV4` axis is on - every kq superblock format, sec.2.2k - else the `DECVEC` axis, which
+synthesizes the twin from the scalar body and is where a new format starts; its `cm2:<fmt>`
+probe row is what decides whether the format gets a hand-written twin. The device decides which
+one the driver runs - it is created with `DASLLAMA_VK_DECVEC` and the extension - and neither
+choice shapes an image byte, so the bake identity ignores it: a serve-only knob is not a
+configuration field. `decvec_on` is the run's arm, announced on the `device ready` line.
 
 **The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is
 whole (`m0 + 128 <= d`), the token column is whole or stamped s, and K is a whole number of BK
 steps; the layouts are then created clamp-Undefined and the B and output strides are masked to
-a multiple of 8 f16 (`stride &= ~7`). The mask is an identity on today's shapes - `n` and `d`
-are 32-multiples - and it exists to make the alignment PROVABLE to the driver's address
-analysis, which is what keeps the loads on the wide path. The s column gates only the weight
-tile: its partial token column loads unclamped and its store clamps. Everything else takes the
-edge path with clamped layouts.
+a multiple of 8 f16 (`stride &= ~7`). The mask changes nothing while `n` and `d` are
+32-multiples, which every served shape is; it exists to make the alignment PROVABLE to the
+driver's address analysis, which is what keeps the loads on the wide path. The s column gates
+only the weight tile: its partial token column loads unclamped and its store clamps. Everything
+else takes the edge path with clamped layouts.
 
 **The no-split arm keeps literal loop bounds and a literal store base.** Where `ksplit` is zero
 the k loop runs the literal `0 .. n` with the store at the row base rather than the general
 `k0`/`k1`/`ybase` form, although those values are exactly `0`, `n` and `0` on that path: the
-general spelling cost 27% of prefill throughput (`benchmarks/lcpp_bench.das` pp512, 5060 Ti).
+general spelling costs 27% of prefill throughput (`benchmarks/lcpp_bench.das` pp512, 5060 Ti).
 The split arm keeps the general form.
 
 ### 2.2m Class-pipeline creation is the Vulkan tier's one shader A/B seat {#vk-class-pipeline-build}
 
 `vkd_class_pipe` is the single place a class kernel's SPIR-V becomes a pipeline, so both shader
 instruments hang there and nothing else has to know about them. The four-wide decode fallback
-hangs there too: when the device was created without `VK_NV_cooperative_matrix_decode_vector`
+hangs there too: when the device carries no `VK_NV_cooperative_matrix_decode_vector`
 (`decvec_on` false) the served words go through `strip_decode_vector` (the capability, the
 extension and every load's `DecodeVectorFunc` operand removed, the scalar callback left to
 serve), after the override and before the shader module, so a dumped or overridden blob is
@@ -171,7 +137,7 @@ ones.
 **Full subgroups are a whole-run arm, never a per-pipeline one.** `DASLLAMA_VK_FULLSG` plus a
 device that reports the feature sets `g_gpu.full_sg_on` once at device init, and every class
 pipeline is then built with `REQUIRE_FULL_SUBGROUPS`. A run never mixes pinned and plain
-pipelines, so an A/B compares two whole runs. Plain is the default: pinned measured slower on
+pipelines, so an A/B compares two whole runs. Plain is the default: pinned measures slower on
 the mm_a gate shape.
 
 ### 2.2q The MoE expert batch arm rides the cm2 tiles through a device-side f16 gather {#cm2-expert-chain}
@@ -185,27 +151,75 @@ its position's row as f16 into the entry's bucket row, the inverse walk of the c
 same map. Gate and up then run the cm2 decode-in-load tiles over that f16 image, the act writes
 the hidden plane as f16, and down runs the cm2 tiles again - the resident dense chain's
 `pf_gemm_enc` feed, with the region records the quant form already fills. The engine asks the
-tier per layer (`moe_gpu_ffn_xf_ok`): the answer is yes only in mode 4 on a coopmat2 device, for
-a gate/up/down triple whose every format the f16 feed admits (sec.2.2l), with the window inside
-the x plane's cap - and on yes it skips its own requant and gather, so the CPU cost of the
-layer's FFN is the routing alone. The f16 form is the combined (`npos > 0`) form only: the
+tier per layer (`moe_gpu_ffn_xf_ok`): the answer is yes only in cm2 mode on a coopmat2 device,
+for a gate/up/down triple whose every format the f16 feed admits (sec.2.2l), with the window
+inside the x plane's cap - and on yes it skips its own requant and gather, so the CPU cost of
+the layer's FFN is the routing alone. The f16 form is the combined (`npos > 0`) form only: the
 combine is what makes the device-side gather pay, since neither the gathered image nor the
 bucket rows ever cross PCIe. Streamed groups take the same arm after the slot bind.
 
 **The per-op attention chain runs the same cm2 flash-attention tile the resident chain runs**
-(`fa_cm2_h64` / `h128`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j) when the device carries the coopmat2-fa trio, the fa knob is
-on, the head size is 64 or 128, and the model's attention is not gated - this chain wires neither
-the h256 stamps nor their gated epilogue, so gated models keep the flash-style `at_attn` pass. The tile reads
-f16 K/V: the chain keeps its f32 roped-k / raw-v planes at absolute positions for the host
-readback the CPU cache store consumes, and fills f16 shadows of them with the base-less
-`f16cvt` over the whole attended prefix each window; the fa output lands in the same out plane
-`at_attn` writes, so the requant and `wo` stages never learn which pass ran.
+(`fa_cm2_h64` / `h128`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j) when the device reports the cm2
+flash-attention features (`has_coopmat2_fa` - cooperative-matrix reductions, conversions and
+per-element ops), the fa knob is on, the head size is 64 or 128, and the model's attention is
+not gated - this chain wires neither the h256 stamps nor their gated epilogue, so gated models
+keep the flash-style `at_attn` pass. The tile reads f16 K/V: the chain keeps its f32 roped-k /
+raw-v planes at absolute positions for the host readback the CPU cache store consumes, and
+fills f16 shadows of them with the base-less `f16cvt` over the whole attended prefix each
+window; the fa output lands in the same out plane `at_attn` writes, so the requant and `wo`
+stages never learn which pass ran.
 
 **The per-op attention chain adds a q/k/v projection bias (qwen2moe) in its prep stage.** The
-layer's `[q | k | v]` row uploads to one device buffer per call and binds to `AtPrep`, whose q and
-k passes add their slice (`boff` 0 and `qd`) to each projection element before the norm and the
-rope - where the CPU chain adds it. v has no prep pass of its own, so a biased layer runs a third
-`AtPrep` over the raw v window with the rope half 0 and the norm off, which makes the kernel a
-copy plus bias in place (`boff` `qd + kv_dim`); the copy into the absolute-position v plane and
-the host readback then both carry the bias. A model without the bias runs the two passes with
-`hasb` 0 and never reads the binding, and the rail's `arch_ok` no longer names the bias.
+layer's `[q | k | v]` row uploads to one device buffer per call and binds to `AtPrep`, whose q
+and k passes add their slice (`boff` 0 and `qd`) to each projection element before the norm and
+the rope - where the CPU chain adds it. v has no prep pass of its own, so a biased layer runs a
+third `AtPrep` over the raw v window with the rope half 0 and the norm off, which makes the
+kernel a copy plus bias in place (`boff` `qd + kv_dim`); the copy into the absolute-position v
+plane and the host readback then both carry the bias. A model without the bias runs the two
+passes with `hasb` 0 and never reads the binding, and the attention-quad rail's `arch_ok` test
+does not name the bias.
+
+### 2.2ae The KHR arm's hand-staged kq tile {#khr-mm-kq-tile}
+
+**The mm mode serves the kq formats through the same template's KHR arm.** A device with
+KHR_cooperative_matrix and no NV_coopmat2 (every AMD and Intel part, the GTX and Turing lines)
+has no decode-in-load tensor API, so the cm2 template carries a second body under its `KHR`
+axis, staged by hand. Each of the 256 threads writes one weight row's 16-wide half of the
+32-wide k step. The weights go through the format's `khr_stage16`. It reads the row's 16
+consecutive values from the quant plane as one or two 16-byte words (`wq4`, the plane aliased
+as `uint4` on its binding; the byte-granular grid formats read 32-bit words through `wqw`),
+reads the row's scale words once, and writes the 16 values into the stage as f16 pairs. The
+activations come straight from the f16 plane as two 16-byte words (that plane aliased as
+`uint4` on its binding), stored as they arrive. Both land in `@workgroup` `uint` arrays at a
+stride of 20 words (16 plus 4 pad, so the fragment loads spread across banks). q8 never arrives
+here - its mm-mode GEMM is the q8-fed mul_mm L-tile.
+
+**The eight subgroups tile the 128 x 128 step two by four.** Each owns 64 weight rows against
+32 tokens as eight 16x16 f16 accumulators (a `coopmatAcc_f16_16x16[8]` walked under
+`for [unroll_full]`, so every fragment sits in registers) and loads four weight fragments and
+two token fragments per 16-deep multiply-add round: 96 fragment loads per workgroup per k step
+against 144 when every subgroup owned a 16-row strip across all 128 tokens. The accumulators
+widen to f32 (`coopmatConvert`) before the store. A whole tile stores its fragments straight
+into y (token-major, so a fragment's (weight, token) is `y[token * d + weight]`); an edge tile
+bounces each widened fragment through the weight staging array - free once the k loop ends,
+and its 2560 words hold the eight subgroups' 256-word fragments - and writes under the row and
+column bounds through a bit cast. Moving any of the three levers back - the word stage, the f16
+accumulator width, the two-by-four tiling - costs rate: the word stage the most, the
+accumulator width next, the tiling least; the probe's `khrx` arms measure them
+(`ARCHITECTURE_MEASUREMENT.md` sec.2.5) and `followup_vulkan.md` item 42 keeps the figures. On
+a partial token column the edge store costs nothing beyond the padded rows: per computed row a
+300-token window runs at the whole-window rate.
+
+**The two staging arrays are the whole footprint by design.** A third array for the bounce
+costs the tile a seventh of its rate, because 8 KB more shared memory per workgroup is one
+workgroup fewer per SM. The k step is 32 (the reference exe's BK): a 64-deep step doubles the
+staging tiles, halves the workgroups an SM holds, and with the 8 KB iq2s grid beside them
+reaches the 49152 B of workgroup memory the tier requires of a device. The tile is sized to
+that 49152 B floor; a device that offers less workgroup memory is not a target.
+
+**The arm exists at one geometry** - 128 weights by 128 tokens, k step 32 - so in mm mode the
+tile pick answers 128 and split-k never engages, and `cm2_cls_ensure/set/enc` route to the
+`khr_cls_*` ladders, the same `(fmt)` key on both. The f16 feed admits a kq format in mm mode
+only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile,
+so a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4
+batch tile.

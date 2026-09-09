@@ -12,6 +12,7 @@ module _spirv_common shared public
 
 require spirv/spirv_shader
 require spirv/spirv_grammar
+require spirv/spirv_dis
 require spirv/spirv_builtins public
 require daslib/fio
 require math
@@ -295,6 +296,58 @@ def public eret_words : array<uint> {
 
 def public rfor_words : array<uint> {
     return clone_to_move(rfor_spv)
+}
+
+//! three shapes, three folds: the bare induction constant, a nested pair through a `uint()` re-type, a non-zero lower bound.
+[compute_shader(local_size_x=64, name="ufor_spv"), marker(no_coverage)]
+def ufor {
+    let gi = gl_GlobalInvocationID.x
+    var acc : float[8]
+    for [unroll_full] (i in range(8)) {
+        acc[i] = float(i)
+    }
+    for [unroll_full] (t in range(2)) {
+        for [unroll_full] (c in range(4)) {
+            acc[t * 4 + c] += fdata[gi + (uint(t) * 8u + uint(c))]
+        }
+    }
+    var s = 0.0
+    for [unroll_full] (i in range(1, 8)) {
+        s += acc[i]
+    }
+    fdata[gi] = s
+}
+
+def public ufor_words : array<uint> {
+    return clone_to_move(ufor_spv)
+}
+
+let private UFOLD_N = 4   //! a named module constant as the bound: the lint compile hands it over unfolded
+
+//! every integer fold the unroll carries, over one induction variable: unary - and ~, the binary - / % << >> & | ^;
+//! then the bound shapes a literal range() cannot spell: a literal urange, a zero-trip range and a one-trip range
+[compute_shader(local_size_x=64, name="ufold_spv"), marker(no_coverage)]
+def ufold {
+    let gi = gl_GlobalInvocationID.x
+    var s = 0.0
+    for [unroll_full] (i in range(UFOLD_N)) {
+        let u = uint(i)
+        s += float(-i) + float(~u) + float(i - 1) + float(i / 2) + float(i % 3) + float(i << 1) + float(i >> 1) + float(i & 1) + float(i | 2) + float(i ^ 1)
+    }
+    for [unroll_full] (k in urange(2u, 5u)) {
+        s += float(k)
+    }
+    for [unroll_full] (_z in range(0)) {
+        s += 100.0
+    }
+    for [unroll_full] (_o in range(1)) {
+        s++
+    }
+    fdata[gi] = s
+}
+
+def public ufold_words : array<uint> {
+    return clone_to_move(ufold_spv)
 }
 
 // ===== Phase-3 vertex/fragment fixtures: stage I/O (@in/@out + Location), rasterizer builtins
@@ -2303,6 +2356,56 @@ def coopmat_f16acc_kernel {
 
 def public coopmat_f16acc_words : array<uint> {
     return clone_to_move(coopmat_f16acc_spv)
+}
+
+var @ssbo @binding = 0 cma_a : array<float16>
+var @ssbo @binding = 1 cma_b : array<float16>
+var @ssbo @binding = 2 cma_c : array<float>
+
+[compute_shader(local_size_x=32, name="coopmat_arr_spv"), marker(no_coverage)]
+def coopmat_arr_kernel {
+    var a : coopmatA_f16_16x16
+    var b : coopmatB_f16_16x16
+    var acc : coopmatAcc_f16_16x16[4]
+    coopmatLoad(a, cma_a, 0, 16, 0)
+    for [unroll_full] (c in range(4)) {
+        coopmatLoad(b, cma_b, c * 256, 16, 1)
+        acc[c] = coopmatMulAdd(a, b, acc[c])
+    }
+    var accw : coopmatAcc_f32_16x16
+    for [unroll_full] (c in range(4)) {
+        coopmatConvert(accw, acc[c])
+        coopmatStore(accw, cma_c, c * 256, 16, 1)
+    }
+}
+
+def public coopmat_arr_words : array<uint> {
+    return clone_to_move(coopmat_arr_spv)
+}
+
+def public count_function_storage_chains(words : array<uint>) : tuple<chains : int; dynamic_indices : int> {
+    var consts : table<uint>
+    var fvars : table<uint>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.Constant) && n >= 2) {
+            consts |> insert(w[s + 1])
+        } elif (opcode == uint(SpvOp.Variable) && n >= 3 && w[s + 2] == uint(SpvStorageClass.Function)) {
+            fvars |> insert(w[s + 1])
+        }
+    }
+    var chains = 0
+    var dynamic_indices = 0
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.AccessChain) && n >= 4 && key_exists(fvars, w[s + 2])) {
+            chains++
+            for (i in range(3, n)) {
+                if (!key_exists(consts, w[s + i])) {
+                    dynamic_indices++
+                }
+            }
+        }
+    }
+    return (chains = chains, dynamic_indices = dynamic_indices)
 }
 
 // ===== packed integer dot product: sdot4 -> OpSDot with the PackedVectorFormat4x8Bit literal.
