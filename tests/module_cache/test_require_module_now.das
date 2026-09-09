@@ -19,6 +19,8 @@ var late_second : Module?
 var late_answer_out = 0
 var late_sum_out = 0
 var late_sum3_out = 0
+var late_pick_out = 0
+var late_pick_why : string
 var late_nomacro_mod : Module?
 var late_nomacro_ctx : Context?
 var late_absent_why : string
@@ -36,6 +38,12 @@ def late_probe {
             call_in_context(ctx, "late_answer", late_answer_out)
             call_in_context(ctx, "late_add", 20, 22, late_sum_out)
             call_in_context(ctx, "late_add3", 20, 20, 2, late_sum3_out)
+            try {
+                call_in_context(ctx, "late_pick", 7, late_pick_out)
+                late_pick_why = "answered {late_pick_out}"
+            } recover {
+                late_pick_why = this_context().last_exception
+            }
         }
     }
     late_nomacro_mod = require_module_now(fixture("mc_late_nomacro"))
@@ -98,10 +106,12 @@ def test_require_module_now(t : T?) {
         t |> success(has_module("mc_late_mod"), "the module joined the process")
         t |> success(late_second == late_mod, "a second call answers the module already there")
     }
-    t |> run("its macro context answers a call by name, the result through a pointer") @(t : T?) {
+    t |> run("its macro context answers a call by name, the result through a pointer; a name two functions share is an error, not a pick") @(t : T?) {
         t |> equal(late_answer_out, 42)
         t |> equal(late_sum_out, 42)
         t |> equal(late_sum3_out, 42)
+        t |> success(find(late_pick_why, "'late_pick' is ambiguous") >= 0, "the shared name is refused: {late_pick_why}")
+        t |> equal(late_pick_out, 0, "neither late_pick ran")
     }
     t |> run("a shared module with no macro context is required, and macro_context_of answers null for it") @(t : T?) {
         t |> success(late_nomacro_mod != null && late_nomacro_mod.name == "mc_late_nomacro", "the late require answers the module")

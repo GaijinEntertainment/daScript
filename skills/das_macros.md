@@ -72,7 +72,8 @@ macro, a simulate macro or an `[init]` (a running script has no compile for the 
 panics), `require_module_now("pkg/mod")` compiles a `shared` module, named by its file, and its
 prerequisites into the process (or answers the one there), `macro_context_of` gives
 its macro context, and `call_in_context(ctx, "fn", args..., result)` calls an `[export]`ed function
-there by name with the result through a pointer. The module is not a dependency - its symbols and
+there by name with the result through a pointer - a name the context holds twice (an overload, a
+same-named function in a required module) is an error, not a pick. The module is not a dependency - its symbols and
 macros stay out of the caller - which is the point when the callee is expensive to bring up and
 only sometimes needed: a hit on a cache decides in the caller, and the emitter comes in on a miss.
 

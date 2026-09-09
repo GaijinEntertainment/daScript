@@ -4,7 +4,7 @@ options strict_smart_pointers
 
 module cross_context shared public
 
-//! A module required after the walk, and calls into its macro context.
+//! A module required after the walk, and calls into its macro context by a name held once there.
 
 require daslib/ast public
 require daslib/rtti public

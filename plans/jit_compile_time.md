@@ -77,7 +77,7 @@ Levers, unmeasured: a macro context that simulates lazily on the first macro cal
 at record read; a cheaper simulate for a context whose program did not change (the record could
 carry the simulated context's tables); a `[_macro]`-free module skipping the context entirely.
 
-## Serializer follow-ups from the require-group review (ledgered 2026-09-09)
+## Follow-ups from the require-group review (ledgered 2026-09-08)
 
 - **A changed record resumes instead of cutting.** `trySerializeProgramModule` cuts the stream
   at a changed file ("file changed"), so every record after it - the emitter's ~40 modules a
@@ -106,5 +106,15 @@ carry the simulated context's tables); a `[_macro]`-free module skipping the con
 - **`requestJit` is still a bit on the shared `Function`** (`mark_jit_selection`), the shape
   the per-program tables removed for `used` and `index`; two programs JIT-ing in one process
   re-stamp each other's answer between plan and resolve.
-- **`call_in_context` dispatches by bare name** (`pinvoke_named` takes the first `findFunction`
-  match), so two `[export]` overloads of one name in a macro context mis-dispatch silently.
+- **A late require nested in a parse or a record read is never cached.** `requireModuleNow`
+  hides the stream (`LateRequireEnvScope::hideStream`) when the bound program is compiling or
+  the reader is inside a record, so a `[call_macro]`'s or a macro module's `[init]`'s late
+  require parses from source on every run. The JIT's simulate-time require, the one that
+  matters today, is between records and joins the stream; the nested shapes would need a
+  reader that can suspend a record and a writer that can insert after the enclosing module's.
+- **Nothing checks that a descriptor's `grp` rows agree with the module's C++ rows.** A
+  static host gets the rows `registerModuleGroupMember` adds from the module constructor, a
+  shared_module build the rows the descriptor's `register_module_group` recorded; the two are
+  spelled by hand in two files (`dasLLVM.cpp` / `.das_module`, and the sibling pairs) and drift
+  is a member one build has and the other lacks. A gate that loads each descriptor and diffs
+  its `grp` rows against the constructor's registry would catch it.

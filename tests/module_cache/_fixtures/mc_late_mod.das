@@ -28,3 +28,17 @@ def public late_add3(a, b, c : int; var out : int?) {
         *out = a + b + c
     }
 }
+
+[export]
+def public late_pick(var out : int?) {
+    unsafe {
+        *out = 1
+    }
+}
+
+[export]
+def public late_pick(a : int; var out : int?) {
+    unsafe {
+        *out = a
+    }
+}

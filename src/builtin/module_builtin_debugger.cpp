@@ -1150,10 +1150,16 @@ namespace debugger {
         LineInfo exAt;
         string exText;
         auto body = [&](){
-            auto simFn = invCtx->findFunction(fn);
+            bool isUnique = false;
+            auto simFn = invCtx->findFunction(fn, isUnique);
             if ( !simFn ) {
                 exAt = call->debugInfo;
                 exText = string("pinvoke can't find '") + fn + "' function";
+                return;
+            }
+            if ( !isUnique ) {
+                exAt = call->debugInfo;
+                exText = string("pinvoke '") + fn + "' is ambiguous - the context has more than one function of that name";
                 return;
             }
             if ( simFn->debugInfo->count!=uint32_t(call->nArguments-2) ) {
