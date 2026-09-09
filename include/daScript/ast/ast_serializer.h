@@ -439,6 +439,11 @@ namespace das {
             AstSerializerState * state,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at );
+    // the same, with the access the restored program's late requires walk through
+    void rtti_ast_serializer_deserialize_program_ex (
+            AstSerializerState * state, smart_ptr<FileAccess> access,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block,
+            Context * context, LineInfoArg * at );
 
     // Get serialized data from a writing serializer.
     void rtti_ast_serializer_get_data (

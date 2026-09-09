@@ -176,9 +176,11 @@ after the prerequisite walk - a macro, a simulate macro, an `[init]` - for a mod
 never saw. It is a compile's: the das entry (`daslib/cross_context`, the `ast` module's
 `require_module_now`) refuses a call with no program compiling or simulating, since a running
 script has no compile whose stream, policies and access the walk could join, and a null access
-is the compiling program's own (`Program::access`, set by `parseDaScriptEx`), so a `-project`
-mapping or a host's custom access reaches the late walk as it reaches the host's; a caller
-restricts by passing an access of its own. It answers the module already in the process when
+is the compiling program's own (`Program::access`, set by `parseDaScriptEx` for a parse and by
+`deserialize_program`'s access argument for a program a reader restores - a stream carries no
+access, so a reader that gives none leaves a late require nothing to walk with), so a
+`-project` mapping or a host's custom access reaches the late walk as it reaches the host's; a
+caller restricts by passing an access of its own. It answers the module already in the process when
 there is one (a promoted shared module, a linked C++ module, or a deferred manifest row, which
 it loads), and otherwise walks the target's own prerequisites, compiles the missing ones the way
 `compileDaScript` does - each parsed as a dependency, promoted when its program asks to be

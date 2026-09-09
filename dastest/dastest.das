@@ -436,9 +436,12 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
         fread(f, data)
         log::info("Deserializing {count:d} programs from {in_file}")
         var ser = create_ast_deserializer(data)
+        // the reader's access: a stream carries none, and a program's late require takes its program's
+        var inscope access <- make_file_access(ctx.projectPath)
+        access |> add_file_access_root("dastest", ctx.dastestRoot)
         using() $(var _mg : ModuleGroup) {
             for (i in range(count)) {
-                deserialize_program(ser) $(ok, program, error) {
+                deserialize_program(ser, access) $(ok, program, error) {
                     if (!ok) {
                         log::error("Deserialization failed at program {i}: {error}")
                         res.errors++
