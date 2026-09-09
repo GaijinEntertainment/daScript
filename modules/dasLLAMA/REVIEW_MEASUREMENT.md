@@ -3,12 +3,12 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `PERF_LEDGER.md`.
 
-Figure rules here bind any text this change adds - in the repo, in its commit messages, or in
-its PR body - outside the pages a `site*/` or `utils/` folder checklist owns (repo root); those
-pages answer to their own checklist. The ledger rules key on `PERF_LEDGER.md`. The naming a
-figure rule asks for sits in the figure's own sentence, in a table heading that covers the
-table's rows, in a section-level provenance line that covers the paragraphs under it, or in a
-citation of the passage whose provenance line covers it.
+Figure rules here bind any text this change adds - in the repo or in its PR body - outside the
+pages a `site*/` or `utils/` folder checklist owns (repo root); those pages answer to their own
+checklist. The ledger rules key on `PERF_LEDGER.md`. The naming a figure rule asks for sits in
+the figure's own sentence, in a table heading that covers the table's rows, in a section-level
+provenance line that covers the paragraphs under it, or in a citation of the passage whose
+provenance line covers it.
 
 **A `PERF_LEDGER.md` entry never states a tok/s figure or a turn wall that the `-jit` script
 produced - a `-jit` A/B pair enters as its ratio, with the arms' absolute rates left in the
@@ -57,11 +57,13 @@ decision in the report of the run that took it and in the PR that lands the kern
 winner enters the ledger only through a re-measured board cell.
 
 **A diff that makes the engine run end to end - serving a client, or measuring - by a route no
-board cell exercises mints that cell in the same change; a route no leg of
-`performance/gen_bench_records.das` mints a row for names, in the same change, the record or
-gate output that proves the route ran end to end.** A route is anything that changes which code
-runs a whole prefill-plus-decode pass end to end, including the path a run with no flags and no
-environment overrides takes.
+board cell exercises mints that cell in the same change.** A route is anything that changes
+which code runs a whole prefill-plus-decode pass end to end, including the path a run with no
+flags and no environment overrides takes.
+
+**A change that owes a board cell for a route no leg of `performance/gen_bench_records.das`
+mints a row for names instead, in the same change, the record or gate output that proves the
+route ran end to end.**
 
 **A diff that makes the fat exe - a shipped exe carrying its tune profile
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - run end to end names `tune_gate`'s fat-world report
@@ -71,11 +73,9 @@ environment overrides takes.
 that path, re-mints a board row (`performance/records/<box>.json`) that exercises that path, in
 the same change, and names that row in the PR body.** A box mints a path when
 `performance/gen_bench_records.das` mints a row for it on that box - a leg its `stored_row_leg`
-(`performance/profile_common.das`) admits - rather than refusing or skipping it; a backend
-route the record rig has no leg for instead names the record or gate output that proves the
-path ran end to end. Where no row exercises the path, the diff mints one. The board is the
-module's committed record of what serving costs; a kernel win that never lands there is
-invisible to the next regression check.
+(`performance/profile_common.das`) admits - rather than refusing or skipping it. Where no row
+exercises the path, the diff mints one. The board is the module's committed record of what
+serving costs; a kernel win that never lands there is invisible to the next regression check.
 
 **A timing figure of a served turn as a whole - tok/s, latency, a whole-turn model or engine
 comparison, the 512-token prefill (pp512) and 128-token decode (tg128) rates - written down as

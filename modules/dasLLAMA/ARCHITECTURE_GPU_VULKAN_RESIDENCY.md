@@ -48,8 +48,8 @@ at 4.35 tok/s, and with 4 GiB more the device returned all-zero logits with no e
 manager never demotes the idle other process; ours is the victim, so the room left is the only
 honest input. A pinned `VRAM_MB` takes no headroom and reads no room: the number is the user's
 contract, and the plan fills it. Every rate in this section is a `benchmarks/lcpp_bench.das`
-tg128 reading (`-jit --for-debug-purposes`, `DASLLAMA_IMAGE=0`, the rig `plans/qwen_arc_board.md`
-states) on the zen2 box's RTX 5060 Ti 16 GB, driver 616.56.
+tg128 reading (`-jit --for-debug-purposes -r 5 -p 512 -n 128`, `DASLLAMA_IMAGE=0`,
+`DASLLAMA_GPU=1`, 16 threads) on the zen2 box's RTX 5060 Ti 16 GB, driver 616.56.
 
 **Where no OS answers, the auto arm's headroom is the larger of 2 GiB and 27% of the tier's
 cap.** That share keeps a 16 GB card's plan near 10.7 GB and leaves an 8 GB card's plan where

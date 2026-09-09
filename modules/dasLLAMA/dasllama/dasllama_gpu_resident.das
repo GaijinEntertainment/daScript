@@ -1702,8 +1702,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         }
         walk_say(dense_skips, "dense rail")
     }
-    // shared-expert triples — DASLLAMA_GPU_SHEXP=1 opt-in. Dense (every token, every layer, one
-    // fixed weight set) so residency carries no miss term; q8 only (the repack registers them fmt 0).
+    // shared-expert triples — on with the tier (DASLLAMA_GPU_SHEXP overrides). Dense (every token,
+    // every layer, one fixed weight set) so residency carries no miss term; q8 only (the repack
+    // registers them fmt 0).
     vulkan_bake_role(VkBakeRole.shexp)
     if (gpu_want_shexp() && t.config.n_ff_shexp > 0l && !t.config.moe_dense_shexp) {
         let nsh = t.config.n_ff_shexp

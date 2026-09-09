@@ -116,3 +116,23 @@ should keep the fixture in its own directory rather than reaching across the tre
 - All tests: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/`
 
 Sweep the whole `tests` root for AOT/JIT validation, per the root-path caveat above.
+
+## The dasSpirv emitter suite (`tests/spirv`)
+
+`tests/spirv` is the SPIR-V emitter's own gate: every fixture compiles a shader and asserts on
+the emitted words, `test_census.das` holds the emitted opcode set equal to the declared set in
+both directions, and every blob is validated with `spirv-val` where the box resolves one - a cell
+prints `spirv-val not found locally; skipping` otherwise, and no CI lane resolves it. The run
+`modules/dasSpirv/REVIEW.md` owes, on a box with the Vulkan SDK on `PATH` (the PR body names
+it):
+
+```
+bin/Release/daslang.exe dastest/dastest.das -- --test tests/spirv --cov-path spirv.lcov --isolated-mode
+```
+
+Green is: every cell passing, the census equal both ways, every blob `spirv-val`-clean, no
+`GC APP LEAK`; `spirv.lcov` is the emitter's dispatch coverage. Two checks stand outside the suite.
+A disassembly diff: dump an emitted module through `spirv_dis` (the emitter's symbolic
+disassembler, `modules/dasSpirv/spirv/spirv_dis.das`) and diff it against the external
+`spirv-dis` as ground truth. The real-driver gate: `modules/dasVulkan`'s integration suite under
+lavapipe and on a local GPU, where the words are shown to compute.

@@ -81,9 +81,8 @@ file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_t
 `performance/build_tts_data.das`), or a call that pins the TTS weight lane (`set_tts_q8` /
 `set_styletts2_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
-**A diff that adds a file under `dasllama/`, or adds, moves, or edits a def, a `require`, or a
-module global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
-what-lands-where rules.
+**A diff that adds a file under `dasllama/`, or adds or moves a def, a `require`, or a module
+global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
 
 **A `[test]` file that requires any `dasllama/*` module and sits under `modules/dasLLAMA/`
 outside `tests/` (beside this file) is a defect - move it into `tests/`.**
@@ -141,21 +140,25 @@ reported wall-clock times - is marked `// clock: control`** - unmarked, it canno
 apart from the ad-hoc profiling an engine file may not carry.
 
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
-quantum - one batch of prompt tokens the prefill path processes in a single pass - is COVERED
-by an annotated region entry** - `[hot_path]`, any of the `[no_alloc]` / `[no_env]` /
-`[no_io]` contracts, or `[cold_path]` on its only reaching entry. Covered means an annotated
-entry reaches it: an annotation binds every function the entry calls, so an interior function
-carries nothing of its own except a `[cold_path]` that exempts a rarely-taken branch (a guard
-that logs once) from the entry's contracts; an entry no annotated entry reaches carries the
-annotation itself, and a function reached only through a registered function value is reached
-by none. A region
-entry is the outermost such function (a kernel `*_encode` / `*_decode`, a step driver, the CPU
-decoder's `forward_*` entries); a loop reached only from a load, stage, bake, or convert path is
-not one. A driver that calls the `forward_*` entries and is reached only by a measurement - a
-benchmark row, a rig's loop - and never by a served request carries `[cold_path]`, which covers
-only the functions below it that carry no annotation of their own.
+quantum - one batch of prompt tokens the prefill path processes in a single pass - is reached
+by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]`
+contracts, or `[cold_path]` on its only reaching entry; a renamed per-token function is not
+new, and its annotation moves with the name in the same change.** An annotation binds every
+function the entry calls; an unreached loop has no contract (`ARCHITECTURE_RUNTIME.md` sec.2.11).
 
-**A renamed per-token function is not new: its annotation moves with the name in the same change.**
+**The annotation sits on the region entry - the outermost function the runtime re-enters per
+token, per frame, or per prefill quantum: a kernel `*_encode` / `*_decode`, a step driver, the
+CPU decoder's `forward_*` entries, or a function reached only through a registered function
+value - and an interior function carries an annotation only when it is a `[cold_path]` on a
+rarely-taken branch (a guard that logs once).**
+
+**A loop reached only from a load, stage, bake, or convert path is not a region entry: it
+carries no `[hot_path]` and none of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts; a
+`[cold_path]` may sit on it.**
+
+**A driver that calls the `forward_*` entries and is reached only by a measurement - a
+benchmark row, a rig's loop - and never by a served request carries `[cold_path]`, which
+covers only the functions below it that carry no annotation of their own.**
 
 **A change to `encode`/`bpe_encode`, or to a function they call, in
 `dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das` / `dasllama/dasllama_pretok.das`,
@@ -252,18 +255,17 @@ that only names it (a comment, a passing reference) does not count.
 **A diff that makes another file's defs reach a consumer through `require dasllama/dasllama`
 adds that file to `REVIEW.das`'s `FACADE_FILES` in the same change.**
 
-**A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A
-struct the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test;
-a struct the renderer emits but the registry does not is caught by
-`tests/test_env_registry.das`.
+**A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A struct
+the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test; a struct
+the renderer emits but the registry does not is caught by `tests/test_env_registry.das`.
 
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff that adds a file under `dasllama/`, or adds, moves, or edits a def, a `require`, or a
-module global in a file under `dasllama/`, or changes what a file owns, lands the sec.1 edit
-that keeps the charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` -
-in the same change.** A diff that adds a file to any folder where another file has its own
+**A diff that adds a file under `dasllama/`, moves a def, a `require`, or a module global
+between files there, or changes what a file owns, lands the sec.1 edit that keeps the
+charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same
+change.** A diff that adds a file to any folder where another file has its own
 sec.1 charter line lands the new file's charter line too. A module-root doc file - a ledger, a
 plan - has no charter line and needs no charter edit.
 

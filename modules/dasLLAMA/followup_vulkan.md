@@ -884,3 +884,16 @@ module) is independent and can land any time - it is pure structure.
     item: the no-coopmat arm - ours `DASLLAMA_COOPMAT=sdot4 DASLLAMA_VK_FA=0` against the reference
     build's coopmat-less arm (the knob in the 2026-09-07 row above), where the prototypes above are
     the road - the wave64 twin of the KHR tile, and the real-hardware pass.
+43. **The Vulkan tier covers every carrier the module already serves.** Ruled 2026-09-08 (Boris,
+    after the MoE fit survey, `followup_general.md` item 122): after the 0.6.4 release and before
+    any new family, every carrier dasLLAMA serves today gets its Vulkan arm at parity - the
+    existing families, and the vision, audio and TTS towers, whose GPU drivers are Metal today.
+    The known gaps on the family side are this ledger's items 3 (the quant KV codecs), 4 (batched
+    decode), 5 (the speculative round), 6 (the mx4 and q51 device kernels behind gpt-oss and
+    gemma-4-26B), the gemma4 pre/post-norm attention decline, and the fully-resident MoE chain:
+    the 5060 Ti holds Qwen1.5-MoE Q6_K, Qwen3-30B-A3B UD-Q3_K_XL, Qwen3.6-35B-A3B UD-IQ3_S and
+    gemma-4-26B-A4B UD-IQ4_XS whole (12.8 to 13.8 GB), the resident driver declines every MoE by
+    construction, and the per-op tier reads 0.14x prefill / 0.75x decode against the reference
+    engine on the one such row measured (the arc board's row 20, both engines fully resident).
+    Done = every family and tower row on the board with a Vulkan column at parity, and the
+    serving census (`coverage-vk`) with no carrier the tier declines.

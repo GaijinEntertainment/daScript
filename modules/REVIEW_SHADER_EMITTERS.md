@@ -2,7 +2,6 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
-Planned work: `plans/shader_emitter_followups.md`.
 
 **Routed here by another checklist: a diff under `dasMetal/` or `dasSpirv/`, or to any kernel
 body or fixture either emitter compiles, applies this list together with its own folder's.**

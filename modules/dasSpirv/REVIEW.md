@@ -41,4 +41,6 @@ invalid module (`ARCHITECTURE.md` section 4).
 
 **A diff under `modules/dasSpirv`, or to a fixture under `tests/spirv` (repo root), runs
 `tests/spirv` locally on a box that resolves `spirv-val` and names the run in the PR.** CI
-resolves no `spirv-val`, so a module the validator rejects reds nowhere but on that box.
+resolves no `spirv-val`, so a module the validator rejects reds nowhere but on that box. The
+run's command and what green means: `skills/internal/tests_in_repo.md`, the emitter suite
+section.

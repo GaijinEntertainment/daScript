@@ -20,19 +20,22 @@ block, verbatim except for the module name and the architecture-doc path:
 
 A checklist whose folder has a follow-up ledger appends `` Planned work: `<ledger>`. `` to
 the same line - `` Planned work: `<ledger>` (sec. <name>). `` when the ledger is one section
-of a larger document, so the pointer still finds it. A checklist whose folder's architecture doc has split into companions writes
-the plural - `` Architecture docs: `<A>`, `<B>`. `` - listing every doc its rules cite. A checklist with routed companions - a shared concern file, subfolder
-checklists, a skill reviewing a construct family - carries their routing lines in or right
-after the opening, each keyed by KIND ("a `[test]` file, wherever the diff puts it, answers to
-the `tests/` subfolder's checklist"), because the folder walk finds only files named
-`REVIEW.md` - a companion is reachable solely through its routing line. An opening that
-deviates from this block - or a checklist that restates contract text instead of pointing - is
-a self-review finding, fixed like any other.
+of a larger document, so the pointer still finds it. A checklist whose folder's architecture
+doc has split into companions writes the plural - `` Architecture docs: `<A>`, `<B>`. `` -
+listing every doc its rules cite. A checklist whose folder has no rationale document - a
+folder of transient documents, each deleted when its work lands, so no rule there can cite a
+reason - writes no `Architecture doc:` slot. A checklist with routed companions - a shared
+concern file, subfolder checklists, a skill reviewing a construct family - carries their
+routing lines in or right after the opening, each keyed by KIND ("a `[test]` file, wherever
+the diff puts it, answers to the `tests/` subfolder's checklist"), because the folder walk
+finds only files named `REVIEW.md` - a companion is reachable solely through its routing
+line. An opening that deviates from this block - or a checklist that restates contract text
+instead of pointing - is a self-review finding, fixed like any other.
 
 `<ARCH-DOC>` is the module's own design document - its `ARCHITECTURE.md` when it has one,
 otherwise its `CLAUDE.md`; a `README.md` that carries the module's charter and mechanisms
-fills the slot too (`site/README.md` is the ruled precedent). Name it concretely; a module
-with no rationale home needs one before its rules can cite a reason.
+fills the slot too (`site/README.md` is one). Name it concretely; a module with no rationale
+home needs one before its rules can cite a reason. (repo-only)
 
 ## The executable half - REVIEW.das
 
@@ -55,6 +58,7 @@ review) is the REVIEW audit row of `skills/internal/make_pr.md`; the tree-wide w
 
 - A separable concern gets its own file, routed to from the opening -
   `modules/REVIEW_SHADER_EMITTERS.md` and `modules/dasLLAMA/REVIEW_GPU.md` are the pattern.
+  (repo-only)
 - The `placement-auditor` agent checks a placement block's file list against the folder's
   actual contents.
 - Test rules add the specifics `REVIEW_COMMON.md`'s "New functionality ships with tests"
@@ -134,4 +138,4 @@ questions, not its limits - that file is the law. Then apply the self-review rul
 and run the followability classes above over the touched rules. The `dragon` agent runs this
 audit on any modified rule document; the `placement-auditor` agent audits a placement block
 against its folder. The canonical conforming set is `modules/dasLLAMA/REVIEW.md` and its
-routed companions.
+routed companions. (repo-only)

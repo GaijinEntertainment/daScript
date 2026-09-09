@@ -57,3 +57,16 @@ the binding rules in `modules/REVIEW_SHADER_EMITTERS.md`. This file holds what i
    - Measured 2026-09-08 (moved here from `modules/dasSpirv/ARCHITECTURE.md`): the `Unroll` loop
      control on `coopmatClamp`'s hand-emitted element walk is worth 34.2 TFLOP/s rolled against
      57.8 unrolled, on the cm2 l-tile min-kernel, RTX 5060 Ti, driver 610.74.
+
+3. **Add the missing fixtures to the `tests/spirv` census roster.** Found 2026-09-08 by the KHR
+   tile round: 111 `*_words` fixture defs against 87 `add_set` rows in `test_census.das`, so
+   about 25 fixtures' opcodes are outside the census sum, and an opcode nothing declares can be
+   emitted unnoticed. `tests/spirv/REVIEW.md` binds a diff that adds a fixture (ruled 2026-09-08:
+   the rule lands in the KHR tile PR, the backlog is the follow-up PR); the gap itself is the
+   `REVIEW.das` candidate - a gate that reads the fixture defs and the roster and fails on the
+   difference.
+   Same PR: the suite's skip line `spirv-val not found locally; skipping (CI enforces)` claims a
+   CI check no lane makes - the run is local by rule (`modules/dasSpirv/REVIEW.md`), so the feint
+   text says so instead.
+   Done = the unrostered fixtures rostered, the suite green, the gate in place so the roster
+   cannot drift again, and the skip line true.

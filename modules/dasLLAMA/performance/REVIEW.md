@@ -145,7 +145,3 @@ the row's canonical values** - the verify never reads the url of a file already 
 
 **A diff that refreshes `last_known_good_sidecar.json` replaces it with one complete mint from
 the box its provenance names, at the current `DASLLAMA_RELEASE` - never a hand-edited copy.**
-
-**A diff that re-mints the box profile's crowns, or bumps `DASLLAMA_RELEASE`, refreshes
-`last_known_good_sidecar.json` in the same change.** A copy minted before the current release
-serves fallbacks on every box, so the scaffolding pinned to it runs kernels nobody ships.

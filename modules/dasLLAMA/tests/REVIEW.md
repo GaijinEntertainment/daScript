@@ -22,16 +22,18 @@ the iteration form between PRs; a PR that ships on it never ran the PLE coverage
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
 function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the
 assertion - whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its header and
-sits in no `run.das` suite; every other test file in this folder sits in one.**
-`DASLLAMA_CPU_PREFILL=1` is what the runner arms for every suite.
+joins the exempt list of `test_run_suites.das`'s suite-membership gate in the same change;
+weakening that gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every
+suite.
 
 **Invoking dastest directly on a test file in a `run.das` suite other than `model-free` and
 `stocked` is a defect - run it through `run.das`.**
 
-**`run.das` runs nothing on require - no `[init]`, and no global whose initializer spawns,
-logs, writes the environment or touches the filesystem; a diff that adds one is a defect.**
-`test_run_suites.das` and `test_run_summary.das` require `run` by bare same-dir name, so
-anything that fires on require fires inside every one of those test processes.
+**`run.das` declares no global whose initializer spawns, logs, writes the environment or
+touches the filesystem; a diff that adds one is a defect, and weakening `test_run_suites.das`'s
+no-`[init]` check is a defect.** `test_run_suites.das` and `test_run_summary.das` require `run`
+by bare same-dir name, so anything that fires on require fires inside every one of those test
+processes.
 
 **A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
 thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the first turn.**
