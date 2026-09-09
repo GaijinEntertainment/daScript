@@ -1444,3 +1444,17 @@
     the acceptable-use terms already beside that select are the consent the upload asks for.
     The cap on the clip's decoded length is the ASR upload's (`max_audio_frames`); the name is
     the file's stem or the field's; a name the roster carries replaces it, as the boot path does.
+126. **A Pocket chunker of our own, as a quality rung.** The port follows the released
+    driver's chunker (pocket-tts 3.1.0: a token budget of 50 per chunk, sentence marks first,
+    then commas, then whitespace; "." appended only after a letter or digit) so the frame
+    counts match the oracle's. The reference's short-chunk early EOS (it002 stops at frame 2,
+    pt003 at frame 1 - the package's own behaviour on short accented sentences) is a chunker
+    artefact: a chunker that keeps a short trailing sentence with its predecessor, or pads it
+    the way the driver pads a four-word input, would read those sentences whole. A rig row per
+    language decides it; the oracle-parity cells keep the 3.1.0 rule as their reference.
+127. **A per-language WER arm for the rig.** `harness/tts_rig.py` scores English through
+    parakeet; the five other Pocket languages have an RTF row and a waveform check against the
+    reference but no WER. The engine's own multilingual Whisper (`load_asr_model` on
+    whisper-large-v3-turbo, the language forced) is the scorer with no new tooling - a
+    `--asr whisper` arm on the rig and one native sentence set per language
+    (`tests/_tts_fixtures/pocket_sentences.json` has three each; the rig wants 50-200).
