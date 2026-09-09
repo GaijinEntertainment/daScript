@@ -199,7 +199,8 @@ def private quoted_ident_tokens(text : string) : array<string> {
 //! Descriptor census for a module whose CMake derives its resolver rows from `.das_module`
 //! (ADD_MODULE_DAS_FROM_DESCRIPTOR), both directions: every `.das` in `census_dirs` is
 //! named by a quoted token in the descriptor, and every identifier-shaped quoted token
-//! outside `non_module_tokens` (e.g. the require category, a DLL registration class)
+//! outside `non_module_tokens` (e.g. the require category, a DLL registration class) and
+//! outside a `register_module_group` row (a registry key and a require path, never a file)
 //! names a file in some census dir. Neither direction has a build-time signal - a gate
 //! built on this is the only enforcer.
 def gate_descriptor_census(descriptor_path : string; census_dirs : array<string>; non_module_tokens : table<string>) {
@@ -207,7 +208,7 @@ def gate_descriptor_census(descriptor_path : string; census_dirs : array<string>
         gate_finding(descriptor_path, "missing - the descriptor is the module's one registration surface")
         return
     }
-    let descriptor = strip_line_comments(fread(descriptor_path))
+    let descriptor = without_group_rows(strip_line_comments(fread(descriptor_path)))
     for (folder in census_dirs) {
         dir(folder) $(name) {
             if (name |> ends_with(".das")) {
@@ -227,6 +228,10 @@ def gate_descriptor_census(descriptor_path : string; census_dirs : array<string>
                 "names {tok}, but no census dir ({dirs_text}) holds {tok}.das - a stale registration is a silently dropped resolver row")
         }
     }
+}
+
+def private without_group_rows(text : string) : string {
+    return join([for (line in split(text, "\n")); line; where find(line, "register_module_group(") < 0], "\n")
 }
 
 def private any_dir_holds(census_dirs : array<string>; fname : string) : bool {

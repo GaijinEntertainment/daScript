@@ -8,8 +8,10 @@
 #include "daScript/misc/handle_registry.h"
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/ast/dyn_modules.h"
+#include "daScript/ast/ast_serializer.h"
 
 #include <atomic>
+#include <mutex>
 
 namespace das {
 
@@ -191,6 +193,30 @@ namespace das {
     bool guardModuleAvailable ( const string & name ) {
         if ( Module::requireEx(name, false) ) return true;
         return g_deferredModuleLoader && g_deferredModuleLoader(name) && Module::requireEx(name, false);
+    }
+
+    // ARCHITECTURE.md sec.2 - process-wide, like the native paths: a descriptor registers once per process
+    static das_map<string, vector<ModuleGroupMember>> g_moduleGroups;
+    static mutex g_moduleGroupsMutex;
+
+    void registerModuleGroupMember ( const string & group, const string & member, const string & guard ) {
+        lock_guard<mutex> guard_(g_moduleGroupsMutex);
+        auto & members = g_moduleGroups[group];
+        for ( auto & m : members ) {
+            if ( m.member == member ) return;
+        }
+        members.push_back({member, guard});
+    }
+
+    vector<ModuleGroupMember> getModuleGroupMembers ( const string & group ) {
+        lock_guard<mutex> guard(g_moduleGroupsMutex);
+        auto it = g_moduleGroups.find(group);
+        if ( it == g_moduleGroups.end() ) return vector<ModuleGroupMember>();
+        vector<ModuleGroupMember> members = it->second;
+        sort(members.begin(), members.end(), [](const ModuleGroupMember & a, const ModuleGroupMember & b){
+            return a.member < b.member;
+        });
+        return members;
     }
 
     void Module::Initialize() {

@@ -23,6 +23,7 @@ require llvm/daslib/llvm_jit_code
 require llvm/daslib/llvm_cpu_class
 require llvm/daslib/llvm_user_modules  // nolint:STYLE030,LINT019 - side-effect require: [llvm_code] generator modules must be in THIS module's closure so their [init] registration runs in the context that reads the registry; STYLE030 is policy-gated, so the keep only fires under a require-analysis run
 require llvm/daslib/llvm_dll_utils
+require llvm/daslib/llvm_jit_plan
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
@@ -196,17 +197,6 @@ def get_function_addr(var ctx : Context?; func : Function?) {
     return unsafe(reinterpret<void?>(MNH_ADDR))
 }
 
-// Check if a function is a late-bound dasbind function (null builtin address, resolvable at runtime)
-[macro_function]
-def is_dasbind_late(func : Function?) : bool {
-    if (func == null || !func.flags.builtIn || func._module.name != "dasbind") return false
-    var hit = false
-    peek(func.name) $(s) {
-        hit = starts_with(s, "__dasbind__")
-    }
-    return hit
-}
-
 
 
 // Codegen mode: how function/global symbols are emitted. Distinct from the run_jit output concern
@@ -246,53 +236,8 @@ struct TableWalkState {
     stride  : int                // value stride in bytes (values lane; keys GEP by element type)
 }
 
-def private loop_source_is_jitable(src : ExpressionPtr) : bool {
-    assume srcT = src._type
-    if (srcT == null) {
-        return false
-    }
-    return (srcT.isRange || srcT.baseType == Type.tFixedArray || srcT.isGoodArrayType
-        || srcT.isIterator || srcT.isString || handle_each_is_jitable(src))
-}
-
-def public handle_each_is_jitable(src : ExpressionPtr) : bool {
-    assume srcT = src._type
-    if (srcT == null || !srcT.isHandle || srcT.annotation == null) {
-        return false
-    }
-    return get_jit_each(srcT.annotation) != null
-}
-
 def private is_int64_or_uint64(t : Type) : bool {
     return t == Type.tInt64 || t == Type.tUInt64
-}
-
-//! The jit passes a handled index in its own C ABI, so the index has to be a primitive the
-//! emitter can put in a register. Anything else (a typed id, a struct key) gets no address and
-//! keeps the interpreter, whatever the annotation offers. Returns -1 when not passable.
-def public jit_index_base_type(ixT : TypeDeclPtr) : int {
-    if (ixT == null || ixT.isRef) {
-        return -1
-    }
-    let bt = ixT.baseType
-    if (bt == Type.tInt || bt == Type.tUInt || bt == Type.tInt64 || bt == Type.tUInt64 ||
-        bt == Type.tInt8 || bt == Type.tUInt8 || bt == Type.tInt16 || bt == Type.tUInt16 ||
-        bt == Type.tFloat || bt == Type.tString) {
-        return int(bt)
-    }
-    return -1
-}
-
-def public handle_at_is_jitable(expr : ExprAt?) : bool {
-    assume subExprT = expr.subexpr._type
-    if (!subExprT.isHandle || subExprT.annotation == null) {
-        return false
-    }
-    let ibt = jit_index_base_type(expr.index._type)
-    if (ibt < 0) {
-        return false
-    }
-    return get_jit_at(subExprT.annotation, ibt) != null
 }
 
 [macro]
@@ -319,6 +264,7 @@ class public LlvmJitVisitor : AstVisitor {
     loop_stack : array<LoopBlock>
     block_stack : array<ExprBlock?>
     jit_context : Context?
+    @do_not_delete prog : Program?
     function_entry : LLVMOpaqueBasicBlock?
     function_body : LLVMOpaqueBasicBlock?
     monad2block : table<Expression?; LLVMOpaqueBasicBlock?>
@@ -349,7 +295,8 @@ class public LlvmJitVisitor : AstVisitor {
     ldu_hint : bool
     attributes : Attributes?
 
-    def LlvmJitVisitor(ctx : Context?; types_ : PrimitiveTypes?; uids : UidNodes?; flags_ : LlvmJitFlags; mode_ : LlvmJitMode; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+    def LlvmJitVisitor(prog_ : Program?; ctx : Context?; types_ : PrimitiveTypes?; uids : UidNodes?; flags_ : LlvmJitFlags; mode_ : LlvmJitMode; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+        prog = prog_
         jit_context = ctx
         types = types_
         g_builder = LLVMCreateBuilderInContext(g_ctx)
@@ -1901,7 +1848,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             }
         } else {
-            if (expr.func.moreFlags.requestJit) {
+            if (is_jit_selected(prog, expr.func)) {
                 var params <- build_call_params(expr)
                 params |> push(get_context_param())
                 if (cmresEval != null) {
@@ -4546,7 +4493,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprMakeStruct
     def callConstructor(expr : ExprMakeStruct?; cmresEval : LLVMOpaqueValue?) {
         assume expr_func = expr.constructor
-        if (expr_func.moreFlags.requestJit) {
+        if (is_jit_selected(prog, expr_func)) {
             var params <- [
                 get_context_param(),
                 LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), "")
@@ -6744,7 +6691,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def make_block_function(expr : ExprMakeBlock?; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
-        var astVisitor = new LlvmJitVisitor(jit_context, types, uid, flags, mode, g_di_builder, attributes)
+        var astVisitor = new LlvmJitVisitor(prog, jit_context, types, uid, flags, mode, g_di_builder, attributes)
         var result : LLVMOpaqueValue?
         var impl : LLVMOpaqueValue?
         make_visitor(*astVisitor) $(mv_adapter) {
@@ -7788,285 +7735,9 @@ def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLV
 
 // We need to overwrite address-like dependencies in .dll before start.
 // It's best to just avoid all such dependencies
-class public ResolveExternVisitor : AstVisitor {
-    dll : DLLHandle?
-    types : PrimitiveTypes?
-    jit_context : Context?
-    @do_not_delete thisFunc : Function?
-    @do_not_delete thisBlock : array<ExprBlock?>
-    uid : UidNodes?
-
-    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
-        return false
-    }
-
-    def override preVisitFunction(var fun : FunctionPtr) : void {
-        uid.reset(fun)
-        thisFunc = fun
-    }
-
-    def override visitFunction(fun : FunctionPtr) : FunctionPtr {
-        thisFunc = null
-        uid.reset(null)
-        return fun
-    }
-
-
-    def ResolveExternVisitor(var _dll : DLLHandle?; var _types : PrimitiveTypes?; ctx : Context?; uids : UidNodes?) {
-        dll = _dll
-        types = _types
-        jit_context = ctx
-        uid = uids
-    }
-
-    def make_call(expr : ExprCallFunc?) {
-        if (expr.func == null || has_intrinsic(expr)) return
-
-        if (expr.func.flags.builtIn) {
-            let FUNC_PTR = get_builtin_function_address(expr.func)
-            var is_dasbind = false
-            peek(expr.func.name) $(s) {
-                is_dasbind = find(s, "__dasbind__") >= 0
-            }
-            if (FUNC_PTR == null && !is_dasbind) {
-                failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {get_mangled_name(expr.func)}")
-            }
-            dll.set_glob_address(uid.get_dll_fn_name_ptr(expr.func), FUNC_PTR)
-        } else {
-            if (!expr.func.moreFlags.requestJit) {
-                var MNH_ADDR = get_function_addr(jit_context, expr.func)
-                dll.set_glob_address(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
-            }
-        }
-    }
-    def override preVisitExprNew(expr : ExprNew?) {
-        if (expr.typeexpr.isHandle) {
-            var new_handle_ptr = get_jit_new(expr.typeexpr.annotation)
-            if (new_handle_ptr == null) {
-                failed_T(expr.typeexpr, "missing new`handle function pointer for {describe(expr.typeexpr)}")
-                return
-            }
-            dll.set_glob_address(uid.get_new(expr.typeexpr), new_handle_ptr)
-        } else {
-            if (expr.typeexpr.baseType == Type.tFixedArray) {
-                // the handle gate lives on the chain element (the head is tFixedArray);
-                // borrow-walk — this pass runs outside ast_gc_guard, clones would leak
-                var elemT = expr.typeexpr
-                while (elemT.baseType == Type.tFixedArray && elemT.firstType != null) {
-                    elemT = elemT.firstType
-                }
-                if (elemT.baseType == Type.tHandle) {
-                    var new_handle_ptr = get_jit_new(elemT.annotation)
-                    if (new_handle_ptr == null) {
-                        failed_T(expr.typeexpr, "missing new`handle function pointer for {describe(expr.typeexpr)}")
-                        return
-                    }
-                    dll.set_glob_address(uid.get_new(expr.typeexpr), new_handle_ptr)
-                } else {
-                    if (expr.initializer) {
-                        make_call(expr)
-                    }
-                }
-            } else {
-                if (expr.initializer) {
-                    make_call(expr)
-                }
-            }
-        }
-    }
-
-    def override preVisitExprCall(expr : ExprCall?) {
-        make_call(expr)
-    }
-
-    def override preVisitExprOp2(var expr : ExprOp2?) {
-        if (isExprOp2_Func(expr)) {
-            make_call(expr)
-        }
-    }
-
-    def override preVisitExprOp1(var expr : ExprOp1?) {
-        if (isExprOp1_Func(expr)) {
-            make_call(expr)
-        }
-    }
-
-    def override preVisitExprDelete(var expr : ExprDelete?) {
-        assume subexpr = expr.subexpr
-        assume subT = expr.subexpr._type
-        if (subT.isPointer) {
-            assume firstT = expr.subexpr._type.firstType
-            if (firstT.isHandle) {
-                var delete_handle_ptr = get_jit_delete(firstT.annotation)
-                if (delete_handle_ptr == null) {
-                    failed_T(firstT, "missing delete`handle function pointer for {describe(firstT)}")
-                    return
-                }
-                dll.set_glob_address(uid.get_delete_type(firstT), delete_handle_ptr)
-            }
-        }
-    }
-
-    def override preVisitExprClone(expr : ExprClone?) : void {
-        assume leftT = expr.left._type
-        if (leftT.isHandle) {
-            var clone_handle_ptr = get_jit_clone(leftT.annotation)
-            if (clone_handle_ptr == null) {
-                failed_T(leftT, "missing clone`handle function pointer for {describe(leftT)}")
-                return
-            }
-            dll.set_glob_address(uid.get_clone_type(leftT), clone_handle_ptr)
-        }
-    }
-
-    def override preVisitExprAddr(expr : ExprAddr?) {
-        var MNH_ADDR = get_function_addr(jit_context, expr.func)
-        dll.set_glob_address(uid.get_addr(expr), MNH_ADDR)
-    }
-
-    def override preVisitExprMakeStructIndex(expr : ExprMakeStruct?; index : int; last : bool) : void {
-        // one time is enough?
-        if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
-            var MNH_ADDR = get_function_addr(jit_context, expr.constructor)
-            dll.set_glob_address(uid.get_ctor(expr), MNH_ADDR)
-        }
-    }
-
-    def override preVisitExprAscend(expr : ExprAscend?) : void {
-        if (expr.subexpr._type.isHandle) {
-            assume firstT = expr.subexpr._type
-            var new_handle_ptr = get_jit_new(firstT.annotation)
-            if (new_handle_ptr == null) {
-                failed_T(firstT, "missing new`handle function pointer for {describe(firstT)}")
-                return
-            }
-            dll.set_glob_address(uid.get_ascend_new(expr), new_handle_ptr)
-        }
-    }
-
-    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
-        thisBlock |> push <| unsafe(reinterpret<ExprBlock?>(expr._block))
-    }
-
-    def override visitExprMakeBlock(expr : ExprMakeBlock?) : ExpressionPtr {
-        thisBlock |> pop()
-        return expr
-    }
-
-    def private get_table_t(subexprT : TypeDeclPtr) {
-        assume firstT = subexprT.firstType
-        if (firstT.isWorkhorseType) {
-            return firstT.baseType
-        } else {
-            var uvt = get_underlying_value_type(firstT)
-            return uvt.baseType
-        }
-    }
-
-    // Pre-bind the JIT table-fn globals for the standalone-exe / cache-reload path. String
-    // keys route through the precomputed-hash helpers (see build_table_find/at), so bind
-    // those globals instead of the per-type ones.
-    def bind_jit_table_find_glob(t : Type) {
-        // String find is fully inline (no glob). Non-string binds the per-type C++ find glob — still
-        // used by non-workhorse keys (vectors / structs) that route through build_table_find_call.
-        if (t != Type.tString) {
-            dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int>(t))))
-        }
-    }
-    def bind_jit_table_at_glob(t : Type) {
-        if (t == Type.tString) {
-            dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH()), get_jit_string_table_at_with_hash())
-            dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS()), get_jit_string_table_at_after_packed_miss())
-        } else {
-            // Non-string keys are open-addressed: the inline probe handles find/at hits and routes a
-            // miss to the regular C++ at (FN_JIT_TABLE_AT) — no packed after-miss helper needed.
-            dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int>(t))))
-        }
-    }
-
-    def override preVisitExprAt(expr : ExprAt?) {
-        assume subExprT = expr.subexpr._type
-        if (subExprT.isGoodTableType) {
-            let t = get_table_t(subExprT)
-            bind_jit_table_at_glob(t)
-        } elif (handle_at_is_jitable(expr)) {
-            assume ixT = expr.index._type
-            dll.set_glob_address(uid.get_at_type(subExprT, ixT),
-                get_jit_at(subExprT.annotation, jit_index_base_type(ixT)))
-        }
-    }
-
-    def override preVisitExprForSource(var expr : ExprFor?, var source : ExpressionPtr, last : bool) : void {
-        if (handle_each_is_jitable(source)) {
-            dll.set_glob_address(uid.get_each_type(source._type), get_jit_each(source._type.annotation))
-        }
-    }
-
-    def override preVisitExprSetInsert(expr : ExprSetInsert?) {
-        let t = get_table_t(expr.arguments[0]._type)
-        bind_jit_table_at_glob(t)
-    }
-
-    def override preVisitExprKeyExists(expr : ExprKeyExists?) {
-        let t = get_table_t(expr.arguments[0]._type)
-        bind_jit_table_find_glob(t)
-    }
-
-    def override preVisitExprFind(expr : ExprFind?) {
-        let t = get_table_t(expr.arguments[0]._type)
-        bind_jit_table_find_glob(t)
-    }
-
-    def override preVisitExprSafeAt(expr : ExprSafeAt?) {
-        assume subExprT = expr.subexpr._type
-        if (subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)) {
-            var etype = subExprT.isPointer ? subExprT.firstType : subExprT
-            let t = get_table_t(etype)
-            bind_jit_table_find_glob(t)
-        }
-    }
-
-    def override preVisitExprErase(expr : ExprErase?) {
-        let t = get_table_t(expr.arguments[0]._type)
-        dll.set_glob_address(DllName(FN_JIT_TABLE_ERASE(t)), get_jit_table_erase(unsafe(reinterpret<int>(t))))
-    }
-
-}
-
-def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
-    verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
-
-    var missing = array<Function?>()
-    missing |> reserve(length(fns))
-    var disabled_exists = array<Function?>()
-    if (dll.handle == null) {
-        for (fn in fns) {
-            missing |> push(unsafe(reinterpret<Function?>(fn)))
-        }
-    } else {
-        for (fn in fns) {
-            let dll_name = uids.get_dll_fn_name(fn)
-            var written_hash = dll.get_function_hash(dll_name)
-            // debug("dll_function_aot_hash: {dll_function_aot_hash}")
-            if (written_hash == null || get_function_aot_hash(fn) != *written_hash) {
-                missing |> push(unsafe(reinterpret<Function?>(fn)))
-            }
-        }
-        for (fn in disabled) {
-            let dll_name = uids.get_dll_fn_name(fn)
-            var written_hash = dll.get_function_hash(dll_name)
-            // debug("dll_function_aot_hash: {dll_function_aot_hash}")
-            if (written_hash != null) {
-                disabled_exists |> push(unsafe(reinterpret<Function?>(fn)))
-            }
-        }
-    }
-    return <- (missing, disabled_exists)
-}
-
 // Main function. Generates LLVM IR for `FunctionPtr`.
 [macro_function]
-def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNodes?;
+def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes?; uids : UidNodes?;
                          attrs : Attributes?; fn : FunctionPtr; flags : LlvmJitFlags; mode : LlvmJitMode) : bool {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
@@ -8079,7 +7750,7 @@ def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNode
         // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
         globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
     }
-    var astVisitor = new LlvmJitVisitor(ctx, types, uids, flags, mode, null, attrs)
+    var astVisitor = new LlvmJitVisitor(prog, ctx, types, uids, flags, mode, null, attrs)
     var handled_by_generator = false
     if (find_llvm_code_annotation(fn) != null) {
         ast_gc_guard() {
@@ -8119,7 +7790,7 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     // globals — they belong to the owner, and writing them corrupts the parent's shared buffer. Matches
     // the interpreter's `if (sharedOwner || !pv.shared)` gate (context.cpp Context::runInitScript).
     let attrs = new Attributes(g_ctx)
-    var visitor = new LlvmJitVisitor(ctx, types, uids, flags, mode, null, attrs)
+    var visitor = new LlvmJitVisitor(prog, ctx, types, uids, flags, mode, null, attrs)
     var globals_fn : LLVMOpaqueValue?
     var globals_fn_type : LLVMOpaqueType?
     make_visitor(*visitor) $(adapter) {
@@ -8149,7 +7820,7 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
 
             prog |> for_each_module() $(mod) {
                 mod |> for_each_global() $(glob) {
-                    if (glob.init != null && glob.flags.used) {
+                    if (glob.init != null && is_used(prog, glob)) {
                         // A clone is not the shared owner: leave shared globals as the
                         // parent's (re-init would corrupt the shared buffer). See skip_shared.
                         if (skip_shared && glob.flags.global_shared) { return }

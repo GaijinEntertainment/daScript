@@ -1,0 +1,1 @@
+Returns the macro context of ``module`` - every macro context carries the mutex ``invoke_in_context`` locks from its creation. Throws when the module has no macro context - ask ``has_macro_context`` first.

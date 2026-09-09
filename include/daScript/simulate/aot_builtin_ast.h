@@ -524,6 +524,21 @@ namespace das {
     DAS_CC_API TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
     DAS_CC_API void notInferred ( Function * func, Context * context, LineInfoArg * at );
     DAS_API void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line );
+    // src/ast/ARCHITECTURE.md sec.4
+    DAS_CC_API bool ast_is_function_used ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API bool ast_is_variable_used ( const Program * program, const Variable * var, Context * context, LineInfoArg * at );
+    DAS_CC_API int32_t ast_function_index ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API int32_t ast_variable_index ( const Program * program, const Variable * var, Context * context, LineInfoArg * at );
+    DAS_CC_API bool ast_is_function_used_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API bool ast_is_variable_used_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at );
+    DAS_CC_API int32_t ast_function_index_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API int32_t ast_variable_index_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at );
+    DAS_CC_API bool ast_is_jit_selected ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API void ast_set_jit_selected ( const Program * program, const Function * fn, bool selected, Context * context, LineInfoArg * at );
+    DAS_CC_API void ast_clear_jit_selection ( const Program * program, Context * context, LineInfoArg * at );
+    DAS_CC_API bool ast_is_jit_selected_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API void ast_set_jit_selected_sp ( smart_ptr_raw<Program> program, const Function * fn, bool selected, Context * context, LineInfoArg * at );
+    DAS_CC_API void ast_clear_jit_selection_sp ( smart_ptr_raw<Program> program, Context * context, LineInfoArg * at );
     DAS_CC_API bool isExprLikeCall ( ExpressionPtr expr );
     DAS_CC_API bool isExprConst ( ExpressionPtr expr );
     DAS_CC_API bool isTempType ( TypeDeclPtr ptr, bool refMatters );

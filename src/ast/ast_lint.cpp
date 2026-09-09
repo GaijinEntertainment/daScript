@@ -613,6 +613,7 @@ namespace das {
                 }
             }
         }
+        das_hash_set<const Variable *> initializedGlobals;
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
             Visitor::preVisitGlobalLetInit(var,that);
             globalVar = var;
@@ -640,16 +641,16 @@ namespace das {
                 program->error("[init] is disabled in the options or CodeOfPolicies", "", "",
                         var->at, CompilationError::cant_global);
             }
-            globalVar->index = -3; // initialized. -1 by default
+            initializedGlobals.insert(&*globalVar);
             globalVar = nullptr;
             return Visitor::visitGlobalLetInit(var,that);;
         }
         virtual void preVisit(ExprVar * expr) override {
             Visitor::preVisit(expr);
             if ( globalVar && expr->isGlobalVariable() ) {
-                if ( expr->variable->index!=-3 ) {
+                if ( initializedGlobals.find(&*expr->variable)==initializedGlobals.end() ) {
                     if ( expr->variable->module==globalVar->module ) {
-                        program->error("global variable " + expr->name + " is initialized after " + globalVar->name + " (" + to_string(expr->variable->index) + ")",
+                        program->error("global variable " + expr->name + " is initialized after " + globalVar->name,
                             "", "", expr->at, CompilationError::invalid_global);
                     }
                 }

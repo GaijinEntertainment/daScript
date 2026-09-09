@@ -138,8 +138,8 @@ namespace das {
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
-        virtual bool canVisitFunction ( Function * fun ) override { return !fun->isTemplate && !fun->stub && (isEverything || fun->used); }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || program->isUsed(var); }
+        virtual bool canVisitFunction ( Function * fun ) override { return !fun->isTemplate && !fun->stub && (isEverything || program->isUsed(fun)); }
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -279,7 +279,7 @@ namespace das {
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual bool canVisitGlobalVariable ( Variable * var ) override {
             if ( var->stackResolved ) return false;
-            if ( !var->used && !isEverything ) return false;
+            if ( !program->isUsed(var) && !isEverything ) return false;
             var->stackResolved = isPermanent;
             return true;
         }
@@ -287,7 +287,7 @@ namespace das {
             if ( fun->stub ) return false;
             if ( fun->isTemplate ) return false;
             if ( fun->stackResolved ) return false;
-            if ( !fun->used && !isEverything ) return false;
+            if ( !program->isUsed(fun) && !isEverything ) return false;
             fun->stackResolved = isPermanent;
             return true;
         }
@@ -379,7 +379,7 @@ namespace das {
             stackTop = sizeof(Prologue);
             pushSp();
             if ( log ) {
-                if (!func->used) logs << "unused ";
+                if (!program->isUsed(func)) logs << "unused ";
                 logs << func->describe() << "\n";
             }
         }
@@ -1036,15 +1036,17 @@ namespace das {
 
     class AllocateConstString : public Visitor {
     public:
+        AllocateConstString ( Program * prog ) : program(prog) {}
+        Program * program = nullptr;
         uint32_t bytesTotal = 0;
         das_hash_set<string>    uniStr;
     public:
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return program->isUsed(var); }
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate && fun->used;
+            return !fun->isTemplate && program->isUsed(fun);
         }
         void allocateString ( const string & message ) {
             if ( !message.empty() ) {
@@ -1125,9 +1127,10 @@ namespace das {
 
     class MarkTempStrings : public Visitor {
     public:
-        MarkTempStrings ( Function * wrapperFn, bool insertWrappers_, bool everything_ )
-            : wrapper(wrapperFn), insertWrappers(insertWrappers_), isEverything(everything_) {}
+        MarkTempStrings ( Program * prog, Function * wrapperFn, bool insertWrappers_, bool everything_ )
+            : program(prog), wrapper(wrapperFn), insertWrappers(insertWrappers_), isEverything(everything_) {}
     protected:
+        Program *   program = nullptr;
         Function *  wrapper = nullptr;
         bool        insertWrappers = false;
         bool        isEverything = false;
@@ -1137,9 +1140,9 @@ namespace das {
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || program->isUsed(var); }
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate && !fun->stub && (isEverything || fun->used);
+            return !fun->isTemplate && !fun->stub && (isEverything || program->isUsed(fun));
         }
         das_hash_map<ExprCall *, Expression *> siteOf;
         bool isWrapperCall ( Expression * e ) const {
@@ -1282,18 +1285,19 @@ namespace das {
     // (each nested temp dies before the next link queues).
     class WrapLetTempStrings : public Visitor {
     public:
-        WrapLetTempStrings ( Function * wrapperFn, bool everything_ )
-            : wrapper(wrapperFn), isEverything(everything_) {}
+        WrapLetTempStrings ( Program * prog, Function * wrapperFn, bool everything_ )
+            : program(prog), wrapper(wrapperFn), isEverything(everything_) {}
     protected:
+        Program *   program = nullptr;
         Function *  wrapper = nullptr;
         bool        isEverything = false;
         // same gates as MarkTempStrings above - this pass mutates let initializers
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || program->isUsed(var); }
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate && !fun->stub && (isEverything || fun->used);
+            return !fun->isTemplate && !fun->stub && (isEverything || program->isUsed(fun));
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             auto & stmts = block->list;
@@ -1358,23 +1362,23 @@ namespace das {
             if ( auto bmod = Module::require("$") ) {
                 wrapperFn = bmod->findUniqueFunction("_temp_string_result");
             }
-            MarkTempStrings mts(wrapperFn, wrapperFn!=nullptr, everything);
+            MarkTempStrings mts(this, wrapperFn, wrapperFn!=nullptr, everything);
             visit(mts);
             if ( wrapperFn ) {
-                WrapLetTempStrings wlt(wrapperFn, everything);
+                WrapLetTempStrings wlt(this, wrapperFn, everything);
                 visit(wlt);
             }
         }
         // string heap
-        AllocateConstString vstr;
+        AllocateConstString vstr(this);
         for (auto & pm : library.modules) {
             for ( auto & var : pm->globals.each() ) {
-                if (var->used && var->init) {
+                if (isUsed(var) && var->init) {
                     var->init->visit(vstr);
                 }
             }
             for ( auto & func : pm->functions.each() ) {
-                if (func->used) {
+                if (isUsed(func)) {
                     func->visit(vstr);
                 }
             }
@@ -1389,12 +1393,14 @@ namespace das {
         // adjust stack size for all the used variables
         for (auto & pm : library.modules) {
             for ( auto & var : pm->globals.each() ) {
-                if ( var->used ) {
+                if ( isUsed(var) ) {
                     globalInitStackSize = das::max(globalInitStackSize, var->initStackSize);
                 }
             }
         }
-        // allocate used variables and functions indices
+        // allocate used variables and functions indices - per pass, so -1 means this pass never saw it
+        functionIndices.clear();
+        variableIndices.clear();
         totalVariables = 0;
         totalFunctions = 0;
         auto log = options.getBoolOption("log_stack");
@@ -1404,10 +1410,11 @@ namespace das {
         }
         for (auto & pm : library.modules) {
             for ( auto & func : pm->functions.each() ) {
-                if ( func->used && !func->builtIn && !func->isTemplate ) {
-                    func->index = totalFunctions++;
+                if ( isUsed(func) && !func->builtIn && !func->isTemplate ) {
+                    auto index = totalFunctions++;
+                    setIndex(func, index);
                     if ( log ) {
-                        logs << "\t" << func->index << "\t" << func->totalStackSize << "\t" << func->getMangledName();
+                        logs << "\t" << index << "\t" << func->totalStackSize << "\t" << func->getMangledName();
                         if ( func->init ) {
                             logs << " [init";
                             if (func->lateInit ) logs << "(late)";
@@ -1423,7 +1430,7 @@ namespace das {
                     }
                 }
                 else {
-                    func->index = -2;
+                    setIndex(func, -2);
                 }
             }
         }
@@ -1432,15 +1439,16 @@ namespace das {
         }
         library.foreach_in_order([&](Module * pm){
             for ( auto & var : pm->globals.each() ) {
-                if (var->used) {
-                    var->index = totalVariables++;
+                if (isUsed(var)) {
+                    auto index = totalVariables++;
+                    setIndex(var, index);
                     if ( log ) {
-                        logs << "\t" << var->index << "\t"  << var->stackTop << "\t"
+                        logs << "\t" << index << "\t"  << var->stackTop << "\t"
                             << var->type->getSizeOf() << "\t" << var->getMangledName() << "\n";
                     }
                 }
                 else {
-                    var->index = -2;
+                    setIndex(var, -2);
                 }
             }
             return true;

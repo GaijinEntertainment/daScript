@@ -64,6 +64,52 @@ def initialize(project_path : string) {
 - One call per C++ module class; one descriptor may register several DLLs, and may mix in
   `register_native_path` calls for the module's `.das` files
 
+## `register_module_group` - joining a group
+
+```das
+[export]
+def initialize(project_path : string) {
+    register_native_path("sqlite", "sqlite_provider", "{project_path}/daslib/sqlite_provider.das")
+    register_module_group("sql_provider", "sqlite/sqlite_provider", "sqlite")
+}
+```
+
+- First argument: the group name a requirer writes as `require [sql_provider]`
+- Second: the member's require path, exactly as a `require` would spell it - a native path
+  this descriptor (or another) registers, or a C++ module's name
+- Third, optional: the member's guard, what `require ?sqlite sqlite/sqlite_provider` would
+  carry - a module name, or a path when it holds a `/`. A member whose file requires a C++
+  module is guarded on that module: the descriptor and the das files sit in every checkout, the
+  module only in a build configured with it, and a member requiring a module the build lacks
+  fails every requirer of the group. The guard is evaluated live at every compile; a file
+  existence check in the descriptor is not, since the manifest replays the descriptor's rows
+  without seeing the build's artifacts
+- `require [group]` is one ordinary require per member, sorted by member path; `public` and a
+  `?guard` on the group apply to every member, a member's own guard to that member, a member that
+  does not resolve fails as a hand-written require would, and a group nothing joined adds nothing
+- A C++ module joins with `registerModuleGroupMember(group, member)` - from its constructor, or
+  from `initMain` in a binder-generated module, whose constructor is generated. A module with
+  both a descriptor and a C++ class registers in both places: the descriptor row serves the
+  scan, the C++ row a host that runs no descriptors, and nothing checks that the pair agrees
+
+The group turns the dependency around: a module that wants every installed provider names the
+group once, and each provider names the group it joins - nothing is edited when a provider is
+added. The row is recorded in the manifest and replayed, and the module cache re-parses a
+requirer when a member joins after its record was written.
+
+The requirer calls its members without naming them through `daslib/module_group`:
+`call_module_group("sql_provider", "register_provider")` expands at compile time to one
+`member::register_provider()` call per member, in the group's sorted order, extra arguments passed
+through; a member without the entry is a compile error naming the call. A group is two names -
+the group a member joins, and the entry every member defines - and both belong in the
+requirer's documentation. Members in this tree: `sql_provider` / `register_provider`
+(`daslib/sql_boost`), `linq_fold_source` / `register_linq_fold_source` (`daslib/linq_fold`),
+`llvm_code_generator` / `register_llvm_code_generators` (`llvm/daslib/llvm_user_modules`);
+`tune_framework` (`llvm_tune`, which re-exports `llvm_code`, guarded on the `llvm` witness) has
+no entry - `daslib/tune` shells its member under `static_if (typeinfo module_exists(...))`. An
+entry is a plain `def` with the arguments the requirer passes, public or default visibility; no
+annotation is required.
+
 ## Package layout
 
 A daspkg package is a module with the descriptor at the repo root:

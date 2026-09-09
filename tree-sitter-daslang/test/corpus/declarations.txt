@@ -448,6 +448,25 @@ require ?llvm/daslib/llvm_tune llvm/daslib/llvm_tune public
       (identifier))))
 
 ================================================================================
+Group require, guarded and public
+================================================================================
+
+require [sql_provider]
+require ?sqlite [sql_provider] public
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (require_declaration
+    group: (require_group_name
+      (identifier)))
+  (require_declaration
+    guard: (require_module_name
+      (identifier))
+    group: (require_group_name
+      (identifier))))
+
+================================================================================
 Require with relative path prefixes
 ================================================================================
 

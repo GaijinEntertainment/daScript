@@ -11,7 +11,7 @@ require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
 require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: the /exchange surface + submit rails, which ride the tune framework
-require ?llvm llvm/daslib/llvm_tune   // nolint:STYLE030,LINT019 — OPTIONAL: tune_manifest_path, the /exchange apply target, reached only inside the exchange arms
+require [tune_framework]   // nolint:STYLE030,LINT019 — OPTIONAL: tune_manifest_path, the /exchange apply target, reached only inside the exchange arms
 require daslib/defer            // defer() { delete js } — free the parsed request JSON on every exit path
 require model_catalog           // the curated list + the /catalog download rail
 require daslib/jobque_boost

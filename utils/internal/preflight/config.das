@@ -96,7 +96,17 @@ def public sweep_excluded(path : string) : bool {
     for (prefix in keys(SWEEP_EXCLUDED)) {
         return true if (path |> starts_with(prefix))
     }
-    return false
+    return standalone_module_tree(path)
+}
+
+//! a module the root build skips - `.daspkg_standalone` beside its CMakeLists.txt, the marker the root
+//! CMakeLists.txt reads - has no artifact for its roots to require, so its trees are the box's, not the sweep's
+def private standalone_module_tree(path : string) : bool {
+    return false if (!(path |> starts_with("modules/")))
+    let rest = slice(path, length("modules/"))
+    let cut = find(rest, "/")
+    return false if (cut < 0)
+    return fexist("modules/{slice(rest, 0, cut)}/.daspkg_standalone")
 }
 
 //! a program root is a file with an exported main; a module or a fixture is not

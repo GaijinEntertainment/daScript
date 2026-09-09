@@ -16,6 +16,8 @@ templates, quoting, and macro infrastructure.
    generated/templates_boost.rst
    generated/quote.rst
    generated/macro_boost.rst
+   generated/cross_context.rst
+   generated/module_group.rst
    generated/typemacro_boost.rst
    generated/ast_block_to_loop.rst
    generated/ast_cursor.rst

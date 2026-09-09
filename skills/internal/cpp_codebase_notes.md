@@ -24,6 +24,12 @@ and how to search them.
   during inference
 - `func.moreFlags.propertyFunction` - property accessor, name starts with `` .` ``
 - `func.classParent` - the struct/class owning the method
+- Whether a program uses a function or global, its slot in that program's context, and whether
+  the program's JIT selected it are NOT fields: `program->isUsed(fn)` / `program->indexOf(fn)` /
+  `program->isJitSelected(fn)` (C++), `is_used(prog, fn)` / `function_index(prog, fn)` /
+  `variable_index(prog, var)` / `is_jit_selected(prog, fn)` (das) - a shared module's objects
+  serve every program in the process (`src/ast/ARCHITECTURE.md` sec.4). `func.moreFlags.requestJit`
+  is the `[jit]` annotation, not the selection
 
 ## Diffing interpreter against AOT
 

@@ -132,6 +132,7 @@ namespace das {
         bool                builtinHashDrift = false;   // last record failed on a builtin cumulative-hash mismatch (lazily populated builtin, e.g. dasbind) - deterministic per process, a rewrite changes nothing
         bool                quietCache = false;
         uint64_t            servedModules = 0;
+        int                 readingRecord = 0;      // >0 while a record's payload deserializes (a late require nested in it cannot read)
         string              cutoffFile;
         string              cutoffReason;
         bool                policyMismatch = false;
@@ -170,8 +171,9 @@ namespace das {
         vector<pair<Enumeration **,SerializeNodeId>>       enumerationRefs;
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
-        // parsedModules record: fileName, source content hash, source size, program, thisModule
-        vector<tuple<string, uint64_t, int64_t, ProgramPtr, Module*>> parsedModules;
+        // parsedModules record: fileName, source content hash, source size, program, thisModule, the collector's require names
+        vector<tuple<string, uint64_t, int64_t, ProgramPtr, Module*, vector<string>>> parsedModules;
+        size_t                                      writtenModules = 0;     // parsedModules already in the stream (writebackModules)
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
@@ -258,7 +260,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 205;   // 205: a vector of a handled element streams under the element's module (204: the record header stamps the source by content hash; the policy stream carries every CodeOfPolicies field)
+            return 207;   // 207: neither Function nor Variable flags carry a used bit, and neither streams an index (206: the record header carries the requires the parse took; 205: a vector of a handled element streams under the element's module; 204: the record header stamps the source by content hash; the policy stream carries every CodeOfPolicies field)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -435,6 +437,11 @@ namespace das {
     // Deserialize one program (reading mode).
     void rtti_ast_serializer_deserialize_program (
             AstSerializerState * state,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block,
+            Context * context, LineInfoArg * at );
+    // the same, with the access the restored program's late requires walk through
+    void rtti_ast_serializer_deserialize_program_ex (
+            AstSerializerState * state, smart_ptr<FileAccess> access,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at );
 

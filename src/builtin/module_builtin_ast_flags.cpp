@@ -188,7 +188,7 @@ namespace das {
         ft->alias = "FunctionFlags";
         ft->argNames = {
             "builtIn", "policyBased", "callBased", "interopFn", "hasReturn", "copyOnReturn", "moveOnReturn", "exports",
-            "init", "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime", "unsafeOperation", "unsafeDeref",
+            "init", "addr", "fastCall", "knownSideEffects", "hasToRunAtCompileTime", "unsafeOperation", "unsafeDeref",
             "hasMakeBlock", "aotNeedPrologue", "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction", "_generator",
             "_lambda", "firstArgReturnType", "noPointerCast", "isClassMethod", "isTypeConstructor", "shutdown", "anyTemplate", "macroInit"
         };
@@ -231,7 +231,7 @@ namespace das {
     TypeDeclPtr makeVariableFlags() {
         auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "VariableFlags";
-        ft->argNames = { "init_via_move", "init_via_clone", "used", "aliasCMRES",
+        ft->argNames = { "init_via_move", "init_via_clone", "aliasCMRES",
             "marked_used", "global_shared", "do_not_delete", "generated", "capture_as_ref",
             "can_shadow", "private_variable", "tag", "global", "inScope", "no_capture", "early_out",
             "used_in_finally", "static_class_member", "bitfield_constant", "pod_delete",

@@ -10,7 +10,7 @@ require dasllama/dasllama_math   // the runtime knob getters the snapshot record
 require dasllama/dasllama_par    // get_total_hw_jobs - the advisory "threads" entry
 require daslib/json_boost
 require daslib/strings_boost   // nolint:STYLE030,LINT019 - join, used only inside the llvm_tune static_if half
-require ?llvm llvm/daslib/llvm_tune
+require [tune_framework]
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple static_if half)
 require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode (Apple static_if half)
 

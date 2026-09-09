@@ -230,7 +230,7 @@ def public create_uid_nodes(prog : Program?; funcs : array<FunctionPtr>; gen_exe
         if (gen_exe) {
             prog |> for_each_module() $(m) {
                 m |> for_each_global() $(var glob) {
-                    if (glob.init != null && glob.flags.used) {
+                    if (glob.init != null && is_used(prog, glob)) {
                         visit_expression(glob.init, adapter)
                     }
                 }

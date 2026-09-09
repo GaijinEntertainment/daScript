@@ -41,3 +41,14 @@ def test_tune_shell_result_matches_the_reference(t : T?) {
 def test_tune_policy_leaves_the_body_alone(t : T?) {
     t |> equal(shell_policy_probe(21), 42)
 }
+
+// the shells reach the framework through `require [tune_framework] public`: on a build that
+// carries the `llvm` witness the group has its member, and the shells see it
+[test]
+def test_tune_framework_group_carries_the_member(t : T?) {
+    static_if (typeinfo builtin_module_exists(llvm)) {
+        t |> success(typeinfo module_exists(llvm_tune), "the tune_framework group brings llvm_tune to daslib/tune on a build with the witness")
+    } else {
+        t |> success(!typeinfo module_exists(llvm_tune), "no witness, no framework")
+    }
+}

@@ -791,6 +791,8 @@ namespace das {
     float4 evalSingleExpression ( ExpressionPtr expr, bool & ok ) {
         ok = true;
         das::Context ctx;
+        auto env = daScriptEnvironment::getBound();
+        ctx.thisProgram = env ? env->g_Program.get() : nullptr;  // src/ast/ARCHITECTURE.md sec.4
         auto node = simulateExpression(ctx, expr);
         ctx.restart();
         vec4f result = ctx.evalWithCatch(node);
@@ -807,7 +809,11 @@ namespace das {
         if ( !expr || !useCtxPtr || useCtxPtr->getException() ) { ok = false; return v_zero(); }
         Context & useCtx = *useCtxPtr;
         ok = true;
+        auto env = daScriptEnvironment::getBound();
+        auto savedProgram = useCtx.thisProgram;
+        if ( !useCtx.thisProgram && env ) useCtx.thisProgram = env->g_Program.get();
         SimNode * node = simulateExpression(useCtx, expr);
+        useCtx.thisProgram = savedProgram;
         vec4f result = useCtx.evalWithCatch(node);
         if ( useCtx.getException() ) ok = false;
         return result;
@@ -1249,6 +1255,69 @@ namespace das {
         return structure->aliases.find(aliasName);
     }
 
+    // a null program is a holder nobody filled, never an answer (src/ast/ARCHITECTURE.md sec.4)
+    static const Program * symbolStateProgram ( const Program * program, const char * what, Context * context, LineInfoArg * at ) {
+        if ( !program ) context->throw_error_at(at, "%s: null program", what);
+        return program;
+    }
+
+    bool ast_is_function_used ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return fn && symbolStateProgram(program, "is_used", context, at)->isUsed(fn);
+    }
+
+    bool ast_is_variable_used ( const Program * program, const Variable * var, Context * context, LineInfoArg * at ) {
+        return var && symbolStateProgram(program, "is_used", context, at)->isUsed(var);
+    }
+
+    int32_t ast_function_index ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return fn ? symbolStateProgram(program, "function_index", context, at)->indexOf(fn) : -1;
+    }
+
+    int32_t ast_variable_index ( const Program * program, const Variable * var, Context * context, LineInfoArg * at ) {
+        return var ? symbolStateProgram(program, "variable_index", context, at)->indexOf(var) : -1;
+    }
+
+    bool ast_is_function_used_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return ast_is_function_used(program.get(), fn, context, at);
+    }
+
+    bool ast_is_variable_used_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at ) {
+        return ast_is_variable_used(program.get(), var, context, at);
+    }
+
+    int32_t ast_function_index_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return ast_function_index(program.get(), fn, context, at);
+    }
+
+    int32_t ast_variable_index_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at ) {
+        return ast_variable_index(program.get(), var, context, at);
+    }
+
+    bool ast_is_jit_selected ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return fn && symbolStateProgram(program, "is_jit_selected", context, at)->isJitSelected(fn);
+    }
+
+    void ast_set_jit_selected ( const Program * program, const Function * fn, bool selected, Context * context, LineInfoArg * at ) {
+        auto prog = const_cast<Program *>(symbolStateProgram(program, "set_jit_selected", context, at));
+        if ( fn ) prog->setJitSelected(fn, selected);
+    }
+
+    void ast_clear_jit_selection ( const Program * program, Context * context, LineInfoArg * at ) {
+        const_cast<Program *>(symbolStateProgram(program, "clear_jit_selection", context, at))->clearJitSelection();
+    }
+
+    bool ast_is_jit_selected_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return ast_is_jit_selected(program.get(), fn, context, at);
+    }
+
+    void ast_set_jit_selected_sp ( smart_ptr_raw<Program> program, const Function * fn, bool selected, Context * context, LineInfoArg * at ) {
+        ast_set_jit_selected(program.get(), fn, selected, context, at);
+    }
+
+    void ast_clear_jit_selection_sp ( smart_ptr_raw<Program> program, Context * context, LineInfoArg * at ) {
+        ast_clear_jit_selection(program.get(), context, at);
+    }
+
     Function * findCompilingFunctionByMangledNameHash(char * module_name, uint64_t mnh, Context * context, LineInfoArg * at) {
         if ( !module_name ) context->throw_error_at(at, "expecting module name");
         auto program = daScriptEnvironment::getBound()->g_Program;
@@ -1384,6 +1453,37 @@ namespace das {
     }
 #endif
 
+    // src/ast/ARCHITECTURE.md sec.3
+    void rtti_builtin_require_module_now ( char * name, smart_ptr<FileAccess> access, const CodeOfPolicies & cop,
+            const TBlock<void,Module *,const string> & block, Context * context, LineInfoArg * at ) {
+        if ( !name || !name[0] ) context->throw_error_at(at, "require_module_now: empty module name");
+        auto program = daScriptEnvironment::getBound()->g_Program.get();  // raw: throw_error_at does not unwind a smart_ptr local
+        if ( !program || !(program->isCompiling || program->isSimulating) ) {
+            context->throw_error_at(at, "require_module_now: no program is compiling - a require after the walk is issued from a macro, a simulate macro or an [init], not from a running script");
+        }
+        if ( !access ) access = program->access;
+        if ( !access ) context->throw_error_at(at, "require_module_now: no file access");
+        TextWriter issues;
+        Module * mod = requireModuleNow(name, access, issues, cop);
+        string istr = issues.str();
+        vec4f args[2] = {
+            cast<Module *>::from(mod),
+            cast<string *>::from(&istr)
+        };
+        context->invoke(block, args, nullptr, at);
+    }
+
+    bool rtti_has_macro_context ( Module * mod ) {
+        return mod && mod->macroContext;
+    }
+
+    Context & rtti_find_macro_context ( Module * mod, Context * context, LineInfoArg * at ) {
+        if ( !mod ) context->throw_error_at(at, "find_macro_context: null module");
+        auto mctx = mod->macroContext.get();
+        if ( !mctx ) context->throw_error_at(at, "find_macro_context: module '%s' has no macro context", mod->name.c_str());
+        return *mctx;
+    }
+
     Module_Ast::Module_Ast() : Module("ast_core") {
         DAS_PROFILE_SECTION("Module_Ast");
         ModuleLibrary lib(this);
@@ -1416,6 +1516,15 @@ namespace das {
         addExtern<DAS_BIND_FUN(rtti_builtin_parse_file)>(*this, lib, "parse_file",
             SideEffects::modifyExternal, "rtti_builtin_parse_file")
                 ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_require_module_now)>(*this, lib, "require_module_now",
+            SideEffects::modifyExternal, "rtti_builtin_require_module_now")
+                ->args({"module_name","fileAccess","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_has_macro_context)>(*this, lib, "has_macro_context",
+            SideEffects::accessExternal, "rtti_has_macro_context")
+                ->arg("module");
+        addExtern<DAS_BIND_FUN(rtti_find_macro_context), SimNode_ExtFuncCallRef>(*this, lib, "find_macro_context",
+            SideEffects::accessExternal, "rtti_find_macro_context")
+                ->args({"module","context","line"});
         addExtern<DAS_BIND_FUN(thisProgram)>(*this, lib,  "this_program",
             SideEffects::accessExternal, "thisProgram")
                 ->arg("context");
@@ -1966,6 +2075,48 @@ namespace das {
         addExtern<DAS_BIND_FUN(findCompilingFunctionByMangledNameHash)>(*this, lib,  "find_compiling_function_by_mangled_name_hash",
             SideEffects::accessExternal, "findCompilingFunctionByMangledNameHash")
                 ->args({"moduleName","mangledNameHash","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_function_used)>(*this, lib,  "is_used",
+            SideEffects::accessExternal, "ast_is_function_used")
+                ->args({"program","function","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_variable_used)>(*this, lib,  "is_used",
+            SideEffects::accessExternal, "ast_is_variable_used")
+                ->args({"program","variable","context","at"});
+        addExtern<DAS_BIND_FUN(ast_function_index)>(*this, lib,  "function_index",
+            SideEffects::accessExternal, "ast_function_index")
+                ->args({"program","function","context","at"});
+        addExtern<DAS_BIND_FUN(ast_variable_index)>(*this, lib,  "variable_index",
+            SideEffects::accessExternal, "ast_variable_index")
+                ->args({"program","variable","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_function_used_sp)>(*this, lib,  "is_used",
+            SideEffects::accessExternal, "ast_is_function_used_sp")
+                ->args({"program","function","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_variable_used_sp)>(*this, lib,  "is_used",
+            SideEffects::accessExternal, "ast_is_variable_used_sp")
+                ->args({"program","variable","context","at"});
+        addExtern<DAS_BIND_FUN(ast_function_index_sp)>(*this, lib,  "function_index",
+            SideEffects::accessExternal, "ast_function_index_sp")
+                ->args({"program","function","context","at"});
+        addExtern<DAS_BIND_FUN(ast_variable_index_sp)>(*this, lib,  "variable_index",
+            SideEffects::accessExternal, "ast_variable_index_sp")
+                ->args({"program","variable","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_jit_selected)>(*this, lib,  "is_jit_selected",
+            SideEffects::accessExternal, "ast_is_jit_selected")
+                ->args({"program","function","context","at"});
+        addExtern<DAS_BIND_FUN(ast_set_jit_selected)>(*this, lib,  "set_jit_selected",
+            SideEffects::modifyExternal, "ast_set_jit_selected")
+                ->args({"program","function","selected","context","at"});
+        addExtern<DAS_BIND_FUN(ast_clear_jit_selection)>(*this, lib,  "clear_jit_selection",
+            SideEffects::modifyExternal, "ast_clear_jit_selection")
+                ->args({"program","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_jit_selected_sp)>(*this, lib,  "is_jit_selected",
+            SideEffects::accessExternal, "ast_is_jit_selected_sp")
+                ->args({"program","function","context","at"});
+        addExtern<DAS_BIND_FUN(ast_set_jit_selected_sp)>(*this, lib,  "set_jit_selected",
+            SideEffects::modifyExternal, "ast_set_jit_selected_sp")
+                ->args({"program","function","selected","context","at"});
+        addExtern<DAS_BIND_FUN(ast_clear_jit_selection_sp)>(*this, lib,  "clear_jit_selection",
+            SideEffects::modifyExternal, "ast_clear_jit_selection_sp")
+                ->args({"program","context","at"});
         addExtern<DAS_BIND_FUN(isCppKeyword)>(*this, lib, "is_cpp_keyword",
             SideEffects::none, "isCppKeyword")
                 ->args({"str"});

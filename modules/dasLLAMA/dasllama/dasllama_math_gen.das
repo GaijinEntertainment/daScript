@@ -12,7 +12,7 @@ require dasllama/dasllama_math_default  // dot_q8q8_f16s — the row-major tails
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
 require daslib/tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code], inert without dasLLVM; PUBLIC so the auto-policy infer pass reaches app roots that require this module
-require ?llvm llvm/daslib/llvm_tune public  // PUBLIC so tune_status reaches app roots that require this module; witness guard: the one framework call below sits under static_if
+require [tune_framework] public  // PUBLIC so tune_status reaches app roots that require this module; the one framework call below sits under static_if
 require dasllama/dasllama_tune_scope  // nolint:STYLE029,LINT019 — an ORDER dependency, not a symbol use: the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost public
@@ -44,10 +44,9 @@ require math
 // backends over the SAME
 // ISA-agnostic slot traversals: "arm64-gen" (priority 25, the arm64 load-select tier since
 // slice C) and "x64-gen" (priority 25, witness-gated — only selectable when the stamped
-// family emitted). dasllama_common pulls it in behind a path guard
-// (`require ?llvm`), so any Q8/mx4 model load on a gen-capable box runs the
-// generated family. The generators live in dasllama/dasllama_gemm_gen.das (llvm-jit context,
-// wired via llvm/daslib/llvm_user_modules.das).
+// family emitted). dasllama_common requires it, so any Q8/mx4 model load on a gen-capable box
+// runs the generated family. The generators live in dasllama/dasllama_gemm_gen.das (llvm-jit
+// context, reached through the llvm_code_generator group).
 
 //! The layout companion (six-function stamp): the repack interleave (mr) the stamped tile reads.
 //! Reference body = the reference tile's grp4; generator declines in lockstep with the tile

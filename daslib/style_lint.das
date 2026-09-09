@@ -35,8 +35,8 @@ module style_lint shared private
 //!   STYLE026 — nested 'unsafe { ... }' block; outer wrap already covers the scope — drop the inner
 //!   STYLE027 — var array<T> / table<K;V> with empty default-init followed by a for-loop that only push/insert into it; use a comprehension
 //!   STYLE028 — 'self->method(...)' inside a class method is optional — drop 'self->' and call 'method(...)' directly (compiler auto-promotes to the same invoke)
-//!   STYLE029 — non-public 'require X' used only for ONE module X re-exports — require it directly and drop X (skipped when ≥2 re-exports are used: aggregation facade; or when X provides macros or [init])
-//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro, or an [init]/[finalize]/[before_reload]/[after_reload]/[live_command] function, or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). Suppress a deliberate keep with '// nolint:STYLE030'
+//!   STYLE029 — non-public 'require X' used only for ONE module X re-exports — require it directly and drop X (skipped when ≥2 re-exports are used: aggregation facade; when X provides macros or [init]; or when X is a member of a 'require [group]', whose members are one unit)
+//!   STYLE030 — non-public 'require X' that is entirely unused — no symbol from X (or anything it re-exports) is referenced; drop it (skipped when X provides any macro, or an [init]/[finalize]/[before_reload]/[after_reload]/[live_command] function, or only re-exports builtins used through it, or X or its public re-export closure exports a function matching an unresolved call inside an uninstanced generic body). A 'require [group]' is one unit: reported only when no member is used. Suppress a deliberate keep with '// nolint:STYLE030'
 //!   STYLE031 — table<K;V> (or table<K> set) var initialized via a run of insert / '[]=' statements; use a table (set) literal move-assign
 //!   STYLE032 — array<T> with empty default-init then a single 'push_from' / 'push_clone_from' from another array<T>; that is a clone — use 'var w := SRC' (clone-assign). Cloneable elements only (a copyable-but-not-cloneable element such as a lambda stays silent — ':=' would not compile)
 //!   STYLE033 — run of >=2 'push_from' / 'push_clone_from' from arrays; into a fresh-empty array that is a concatenation (use 'var c <- concat(s1, s2, ...)', needs 'require daslib/linq'; cloneable elements only, as STYLE032); into an existing array — plain var or a pure chain like 'obj.arr' / 'bags[0].nums' — collapse to one variadic call of the same name ('dst |> push_from(...)' or 'dst |> push_clone_from(...)')
@@ -2264,15 +2264,35 @@ class StyleLintVisitor : AstVisitor {
                 }
             }
         }
+        st030_report_requires(prog, module_files, this_name, hook_reach)
+    }
+
+    [arch(at="ARCHITECTURE_LINT.md#style-lint-require-group")]
+    def st030_report_requires(prog : ProgramPtr; module_files : table<string>; this_name : string; hook_reach : table<string; int>) : void {
+        var group_line : table<string; bool>
+        prog |> for_each_require_declaration() $ [unused_argument(req_name, file)] (mod, req_name, file, pub, at) {
+            if (mod == null || pub || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
+            let key = st030_decl_key(at)
+            if (!key_exists(group_line, key)) {
+                group_line[key] = st030_is_group_line(rtti_get_source_line(at.fileInfo, at.line))
+            }
+        }
+        var keep : table<string; bool>
+        var verdict : table<string; string>
+        var members : table<string; string>
         prog |> for_each_require_declaration() $ [unused_argument(file)] (mod, req_name, file, pub, at) {
             if (mod == null || pub
                 || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
+            let key = st030_decl_key(at)
             let mname = "{mod.name}"
             if (mname == "" || mname == this_name || mname == "$" || mname == "builtin"
                 || key_exists(used_modules, mname)
                 || st029_module_provides_macro(mod)
                 || st029_module_has_lifecycle_hook(mod)
-                || st030_exports_unresolved_name(mod)) return
+                || st030_exports_unresolved_name(mod)) {
+                keep[key] = true
+                return
+            }
             var closure : table<string; bool>
             st029_collect_public_deps(mod, closure)
             var via : array<string>
@@ -2282,19 +2302,77 @@ class StyleLintVisitor : AstVisitor {
                 used_count++
                 if (closure?[cm] ?? false) via |> push(cm)
             }
-            var line_at = at
             var reached : table<string; Module?>
             reached |> insert(mname, mod)
             st029_collect_all_deps(mod, reached)
             if (used_count == 1 && !empty(via)) {
                 let mods = via[0]
-                return if (st029_hook_only_through(reached, hook_reach, reached?[mods] ?? null))
-                style_warning("STYLE029: require {req_name} is used only for the module it re-exports ({mods}); require it directly and drop {req_name}", line_at)
+                if ((group_line?[key] ?? false) || st029_hook_only_through(reached, hook_reach, reached?[mods] ?? null)) {
+                    keep[key] = true
+                    return
+                }
+                verdict["{key}|{req_name}"] = "029:{mods}"
                 return
             }
-            return if (used_count > 0 || st029_hook_only_through(reached, hook_reach, null))
-            style_warning("STYLE030: require {req_name} is unused - no symbol from it (or a module it re-exports) is referenced; drop it", line_at)
+            if (used_count > 0 || st029_hook_only_through(reached, hook_reach, null)) {
+                keep[key] = true
+                return
+            }
+            verdict["{key}|{req_name}"] = "030"
+            let listed = members?[key] ?? ""
+            members[key] = listed == "" ? "{req_name}" : "{listed}, {req_name}"
         }
+        var group_reported : table<string; bool>
+        prog |> for_each_require_declaration() $ [unused_argument(mod, file, pub)] (mod, req_name, file, pub, at) {
+            if (at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
+            let key = st030_decl_key(at)
+            if (keep?[key] ?? false) return
+            let v = verdict?["{key}|{req_name}"] ?? ""
+            if (v == "") return
+            if (starts_with(v, "029:")) {
+                let mods = slice(v, 4)
+                style_warning("STYLE029: require {req_name} is used only for the module it re-exports ({mods}); require it directly and drop {req_name}", at)
+                return
+            }
+            if (group_line?[key] ?? false) {
+                if (group_reported?[key] ?? false) return
+                group_reported[key] = true
+                style_warning("STYLE030: require [group] is unused - no symbol from any member ({members?[key] ?? ""}) or a module it re-exports is referenced; drop it", at)
+                return
+            }
+            style_warning("STYLE030: require {req_name} is unused - no symbol from it (or a module it re-exports) is referenced; drop it", at)
+        }
+    }
+
+    def st030_decl_key(at : LineInfo) : string {
+        return "{at.fileInfo.name}:{at.line}:{at.column}"
+    }
+
+    def st030_is_group_line(src : string) : bool {
+        //! `require [group]` or `require ?guard [group]` - the bracket right after the keyword
+        //! and the optional guard, not one anywhere on the line
+        var group = false
+        peek_data(src) $(d) {
+            let req = find(d, "require")
+            if (req < 0) {
+                return
+            }
+            var i = req + length("require")
+            let n = length(d)
+            while (i < n && is_tab_or_space(int(d[i]))) {
+                i++
+            }
+            if (i < n && int(d[i]) == '?') {
+                while (i < n && !is_tab_or_space(int(d[i])) && int(d[i]) != '[') {
+                    i++
+                }
+                while (i < n && is_tab_or_space(int(d[i]))) {
+                    i++
+                }
+            }
+            group = i < n && int(d[i]) == '['
+        }
+        return group
     }
 
     def note_decl_span(var file_first_decl : table<string; uint>; fname : string; s : uint) : void {

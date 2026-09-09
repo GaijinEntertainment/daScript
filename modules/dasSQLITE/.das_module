@@ -10,4 +10,7 @@ def initialize(project_path : string) {
     for (path in sqlite_paths) {
         register_native_path("sqlite", "{path}", "{project_path}/daslib/{path}.das")
     }
+    // guarded on the C++ module: the descriptor and the das files sit in every checkout, the
+    // module only in a build configured with it, and sql_boost requires every member
+    register_module_group("sql_provider", "sqlite/sqlite_provider", "sqlite")
 }

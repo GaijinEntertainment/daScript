@@ -1257,6 +1257,26 @@ namespace das {
         return Module::require(name) != nullptr || is_dynamic_module_deferred(name);
     }
 
+    // a member's guard answers as the require's would (src/ast/ARCHITECTURE.md sec.2)
+    static bool moduleGroupMemberAvailable ( const ModuleGroupMember & m ) {
+        if ( m.guard.empty() ) return true;
+        if ( m.guard.find('/') == string::npos ) return guardModuleAvailable(m.guard);
+        auto env = daScriptEnvironment::getBound();
+        auto program = env->g_Program;
+        if ( !program || !program->access ) return false;
+        // the base the collector and the parser resolve a relative guard against: the file being compiled
+        auto ginfo = program->access->getModuleInfo(m.guard, env->g_compilingFileName ? env->g_compilingFileName : "");
+        return !ginfo.fileName.empty() && program->access->getFileInfo(ginfo.fileName) != nullptr;
+    }
+
+    void rtti_module_group_for_each_member ( const char * group, const TBlock<void,const char *> & block, Context * context, LineInfoArg * at ) {
+        for ( const auto & member : getModuleGroupMembers(group ? group : "") ) {
+            if ( !moduleGroupMemberAvailable(member) ) continue;
+            vec4f args[1] = { cast<const char *>::from(member.member.c_str()) };
+            context->invoke(block, args, nullptr, at);
+        }
+    }
+
     void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
         program->library.foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
@@ -1991,6 +2011,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_has_module)>(*this, lib, "has_module",
                 SideEffects::modifyExternal, "rtti_has_module")
                     ->arg("name");
+            addExtern<DAS_BIND_FUN(rtti_module_group_for_each_member)>(*this, lib, "module_group_for_each_member",
+                SideEffects::modifyExternal, "rtti_module_group_for_each_member")
+                    ->args({"group","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_expected_errors)>(*this, lib, "for_each_expected_error",
                 SideEffects::modifyExternal, "builtin_expected_errors")
                     ->args({"program","block","context","line"});
@@ -2014,6 +2037,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program)>(*this, lib, "deserialize_program",
                 SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program")
                     ->args({"serializer","block","context","line"});
+            addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program_ex)>(*this, lib, "deserialize_program",
+                SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program_ex")
+                    ->args({"serializer","access","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
                 SideEffects::modifyExternal, "rtti_ast_serializer_get_data")
                     ->args({"serializer","block","context","line"});

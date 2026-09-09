@@ -22,10 +22,9 @@ require daslib/templates_boost
 require daslib/json public
 require daslib/json_boost public
 require daslib/archive public
+require daslib/module_group
 
-require ?sqlite sqlite/sqlite_provider
-require ?duckdb duckdb/duckdb_provider
-require ?postgres postgres/postgres_provider
+require [sql_provider]
 
 //! Provider-neutral SQL macro layer: ``[sql_table]`` / ``[sql_view]`` / ``[sql_index]``,
 //! the typed ALTER macros (``add_column`` / ``create_index``), and the ``sql_bind`` /
@@ -35,19 +34,11 @@ require ?postgres postgres/postgres_provider
 //! (e.g. ``sqlite/sqlite_boost``). Contract: modules/dasSQLITE/PROVIDER_CONTRACT.md.
 
 def public sql_register_present_providers {
-    //! Registers every linked provider, once per macro context; call from a ``[_macro]``
-    //! in each registry-consulting macro module (``[init]`` does not reach macro contexts).
-    //! Adding a provider = one ``require ?<mod>`` line above + one ``static_if`` branch here.
+    //! Registers every present provider, once per macro context; call from a ``[_macro]`` in
+    //! each registry-consulting macro module (``[init]`` does not reach macro contexts). A
+    //! provider joins the ``sql_provider`` group from its descriptor and defines ``register_provider``.
     if (sql_register_present_providers_done()) return
-    static_if (typeinfo builtin_module_exists(sqlite)) {
-        register_sqlite_provider()
-    }
-    static_if (typeinfo builtin_module_exists(duckdb)) {
-        register_duckdb_provider()
-    }
-    static_if (typeinfo builtin_module_exists(postgres)) {
-        register_postgres_provider()
-    }
+    call_module_group("sql_provider", "register_provider")
 }
 
 [_macro]

@@ -12,6 +12,7 @@ module llvm_jit_common shared private
 
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
+require llvm/daslib/llvm_jit_plan public
 require llvm/daslib/llvm_targets
 
 require llvm/daslib/llvm_dsl
@@ -33,9 +34,6 @@ let public LLVM_DEBUG_TRACES = false
 let public LLVM_DEBUG_LINE_TRACES = false
 
 let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
-
-let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT = false   // NOTE - this should be true, to match interpreter and AOT behavior
-var public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
 
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let public LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING || LLVM_DEBUG_RESULT
@@ -221,29 +219,6 @@ enum public JIT_BLOCK {
 
 enum public JIT_SEQUENCE {
     ITERATOR
-}
-
-// We use global variable to store pointer to jit table methods.
-def public FN_JIT_TABLE_AT(t : Type) {
-    return "`jit`table_at`{t}`"
-}
-
-def public FN_JIT_TABLE_ERASE(t : Type) {
-    return "`jit`table_erase`{t}`"
-}
-
-def public FN_JIT_TABLE_FIND(t : Type) {
-    return "`jit`table_find`{t}`"
-}
-
-// String-key at that takes a precomputed hash (string-only, no per-type matrix; the grow fallback
-// for the inline large-string at). String find is fully inline — no C++ helper.
-def public FN_JIT_STRING_TABLE_AT_WITH_HASH() {
-    return "`jit`string_table_at_with_hash`"
-}
-
-def public FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS() {
-    return "`jit`string_table_at_after_packed_miss`"
 }
 
 
@@ -1035,7 +1010,6 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
 
 // Offline AOT: emit a native object only, no linker step (jit_emit_object path).
 // use_host_cpu=false (default) targets a generic CPU so the .o is portable; true bakes host features.
-def public jit_sec(us : int) : double => double(us) / 1000000.0lf
 
 def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host_cpu : bool = false) {
     // Codegen level 3 deliberate: shipped artifacts, no cache guard (ARCHITECTURE.md 1.2)

@@ -519,7 +519,13 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     auto compile0 = ref_time_ticks();
     auto program = compileDaScript(fn,access,tout,dummyGroup,policies);
     startupCompileUsec += get_time_usec(compile0);
-    {
+    // the cache stays armed through simulate: a require issued from a simulate macro or an
+    // [init] (the JIT's emitter) is this compile's, so its records join this stream
+    // (src/ast/ARCHITECTURE.md sec.3)
+    bool cacheFinished = false;
+    auto finishModuleCache = [&]() {
+        if ( cacheFinished ) return;
+        cacheFinished = true;
         auto cres = moduleCache.finish();
         if ( !cacheQuiet ) {
             switch ( cres.verdict ) {
@@ -552,9 +558,10 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         if ( cres.saveFailed ) {
             tout << "ser: cannot write '" << cacheWritePath << "'\n";
         }
-    }
+    };
     if ( program ) {
         if ( program->failed() ) {
+            finishModuleCache();
             for ( auto & err : program->errors ) {
                 tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
@@ -564,12 +571,15 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         } else {
             if ( outputProgramCode )
                 tout << *program << "\n";
-            if ( compileOnly )
+            if ( compileOnly ) {
+                finishModuleCache();
                 return 0;
+            }
 
             auto simulate0 = ref_time_ticks();
             auto pctx = SimulateWithErrReport(program, tout);
             startupSimulateUsec += get_time_usec(simulate0);
+            finishModuleCache();
             // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
             {
                 auto & root = gc_root::gc_get_thread_root();
@@ -650,6 +660,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
             }
         }
     }
+    finishModuleCache();    // every path unbinds the stream, a compile that produced no program included
     return exitCode;
 }
 

@@ -234,3 +234,15 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 - **C++ mirror pairs**: the STYLE024/025 unsafe map <-> infer's `unsafe_*` rules;
   `style036_inert_contract` <-> infer's contract clearing. Nothing fails when one side
   moves alone.
+
+### 4.1 STYLE029/030 over a require group {#style-lint-require-group}
+
+- **The source line at a declaration's (file, line, column) key, read for the `[...]`
+  spelling after the keyword and its guard, is what tells a group apart from a require written
+  by hand.** A group's members share the group line's key, but a group with one member has one
+  declaration, exactly like a plain require, so the key alone cannot say; both rules judge
+  members and then keep, suppress and report per key.
+- **A declaration's verdict is settled only after every member sharing its key has been
+  judged**, so `st030_report_requires` records verdicts in one walk and reports them in a
+  later one. Reporting inside the deciding walk would fire on a member judged ahead of the
+  used member that keeps the line.

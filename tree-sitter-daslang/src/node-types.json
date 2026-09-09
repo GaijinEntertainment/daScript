@@ -3157,6 +3157,16 @@
           }
         ]
       },
+      "group": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "require_group_name",
+            "named": true
+          }
+        ]
+      },
       "guard": {
         "multiple": true,
         "required": false,
@@ -3173,7 +3183,7 @@
       },
       "module": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "require_module_name",
@@ -3181,6 +3191,21 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "require_group_name",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
     }
   },
   {

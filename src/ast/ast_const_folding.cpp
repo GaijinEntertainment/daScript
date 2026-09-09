@@ -1675,7 +1675,7 @@ namespace das {
                             return Visitor::visit(expr);
                         }
                     }
-                    if ( expr->func->index==-1 ) {
+                    if ( runProgram->indexOf(expr->func)==-1 ) {
                         runProgram->error("internal compilation error, folding symbol was not marked as used","","",
                             expr->at, CompilationError::internal_function);
                         return Visitor::visit(expr);

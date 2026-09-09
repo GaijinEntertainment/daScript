@@ -40,13 +40,13 @@ a stack, never in a bare scalar.** A saved value kept in a scalar survives into 
 construct's exit path and unbalances it.
 
 **A diff that adds or changes a daslib fact - code or a `//!` contract - whose truth is
-decided by a C++-side definition, with no test, lint, or compile error failing when the two
-sides no longer match, records the pair, naming both sides, in whichever `ARCHITECTURE*.md` in
-this folder holds the daslib file's section - adding that section to `ARCHITECTURE.md` when no
-doc holds one.**
+decided by a definition outside this folder - a C++ definition, or another module's descriptor
+- with no test, lint, or compile error failing when the two sides no longer match, records the
+pair, naming both sides, in whichever `ARCHITECTURE*.md` in this folder holds the daslib file's
+section - adding that section to `ARCHITECTURE.md` when no doc holds one.**
 
-**When a diff changes one side of a recorded daslib/C++ pair so the two no longer match, it
-changes the other side in the same diff.**
+**When a diff changes one side of a recorded pair so the two no longer match, it changes the
+other side in the same diff.**
 
 **A diff that renames, deletes, or changes the behavior of a daslib name that an
 `ARCHITECTURE*.md` in this folder spells updates that entry in the same change.** The doc is
@@ -245,6 +245,12 @@ signed sum wraps, the bounds test passes, and the walk leaves the array silently
 **Never put a branch a macro-time value can decide into macro-built AST - branch in daslang
 and emit only the taken arm.** Nothing folds at macro-application time, so a generated
 `if ($v(flag))` keeps its dead arm and type-checks it.
+
+**A diff that adds a function to `cross_context.das` wrapping `invoke_in_context` - taking the
+`unsafe` and the `addr` off the caller - is a defect; the caller writes the call itself.** The
+wrapper's signature checks nothing the call does not: the target is found by name and argument
+count, and a pointer crosses into a context that holds its lock for the whole run, so the
+`unsafe` belongs at the site that hands the pointer over.
 
 **A diff that adds or changes a buffer-I/O overload returns before taking `addr(buf[0])` on
 an empty buffer.** The address is out of bounds and the call sits inside `unsafe`, so an

@@ -219,7 +219,7 @@ namespace das {
                     bool isMod = !isReq && !isInc && (memcmp(src, "module", 6)==0);
                     if ( isReq || isInc ) {
                         src += 7;
-                        if ( isspace(src[0]) ) {
+                        if ( isspace(src[0]) || (isReq && src[0]=='[') ) {
                             while ( src < src_end && isspace(src[0]) ) {
                                 src ++;
                             }
@@ -247,6 +247,47 @@ namespace das {
                                     continue;
                                 }
                             }
+                            // ARCHITECTURE.md sec.2
+                            auto guardAvailable = [&](const string & guard) {
+                                if ( guard.empty() ) return true;
+                                if ( guard.find('/')!=string::npos ) {
+                                    auto ginfo = access->getModuleInfo(guard, fi->name);
+                                    return !ginfo.fileName.empty() && access->getFileInfo(ginfo.fileName) != nullptr;
+                                }
+                                return guardModuleAvailable(guard);
+                            };
+                            auto guardTaken = [&]() {
+                                return !hasReqGuard || guardAvailable(reqGuard);
+                            };
+                            auto publicFollows = [&]() {
+                                while ( src < src_end && isspace(src[0]) ) {    // the parser reads tokens: any whitespace before `public`
+                                    src ++;
+                                }
+                                return src + 6 < src_end && memcmp(src, "public", 6) == 0;
+                            };
+                            if ( isReq && src[0]=='[' ) {
+                                // ARCHITECTURE.md sec.2
+                                src ++;
+                                while ( src < src_end && isspace(src[0]) ) {    // the parser reads tokens, so a newline inside the brackets is nothing
+                                    src ++;
+                                }
+                                string group;
+                                while ( src < src_end && (isalnumE(src[0]) || src[0]=='_') ) {
+                                    group += *src ++;
+                                }
+                                while ( src < src_end && isspace(src[0]) ) {
+                                    src ++;
+                                }
+                                if ( src < src_end && src[0]==']' && !group.empty() && guardTaken() ) {
+                                    src ++;
+                                    bool isPublic = publicFollows();
+                                    for ( const auto & member : getModuleGroupMembers(group) ) {
+                                        if ( !guardAvailable(member.guard) ) continue;
+                                        req.push_back({member.member, line, chain, isPublic});
+                                    }
+                                }
+                                continue;
+                            }
                             if ( src[0]=='_' || isalphaE(src[0]) || src[0] == '%' || src[0] == '.' || src[0]=='/' ) {
                                 string mod;
                                 mod += *src++;
@@ -254,28 +295,10 @@ namespace das {
                                     mod += *src ++;
                                 }
                                 if ( isReq ) {
-                                    // guarded optional require. Path guard (contains '/'): proceed only when
-                                    // the guard's OWN file resolves — the rail for pure-das packages (nothing
-                                    // C++ to guard on) and cross-package dependency witnesses. Plain-name
-                                    // guard: proceed only when the build has the module (guardModuleAvailable,
-                                    // src/ast/ARCHITECTURE.md sec.2); no target-resolvability fallback (module
-                                    // source dirs exist in every checkout regardless of build config).
-                                    // Otherwise skip silently. Must match ast_requireModule (parser_impl.cpp).
-                                    if ( hasReqGuard && reqGuard.find('/')!=string::npos ) {
-                                        auto ginfo = access->getModuleInfo(reqGuard, fi->name);
-                                        if ( ginfo.fileName.empty() || !access->getFileInfo(ginfo.fileName) ) {
-                                            continue;
-                                        }
-                                    } else if ( hasReqGuard && !guardModuleAvailable(reqGuard) ) {
+                                    if ( !guardTaken() ) {
                                         continue;
                                     }
-                                    bool isPublic = false;
-                                    while ( src < src_end && src[0] == ' ' ) {
-                                        src ++;
-                                    }
-                                    if ( src + 6 < src_end && memcmp(src, "public", 6) == 0 ) {
-                                        isPublic = true;
-                                    }
+                                    bool isPublic = publicFollows();
                                     req.push_back({mod, line, chain, isPublic});
                                 } else if ( isInc ) {
                                     string incFileName = access->getIncludeFileName(fi->name,mod);
@@ -676,6 +699,18 @@ namespace das {
         }
     }
 
+    // ARCHITECTURE.md sec.1
+    static vector<string> collectRequireNames ( FileInfo * fi, const FileAccessPtr & access ) {
+        vector<string> names;
+        if ( fi ) {
+            string modName;
+            vector<FileInfo *> chain;
+            for ( auto & rec : getAllRequire(fi, modName, chain, access) ) names.push_back(rec.name);
+        }
+        sort(names.begin(), names.end());
+        return names;
+    }
+
     bool trySerializeProgramModule (
             ProgramPtr          & program,
             const FileAccessPtr & access,
@@ -722,6 +757,8 @@ namespace das {
         uint64_t payload_size = 0;
         uint32_t depCount = 0;
         vector<tuple<string,int64_t,uint64_t>> savedDeps;
+        uint32_t reqCount = 0;
+        vector<string> savedReq;
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer << saved_hash;
             serializer << saved_size;
@@ -737,10 +774,17 @@ namespace das {
                     serializer << get<2>(dep);
                 }
             }
+            serializer << reqCount;
+            if ( depCount <= SER_MAX_MACRO_DEPS && reqCount <= SER_MAX_MACRO_DEPS ) {
+                savedReq.resize(reqCount);
+                for ( auto & req : savedReq ) {
+                    serializer << req;
+                }
+            }
             serializer << payload_size;
-        }) || depCount > SER_MAX_MACRO_DEPS ) {
+        }) || depCount > SER_MAX_MACRO_DEPS || reqCount > SER_MAX_MACRO_DEPS ) {
             serializer_read->seenNewModule = true;
-            serializer_read->failed = depCount > SER_MAX_MACRO_DEPS;
+            serializer_read->failed = depCount > SER_MAX_MACRO_DEPS || reqCount > SER_MAX_MACRO_DEPS;
             if ( !serializer_read->quietCache ) logs << "ser: read failed '" << fileName << "'\n";
             return false;
         }
@@ -779,17 +823,34 @@ namespace das {
             }
             return false;
         }
+        // ARCHITECTURE.md sec.1
+        {
+            auto currentReq = collectRequireNames(access->getFileInfo(fileName), access);
+            sort(savedReq.begin(), savedReq.end());
+            if ( currentReq != savedReq ) {
+                serializer_read->seenNewModule = true;
+                serializer_read->failed = true;
+                serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffReason = "require set changed";
+                if ( !serializer_read->quietCache ) {
+                    logs << "ser: require set changed '" << fileName << "': " << savedReq.size() << " recorded, " << currentReq.size() << " now\n";
+                }
+                return false;
+            }
+        }
 
         size_t payload_start = serializer_read->buffer->bufferPos;
         // no per-module logging on the happy path - the standalone sink has no level
         // threshold, so a line here prints once per warm module; the verdict line and the
         // failure branches below carry everything a human needs
         deriveSourcePolicies(access, fileName, program->policies);
+        serializer_read->readingRecord ++;
         bool read_ok = serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer.thisModuleGroup = &libGroup;
             serializer.fileAccess = access.get();
             serializer.serializeProgram(program, libGroup);
         });
+        serializer_read->readingRecord --;
 
         if ( read_ok && !program->failed() && !serializer_read->failed ) {
             serializer_read->servedModules ++;
@@ -798,7 +859,7 @@ namespace das {
             // must round-trip through the deserialized program or the next write drops them
             program->moduleCacheDependencies = das::move(savedDeps);
             if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get()});
+                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(), das::move(savedReq)});
             }
             return true;
         }
@@ -1087,6 +1148,7 @@ namespace das {
         auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
         uint64_t macroSim0 = serializer_read ? serializer_read->totMacroTime : 0;
         if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
+            program->access = access;   // the read replaced the program object
             auto readT = get_time_usec(time0);
             auto macroSimT = int64_t(serializer_read->totMacroTime - macroSim0);
             *totCacheRead += readT;
@@ -1104,6 +1166,7 @@ namespace das {
         }
 
         int err;
+        program->access = access;   // a failed read replaced the program object above
         daScriptEnvironment::getBound()->g_Program = program;
         daScriptEnvironment::getBound()->g_compilerLog = &logs;
         daScriptEnvironment::getBound()->g_compilingFileName = fileName.c_str();
@@ -1395,8 +1458,9 @@ namespace das {
                 logs << "compiler took " << dt << ", " << fileName << "\n";
             }
             auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
-            if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get()});
+            if ( serializer_write != nullptr && !program->failed() ) {    // a failed module is no record (a persistent stream's later writeback would carry it)
+                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(),
+                    collectRequireNames(access->getFileInfo(fileName), access)});
             }
             return program;
         }
@@ -1530,8 +1594,10 @@ namespace das {
             *serializer_write << magic;
             *serializer_write << version;
         }
-        for ( auto & parsedModule : serializer_write->parsedModules ) {
-            auto & [fileName, fileHash, fileSize, program, thisModule] = parsedModule;
+        // from the cursor: a late walk (requireModuleNow) writes back mid-compile, and the host's
+        // writeback at its end must not repeat those records
+        for ( size_t pi = serializer_write->writtenModules; pi < serializer_write->parsedModules.size(); ++pi ) {
+            auto & [fileName, fileHash, fileSize, program, thisModule, requireNames] = serializer_write->parsedModules[pi];
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
@@ -1541,6 +1607,12 @@ namespace das {
                 *serializer_write << get<0>(dep);
                 *serializer_write << get<1>(dep);
                 *serializer_write << get<2>(dep);
+            }
+            // ARCHITECTURE.md sec.1
+            uint32_t reqCount = uint32_t(requireNames.size());
+            *serializer_write << reqCount;
+            for ( auto & req : requireNames ) {
+                *serializer_write << req;
             }
             // record length, backpatched after the payload: lets the reader skip a record
             // that fails to deserialize for an UNCHANGED file and keep serving later ones.
@@ -1561,6 +1633,7 @@ namespace das {
             payload_size = uint64_t(serializer_write->buffer->writingSize() - payload_start);
             serializer_write->buffer->patch(len_at, &payload_size, sizeof(payload_size));
         }
+        serializer_write->writtenModules = serializer_write->parsedModules.size();
     }
 
     void addRttiRequireVariable ( ProgramPtr res, string fileName, const LineInfo & at ) {
@@ -1575,9 +1648,9 @@ namespace das {
         rtti_require->type = new TypeDecl(Type::tString, at);
         rtti_require->init = new ExprConstString(at, ss.str());
         rtti_require->init->type = new TypeDecl(Type::tString, at);
-        rtti_require->used = true;
         rtti_require->private_variable = true;
         res->thisModule->addVariable(rtti_require);
+        res->setUsed(rtti_require, true);
     }
 
     void reportChain ( TextWriter & tw, const vector<FileInfo *> & chain ) {
@@ -1805,6 +1878,150 @@ namespace das {
             addNewModules(libGroup, depProgram);
         }
         return parseDaScriptNoInfer(fileName, modName, access, logs, libGroup, policies.export_all, false, policies);
+    }
+
+    static recursive_mutex g_requireModuleNowMutex;
+
+    static void logProgramErrors ( const ProgramPtr & program, TextWriter & logs ) {
+        for ( auto & err : program->errors ) {
+            logs << err.at.describe() << ": " << err.what << "\n";
+            if ( !err.extra.empty() ) logs << err.extra << "\n";
+        }
+    }
+
+    // ARCHITECTURE.md sec.3 - what a nested compile rebinds on the environment, put back on every exit;
+    // a walk nested in a parse or a record read also hides the stream for its duration
+    struct LateRequireEnvScope {
+        daScriptEnvironment *   env;
+        ProgramPtr              program;
+        TextWriter *            log;
+        const char *            fileName;
+        const char *            moduleName;
+        AstSerializer *         read = nullptr;
+        AstSerializer *         write = nullptr;
+        bool                    streamHidden = false;
+        LateRequireEnvScope ( daScriptEnvironment * e ) : env(e), program(e->g_Program), log(e->g_compilerLog),
+            fileName(e->g_compilingFileName), moduleName(e->g_compilingModuleName) {}
+        void hideStream () {
+            read = env->serializer_read;
+            write = env->serializer_write;
+            env->serializer_read = nullptr;
+            env->serializer_write = nullptr;
+            streamHidden = true;
+        }
+        ~LateRequireEnvScope () {
+            env->g_Program = program;
+            env->g_compilerLog = log;
+            env->g_compilingFileName = fileName;
+            env->g_compilingModuleName = moduleName;
+            if ( streamHidden ) {
+                env->serializer_read = read;
+                env->serializer_write = write;
+            }
+        }
+    };
+
+    // ARCHITECTURE.md sec.3
+    Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access, TextWriter & logs, CodeOfPolicies policies ) {
+        lock_guard<recursive_mutex> guard(g_requireModuleNowMutex);
+        verifyCodeOfPoliciesStamp(policies);
+        auto env = daScriptEnvironment::getBound();
+        // a relative target resolves against the file issuing the require, as a written require would
+        auto info = access->getModuleInfo(requireName, env->g_compilingFileName ? env->g_compilingFileName : "");
+        string modName = info.moduleName.empty() ? requireName : info.moduleName;
+        if ( auto mod = Module::requireEx(modName, true, requireName, info.fileName) ) return mod;
+        if ( info.fileName.empty() ) {
+            if ( auto loader = getDeferredModuleLoader(); loader && loader(modName) ) {
+                return Module::requireEx(modName, true, requireName, info.fileName);
+            }
+            logs << "require_module_now: module '" << requireName << "' not found\n";
+            return nullptr;
+        }
+        LateRequireEnvScope envScope(env);
+        // ARCHITECTURE.md sec.3 - a walk nested in a parse or a record read leaves the stream alone
+        bool nested = (env->g_Program && env->g_Program->isCompiling)
+            || (env->serializer_read && env->serializer_read->readingRecord > 0);
+        if ( nested ) envScope.hideStream();
+        Module * result = nullptr;
+        {
+            gc_guard compile_gc_scope;
+            GcCollectOnExit compile_gc_collect(compile_gc_scope);
+            ReuseCacheGuard rcg;
+            ModuleGroup libGroup;
+            vector<ModuleInfo> req;
+            vector<MissingRecord> missing;
+            vector<RequireRecord> circular, notAllowed;
+            vector<FileInfo *> chain;
+            das_set<string> dependencies;
+            das_hash_map<string, NamelessModuleReq> namelessReq;
+            vector<NamelessMismatch> namelessMismatches;
+            string fileModName;
+            bool ok = addExtraDependency("builtin", get_builtin_path(), missing, circular, notAllowed, req,
+                dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
+            ok = ok && getPrerequisits(info.fileName, access, fileModName, req, missing, circular, notAllowed, chain,
+                dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules);
+            if ( !ok ) {
+                logProgramErrors(reportPrerequisitesErrors(info.fileName, missing, circular, notAllowed, namelessMismatches, libGroup, policies), logs);
+            } else if ( !verifyModuleNamesUnique(req, logs) ) {
+                ok = false;
+            } else if ( !fileModName.empty() && fileModName != modName ) {
+                logs << "require_module_now: '" << info.fileName << "' declares module '" << fileModName
+                     << "' - a module required after the walk is named by its file, so it declares `module " << modName << "`\n";
+                ok = false;
+            }
+            if ( ok ) {
+                disableSerializationOnDebugger(req);
+                for ( auto & mod : req ) {
+                    if ( libGroup.findModule(mod.moduleName) ) continue;
+                    auto program = parseDaScript(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies);
+                    policies.threadlock_context |= program->options.getBoolOption("threadlock_context", false);
+                    if ( program->failed() ) {
+                        logProgramErrors(program, logs);
+                        ok = false;
+                        break;
+                    }
+                    if ( program->thisModule->name.empty() ) {
+                        program->library.renameModule(program->thisModule.get(), mod.moduleName);
+                        program->thisModule->wasParsedNameless = true;
+                    }
+                    program->thisModule->fileName = mod.fileName;
+                    program->thisModule->fromExtraDependency = mod.extraDepModule;
+                    if ( program->promoteToBuiltin ) {
+                        if ( !canShareModule(program) ) {
+                            logProgramErrors(program, logs);
+                            ok = false;
+                            break;
+                        }
+                        program->thisModule->promoteToBuiltin(access, mod.requireName);
+                    }
+                    addNewModules(libGroup, program);
+                }
+            }
+            if ( ok ) {
+                auto program = parseDaScript(info.fileName, modName, access, logs, libGroup, true, true, policies);
+                if ( program->failed() ) {
+                    logProgramErrors(program, logs);
+                } else if ( !program->promoteToBuiltin ) {
+                    logs << "require_module_now: module '" << requireName << "' is not shared - a module required after the walk needs `module " << modName << " shared`\n";
+                } else if ( !canShareModule(program) ) {
+                    logProgramErrors(program, logs);
+                } else {
+                    if ( program->thisModule->name.empty() ) {
+                        program->library.renameModule(program->thisModule.get(), modName);
+                        program->thisModule->wasParsedNameless = true;
+                    }
+                    program->thisModule->fileName = info.fileName;
+                    program->thisModule->promoteToBuiltin(access, requireName);
+                    result = program->thisModule.get();
+                    addNewModules(libGroup, program);
+                    if ( env->serializer_write != nullptr
+                        && (!env->serializer_read || env->serializer_read->failed || env->serializer_read->resumedCorrupt != 0) ) {
+                        writebackModules(libGroup);
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     ProgramPtr compileDaScript ( const string & fileName,

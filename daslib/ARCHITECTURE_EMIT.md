@@ -87,12 +87,12 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   runs it, collecting on its first tick.
 - **There is no `!stopFlags` guard between `[init]` calls** - a panic propagates out of the
   ctor instead of soft-stopping the sequence.
-- **Global init order is fixed by `var->index` assignment**: `StandaloneContextGen`'s
+- **Global init order is fixed by the program's variable index table**: `StandaloneContextGen`'s
   `preVisitGlobalLet` emits required modules' globals via ordered `for_each_module`
   before the adapter walks the entry module's own - correct only because
-  `ast_allocate_stack.cpp` assigns `var->index` through the same dependency-first
-  module order with the entry module last, and `runInitScript` executes ascending
-  index. `[init]` function order is not re-derived at all: the emitter reads the
+  `ast_allocate_stack.cpp` fills `Program::variableIndices` (read back as
+  `variable_index(program, var)`) through the same dependency-first module order with the
+  entry module last, and `runInitScript` executes ascending index. `[init]` function order is not re-derived at all: the emitter reads the
   simulated context's list through rtti `for_each_init_function`, so the C++ late-init
   sort stays the single source of truth.
 - **The TU holds every used function of every module.** A standalone context is one

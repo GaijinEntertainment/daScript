@@ -18,9 +18,9 @@ require daslib/templates_boost
 
 //! SQLite's `SqlProviderInfo` registration shim — the lean bridge between the raw
 //! `sqlite` C binding and the neutral registry in `daslib/sql_provider`. Deliberately
-//! does NOT require `sqlite/sqlite_boost`: `daslib/sql_provider` pulls this file into
-//! every consulting macro context via `require ?sqlite`, and requiring the full boost
-//! here would cycle (sqlite_boost → daslib/sql_boost → daslib/sql_provider → here).
+//! does NOT require `sqlite/sqlite_boost`: `daslib/sql_boost` pulls this file into
+//! every consulting macro context as a member of the `sql_provider` group, and requiring
+//! the full boost here would cycle (sqlite_boost → daslib/sql_boost → here).
 //! Runtime surface (SqlRunner, exec/query, runner helpers) lives in `sqlite/sqlite_boost`.
 
 def sqlite3_column_text_(stmt : sqlite3_stmt?; col : int) : string {
@@ -122,10 +122,8 @@ def private _sqlite_render_json_extract(target : string; jsonPath : string) : st
 
 def private _sqlite_quote_id(id : string) : string => sql_quote_id(id)
 
-def register_sqlite_provider {
-    //! Registers the sqlite `SqlProviderInfo` entry in the CURRENT macro context.
-    //! Reached via `sql_register_present_providers` (daslib/sql_provider) from each
-    //! consulting macro module's own `[_macro]`.
+def register_provider {
+    //! The `sql_provider` group entry: registers the sqlite `SqlProviderInfo` in the CURRENT macro context.
     var info = SqlProviderInfo(
         name = "sqlite",
         runnerModule = "sqlite_boost",

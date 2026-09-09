@@ -27,7 +27,15 @@ the `CodeOfPolicies` of the compile that wrote it, and a record whose policies d
 reading compile's is never served - a lint compile and a run compile of one graph never share a
 record. The mismatch fails the record the way damage does, reparsed in place rather than cutting
 the stream (damage landing on the policy bytes must not cut it either), and the writeback that
-repairs it carries the new policies. The first mismatch is the cutoff: the reader marks the stream failed, the
+repairs it carries the new policies. The record header also carries the text collector's
+answer for the file when the record was written (`collectRequireNames` over `getAllRequire`,
+guards and groups already applied, names sorted), and the reader runs the same collector over the
+file it is about to serve and compares: a member a group gained or a guard a build flipped changes
+a module's dependencies without touching its bytes, and a record served then would carry the old
+dependency set. Both sides are one function, so a require only the walk knows - a host's
+`parseCustomRequire` - compares equal to itself instead of cutting the stream on every warm read.
+That mismatch is a cutoff (`require set changed`), since the modules after it may have moved too.
+The first mismatch is the cutoff: the reader marks the stream failed, the
 module and everything after it parse from source, and the writer rewrites the whole file - the
 served records re-serialized from the modules the reader restored, then the freshly parsed
 ones. A record whose header matched but whose payload fails to deserialize reparses in place,
@@ -110,7 +118,14 @@ require guard (`require ?mod`) and `builtin_module_exists` ask whether the build
 module (`guardModuleAvailable`): linked in, or waiting in a manifest row, which the guard
 loads then - so `require ?das_metal metal/das_metal_boost` still means "on a build with
 Metal", a cold start and a warm start answer alike, and `llvm`, a witness module no das file
-requires unguarded, comes in through the guards `daslib/tune` places on it. A load adds
+requires unguarded, comes in through the guards dasLLAMA places on it. A guard whose name
+holds a `/` is a path instead: the guard is taken when the guard's own file resolves through the
+compile's `FileAccess` - the rail for a pure-das package, which has nothing C++ to guard on, and
+for a witness of a cross-package dependency. A guard the build does not have skips the require
+silently and without resolving the target, so a skipped require probes no file paths; a guard the
+build has over a target that does not resolve is the ordinary missing-module error. Neither form
+falls back to the target's own resolvability: a module's source directory sits in every checkout
+whatever the build configured. A load adds
 nothing to `$`: a module-cache record carries each builtin module's cumulative hash of
 mangled names, and a process that loaded a different set of C++ modules would otherwise fail
 every record on `$`, so a `vector<T>` of a handled element registers into the element's
@@ -123,7 +138,29 @@ that names one compares the part after `::` (`daslib/ast_boost`'s printer). `-ig
 reads and writes no manifest: every descriptor compiles and every C++ module loads on start,
 the form a tool that enumerates modules - the MCP server - runs under.
 `no_manifest()` inside `initialize` marks the descriptor as one that runs on every start: its
-manifest carries the stamp and the flag and no rows, and is not rewritten. With
+manifest carries the stamp and the flag and no rows, and is not rewritten. A module group is a
+name that `require [group]` expands to a list: `register_module_group(group, member, guard)` in
+a descriptor - recorded as a `grp` row and replayed - or `registerModuleGroupMember` from a C++
+module adds a member, once (`ast_module.cpp`, one process-wide registry under a mutex, kept for
+the life of the process like the native paths: a descriptor registers once per process, so a
+cleared registry could only lose members); the list comes back sorted by member path, since the
+scan registers in `readdir` order, which no platform promises. A member's guard is the guard a
+hand-written `require ?guard member` would carry - a module name, or a path when it holds a
+`/` - and is evaluated wherever the list is read; a descriptor whose das files sit in every
+checkout guards its row on the C++ module only a build configured with it has, since a member
+requiring a module the build lacks fails every requirer of the group, and a manifest cannot
+record what a build has - its key does not see the build's artifacts. The text collector
+(`getAllRequireReq`) and the parser (`ast_requireModuleGroup`) expand the same list into one
+require per member, the group's guard and `public` on each, a member's own guard on that member;
+a member resolves and fails as a require spelled by hand would, and a group nothing registered
+adds nothing. The collector reads `require[group]` with no space as the parser does. The
+requirer calls the members through `daslib/module_group`, whose `call_module_group` reads the
+same list at macro time (`module_group_for_each_member`, the `rtti` module, a path guard
+resolved through the compiling program's own access) and emits one qualified call per member, so
+the expansion and the calls agree on the set. Membership is tree-level, so the answer does not
+depend on the walk order - a module joins from its own descriptor, and the requirer names only
+the group; the module-cache record stamps the expansion (sec.1), so a member joining later
+re-parses the modules that require the group. With
 `DAS_TRACE_MODULE_LOAD=1` the scan prints one line per descriptor - `replayed N row(s) in <sec>
 (shared module load <sec>, deferred K)`, `compiled (<why>), manifest written (N row(s))`,
 `compiled (no_manifest)`, `compiled (manifests ignored)`, or why a manifest was not written -
@@ -131,3 +168,84 @@ and a deferred load prints `[module] require <name>: loading the deferred <class
 fallback `[module] loading every deferred module (K)`. A replayed descriptor's time is its
 manifest read plus its rows, and the second number is the share the `.shared_module` dlopen and
 module constructor took.
+
+## 3. A require after the walk (`requireModuleNow`, `ast_parse.cpp`)
+
+`requireModuleNow(requireName, access, logs, policies)` is a `require` issued by code that runs
+after the prerequisite walk - a macro, a simulate macro, an `[init]` - for a module the walk
+never saw. It is a compile's: the das entry (`daslib/cross_context`, the `ast` module's
+`require_module_now`) refuses a call with no program compiling or simulating, since a running
+script has no compile whose stream, policies and access the walk could join, and a null access
+is the compiling program's own (`Program::access`, set by `parseDaScriptEx` for a parse and by
+`deserialize_program`'s access argument for a program a reader restores - a stream carries no
+access, so a reader that gives none leaves a late require nothing to walk with), so a
+`-project` mapping or a host's custom access reaches the late walk as it reaches the host's; a
+caller restricts by passing an access of its own. It answers the module already in the process when
+there is one (a promoted shared module, a linked C++ module, or a deferred manifest row, which
+it loads), and otherwise walks the target's own prerequisites, compiles the missing ones the way
+`compileDaScript` does - each parsed as a dependency, promoted when its program asks to be
+shared, the debugger switching serialization off as it does for the host - and then the target
+itself, which must be `shared`: a module that is not promoted lives only in the walk's
+`ModuleGroup` and dies with it, so a non-shared target is refused by name rather than returned
+dangling. The target is named by its file: the already-there answer looks the module up by the
+file's stem before any parse, so a file declaring another name would compile and promote a new
+module on every call, and the walk refuses the mismatch by name instead. The answer is the
+module or null, and every error the walk, the dependency parses and the target's parse produced
+is written to the caller's `logs`, so a caller reports the text it got rather than the compiler's
+own log. The module is not a dependency of any program: its symbols are not visible to the
+caller and its macros do not apply to the caller's program; the caller reaches it through its
+macro context (`Module::macroContext`, `daslib/cross_context`'s `macro_context_of`). Every macro
+context carries a context mutex from its creation (`makeMacroModule`), because
+`invoke_in_context` locks its target and a mutex created at the first call would be created
+twice by two callers. The call saves and restores the environment's bound program, compiler log
+and compiling names around the walk in a scope object, since it may run mid-parse of another
+module and an unwind must put them back; the symbol state its passes compute lives on its own
+`Program` (sec.4), so the caller's - which may be mid-simulate with a JIT reading it - is
+untouched. One recursive mutex serializes every late require in the process. The late walk has
+no module cache of its own: a stream holds many compiles in order, shared modules written once
+(a persistent serializer, dastest's `--ser`), read at a parse's start and written at its end.
+A late require issued after the compile - a simulate macro, an `[init]` of the program - finds
+the reader between records, so its modules are the next records of that compile, read from the
+environment's bound serializer and written back through the same writer from its cursor
+(`writtenModules`), and the host's writeback at its end repeats nothing; the hosts keep their
+cache armed through `simulate` (`utils/daslang`, `utils/daslang-live`), where that case lands -
+the JIT's emitter is it. A late require nested in a compile - a macro during a parse (the bound
+program's `isCompiling`), a macro module's `[init]` during its record's read (the reader's
+`readingRecord`) - would write its records ahead of the requirer's, which the reader meets at
+the requirer's position, or read mid-record; so a nested walk hides the stream for its duration
+(`LateRequireEnvScope`), parses its modules from source, once per process, and pushes no
+record. A module whose parse failed pushes no record either, whatever the walk.
+
+## 4. Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`)
+
+Whether a program uses a function or a global, and the slot each holds in that program's
+context, are decided per program - the symbol-use pass (`markSymbolUse` and its variants,
+`ast_export.cpp`) walks the whole library from the program's roots, and `allocateStack` numbers
+what it marked - while the `Function` and `Variable` objects of a shared module are one instance
+for every program in the process. The state therefore lives on `Program`: `usedFunctions` and
+`usedVariables` are sets, `functionIndices` and `variableIndices` maps, read through `isUsed`
+and `indexOf` and written through `setUsed` and `setIndex`; `clearSymbolUse` empties the sets.
+An index is `-1` for an object the allocation never saw, `-2` for one it saw and found unused,
+the context slot otherwise; the constant folder tells the first from the rest. Simulate reads
+the tables through `context.thisProgram`, and das code through the `ast` module's `is_used`,
+`function_index` and `variable_index`, each taking the program - a null program there is a
+holder nobody filled and throws, never an answer. `Program::simulate` binds itself to the
+context it fills, and clears the binding at the end when the `rtti` option is off; a macro
+context's binding is cleared after its simulate whatever the option, since the context lives in
+the module for the process while its program is a temporary. A context that simulates an
+expression outside that call takes the compiling program from the bound environment instead:
+`eval_single_expression` sets it on the context it makes, and on a caller's context only when
+that context has none, putting back what was there. A context that still has no program answers
+-1 for every function and variable (`programIndexOf`, `ast_simulate.cpp`) - with no tables to
+read, nothing is used and nothing holds a slot. The index tables are per allocation:
+`allocateStack` clears both before numbering, so -1 means this pass never saw the object, and a
+folding round's slots do not survive into the final pass. A compile nested inside another - a
+macro calling `compile`, a late `require` (sec.3), the folding program - fills its own tables
+and leaves the outer program's answers standing. The stream a module-cache record carries has
+neither the flag nor the slot: both are recomputed by the reading program. Three per-compile
+values still live on the objects: `Variable::stackTop` and `Function::totalStackSize` /
+`totalGenLabel`, which `allocateStack` writes and the same program's simulate reads before any
+nested compile can run. The JIT's selection - which functions of a program a DLL holds - is a
+third table, `jitSelected`, read through `is_jit_selected` and written through
+`set_jit_selected` / `clear_jit_selection`; `Function::requestJit` is the `[jit]` annotation
+only, an author's request the selection reads and never writes.

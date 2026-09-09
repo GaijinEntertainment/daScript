@@ -2853,7 +2853,9 @@ A non-public ``require X`` where no symbol from ``X`` (or any module it
 re-exports) is referenced anywhere in the file. Remove it. Skipped when ``X``
 provides any macro or an ``[init]``, when a lifecycle hook is reachable only
 through ``X`` (as for STYLE029), or when ``X`` only re-exports builtins used
-through it. Suppress a deliberate keep with ``// nolint:STYLE030``.
+through it. A ``require [group]`` is one unit: it is reported only when no
+member is used, and a member used through its re-export never draws STYLE029.
+Suppress a deliberate keep with ``// nolint:STYLE030``.
 
 .. das-doc: alt
 .. code-block:: das

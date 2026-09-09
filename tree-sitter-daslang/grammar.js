@@ -185,11 +185,18 @@ module.exports = grammar({
       // identifier — ds2_parser.ypp:843 is `'?' require_module_name`, so `?llvm/daslib/llvm_tune`
       // is legal and appears in dasllama_common.das.
       optional(field('guard', seq('?', $.require_module_name))),
-      field('module', $.require_module_name),
-      optional(seq('as', field('alias', $.identifier))),
+      choice(
+        seq(
+          field('module', $.require_module_name),
+          optional(seq('as', field('alias', $.identifier))),
+        ),
+        field('group', $.require_group_name),
+      ),
       optional('public'),
       $._semicolon,
     ),
+
+    require_group_name: $ => seq('[', $.identifier, ']'),
 
     require_module_name: $ => seq(
       optional('%'),
