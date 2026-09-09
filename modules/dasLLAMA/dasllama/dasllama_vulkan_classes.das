@@ -7323,6 +7323,7 @@ struct GemvArgs {
     d : uint       // output rows per region
     nreg : uint    // region count
     ybase : uint   // output base row
+    lpr : uint     // lanes per output row in the kq family: 8, 16, or 0 = the whole subgroup (the q8 GEMV ignores it)
 }
 
 // ===== the Q8_0 decode GEMV pair =====
@@ -7377,10 +7378,11 @@ class Q8Gemv {
 }
 
 // ===== the K-quant decode GEMV family: one base shell, per-format block contributions =====
-// ONE LANE PER 32-BLOCK via uint4 loads (512B/warp in flight, one scale decode per block).
-// The four formats share the region walk, the lane->block map, and the subgroup fold — only
-// the block's dot + scale fold differ, so each format is an override of blk_contrib and the
-// devirtualizer inlines the family back to four standalone kernels at emission.
+// ONE LANE PER 32-BLOCK via uint4 loads (one scale decode per block), a subgroup over one, two or
+// four rows by the row length (`gemv_lanes_per_row`), each row's lanes a cluster of the fold.
+// The formats share the region walk, the lane->block map, and the subgroup fold — only the
+// block's dot + scale fold differ, so each format is an override of blk_contrib and the
+// devirtualizer inlines the family back to standalone kernels at emission.
 
 let private KQC_LOW = 0x0F0F0F0Fu   // nibble mask
 let private KQC_ONES = 0x01010101u  // sdot4 against this sums 4 signed bytes
@@ -7462,29 +7464,41 @@ class KqGemvBase {
         return dm.x * float(sc * idot) - dm.y * float(mn * bs)
     }
 
+    // a subgroup takes 32 / lpr rows at once, each row's lanes a cluster: a short row (the expert
+    // rows of a MoE, K 512-1408) keeps every lane loading where one row per subgroup left most idle
     def gemv_shell {
-        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (rg < pa.nreg * pa.d) {
+        let lpr = pa.lpr == 0u ? gl_SubgroupSize : pa.lpr
+        let lane = gl_SubgroupInvocationID
+        let li = lane % lpr
+        let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lpr) + lane / lpr
+        let live = rg < pa.nreg * pa.d
+        var acc = 0.0
+        if (live) {
             let r = rg / pa.d
             let row = rg % pa.d
             let nsb = pa.n / 256u
             let wsb0 = regions[r * 2u] + row * nsb
             let xsb0 = regions[r * 2u + 1u]
-            let lane = gl_SubgroupInvocationID
             let nb = nsb * 8u
-            var acc = 0.0
             var b0 = 0u
             while (b0 < nb) {
-                let bb = b0 + lane
+                let bb = b0 + li
                 if (bb < nb) {
                     acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)
                 }
-                b0 += gl_SubgroupSize
+                b0 += lpr
             }
-            let total = subgroupAdd(acc)
-            if (subgroupElect()) {
-                y[pa.ybase + rg] = total
-            }
+        }
+        var total = 0.0   // every lane reduces, a dead row at zero: the clusters stay whole
+        if (lpr == 8u) {
+            total = subgroupClusteredAdd(acc, 8u)
+        } elif (lpr == 16u) {
+            total = subgroupClusteredAdd(acc, 16u)
+        } else {
+            total = subgroupAdd(acc)
+        }
+        if (live && li == 0u) {
+            y[pa.ybase + rg] = total
         }
     }
 }
@@ -7727,6 +7741,37 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
     } else {
         panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
     }
+}
+
+//! the GEMV family's dispatch grid over `rows` output rows at `lpr` lanes per row (0 = a whole subgroup per
+//! row, the q8 GEMV's only form): a workgroup's subgroups each take subgroup_size / lpr rows
+def gemv_wgs(rows : int64; lpr : uint) : int64 {
+    let l = lpr == 0u ? g_gpu.subgroup_size : int64(lpr)
+    let rpw = g_gpu.rows_per_wg * (g_gpu.subgroup_size / l)
+    return (rows + rpw - 1l) / rpw
+}
+
+//! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
+def gemv_grid_fmt(fmt : int) : bool {
+    return fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl)
+}
+
+//! lanes per output row of the kq GEMV family by the row's 32-blocks; the q8 GEMV has the one form
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
+def gemv_lanes_per_row(fmt : int; n : int64) : uint {
+    if (fmt == int(KqFmt.q8)) return 0u
+    let nb = n / 32l
+    let grid = gemv_grid_fmt(fmt)
+    if (nb <= 24l) return 8u
+    if (nb <= 48l) return grid ? 8u : 16u
+    if (nb <= 96l) return 16u
+    return grid ? 16u : 0u
+}
+
+//! the family's dispatch over `rows` output rows: the lanes per row by the row length, the grid to match
+def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; rows : int64) {
+    pc.lpr = gemv_lanes_per_row(fmt, int64(pc.n))
+    gemv_cls_enc(fmt, raw, h, set_, pc, gemv_wgs(rows, pc.lpr))
 }
 
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).

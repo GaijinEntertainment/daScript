@@ -1487,8 +1487,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
                 var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
-                gemv_cls_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc,
-                    (g_rd.vocab + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
+                gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
                 pfq_ts(raw)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
@@ -1725,10 +1724,9 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        let gwg = (nfe + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg
         var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = 1u, ybase = 0u)
-        gemv_cls_enc(f1, raw, h, gate_set, pcg, gwg)
-        gemv_cls_enc(f3, raw, h, up_set, pcg, gwg)
+        gemv_enc(f1, raw, h, gate_set, pcg, nfe)
+        gemv_enc(f3, raw, h, up_set, pcg, nfe)
         // the requant form follows the DOWN plane — its GEMV consumes hq/hs
         var pca = ActArgs(nelem = uint(nfe), gelu = is_gelu ? 1u : 0u, nblk = uint(nfe / (dkq ? 256l : 32l)))
         let awgs = (nfe / (dkq ? 8l : 4l) + 255l) / 256l
@@ -1738,7 +1736,7 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
             enc_q8_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
         }
         var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = 1u, ybase = 0u)
-        gemv_cls_enc(f2, raw, h, down_set, pcd, (n + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
+        gemv_enc(f2, raw, h, down_set, pcd, n)
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.af_yo_dev, g_gpu.af_yo_host.buf, n * 4l)
         vk_check(vkEndCommandBuffer(raw), null)
@@ -1838,7 +1836,7 @@ def vk_arena_gemv(var y : array<float>; blk : int64; n, d : int64; fmt : int; xq
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
         var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
-        gemv_cls_enc(fmt, raw, h, a.cls_sets[sl], pc, (d + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg)
+        gemv_enc(fmt, raw, h, a.cls_sets[sl], pc, d)
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, a.y_dev, a.y.buf, d * 4l)
         vk_check(vkEndCommandBuffer(raw), null)

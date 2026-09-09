@@ -274,6 +274,29 @@ the rest is the per-layer host glue the span would remove, and the span declines
    across the day's runs with the same kernels). The 30B token by role (48 layers, us): e_down
    1085, e_gate 803, e_up 480, ar2 446, ar1 310, topk 278, router 146, e_act 139, rq_f 115;
    the attention head q 864, wo 882, attn 441; the head 609; total 7173.
+   6 DONE 2026-09-09 (Boris: "goes in this one ... it looks beneficial for sure") - the decode
+   GEMV family's lanes per row. The family put one subgroup on one output row, a lane per
+   32-block, so a MoE's expert rows (K 512 to 1408) left most lanes idle: the 30B's expert
+   GEMVs ran at 40-54% of the card's bandwidth, the twin's k6 down at 65%, where the dense rows
+   at K 2048-5120 sat at 75-100%. `vk_gemv_probe.das` gained a lanes sweep (`<n> <d>`, three
+   lane splits per format, DRAM-bound planes), and the sweep over K 512 / 768 / 1408 / 2048 /
+   2560 / 4096 / 5632 set the rule (`gemv_lanes_per_row`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`
+   sec.2.2ah): 8 lanes to 24 blocks, 8 for the grid formats and 16 for the k-lattice to 48, 16
+   to 96, past that the whole subgroup for the k-lattice and 16 for the grid formats; the fold
+   is `subgroupClusteredAdd`, every lane reducing with a dead row at zero, and the push block
+   carries the lanes (0 = one row, the q8 GEMV's one form). Every decode site dispatches
+   through `gemv_enc`, which picks the lanes and sizes the grid; the kernel cell runs the 13
+   formats at all three splits against the oracle. The probe at K 768 (the 30B's down):
+   iq2s 148 -> 337 GB/s, iq2xxs 213 -> 376, k4 403 -> 414; at K 512 (the 35B's): iq2s 100 ->
+   297, iq2xxs 142 -> 351; at K 1408 (the twin's): k6 386 -> 399, iq2s 198 -> 368. The rows
+   (tg128; the pp rows do not dispatch the family): the 30B 126.2 -> 132.0 (1.13x; its token
+   7.17 -> 6.79 ms, e_down 1085 -> 806 us, e_gate + e_up 1283 -> 1160 - a token's expert
+   dispatch is 3-4 MB, where launch and ramp cost what the transfer does, so the steady-state
+   rates do not arrive whole), the 35B 99.0 -> 107.1 (1.50x), the twin 163.9 -> 166.8 (0.96x),
+   the 4B Q4_K_M 115.3 against 116.8 (its token 8032 against 8041 us on the one-row form: a
+   wash at K 2560, the bench read is the box). The lane-to-block map sets a row's summation
+   order, so every resident-vs-CPU step moved inside its class (the 35B two-window step 4
+   0.39 -> 0.43); the resident MoE, hybrid, qwen2 and per-op shexp files all green.
 
 Slices 1 and 2 are small and land the shared-expert families' rows; slice 3 is the arc's body.
 

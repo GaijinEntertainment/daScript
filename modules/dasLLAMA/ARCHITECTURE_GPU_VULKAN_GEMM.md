@@ -1,10 +1,11 @@
 # dasLLAMA Architecture - the Vulkan tier's GEMM tile family
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2k-2.2m, 2.2q and 2.2ae, the cooperative-matrix tiles the Vulkan
-tier's GEMMs run on: how a cm2 tile decodes its quant bytes, how a tile and the served GEMM
-mode are picked, the class-pipeline build seat both shader instruments hang on, the MoE expert
-chain on those tiles, and the KHR arm's hand-staged tile. `ARCHITECTURE_GPU_VULKAN.md` carries
+document carries sections 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah, the cooperative-matrix tiles the
+Vulkan tier's GEMMs run on and the decode GEMV family's lane split: how a cm2 tile decodes its
+quant bytes, how a tile and the served GEMM mode are picked, the class-pipeline build seat both
+shader instruments hang on, the MoE expert chain on those tiles, the KHR arm's hand-staged
+tile, and how a GEMV subgroup splits across short rows. `ARCHITECTURE_GPU_VULKAN.md` carries
 the prefill window chain that dispatches them (sec.2.2j) and its recurrent block (sec.2.2ad),
 the Q8 requant byte store (sec.2.2p), the decode GEMV family's grid codebook buffer
 (sec.2.2ab), and the tile probe's shared descriptor set layout (sec.2.2ac). What a model has to
@@ -247,3 +248,26 @@ tile pick answers 128 and split-k never engages, and `cm2_cls_ensure/set/enc` ro
 only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile,
 so a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4
 batch tile.
+
+### 2.2ah The decode GEMV family splits a subgroup across rows by the row length {#kq-gemv-lanes}
+
+**A subgroup of the kq GEMV family takes one, two or four output rows, each row's lanes a cluster
+of the fold.** A lane loads one 32-block per step (`gemv_shell`), so a row of nb blocks over 32
+lanes keeps nb / 32 loads in flight per lane: two at K 2048, under one at a MoE's expert rows
+(K 512 to 1408, 16 to 44 blocks), where most of the subgroup idled and the DRAM rate fell to a
+third of the k4 band. `gemv_lanes_per_row` picks the lanes per row from the row's blocks - 8 to
+24 blocks; 8 for the grid formats and 16 for the k-lattice to 48; 16 to 96; past that the whole
+subgroup for the k-lattice and 16 for the grid formats - and `gemv_enc` sizes the grid to match
+(a workgroup's subgroups each take subgroup_size / lanes rows). The push block carries the
+lanes (0 = the whole subgroup, the q8 GEMV's one form), the fold is `subgroupClusteredAdd` at 8
+or 16, and every lane reduces, a dead row at zero, so the clusters stay whole. The lane-to-block
+map sets the row's summation order, so a resident-vs-CPU bar reads a different noise sample
+than the one-row form did, inside the same class. Measured on the reference card
+(`harness/vk_gemv_probe.das <n> <d>`, DRAM-bound planes, GB/s at 32 / 16 / 8 lanes): K 512 iq2s
+100 / 194 / 297, iq2xxs 142 / 233 / 351, k4 394 / 402 / 413, k6 386 / 414 / 407; K 768 iq2s
+148 / 221 / 337, iq2xxs 213 / 269 / 376, k4 403 / 404 / 414, k6 407 / 392 / 387; K 1408 iq2s
+198 / 299 / 368, k6 386 / 399 / 373, k4 394 / 394 / 382; K 2048 iq2s 311 / 384 / 388, k6 417 /
+416 / 369; K 4096 iq2s 376 / 408 / 344, k6 403 / 387 / 326, k4 400 / 404 / 406; K 5632 k4 411 /
+399 / 386, k6 396 / 384 / 287, iq2s 377 / 393 / 296. llama.cpp's mat-vec splits K over 16 threads
+and blocks two to four rows per thread (`rm_kq`, `NUM_ROWS` in its `mul_mat_vec_*.comp`): the
+same bytes in flight by the other axis.

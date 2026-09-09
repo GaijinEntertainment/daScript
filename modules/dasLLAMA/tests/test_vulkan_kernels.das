@@ -751,13 +751,13 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                 var host = make_host_buf(y_bytes, true, [cached = true])
                 var y_cls : array<float>
                 y_cls |> resize(rows)
-                let wgs = (int64(rows) + g_gpu.rows_per_wg - 1l) / g_gpu.rows_per_wg
                 var regs : array<uint>
                 regs |> resize(nreg * 2)
                 for (r in range(nreg)) {
                     regs[r * 2] = uint(r * d * nsb)
                     regs[r * 2 + 1] = 0u
                 }
+                var y_ref <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, regs, 512, d, nreg)
                 unsafe {
                     upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
                     upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
@@ -768,47 +768,50 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     let cs = fixed_array(wq_bytes, ws_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, y_bytes)
                     let cg = fixed_array(1u, 2u, 4u, 8u, 16u, 32u)
                     var s_cls = gemv_cls_set(fmt, cb, cs, cg)
-                    var raw2 = alloc_cmd()
-                    let begin = VkCommandBufferBeginInfo()
-                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
-                    var h2 : VkHaz
-                    var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u)
-                    if (fmt == int(KqFmt.k4)) {
-                        enc_kq_gemv_k4_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.q40)) {
-                        enc_kq_gemv_q40_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.k5)) {
-                        enc_kq_gemv_k5_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.iq4xs)) {
-                        enc_kq_gemv_iq4xs_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.k3)) {
-                        enc_kq_gemv_k3_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.iq3s)) {
-                        enc_kq_gemv_iq3s_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.iq3xxs)) {
-                        enc_kq_gemv_iq3xxs_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.iq4nl)) {
-                        enc_kq_gemv_iq4nl_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.k2)) {
-                        enc_kq_gemv_k2_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.iq2s)) {
-                        enc_kq_gemv_iq2s_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.iq2xs)) {
-                        enc_kq_gemv_iq2xs_cls(raw2, h2, s_cls, pc, wgs)
-                    } elif (fmt == int(KqFmt.iq2xxs)) {
-                        enc_kq_gemv_iq2xxs_cls(raw2, h2, s_cls, pc, wgs)
-                    } else {
-                        enc_kq_gemv_k6_cls(raw2, h2, s_cls, pc, wgs)
+                    // the three lane splits of a subgroup: one row, two rows, four rows (the 16-block row keeps every lane busy at eight)
+                    for (lpr in fixed_array(0u, 16u, 8u)) {
+                        let wgs = gemv_wgs(int64(rows), lpr)
+                        var raw2 = alloc_cmd()
+                        let begin = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                        var h2 : VkHaz
+                        var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u, lpr = lpr)
+                        if (fmt == int(KqFmt.k4)) {
+                            enc_kq_gemv_k4_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.q40)) {
+                            enc_kq_gemv_q40_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.k5)) {
+                            enc_kq_gemv_k5_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.iq4xs)) {
+                            enc_kq_gemv_iq4xs_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.k3)) {
+                            enc_kq_gemv_k3_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.iq3s)) {
+                            enc_kq_gemv_iq3s_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.iq3xxs)) {
+                            enc_kq_gemv_iq3xxs_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.iq4nl)) {
+                            enc_kq_gemv_iq4nl_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.k2)) {
+                            enc_kq_gemv_k2_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.iq2s)) {
+                            enc_kq_gemv_iq2s_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.iq2xs)) {
+                            enc_kq_gemv_iq2xs_cls(raw2, h2, s_cls, pc, wgs)
+                        } elif (fmt == int(KqFmt.iq2xxs)) {
+                            enc_kq_gemv_iq2xxs_cls(raw2, h2, s_cls, pc, wgs)
+                        } else {
+                            enc_kq_gemv_k6_cls(raw2, h2, s_cls, pc, wgs)
+                        }
+                        vhz_dep(raw2, h2, 32u, 0u, true)
+                        cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
+                        vk_check(vkEndCommandBuffer(raw2), null)
+                        submit_wait(raw2)
+                        memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+                        let bad = mismatch_approx(y_cls, y_ref)
+                        t |> success(bad == 0, "fmt {fmt} at {lpr == 0u ? 32u : lpr} lanes per row: class kernel matches the CPU oracle ({bad} of {rows} rows off)")
                     }
-                    vhz_dep(raw2, h2, 32u, 0u, true)
-                    cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
-                    vk_check(vkEndCommandBuffer(raw2), null)
-                    submit_wait(raw2)
-                    memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
                 }
-                var y_ref <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, regs, 512, d, nreg)
-                let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "fmt {fmt}: class kernel matches the CPU oracle ({bad} of {rows} rows off)")
                 if (fmt == int(KqFmt.iq4xs)) {   // the codebook pack has an independent float witness
                     var y_flt <- iq4xs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)

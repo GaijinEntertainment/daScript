@@ -750,7 +750,7 @@ def private rd_x_quants_b32 : bool {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
-def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; rpw : int64;
+def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool;
                                 var pc_rq_qd : RqArgs; var pc_rq_qd_k : RqArgs; rqwg_qd, rqwg_qd_k, nlfin : int64) {
     let dim = g_rd.dim
     let qd = g_rd.qd
@@ -758,18 +758,18 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     let qrows = g_rd.q_gated ? 2l * qd : qd
     let qstride = uint(g_rd.q_gated ? 2l * g_rd.head_size : g_rd.head_size)
     var pcq = GemvArgs(n = uint(dim), d = uint(qrows), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(L.fq, raw, h, L.s_q, pcq, (qrows + rpw - 1l) / rpw)
+    gemv_enc(L.fq, raw, h, L.s_q, pcq, qrows)
     pfq_ts(raw)
     if (L.kv_merged) {
         var pckv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 2u, ybase = uint(qd))
-        gemv_cls_enc(L.fk, raw, h, L.s_kv, pckv, (2l * kvd + rpw - 1l) / rpw)
+        gemv_enc(L.fk, raw, h, L.s_kv, pckv, 2l * kvd)
         pfq_ts(raw)
     } else {
         var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd))
-        gemv_cls_enc(L.fk, raw, h, L.s_k, pck, (kvd + rpw - 1l) / rpw)
+        gemv_enc(L.fk, raw, h, L.s_k, pck, kvd)
         pfq_ts(raw)
         var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd))
-        gemv_cls_enc(L.fv, raw, h, L.s_v, pcv, (kvd + rpw - 1l) / rpw)
+        gemv_enc(L.fv, raw, h, L.s_v, pcv, kvd)
         pfq_ts(raw)
     }
     let hs = g_rd.head_size
@@ -819,21 +819,21 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     }
     pfq_ts(raw)
     var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(L.fo, raw, h, L.s_wo, pcw, (dim + rpw - 1l) / rpw)
+    gemv_enc(L.fo, raw, h, L.s_wo, pcw, dim)
     pfq_ts(raw)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
-def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; rpw : int64) {
+def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer) {
     let dim = g_rd.dim
     let cd = g_rd.dn_cd
     let di = g_rd.dn_di
     let nvh = g_rd.dn_nvh
     var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(L.fqkv, raw, h, L.s_dnqkv, pcqkv, (cd + rpw - 1l) / rpw)
+    gemv_enc(L.fqkv, raw, h, L.s_dnqkv, pcqkv, cd)
     pfq_ts(raw)
     var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
-    gemv_cls_enc(L.fz, raw, h, L.s_dnz, pcz, (di + rpw - 1l) / rpw)
+    gemv_enc(L.fz, raw, h, L.s_dnz, pcz, di)
     pfq_ts(raw)
     if (g_rd.dn_ba_f32) {
         var pcb = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA))
@@ -846,9 +846,9 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
             enc_cls_dn_rq(raw, h, L.s_quant_xb, pcr, (dim / 4l + 255l) / 256l)
         }
         var pcb = GemvArgs(n = uint(dim), d = uint(nvh), nreg = 1u, ybase = uint(DN_SM_BETA))
-        gemv_cls_enc(int(KqFmt.q8), raw, h, L.s_dnbeta, pcb, (nvh + rpw - 1l) / rpw)
+        gemv_enc(int(KqFmt.q8), raw, h, L.s_dnbeta, pcb, nvh)
         var pcg = GemvArgs(n = uint(dim), d = uint(nvh), nreg = 1u, ybase = uint(DN_SM_G))
-        gemv_cls_enc(int(KqFmt.q8), raw, h, L.s_dnalpha, pcg, (nvh + rpw - 1l) / rpw)
+        gemv_enc(int(KqFmt.q8), raw, h, L.s_dnalpha, pcg, nvh)
     }
     pfq_ts(raw)
     var pcd = DnStepArgs(cd = uint(cd), kd = uint(g_rd.dn_kd), nkh = uint(g_rd.dn_nkh), ds = uint(g_rd.dn_ds),
@@ -863,7 +863,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         enc_cls_q8k_rq(raw, h, L.s_quant_dno, pcr, (di / 8l + 255l) / 256l)
     }
     var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(L.fout, raw, h, L.s_dnout, pco, (dim + rpw - 1l) / rpw)
+    gemv_enc(L.fout, raw, h, L.s_dnout, pco, dim)
     pfq_ts(raw)
 }
 
@@ -874,12 +874,12 @@ def private rd_fuse_gates : tuple<fuse : bool; fuse_qkr : bool> {
 }
 
 // the dense FFN tail of the token command: gate and up GEMVs, the fused act+requant, the down GEMV into ffnout
-def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; hid, rpw : int64; var pc_act : ActArgs; var pc_act_k : ActArgs) {
+def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; hid : int64; var pc_act : ActArgs; var pc_act_k : ActArgs) {
     let dim = g_rd.dim
     var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(L.f1, raw, h, L.s_gate, pcg, (hid + rpw - 1l) / rpw)
+    gemv_enc(L.f1, raw, h, L.s_gate, pcg, hid)
     pfq_ts(raw)
-    gemv_cls_enc(L.f3, raw, h, L.s_up, pcg, (hid + rpw - 1l) / rpw)
+    gemv_enc(L.f3, raw, h, L.s_up, pcg, hid)
     pfq_ts(raw)
     if (kq_sb(L.f2)) {
         enc_q8k_actrq_cls(raw, h, L.s_actrq, pc_act_k, (hid / 8l + 255l) / 256l)
@@ -888,7 +888,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
     pfq_ts(raw)
     var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(L.f2, raw, h, L.s_down, pcd, (dim + rpw - 1l) / rpw)
+    gemv_enc(L.f2, raw, h, L.s_down, pcd, dim)
     pfq_ts(raw)
 }
 
@@ -896,7 +896,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 //! top-k writing the three expert GEMVs' slot regions, gate/up over k slots, the act, down; the
 //! combine onto the residual rides the ar2 step that follows (`rd_ar_comb_args`).
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#resident-moe-token")]
-def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; rpw : int64;
+def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
                           var pc_rq_dim : RqArgs; var pc_rq_dim_k : RqArgs; rqwg_dim, rqwg_dim_k : int64) {
     let dim = g_rd.dim
     let nfe = g_rd.nfe
@@ -920,10 +920,9 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     enc_topk_cls(raw, h, L.s_topk, pct, 1l)
     pfq_ts(raw)
     var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(k), ybase = 0u)
-    let ggu = (k * nfe + rpw - 1l) / rpw
-    gemv_cls_enc(L.fe1, raw, h, L.s_egate, pcg, ggu)
+    gemv_enc(L.fe1, raw, h, L.s_egate, pcg, k * nfe)
     pfq_ts(raw)
-    gemv_cls_enc(L.fe3, raw, h, L.s_eup, pcg, ggu)
+    gemv_enc(L.fe3, raw, h, L.s_eup, pcg, k * nfe)
     pfq_ts(raw)
     let dkq = kq_sb(L.fe2)
     var pca = ActArgs(nelem = uint(k * nfe), gelu = g_rd.is_gelu ? 1u : 0u, nblk = uint(k * nfe / (dkq ? 256l : 32l)))
@@ -935,7 +934,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
     pfq_ts(raw)
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k), ybase = 0u)
-    gemv_cls_enc(L.fe2, raw, h, L.s_edown, pcd, (k * dim + rpw - 1l) / rpw)
+    gemv_enc(L.fe2, raw, h, L.s_edown, pcd, k * dim)
     pfq_ts(raw)
 }
 
@@ -986,7 +985,6 @@ def private rd_encode_token {
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.head_size * 4l)
         let (fuse, fuse_qkr) = rd_fuse_gates()
-        let rpw = g_gpu.rows_per_wg
         var pc_rq_dim = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
         var pc_rq_qd = RqArgs(inbase = 0u, nblk = uint(qd / 32l))
         var pc_rq_dim_k = RqArgs(inbase = 0u, nblk = uint(dim / 256l))
@@ -1015,9 +1013,9 @@ def private rd_encode_token {
                 pfq_ts(raw)
             }
             if (L.recurrent) {
-                rd_encode_dn_head(raw, h, L, rpw)
+                rd_encode_dn_head(raw, h, L)
             } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, rpw, pc_rq_qd, pc_rq_qd_k, rqwg_qd, rqwg_qd_k, nlfin)
+                rd_encode_attn_head(raw, h, L, l, fuse_qkr, pc_rq_qd, pc_rq_qd_k, rqwg_qd, rqwg_qd_k, nlfin)
             }
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
             if (fuse) {
@@ -1034,10 +1032,10 @@ def private rd_encode_token {
                 pfq_ts(raw)
             }
             if (L.b1 >= 0l) {   // the dense triple: the layer's FFN, or an MoE layer's shared expert
-                rd_encode_ffn(raw, h, L, hid, rpw, pc_act, pc_act_k)
+                rd_encode_ffn(raw, h, L, hid, pc_act, pc_act_k)
             }
             if (L.moe) {
-                rd_encode_moe(raw, h, L, rpw, pc_rq_dim, pc_rq_dim_k, rqwg_dim, rqwg_dim_k)
+                rd_encode_moe(raw, h, L, pc_rq_dim, pc_rq_dim_k, rqwg_dim, rqwg_dim_k)
             }
             let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // rms_att[l+1] | final
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
@@ -1060,7 +1058,7 @@ def private rd_encode_token {
             pfq_ts(raw)
         }
         var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
-        gemv_cls_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, (g_rd.vocab + rpw - 1l) / rpw)
+        gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
         pfq_ts(raw)
         vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
@@ -1422,11 +1420,10 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     vhz_dep(raw, h, 0u, VHG_SM, true)   // one declaration for the smalls copy group
     cmd_copy_range(raw, g_gpu.dnd_bg.buf, 0l, st.smalls_dev, DN_SM_BETA * 4l, nvh * 4l)
     cmd_copy_range(raw, g_gpu.dnd_bg.buf, nvh * 4l, st.smalls_dev, DN_SM_G * 4l, nvh * 4l)
-    let rpw = g_gpu.rows_per_wg
     var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(fqkv, raw, h, qset, pcqkv, (cd + rpw - 1l) / rpw)
+    gemv_enc(fqkv, raw, h, qset, pcqkv, cd)
     var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
-    gemv_cls_enc(fz, raw, h, st.z_set, pcz, (di + rpw - 1l) / rpw)
+    gemv_enc(fz, raw, h, st.z_set, pcz, di)
     var pcd = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds),
         dconv = uint(taps + 1l), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
         taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
@@ -1434,7 +1431,7 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
         eps = eps, qscale = 1.0 / sqrt(float(ds)))
     enc_dn_step_cls(raw, h, st.fused_set, pcd, nvh)
     var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(fo, raw, h, st.out_set, pco, (dim + rpw - 1l) / rpw)
+    gemv_enc(fo, raw, h, st.out_set, pco, dim)
     vhz_dep(raw, h, VHG_YO, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[s_o].y_dev, g_gpu.stacks[s_o].y.buf, dim * 4l)
     if (vk_prof()) {
@@ -1671,11 +1668,9 @@ def private ffn_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var fc : FfnCmd;
     var uset = stack_gemv_cls_set(s3)
     hz_set_bits(gset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
     hz_set_bits(uset, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
-    let rpw = g_gpu.rows_per_wg
-    let ggu = (nrows * nfe + rpw - 1l) / rpw
     var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
-    gemv_cls_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, ggu)
-    gemv_cls_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, ggu)
+    gemv_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, nrows * nfe)
+    gemv_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, nrows * nfe)
     let down_is_kq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
     var pca = ActArgs(nelem = uint(nrows * nfe), gelu = is_gelu ? 1u : 0u,
         nblk = uint(nrows * nfe / (down_is_kq ? 256l : 32l)))
@@ -1686,7 +1681,7 @@ def private ffn_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var fc : FfnCmd;
         enc_q8_actrq_cls(raw, h, fc.actrq_set, pca, awgs)
     }
     var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nrows), ybase = 0u)
-    gemv_cls_enc(g_gpu.stacks[s2].fmt, raw, h, fc.down_set, pcd, (nrows * n + rpw - 1l) / rpw)
+    gemv_enc(g_gpu.stacks[s2].fmt, raw, h, fc.down_set, pcd, nrows * n)
 }
 
 def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool) : VkCommandBuffer {
@@ -2177,13 +2172,12 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
     var qset = stack_gemv_cls_set(sq)
     hz_set_bits(qset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
     var h : VkHaz
-    let rpw = g_gpu.rows_per_wg
     var pcq = GemvArgs(n = uint(n), d = uint(dq), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(fq, raw, h, qset, pcq, (dq + rpw - 1l) / rpw)
+    gemv_enc(fq, raw, h, qset, pcq, dq)
     var pck = GemvArgs(n = uint(n), d = uint(dk), nreg = 1u, ybase = uint(dq))
-    gemv_cls_enc(fk, raw, h, qc.k_set, pck, (dk + rpw - 1l) / rpw)
+    gemv_enc(fk, raw, h, qc.k_set, pck, dk)
     var pcv = GemvArgs(n = uint(n), d = uint(dv), nreg = 1u, ybase = uint(dq + dk))
-    gemv_cls_enc(fv, raw, h, qc.v_set, pcv, (dv + rpw - 1l) / rpw)
+    gemv_enc(fv, raw, h, qc.v_set, pcv, dv)
     vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
     vk_check(vkEndCommandBuffer(raw), null)
@@ -2405,9 +2399,8 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
     var h : VkHaz
-    let rpw = g_gpu.rows_per_wg
     var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(fmt, raw, h, g_gpu.stacks[si].cls_set, pc, (d + rpw - 1l) / rpw)
+    gemv_enc(fmt, raw, h, g_gpu.stacks[si].cls_set, pc, d)
     vhz_dep(raw, h, VHG_YO, 0u, true)
     cmd_copy_whole(raw, g_gpu.stacks[si].y_dev, g_gpu.stacks[si].y.buf, d * 4l)
     vk_check(vkEndCommandBuffer(raw), null)
@@ -2628,13 +2621,12 @@ def vk_moe_attn_dec_hydrate(woq : int64; kp : uint8 const?; vp : uint8 const?; n
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
 def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer; fq, fk, fv, fo : int; dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
-    let rpw = g_gpu.rows_per_wg
     var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(fq, raw, h, L.s_q, pcq, (qd + rpw - 1l) / rpw)
+    gemv_enc(fq, raw, h, L.s_q, pcq, qd)
     var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd))
-    gemv_cls_enc(fk, raw, h, L.s_k, pck, (kvd + rpw - 1l) / rpw)
+    gemv_enc(fk, raw, h, L.s_k, pck, kvd)
     var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd))
-    gemv_cls_enc(fv, raw, h, L.s_v, pcv, (kvd + rpw - 1l) / rpw)
+    gemv_enc(fv, raw, h, L.s_v, pcv, kvd)
     let hb = L.has_bias ? 1u : 0u   // the layer's own row is bound, so boff stays 0
     if (qk_norm) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
@@ -2649,7 +2641,7 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
     enc_da_attn_f16_cls(raw, h, L.s_attn, pca, n_heads)
     rq_enc(raw, h, L.s_rq, fo, qd)
     var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u)
-    gemv_cls_enc(fo, raw, h, L.s_wo, pcw, (dim + rpw - 1l) / rpw)
+    gemv_enc(fo, raw, h, L.s_wo, pcw, dim)
 }
 
 //! MoeGpuAttnDecFn: one layer's decode attention on the device. The chain

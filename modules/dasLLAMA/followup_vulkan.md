@@ -936,16 +936,20 @@ module) is independent and can land any time - it is pure structure.
     bank-conflict bound: 4.3 -> 2.4 ms per 30B window), the residual step's slot groups (eight
     rows in flight, then four: the twin's one-row step 360 -> 290 us per token) and the
     FFN-norm requant skipped on a layer with no shared expert (540 us per 30B window that
-    nothing read). The rows on the final kernels: the 30B 3482.6 / 126.2 (0.99x / 1.08x, the
-    window 143.4 ms against 142.3), the 35B 2962.8 / 99.0 (1.04x / 1.38x), the twin 5395.3 /
-    163.9 (1.06x / 0.94x; its token 6.05 ms on the device = 165 t/s, the bench's tg wandering
-    163-169 across the day on the same kernels). Still open under this item: the 30B prefill's
-    last 1% (the expert tiles ~99 ms against the reference's ~88 - a 64-wide column for the
-    33-64-row buckets - the router's 2.4 ms against 1.2 on 32 workgroups over 36 SMs, the act
-    2.8 and the gather 1.6; the profile stamp after the down tiles absorbs their tail, so the
-    residual step's own cost does not read there), the twin's decode 6% (the expert GEMVs at 73%
-    of bandwidth and the shared expert's at 81% - the remaining lever is the kq GEMV family's
-    rate, which every dense row shares), the fused add+rms twin that also stores the normed row
+    nothing read); then the decode GEMV family's lanes per row (`ARCHITECTURE_GPU_VULKAN_GEMM.md`
+    sec.2.2ah: a subgroup over one, two or four rows by the row length, the expert rows of a MoE
+    being the short ones - iq2s at K 768 148 -> 337 GB/s on the probe). The rows on the final
+    kernels, pp512 / tg128: the 30B 3482.6 / 132.0 (0.99x / 1.13x, the window 143.4 ms against
+    142.3, the token 6.79 ms), the 35B 2962.8 / 107.1 (1.04x / 1.50x), the twin 5395.3 / 166.8
+    (1.06x / 0.96x), the dense 4B Q4_K_M unchanged at 115-117 (its token a wash on either
+    form). Still open under this item: the 30B prefill's last 1% (the expert tiles ~99 ms
+    against the reference's ~88 - a 64-wide column for the 33-64-row buckets - the router's 2.4
+    ms against 1.2 on 32 workgroups over 36 SMs, the act 2.8 and the gather 1.6; the profile
+    stamp after the down tiles absorbs their tail, so the residual step's own cost does not read
+    there), the twin's decode 4% (a token's expert dispatch is 3-4 MB, where launch and ramp cost
+    what the transfer does: the 30B's e_down reads 806 us over 48 layers = 240 GB/s effective
+    against the probe's 337 steady - fewer, larger dispatches, or the gate and up planes in one,
+    are the next form), the fused add+rms twin that also stores the normed row
     (the router's feed, so a MoE could take the fused rail; ar1 reads 1.8-2.0 ms of the 30B
     window), the CPU chain's shared expert on the same K-quant planes (it reads the q8
     transcode, so the resident-vs-CPU bar carries the two forms' rounding), and an LPT order for
