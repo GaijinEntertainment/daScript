@@ -26,6 +26,7 @@ let CALL_GROUP_MISSING = "options gen2\nrequire daslib/module_group\nrequire [pr
 let CALL_GROUP_BAD_ARGS = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\n[export]\ndef main \{\n    call_module_group(\"probe_group\")\n\}\n"
 let CALL_GROUP_SIDE_EFFECT = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\nvar counter = 0\ndef bump() : int \{\n    counter++\n    return counter\n\}\n[export]\ndef main \{\n    call_module_group(\"probe_group\", \"probe_entry\", bump())\n    print(\"PROBE \{counter\}\\n\")\n\}\n"
 let CALL_PATH_GROUP = "options gen2\nrequire daslib/module_group\nrequire [path_group]\n[export]\ndef main \{\n    call_module_group(\"path_group\", \"probe_entry\", 3)\n    print(\"PROBE done\\n\")\n\}\n"
+let CALL_GROUP_SHADOW = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\nvar counter = 0\ndef bump() : int \{\n    counter++\n    return counter\n\}\n[export]\ndef main \{\n    let _cmg_arg_0 = 5\n    call_module_group(\"probe_group\", \"probe_entry\", bump())\n    print(\"PROBE \{counter\} \{_cmg_arg_0\}\\n\")\n\}\n"
 let MID_PUBLIC = "options gen2\nmodule mid\nrequire [probe_group] public\n"
 let MID_PUBLIC_TAB = "options gen2\nmodule mid_tab\nrequire [probe_group]\tpublic\n"
 let MID_PRIVATE = "options gen2\nmodule mid_private\nrequire [probe_group]\n"
@@ -197,6 +198,9 @@ def arms_calls(t : T?; fx : Fixture) {
         fwrite(sideEffect, CALL_GROUP_SIDE_EFFECT)
         t |> success(report_child(t, "side effect", run_driver(fx, sideEffect, out), out, "PROBE 1"), "an argument with a side effect is evaluated once for every member")
         t |> success(find(out, "ENTRY alpha 1") >= 0 && find(out, "ENTRY beta 1") >= 0, "every member receives the one value:\n{out}")
+        let shadow = path_join(fx.tmp, "use_call_shadow.das")
+        fwrite(shadow, CALL_GROUP_SHADOW)
+        t |> success(report_child(t, "shadow", run_driver(fx, shadow, out), out, "PROBE 1 5"), "the bound argument's name is the expansion's own, so a caller's local of the plain spelling is untouched")
     }
     t |> run("a descriptor registering an empty member is refused by name, and the run goes on") @(t : T?) {
         var out : string

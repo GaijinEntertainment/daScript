@@ -39,7 +39,7 @@ class CallModuleGroup : AstCallMacro {
             if (expr.arguments[i] is ExprVar || expr.arguments[i].__rtti |> starts_with("ExprConst")) {
                 argNames |> push("")
             } else {
-                let name = "_cmg_arg_{i - 2}"
+                let name = make_unique_private_name("_cmg_arg_{i - 2}", expr.at)  // hygienic: the block lands in the caller's scope
                 argNames |> push(name)
                 var decl <- qmacro_block() {
                     let $i(name) = $e(expr.arguments[i])
