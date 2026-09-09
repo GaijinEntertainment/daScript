@@ -15,8 +15,11 @@ lists the served model's whole directory, and a personal model library does
 not belong in a fixture.
 
 ```sh
-bin/daslang -jit utils/dasllama-server/main.das -- --config capture-server.toml
+bin/daslang -jit utils/dasllama-server/main.das -- --config capture-server.toml --affinity -1
 ```
+
+(`--affinity -1` on the command line is what makes the `affinity` key read `cli` in every
+`/config` capture - keep it, or the config fixtures move for no reason.)
 
 with `capture-server.toml`:
 
@@ -61,7 +64,7 @@ Speech fixtures (the same server, restarted with
 
 | File | Command |
 |---|---|
-| `stats_tts.json` | `curl $B/v1/stats` after a synthesis or two - the `tts` block (voices, sample rate, lane) rides the full stats shape |
+| `stats_tts.json` | `curl $B/v1/stats` after a synthesis or two - the `tts` block (voices, sample rate, lane, the `cloning` / `speed` / `lang` facts of the served family) rides the full stats shape |
 | `stats_tts_failed.json` | `curl $B/v1/stats` on a boot whose whole `--tts` file set is THERE but whose worker cannot load it - copy `kitten-nano.gguf` + `tts_postag.bin` into a scratch dir and write a `tts_g2p.bin` of ten bytes, `TG2P` then a version byte of 1 (an ordinary upgrade leaves exactly that), then boot `--tts <scratch>/kitten-nano.gguf --config <a one-key toml>` with no `--model`. The `tts` block with `ready: false`, empty `voices`, the requested `lane`, and the loader's own `error`, which the speech card prints instead of the studio. A file that is simply ABSENT is a different path - `configure_tts` drops the route before the worker starts, and the block never appears |
 | `config_tts.json` | `curl $B/config` on that same boot - the `tts` path and `tts_lane` as the speech studio's offer card reads them |
 | `speech.wav` | `curl -X POST $S -d '{"input":"Hi.","voice":"expr-voice-2-f","response_format":"wav"}' -o speech.wav` - raw bytes, keep the exact RIFF header. Say ONE short word: the answer is uncompressed 16-bit PCM, so every second costs ~48 KB |

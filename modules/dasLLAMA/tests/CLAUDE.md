@@ -653,7 +653,7 @@ round trip; the parity rail - the codec decoder over the oracle's latents (one s
 encoder and the voice prompt's key-value rows per layer, then teacher-forced frames (the oracle's
 noise and its own frames fed back): the head alone on the oracle's conditioning, the backbone
 conditioning and EOS logit per frame, the latents and the waveform, plus a free run logged; the
-facade cells - caps (cloning, one language, the 19-voice roster), the reference's chunk lists over
+facade cells - caps (cloning, no speed, one language, the 19-voice roster), the reference's chunk lists over
 multi-sentence texts, one sentence spoken with the family's own timing stages, a cloned voice
 joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
 a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, the one-channel

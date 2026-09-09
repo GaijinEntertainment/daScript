@@ -609,6 +609,7 @@ def test_pocket_facade(t : T?) {
         var inscope m <- load_tts_model(path)
         var inscope c <- caps(m)
         t |> success(c.cloning, "a Pocket model clones")
+        t |> success(!c.speed, "a Pocket model has no speed to honour")
         t |> equal(length(c.langs), 1)
         t |> equal(c.langs[0], "en")
         t |> equal(length(c.voices), 19, "the shipped English roster")

@@ -78,8 +78,9 @@ the change moves no phoneme of the 200-sentence corpus, which pins the audio bit
 expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
 `tests/test_tts_g2p.das` in the same change as its fix.**
 
-**Never accept a voice or language a model's `caps()` does not declare, or a cloning request
-when `caps()` says it cannot clone - panic at the call site instead.**
+**Never accept a voice or language a model's `caps()` does not declare, a cloning request when
+`caps()` says it cannot clone, or a speed other than 1.0 when `caps()` says a speed means
+nothing to it - panic at the call site instead.**
 
 **A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as geometry -
 `pad_l = k - stride` on a forward conv, `pad_r = k - stride` on a transposed one, the replicate

@@ -109,7 +109,11 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--tts``
      -
      - ---
-     - TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m) --- enables ``/v1/audio/speech``
+     - TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m with their front-end packs beside them; or a ``pocket-tts-<lang>-q8`` file, which reads text, needs no pack and clones a voice) --- enables ``/v1/audio/speech``
+   * - ``--tts-voices-dir``
+     -
+     - ---
+     - Directory of voice clips (wav / flac / mp3 / ogg, a few seconds of one speaker each) a cloning speech model adds to its voices at boot, each under its file's stem; a clip that does not decode is logged and skipped, the key on a model that cannot clone is logged and ignored
    * - ``--image-mmproj``
      -
      - ---
@@ -198,7 +202,7 @@ Endpoints
      - Text→speech (needs ``--tts``); ``response_format`` ``wav`` (default) or ``pcm``
    * - ``POST``
      - ``/v1/audio/phonemes``
-     - ``{"input", "voice"?}`` → the normalized text, the dialect the voice speaks (``lang``) and, per chunk a synthesis would take, its phoneme string in that dialect (needs ``--tts``)
+     - ``{"input", "voice"?}`` → the normalized text, the dialect the voice speaks (``lang``) and, per chunk a synthesis would take, its phoneme string in that dialect --- empty for a text-reading model such as Pocket (needs ``--tts``)
    * - ``POST``
      - ``/v1/models/activate``
      - ``{"model": name}`` — make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)

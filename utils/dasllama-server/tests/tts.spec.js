@@ -175,6 +175,51 @@ test('a refused phonemes call leaves the panel hidden and does not disturb the a
     await expect(page.locator('#s-phon')).toBeHidden();
 });
 
+test('a cloning model shows its acceptable-use terms beside the voice picker; a phoneme model shows none', async ({ page }) => {
+    const s = fx('stats_tts');
+    expect(s.tts.cloning).toBe(false);   // the capture is a phoneme family: nothing to clone, nothing to agree to
+    await openControl(page, { stats: s });
+    await expect(page.locator('#s-terms')).toBeHidden();
+    const c = JSON.parse(JSON.stringify(s));
+    c.tts.cloning = true;
+    await openControl(page, { stats: c });
+    await expect(page.locator('#s-terms')).toBeVisible();
+    await expect(page.locator('#s-terms')).toContainText('consent');
+});
+
+test('a model with no speed control loses the speed knob, and the request still carries 1.0', async ({ page }) => {
+    const s = fx('stats_tts');
+    expect(s.tts.speed).toBe(true);   // the capture is a phoneme family: durations scale
+    await openControl(page, { stats: s });
+    await expect(page.locator('#s-speed-knob')).toBeVisible();
+    const c = JSON.parse(JSON.stringify(s));
+    c.tts.speed = false;
+    const { posts } = await openControl(page, Object.assign({ stats: c }, wavAnswer()));
+    await expect(page.locator('#s-speed-knob')).toBeHidden();
+    await page.locator('#s-text').fill('no speed knob here');
+    await page.locator('#s-run').click();
+    await expect(page.locator('#s-note')).toContainText('of audio in');
+    expect(lastJson(posts.filter(p => p.path === SPEECH)).speed).toBe(1);
+});
+
+test('the offer card says so when the wired model clones a voice', async ({ page }) => {
+    const s = fx('stats_tts');
+    await openControl(page, { stats: s, config: fx('config_tts') });
+    await expect(page.locator('#tts-offer')).not.toContainText('clones a voice');
+    const c = JSON.parse(JSON.stringify(s));
+    c.tts.cloning = true;
+    await openControl(page, { stats: c, config: fx('config_tts') });
+    await expect(page.locator('#tts-offer')).toContainText('clones a voice');
+});
+
+test('the config editor carries the voices directory as a path override', async ({ page }) => {
+    const c = fx('config_tts');
+    expect(c.surface.config).toHaveProperty('tts_voices_dir');
+    await openControl(page, { stats: fx('stats_tts'), config: c });
+    await expect(page.locator('#f-tts_voices_dir')).toHaveValue(c.surface.config.tts_voices_dir);
+    await expect(page.locator('#en-tts_voices_dir')).not.toBeChecked();   // the capture left it at its default
+});
+
 test('the picked voice survives a reload', async ({ page }) => {
     const s = fx('stats_tts');
     const second = s.tts.voices[1];

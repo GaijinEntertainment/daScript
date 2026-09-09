@@ -161,9 +161,9 @@ def private sample_rate_of(m : TtsModel) : int {
 
 def caps(m : TtsModel) : TtsCaps {
     //! What the loaded model offers: the canonical voice names the front end can drive, each with
-    //! its language (a voice whose language it does not phonemize is left out; a family's aliases
-    //! resolve at synthesis), the PCM sample rate, the languages, and whether it clones a voice.
-    var c = TtsCaps(sample_rate = sample_rate_of(m), cloning = m.kind == TtsKind.pocket)
+    //! its language (a voice whose language it does not phonemize is left out; aliases resolve at
+    //! synthesis), the PCM rate, the languages, whether it clones a voice, whether a speed applies.
+    var c = TtsCaps(sample_rate = sample_rate_of(m), cloning = m.kind == TtsKind.pocket, speed = m.kind != TtsKind.pocket)
     c.langs <- front_end_langs(m)
     let names & = unsafe(m.kind == TtsKind.pocket ? m.pocket.voice_names : m.model.voice_names)
     for (v in names) {
@@ -202,6 +202,19 @@ def tts_normalize(text : string) : string {
     //! alone - it reads no pack), where "Dr." reads "Doctor", "3.5" reads "three point five" and
     //! "$12" reads "twelve dollars".
     return normalize_text(text)
+}
+
+def tts_needs_packs(path : string) : bool {
+    //! Whether the model at ``path`` reads the front-end packs (``tts_g2p.bin``, ``tts_postag.bin``)
+    //! from its directory: the phoneme families do, a Pocket TTS GGUF reads text and needs neither.
+    //! Answerable before a load, from the file's architecture alone.
+    return !(path |> ends_with(".gguf")) || gguf_file_arch(path) != "pocket-tts"
+}
+
+def tts_has_phonemes(m : TtsModel) : bool {
+    //! Whether ``tts_phonemize`` has an answer for this model: the phoneme families yes, a Pocket
+    //! model no - it reads text, and its chunks carry no phoneme string.
+    return m.kind != TtsKind.pocket
 }
 
 def private phoneme_family_only(m : TtsModel) {

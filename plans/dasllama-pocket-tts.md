@@ -208,6 +208,15 @@ activations' variance is 1e-4: at 1e-6 every latent was off by one percent.
    tokenizer alone: our normalizer is English-only, the reference does no normalization in
    any language, so parity with the reference holds and a normalizer per language is a
    later quality rung).
+   Landed 2026-09-09: the server serves a Pocket file standing alone (`tts_needs_packs`
+   decides the file set), the `tts` block of `/v1/stats` gains `cloning`, `speed` and `lang`,
+   `/v1/audio/phonemes` answers a Pocket model's chunks with empty phoneme strings, a speed on
+   it is a 400, `--tts-voices-dir` / `tts_voices_dir` clones every clip of a directory at boot
+   under its stem (`test_pocket_voices_dir`), the control page shows the acceptable-use terms
+   beside the voice picker of a cloning model and drops the speed knob where `speed` is false,
+   `caps().speed` is the facade's own word for it, the tutorial gains `--clone` and the
+   sections that read the new caps, and `load_audio_mono(path, rate)` is the clip decode rail.
+   The upload route is followup_general.md row 125.
 6. **Perf.** The `[hot_path]` carrier (`PocketScratch`), the image rail (`.dlim`, q8 lane:
    backbone and codec GEMMs as Q8_0 tap-stacked rows; the 1->64 and 64->1 convs stay f32),
    the q8 GEMV for the decode step, then frame-block decoding for first-chunk latency.

@@ -1434,3 +1434,13 @@
     lanes, the flow head left f32 throughout (it is the graph's sensitive part - a 1e-5
     epsilon in its timestep norm moved every latent one percent). The prize: the English file
     from 152 MB to about 80, and the backbone's per-frame read from 75 MB to 38.
+125. **A voice-clip upload route on dasllama-server (ruled 2026-09-09 as a ledger row).** The
+    Pocket arc clones by NAMED voices only: the GGUF roster plus the clips of `tts_voices_dir`,
+    read once at boot (`register_voice_clips` in `utils/dasllama-server/openai_server.das`). A
+    `POST /v1/audio/voices` taking a clip and a name would let the control page's studio clone
+    without a restart: the worker's job kinds gain a `register` arm (the clip decoded at the
+    model's rate on the worker, `tts_register_voice`, the ready event re-emitted so the `tts`
+    block's roster moves), the page's tts card gains a file picker beside the voice select, and
+    the acceptable-use terms already beside that select are the consent the upload asks for.
+    The cap on the clip's decoded length is the ASR upload's (`max_audio_frames`); the name is
+    the file's stem or the field's; a name the roster carries replaces it, as the boot path does.

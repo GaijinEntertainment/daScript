@@ -12,28 +12,34 @@ require strings
 //
 // This tutorial covers:
 //   - load_tts_model — one loader for every TTS family, the front-end packs read beside the GGUF
-//   - caps() — the voices, the languages and the PCM rate a loaded model serves
+//   - caps() — the voices, the languages, the PCM rate, and what a loaded model can do
 //   - tts_normalize / tts_phonemize / tts_voice_lang — the text front end on its own, in the
-//     dialect the picked voice reads, without synthesizing
+//     dialect the picked voice reads, without synthesizing; tts_has_phonemes says whether a
+//     model has a phoneme string to show at all
 //   - set_tts_q8 / reset_tts_q8 / tts_serves_q8 — the two weight lanes, and the pin discipline
 //   - synthesize — text in, PCM out; write_wav_pcm16 puts it on disk
 //   - synthesize_stream — the same audio delivered sentence by sentence, as each piece lands
 //   - TtsTimings and rtf — per-stage wall time, and seconds spent per second of speech
 //   - tts_chunks — the sentence splitter one synthesis takes at a time
+//   - tts_register_voice — a voice cloned from a few seconds of audio, on a model that can
 //
-// Two families run through these verbs, and load_tts_model tells them apart from the GGUF's
+// Three families run through these verbs, and load_tts_model tells them apart from the GGUF's
 // own architecture metadata:
 //   - KittenTTS — kitten-nano and kitten-mini, 8 voices
 //   - Kokoro-82M — 54 voice packs in nine languages; caps() lists the ones the front end speaks
-// Both are StyleTTS2-lineage models: a text encoder predicts per-phoneme durations, a prosody
-// branch predicts pitch and energy, a decoder and an iSTFT generator turn those into samples.
-// caps() reports the rate each one emits.
+//   - Pocket TTS — one file per language, a bundled voice roster, and any voice cloned from a
+//     clip; it reads text (no phoneme step) and has no speed control
+// The first two are StyleTTS2-lineage models: a text encoder predicts per-phoneme durations, a
+// prosody branch predicts pitch and energy, a decoder and an iSTFT generator turn those into
+// samples. Pocket is a small language model over audio codec frames with a codec decoder after
+// it. caps() reports the rate each one emits.
 //
-// Prerequisites: a TTS GGUF with tts_g2p.bin and tts_postag.bin in the same directory. The
-// packs are the text front end — normalization, part-of-speech tagging, grapheme-to-phoneme —
-// and load_tts_model reads them from the model's own directory.
+// Prerequisites: a TTS GGUF. The phoneme families want tts_g2p.bin and tts_postag.bin in the
+// same directory — the packs are the text front end (normalization, part-of-speech tagging,
+// grapheme-to-phoneme) and load_tts_model reads them from the model's own directory. A Pocket
+// file stands alone.
 //
-// Run: daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- <tts-model.gguf> [out.wav] [--voice <name>] [--f32]
+// Run: daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- <tts-model.gguf> [out.wav] [--voice <name>] [--f32] [--clone <clip.wav>]
 
 let TEXT = "daslang speaks. The text becomes phonemes, the phonemes become durations, and the durations become a waveform."
 
@@ -49,6 +55,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     var model_path = ""
     var out_path = "speech.wav"
     var voice = ""
+    var clip_path = ""
     var want_f32 = false
     var i = 0
     while (i < length(cmd)) {
@@ -58,6 +65,9 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         } elif (a == "--voice" && i + 1 < length(cmd)) {
             voice = cmd[i + 1]
             i++
+        } elif (a == "--clone" && i + 1 < length(cmd)) {
+            clip_path = cmd[i + 1]
+            i++
         } elif (ends_with(a, ".gguf")) {
             model_path = a
         } elif (ends_with(a, ".wav")) {
@@ -66,7 +76,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         i++
     }
     if (empty(model_path)) {
-        print("usage: daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- <tts-model.gguf> [out.wav] [--voice <name>] [--f32]\n")
+        print("usage: daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- <tts-model.gguf> [out.wav] [--voice <name>] [--f32] [--clone <clip.wav>]\n")
         return
     }
 
@@ -96,9 +106,12 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     // ──────────────────────────────────────────────────────────────────────────
     //
     // One loader for every family. caps() is the honesty contract: the voices it accepts by
-    // name, the languages it speaks, the rate its PCM comes out at, and whether it can clone
-    // a voice from a recording. Ask a voice caps() does not carry and the call panics — the
-    // request is never quietly swapped for something the model does have.
+    // name, the languages it speaks, the rate its PCM comes out at, whether it can clone a
+    // voice from a recording, and whether a speed means anything to it. Ask a voice caps()
+    // does not carry and the call panics — the request is never quietly swapped for something
+    // the model does have. tts_needs_packs answers, from the file alone, whether the two
+    // front-end packs have to sit beside it.
+    print("front-end packs beside the file: {tts_needs_packs(model_path)}\n")
     let t_load = ref_time_ticks()
     var m <- load_tts_model(model_path)
     print("loaded in {double(get_time_usec(t_load)) / 1.0e6lf} s\n")
@@ -106,7 +119,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     let c <- caps(m)
     print("voices ({length(c.voices)}): {join(c.voices, ", ")}\n")
     print("languages: {join(c.langs, ", ")}\n")
-    print("rate: {c.sample_rate} Hz; clones a voice: {c.cloning}\n")
+    print("rate: {c.sample_rate} Hz; clones a voice: {c.cloning}; honours a speed: {c.speed}\n")
     // caps().voices can be EMPTY: a model whose every voice pack speaks a language this front
     // end does not phonemize offers none, and there is no first voice to fall back on.
     if (empty(voice) && empty(c.voices)) {
@@ -131,20 +144,28 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     // g2p_pack_path names the phoneme pack the loader took from the model's directory: the full
     // tts_g2p.bin when it is there, else the American-only tts_g2p_en_us.bin - the smaller pack a
     // browser build ships, which reads no British voice.
-    print("phoneme pack: {base_name(g2p_pack_path(dir_name(model_path)))}\n")
     //
     // A synthesis phonemizes in the DIALECT ITS VOICE WAS TRAINED ON, so this pass has to be
     // asked in the same one, or you are reading a document about a different sound. Every voice
     // carries its language: c.voice_langs[i] beside c.voices[i], and tts_voice_lang answers for
     // an alias too. Kokoro's bf_emma reads en-gb where af_heart reads en-us; a KittenTTS voice is
     // always en-us. The bare two-argument tts_phonemize reads American English.
+    //
+    // A Pocket model reads text, not phonemes: tts_has_phonemes answers false, tts_phonemize
+    // panics rather than invent a string, and the normalized text IS what the model is asked to
+    // say (the normalizer is English; the other Pocket languages read their text as it is).
     let sentence = "Dr. Chen read 3.5 pages and paid $12."
     let spoken = tts_normalize(sentence)
     let vlang = tts_voice_lang(m, vname)
     print("\ntext:       {sentence}\n")
     print("normalized: {spoken}\n")
     print("voice:      {vname} reads {vlang}\n")
-    print("phonemes:   {tts_phonemize(m, spoken, vlang)}\n")
+    if (tts_has_phonemes(m)) {
+        print("phoneme pack: {base_name(g2p_pack_path(dir_name(model_path)))}\n")
+        print("phonemes:   {tts_phonemize(m, spoken, vlang)}\n")
+    } else {
+        print("phonemes:   none - this model reads the text\n")
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // Section 4 — the sentence chunker
@@ -209,12 +230,50 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         // without changing pitch. The voice is a name from caps().voices; each one is a
         // style vector the model was trained with, and switching it costs nothing. A
         // KittenTTS voice also carries its own speed prior, so the same speed number on two
-        // voices is not the same tempo — hold the voice fixed to read the speed knob.
-        let quick <- synthesize(m, TEXT, vname, 1.25)
+        // voices is not the same tempo — hold the voice fixed to read the speed knob. A model
+        // with nothing that scales a duration says so in caps().speed and panics on any speed
+        // but 1.0, so the knob is read only where it exists.
         print("\n{vname} at speed 1.0:  {seconds(audio.pcm, audio.sample_rate)} s\n")
-        print("{vname} at speed 1.25: {seconds(quick.pcm, quick.sample_rate)} s\n")
+        if (c.speed) {
+            let quick <- synthesize(m, TEXT, vname, 1.25)
+            print("{vname} at speed 1.25: {seconds(quick.pcm, quick.sample_rate)} s\n")
+        }
         let alt = length(c.voices) > 1 ? c.voices[1] : vname   // vname when the model offers one voice, or none it can drive
         let other <- synthesize(m, TEXT, alt)
         print("{alt} at speed 1.0:  {seconds(other.pcm, other.sample_rate)} s\n")
+
+        // ──────────────────────────────────────────────────────────────────────
+        // Section 8 — a voice of your own
+        // ──────────────────────────────────────────────────────────────────────
+        //
+        // caps().cloning says whether the model takes a voice from a recording. A few seconds
+        // of one speaker, mono at the model's own rate, become a voice in the roster:
+        // load_audio_mono decodes a wav, flac, mp3 or ogg file to that rate, and
+        // tts_register_voice adds the samples under the name you give. From then on the name
+        // works like any bundled voice. A model that cannot clone panics here rather than
+        // pretend.
+        //
+        // The voice is the speaker's and the words are yours: Kyutai's acceptable-use terms
+        // bind the Pocket weights and every voice they clone — no impersonation or cloning
+        // without the speaker's explicit and lawful consent, no misinformation, no unlawful or
+        // harmful content.
+        if (!empty(clip_path)) {
+            if (!c.cloning) {
+                print("\n--clone: {model_path} cannot clone a voice\n")
+            } else {
+                let clip <- load_audio_mono(clip_path, c.sample_rate)
+                if (empty(clip)) {
+                    print("\n--clone: {clip_path} did not decode\n")
+                } else {
+                    tts_register_voice(m, "mine", clip, c.sample_rate)
+                    let mine <- synthesize(m, TEXT, "mine")
+                    print("\nmine (cloned from {seconds(clip, c.sample_rate)} s of {base_name(clip_path)}): {seconds(mine.pcm, mine.sample_rate)} s of speech, rtf {rtf(mine.timings, mine.sample_rate)}\n")
+                    let clone_out = path_join(dir_name(out_path), "{stem(base_name(out_path))}-mine.wav")
+                    if (write_wav_pcm16(clone_out, mine.pcm, mine.sample_rate)) {
+                        print("  wrote {clone_out}\n")
+                    }
+                }
+            }
+        }
     }
 }
