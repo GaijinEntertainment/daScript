@@ -654,7 +654,7 @@ def private pf_roles_per_layer(L : RLayer) : int64 {
 }
 
 let private PF_MOE_ROLES = 9l   // router topk sched gather e_gate e_up e_act e_down comb
-let private PF_MOE_MAP_OFF = 1_024l   // the schedules' per-wg map word offset: 4-word records for up to 256 experts
+let private PF_MOE_MAP_OFF = 2_048l   // the schedules' first per-wg map word offset: 4-word records for up to 256 experts, the s pieces' then the m pieces'
 
 //! Does the resident MoE block admit an expert triple of these formats: the f16-fed cm2 tiles
 //! serve it, so a coopmat2 device in cm2 mode with every format the f16 feed admits.
@@ -666,11 +666,14 @@ def vk_rdec_moe_ok(f1, f3, f2 : int) : bool {
     return pf_f16_feed(f1) && pf_f16_feed(f3) && pf_f16_feed(f2)
 }
 
-//! the expert tiles' dispatch bounds for a window of `nk` slot rows at token column `tc`: every
-//! expert may take a partial tile, so the schedule's map is sized for one region per expert
-def private pf_moe_bounds(nk, tc : int64) : tuple<gu : int64; dn : int64> {
-    let rt = (nk + tc - 1l) / tc + min(g_rd.ne, nk)
-    return (gu = rt * ((g_rd.nfe + 127l) / 128l), dn = rt * ((g_rd.dim + 127l) / 128l))
+//! the expert tiles' dispatch bounds for a window of `nk` slot rows: the s dispatch takes at most
+//! one tile per expert (a bucket within the s column, or the remainder past whole m columns), the
+//! m dispatch every expert's whole columns plus a partial one
+def private pf_moe_bounds(nk : int64) : tuple<gu : int64; dn : int64; mgu : int64; mdn : int64> {
+    let wt_gu = (g_rd.nfe + 127l) / 128l
+    let wt_dn = (g_rd.dim + 127l) / 128l
+    let rt_m = nk / int64(SCHED_M_ROWS) + g_rd.ne
+    return (gu = g_rd.ne * wt_gu, dn = g_rd.ne * wt_dn, mgu = rt_m * wt_gu, mdn = rt_m * wt_dn)
 }
 
 // the window chain's MoE block buffers and class rails, once per residency
@@ -684,9 +687,8 @@ def private pf_moe_setup {
     verify(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_gather_f16_cls()
         && ensure_actf16_cls() && ensure_combine_cls() && ensure_combine_sh_cls(),
         "vk prefill: the MoE block's class rails must engage on a live device")
-    g_rd.moe_tc = cm2_tile_cols(nfe, max(nk / g_rd.ne, 1l))
-    let bounds = pf_moe_bounds(nk, g_rd.moe_tc)
-    assert((PF_MOE_MAP_OFF + max(bounds.gu, bounds.dn)) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: the MoE block's schedule exceeds its plane")
+    let bounds = pf_moe_bounds(nk)
+    assert((PF_MOE_MAP_OFF + max(bounds.gu + bounds.mgu, bounds.dn + bounds.mdn)) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: the MoE block's schedule exceeds its plane")
     g_rd.pf_mlog = make_device_buf(np * g_rd.ner * 4l)
     g_rd.pf_midx = make_device_buf(nk * 4l)
     g_rd.pf_mw = make_device_buf(nk * 4l)
@@ -699,10 +701,12 @@ def private pf_moe_setup {
     g_rd.pf_my2 = make_device_buf(nk * nfe * 4l)
     g_rd.pf_mhf = make_device_buf((nk + TILE_READ_SLACK) * nfe * 2l)
     g_rd.pf_mdn = make_device_buf(nk * dim * 4l)
+    g_rd.pf_midx_host = make_host_buf(nk * 4l, false, [cached = true])
 }
 
 // one MoE layer's window sets: the router GEMM and per-row select over the routing planes, the
-// schedule, the gather, the three expert tiles over the device-written schedules, the act, the combine
+// schedule, the gather, the three expert planes' s and m tiles over the device-written schedules,
+// the act, the combine
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
 def private pf_moe_layer_sets(l : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -711,7 +715,8 @@ def private pf_moe_layer_sets(l : int64) {
     let nfe = g_rd.nfe
     let nk = g_rd.pf_nk
     let ner = g_rd.ner
-    let tc = g_rd.moe_tc
+    let tcs = int64(SCHED_S_ROWS)
+    let tcm = int64(SCHED_M_ROWS)
     let xg_bytes = (nk + TILE_READ_SLACK) * dim * 2l
     let y_bytes = nk * nfe * 4l
     let hf_bytes = (nk + TILE_READ_SLACK) * nfe * 2l
@@ -719,7 +724,8 @@ def private pf_moe_layer_sets(l : int64) {
     let pe1 = arena_planes(L.fe1, L.be1)
     let pe3 = arena_planes(L.fe3, L.be3)
     let pe2 = arena_planes(L.fe2, L.be2)
-    verify(cm2_cls_ensure(L.fe1, tc) && cm2_cls_ensure(L.fe3, tc) && cm2_cls_ensure(L.fe2, tc), "vk prefill: the expert tile class rails must engage")
+    verify(cm2_cls_ensure(L.fe1, tcs) && cm2_cls_ensure(L.fe3, tcs) && cm2_cls_ensure(L.fe2, tcs)
+        && cm2_cls_ensure(L.fe1, tcm) && cm2_cls_ensure(L.fe3, tcm) && cm2_cls_ensure(L.fe2, tcm), "vk prefill: the expert tile class rails must engage")
     L.pf_router_set = set_router_gemm_cls(fixed_array(g_rd.router_dev, g_rd.pf_xb, g_rd.pf_mlog),
         fixed_array(g_rd.router_bytes, np * dim * 4l, np * ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
     L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw),
@@ -729,22 +735,28 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT))
     L.pf_gather_set = set_moe_gather_f16_cls(fixed_array(g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mxg),
         fixed_array(np * dim * 4l, nk * 4l, xg_bytes), fixed_array(VHZ_XB, VHZ_MRT, VHZ_MXG))
-    L.pf_e1_set = cm2_cls_set(L.fe1, tc, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
+    L.pf_e1_set = cm2_cls_set(L.fe1, tcs, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
         fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE))
-    L.pf_e3_set = cm2_cls_set(L.fe3, tc, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
+    L.pf_e1m_set = cm2_cls_set(L.fe1, tcm, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
+        fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE_M))
+    L.pf_e3_set = cm2_cls_set(L.fe3, tcs, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
         fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP))
+    L.pf_e3m_set = cm2_cls_set(L.fe3, tcm, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
+        fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP_M))
     L.pf_eact_set = set_actf16_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf),
-        fixed_array(y_bytes, y_bytes, hf_bytes), fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ))
-    L.pf_e2_set = cm2_cls_set(L.fe2, tc, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
+        fixed_array(y_bytes, y_bytes, hf_bytes), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ))
+    L.pf_e2_set = cm2_cls_set(L.fe2, tcs, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
         fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
+    L.pf_e2m_set = cm2_cls_set(L.fe2, tcm, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
+        fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN_M))
     if (L.b1 >= 0l) {
         L.pf_ecomb_set = set_combine_sh_cls(fixed_array(g_rd.pf_ffnout, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
             fixed_array(np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
-            fixed_array(VHZ_FFO, VHZ_MRT, VHZ_MRT, VHZ_MDN, VHZ_MRT))
+            fixed_array(VHZ_FFO, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
     } else {
         L.pf_ecomb_set = set_combine_cls(fixed_array(g_rd.pf_ffnout, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn),
             fixed_array(np * dim * 4l, nk * 4l, nk * 4l, dn_bytes),
-            fixed_array(VHZ_FFO, VHZ_MRT, VHZ_MRT, VHZ_MDN))
+            fixed_array(VHZ_FFO, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M))
     }
 }
 
@@ -766,10 +778,14 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale)
     enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)
     pfq_ts(raw)
-    let tc = g_rd.moe_tc
-    let bounds = pf_moe_bounds(nk, tc)
-    var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), tc = uint(tc), wt_gu = uint((nfe + 127l) / 128l), wt_dn = uint((dim + 127l) / 128l),
-        map_off = uint(PF_MOE_MAP_OFF), bound_gu = uint(bounds.gu), bound_dn = uint(bounds.dn),
+    let bounds = pf_moe_bounds(nk)
+    let tcs = int64(SCHED_S_ROWS)
+    let tcm = int64(SCHED_M_ROWS)
+    let map_m_gu = uint(PF_MOE_MAP_OFF + bounds.gu)   // the m dispatch's maps follow the s dispatch's
+    let map_m_dn = uint(PF_MOE_MAP_OFF + bounds.dn)
+    var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint((nfe + 127l) / 128l), wt_dn = uint((dim + 127l) / 128l),
+        map_off = uint(PF_MOE_MAP_OFF), map_off_mgu = map_m_gu, map_off_mdn = map_m_dn,
+        bound_gu = uint(bounds.gu), bound_dn = uint(bounds.dn), bound_mgu = uint(bounds.mgu), bound_mdn = uint(bounds.mdn),
         base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / fmt_unit(L.fe1)),
         base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / fmt_unit(L.fe3)),
         base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / fmt_unit(L.fe2)))
@@ -778,16 +794,22 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     var pcg = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
     enc_moe_gather_f16_cls(raw, h, L.pf_gather_set, pcg, nk)
     pfq_ts(raw)
+    // each plane's m dispatch first (the long columns), its s dispatch beside it: disjoint rows under separate hazard bits
     var pc1 = BatchArgs(n = uint(dim), d = uint(nfe), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
-    cm2_cls_enc(L.fe1, tc, raw, h, L.pf_e1_set, pc1, bounds.gu)
+    var pc1m = BatchArgs(n = uint(dim), d = uint(nfe), map_off = map_m_gu, ksplit = 0u)
+    cm2_cls_enc(L.fe1, tcm, raw, h, L.pf_e1m_set, pc1m, bounds.mgu)
+    cm2_cls_enc(L.fe1, tcs, raw, h, L.pf_e1_set, pc1, bounds.gu)
     pfq_ts(raw)
-    cm2_cls_enc(L.fe3, tc, raw, h, L.pf_e3_set, pc1, bounds.gu)
+    cm2_cls_enc(L.fe3, tcm, raw, h, L.pf_e3m_set, pc1m, bounds.mgu)
+    cm2_cls_enc(L.fe3, tcs, raw, h, L.pf_e3_set, pc1, bounds.gu)
     pfq_ts(raw)
     var pca = ActArgs(nelem = uint(nk * nfe), gelu = g_rd.is_gelu ? 1u : 0u, nblk = uint(nk * nfe / 32l), elem0 = 0u)
     enc_actf16_cls(raw, h, L.pf_eact_set, pca, (nk * nfe / 4l + 255l) / 256l)
     pfq_ts(raw)
     var pc2 = BatchArgs(n = uint(nfe), d = uint(dim), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
-    cm2_cls_enc(L.fe2, tc, raw, h, L.pf_e2_set, pc2, bounds.dn)
+    var pc2m = BatchArgs(n = uint(nfe), d = uint(dim), map_off = map_m_dn, ksplit = 0u)
+    cm2_cls_enc(L.fe2, tcm, raw, h, L.pf_e2m_set, pc2m, bounds.mdn)
+    cm2_cls_enc(L.fe2, tcs, raw, h, L.pf_e2_set, pc2, bounds.dn)
     pfq_ts(raw)
     if (L.b1 >= 0l) {
         var pcc = CombineShArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk), lstride = uint(ner), gidx = uint(ne), gated = g_rd.sh_gated ? 1u : 0u)
@@ -1136,6 +1158,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let pairs = int(qd / 2l + kvd / 2l)
     unsafe {
         var w0 = 0l
+        var last_wlen = 0l
         let taps = max(g_rd.dn_dconv - 1l, 0l)
         while (w0 < npos) {
             let tp0 = ref_time_ticks()
@@ -1453,6 +1476,10 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             if (vk_prof()) {
                 to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
+                if (g_rd.moe) {   // the last MoE layer's picks, for the bucket report
+                    vhz_dep(raw, h, VHZ_MRT, 0u, true)
+                    cmd_copy_whole(raw, g_rd.pf_midx, g_rd.pf_midx_host.buf, wlen * g_rd.k * 4l)
+                }
             }
             pfq_end(raw)
             vk_check(vkEndCommandBuffer(raw), null)
@@ -1462,13 +1489,66 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 to_log(LOG_INFO, "vk_rdpf w0 {w0} rows {wlen} prep {t_prep} record {t_record} submit {get_time_usec(tp0) - t_prep - t_record}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
             }
             w0 += wlen
+            last_wlen = wlen
         }
         memcpy(addr<void?>(logits[0]), g_rd.pf_logits_host.mapped, g_rd.vocab * 4l)
         // per-role GPU aggregation, LAST window, only when every stamp landed; overlapped levels (q|k|v, gate|up) bill the level on the last member's delta
         if (vk_prof()) {
             pf_prof_report(npos)
+            if (g_rd.moe) {
+                pf_moe_bucket_report(last_wlen)
+            }
         }
     }
+}
+
+//! the profile's bucket report: the last MoE layer's picks of the last window as per-expert row
+//! counts - the shape the expert tiles run over - with the 32-row tile count the s column takes
+//! and the count a 32 / 64 / 128 column ladder would take
+[cold_path]
+def private pf_moe_bucket_report(wlen : int64) {
+    let nk = wlen * g_rd.k
+    var cnt : array<int64>
+    cnt |> resize(g_rd.ne)
+    unsafe {
+        let picks = reinterpret<uint?>(g_rd.pf_midx_host.mapped)
+        for (i in range64(nk)) {
+            let e = int64(picks[i])
+            if (e < g_rd.ne) {
+                cnt[e]++
+            }
+        }
+    }
+    var used = 0l
+    var largest = 0l
+    var b32 = 0l
+    var b64 = 0l
+    var b128 = 0l
+    var big = 0l
+    var tiles_s = 0l
+    var tiles_ladder = 0l
+    for (c in cnt) {
+        continue if (c == 0l)
+        used++
+        largest = max(largest, c)
+        tiles_s += (c + 31l) / 32l
+        if (c <= 32l) {
+            b32++
+            tiles_ladder++
+        } elif (c <= 64l) {
+            b64++
+            tiles_ladder++
+        } else {
+            if (c <= 128l) {
+                b128++
+            } else {
+                big++
+            }
+            tiles_ladder += (c + 127l) / 128l
+        }
+    }
+    to_log(LOG_INFO, "vk_rdpf moe buckets (the last MoE layer, {nk} rows over {g_rd.ne} experts): {used} non-empty, the largest {largest}; sizes <=32: {b32} 33-64: {b64} 65-128: {b128} >128: {big}; 32-row tiles {tiles_s}, a 32/64/128 ladder {tiles_ladder}\n")
+    delete cnt
 }
 
 [cold_path]   // DASLLAMA_GPU_PROF=1 report leg
@@ -2855,7 +2935,7 @@ def private ensure_xf_state {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 expert chain engaged\n")
 }
 
-let private TILE_READ_SLACK = 32l   // rows of read slack past a region's last row
+let private TILE_READ_SLACK = 128l   // rows of read slack past a region's last row: the m column's unclamped partial load
 
 //! chunk row cap of the cm2 chain: the gathered f16 image (batch_xq window), the f16 hidden plane
 //! (hq_dev) and the f32 output planes must all fit; 128-aligned like the tiles' columns

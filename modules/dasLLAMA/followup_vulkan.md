@@ -913,8 +913,19 @@ module) is independent and can land any time - it is pure structure.
     chain landed 2026-09-09: the whole-model driver admits a MoE whose expert stacks fit the arena
     (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n), the window chain's routed block
     (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2af) and the token command's (`ARCHITECTURE_GPU_VULKAN_DECODE.md`
-    sec.2.2ag); the per-op tier keeps the files that stream. Still open under this item: the
-    30B and 35B rows on the resident driver (the plan at their sizes on the 16 GB card), the
-    hybrid MoE (the deltanet head beside the routed block), the small-M expert tiles, the fused
-    add+rms twin that also stores the normed row (the router's feed, so a MoE could take the fused
-    rail), and an LPT order for the device schedule's regions.
+    sec.2.2ag); the per-op tier keeps the files that stream. The 30B and 35B rows ride the driver
+    whole (the plan forgoes the per-op reserves for a fitting file), the hybrid MoE registers its
+    routed block after the deltanet head, and the expert tiles took two levers: the grid decodes'
+    lane shifts (item 36's 2026-09-09 status) and the schedule's tile ladder (a bucket past the s
+    column takes m columns, the last partial: `ARCHITECTURE_GPU_VULKAN.md` sec.2.2af; the real
+    window's skew put 4096 rows in 175 s tiles where the ladder runs 85). The rows on the RTX
+    5060 Ti against llama.cpp b357x, pp512 / tg128: Qwen3-30B-A3B UD-IQ2_XXS 3242.0 / 123.6
+    (3520.0 / 116.6: 0.92x / 1.06x; the window 153.9 ms against 142.3, the expert tiles 97.7),
+    Qwen3.6-35B-A3B UD-IQ2_XXS 2837.7 / 95.9 (2853.1 / 71.6: 0.99x / 1.34x), the Qwen1.5-MoE
+    twin 5152.9 / 142.5 (5099.8 / 173.8; its window 94.5 ms, the first measured rep after the
+    warmup reads 101 on every row here, a driver warm-up the bench's one warmup does not absorb).
+    Still open under this item: the 30B prefill's last 8% (the attention head 28 ms, the router
+    and schedule 15, the act, combine and gather 8), the decode levers (the shared and expert
+    GEMVs' bandwidth, the twelve small dispatches per layer), the fused add+rms twin that also
+    stores the normed row (the router's feed, so a MoE could take the fused rail), and an LPT
+    order for the device schedule's pieces (the m dispatch already leads the s one).

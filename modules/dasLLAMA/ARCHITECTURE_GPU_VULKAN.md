@@ -168,21 +168,34 @@ five device stages over the window's FFN-normed rows.
   position-major as the picked expert and its weight per slot.
 - **The bucket schedule** (`MoeSched`, one workgroup) writes what the host fill writes for the
   per-op chain: thread e counts expert e's slots over the window, exclusive scans place its
-  bucket rows, its region index (experts with rows, in expert order) and its tile workgroups,
-  and the three expert planes' schedules land as 4-word records plus per-workgroup maps at a
-  fixed map offset (4 words for up to 256 experts). The dispatch is sized for the worst case -
-  a partial tile per expert - and the map's tail past the real workgroup count carries the
-  sentinel (`SCHED_NONE`): a tile workgroup that reads it sees a zero-row region and returns
-  before its first barrier. The two slot walks (the counts, the slot-to-bucket-row map) stage
-  the picks through workgroup memory in 256-slot chunks rather than reading every slot from
-  global memory per thread (258 us per layer to 163 on the 30B). The slot-to-bucket-row map
-  lands in slot order, the CPU walk's order, so the device buckets equal the host's.
+  bucket rows, its region indices (experts with rows, in expert order) and its tile workgroups,
+  and the three expert planes' schedules land as 4-word records plus per-workgroup maps. A
+  bucket is cut into at most two pieces by the tile ladder: a bucket within the s column (32
+  rows) is one s piece; a bigger bucket takes whole m columns (128 rows) with the last one
+  partial, unless the remainder past the whole columns fits the s column, which then takes it
+  (`sched_ladder_m_rows`). The s pieces' records sit at `[0, ne)`, the m pieces' at `[ne, 2 ne)`,
+  and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 2048 words for up
+  to 256 experts twice), the two tile counts scanned as one packed word. Every dispatch is sized
+  for its worst case - one s tile per expert; every expert's whole columns plus a partial one -
+  and the map's tail past the real workgroup count carries the sentinel (`SCHED_NONE`): a tile
+  workgroup that reads it sees a zero-row region and returns before its first barrier. A real
+  window's router is skewed - on the Qwen3-30B-A3B at 512 tokens, 69 of 128 experts route, nine
+  hold over 128 rows (the largest 467) - so the ladder runs about 90 column tiles where the s
+  column alone ran 175 (`DASLLAMA_GPU_PROF=1` prints the last MoE layer's buckets and both
+  counts): the expert planes at 593 / 650 us against 842 / 915 on the s column alone
+  (`harness/vk_gemm_probe.das -- moesk:iq2xxs`, that window's profile). The two slot walks (the
+  counts, the slot-to-bucket-row map) stage the picks through workgroup memory in 256-slot chunks
+  rather than reading every slot from global memory per thread (258 us per layer to 163 on the
+  30B). The slot-to-bucket-row map lands in slot order, the CPU walk's order, so the device
+  buckets equal the host's.
 - **The gather, the expert tiles and the act** are the per-op chain's: the f16 gather scatters
-  each position's row into its bucket rows, gate and up run the cm2 tiles at the 32-row column
-  over the gathered image, the act writes the f16 hidden rows, and down runs the tiles again.
-  The window planes carry 32 rows of read slack past the last bucket row (the s tile loads a
-  whole column unclamped, sec.2.2j) and hold a whole window of `PF_WINDOW x k` bucket rows, so
-  the block never chunks.
+  each position's row into its bucket rows, gate and up run the cm2 tiles over the gathered
+  image - each plane's m dispatch then its s dispatch, the two writing disjoint rows of one
+  plane under separate hazard bits (`VHZ_GATE_M`, `VHZ_UP_M`, `VHZ_MDN_M`) so they co-run and the
+  reader's barrier covers both - the act writes the f16 hidden rows, and down runs the tiles
+  again. The window planes carry 128 rows of read slack past the last bucket row (the s and m
+  tiles load a partial column unclamped, `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l) and hold a
+  whole window of `PF_WINDOW x k` bucket rows, so the block never chunks.
 - **The combine** lands the routed slots' weighted down rows on the layer's FFN rows. A layer
   with a shared expert runs the dense tail first - the shared triple is the layer's dense
   triple, at the shared width - and the gated combine (`MoeCombineSh`) starts from those rows

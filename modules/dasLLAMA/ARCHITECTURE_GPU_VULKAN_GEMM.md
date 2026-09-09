@@ -61,17 +61,22 @@ times that SM count is the slots it allocates. The pick takes the tile whose wor
 the larger share of its allocated slots, the two ratios compared by cross-multiplying. The m
 tile wins only on a strict win; a tie goes to l, whose bigger tile carries twice the arithmetic
 intensity. Three rules sit ahead of the comparison: a region of 64 rows or fewer takes the s
-tile (32-row columns - the MoE expert-bucket shape, where a 512-token window routes ~32 rows to
-each of 128 experts and an m column would pad three quarters of every tile and take the edge
-path on all of them), a window of 128 rows or fewer takes m (the l column would run half
-empty), and a device that reports no SM count takes l and never splits k. Beyond `(d, cnt,
-sm_count)` the pick reads only two values fixed at init - the served mode and
-`DASLLAMA_CM2_TILE` - so the class the pipeline binds and the tile rule the meta fill writes
+tile (32-row columns - the per-op tier's MoE expert-bucket shape, where a 512-token window
+routes ~32 rows to each of 128 experts on average), a window of 128 rows or fewer takes m (the
+l column would run half empty), and a device that reports no SM count takes l and never splits
+k. Beyond `(d, cnt, sm_count)` the pick reads only two values fixed at init - the served mode
+and `DASLLAMA_CM2_TILE` - so the class the pipeline binds and the tile rule the meta fill writes
 can never disagree; `cnt` is the AVERAGE rows per active region of the dispatch, so one tile
-serves every region of a MoE schedule. A region below the s tile's row count goes to the decode
-GEMV family, not to a tile. The s tile's fast path loads a partial 32-row column UNCLAMPED and
-clamps only the store, so every f16 plane the chain feeds it - the gathered activation image and
-the hidden plane - is sized with 32 rows of slack past its last region (`ffn_cm2_chunk_rows`).
+serves every region of a per-op MoE schedule. The resident MoE block makes no pick: its device
+schedule cuts every bucket into s and m pieces by size and dispatches both classes per plane
+(`ARCHITECTURE_GPU_VULKAN.md` sec.2.2af), which is what a real window's skew needs - one tile
+per bucket costs the same whatever its fill, and a 467-row bucket is 15 s tiles or 4 m
+columns. A region below the s tile's row count goes to the decode GEMV family, not to a tile.
+The s and m tiles' fast path loads a partial column UNCLAMPED (the layout's row dimension
+rounded up to the column) and clamps only the store, so every f16 plane the chain feeds them -
+the gathered activation image and the hidden plane - is sized with 128 rows of slack past its
+last region (`TILE_READ_SLACK`, `ffn_cm2_chunk_rows`); the l tile takes the edge path on a
+partial column, since only a window's last column is ever partial there.
 
 **The split-k pick counts the dispatch group, not the GEMM.** With long K (2048 and up), a grid
 that fills at most half the SMs splits its reduction across f32 partial planes that
@@ -110,13 +115,14 @@ choice shapes an image byte, so the bake identity ignores it: a serve-only knob 
 configuration field. `decvec_on` is the run's arm, announced on the `device ready` line.
 
 **The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is
-whole (`m0 + 128 <= d`), the token column is whole or stamped s, and K is a whole number of BK
-steps; the layouts are then created clamp-Undefined and the B and output strides are masked to
-a multiple of 8 f16 (`stride &= ~7`). The mask changes nothing while `n` and `d` are
-32-multiples, which every served shape is; it exists to make the alignment PROVABLE to the
-driver's address analysis, which is what keeps the loads on the wide path. The s column gates
-only the weight tile: its partial token column loads unclamped and its store clamps. Everything
-else takes the edge path with clamped layouts.
+whole (`m0 + 128 <= d`), the token column is whole or the stamp carries the partial-column path
+(`STILE`: the s and m columns), and K is a whole number of BK steps; the layouts are then
+created clamp-Undefined and the B and output strides are masked to a multiple of 8 f16
+(`stride &= ~7`). The mask changes nothing while `n` and `d` are 32-multiples, which every
+served shape is; it exists to make the alignment PROVABLE to the driver's address analysis,
+which is what keeps the loads on the wide path. A partial-column stamp gates only the weight
+tile: its partial token column loads unclamped and its store clamps (`tensorLayout2DPad`).
+Everything else takes the edge path with clamped layouts.
 
 **The no-split arm keeps literal loop bounds and a literal store base.** Where `ksplit` is zero
 the k loop runs the literal `0 .. n` with the store at the row base rather than the general

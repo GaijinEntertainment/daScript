@@ -177,22 +177,32 @@ the rest is the per-layer host glue the span would remove, and the span declines
    aux32 assembled from two lanes): iq2xxs 749, iq3xxs 585, iq3s 767, iq2s 772. The rows:
    the 30B window 221.2 -> 187.7 ms (expert tiles 166 -> 133), pp512 2670.7 (0.76x), tg128
    124.6; the 35B 2542.7 (0.89x), tg128 95.3; the twin (k4) unchanged at 5208.4 / 143.1.
-   5b NEXT - the schedule's shape. llama.cpp's own per-op logger on the real 30B window
-   (`GGML_VK_PERF_LOGGER=1 llama-bench -p 512`) reads its iq2_xxs gate/up plane at 594 us -
-   FASTER than its 754 on uniform buckets - because the l pipeline's column widens to 64 or
-   128 rows on a big bucket, so the real router's skew (a few experts with hundreds of rows,
-   many with a dozen) amortizes each A decode over more rows; our s tile decodes the 128-row
-   weight tile once per 32 rows whatever the bucket, so the same skew costs us: the real
-   window's gate plane read 1211 us per layer against the probe's 955 on uniform buckets
-   before 5a (966 against 749 after). The lever: split every bucket into whole 128-row chunks
-   for the m class and a remainder of at most 127 rows for the s class - one schedule pass
-   writing both record lists (records [0, ne) for the s pieces, [ne, 2 ne) for the m pieces,
-   the map offset moved to 2048 words, one packed two-way scan for the two tile counts), two
-   dispatches per plane over the same planes (the m dispatch's y plane under its own hazard
-   bit so the two co-run and the act's barrier covers both), no new kernel: the m class is
-   the dense chain's, and every m column is whole by construction, so it never takes the
-   edge path. `moesk:<fmt>` (a 1 / (rank + 8) profile over the 128 experts) measures the
-   whole-s schedule against the split before the sched kernel changes.
+   5b DONE 2026-09-09 - the schedule's shape. llama.cpp's own per-op logger on the real 30B
+   window (`GGML_VK_PERF_LOGGER=1 llama-bench -p 512`) reads its iq2_xxs gate/up plane at 594
+   us - FASTER than its 754 on uniform buckets - because the l pipeline's column widens to 64
+   or 128 rows on a big bucket, so the real router's skew amortizes each A decode over more
+   rows; our s tile decoded the 128-row weight tile once per 32 rows whatever the bucket. The
+   real window (the profile's new bucket report, the last MoE layer): 69 of 128 experts route,
+   nine hold over 128 rows (the largest 467), 48 sit within 32 - 175 s tiles where a 32/128
+   ladder runs 87. The first cut, whole 128-row chunks on the m class with the remainders on
+   s, gained 2% on a 1 / (rank + 8) profile (`moesk:`): the mid-sized buckets (33 to 127 rows)
+   were the cost, and a whole-column rule leaves them on the s tile. The ladder that landed:
+   the m class takes the s tile's partial-column fast path (`STILE` generalized to the stamp's
+   column, the store clamped, every f16 plane the tiles read carrying 128 rows of slack), and
+   the schedule cuts a bucket past 32 rows into m columns with the last one partial - unless
+   the remainder past whole columns fits the s column, which takes it - so a 100-row bucket is
+   one m column instead of four s tiles (`sched_ladder_m_rows`); one schedule pass writes both
+   piece lists (records [0, ne) s, [ne, 2 ne) m, the maps at 2048 words on, one packed two-way
+   scan), two dispatches per plane under separate hazard bits (`VHZ_GATE_M` / `VHZ_UP_M` /
+   `VHZ_MDN_M`) so they co-run. On the probe's real-shape profile (`moesk:iq2xxs`): gate/up 842
+   -> 593 us, down 915 -> 650. The rows: the 30B window 187.7 -> 153.9 ms (expert tiles 133 ->
+   97.7; llama.cpp 142.3 with its tiles at ~88), pp512 3242.0 (0.92x), tg128 123.6; the 35B
+   2837.7 (0.99x), tg128 95.9; the twin's window 99.2 -> 94.5 ms, its row 5152.9 (the first
+   measured rep after the warmup reads 101 ms on every model here - a driver warm-up the
+   bench's one warmup does not absorb - so its three-rep mean and spread wander).
+   What is left of the 30B window against theirs: the expert tiles ~10 ms, the attention head
+   28 ms (q 9.0, wo 7.7, attn 5.0, qkn 2.8, rope 1.6, k+v 2.1), the router 6.6 and schedule
+   8.1, the combine 4.0, act 2.8, gather 1.6, the residual adds and requants ~4.
 
 Slices 1 and 2 are small and land the shared-expert families' rows; slice 3 is the arc's body.
 

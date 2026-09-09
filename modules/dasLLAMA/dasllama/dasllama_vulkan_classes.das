@@ -974,32 +974,46 @@ class RouterGemm {
 }
 
 struct SchedArgs {
-    nk : uint         // slot rows (npos x k)
-    ne : uint         // experts (at most 256: one thread per expert)
-    tc : uint         // the tile's token column (rows per tile)
-    wt_gu : uint      // the gate/up GEMMs' weight tiles (ceil(nfe / 128))
-    wt_dn : uint      // the down GEMM's (ceil(dim / 128))
-    map_off : uint    // the per-wg map's word offset in every sched plane
-    bound_gu : uint   // the gate/up dispatch's workgroups; the map's tail past the schedule reads the sentinel
+    nk : uint          // slot rows (npos x k)
+    ne : uint          // experts (at most 256: one thread per expert)
+    wt_gu : uint       // the gate/up GEMMs' weight tiles (ceil(nfe / 128))
+    wt_dn : uint       // the down GEMM's (ceil(dim / 128))
+    map_off : uint     // the s dispatch's per-wg map word offset in every sched plane; the records precede it
+    map_off_mgu : uint // the m dispatch's map offset in the gate/up planes
+    map_off_mdn : uint // ... and in the down plane
+    bound_gu : uint    // the s dispatch's workgroups per gate/up plane; the map's tail past the schedule reads the sentinel
     bound_dn : uint
-    base1 : uint      // expert 0's block base in the gate plane (slab-local, in the plane's units)
-    stride1 : uint    // blocks per expert
+    bound_mgu : uint   // the m dispatch's
+    bound_mdn : uint
+    base1 : uint       // expert 0's block base in the gate plane (slab-local, in the plane's units)
+    stride1 : uint     // blocks per expert
     base3 : uint
     stride3 : uint
     base2 : uint
     stride2 : uint
 }
 
+let SCHED_S_ROWS = 32u    //! the s column: the ladder's small-bucket and remainder tile
+let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the last one partial
+
+//! the ladder's m rows of a bucket of `c` rows: none up to the s column, else whole m columns plus a
+//! partial one when the remainder passes the s column (a remainder within it takes the s column)
+def sched_ladder_m_rows(c : uint) : uint {
+    if (c <= SCHED_S_ROWS) return 0u
+    return (c % SCHED_M_ROWS) > SCHED_S_ROWS ? c : (c / SCHED_M_ROWS) * SCHED_M_ROWS
+}
+
 // the window's bucket schedule on the device, one workgroup: thread e counts expert e's slots, the
 // scans place its bucket rows and its tiles, the three GEMMs' region records and per-wg maps land
-// in the layout the host fill writes (regions in expert order, empty experts skipped), the map
-// tails past the real workgroup counts read the sentinel, and inv maps every slot row to its
-// bucket row in slot order - the CPU bucket walk's order
+// in the layout the host fill writes (regions in expert order, empty experts skipped) - the s
+// pieces' records at [0, ne), the m pieces' at [ne, 2 ne), each dispatch's map at its own offset -
+// the map tails past the real workgroup counts read the sentinel, and inv maps every slot row to
+// its bucket row in slot order - the CPU bucket walk's order
 [vk_dispatch(name = "moe_sched_cls", grid = "one", params = "one : int64")]
 class MoeSched {
     @ssbo @binding = 0 idx : array<uint>       // [nk] the picked expert per slot row
     @ssbo @binding = 1 inv : array<uint>       // [nk] slot row -> bucket row
-    @ssbo @binding = 2 sched1 : array<uint>    // the gate plane's records + map
+    @ssbo @binding = 2 sched1 : array<uint>    // the gate plane's records + maps
     @ssbo @binding = 3 sched3 : array<uint>
     @ssbo @binding = 4 sched2 : array<uint>
     @push_constant pa : SchedArgs
@@ -1015,6 +1029,65 @@ class MoeSched {
         }
         barrier()
         return min(256u, pa.nk - c0)
+    }
+
+    // one piece's record and per-wg map on the three planes: expert `tid`'s `rows` from `row0`,
+    // record `ri`, its `rt` column tiles from workgroup `wg_gu` / `wg_dn` of the dispatch whose
+    // maps sit at `map_gu` / `map_dn`
+    def write_piece(ri, row0, rows, rt, wg_gu, wg_dn, map_gu, map_dn : uint) {
+        let tid = gl_LocalInvocationID.x
+        let rb = ri * 4u
+        sched1[rb] = pa.base1 + tid * pa.stride1
+        sched1[rb + 1u] = row0
+        sched1[rb + 2u] = rows
+        sched1[rb + 3u] = wg_gu
+        sched3[rb] = pa.base3 + tid * pa.stride3
+        sched3[rb + 1u] = row0
+        sched3[rb + 2u] = rows
+        sched3[rb + 3u] = wg_gu
+        sched2[rb] = pa.base2 + tid * pa.stride2
+        sched2[rb + 1u] = row0
+        sched2[rb + 2u] = rows
+        sched2[rb + 3u] = wg_dn
+        var g = 0u
+        while (g < rt * pa.wt_gu) {
+            sched1[map_gu + wg_gu + g] = ri
+            sched3[map_gu + wg_gu + g] = ri
+            g++
+        }
+        g = 0u
+        while (g < rt * pa.wt_dn) {
+            sched2[map_dn + wg_dn + g] = ri
+            g++
+        }
+    }
+
+    // the sentinel tails of the four maps, from the live workgroup counts (the s count in the low
+    // half of each total, the m count in the high) to the dispatch bounds
+    def write_tails(total_gu, total_dn : uint) {
+        let tid = gl_LocalInvocationID.x
+        var t = (total_gu & 0xFFFFu) + tid
+        while (t < pa.bound_gu) {
+            sched1[pa.map_off + t] = SCHED_NONE
+            sched3[pa.map_off + t] = SCHED_NONE
+            t += 256u
+        }
+        t = (total_dn & 0xFFFFu) + tid
+        while (t < pa.bound_dn) {
+            sched2[pa.map_off + t] = SCHED_NONE
+            t += 256u
+        }
+        t = (total_gu >> 16u) + tid
+        while (t < pa.bound_mgu) {
+            sched1[pa.map_off_mgu + t] = SCHED_NONE
+            sched3[pa.map_off_mgu + t] = SCHED_NONE
+            t += 256u
+        }
+        t = (total_dn >> 16u) + tid
+        while (t < pa.bound_mdn) {
+            sched2[pa.map_off_mdn + t] = SCHED_NONE
+            t += 256u
+        }
     }
 
     // the exclusive prefix over the 256 threads' v; scan[255] holds the total after the call
@@ -1055,50 +1128,24 @@ class MoeSched {
             c0 += 256u
         }
         let st = excl_scan(c)
-        let has = mine && c > 0u ? 1u : 0u
-        let ri = excl_scan(has)
-        let rt = (c + pa.tc - 1u) / pa.tc
-        let g_gu = excl_scan(rt * pa.wt_gu)
+        let mrows = mine ? sched_ladder_m_rows(c) : 0u
+        let srows = mine ? c - mrows : 0u
+        let ri_s = excl_scan(srows > 0u ? 1u : 0u)
+        let ri_m = pa.ne + excl_scan(mrows > 0u ? 1u : 0u)
+        let rt_s = (srows + SCHED_S_ROWS - 1u) / SCHED_S_ROWS
+        let rt_m = (mrows + SCHED_M_ROWS - 1u) / SCHED_M_ROWS
+        // the two dispatches' tile counts scanned as one packed word: the s count in the low half, the m count in the high
+        let g_gu = excl_scan(rt_s * pa.wt_gu | ((rt_m * pa.wt_gu) << 16u))
         let total_gu = scan[255u]
-        let g_dn = excl_scan(rt * pa.wt_dn)
+        let g_dn = excl_scan(rt_s * pa.wt_dn | ((rt_m * pa.wt_dn) << 16u))
         let total_dn = scan[255u]
-        if (has != 0u) {
-            let rb = ri * 4u
-            sched1[rb] = pa.base1 + tid * pa.stride1
-            sched1[rb + 1u] = st
-            sched1[rb + 2u] = c
-            sched1[rb + 3u] = g_gu
-            sched3[rb] = pa.base3 + tid * pa.stride3
-            sched3[rb + 1u] = st
-            sched3[rb + 2u] = c
-            sched3[rb + 3u] = g_gu
-            sched2[rb] = pa.base2 + tid * pa.stride2
-            sched2[rb + 1u] = st
-            sched2[rb + 2u] = c
-            sched2[rb + 3u] = g_dn
-            var g = 0u
-            while (g < rt * pa.wt_gu) {
-                sched1[pa.map_off + g_gu + g] = ri
-                sched3[pa.map_off + g_gu + g] = ri
-                g++
-            }
-            g = 0u
-            while (g < rt * pa.wt_dn) {
-                sched2[pa.map_off + g_dn + g] = ri
-                g++
-            }
+        if (srows > 0u) {
+            write_piece(ri_s, st + mrows, srows, rt_s, g_gu & 0xFFFFu, g_dn & 0xFFFFu, pa.map_off, pa.map_off)
         }
-        var t = total_gu + tid
-        while (t < pa.bound_gu) {
-            sched1[pa.map_off + t] = SCHED_NONE
-            sched3[pa.map_off + t] = SCHED_NONE
-            t += 256u
+        if (mrows > 0u) {
+            write_piece(ri_m, st, mrows, rt_m, g_gu >> 16u, g_dn >> 16u, pa.map_off_mgu, pa.map_off_mdn)
         }
-        t = total_dn + tid
-        while (t < pa.bound_dn) {
-            sched2[pa.map_off + t] = SCHED_NONE
-            t += 256u
-        }
+        write_tails(total_gu, total_dn)
         var b = st
         c0 = 0u
         while (c0 < pa.nk) {
@@ -5154,7 +5201,7 @@ class template KqCm2BatchT : MoeCmBase {
             tensorLayoutSetStride(fla, pa.n / BLKW, 1u)
             var flb : tensorLayout2D
             tensorLayoutCreate(flb)
-            tensorLayoutSetDimension(flb, row0 + (STILE ? ((cnt + 31u) & ~31u) : cnt), pa.n)
+            tensorLayoutSetDimension(flb, row0 + (STILE ? ((cnt + BN - 1u) & ~(BN - 1u)) : cnt), pa.n)
             tensorLayoutSetStride(flb, pa.n & ~7u, 1u)
             var flo : FLO
             tensorLayoutCreate(flo)
@@ -6300,10 +6347,11 @@ class Q8Cm2LBatch : Q8Cm2T {
 [vk_dispatch(name = "q8_batch_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2MBatch : Q8Cm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "q8_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6327,10 +6375,11 @@ class K4Cm2LBatch : K4Cm2T {
 [vk_dispatch(name = "kq_batch_k4_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K4Cm2MBatch : K4Cm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k4_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6354,10 +6403,11 @@ class K6Cm2LBatch : K6Cm2T {
 [vk_dispatch(name = "kq_batch_k6_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K6Cm2MBatch : K6Cm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k6_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6381,10 +6431,11 @@ class K5Cm2LBatch : K5Cm2T {
 [vk_dispatch(name = "kq_batch_k5_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K5Cm2MBatch : K5Cm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k5_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6408,10 +6459,11 @@ class Q40Cm2LBatch : Q40Cm2T {
 [vk_dispatch(name = "kq_batch_q40_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q40Cm2MBatch : Q40Cm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_q40_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6435,10 +6487,11 @@ class Iq4xsCm2LBatch : Iq4xsCm2T {
 [vk_dispatch(name = "kq_batch_iq4xs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4xsCm2MBatch : Iq4xsCm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4xs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6462,10 +6515,11 @@ class K3Cm2LBatch : K3Cm2T {
 [vk_dispatch(name = "kq_batch_k3_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K3Cm2MBatch : K3Cm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k3_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6489,10 +6543,11 @@ class Iq3sCm2LBatch : Iq3sCm2T {
 [vk_dispatch(name = "kq_batch_iq3s_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3sCm2MBatch : Iq3sCm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3s_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6516,10 +6571,11 @@ class Iq3xxsCm2LBatch : Iq3xxsCm2T {
 [vk_dispatch(name = "kq_batch_iq3xxs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3xxsCm2MBatch : Iq3xxsCm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3xxs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6543,10 +6599,11 @@ class Iq4nlCm2LBatch : Iq4nlCm2T {
 [vk_dispatch(name = "kq_batch_iq4nl_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nlCm2MBatch : Iq4nlCm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4nl_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6570,10 +6627,11 @@ class K2Cm2LBatch : K2Cm2T {
 [vk_dispatch(name = "kq_batch_k2_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K2Cm2MBatch : K2Cm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k2_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6597,10 +6655,11 @@ class Iq2sCm2LBatch : Iq2sCm2T {
 [vk_dispatch(name = "kq_batch_iq2s_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2sCm2MBatch : Iq2sCm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2s_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6624,10 +6683,11 @@ class Iq2xsCm2LBatch : Iq2xsCm2T {
 [vk_dispatch(name = "kq_batch_iq2xs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xsCm2MBatch : Iq2xsCm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6651,10 +6711,11 @@ class Iq2xxsCm2LBatch : Iq2xxsCm2T {
 [vk_dispatch(name = "kq_batch_iq2xxs_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xxsCm2MBatch : Iq2xxsCm2T {
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xxs_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -6673,130 +6734,143 @@ class Iq2xxsCm2SBatch : Iq2xxsCm2T {
 class K4KhrBatch : K4Cm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k5_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K5KhrBatch : K5Cm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k6_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K6KhrBatch : K6Cm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_q40_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q40KhrBatch : Q40Cm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4xsKhrBatch : Iq4xsCm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k3_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K3KhrBatch : K3Cm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3s_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3sKhrBatch : Iq3sCm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq3xxs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3xxsKhrBatch : Iq3xxsCm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq4nl_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nlKhrBatch : Iq4nlCm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_k2_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K2KhrBatch : K2Cm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2s_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2sKhrBatch : Iq2sCm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xsKhrBatch : Iq2xsCm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 [vk_dispatch(name = "kq_batch_iq2xxs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xxsKhrBatch : Iq2xxsCm2T {
     override KHR = true
     override BN = 128u
+    override STILE = true
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
-    typedef FLO = tensorLayout2D
+    typedef FLO = tensorLayout2DPad
 }
 
 struct SkRedArgs {

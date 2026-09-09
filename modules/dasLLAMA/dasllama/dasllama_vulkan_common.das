@@ -2163,7 +2163,8 @@ struct RLayer {
     s_edown : VkDescriptorSet
     s_ecomb : VkDescriptorSet       // the combine (the shared-expert form or the plain one)
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   // the window chain's MoE block
-    pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   // the expert tiles over the device-written schedules
+    pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   // the expert tiles over the device-written schedules: the s column's
+    pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   // ... and the m column's, over the same planes
     pf_eact_set, pf_ecomb_set : VkDescriptorSet
 }
 
@@ -2239,6 +2240,7 @@ struct RDec {
     // is f16 — the fa tiles bind the mirrors directly, no shadow planes)
     pf_facm2 : bool
     pf_logits_host : HostBuf
+    pf_midx_host : HostBuf        // the last MoE layer's picks, read back for the profile's bucket report
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
     @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*16 + variant (lazy insert, steady-state hit)
@@ -2265,7 +2267,6 @@ struct RDec {
     n_moe : int64                 // MoE layers (the router plane's slots)
     sh_gated, norm_topk, is_gelu : bool
     wscale : float
-    moe_tc : int64                // the expert tiles' token column
     router_dev : uint64           // [n_moe x ner x dim] f32 router rows, the gate row last
     router_bytes : int64
     moe_ident_dev : uint64        // 0..MAX_ROUTED_SLOTS-1: the decode combine's identity slot map
@@ -2482,6 +2483,9 @@ let VHZ_DNC = 0x2000000u  // the prefill's deltanet conv output rows (pf_dnconv)
 let VHZ_DNZ = 0x4000000u  // the prefill's deltanet z rows (pf_dnz)
 let VHZ_MXG = 0x8000000u  // the MoE block's gathered f16 rows (pf_mxg)
 let VHZ_MDN = 0x10000000u // the MoE block's routed down rows (pf_mdn / edown_dev)
+let VHZ_GATE_M = 0x20000000u   // the MoE block's m-column dispatches: the same three planes as VHZ_GATE / VHZ_UP / VHZ_MDN,
+let VHZ_UP_M = 0x40000000u     // disjoint rows, so the s and m dispatches of a plane co-run and the reader's barrier covers both
+let VHZ_MDN_M = 0x80000000u
 
 struct VkHaz {
     w : uint            // bits with a pending (unbarriered) write

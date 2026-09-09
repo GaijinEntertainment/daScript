@@ -467,44 +467,45 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
 // shape (d 768, K 2048) and the down shape (d 2048, K 768), dispatched to the bound the device
 // schedule dispatches (the sentinel tail included), both decode arms interleaved like cm2:<fmt>.
 // Two bucket profiles: uniform (32 rows each, the reference harness's), and skewed (moesk: the
-// counts fall as 1 / (rank + 8), a real window's shape). Two schedule forms per profile: the
-// whole buckets at the s column (the shipped form), and the split - the 128-row chunks at the m
-// column, the remainders at the s column. The reference row is test-backend-ops perf MUL_MAT_ID
-// at n_mats=128,n_used=8,m=768,n=512,k=2048 =====
+// Qwen3-30B window's own shape - 69 experts route, nine hold 250 rows, eight 96, four 48, the
+// rest 18). Two schedule forms per profile: the whole buckets at the s column, and the ladder -
+// a bucket past 32 rows takes m columns (the last one partial) and a remainder of at most 32
+// rows past whole m columns takes the s column. The reference row is test-backend-ops perf
+// MUL_MAT_ID at n_mats=128,n_used=8,m=768,n=512,k=2048 =====
 let private MOE_NE = 128
-let private MOE_ROWS = 32   //! rows per expert region: the 30B window's average bucket
-let private MOE_READ_SLACK = 32   //! the s tile's unclamped partial-column load: rows of slack past the last region
-let private MOE_CHUNK = 128   //! the m column: the split schedule's whole-chunk width
+let private MOE_ROWS = 32   //! the s column: rows per expert region on the uniform profile
+let private MOE_READ_SLACK = 128   //! the m column's unclamped partial-column load: rows of slack past the last region
+let private MOE_CHUNK = 128   //! the m column
 
-//! a schedule form over the buckets: the whole buckets at the s column, the 128-row chunks alone, or the remainders past them
+//! a schedule form over the buckets: the whole buckets at the s column, or the ladder's m and s halves
 enum private MoeSchedForm {
     whole
-    chunks
-    rest
+    ladder_m
+    ladder_s
 }
 
-//! the bucket rows per expert: 32 each, or the skewed profile
+//! the bucket rows per expert: 32 each, or the 30B window's profile
 def private moe_bucket_counts(skew : bool) : array<int> {
     var cnt : array<int>
     cnt |> resize(MOE_NE)
-    let nk = MOE_NE * MOE_ROWS
     if (!skew) {
         for (c in cnt) {
             c = MOE_ROWS
         }
         return <- cnt
     }
-    var wsum = 0.0
     for (e in range(MOE_NE)) {
-        wsum += 1.0 / float(e + 8)
+        cnt[e] = e < 9 ? 250 : (e < 17 ? 96 : (e < 21 ? 48 : (e < 69 ? 18 : 0)))
     }
-    var total = 0
-    for (e in range(MOE_NE)) {
-        cnt[e] = int(float(nk) / float(e + 8) / wsum)
-        total += cnt[e]
-    }
-    cnt[0] += nk - total   // the rounding remainder onto the biggest bucket
+    cnt[0] += MOE_NE * MOE_ROWS - 9 * 250 - 8 * 96 - 4 * 48 - 48 * 18   // the rows left onto the biggest bucket
     return <- cnt
+}
+
+//! the ladder's m rows of a bucket: none up to the s column, else whole m columns plus a partial one
+//! when the remainder passes the s column (a remainder within it takes the s column)
+def private moe_ladder_m_rows(c : int) : int {
+    if (c <= MOE_ROWS) return 0
+    return c % MOE_CHUNK > MOE_ROWS ? c : (c / MOE_CHUNK) * MOE_CHUNK
 }
 
 //! the device schedule's words for one form: a record per bucket piece [block base, row base, rows,
@@ -517,9 +518,9 @@ def private moe_sched_words(cnt : array<int>; plane_blk, wtiles, tc, bound : int
     var wg = 0
     var row0 = 0
     for (e in range(MOE_NE)) {
-        let chunks = (cnt[e] / MOE_CHUNK) * MOE_CHUNK
-        let rows = form == MoeSchedForm.whole ? cnt[e] : (form == MoeSchedForm.chunks ? chunks : cnt[e] - chunks)
-        let r0 = row0 + (form == MoeSchedForm.rest ? chunks : 0)
+        let mrows = moe_ladder_m_rows(cnt[e])
+        let rows = form == MoeSchedForm.whole ? cnt[e] : (form == MoeSchedForm.ladder_m ? mrows : cnt[e] - mrows)
+        let r0 = row0 + (form == MoeSchedForm.ladder_s ? mrows : 0)
         row0 += cnt[e]
         continue if (rows == 0)
         let tiles = ((rows + tc - 1) / tc) * wtiles
@@ -582,17 +583,17 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     let wtiles = (d + 127) / 128
     let map_off = MOE_NE * 4
     var cnt <- moe_bucket_counts(skew)
-    // the three schedules: the shipped whole-bucket form at the s column, and the split's chunk
-    // and remainder halves; each dispatched to the bound the device schedule would size
-    let bound_whole = (nk / MOE_ROWS + MOE_NE) * wtiles   //! pf_moe_bounds at tc 32: every bucket may straddle a column
-    let bound_chunks = (nk / MOE_CHUNK) * wtiles
-    let bound_rest = min(MOE_NE * (MOE_CHUNK / MOE_ROWS), nk / MOE_ROWS + MOE_NE) * wtiles
+    // the three schedules: the whole-bucket form at the s column, and the ladder's m and s halves;
+    // each dispatched to the bound the device schedule would size
+    let bound_whole = (nk / MOE_ROWS + MOE_NE) * wtiles   //! every bucket may straddle a column
+    let bound_chunks = (nk / MOE_CHUNK + MOE_NE) * wtiles   //! every bucket may own a partial m column
+    let bound_rest = MOE_NE * wtiles   //! at most one s tile per bucket
     var live_whole = 0
     var live_chunks = 0
     var live_rest = 0
     var sw <- moe_sched_words(cnt, plane_blk, wtiles, MOE_ROWS, bound_whole, MoeSchedForm.whole, live_whole)
-    var sc <- moe_sched_words(cnt, plane_blk, wtiles, MOE_CHUNK, bound_chunks, MoeSchedForm.chunks, live_chunks)
-    var sr <- moe_sched_words(cnt, plane_blk, wtiles, MOE_ROWS, bound_rest, MoeSchedForm.rest, live_rest)
+    var sc <- moe_sched_words(cnt, plane_blk, wtiles, MOE_CHUNK, bound_chunks, MoeSchedForm.ladder_m, live_chunks)
+    var sr <- moe_sched_words(cnt, plane_blk, wtiles, MOE_ROWS, bound_rest, MoeSchedForm.ladder_s, live_rest)
     let wq_bytes = int64(totblk) * bb.wq
     let ws_bytes = long_length(wsuh) * 4l
     let xf_bytes = int64(xrows * n) * 2l
@@ -647,7 +648,7 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         vk_check(vkEndCommandBuffer(raw2), null)
         let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
-        print("{name} {profile} split m+s:    d={d} K={n} wgs={bound_chunks}+{bound_rest} ({live_chunks}+{live_rest} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
+        print("{name} {profile} ladder m+s:   d={d} K={n} wgs={bound_chunks}+{bound_rest} ({live_chunks}+{live_rest} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
     }
     delete wqh
     delete wsuh
