@@ -228,7 +228,7 @@ jobs:
             # No sccache launcher: this lane is nightly-only and runs uncached.
             cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=Release \
               $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-            cmake --build ./build --config Release --target daslang daslang_static --parallel
+            cmake --build ./build --config Release --target daslang daslang_static dasbind_probe --parallel
             ;;
           linux)
             echo "BIN=./bin" >> $GITHUB_ENV
@@ -245,7 +245,7 @@ jobs:
               -DDAS_CLANG_BIND_DISABLED=ON \
               -DDAS_GLFW_DISABLED=OFF \
               -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
-            cmake --build ./build --config Release --target daslang daslang_static
+            cmake --build ./build --config Release --target daslang daslang_static dasbind_probe
             ;;
           *)
             echo "BIN=./bin" >> $GITHUB_ENV
@@ -254,7 +254,7 @@ jobs:
               -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
               -DDAS_GLFW_DISABLED=OFF \
               -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
-            cmake --build ./build --config Release --target daslang daslang_static
+            cmake --build ./build --config Release --target daslang daslang_static dasbind_probe
             ;;
         esac
 

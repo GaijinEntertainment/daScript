@@ -1634,6 +1634,9 @@ if (NOT ${DAS_TOOLS_DISABLED})
     # test time + dasModuleSQLITE; both must already be defined as targets).
     add_subdirectory(tests/exe-paths)
 
+    # The probe library tests/dasbind binds through [extern] (lands in lib/).
+    add_subdirectory(tests/dasbind)
+
     # Build daslang utilities as standalone executables (-exe mode)
     add_subdirectory(utils)
 
