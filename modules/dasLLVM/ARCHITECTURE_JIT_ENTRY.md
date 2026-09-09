@@ -77,8 +77,9 @@ one resolver, and the visitor's borrowed fields (`dll`, `jit_context`, `uid`) ca
 ## 4. What stays out of the program's jitted set
 
 The finalizer is program code, so everything it reaches joins the program's used set and is a JIT
-candidate in every jitted program. `free_jit_context` and `free_jit_engine_in_emitter` are
-`[no_jit]` and call externs only (`get_module`, `find_macro_context`, `invoke_in_context`); a das
+candidate in every jitted program. `free_jit_context` is one function - a jitted program carries
+it and nothing else of the link module - `[no_jit]`, calling externs only (`get_module`,
+`find_macro_context`, `invoke_in_context`); a das
 helper on that path - `macro_context_of`, say - would put `daslib/cross_context`'s functions,
 blocks passed to C++ with a `LineInfoArg`, into every program's DLL, and the emitter cannot lower
 those. `llvm_exe.das`'s standalone-exe sweep skips `llvm_jit_link` the way it skips `llvm_macro`:

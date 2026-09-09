@@ -110,20 +110,9 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     return true
 }
 
-[no_jit]
-def private free_jit_engine_in_emitter(ee : void?; ctx : void?) {
-    let emitter = get_module("llvm_macro")
-    if (emitter == null || !has_macro_context(emitter)) {
-        panic("LLVM JIT: an in-memory engine exists but the emitter module is not in the process")
-    }
-    unsafe {
-        invoke_in_context(find_macro_context(emitter), "free_jit_engine", ee, ctx)
-    }
-}
-
 //! Frees the jit state when the last context sharing it goes: the cached DLL closes here; an
 //! in-memory engine is the emitter's to dispose, and the emitter is in the process whenever
-//! there is one.
+//! there is one. One function, so a jitted program carries one finalizer and nothing else.
 [finalize(late), no_jit]
 def public free_jit_context {
     if (get_context_share_counter() == 1ul) {
@@ -131,7 +120,13 @@ def public free_jit_context {
             if (dll != null) {
                 close_dynamic_library(dll)
             } elif (ee != null || ctx != null) {
-                free_jit_engine_in_emitter(ee, ctx)
+                let emitter = get_module("llvm_macro")
+                if (emitter == null || !has_macro_context(emitter)) {
+                    panic("LLVM JIT: an in-memory engine exists but the emitter module is not in the process")
+                }
+                unsafe {
+                    invoke_in_context(find_macro_context(emitter), "free_jit_engine", ee, ctx)
+                }
             }
         }
     }

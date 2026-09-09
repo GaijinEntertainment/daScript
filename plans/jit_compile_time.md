@@ -101,8 +101,8 @@ carry the simulated context's tables); a `[_macro]`-free module skipping the con
   ones answer "no such slot" after a mangled-name build and a `dlsym` miss - where the emitter's
   visitor skipped them by `has_intrinsic` / `isExprOp2_Func` before any of that.
 - **The in-memory engine's finalizer runs through the emitter's macro context**
-  (`free_jit_engine_in_emitter`), so a host whose context outlives module shutdown reaches a
-  context that is gone; a C++ `free_jit_engine` in the `jit` module would not.
+  (`free_jit_context`'s engine branch), so a host whose context outlives module shutdown reaches
+  a context that is gone; a C++ `free_jit_engine` in the `jit` module would not.
 - **A late require nested in a parse or a record read is never cached.** `requireModuleNow`
   hides the stream (`LateRequireEnvScope::hideStream`) when the bound program is compiling or
   the reader is inside a record, so a `[call_macro]`'s or a macro module's `[init]`'s late
