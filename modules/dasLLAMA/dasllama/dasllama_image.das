@@ -1587,6 +1587,10 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 : load_model_image(path, t) || load_model_image(path, t, METAL_IMAGE_TAG))
         }
         if (!loaded) {
+            let pk = image_peek(path)
+            if (pk.valid && pk.version != IMAGE_VERSION) {   // the one decline a reader can act on without the log: the image is from another build
+                panic("dasLLAMA: '{path}' was minted at IMAGE_VERSION {pk.version}, this build reads {IMAGE_VERSION} - re-mint it from the source gguf (dasllama-convert --config for the target build)")
+            }
             let vk_ident = vk_tag != "" ? " / {image_identity(vk_tag)}" : ""
             panic("dasLLAMA: '{path}' is not a prepared image for this box/knobs (identity {image_identity()} / {image_identity(METAL_IMAGE_TAG)}{vk_ident}) - regenerate it from the source gguf")
         }

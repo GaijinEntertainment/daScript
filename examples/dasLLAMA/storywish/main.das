@@ -18,31 +18,33 @@ require live_host
 require math
 require daslib/math_boost   // ortho_rh / compose for the text layer
 require strings
+require wish                // the request side: typed line -> words -> prompt, and the field-line stop
 
-// Storyteller. A tiny story model (Karpathy's stories15M, Q8) writes a children's story on
-// screen a few tokens per frame, and KittenTTS reads each finished sentence aloud in a kid's
-// voice while the next one is still being written. Space starts a new story at any moment - the
-// clip being read stops, and the sentences of the old story still queued for speech are skipped,
-// so the new one is heard at once. Escape quits.
+// Storywish. You type the words you wish for - "dragon, cake, moon" - and Enter asks a story
+// model trained to take requests (tinystories-instruct-27M, a llama trained on the
+// TinyStoriesInstruct corpus) for a children's story that uses them; it writes on screen a few
+// tokens per frame while KittenTTS reads each finished sentence aloud. Tab asks for dialogue in
+// the story. Enter while a story is being told stops it and tells the next one; the sentences of
+// the old story still queued for speech are skipped. Escape quits.
 //
-//   bin/daslang -jit examples/dasLLAMA/storyteller/main.das -- --models <dir>
+//   bin/daslang -jit examples/dasLLAMA/storywish/main.das -- --models <dir> [--words "dragon, cake, moon"]
 //
 // <dir> holds the two models and the front-end packs - tts_g2p.bin (or its American-only twin
-// tts_g2p_en_us.bin, which the web set ships) and tts_postag.bin. A model
-// is its gguf (the default names) or a prepared .dlim image baked for the running build's
-// identity (dasllama-convert --config) - the web build ships images only, the shell names them.
+// tts_g2p_en_us.bin, which the web set ships) and tts_postag.bin. A model is its gguf (the
+// default names) or a prepared .dlim image baked for the running build's identity
+// (dasllama-convert --config) - the web build ships images only, the shell names them.
 // The language model runs on the frame thread in per-frame token budgets, so the loop never
 // blocks; speech synthesis runs on its own thread, fed sentences through one stream and
 // answering with PCM through another, and the frame thread plays the clips back to back.
 
 [CommandLineArgs]
-struct StoryArgs {
+struct WishArgs {
     @clarg_short = "m"
     @clarg_doc = "Directory holding the story model, the TTS model and its phoneme packs"
     models : string = "/Users/borisbatkin/Work/llama.cpp/models"
 
     @clarg_doc = "The story model file inside --models"
-    story_model : string = "stories15M-Q8_0.gguf"
+    story_model : string = "tinystories-instruct-27M-Q8_0.gguf"
 
     @clarg_doc = "The TTS model file inside --models"
     tts_model : string = "kitten-nano.gguf"
@@ -50,20 +52,24 @@ struct StoryArgs {
     @clarg_doc = "Voice name or alias (default: the model's last voice)"
     voice : string
 
-    @clarg_doc = "Start a story at once (the browser shell's start button) - the loop then runs on, space for the next"
+    @clarg_short = "w"
+    @clarg_doc = "The words the first story must use, comma-separated - the line you would have typed"
+    words : string = "dragon, cake, moon"
+
+    @clarg_doc = "Ask for dialogue in the story from the start (Tab toggles it)"
+    dialogue : bool
+
+    @clarg_doc = "Sampling seed (0 = a fresh one per story)"
+    seed : int
+
+    @clarg_doc = "Tell a story from --words at once (the browser shell's start button) - Enter then tells the next"
     autoplay : bool
 
-    @clarg_doc = "Start a story at once and quit when it has been read out - the smoke rail"
+    @clarg_doc = "Tell a story from --words at once and quit when it has been read out - the smoke rail"
     smoke : bool
 
     @clarg_doc = "Stop after this many frames (0 = never) - the smoke rail"
     max_frames : int
-
-    @clarg_doc = "Start another story at this frame, as a space press would (0 = never) - the smoke rail's restart-while-writing check"
-    restart_at : int
-
-    @clarg_doc = "Start another story when this many clips have begun playing, as a space press would (0 = never) - the smoke rail's restart-while-reading check"
-    restart_on_clip : int
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -71,14 +77,14 @@ struct StoryArgs {
     help : bool
 }
 
-let PROMPT = "Once upon a time"
-let MAX_TOKENS = 220
-let STORY_CONTEXT = 256l          // prompt + MAX_TOKENS must fit; stories15M was trained at 256
+let MAX_TOKENS = 350
+let STORY_CONTEXT = 512l          // the request + MAX_TOKENS must fit; tinystories-instruct-27M was trained at 512
 let TOKENS_PER_FRAME = 2          // ~120 tokens a second at 60 Hz: readable typing, never a stall
-let BOS_TOKEN = 1l                // llama2 vocabulary; the TinyStories corpus separates stories with BOS, so it is the stop word too
+let BOS_TOKEN = 1l                //! the corpus separates its examples with BOS ... EOS; either one ends the story
 let EOS_TOKEN = 2l
 let WRAP_CHARS = 74               // droidsansmono is monospace: characters are the wrap unit
-let VISIBLE_LINES = 15            // what fits between the title and the status line at the reference size
+let VISIBLE_LINES = 13            // what fits between the wish line and the status line at the reference size
+let MAX_WISH_CHARS = 60
 let TEXT_SIZE = 0.72
 let SMALL_SIZE = 0.52
 
@@ -99,13 +105,17 @@ struct Speech {
     story : int
 }
 
-var g_args = StoryArgs()
+var g_args = WishArgs()
 var g_model = Model()
 var g_session = Session()
-var g_params = SamplingParams(temp = 0.8, top_k = 40l, penalty = 1.1)
+var g_params = SamplingParams(temp = 0.8, top_k = 40l)
 var g_phase = Phase.idle
+var g_wish = ""                   //! the line being typed
+var g_dialogue = false
+var g_told_wish = ""              //! the request the story on screen answers
 var g_wrapped_lines : array<string>
 var g_sentence_pieces : array<string>
+var g_line_pieces : array<string> //! the pieces of the line being written, so a field line can be taken back whole
 var g_ntokens = 0
 var g_stories = 0
 
@@ -122,9 +132,9 @@ var g_audio_initialized = false
 var g_asch : AudioSystemChannels
 var g_font : Font?
 var g_frames = 0
-var g_clips_played = 0
-var g_rail_restarted = false      // the smoke rail's restart fires once
-var g_space_was = false
+var g_enter_pressed = false       //! set by the key callback, consumed by the frame
+var g_backspace_pressed = false
+var g_tab_pressed = false
 var display_w = 0
 var display_h = 0
 
@@ -156,8 +166,8 @@ def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done :
                 now |> read() $(story : int) {
                     current = story
                 }
-                if (l.story < current) {   // a sentence of a story space already replaced: its clip would be dropped unheard, and the synthesis would keep the new story waiting
-                    to_log(LOG_INFO, "storyteller: a sentence of story {l.story} is skipped, story {current} is being told\n")
+                if (l.story < current) {   // a sentence of a story Enter already replaced: its clip would be dropped unheard, and the synthesis would keep the new story waiting
+                    to_log(LOG_INFO, "storywish: a sentence of story {l.story} is skipped, story {current} is being told\n")
                     return
                 }
                 var inscope a <- synthesize(m, l.text, voice, 1.0)
@@ -195,35 +205,37 @@ def poll_speech() {
         g_clips |> erase(0)
         g_speaking_until = g_elapsed_s + seconds
         g_unplayed_sentences--
-        g_clips_played++
     }
 }
 
 def start_story() {
+    let words = wish_words(g_wish)
+    return if (empty(words))
     if (g_playing_sid != INVALID_SID) {
-        //! the smoke rail's witness lines, here and below: modules/dasLLAMA/tests/test_storyteller_restart.das reads them word for word
-        to_log(LOG_INFO, "storyteller: the clip of story {g_stories} stops, {g_unplayed_sentences} sentences of it go unheard\n")
+        //! the smoke rail's witness lines, here and below: modules/dasLLAMA/tests/test_storywish_smoke.das reads them word for word
+        to_log(LOG_INFO, "storywish: the clip of story {g_stories} stops, {g_unplayed_sentences} sentences of it go unheard\n")
         stop(g_playing_sid, 0.05)
         g_playing_sid = INVALID_SID
     }
     delete g_session
     g_session <- create_session(g_model)
-    set_seed(g_session, int(ref_time_ticks() % 2147483647l))   // a fresh session samples the same story every time otherwise
+    set_seed(g_session, g_args.seed != 0 ? g_args.seed : int(ref_time_ticks() % 2147483647l))   // a fresh session samples the same story every time otherwise
     g_wrapped_lines |> clear()
     g_wrapped_lines |> push("")
     g_sentence_pieces |> clear()
     g_sentence_pieces |> reserve(64)
+    g_line_pieces |> clear()
+    g_line_pieces |> reserve(32)
     g_ntokens = 0
     g_stories++
+    g_told_wish = words
     g_story_now |> publish(g_stories)
-    to_log(LOG_INFO, "storyteller: story {g_stories} starts at frame {g_frames}\n")
+    to_log(LOG_INFO, "storywish: story {g_stories} starts at frame {g_frames} - words: {words}{g_dialogue ? ", with dialogue" : ""}\n")
     g_clips |> clear()
     g_unplayed_sentences = 0
     g_speaking_until = g_elapsed_s
-    var prompt <- encode(g_model, PROMPT, true)
+    var prompt <- encode(g_model, build_prompt(words, g_dialogue), true)
     eval(g_model, g_session, prompt)
-    append_text(PROMPT)
-    g_sentence_pieces |> push(PROMPT)
     g_phase = Phase.writing
 }
 
@@ -237,6 +249,7 @@ def append_text(piece : string) {
     for (i, part in iter_range(parts), parts) {
         if (i > 0) {
             g_wrapped_lines |> push("")
+            g_line_pieces |> clear()
         }
         let li = length(g_wrapped_lines) - 1
         g_wrapped_lines[li] = "{g_wrapped_lines[li]}{part}"
@@ -267,6 +280,19 @@ def sentence_ends(piece : string) : bool {
     return ends_with(t, ".") || ends_with(t, "!") || ends_with(t, "?") || ends_with(t, "\"") && (find(t, ".") >= 0 || find(t, "!") >= 0 || find(t, "?") >= 0)
 }
 
+//! take the field line back: off the screen, and out of the sentence the speech thread would get
+def drop_field_line() {
+    let n = min(length(g_line_pieces), length(g_sentence_pieces))
+    for (_i in range(n)) {
+        g_sentence_pieces |> pop()
+    }
+    g_wrapped_lines |> pop()
+    if (empty(g_wrapped_lines)) {
+        g_wrapped_lines |> push("")
+    }
+    g_line_pieces |> clear()
+}
+
 def write_step() {
     var one : array<int64>
     one |> resize(1)
@@ -280,6 +306,12 @@ def write_step() {
         let text = plain_quotes(piece(g_model, tok))
         append_text(text)
         g_sentence_pieces |> push(text)
+        g_line_pieces |> push(text)
+        if (line_is_a_field(join(g_line_pieces, ""))) {
+            drop_field_line()
+            finish_story()
+            return
+        }
         if (sentence_ends(text)) {
             say(strip(join(g_sentence_pieces, "")))
             g_sentence_pieces |> clear()
@@ -295,6 +327,7 @@ def finish_story() {
         say(rest)
     }
     g_sentence_pieces |> clear()
+    g_line_pieces |> clear()
     g_phase = Phase.told
 }
 
@@ -321,29 +354,63 @@ def draw_story() {
     let ink = float3(0.93, 0.9, 0.82)
     let dim = float3(0.55, 0.52, 0.48)
     let accent = float3(0.98, 0.75, 0.35)
-    draw_text("storyteller", 60.0, 60.0, 0.6, dim)
-    var y = 130.0
+    draw_text("storywish", 60.0, 60.0, 0.6, dim)
+    let caret = (g_frames / 30) % 2 == 0 ? "_" : " "
+    draw_text("wish for: {g_wish}{caret}", 60.0, 110.0, TEXT_SIZE, accent)
+    draw_text(g_dialogue ? "[with dialogue - Tab turns it off]" : "[Tab asks for dialogue]", 60.0, 146.0, SMALL_SIZE, dim)
+    var y = 200.0
     let step = 34.0 * TEXT_SIZE / 0.72
     let first = max(0, length(g_wrapped_lines) - VISIBLE_LINES)   // a long story scrolls: the newest lines stay on screen
     for (i in range(first, length(g_wrapped_lines))) {
         draw_text(g_wrapped_lines[i], 60.0, y, TEXT_SIZE, ink)
         y += step
     }
-    let status = (g_phase == Phase.idle ? "press SPACE for a story"
-        : g_phase == Phase.writing ? "writing..."
+    let status = (g_phase == Phase.idle ? "type the words you wish for, Enter tells the story"
+        : g_phase == Phase.writing ? "writing a story about {g_told_wish}..."
         : g_unplayed_sentences > 0 || g_elapsed_s < g_speaking_until ? "reading aloud..."
-        : "the end - press SPACE for another")
+        : "the end - change the words, Enter for another")
     draw_text(status, 60.0, 660.0, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
+}
+
+//! a typed character lands in the wish line: letters, digits, spaces and the list's punctuation, nothing else
+def type_char(codepoint : uint) {
+    return if (codepoint >= 128u)
+    let c = int(codepoint)
+    let ok = is_alpha(c) || is_number(c) || c == ' ' || c == ',' || c == '\'' || c == '-'
+    return if (!ok || length(g_wish) >= MAX_WISH_CHARS)
+    g_wish = "{g_wish}{to_char(c)}"
+}
+
+def erase_char() {
+    return if (empty(g_wish))
+    peek_data(g_wish) $(d) {
+        g_wish = clone_string(slice(d, 0, length(d) - 1))
+    }
 }
 
 [export]
 def init() {
-    var inscope r <- parse_args(type<StoryArgs>)
+    var inscope r <- parse_args(type<WishArgs>)
     if (r |> is_err) {
-        panic("storyteller: {r |> unwrap_err}")
+        panic("storywish: {r |> unwrap_err}")
     }
     g_args <- r |> move_unwrap
-    live_create_window("Storyteller", 1280, 720)
+    g_wish = g_args.words
+    g_dialogue = g_args.dialogue
+    live_create_window("Storywish", 1280, 720)
+    glfwSetCharCallback(live_window) <| @(w, codepoint) {
+        type_char(codepoint)
+    }
+    glfwSetKeyCallback(live_window) <| @(w, key, scancode, action, mods) {
+        return if (action != GLFW_PRESS && action != GLFW_REPEAT)
+        if (key == GLFW_KEY_BACKSPACE) {
+            g_backspace_pressed = true
+        } elif (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER) {
+            g_enter_pressed = true
+        } elif (key == GLFW_KEY_TAB) {
+            g_tab_pressed = true
+        }
+    }
     cache_ttf_objects()
     g_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
     if (!g_audio_initialized) {
@@ -387,17 +454,19 @@ def update() {
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-    let space = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
-    let space_just = space && !g_space_was
-    g_space_was = space
     if (glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(live_window, 1)
     }
-    let rail_due = (!g_rail_restarted
-        && ((g_args.restart_at > 0 && g_frames == g_args.restart_at)
-            || (g_args.restart_on_clip > 0 && g_clips_played == g_args.restart_on_clip)))
-    if (space_just || rail_due) {
-        g_rail_restarted ||= rail_due
+    if (g_backspace_pressed) {
+        g_backspace_pressed = false
+        erase_char()
+    }
+    if (g_tab_pressed) {
+        g_tab_pressed = false
+        g_dialogue = !g_dialogue
+    }
+    if (g_enter_pressed) {
+        g_enter_pressed = false
         start_story()
     }
     if (g_phase == Phase.writing) {
@@ -451,8 +520,8 @@ def main() {
     shutdown()
     if (g_args.smoke) {
         to_log(LOG_INFO, read_out
-            ? "storyteller: story {g_stories} written and read out after {g_frames} frames\n"
-            : "storyteller: the frame cap stopped story {g_stories} after {g_frames} frames\n")
+            ? "storywish: story {g_stories} written and read out after {g_frames} frames\n"
+            : "storywish: the frame cap stopped story {g_stories} after {g_frames} frames\n")
         print("{join(g_wrapped_lines, "\n")}\n")
     }
 }

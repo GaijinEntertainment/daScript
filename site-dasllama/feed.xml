@@ -4,8 +4,23 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-09-07T00:00:00Z</updated>
+<updated>2026-09-10T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>Storywish - type the words, a story model trained to take requests writes the tale, in the browser.</title>
+<link href="https://dasllama.io/#n-2026-09-10-storywish"/>
+<id>https://dasllama.io/#n-2026-09-10-storywish</id>
+<updated>2026-09-10T00:00:00Z</updated>
+<content type="html">&lt;p&gt;A second dasLLAMA example on the examples page. The published TinyStories-Instruct models are
+GPT-Neo, which no GGUF engine runs, so we trained our own: &lt;code&gt;tinystories-instruct-27M&lt;/code&gt;, a
+27M-parameter llama on the TinyStoriesInstruct corpus with a 4K vocabulary - 15 minutes on one
+H100 - that follows a &lt;code&gt;Words: dragon, cake, moon&lt;/code&gt; request as often as the official 33M does. It
+ships as a 31 MB &lt;code&gt;.dlim&lt;/code&gt; beside KittenTTS nano; you type the words, Enter tells the story, Tab
+asks for dialogue. The model, the training recipe and the hit-rate numbers are on
+&lt;a href=&quot;https://huggingface.co/borisbat/dasllama-stories&quot;&gt;Hugging Face&lt;/a&gt;. The model sets of both
+examples are now minted by the deploy for the build it ships, so a format bump can no longer
+leave a page silently declining its images. &lt;a href=&quot;examples.html&quot;&gt;Try it&lt;/a&gt;.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>dasllama-server is a download now - one archive per platform.</title>
 <link href="https://dasllama.io/#n-2026-09-07-download-dasllama-server"/>

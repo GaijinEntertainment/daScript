@@ -1117,6 +1117,13 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
         let base = base_name(rel_path)
         let src = path_join("{das_root}/lib", rel_path)
         let dst = path_join(lib_dir, base)
+        if (!looks_like_wasm_archive(src)) {
+            // a desktop build of the same tree writes native archives under the same names, and ninja then
+            // leaves the wasm targets alone because their outputs "exist" - the link fails on every module symbol
+            to_log(LOG_ERROR, "build --wasm: {src} is not a wasm archive - this tree also has a desktop build; delete lib/liblibDasModule*.a and rerun\n")
+            copy_failed = true
+            return
+        }
         if (get_full_file_name(src) == get_full_file_name(dst)) {
             copied ++
             return
@@ -1137,6 +1144,25 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
     }
     log("build --wasm: {copied} archive(s) -> {lib_dir}\n")
     return 0
+}
+
+//! an archive whose first object member is a wasm module: the 8-byte wasm magic within the first
+//! 64 KB (past the `!<arch>` header and a symbol table); a native archive's members carry Mach-O or ELF magic
+def private looks_like_wasm_archive(path : string) : bool {
+    var found = false
+    let f = fopen(path, "rb")
+    return false if (f == null)
+    fmap(f) $(var data : array<uint8>#) {
+        let n = length(data) < 65536 ? length(data) : 65536
+        var i = 0
+        while (i + 8 <= n && !found) {
+            found = (data[i] == 0x00u8 && data[i + 1] == 0x61u8 && data[i + 2] == 0x73u8 && data[i + 3] == 0x6du8
+                && data[i + 4] == 0x01u8 && data[i + 5] == 0x00u8 && data[i + 6] == 0x00u8 && data[i + 7] == 0x00u8)
+            i++
+        }
+    }
+    fclose(f)
+    return found
 }
 
 def check_tool(name, cmd : string) : bool {

@@ -9,9 +9,12 @@ project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up
 
 - `index.html` - news-first home (identity masthead, feed, how-to-get, ladder teaser)
 - `examples.html` - the browser examples: one card per example, each opening the example on its own
-  page under `examples/<id>/` (the storyteller's page is `examples/dasLLAMA/storyteller/web_shell.html`
-  in the repo, built by `daspkg release wasm`; its model set is the rolling `dasllama-web` GitHub
-  release the deploy downloads beside it); posters under `files/examples/`
+  page under `examples/<id>/` (the page is `examples/dasLLAMA/<id>/web_shell.html` in the repo,
+  built by `daspkg release wasm`; its model set is named by `examples/dasLLAMA/<id>/models.json`
+  and MINTED by the deploy for the build it ships - `examples/dasLLAMA/wasm/mint_models.py`
+  fetches the GGUFs from Hugging Face, bakes the `.dlim` images against the wasm64 build's
+  configuration, writes `models/manifest.json` and stamps the page's IMAGE_VERSION); posters
+  under `files/examples/`
 - `stories.html` - the stories index (title, date, tag, lede per story), generated from
   `_stories/` between the `stories:begin` markers by `build_news.py`; the index rows use
   `forge.css`'s shared blog-list language (`forge-blog-*`), so their styling is shared with

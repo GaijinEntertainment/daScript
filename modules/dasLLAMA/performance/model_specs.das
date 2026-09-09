@@ -289,12 +289,16 @@ let TTS_ORACLE_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -
 //! serves the gguf, and the converter's output bytes move with its version, so it is presence-gated
 let STORIES15M_RECIPE = "convert: the reference build's llama-convert-llama2c-to-ggml --copy-vocab-from-model tokenizer.bin --llama2c-model stories15M.bin over karpathy/tinyllamas ({HF}/karpathy/tinyllamas: stories15M.bin + tokenizer.bin, the llama2.c checkpoint), then its llama-quantize to Q8_0; bytes are per-converter-version - the gate is the storyteller's smoke rail (tests/test_storyteller_restart.das), which writes and reads a story out of it: a smoke, not a parity check, the toy model pins no reference output"
 
+//! the storywish example's story model: our own training, published as GGUF - the download is the file itself
+let STORYWISH_RECIPE = "download: {HF}/borisbat/dasllama-stories/resolve/main/tinystories-instruct-27M-Q8_0.gguf (a 27M llama trained on roneneldan/TinyStoriesInstruct with a 4K SentencePiece vocabulary; the card carries the recipe and the hit-rate table)"
+
 // The text-model set, ascending size. Absent files skip at run time, so one table serves every
 // box; each view measures/verifies the subset it actually has. Audio models live in
 // [[asr_catalog]] (their provenance rides those specs into [[models_provenance]]).
 def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set table, one entry per carrier
     return <- [
         ModelSpec(file = "stories15M-Q8_0.gguf", recipe = STORIES15M_RECIPE),   // llama2.c's TinyStories writer behind examples/dasLLAMA/storyteller; profiled nowhere
+        ModelSpec(file = "tinystories-instruct-27M-Q8_0.gguf", recipe = STORYWISH_RECIPE),   // the request-taking story writer behind examples/dasLLAMA/storywish; profiled nowhere
         ModelSpec(file = "SmolLM2-135M-Instruct-Q8_0.gguf", display = "SmolLM2-135M"),
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q8_0.gguf", display = "Qwen2.5-0.5B"),
         ModelSpec(file = "Qwen3-0.6B-Q8_0.gguf", display = "Qwen3-0.6B",

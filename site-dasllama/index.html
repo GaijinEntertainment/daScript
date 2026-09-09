@@ -63,8 +63,20 @@
 <div id="dio-feed-items">
 <!-- news:begin — everything between the markers is generated from _news/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
-<article class="dio-item dio-item--lead is-open" id="n-2026-09-07-download-dasllama-server" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-09-07</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama-server is a download now - one archive per platform.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<article class="dio-item dio-item--lead is-open" id="n-2026-09-10-storywish" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-10</span><span class="dio-item__tag">examples</span><h2 class="dio-item__title">Storywish - type the words, a story model trained to take requests writes the tale, in the browser.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>A second dasLLAMA example on the examples page. The published TinyStories-Instruct models are
+GPT-Neo, which no GGUF engine runs, so we trained our own: <code>tinystories-instruct-27M</code>, a
+27M-parameter llama on the TinyStoriesInstruct corpus with a 4K vocabulary - 15 minutes on one
+H100 - that follows a <code>Words: dragon, cake, moon</code> request as often as the official 33M does. It
+ships as a 31 MB <code>.dlim</code> beside KittenTTS nano; you type the words, Enter tells the story, Tab
+asks for dialogue. The model, the training recipe and the hit-rate numbers are on
+<a href="https://huggingface.co/borisbat/dasllama-stories">Hugging Face</a>. The model sets of both
+examples are now minted by the deploy for the build it ships, so a format bump can no longer
+leave a page silently declining its images. <a href="examples.html">Try it</a>.</p></div>
+</article>
+<article class="dio-item" id="n-2026-09-07-download-dasllama-server" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-07</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama-server is a download now - one archive per platform.</h2><span class="dio-item__chev">▾</span></div>
 <div class="dio-item__body"><p>The OpenAI-compatible server ships as a standalone bundle for macOS (Apple silicon), Windows
 x64, Linux x86_64 and Linux arm64, from the rolling
 <a href="https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server">dasllama-server release</a>

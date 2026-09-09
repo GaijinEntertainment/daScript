@@ -1,0 +1,18 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("dlim_config")
+    package_description("Prints the running build's DlimConfiguration JSON - cross-compiled to wasm64 so the deploy mints the browser examples' images for the build it just made")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+    // host-only GPU tiers: absent from the wasm build, so their guarded requires resolve as absent
+    release_wasm_disable_module("dasvulkan")
+    release_wasm_disable_module("dasmetal")
+    release_wasm_disable_module("dasaccelerate")
+}
