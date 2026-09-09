@@ -1001,6 +1001,11 @@ def pocket_head(m : PocketModel; cond, x0 : array<float>; var sc : PocketScratch
     }
 }
 
+[cold_path]
+def private warn_no_eos(frames, n_txt : int64) {
+    to_log(LOG_WARNING, "dasLLAMA pocket: {frames} frames without an end of speech - the cap for {n_txt} tokens\n")
+}
+
 //! The frames one chunk needs at most: the reference's speech-rate estimate plus a margin.
 def pocket_max_frames(n_tokens : int64) : int64 {
     return int64(ceil((float(n_tokens) / MAX_GEN_TOKENS_PER_SECOND + GEN_SECONDS_PADDING) * FRAME_RATE))
@@ -1009,6 +1014,7 @@ def pocket_max_frames(n_tokens : int64) : int64 {
 //! One prepared chunk in one voice: the text prompt after the voice's rows, frames until EOS plus
 //! `frames_after_eos` (noise from `sc.rng` at `temp`, or the `captured` draws; `forced` rows fed
 //! back in place of ours = teacher forcing), the latents decoded into `sc.wave`; the frame count.
+[hot_path]
 def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceState; temp : float; frames_after_eos : int;
                       captured, forced : array<float>; var tm : TtsTimings; var sc : PocketScratch) : int64 {
     let d = m.backbone.d
@@ -1019,7 +1025,9 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
     for (kc in vs.caches) {
         kc.n = vs.len
     }
-    sc.rows |> reserve_resize(n_txt * d)
+    unsafe {
+        scratch_resize(sc.rows, n_txt * d)
+    }
     for (r in range64(n_txt)) {
         let src = ids[r] * d
         for (j in range64(d)) {
@@ -1029,11 +1037,13 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
     transformer_rows(m.backbone, sc.rows, n_txt, vs.len, vs.caches, sc)
     tm.prompt_us = int64(get_time_usec(clock))
     let max_frames = pocket_max_frames(n_txt)
-    sc.latents |> reserve_resize(max_frames * ld)
-    sc.conds |> reserve_resize(max_frames * d)
-    sc.eos_logits |> reserve_resize(max_frames)
-    sc.x_in |> reserve_resize(ld)
-    sc.x0 |> reserve_resize(ld)
+    unsafe {
+        scratch_resize(sc.latents, max_frames * ld)
+        scratch_resize(sc.conds, max_frames * d)
+        scratch_resize(sc.eos_logits, max_frames)
+        scratch_resize(sc.x_in, ld)
+        scratch_resize(sc.x0, ld)
+    }
     for (j in range64(ld)) {
         sc.x_in[j] = m.bos_emb.a[j]
     }
@@ -1071,7 +1081,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
         frames++
     }
     if (eos_at < 0l) {
-        to_log(LOG_WARNING, "dasLLAMA pocket: {frames} frames without an end of speech - the cap for {n_txt} tokens\n")
+        warn_no_eos(frames, n_txt)
     }
     tm.backbone_us = backbone_us
     tm.head_us = head_us
