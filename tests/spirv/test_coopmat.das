@@ -41,7 +41,7 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         if (r.ran) {
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
         } else {
-            feint("spirv-val not found locally; skipping (CI enforces)\n")
+            feint("spirv-val not found locally; skipping - run on a box with the Vulkan SDK on PATH\n")
         }
         delete words
     }
@@ -64,7 +64,7 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         if (r.ran) {
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
         } else {
-            feint("spirv-val not found locally; skipping (CI enforces)\n")
+            feint("spirv-val not found locally; skipping - run on a box with the Vulkan SDK on PATH\n")
         }
         delete words
     }
@@ -82,7 +82,7 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         if (r.ran) {
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
         } else {
-            feint("spirv-val not found locally; skipping (CI enforces)\n")
+            feint("spirv-val not found locally; skipping - run on a box with the Vulkan SDK on PATH\n")
         }
         delete words
     }
@@ -96,7 +96,7 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         if (r.ran) {
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
         } else {
-            feint("spirv-val not found locally; skipping (CI enforces)\n")
+            feint("spirv-val not found locally; skipping - run on a box with the Vulkan SDK on PATH\n")
         }
         delete words
     }
@@ -115,7 +115,7 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         if (r.ran) {
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")
         } else {
-            feint("spirv-val not found locally; skipping (CI enforces)\n")
+            feint("spirv-val not found locally; skipping - run on a box with the Vulkan SDK on PATH\n")
         }
         delete words
     }

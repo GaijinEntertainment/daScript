@@ -22,7 +22,7 @@ def private validate(t : T?; words : array<uint>; lbl : string) {
     if (r.ran) {
         t |> success(r.ok, "{lbl}: spirv-val: {r.msg}")
     } else {
-        feint("spirv-val not found locally; skipping (CI enforces)\n")
+        feint("spirv-val not found locally; skipping - run on a box with the Vulkan SDK on PATH\n")
     }
 }
 
