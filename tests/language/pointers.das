@@ -212,6 +212,32 @@ def test_intptr(t : T?) {
             t |> equal(intptr(px) != intptr(py), true)
         }
     }
+    t |> run("intptr of a function value is its handle, whatever spelling carries it") @(t : T?) {
+        let typed_slot : function<(a : int) : int> = @@ip_twice
+        t |> equal(intptr(typed_slot) != 0ul, true, "a function handle is not null")
+        t |> equal(intptr(@@ip_twice), intptr(typed_slot), "the direct and the typed spelling agree")
+        unsafe {
+            t |> equal(intptr(@@ip_twice), intptr(reinterpret<void?>(@@ip_twice)), "the handle is the address the pointer overload reads")
+        }
+        t |> equal(intptr(@@ip_twice) != intptr(@@ip_thrice), true, "two functions do not share a handle")
+    }
+    t |> run("intptr of a lambda value is its capture address") @(t : T?) {
+        let lam <- @(a : int) : int { return a + 1 }
+        let other_lam <- @(a : int) : int { return a + 2 }
+        t |> equal(intptr(lam) != 0ul, true, "a lambda handle is not null")
+        unsafe {
+            t |> equal(intptr(lam), intptr(reinterpret<void?>(lam)), "the handle is the capture pointer")
+        }
+        t |> equal(intptr(lam) != intptr(other_lam), true, "two lambdas do not share a handle")
+    }
+}
+
+def ip_twice(a : int) : int {
+    return a * 2
+}
+
+def ip_thrice(a : int) : int {
+    return a * 3
 }
 
 [test]

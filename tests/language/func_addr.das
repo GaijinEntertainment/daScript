@@ -17,7 +17,7 @@ struct FaSlot {
 }
 
 def fa_handle_of(f : FaFn) : uint64 {
-    return unsafe(reinterpret<uint64>(f))
+    return intptr(f)
 }
 
 def fa_inline_handle : uint64 {
@@ -63,7 +63,7 @@ def test_func_addr(t : T?) {
             t |> equal(slot.handle, handle_via_param, "struct field assignment")
             t |> equal(literal.handle, handle_via_param, "struct literal field")
             t |> equal(arith, handle_via_param, "arithmetic operand")
-            t |> equal(reinterpret<uint64>(as_ptr), handle_via_param, "cast to void?")
+            t |> equal(intptr(as_ptr), handle_via_param, "cast to void?")
             t |> equal(reinterpret<int64>(@@fa_add), int64(handle_via_param), "cast to int64")
             t |> equal(invoke(reinterpret<FaFn>(as_ptr), 20, 22), 42, "a void? handle casts back to a callable")
         }
