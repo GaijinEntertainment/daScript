@@ -246,10 +246,11 @@ signed sum wraps, the bounds test passes, and the walk leaves the array silently
 and emit only the taken arm.** Nothing folds at macro-application time, so a generated
 `if ($v(flag))` keeps its dead arm and type-checks it.
 
-**A diff that adds a `call_in_context` overload (`cross_context.das`) states in its `//!` that
-the target must not call back into the calling context and hands its answer back through the
-result pointer.** The call holds the target context's lock for its whole run, and the callers
-live outside this folder, so the contract travels on the function.
+**A diff that adds a function to `cross_context.das` wrapping `invoke_in_context` - taking the
+`unsafe` and the `addr` off the caller - is a defect; the caller writes the call itself.** The
+wrapper's signature checks nothing the call does not: the target is found by name and argument
+count, and a pointer crosses into a context that holds its lock for the whole run, so the
+`unsafe` belongs at the site that hands the pointer over.
 
 **A diff that adds or changes a buffer-I/O overload returns before taking `addr(buf[0])` on
 an empty buffer.** The address is out of bounds and the call sits inside `unsafe`, so an

@@ -80,7 +80,7 @@ this document states what the folder is and why its tests take the shape they do
   from the test module's own `[init]` for the API - a require after the walk is a compile's, and
   a test body runs after the compile - and in a child for the cache: a `shared` fixture with a
   macro context compiles at the call and the same module answers after; `macro_context_of` and
-  `call_in_context` reach an `[export]`ed function there by name, the result through a pointer,
+  `invoke_in_context` reach an `[export]`ed function there by name, the result through a pointer,
   and a name two of the context's functions share is refused rather than picked;
   a shared module without a macro context is required and `macro_context_of` answers null for
   it; a file nothing serves, a module that is not `shared`, one that does not compile and one

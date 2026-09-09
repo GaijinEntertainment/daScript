@@ -4,7 +4,8 @@ options strict_smart_pointers
 
 module cross_context shared public
 
-//! A module required after the walk, and calls into its macro context by a name held once there.
+//! A module required after the walk, and its macro context - `invoke_in_context` calls into it
+//! by a name held once there, under `unsafe`, the answer through a pointer.
 
 require daslib/ast public
 require daslib/rtti public
@@ -44,36 +45,4 @@ def macro_context_of(name : string) : Context? {
         return null
     }
     return unsafe(addr(find_macro_context(mod)))
-}
-
-def call_in_context(ctx : Context?; fn : string; var result : auto(T)&) {
-    //! Calls `fn` in `ctx` with a pointer to `result` as its only argument; the target must not
-    //! call back into this context - its answer comes back through `result`.
-    unsafe {
-        invoke_in_context(ctx, fn, addr(result))
-    }
-}
-
-def call_in_context(ctx : Context?; fn : string; a0 : auto(A0); var result : auto(T)&) {
-    //! Calls `fn` in `ctx` with `a0` and a pointer to `result`; the target must not call back
-    //! into this context - its answer comes back through `result`.
-    unsafe {
-        invoke_in_context(ctx, fn, a0, addr(result))
-    }
-}
-
-def call_in_context(ctx : Context?; fn : string; a0 : auto(A0); a1 : auto(A1); var result : auto(T)&) {
-    //! Calls `fn` in `ctx` with `a0`, `a1` and a pointer to `result`; the target must not call
-    //! back into this context - its answer comes back through `result`.
-    unsafe {
-        invoke_in_context(ctx, fn, a0, a1, addr(result))
-    }
-}
-
-def call_in_context(ctx : Context?; fn : string; a0 : auto(A0); a1 : auto(A1); a2 : auto(A2); var result : auto(T)&) {
-    //! Calls `fn` in `ctx` with `a0`, `a1`, `a2` and a pointer to `result`; the target must not
-    //! call back into this context - its answer comes back through `result`.
-    unsafe {
-        invoke_in_context(ctx, fn, a0, a1, a2, addr(result))
-    }
 }

@@ -39,7 +39,9 @@ def private run_jit_in_emitter(prog : Program?; var ctx : Context?; log_jit_time
         to_log(LOG_INFO, "LLVM JIT time: plan {jit_sec(t_plan)} probe {jit_sec(t_probe)} emitter load {jit_sec(get_time_usec(load_tm))}\n")
     }
     var ok = false
-    call_in_context(mctx, "run_jit_codegen", prog, ctx, ok)
+    unsafe {
+        invoke_in_context(mctx, "run_jit_codegen", prog, ctx, addr(ok))
+    }
     return ok
 }
 

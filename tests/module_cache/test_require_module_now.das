@@ -35,11 +35,15 @@ def late_probe {
         late_second = require_module_now(fixture("mc_late_mod"))
         let ctx = macro_context_of(fixture("mc_late_mod"))
         if (ctx != null) {
-            call_in_context(ctx, "late_answer", late_answer_out)
-            call_in_context(ctx, "late_add", 20, 22, late_sum_out)
-            call_in_context(ctx, "late_add3", 20, 20, 2, late_sum3_out)
+            unsafe {
+                invoke_in_context(ctx, "late_answer", addr(late_answer_out))
+                invoke_in_context(ctx, "late_add", 20, 22, addr(late_sum_out))
+                invoke_in_context(ctx, "late_add3", 20, 20, 2, addr(late_sum3_out))
+            }
             try {
-                call_in_context(ctx, "late_pick", 7, late_pick_out)
+                unsafe {
+                    invoke_in_context(ctx, "late_pick", 7, addr(late_pick_out))
+                }
                 late_pick_why = "answered {late_pick_out}"
             } recover {
                 late_pick_why = this_context().last_exception
@@ -67,7 +71,7 @@ def late_probe {
 
 //! a late require from the driver's [init], with the fixture's compile logged per module
 def late_driver() : string {
-    return "options gen2\nrequire daslib/cross_context\n\nvar answer = 0\n\n[init]\ndef late_init \{\n    var inscope no_access : smart_ptr<FileAccess>\n    using() $(var cop : CodeOfPolicies) \{\n        cop.log_module_compile_time = true\n        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) $(var mod : Module?; issues : das_string) \{\n            print(\"LATE LOG \{issues\}\\n\")\n            if (mod != null) \{\n                call_in_context(unsafe(addr(find_macro_context(mod))), \"late_answer\", answer)\n            \}\n        \}\n    \}\n\}\n\n[export]\ndef main \{\n    print(\"LATE \{answer\}\\n\")\n\}\n"
+    return "options gen2\nrequire daslib/cross_context\n\nvar answer = 0\n\n[init]\ndef late_init \{\n    var inscope no_access : smart_ptr<FileAccess>\n    using() $(var cop : CodeOfPolicies) \{\n        cop.log_module_compile_time = true\n        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) $(var mod : Module?; issues : das_string) \{\n            print(\"LATE LOG \{issues\}\\n\")\n            if (mod != null) \{\n                unsafe \{\n                    invoke_in_context(addr(find_macro_context(mod)), \"late_answer\", addr(answer))\n                \}\n            \}\n        \}\n    \}\n\}\n\n[export]\ndef main \{\n    print(\"LATE \{answer\}\\n\")\n\}\n"
 }
 
 //! the wrapper called from a running script

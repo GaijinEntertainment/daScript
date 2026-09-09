@@ -16,7 +16,9 @@ class LateProbeCall : AstCallMacro {
         var answer = 0
         let ctx = macro_context_of("%/tests/module_cache/_fixtures/mc_late_mod.das")
         if (ctx != null) {
-            call_in_context(ctx, "late_answer", answer)
+            unsafe {
+                invoke_in_context(ctx, "late_answer", addr(answer))
+            }
         }
         return <- qmacro($v(answer))
     }

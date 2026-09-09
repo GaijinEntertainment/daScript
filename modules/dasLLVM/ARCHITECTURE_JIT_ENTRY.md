@@ -29,7 +29,7 @@ the DLL's extern slots, `install_dll_functions` points the sim nodes at the DLL'
 compile-only, an in-memory run, a static host - goes to the emitter:
 `macro_context_of("llvm/daslib/llvm_macro")` (`daslib/cross_context`) brings the module in
 through `require_module_now` on the first call and answers the context it already has after,
-and `call_in_context` runs `run_jit_codegen` there with the program and context pointers. The
+and `invoke_in_context` runs `run_jit_codegen` there with the program and context pointers. The
 emitter recomputes the same plan - its inputs are the program and the command line - and takes
 the pipeline `ARCHITECTURE.md` sec.1 describes; on a warm run the emitter's ~40 modules are never
 read from the module cache and its macro contexts never simulated, which is the whole of the
