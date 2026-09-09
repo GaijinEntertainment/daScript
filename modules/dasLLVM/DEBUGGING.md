@@ -7,18 +7,38 @@ instrument anything, compile in anything, and emit any metadata we want.
 
 ## What ships today
 
-- **`--jit-debug` / `policies.jit_debug_info`** - full debug-info rail (2026-07-19):
-  - impl + wrapper functions get `DISubprogram`s; every expression carries a
+- **`--jit-debug` / `-g` / `policies.jit_debug_info`** - the source-level debug-info rail.
+  How the metadata is shaped and why: `ARCHITECTURE_DEBUG_INFO.md` sec.12.
+  - one `DICompileUnit` per generated module; impl, wrapper and every block/lambda body get a
+    `DISubprogram` named as the das source names them, and every expression carries a
     `DILocation` (file/line/column from the das AST `LineInfo`);
-  - `DICompileUnit` per DIBuilder, `"Debug Info Version"` + `"CodeView"` module flags
-    (CodeView gated on windows triples via `LLVMGetDefaultTargetTriple()` -
-    `host_jit_triple()` is "" on MSVC hosts, it only disambiguates mingw arches);
+  - every das local, loop variable and argument gets a `DILocalVariable` with a real `DIType`
+    (structs and tuples with named members at their own offsets, enums with their entries,
+    `string` as `char *`, vectors as lane arrays, `dim` as an array type), so a debugger reads
+    and prints das values; each das block opens a `DILexicalBlock`;
+  - `"Debug Info Version"` + `"CodeView"` module flags (CodeView gated on windows triples via
+    `LLVMGetDefaultTargetTriple()` - `host_jit_triple()` is "" on MSVC hosts, it only
+    disambiguates mingw arches);
   - lld-link gets `/DEBUG` -> a real PDB lands beside the jitted DLL in
     `.jitted_scripts/`, auto-discovered by cdb/WinDbg/VS via the embedded path;
   - the in-process crash handler (`src/hal/crash_handler.cpp`) resolves jitted frames
     through that PDB with **function name + .das file:line** - `SymFromAddr` +
     `SymGetLineFromAddr64` were always called, they were just starved of data.
   - flag folds into the DLL cache hash; default path is byte-identical, no PDB.
+
+  On a linux or macOS box the jitted artifact is an ordinary `dlopen`ed shared object carrying
+  DWARF, so lldb and gdb need no JIT protocol. What works, verified end to end under lldb and
+  gdb: a breakpoint set by the das function name (`breakpoint set -n hot` / `break hot`),
+  source listing of the `.das` file at the stop, a backtrace of das frames with argument
+  values, `frame variable` / `info locals`, and expression evaluation over das locals
+  (`expr n * 2`). Argument and local values read fully at `--jit-opt-level=0`; at the default
+  O3 the breakpoints and frames still resolve - including into an inlined instance - while
+  values read `<optimized out>` exactly as they do for an optimized C++ build.
+
+  Two things a debugger does not see yet: a das GLOBAL (it lives at `context->globals +
+  stackTop`, not in an LLVM global, so it needs a `DIGlobalVariableExpression` with a computed
+  location), and the interpreted half of a mixed stack (an interpreter frame shows as the
+  `SimNode` eval chain; `--jit-stack` plus `Context::getStackWalk()` is the parallel answer).
 - **`--jit-opt-level=0..3`** - IR pass pipeline honors it, and the DLL path's
   codegen-side target machine follows it too (`write_dll` `codegen_opt_level`);
   `write_exe` / AOT-object emission deliberately stay at 3 (shipped artifacts).
@@ -143,6 +163,7 @@ where the primary structures lie; the shadow buffer is the witness that doesn't.
   after. Remaining blind spot was the runtime DLL's nearest-EXPORT frames - fixed the
   root cause: Release now compiles /Z7 and links /DEBUG /OPT:REF /OPT:ICF
   (CMakeCommon.txt), so every future dump resolves runtime frames with C++ lines.
-  Known cosmetic: jitted-frame paths print the relative dir twice
-  (`utils/dasllama-server/utils/dasllama-server/...`) - DIFile directory + filename
-  both carry it; fix in `get_debug_file_location_by_name`.
+  Cosmetic residue from that night, since fixed: jitted-frame paths printed the
+  relative dir twice (`utils/dasllama-server/utils/dasllama-server/...`) because the
+  DIFile directory and filename both carried it. A DIFile now carries the absolute
+  path with an empty directory (`ARCHITECTURE_DEBUG_INFO.md` sec.12).

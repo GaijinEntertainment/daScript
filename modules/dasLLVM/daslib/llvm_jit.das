@@ -18,6 +18,7 @@ require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_lower
 require llvm/daslib/llvm_jit_common
+require llvm/daslib/llvm_jit_di
 require llvm/daslib/llvm_jit_code
 require llvm/daslib/llvm_cpu_class
 require llvm/daslib/llvm_user_modules  // nolint:STYLE030,LINT019 - side-effect require: [llvm_code] generator modules must be in THIS module's closure so their [init] registration runs in the context that reads the registry; STYLE030 is policy-gated, so the keep only fires under a require-analysis run
@@ -306,6 +307,7 @@ class public LlvmJitVisitor : AstVisitor {
     heapMkaData : array<LLVMOpaqueValue?>
     v2v : table<Variable?; LLVMOpaqueValue?>
     g2v : table<Variable?; LLVMOpaqueValue?>    //! a solid-context global's entry-block pointer, cleared per LLVM function
+    di_globals : table<Variable?; bool>         //! the globals this function already describes, cleared with g2v
     v2t : table<LLVMOpaqueValue?; LLVMOpaqueType?>
     call2cmres : table<Expression?; LLVMOpaqueValue?>
     ffunc, wfunc : LLVMOpaqueValue?
@@ -332,8 +334,8 @@ class public LlvmJitVisitor : AstVisitor {
     callBlock : LLVMOpaqueValue?
     g_builder : LLVMOpaqueBuilder?
     g_di_builder : LLVMOpaqueDIBuilder?
-    di_file_location : table<string; LLVMOpaqueMetadata?>
-    di_function : LLVMOpaqueMetadata?
+    di_subprogram : LLVMOpaqueMetadata?
+    di_scopes : array<LLVMOpaqueMetadata?>
     types : PrimitiveTypes -const? -const
     option_no_range_check : bool = false
     option_no_division_check : bool = false
@@ -344,7 +346,6 @@ class public LlvmJitVisitor : AstVisitor {
     has_externals : bool = false
     flags : LlvmJitFlags
     mode : LlvmJitMode
-    own_di : bool = false
     ldu_hint : bool
     attributes : Attributes?
 
@@ -358,25 +359,11 @@ class public LlvmJitVisitor : AstVisitor {
         attributes = attrs
         uid = uids
         if (flags.need_di) {
-            own_di = true
-            g_di_builder = LLVMCreateDIBuilder(g_mod)
-            // One CU per DIBuilder (LLVM asserts on a second). DIBuilder remembers it and
-            // stamps `unit:` on every subprogram definition; per-function DIFiles carry the
-            // real .das paths, so the CU's own file name is just a label.
-            let cu_name = "das-jit"
-            let producer = "daslang jit"
-            let cu_file = LLVMDIBuilderCreateFile(g_di_builder, cu_name, uint64(long_length(cu_name)), "", 0ul)
-            LLVMDIBuilderCreateCompileUnit(g_di_builder, LLVMDWARFSourceLanguage.C, cu_file,
-                producer, uint64(long_length(producer)), 0, "", 0ul, 0u, "", 0ul,
-                LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0u, 0, 0, "", 0ul, "", 0ul)
+            g_di_builder = di_begin_module(g_mod)
         }
     }
 
     def finalize {
-        if (own_di && g_di_builder != null) {
-            LLVMDIBuilderFinalize(g_di_builder)
-            LLVMDisposeDIBuilder(g_di_builder)
-        }
         LLVMDisposeBuilder(g_builder)
     }
 
@@ -385,19 +372,41 @@ class public LlvmJitVisitor : AstVisitor {
         return g_di_builder != null
     }
 
+    [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-subprogram-naming")]
+    def debug_subprogram(dasName : string; at : LineInfo;
+                         arguments : dasvector`ptr`Variable; result : TypeDeclPtr; localToUnit : bool) {
+        let unit = get_debug_file_location(at)
+        let ty = di_subroutine_of(g_di_builder, unit, arguments, result)
+        return LLVMDIBuilderCreateFunction(g_di_builder, unit,
+            dasName, uint64(long_length(dasName)), "", 0ul,
+            unit, at.line, ty, localToUnit ? 1 : 0, 1, at.line,
+            LLVMDIFlags.LLVMDIFlagZero, 0)
+    }
+
+    [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-subprogram-naming")]
+    def impl_is_local_to_unit() {
+        return !g_jit_split_active
+    }
+
     def debug_before_function(fun : FunctionPtr) {
         if (debug_info_enabled()) {
             clear_builder_location()
-            let unit = get_debug_file_location(fun.at)
-            let implName = uid.get_dll_fn_name(fun).impl()
-            // Untyped subroutine (no param/return DI types yet) — enough for line tables.
-            var ty = LLVMDIBuilderCreateSubroutineType(
-                g_di_builder, unit, null, 0u, LLVMDIFlags.LLVMDIFlagZero)
-            // split mode makes impls external-hidden, so the DISubprogram must not claim local-to-unit
-            di_function = LLVMDIBuilderCreateFunction(g_di_builder, unit,
-                implName, uint64(long_length(implName)), "", 0ul, unit, fun.at.line,
-                ty, g_jit_split_active ? 0 : 1, 1, fun.at.line, LLVMDIFlags.LLVMDIFlagZero, 0)
-            LLVMSetSubprogram(ffunc, di_function)
+            di_subprogram = debug_subprogram("{fun.name}", fun.at, fun.arguments, fun.result, impl_is_local_to_unit())
+            LLVMSetSubprogram(ffunc, di_subprogram)
+            di_scopes |> clear()
+        }
+    }
+
+    def block_das_name(blk : ExprBlock?; func : Function?) {
+        return func != null ? "{func.name}_block_at_{int(blk.at.line)}" : "block_at_{int(blk.at.line)}"
+    }
+
+    def debug_before_block(blk : ExprBlock?; func : Function?) {
+        if (debug_info_enabled()) {
+            clear_builder_location()
+            di_subprogram = debug_subprogram(block_das_name(blk, func), blk.at, blk.arguments, blk.returnType, impl_is_local_to_unit())
+            LLVMSetSubprogram(ffunc, di_subprogram)
+            di_scopes |> clear()
         }
     }
 
@@ -415,27 +424,41 @@ class public LlvmJitVisitor : AstVisitor {
 
     def get_debug_file_location(at : LineInfo) : LLVMOpaqueMetadata? {
         if (debug_info_enabled()) {
-            let filename = at.fileInfo != null ? string(at.fileInfo.name) : ""
-            return get_debug_file_location_by_name(filename)
+            return get_debug_file_location_by_name(at.fileInfo != null ? string(at.fileInfo.name) : "")
         } else {
             return null
         }
     }
 
     def get_debug_file_location_by_name(filename : string) : LLVMOpaqueMetadata? {
-        var meta & = unsafe(di_file_location[filename])
-        if (meta == null) {
-            // filename already carries its path; a non-empty directory would make CodeView
-            // consumers print the dir twice (dir/dir/file) when they join the two fields
-            meta = LLVMDIBuilderCreateFile(g_di_builder, filename, uint64(long_length(filename)), "", 0ul)
+        return di_file_of(g_di_builder, filename)
+    }
+
+    def di_current_scope : LLVMOpaqueMetadata ? {
+        return di_scopes |> empty() ? di_subprogram : di_scopes |> back()
+    }
+
+    [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-scopes")]
+    def di_push_lexical_block(at : LineInfo) {
+        return if (!debug_info_enabled() || di_subprogram == null)
+        let parent = di_current_scope()
+        let file = get_debug_file_location(at)
+        let parentFile = LLVMDIScopeGetFile(parent)
+        if (file != parentFile && file != null) {
+            di_scopes |> push <| LLVMDIBuilderCreateLexicalBlockFile(g_di_builder, parent, file, 0u)
+        } else {
+            di_scopes |> push <| LLVMDIBuilderCreateLexicalBlock(g_di_builder, parent, file, at.line, at.column)
         }
-        return meta
+    }
+
+    def di_pop_lexical_block {
+        return if (!debug_info_enabled() || di_scopes |> empty())
+        di_scopes |> pop()
     }
 
     def get_debug_location(at : LineInfo) : LLVMOpaqueMetadata? {
         if (debug_info_enabled()) {
-            let file_meta = get_debug_file_location(at)
-            return LLVMDIBuilderCreateDebugLocation(g_ctx, at.line, at.column, di_function, null)
+            return LLVMDIBuilderCreateDebugLocation(g_ctx, at.line, at.column, di_current_scope(), null)
         } else {
             return null
         }
@@ -443,7 +466,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def set_builder_location(at : LineInfo) {
         if (debug_info_enabled()) {
-            if (di_function != null) {
+            if (di_subprogram != null) {
                 LLVMSetCurrentDebugLocation2(g_builder, get_debug_location(at))
             }
         }
@@ -453,6 +476,52 @@ class public LlvmJitVisitor : AstVisitor {
         if (debug_info_enabled()) {
             LLVMSetCurrentDebugLocation2(g_builder, null)
         }
+    }
+
+    def slot_holds_pointer(v : VariablePtr) {
+        return v._type.flags.ref && !v.flags.aliasCMRES
+    }
+
+    // a local and a parameter differ only in the DILocalVariable they build; argNo is the
+    // parameter's 1-based position, which is what tells the two apart
+    def debug_declare_local(v : VariablePtr; storage : LLVMOpaqueValue?) {
+        debug_declare_variable(v, storage, 0, slot_holds_pointer(v))
+    }
+
+    def debug_declare_parameter(v : VariablePtr; storage : LLVMOpaqueValue?; argNo : int) {
+        debug_declare_variable(v, storage, argNo, false)
+    }
+
+    //! A das global is described once per function that touches it, at the address that
+    //! function computed from its own `ctx` (arch doc sec.12.4).
+    [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-globals")]
+    def debug_declare_global(v : VariablePtr; slot : LLVMOpaqueValue?) {
+        return if (!debug_info_enabled() || v == null || slot == null || di_globals |> key_exists(v))
+        di_globals[v] = true
+        debug_declare_variable(v, slot, 0, false)
+    }
+
+    [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-variable-locations")]
+    def debug_declare_variable(v : VariablePtr; storage : LLVMOpaqueValue?; argNo : int; storageHoldsPointer : bool) {
+        return if (!debug_info_enabled() || di_subprogram == null || storage == null ||
+                   v == null || v._type == null || v._type.isVoid)
+        let scope = di_current_scope()
+        let file = get_debug_file_location(v.at)
+        let vname = "{v.name}"
+        return if (vname |> empty())
+        var vty = di_type_of(g_di_builder, file, v._type)
+        return if (vty == null)
+        var dv : LLVMOpaqueMetadata?
+        if (argNo > 0) {
+            dv = LLVMDIBuilderCreateParameterVariable(g_di_builder, scope, vname, uint64(long_length(vname)),
+                uint(argNo), file, v.at.line, vty, 1, LLVMDIFlags.LLVMDIFlagZero)
+        } else {
+            dv = LLVMDIBuilderCreateAutoVariable(g_di_builder, scope, vname, uint64(long_length(vname)),
+                file, v.at.line, vty, 1, LLVMDIFlags.LLVMDIFlagZero, 0u)
+        }
+        let expr = storageHoldsPointer ? di_deref_expression(g_di_builder) : di_empty_expression(g_di_builder)
+        LLVMDIBuilderInsertDeclareRecordAtEnd(g_di_builder, storage, dv, expr,
+            get_debug_location(v.at), LLVMGetInsertBlock(g_builder))
     }
 
 // Expression
@@ -799,25 +868,18 @@ class public LlvmJitVisitor : AstVisitor {
             }
         }
         if (generated) {
-            build_wrapper_function(fnmna, fun.arguments, clone_type(fun.result), isCMRES(fun), null, fun.at)
+            build_wrapper_function(fnmna, "{fun.name}", fun.arguments, clone_type(fun.result), isCMRES(fun), null, fun.at)
         }
         ffunc = null
         wfunc = null
         return generated
     }
 
-    def build_wrapper_function(fnmna : DllName; arguments : dasvector`ptr`Variable; var result : TypeDeclPtr; isCmres : bool; captureType : LLVMOpaqueType?; at : LineInfo) {
+    def build_wrapper_function(fnmna : DllName; dasName : string; arguments : dasvector`ptr`Variable; var result : TypeDeclPtr; isCmres : bool; captureType : LLVMOpaqueType?; at : LineInfo) {
         var wentry = LLVMAppendBasicBlockInContext(g_ctx, wfunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         if (debug_info_enabled()) {
-            // The wrapper needs its own DISubprogram: at O2+ the impl often inlines into
-            // it, and LLVM drops the callee's !dbg when the host has no debug scope.
-            let unit = get_debug_file_location(at)
-            let publName = fnmna.publ()
-            var wty = LLVMDIBuilderCreateSubroutineType(g_di_builder, unit, null, 0u, LLVMDIFlags.LLVMDIFlagZero)
-            let wsp = LLVMDIBuilderCreateFunction(g_di_builder, unit,
-                publName, uint64(long_length(publName)), "", 0ul, unit, at.line,
-                wty, 0, 1, at.line, LLVMDIFlags.LLVMDIFlagZero, 0)
+            let wsp = debug_subprogram(dasName, at, arguments, result, false)
             LLVMSetSubprogram(wfunc, wsp)
             LLVMSetCurrentDebugLocation2(g_builder,
                 LLVMDIBuilderCreateDebugLocation(g_ctx, at.line, at.column, wsp, null))
@@ -939,7 +1001,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         // allocate arguments (promoted to local variables). hasMakeBlock forces always-promote so
         // block-captured argument variables are addressable; could be narrowed to captured-only.
-        var alwaysPromote = false
+        var alwaysPromote = flags.need_di
         if (thisBlock != null && thisBlock.blockFlags.hasMakeBlock) {
             alwaysPromote = true
         } elif (thisFunc != null && thisFunc.flags.hasMakeBlock) {
@@ -951,6 +1013,9 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMSetAlignment(tryV, 16u)
                 LLVMBuildStore(g_builder, LLVMGetParam(ffunc, uint(ai)), tryV)
                 setV(a, tryV)
+                debug_declare_parameter(a, tryV, ai + 1)
+            } elif (a._type.isRef) {
+                debug_declare_parameter(a, LLVMGetParam(ffunc, uint(ai)), ai + 1)
             }
         }
         // function body
@@ -967,19 +1032,20 @@ class public LlvmJitVisitor : AstVisitor {
         thisFunc = fun
         uid.reset(fun)
         g2v |> clear()
+        di_globals |> clear()
         ldu_hint = LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS
         let fnmna = uid.get_dll_fn_name(fun)
         ffunc = LLVMGetNamedFunction(g_mod, fnmna.impl())
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
         // build wrapper function
-        build_wrapper_function(fnmna, fun.arguments, fun.result, isCMRES(fun), null, fun.at)
+        build_wrapper_function(fnmna, "{fun.name}", fun.arguments, fun.result, isCMRES(fun), null, fun.at)
+        debug_before_function(fun)
         build_function_entry(fun.at, hash(get_mangled_name(fun)),
                              fun.flags.hasMakeBlock || flags.emit_prologue,
                              fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations, fun.arguments)
         process_labels(fun.body)
         process_finally(fun.body)
-        debug_before_function(fun)
         set_builder_location(fun.at)
     }
 
@@ -1000,6 +1066,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override visitFunction(fun : FunctionPtr) : FunctionPtr {
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
+        clear_builder_location()
         LLVMBuildBr(g_builder, function_body)
         debug_after_function()
         LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = ldu_hint
@@ -1071,6 +1138,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override preVisitExprBlock(var blk : ExprBlock?) : void {
         block_stack |> push(blk)
+        di_push_lexical_block(blk.at)
     }
 
     def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
@@ -1127,6 +1195,7 @@ class public LlvmJitVisitor : AstVisitor {
             jump_to_next_finally(blk)
         }
         block_stack |> pop()
+        di_pop_lexical_block()
         return blk
     }
 
@@ -1182,6 +1251,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
         }
         setV(arg, v_ptr)
+        debug_declare_local(arg, v_ptr)
         if (arg.init == null) {
             LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), uint(valign))
         } elif (make_call_to_cmres(arg.init, v_ptr)) {
@@ -3715,6 +3785,7 @@ class public LlvmJitVisitor : AstVisitor {
     def override visitExprWhile(expr : ExprWhile?) : ExpressionPtr {
         var lblk = loop_stack |> back()
         loop_stack |> pop()
+        set_builder_location(expr.at)
         if (!current_block_terminates()) {
             let backedge = LLVMBuildBr(g_builder, lblk.loop_start)
             attach_loop_metadata(backedge, expr.annotations)
@@ -4033,6 +4104,7 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMSetAlignment(v_ptr, 16u)
             v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "for_loop_variable_{svar.name}")
             setV(svar, v_ptr)
+            debug_declare_local(svar, v_ptr)
         }
         // initialize its memory with 0 (should we?)
         let vsize = svar._type.isRef ?  typeinfo sizeof(type<void?>) : svar._type.sizeOf
@@ -4240,6 +4312,7 @@ class public LlvmJitVisitor : AstVisitor {
     def override visitExprFor(expr : ExprFor?) : ExpressionPtr {
         var lblk = loop_stack |> back()
         loop_stack |> pop()
+        set_builder_location(expr.at)
         /*
         LOOP_CONTINUE:
             for ( int t=0; t!=totalCount; ++t ){
@@ -6095,6 +6168,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 g2v[expr.variable] = tryV
             }
+            debug_declare_global(expr.variable, tryV)
             if (expr.varFlags.r2v) {
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), tryV, expr._type.alignOf, "global_var_r2v_{expr.variable.name}"))
             } else {
@@ -6649,7 +6723,8 @@ class public LlvmJitVisitor : AstVisitor {
         ffunc = LLVMGetNamedFunction(g_mod, fnmna.impl())
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
         // build wrapper function
-        build_wrapper_function(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
+        build_wrapper_function(fnmna, block_das_name(thisBlock, func), thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
+        debug_before_block(thisBlock, func)
         build_function_entry(expr.at, hash(fnmna),
             thisBlock.blockFlags.hasMakeBlock || flags.emit_prologue,
             SIZE_OF_PROLOGUE, thisBlock.arguments)
@@ -6662,6 +6737,7 @@ class public LlvmJitVisitor : AstVisitor {
     def post_make_block(var blk : ExprBlock?) {
         add_default_terminator(blk)
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
+        clear_builder_location()
         LLVMBuildBr(g_builder, function_body)
         thisBlock = null
         thisFunc = null
@@ -7532,9 +7608,14 @@ class public LlvmJitVisitor : AstVisitor {
 
     def at_function_entry(blk : block) {
         var current_block = LLVMGetInsertBlock(g_builder)
+        let saved_location = debug_info_enabled() ? LLVMGetCurrentDebugLocation2(g_builder) : null
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
+        clear_builder_location()
         invoke(blk)
         LLVMPositionBuilderAtEnd(g_builder, current_block)
+        if (debug_info_enabled()) {
+            LLVMSetCurrentDebugLocation2(g_builder, saved_location)
+        }
     }
 
     def before_function_entry {

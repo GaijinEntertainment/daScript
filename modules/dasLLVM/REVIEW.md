@@ -1,8 +1,8 @@
 # dasLLVM Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
-`ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`. Planned work: `DEBUGGING.md` (sec. Roadmap),
-`fat_mode_plan.md`.
+`ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`. Planned work:
+`DEBUGGING.md` (sec. Roadmap), `fat_mode_plan.md`.
 
 - **A change under `modules/dasLLVM/` runs the module-owned suite** (command and build gate:
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
@@ -34,7 +34,8 @@
   (`daslib/llvm_jit_run.das`) executes - its own body or any callee - also prints an
   `LLVM JIT time:` number for that work: its own line, or the number of a phase that includes
   it, while that phase's line still prints** (phase inventory: `ARCHITECTURE.md` sec.1).
-  Option resolution before the first timer, and log lines, are not work.
+  Only work on the path that reaches the report is timed: option resolution before the first
+  timer, log lines, and failure-path teardown are not.
 
 - **A change that can alter the machine code the JIT's DLL or split-obj cache serves back for
   identical inputs - IR generation, target-machine setup, a `[llvm_code]` generator body, or the
@@ -99,6 +100,21 @@
   recorded path is read by other people and must not name the user who minted it. A host path
   a diff passes to a filesystem call stays raw: no filesystem call resolves `~`.
   `tests/llvm_tune_manifest.das` here asserts a minted sidecar carries no home directory.
+
+- **A diff that emits an instruction into the entry block of a function whose body das
+  statements emit - the impl half of a pair, or a block body - gives it no debug location, and
+  one it emits into a loop's latch (the block that jumps back to the loop head) gives it the
+  loop's own line** (`daslib/llvm_jit.das`). Those are the two places the emitter fills out of
+  das statement order, and an instruction that keeps whatever location was current when it was
+  emitted moves a `break file:line` stop onto a statement that has not run
+  (`ARCHITECTURE_DEBUG_INFO.md` sec.12.2). The wrapper half's entry block is not such a place:
+  it holds no das statement at all and carries the declaration line on purpose, so a frame for
+  it prints a line.
+
+- **A diff that adds a teardown step to `reset_jit_globals_after_failure`
+  (`daslib/llvm_jit_run.das`) puts it after the `di_finalize()` call.** A DIBuilder writes into
+  the LLVM module it was created for, so finalizing one whose module an earlier step already
+  disposed of reads freed memory.
 
 - **Never call `LLVMSetIsInBounds` - build the GEP in-bounds with `LLVMBuildInBoundsGEP2` (the
   `llvm_boost` wrapper's `inbounds` default) instead.** A constant-folded GEP is a

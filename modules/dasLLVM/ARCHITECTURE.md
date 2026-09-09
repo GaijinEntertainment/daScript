@@ -2,7 +2,8 @@
 
 The design document `REVIEW.md` cites. Numbered sections are the stable reference targets;
 usage and installation live in `README.md`, the debugger rail and its roadmap in `DEBUGGING.md`.
-Companion: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU classes).
+Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU classes),
+`ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12).
 
 ## 1. The jit backend pipeline
 
@@ -117,7 +118,9 @@ bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FE
 `DAS_JIT_ARM64_FORCE_FEATURES` (force CPU features past detection - emission, the cache keys,
 and `cpu_supports`-based tune eligibility all follow), `DAS_JIT_BASELINE` (build for a CPU class
 instead of the box - the machine, the gates, the tune ladder and the cache keys all follow;
-`ARCHITECTURE_TARGET_FEATURES.md` sec.10), and the runtime escape API
+`ARCHITECTURE_TARGET_FEATURES.md` sec.10), `--jit-debug` / `-g` (emit DWARF or CodeView debug
+info and promote every argument to a stack slot for it; `ARCHITECTURE_DEBUG_INFO.md` sec.12),
+and the runtime escape API
 `tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the caller
 passes the knob name it acts for). The announce contract: an override announces at the point
 it CHANGES THE OUTCOME - at least one line naming the knob (its env spelling, or the
