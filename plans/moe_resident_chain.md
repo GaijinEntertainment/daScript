@@ -140,7 +140,14 @@ the rest is the per-layer host glue the span would remove, and the span declines
    A decode - our s tile runs 128 x 32 x 64 on the same decode. Both decode every expert
    weight once per window at 32 rows per expert; the levers to probe are the decode itself
    (their `DECODE_VECTOR` arm against our DECV4 twin on iq2xxs) and the row gather inside the
-   tile (no gather kernel, no schedule).
+   tile (no gather kernel, no schedule). Their own harness at the 30B expert shape
+   (`test-backend-ops perf -o MUL_MAT_ID -p "n_mats=128,n_used=8,b=0,m=768,n=512,k=2048"`,
+   build-vulkan-357, the same card): iq2_xs 737 us (17.5 TFLOP/s), q4_0 853 (15.1), q8_0 988
+   (13.1), q4_K 985 (13.1), q6_K 1031 (12.5), f16 1181 (10.9). Ours on the 30B window's
+   iq2xxs-led mix: gate 1210 us per layer, up 1181, down 1060 (10.7-12.2 TFLOP/s) - a 1.2x to
+   1.6x gap per plane, not the 1.6x the whole window shows, so the rest of the window (the
+   attention head 28.5 ms, the act, combine, norm and requant dispatches ~12 ms, the router
+   and schedule 14.6) carries the other half of the distance to their 145 ms.
 4. **The hybrid MoE.** The 35B rides slice 3 with the deltanet block already in the chain.
 5. **The expert GEMMs at small M.** The last term (192 ms on the 30B): a tile pick for
    32-row buckets, or a mul_mat_id-shaped kernel; measured on the probe first.
