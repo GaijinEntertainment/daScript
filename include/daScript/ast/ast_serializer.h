@@ -172,6 +172,7 @@ namespace das {
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
         // parsedModules record: fileName, source content hash, source size, program, thisModule, the collector's require names
         vector<tuple<string, uint64_t, int64_t, ProgramPtr, Module*, vector<string>>> parsedModules;
+        size_t                                      writtenModules = 0;     // parsedModules already in the stream (writebackModules)
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;

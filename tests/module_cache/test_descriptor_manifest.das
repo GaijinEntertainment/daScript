@@ -152,7 +152,7 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
         t |> equal("compiled (no manifest), manifest written (1 row(s))", probe_line(out), "the trace says compiled and written:\n{out}")
         t |> success(stat(manifest).is_valid, "the manifest sits beside the descriptor")
         let text = fread(manifest)
-        t |> success(text |> starts_with("das_module_manifest\t3\n"), "the manifest opens with its format version: {text}")
+        t |> success(text |> starts_with("das_module_manifest\t4\n"), "the manifest opens with its format version: {text}")
         t |> success(find(text, "\ndep\t") >= 0 && find(text, "/daslib/fio.das\t") >= 0, "the manifest stamps the files the descriptor's compile read: {text}")
         t |> success(find(text, "\nnp\tmanifest_probe\thello\t") >= 0, "the manifest carries the recorded row: {text}")
         t |> success(find(text, "\nend\t1\n") >= 0, "the manifest closes with its row count: {text}")

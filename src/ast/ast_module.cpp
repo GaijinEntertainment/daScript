@@ -195,42 +195,28 @@ namespace das {
         return g_deferredModuleLoader && g_deferredModuleLoader(name) && Module::requireEx(name, false);
     }
 
-    static vector<unique_ptr<ModuleFileCache>> g_lateModuleCaches;     // ARCHITECTURE.md sec.3
-    static mutex g_lateModuleCachesMutex;
-
-    void keepLateModuleCache ( unique_ptr<ModuleFileCache> cache ) {
-        lock_guard<mutex> guard(g_lateModuleCachesMutex);
-        g_lateModuleCaches.push_back(das::move(cache));
-    }
-
-    void freeLateModuleCaches () {
-        lock_guard<mutex> guard(g_lateModuleCachesMutex);
-        g_lateModuleCaches.clear();
-    }
-
-    static das_map<string, vector<string>> g_moduleGroups;
+    // ARCHITECTURE.md sec.2 - process-wide, like the native paths: a descriptor registers once per process
+    static das_map<string, vector<ModuleGroupMember>> g_moduleGroups;
     static mutex g_moduleGroupsMutex;
 
-    void registerModuleGroupMember ( const string & group, const string & member ) {
-        lock_guard<mutex> guard(g_moduleGroupsMutex);
+    void registerModuleGroupMember ( const string & group, const string & member, const string & guard ) {
+        lock_guard<mutex> guard_(g_moduleGroupsMutex);
         auto & members = g_moduleGroups[group];
-        if ( find(members.begin(), members.end(), member) == members.end() ) {
-            members.push_back(member);
+        for ( auto & m : members ) {
+            if ( m.member == member ) return;
         }
+        members.push_back({member, guard});
     }
 
-    vector<string> getModuleGroupMembers ( const string & group ) {
+    vector<ModuleGroupMember> getModuleGroupMembers ( const string & group ) {
         lock_guard<mutex> guard(g_moduleGroupsMutex);
         auto it = g_moduleGroups.find(group);
-        if ( it == g_moduleGroups.end() ) return vector<string>();
-        vector<string> members = it->second;
-        sort(members.begin(), members.end());
+        if ( it == g_moduleGroups.end() ) return vector<ModuleGroupMember>();
+        vector<ModuleGroupMember> members = it->second;
+        sort(members.begin(), members.end(), [](const ModuleGroupMember & a, const ModuleGroupMember & b){
+            return a.member < b.member;
+        });
         return members;
-    }
-
-    void clearModuleGroups () {
-        lock_guard<mutex> guard(g_moduleGroupsMutex);
-        g_moduleGroups.clear();
     }
 
     void Module::Initialize() {
@@ -292,11 +278,9 @@ namespace das {
         // pointers in dasModule*.shared_module DLLs are still valid, and any
         // live job threads that were holding handles have exited. Dump here.
         if ( dumpHandleLeaks ) handleRegistry_dumpAll();
-        if ( g_envTotal==0 ) freeLateModuleCaches();   // process-wide, after the modules (ARCHITECTURE.md sec.3)
         // Free allocated structures for dynamic modules (unloads DLLs).
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
         clear_deferred_dynamic_modules();
-        if ( g_envTotal==0 ) clearModuleGroups();
         setDeferredModuleLoader(nullptr);
 
         clearGlobalAotLibrary();

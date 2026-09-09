@@ -70,10 +70,12 @@ registration is pulled, not pushed: each consulting macro module (`daslib/sql_bo
 new provider therefore ships a lean **registration shim** module (stmt factories +
 dialect hooks + caps; it must NOT require the provider's boost - that would cycle
 through `daslib/sql_boost`) that defines `register_provider`, and joins the group:
-`register_module_group("sql_provider", "<mod>/<mod>_provider")` in its `.das_module`
-descriptor, plus `registerModuleGroupMember` with the same two strings in the C++
-module's `initMain` for a host that runs no descriptors. Nothing in `daslib/` is
-edited. Entry fields:
+`register_module_group("sql_provider", "<mod>/<mod>_provider", "<mod>")` in its
+`.das_module` descriptor - the third argument guards the row on the C++ module, since the
+descriptor and the das files sit in every checkout and the module only in a build configured
+with it - plus `registerModuleGroupMember` with the first two strings in the C++ module's
+`initMain` (the binder generates the constructor) for a host that runs no descriptors.
+Nothing in `daslib/` is edited. Entry fields:
 
 | Field | SQLite value | Consulted by |
 |---|---|---|

@@ -219,7 +219,7 @@ namespace das {
                     bool isMod = !isReq && !isInc && (memcmp(src, "module", 6)==0);
                     if ( isReq || isInc ) {
                         src += 7;
-                        if ( isspace(src[0]) ) {
+                        if ( isspace(src[0]) || (isReq && src[0]=='[') ) {
                             while ( src < src_end && isspace(src[0]) ) {
                                 src ++;
                             }
@@ -248,13 +248,16 @@ namespace das {
                                 }
                             }
                             // ARCHITECTURE.md sec.2
-                            auto guardTaken = [&]() {
-                                if ( !hasReqGuard ) return true;
-                                if ( reqGuard.find('/')!=string::npos ) {
-                                    auto ginfo = access->getModuleInfo(reqGuard, fi->name);
+                            auto guardAvailable = [&](const string & guard) {
+                                if ( guard.empty() ) return true;
+                                if ( guard.find('/')!=string::npos ) {
+                                    auto ginfo = access->getModuleInfo(guard, fi->name);
                                     return !ginfo.fileName.empty() && access->getFileInfo(ginfo.fileName) != nullptr;
                                 }
-                                return guardModuleAvailable(reqGuard);
+                                return guardModuleAvailable(guard);
+                            };
+                            auto guardTaken = [&]() {
+                                return !hasReqGuard || guardAvailable(reqGuard);
                             };
                             auto publicFollows = [&]() {
                                 while ( src < src_end && src[0] == ' ' ) {
@@ -279,7 +282,8 @@ namespace das {
                                     src ++;
                                     bool isPublic = publicFollows();
                                     for ( const auto & member : getModuleGroupMembers(group) ) {
-                                        req.push_back({member, line, chain, isPublic});
+                                        if ( !guardAvailable(member.guard) ) continue;
+                                        req.push_back({member.member, line, chain, isPublic});
                                     }
                                 }
                                 continue;
@@ -1142,6 +1146,7 @@ namespace das {
         auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
         uint64_t macroSim0 = serializer_read ? serializer_read->totMacroTime : 0;
         if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
+            program->access = access;   // the read replaced the program object
             auto readT = get_time_usec(time0);
             auto macroSimT = int64_t(serializer_read->totMacroTime - macroSim0);
             *totCacheRead += readT;
@@ -1159,6 +1164,7 @@ namespace das {
         }
 
         int err;
+        program->access = access;   // a failed read replaced the program object above
         daScriptEnvironment::getBound()->g_Program = program;
         daScriptEnvironment::getBound()->g_compilerLog = &logs;
         daScriptEnvironment::getBound()->g_compilingFileName = fileName.c_str();
@@ -1586,8 +1592,10 @@ namespace das {
             *serializer_write << magic;
             *serializer_write << version;
         }
-        for ( auto & parsedModule : serializer_write->parsedModules ) {
-            auto & [fileName, fileHash, fileSize, program, thisModule, requireNames] = parsedModule;
+        // from the cursor: a late walk (requireModuleNow) writes back mid-compile, and the host's
+        // writeback at its end must not repeat those records
+        for ( size_t pi = serializer_write->writtenModules; pi < serializer_write->parsedModules.size(); ++pi ) {
+            auto & [fileName, fileHash, fileSize, program, thisModule, requireNames] = serializer_write->parsedModules[pi];
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
@@ -1623,6 +1631,7 @@ namespace das {
             payload_size = uint64_t(serializer_write->buffer->writingSize() - payload_start);
             serializer_write->buffer->patch(len_at, &payload_size, sizeof(payload_size));
         }
+        serializer_write->writtenModules = serializer_write->parsedModules.size();
     }
 
     void addRttiRequireVariable ( ProgramPtr res, string fileName, const LineInfo & at ) {
@@ -1878,6 +1887,23 @@ namespace das {
         }
     }
 
+    // ARCHITECTURE.md sec.3 - what a nested compile rebinds on the environment, put back on every exit
+    struct LateRequireEnvScope {
+        daScriptEnvironment *   env;
+        ProgramPtr              program;
+        TextWriter *            log;
+        const char *            fileName;
+        const char *            moduleName;
+        LateRequireEnvScope ( daScriptEnvironment * e ) : env(e), program(e->g_Program), log(e->g_compilerLog),
+            fileName(e->g_compilingFileName), moduleName(e->g_compilingModuleName) {}
+        ~LateRequireEnvScope () {
+            env->g_Program = program;
+            env->g_compilerLog = log;
+            env->g_compilingFileName = fileName;
+            env->g_compilingModuleName = moduleName;
+        }
+    };
+
     // ARCHITECTURE.md sec.3
     Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access, TextWriter & logs, CodeOfPolicies policies ) {
         lock_guard<recursive_mutex> guard(g_requireModuleNowMutex);
@@ -1893,24 +1919,7 @@ namespace das {
             return nullptr;
         }
         auto env = daScriptEnvironment::getBound();
-        auto savedProgram = env->g_Program;
-        auto savedRead = env->serializer_read;
-        auto savedWrite = env->serializer_write;
-        auto savedLog = env->g_compilerLog;
-        auto savedFileName = env->g_compilingFileName;
-        auto savedModuleName = env->g_compilingModuleName;
-        env->serializer_read = nullptr;
-        env->serializer_write = nullptr;
-        unique_ptr<ModuleFileCache> cache;
-        if ( env->lateModuleCacheEnabled ) {
-            cache = make_unique<ModuleFileCache>();
-            auto path = ModuleFileCache::defaultPath("late~" + modName, env->lateModuleCacheHostBinary, env->lateModuleCacheHostOptions);
-            if ( !env->lateModuleCacheDir.empty() ) {
-                auto slash = path.find_last_of("/\\");
-                path = env->lateModuleCacheDir + (slash == string::npos ? path : path.substr(slash + 1));
-            }
-            cache->install(path, path, env->lateModuleCacheQuiet);
-        }
+        LateRequireEnvScope envScope(env);
         Module * result = nullptr;
         {
             gc_guard compile_gc_scope;
@@ -1933,9 +1942,13 @@ namespace das {
                 logProgramErrors(reportPrerequisitesErrors(info.fileName, missing, circular, notAllowed, namelessMismatches, libGroup, policies), logs);
             } else if ( !verifyModuleNamesUnique(req, logs) ) {
                 ok = false;
+            } else if ( !fileModName.empty() && fileModName != modName ) {
+                logs << "require_module_now: '" << info.fileName << "' declares module '" << fileModName
+                     << "' - a module required after the walk is named by its file, so it declares `module " << modName << "`\n";
+                ok = false;
             }
             if ( ok ) {
-                if ( !fileModName.empty() ) modName = fileModName;
+                disableSerializationOnDebugger(req);
                 for ( auto & mod : req ) {
                     if ( libGroup.findModule(mod.moduleName) ) continue;
                     auto program = parseDaScript(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies);
@@ -1986,16 +1999,6 @@ namespace das {
                 }
             }
         }
-        if ( cache ) {
-            cache->finish();
-            keepLateModuleCache(das::move(cache));
-        }
-        env->g_Program = savedProgram;
-        env->serializer_read = savedRead;
-        env->serializer_write = savedWrite;
-        env->g_compilerLog = savedLog;
-        env->g_compilingFileName = savedFileName;
-        env->g_compilingModuleName = savedModuleName;
         return result;
     }
 

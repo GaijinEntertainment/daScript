@@ -305,8 +305,8 @@ namespace das {
     bool builtin_fs_is_absolute ( const char * ) GENERATE_IO_STUB_RET
     void * register_dynamic_module ( const char *, const char *, int, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     void register_native_path ( const char *, const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
-    void register_module_group ( const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
-    DAS_API void replay_module_group ( const char *, const char * ) GENERATE_IO_STUB
+    void register_module_group ( const char *, const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
+    DAS_API void replay_module_group ( const char *, const char *, const char * ) GENERATE_IO_STUB
     DAS_API void retry_pending_dynamic_modules () GENERATE_IO_STUB
     DAS_API string describe_pending_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API int report_pending_dynamic_modules () GENERATE_IO_STUB_RET
@@ -2562,23 +2562,24 @@ namespace das {
         register_native_path(mod_name, src, dst, nullptr, nullptr);
     }
 
-    void register_module_group ( const char * group, const char * member, Context * context, LineInfoArg * at ) {
+    void register_module_group ( const char * group, const char * member, const char * guard, Context * context, LineInfoArg * at ) {
         if ( !group || !group[0] || !member || !member[0] ) {
             if ( context ) context->throw_error_at(at, "register_module_group needs a group name and a member require path");
             return;
         }
-        registerModuleGroupMember(group, member);
+        registerModuleGroupMember(group, member, guard ? guard : "");
         if ( g_manifest_recording ) {
             DynModuleManifestRow row;
             row.group = true;
             row.a = group;
             row.b = member;
+            row.c = guard ? guard : "";
             g_manifest_rows.push_back(das::move(row));
         }
     }
 
-    DAS_API void replay_module_group ( const char * group, const char * member ) {
-        register_module_group(group, member, nullptr, nullptr);
+    DAS_API void replay_module_group ( const char * group, const char * member, const char * guard ) {
+        register_module_group(group, member, guard, nullptr, nullptr);
     }
 
     void for_each_registered_native_path ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) {
@@ -3223,7 +3224,8 @@ namespace das {
                     ->args({"mod_name", "src", "dst", "context","at"});
             addExtern<DAS_BIND_FUN(register_module_group)>(*this, lib, "register_module_group",
                 SideEffects::worstDefault, "register_module_group")
-                    ->args({"group", "member", "context","at"});
+                    ->args({"group", "member", "guard", "context","at"})
+                    ->arg_init(2, new ExprConstString(""));
             addExtern<DAS_BIND_FUN(builtin_describe_pending_dynamic_modules)>(*this, lib, "describe_pending_dynamic_modules",
                 SideEffects::accessExternal, "builtin_describe_pending_dynamic_modules")
                     ->args({"context","at"})->setTempStringResult();

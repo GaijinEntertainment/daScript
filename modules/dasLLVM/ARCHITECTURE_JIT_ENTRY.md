@@ -33,7 +33,10 @@ and `call_in_context` runs `run_jit_codegen` there with the program and context 
 emitter recomputes the same plan - its inputs are the program and the command line - and takes
 the pipeline `ARCHITECTURE.md` sec.1 describes; on a warm run the emitter's ~40 modules are never
 read from the module cache and its macro contexts never simulated, which is the whole of the
-saving (a warm `-jit` hello world: total 0.20 s to 0.08 s, compile 0.17 s to 0.065 s).
+saving (a warm `-jit` hello world: total 0.20 s to 0.08 s, compile 0.17 s to 0.065 s). The
+emitter's load is JIT work and prints its own `LLVM JIT time: emitter load` line; its modules
+are records of the script's own module cache (`src/ast/ARCHITECTURE.md` sec.3), written on the
+first miss and served on the next.
 
 ## 2. The key folds the candidate set
 
@@ -44,8 +47,15 @@ gate is a function of the candidates, the emitter version and the target, all of
 key folds, so one key still names one DLL. What the hit path gains is that it never runs the
 gate: `probe_dll` binds a candidate the DLL holds under a matching hash, leaves one the DLL
 lacks to the interpreter (the gate dropped it at codegen), and calls a candidate held under
-another hash, or a `[no_jit]` function the DLL holds, a miss. `LLVM_JIT_CODEGEN_VERSION` 0x79
-is the key's change of shape.
+another hash, or a `[no_jit]` function the DLL holds, a miss. A DLL that binds nothing is a
+miss too: a pinned `-output` path is one name for every program pointed at it, and a DLL
+another program wrote holds none of this one's functions. A program with no candidates never
+loads the emitter - the link module logs the interpreted run and returns. An extern slot the
+process cannot fill on a hit - a builtin with no interop address here, a handled type's helper
+from a module this process lacks, process facts the key does not fold - is logged and handed to
+the emitter, whose content gate decides again and rewrites the DLL, where a panic would repeat
+on every run against the same name. `LLVM_JIT_CODEGEN_VERSION` 0x79 is the key's change of
+shape.
 
 The candidate set reads the CONTEXT, not the `used` flag alone: `get_function_by_mangled_name_hash`
 answers whether the simulated program holds the function. A module compiled into the process

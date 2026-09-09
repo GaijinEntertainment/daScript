@@ -1,7 +1,8 @@
 The CROSS_CONTEXT module requires a ``shared`` module after the prerequisite walk -
-from a macro, a simulate macro or a running script - and calls into its macro context
-by function name, so a module that is expensive to bring up and only sometimes needed
-comes in at the point that decides it needs it.
+from a macro, a simulate macro or an ``[init]``, never from a running script, which has
+no compile for the module to join - and calls into its macro context by function name,
+so a module that is expensive to bring up and only sometimes needed comes in at the point
+that decides it needs it.
 
 The function reached by name is ``[export]``\ ed - a macro context keeps only exported,
 ``[init]``, ``[finalize]`` and macro-init functions - and it runs under the target

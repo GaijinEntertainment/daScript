@@ -136,12 +136,15 @@ syntax only):
     require ?sqlite [sql_provider] public
 
 A group is a name that modules register themselves under. A module's ``.das_module``
-descriptor calls ``register_module_group("sql_provider", "sqlite/sqlite_provider")``,
-and a C++ module registers from its constructor with ``registerModuleGroupMember``.
-``require [group]`` is one ordinary ``require`` per registered member, sorted by member
-path: a member resolves and fails exactly as the same require spelled by hand would,
-``public`` applies to every member, and a guard drops the whole group the way it
-drops a single require. A group nothing registered under adds nothing.
+descriptor calls ``register_module_group("sql_provider", "sqlite/sqlite_provider", "sqlite")``
+- the third argument, optional, is the member's guard, what ``require ?sqlite
+sqlite/sqlite_provider`` would carry, so a member whose file requires a C++ module the
+build may lack joins only where that module is - and a C++ module registers with
+``registerModuleGroupMember``. ``require [group]`` is one ordinary ``require`` per
+registered member, sorted by member path: a member resolves and fails exactly as the same
+require spelled by hand would, ``public`` applies to every member, a guard on the group
+drops the whole group the way it drops a single require, and a member's own guard drops
+that member. A group nothing registered under adds nothing.
 
 The group turns the dependency around. A module that wants every installed provider
 would otherwise have to name each one with its own guard and gain a line per

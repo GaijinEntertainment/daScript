@@ -18,21 +18,16 @@ def private report_late_require(name : string; var mod : Module?; issues : das_s
 }
 
 def require_module_now(name : string) : Module? {
-    //! Compiles `name` - a `shared` module - and its prerequisites now, or answers the one
-    //! already in the process; the compiling program's policies apply when one is bound.
-    //! A failure logs the errors and answers null.
+    //! Compiles `name` - a `shared` module - and its prerequisites now, under the compiling
+    //! program's policies and file access, or answers the one already in the process; a panic
+    //! outside a compile (a macro, a simulate macro, an `[init]`). Null, logged, on failure.
+    if (!is_compiling()) {
+        panic("require_module_now({name}): no program is compiling - a require after the walk is issued from a macro, a simulate macro or an [init], not from a running script")
+    }
     var found : Module?
     var inscope no_access : smart_ptr<FileAccess>
-    if (compiling_program() != null) {
-        require_module_now(name, no_access, compiling_program().policies) $(var mod : Module?; issues : das_string) {
-            found = report_late_require(name, mod, issues)
-        }
-    } else {
-        using() $(var cop : CodeOfPolicies) {
-            require_module_now(name, no_access, cop) $(var mod : Module?; issues : das_string) {
-                found = report_late_require(name, mod, issues)
-            }
-        }
+    require_module_now(name, no_access, compiling_program().policies) $(var mod : Module?; issues : das_string) {
+        found = report_late_require(name, mod, issues)
     }
     return found
 }

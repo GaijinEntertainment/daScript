@@ -1107,9 +1107,12 @@ namespace das
     DAS_API void setDeferredModuleLoader ( DeferredModuleLoader loader );
     DAS_API DeferredModuleLoader getDeferredModuleLoader ();
     DAS_API bool guardModuleAvailable ( const string & name );
-    DAS_API void registerModuleGroupMember ( const string & group, const string & member );
-    DAS_API vector<string> getModuleGroupMembers ( const string & group );
-    DAS_API void clearModuleGroups ();
+    struct ModuleGroupMember {
+        string member;      // the require path
+        string guard;       // `require ?guard member` when set - a module name, or a path when it holds a '/'
+    };
+    DAS_API void registerModuleGroupMember ( const string & group, const string & member, const string & guard = string() );
+    DAS_API vector<ModuleGroupMember> getModuleGroupMembers ( const string & group );
 
     class DAS_API Module {
     public:
@@ -1665,6 +1668,7 @@ namespace das
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
         ModuleGroup *               thisModuleGroup = nullptr;
+        FileAccessPtr               access;             // the access this program parses through
         int                         totalFunctions = 0;
         int                         totalVariables = 0;
         // src/ast/ARCHITECTURE.md sec.4
@@ -1748,9 +1752,6 @@ namespace das
     // src/ast/ARCHITECTURE.md sec.3
     DAS_CC_API Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access,
         TextWriter & logs, CodeOfPolicies policies = CodeOfPolicies() );
-    struct ModuleFileCache;
-    DAS_API void keepLateModuleCache ( unique_ptr<ModuleFileCache> cache );
-    DAS_API void freeLateModuleCaches ();
 
     // optimization pass (compiler lib); runs after type inference
     void optimizeProgram ( Program * program, TextWriter & logs, ModuleGroup & libGroup );
@@ -1838,13 +1839,6 @@ namespace das
         inline static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;
         uint64_t        dataWalkerStringLimit = 0;
         bool            g_modulesInitialized = false;
-        // src/ast/ARCHITECTURE.md sec.3
-        bool            lateModuleCacheEnabled = false;
-        bool            lateModuleCacheQuiet = true;
-        string          lateModuleCacheDir;
-        string          lateModuleCacheHostBinary;
-        string          lateModuleCacheHostOptions;
-
 
         static daScriptEnvironment *getBound();
         static void setBound(daScriptEnvironment *bnd);

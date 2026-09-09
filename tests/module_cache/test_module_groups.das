@@ -8,7 +8,9 @@ require daslib/fio
 require daslib/strings_boost
 require _mc_common
 
-let DESCRIPTOR_ALPHA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_alpha\", \"alpha\", \"\{project_path\}/alpha.das\")\n    register_module_group(\"probe_group\", \"grp_alpha/alpha\")\n\}\n"
+// alpha joins under a guard the build has; delta under one it lacks, with no file behind it
+let DESCRIPTOR_ALPHA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_alpha\", \"alpha\", \"\{project_path\}/alpha.das\")\n    register_module_group(\"probe_group\", \"grp_alpha/alpha\", \"math\")\n\}\n"
+let DESCRIPTOR_DELTA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_module_group(\"probe_group\", \"grp_delta/delta\", \"zz_absent_guard\")\n\}\n"
 let DESCRIPTOR_BETA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n    register_module_group(\"probe_group\", \"grp_beta/beta\")\n\}\n"
 let DESCRIPTOR_BETA_OUTSIDE = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"grp_beta\", \"beta\", \"\{project_path\}/beta.das\")\n\}\n"
 let DESCRIPTOR_GAMMA = "options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n    register_module_group(\"broken_group\", \"grp_gamma/missing\")\n\}\n"
@@ -36,15 +38,18 @@ def make_fixture(tmp : string) : Fixture {
     let alphaDir = path_join(modules, "grp_alpha")
     let betaDir = path_join(modules, "grp_beta")
     let gammaDir = path_join(modules, "grp_gamma")
+    let deltaDir = path_join(modules, "grp_delta")
     var merr : string
     mkdir_rec(alphaDir, merr)
     mkdir_rec(betaDir, merr)
     mkdir_rec(gammaDir, merr)
+    mkdir_rec(deltaDir, merr)
     fwrite(path_join(alphaDir, ".das_module"), DESCRIPTOR_ALPHA)
     fwrite(path_join(alphaDir, "alpha.das"), ALPHA)
     fwrite(path_join(betaDir, ".das_module"), DESCRIPTOR_BETA)
     fwrite(path_join(betaDir, "beta.das"), BETA)
     fwrite(path_join(gammaDir, ".das_module"), DESCRIPTOR_GAMMA)
+    fwrite(path_join(deltaDir, ".das_module"), DESCRIPTOR_DELTA)
     fwrite(path_join(tmp, "mid.das"), MID_PUBLIC)
     fwrite(path_join(tmp, "mid_private.das"), MID_PRIVATE)
     return Fixture(
@@ -81,18 +86,25 @@ def descriptor_verdict(out : string; mod : string) : string {
 
 def arms_expand(t : T?; fx : Fixture) {
     let useGroup = write_driver(fx, "use_group.das", "require [probe_group]", "alpha_value() + beta_value()")
-    t |> run("a cold start compiles both descriptors and the group brings both members in") @(t : T?) {
+    t |> run("a cold start compiles the descriptors and the group brings both members in, a member row's guard the build lacks left out") @(t : T?) {
         var out : string
         t |> success(report_child(t, "cold", run_driver(fx, useGroup, out), out, "PROBE 11"), "both members resolve")
         t |> equal("compiled (no manifest), manifest written (2 row(s))", descriptor_verdict(out, "grp_alpha"), "alpha's manifest carries its path row and its group row:\n{out}")
         let manifest = fread(path_join(fx.alphaDir, ".das_module.manifest"))
-        t |> success(find(manifest, "\ngrp\tprobe_group\tgrp_alpha/alpha\n") >= 0, "the group row is written as recorded:\n{manifest}")
+        t |> success(find(manifest, "\ngrp\tprobe_group\tgrp_alpha/alpha\tmath\n") >= 0, "the group row is written with its guard:\n{manifest}")
+        t |> success(find(out, "grp_delta/delta") < 0, "delta's row, guarded on a module the build lacks, adds nothing and resolves nothing:\n{out}")
     }
     t |> run("a warm start replays the group rows and the group still brings both members in") @(t : T?) {
         var out : string
         t |> success(report_child(t, "warm", run_driver(fx, useGroup, out), out, "PROBE 11"), "both members resolve from the replayed rows")
         t |> equal("replayed 2 row(s)", descriptor_verdict(out, "grp_alpha"), "alpha's descriptor replays:\n{out}")
         t |> equal("replayed 2 row(s)", descriptor_verdict(out, "grp_beta"), "beta's descriptor replays:\n{out}")
+        t |> equal("replayed 1 row(s)", descriptor_verdict(out, "grp_delta"), "delta's guarded row replays and stays out:\n{out}")
+    }
+    t |> run("`require[group]` with no space is the same require") @(t : T?) {
+        var out : string
+        let script = write_driver(fx, "use_nospace.das", "require[probe_group]", "alpha_value() + beta_value()")
+        t |> success(report_child(t, "no space", run_driver(fx, script, out), out, "PROBE 11"), "the collector and the parser read the spelling alike")
     }
     t |> run("a guard the build lacks drops the group; a guard the build has takes it") @(t : T?) {
         var out : string

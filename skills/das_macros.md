@@ -68,8 +68,9 @@ Two shapes replace the per-contributor guard line. **A `require [group]`** in A 
 expands to every module registered under the name; a contributor joins from its `.das_module`
 descriptor (`register_module_group("group", "pkg/registration")`) and A's source never changes
 (`skills/dynamic_modules.md`). **`daslib/cross_context`** goes the other way, after the walk: from a
-macro, a simulate macro or a running script, `require_module_now("pkg/mod")` compiles a `shared`
-module and its prerequisites into the process (or answers the one there), `macro_context_of` gives
+macro, a simulate macro or an `[init]` (a running script has no compile for the module to join, and
+panics), `require_module_now("pkg/mod")` compiles a `shared` module, named by its file, and its
+prerequisites into the process (or answers the one there), `macro_context_of` gives
 its macro context, and `call_in_context(ctx, "fn", args..., result)` calls an `[export]`ed function
 there by name with the result through a pointer. The module is not a dependency - its symbols and
 macros stay out of the caller - which is the point when the callee is expensive to bring up and

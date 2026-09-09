@@ -34,10 +34,10 @@
   compiles, and a decision the two make differently is a require the parse takes with no module
   behind it.
 
-- **A diff that moves the `freeLateModuleCaches()` call in `Module::Shutdown`
-  (`ast_module.cpp`) keeps it below the loop that deletes the modules, in the same change.** A
-  served module's line references point at `FileInfo` objects those caches own, so a free above
-  the loop leaves every such reference dangling while the modules are still being destroyed.
+- **A diff that adds a field `requireModuleNow` (`ast_parse.cpp`) rebinds on the environment
+  adds it to `LateRequireEnvScope`, in the same change.** The late walk runs mid-parse of
+  another module, and a field restored by a plain statement after the walk is not restored by
+  an unwind through it.
 
 - **Removing the `setDeferredModuleLoader` call from `require_dynamic_modules`
   (`dyn_modules.cpp`) is a defect.** A descriptor compiled during the scan can require a module

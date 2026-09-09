@@ -36,11 +36,7 @@ def initialize(project_path : string) {
         // dasLLVM; the 2-arg form skips silently when the .shared_module was never built, and
         // that silence is what `require ?llvm` reads as "this build has no LLVM"
         register_dynamic_module("{project_path}/dasModuleLLVM.shared_module", "Module_LLVM")
-        // the artifact's presence, not the load's answer: a load deferred behind a sibling
-        // library also answers null, and the group rows must not depend on load order
-        if (fexist("{project_path}/dasModuleLLVM.shared_module")) {
-            register_module_group("tune_framework", "llvm/daslib/llvm_tune")
-            register_module_group("llvm_code_annotation", "llvm/daslib/llvm_code")
-        }
     }
+    // guarded on the witness, so the member expands exactly where `require ?llvm` would take it
+    register_module_group("tune_framework", "llvm/daslib/llvm_tune", "llvm")
 }

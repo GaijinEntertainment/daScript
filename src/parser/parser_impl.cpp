@@ -1223,15 +1223,18 @@ namespace das {
     }
 
     // src/ast/ARCHITECTURE.md sec.2
+    static bool ast_requireGuardAvailable ( yyscan_t scanner, const string & guard ) {
+        if ( guard.empty() ) return true;
+        if ( guard.find('/') != string::npos ) {
+            auto ginfo = yyextra->g_Access->getModuleInfo(guard, yyextra->g_FileAccessStack.back()->name);
+            return !ginfo.fileName.empty() && yyextra->g_Access->getFileInfo(ginfo.fileName) != nullptr;
+        }
+        return guardModuleAvailable(guard);
+    }
+
     static bool ast_requireGuardAvailable ( yyscan_t scanner, string * guard ) {
         if ( !guard ) return true;
-        bool guardAvailable;
-        if ( guard->find('/') != string::npos ) {
-            auto ginfo = yyextra->g_Access->getModuleInfo(*guard, yyextra->g_FileAccessStack.back()->name);
-            guardAvailable = !ginfo.fileName.empty() && yyextra->g_Access->getFileInfo(ginfo.fileName) != nullptr;
-        } else {
-            guardAvailable = guardModuleAvailable(*guard);
-        }
+        bool guardAvailable = ast_requireGuardAvailable(scanner, *guard);
         delete guard;
         return guardAvailable;
     }
@@ -1250,7 +1253,8 @@ namespace das {
     void ast_requireModuleGroup ( yyscan_t scanner, string * group, bool pub, const LineInfo & atName, string * guard ) {
         if ( ast_requireGuardAvailable(scanner, guard) ) {
             for ( const auto & member : getModuleGroupMembers(*group) ) {
-                ast_requireOneModule(scanner, member, nullptr, pub, atName);
+                if ( !ast_requireGuardAvailable(scanner, member.guard) ) continue;
+                ast_requireOneModule(scanner, member.member, nullptr, pub, atName);
             }
         }
         delete group;

@@ -8,5 +8,7 @@ def initialize(project_path : string) {
     }
     register_native_path("pugixml", "PUGIXML_boost", "{project_path}/daslib/PUGIXML_boost.das")
     register_native_path("pugixml", "linq_fold_xml", "{project_path}/daslib/linq_fold_xml.das")
-    register_module_group("linq_fold_source", "pugixml/linq_fold_xml")
+    // guarded on the C++ module: the das files sit in every checkout, the module only in a
+    // build configured with it, and linq_fold requires every member
+    register_module_group("linq_fold_source", "pugixml/linq_fold_xml", "pugixml")
 }

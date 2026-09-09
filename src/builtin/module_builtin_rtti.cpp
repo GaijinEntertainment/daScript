@@ -1257,9 +1257,20 @@ namespace das {
         return Module::require(name) != nullptr || is_dynamic_module_deferred(name);
     }
 
+    // a member's guard answers as the require's would (src/ast/ARCHITECTURE.md sec.2)
+    static bool moduleGroupMemberAvailable ( const ModuleGroupMember & m ) {
+        if ( m.guard.empty() ) return true;
+        if ( m.guard.find('/') == string::npos ) return guardModuleAvailable(m.guard);
+        auto program = daScriptEnvironment::getBound()->g_Program;
+        if ( !program || !program->access ) return false;
+        auto ginfo = program->access->getModuleInfo(m.guard, "");
+        return !ginfo.fileName.empty() && program->access->getFileInfo(ginfo.fileName) != nullptr;
+    }
+
     void rtti_module_group_for_each_member ( const char * group, const TBlock<void,const char *> & block, Context * context, LineInfoArg * at ) {
         for ( const auto & member : getModuleGroupMembers(group ? group : "") ) {
-            vec4f args[1] = { cast<const char *>::from(member.c_str()) };
+            if ( !moduleGroupMemberAvailable(member) ) continue;
+            vec4f args[1] = { cast<const char *>::from(member.member.c_str()) };
             context->invoke(block, args, nullptr, at);
         }
     }

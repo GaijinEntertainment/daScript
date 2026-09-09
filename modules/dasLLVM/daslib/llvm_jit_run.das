@@ -35,7 +35,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x79cfc349af5aca98ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xe58b625aa8ef06e0ul
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -563,7 +563,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             let dll_changed = !(missing |> empty() && disabling |> empty())
             recompile_prog = dll_changed
             if (recompile_prog) {
-                g_dynamic_lib_handle.reset();
+                g_dynamic_lib_handle.reset()
                 to_log(LOG_INFO, "LLVM JIT: DLL cache miss, codegen for {output_path}.dll\n")
             } else {
                 to_log(LOG_INFO, "LLVM JIT: DLL cache hit {output_path}.dll\n")

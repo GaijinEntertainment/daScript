@@ -729,7 +729,7 @@ src/ast/ast_lint.cpp,392,cant_be_null,global variable of type '<var>' can't be i
 src/ast/ast_lint.cpp,397,invalid_variable_type,global variable '<var>' is too big,LintVisitor::preVisitGlobalLet,primary,exceeds | global,exceeds_global,
 src/ast/ast_lint.cpp,417,variable_not_found,global variable initialization loop,LintVisitor::preVisitGlobalLetInit,recategorize,recursion | global | loop,recursion_global_loop,"recategorize: variable_not_found is wrong; this is initialization-recursion"
 src/ast/ast_lint.cpp,425,no_init,[init] is disabled in the options or CodeOfPolicies,LintVisitor::visitGlobalLetInit,primary,cant | global,cant_global,
-src/ast/ast_lint.cpp,437,variable_not_found,global variable <var> is initialized after <var> (<var>),LintVisitor::preVisit(ExprVar*),recategorize,invalid | global,invalid_global,"recategorize: variable_not_found is wrong; this is initialization-order"
+src/ast/ast_lint.cpp,437,variable_not_found,global variable <var> is initialized after <var>,LintVisitor::preVisit(ExprVar*),recategorize,invalid | global,invalid_global,"recategorize: variable_not_found is wrong; this is initialization-order"
 src/ast/ast_lint.cpp,451,invalid_name,invalid variable name '<var>',LintVisitor::preVisit(ExprFor*),primary,invalid | variable | name,invalid_variable_name,
 src/ast/ast_lint.cpp,459,cant_be_null,can't delete <var> it will create null pointer,LintVisitor::preVisit(ExprDelete*),primary,cant | expression,cant_expression,
 src/ast/ast_lint.cpp,470,invalid_name,invalid variable name <var>,LintVisitor::preVisit(ExprLet*),primary,invalid | variable | name,invalid_variable_name,

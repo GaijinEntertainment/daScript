@@ -1255,36 +1255,42 @@ namespace das {
         return structure->aliases.find(aliasName);
     }
 
-    bool ast_is_function_used ( const Program * program, const Function * fn ) {
-        return program && fn && program->isUsed(fn);
+    // a null program is a holder nobody filled, never an answer (src/ast/ARCHITECTURE.md sec.4)
+    static const Program * symbolStateProgram ( const Program * program, const char * what, Context * context, LineInfoArg * at ) {
+        if ( !program ) context->throw_error_at(at, "%s: null program", what);
+        return program;
     }
 
-    bool ast_is_variable_used ( const Program * program, const Variable * var ) {
-        return program && var && program->isUsed(var);
+    bool ast_is_function_used ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return fn && symbolStateProgram(program, "is_used", context, at)->isUsed(fn);
     }
 
-    int32_t ast_function_index ( const Program * program, const Function * fn ) {
-        return program && fn ? program->indexOf(fn) : -1;
+    bool ast_is_variable_used ( const Program * program, const Variable * var, Context * context, LineInfoArg * at ) {
+        return var && symbolStateProgram(program, "is_used", context, at)->isUsed(var);
     }
 
-    int32_t ast_variable_index ( const Program * program, const Variable * var ) {
-        return program && var ? program->indexOf(var) : -1;
+    int32_t ast_function_index ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return fn ? symbolStateProgram(program, "function_index", context, at)->indexOf(fn) : -1;
     }
 
-    bool ast_is_function_used_sp ( smart_ptr_raw<Program> program, const Function * fn ) {
-        return ast_is_function_used(program.get(), fn);
+    int32_t ast_variable_index ( const Program * program, const Variable * var, Context * context, LineInfoArg * at ) {
+        return var ? symbolStateProgram(program, "variable_index", context, at)->indexOf(var) : -1;
     }
 
-    bool ast_is_variable_used_sp ( smart_ptr_raw<Program> program, const Variable * var ) {
-        return ast_is_variable_used(program.get(), var);
+    bool ast_is_function_used_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return ast_is_function_used(program.get(), fn, context, at);
     }
 
-    int32_t ast_function_index_sp ( smart_ptr_raw<Program> program, const Function * fn ) {
-        return ast_function_index(program.get(), fn);
+    bool ast_is_variable_used_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at ) {
+        return ast_is_variable_used(program.get(), var, context, at);
     }
 
-    int32_t ast_variable_index_sp ( smart_ptr_raw<Program> program, const Variable * var ) {
-        return ast_variable_index(program.get(), var);
+    int32_t ast_function_index_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
+        return ast_function_index(program.get(), fn, context, at);
+    }
+
+    int32_t ast_variable_index_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at ) {
+        return ast_variable_index(program.get(), var, context, at);
     }
 
     Function * findCompilingFunctionByMangledNameHash(char * module_name, uint64_t mnh, Context * context, LineInfoArg * at) {
@@ -1426,9 +1432,11 @@ namespace das {
     void rtti_builtin_require_module_now ( char * name, smart_ptr<FileAccess> access, const CodeOfPolicies & cop,
             const TBlock<void,Module *,const string> & block, Context * context, LineInfoArg * at ) {
         if ( !name || !name[0] ) context->throw_error_at(at, "require_module_now: empty module name");
-#if !DAS_NO_FILEIO
-        if ( !access ) access = ::get_file_access((char *)"");
-#endif
+        auto program = daScriptEnvironment::getBound()->g_Program.get();  // raw: throw_error_at does not unwind a smart_ptr local
+        if ( !program || !(program->isCompiling || program->isSimulating) ) {
+            context->throw_error_at(at, "require_module_now: no program is compiling - a require after the walk is issued from a macro, a simulate macro or an [init], not from a running script");
+        }
+        if ( !access ) access = program->access;
         if ( !access ) context->throw_error_at(at, "require_module_now: no file access");
         TextWriter issues;
         Module * mod = requireModuleNow(name, access, issues, cop);
@@ -1448,7 +1456,6 @@ namespace das {
         if ( !mod ) context->throw_error_at(at, "find_macro_context: null module");
         auto mctx = mod->macroContext.get();
         if ( !mctx ) context->throw_error_at(at, "find_macro_context: module '%s' has no macro context", mod->name.c_str());
-        if ( !mctx->contextMutex ) mctx->contextMutex = new recursive_mutex;
         return *mctx;
     }
 
@@ -2045,28 +2052,28 @@ namespace das {
                 ->args({"moduleName","mangledNameHash","context","at"});
         addExtern<DAS_BIND_FUN(ast_is_function_used)>(*this, lib,  "is_used",
             SideEffects::accessExternal, "ast_is_function_used")
-                ->args({"program","function"});
+                ->args({"program","function","context","at"});
         addExtern<DAS_BIND_FUN(ast_is_variable_used)>(*this, lib,  "is_used",
             SideEffects::accessExternal, "ast_is_variable_used")
-                ->args({"program","variable"});
+                ->args({"program","variable","context","at"});
         addExtern<DAS_BIND_FUN(ast_function_index)>(*this, lib,  "function_index",
             SideEffects::accessExternal, "ast_function_index")
-                ->args({"program","function"});
+                ->args({"program","function","context","at"});
         addExtern<DAS_BIND_FUN(ast_variable_index)>(*this, lib,  "variable_index",
             SideEffects::accessExternal, "ast_variable_index")
-                ->args({"program","variable"});
+                ->args({"program","variable","context","at"});
         addExtern<DAS_BIND_FUN(ast_is_function_used_sp)>(*this, lib,  "is_used",
             SideEffects::accessExternal, "ast_is_function_used_sp")
-                ->args({"program","function"});
+                ->args({"program","function","context","at"});
         addExtern<DAS_BIND_FUN(ast_is_variable_used_sp)>(*this, lib,  "is_used",
             SideEffects::accessExternal, "ast_is_variable_used_sp")
-                ->args({"program","variable"});
+                ->args({"program","variable","context","at"});
         addExtern<DAS_BIND_FUN(ast_function_index_sp)>(*this, lib,  "function_index",
             SideEffects::accessExternal, "ast_function_index_sp")
-                ->args({"program","function"});
+                ->args({"program","function","context","at"});
         addExtern<DAS_BIND_FUN(ast_variable_index_sp)>(*this, lib,  "variable_index",
             SideEffects::accessExternal, "ast_variable_index_sp")
-                ->args({"program","variable"});
+                ->args({"program","variable","context","at"});
         addExtern<DAS_BIND_FUN(isCppKeyword)>(*this, lib, "is_cpp_keyword",
             SideEffects::none, "isCppKeyword")
                 ->args({"str"});

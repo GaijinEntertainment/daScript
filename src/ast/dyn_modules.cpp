@@ -90,7 +90,7 @@ static Result run_descriptor(smart_ptr<FileAccess> fa, const string & mod_filena
 }
 
 static constexpr const char *MANIFEST_SUFFIX = ".das_module.manifest";   // ARCHITECTURE.md sec.2
-static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t3";
+static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t4";
 
 static bool g_ignore_manifests = false;
 
@@ -273,10 +273,10 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
             row.a = fields[1]; row.b = fields[2]; row.c = fields[4];
             res.rows.push_back(das::move(row));
         } else if ( kind == "grp" ) {
-            if ( fields.size() != 3 ) return damaged("grp field count");
+            if ( fields.size() != 4 ) return damaged("grp field count");
             DynModuleManifestRow row;
             row.group = true;
-            row.a = fields[1]; row.b = fields[2];
+            row.a = fields[1]; row.b = fields[2]; row.c = fields[3];
             res.rows.push_back(das::move(row));
         } else if ( kind == "no_manifest" ) {
             if ( fields.size() != 1 ) return damaged("no_manifest field count");
@@ -327,7 +327,7 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
             if ( row.dynamic ) {
                 text += "dm\t" + row.a + "\t" + row.b + "\t" + to_string(row.on_error) + "\t" + row.c + "\n";
             } else if ( row.group ) {
-                text += "grp\t" + row.a + "\t" + row.b + "\n";
+                text += "grp\t" + row.a + "\t" + row.b + "\t" + row.c + "\n";
             } else {
                 text += "np\t" + row.a + "\t" + row.b + "\t" + row.c + "\n";
             }
@@ -388,7 +388,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
         size_t deferred = 0;
         for ( auto & row : mr.rows ) {
             if ( row.group ) {
-                replay_module_group(row.a.c_str(), row.b.c_str());
+                replay_module_group(row.a.c_str(), row.b.c_str(), row.c.c_str());
             } else if ( !row.dynamic ) {
                 replay_native_path(row.a.c_str(), row.b.c_str(), row.c.c_str());
             } else if ( !row.c.empty() ) {

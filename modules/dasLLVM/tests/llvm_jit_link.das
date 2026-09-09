@@ -59,7 +59,8 @@ def test_jit_link(t : T?) {
         t |> success(find(out, "PROBE 285") >= 0, "the fixture answered: {tail(out)}")
         t |> success(find(out, "LLVM JIT: DLL cache miss") >= 0 && find(out, "(codegen") >= 0, "the cold run is a miss that emits: {tail(out)}")
         t |> success(find(out, "EMITTER true") >= 0, "the emitter module joined the process for the miss: {tail(out)}")
-        t |> equal(1, count_prefix(tmp, "late~llvm_macro-"), "the emitter's late walk kept its cache beside the explicit module cache")
+        t |> equal(0, count_prefix(tmp, "late~"), "the emitter's modules are records of the script's own module cache, not a cache of their own")
+        t |> success(find(out, "LLVM JIT time: emitter load ") >= 0, "the emitter's load prints its time: {tail(out)}")
     }
     t |> run("a warm run binds the pinned DLL from the link module alone") @(t : T?) {
         var out = ""
@@ -83,6 +84,15 @@ def test_jit_link(t : T?) {
         t |> equal(0, rc, "the fixture runs: {tail(out)}")
         t |> success(find(out, "PROBE 385") >= 0, "the new body answered: {tail(out)}")
         t |> success(find(out, "LLVM JIT: DLL cache miss") >= 0 && find(out, "EMITTER true") >= 0, "the stale DLL is a miss that emits: {tail(out)}")
+    }
+    t |> run("a pinned DLL another program wrote holds none of this one's functions, and that is a miss") @(t : T?) {
+        let other = path_join(tmp, "use_other.das")
+        fwrite(other, "options gen2\nrequire daslib/rtti\n\n[export]\ndef main \{\n    var p = 1\n    for (i in range(12)) \{\n        p = (p * 3) % 1000\n    \}\n    print(\"OTHER \{p\}\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n")
+        var out = ""
+        let rc = run_and_capture(jit_argv(other, path_join(tmp, "mc_other.dascache"), pinned, false), out, 300.0)
+        t |> equal(0, rc, "the other program runs: {tail(out)}")
+        t |> success(find(out, "OTHER ") >= 0, "the other program answered: {tail(out)}")
+        t |> success(find(out, "LLVM JIT: DLL cache miss") >= 0 && find(out, "EMITTER true") >= 0 && find(out, "0 functions in") < 0, "the DLL of another program is a miss that emits, not a hit binding nothing: {tail(out)}")
     }
     var err : string
     rmdir_rec(tmp, err)

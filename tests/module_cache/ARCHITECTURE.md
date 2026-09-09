@@ -57,9 +57,11 @@ this document states what the folder is and why its tests take the shape they do
   `.shared_module` - has nothing to observe and the test says so and returns.
 - `test_module_groups.das` - `require [group]` on a project root the test writes: two pure-das
   modules whose descriptors register themselves under one group, a third whose descriptor
-  registers a member no require path serves. A cold start writes each descriptor's group row
-  beside its path row and the group brings both members in; a warm start replays the rows; a
-  guard the build lacks drops the group and one it has takes it; a group nothing registered
+  registers a member no require path serves, and a fourth joins under a guard the build lacks
+  with no file behind it. A cold start writes each descriptor's group row, its guard with it,
+  beside its path row and the group brings both members in, the guarded-out row adding and
+  resolving nothing; a warm start replays the rows; `require[group]` with no space is the same
+  require; a guard the build lacks drops the group and one it has takes it; a group nothing registered
   adds nothing; `public` on the group re-exports every member and its absence keeps them
   private; the unserved member fails as a hand-written require would; `call_module_group`
   (`daslib/module_group`) calls both members' entry with its argument, sorted by member path,
@@ -69,14 +71,17 @@ this document states what the folder is and why its tests take the shape they do
   the cache off at that requirer (`require set changed`) while the unchanged tree and the
   rewritten cache serve.
 - `test_require_module_now.das` - a `require` issued after the walk (`daslib/cross_context`),
-  in the test's own process for the API and in a child for the cache: a `shared` fixture with a
+  from the test module's own `[init]` for the API - a require after the walk is a compile's, and
+  a test body runs after the compile - and in a child for the cache: a `shared` fixture with a
   macro context compiles at the call and the same module answers after; `macro_context_of` and
   `call_in_context` reach an `[export]`ed function there by name, the result through a pointer;
-  a file nothing serves, a module that is not `shared` and one that does not compile answer
-  null with the reason in the issues; and a child running under an explicit `-module-cache`
-  keeps the late walk's cache beside that file (`late~<module>-<hash>.dascache`), serves the
-  fixture from it on the second run, and compiles it under `-no-module-cache`, read off the
-  fixture's own per-module compile-time lines.
+  a file nothing serves, a module that is not `shared`, one that does not compile and one whose
+  declared name is not its file's answer null with the reason in the issues; a child whose
+  `[init]` requires the fixture under an explicit `-module-cache` writes the fixture's record
+  into that one file (no `late~` cache beside it), serves it from there on the second run
+  without rewriting, and compiles it under `-no-module-cache`, read off the fixture's own
+  per-module compile-time lines; and a child calling the wrapper from `main` fails with the
+  no-compile reason.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`, the `mc_late_*` trio a late require targets: a shared module with a
   macro context, one that is not shared, one that does not compile); a case needing a
@@ -91,8 +96,8 @@ this document states what the folder is and why its tests take the shape they do
 
 ## 2. Why every case is a spawned process
 
-The host installs the cache before `compileDaScript` and finishes it after; the default path,
-the quiet flag and the verdict are host decisions (`utils/daslang/main.cpp`). A test compiling
+The host installs the cache before `compileDaScript` and finishes it after `simulate`; the
+default path, the quiet flag and the verdict are host decisions (`utils/daslang/main.cpp`). A test compiling
 in-process sees none of them. Each case therefore spawns the daslang binary dastest itself runs
 under (`argv[0]`): the default-path case on scripts it writes to a temp directory, asserting on
 the child's stdout and on the files under `.jitted_scripts/module_cache/` in the cwd; the

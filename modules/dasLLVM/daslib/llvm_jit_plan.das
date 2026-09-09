@@ -421,6 +421,7 @@ def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPt
 //! the DLL lacks was dropped by the emitter's content gate and stays interpreted; a candidate
 //! held under another hash, or a `[no_jit]` function the DLL holds, is a miss
 def public probe_dll(var candidates : array<FunctionPtr>; disabled : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
+    verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
     var bound : array<FunctionPtr>
     var mismatched = 0
     if (dll.handle != null) {
@@ -495,9 +496,10 @@ class public DllExternResolver : AstVisitor {
         errors |> push(msg)
     }
 
-    def private set_slot(name : DllName; ptr : void?; what : string) {
+    //! `what` names the slot only on failure - the message is a `describe` the success path never pays for
+    def private set_slot(name : DllName; ptr : void?; what : block<() : string>) {
         if (dll.set_glob_address(name, ptr) && ptr == null) {
-            fail("missing {what}")
+            fail("missing {invoke(what)}")
         }
     }
 
@@ -510,13 +512,17 @@ class public DllExternResolver : AstVisitor {
                 fail("missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {get_mangled_name(expr.func)} at {describe(expr.at)}")
             }
         } elif (!expr.func.moreFlags.requestJit) {
-            set_slot(slot, interpreter_function_addr(jit_context, expr.func), "function pointer for {expr.func.name} at {describe(expr.at)}")
+            set_slot(slot, interpreter_function_addr(jit_context, expr.func)) {
+                return "function pointer for {expr.func.name} at {describe(expr.at)}"
+            }
         }
     }
 
     def override preVisitExprNew(expr : ExprNew?) {
         if (expr.typeexpr.isHandle) {
-            set_slot(uid.get_new(expr.typeexpr), get_jit_new(expr.typeexpr.annotation), "new`handle function pointer for {describe(expr.typeexpr)}")
+            set_slot(uid.get_new(expr.typeexpr), get_jit_new(expr.typeexpr.annotation)) {
+                return "new`handle function pointer for {describe(expr.typeexpr)}"
+            }
         } elif (expr.typeexpr.baseType == Type.tFixedArray) {
             // the handle gate lives on the chain element (the head is tFixedArray);
             // borrow-walk — this pass runs outside ast_gc_guard, clones would leak
@@ -525,7 +531,9 @@ class public DllExternResolver : AstVisitor {
                 elemT = elemT.firstType
             }
             if (elemT.baseType == Type.tHandle) {
-                set_slot(uid.get_new(expr.typeexpr), get_jit_new(elemT.annotation), "new`handle function pointer for {describe(expr.typeexpr)}")
+                set_slot(uid.get_new(expr.typeexpr), get_jit_new(elemT.annotation)) {
+                    return "new`handle function pointer for {describe(expr.typeexpr)}"
+                }
             } elif (expr.initializer) {
                 make_call(expr)
             }
@@ -554,31 +562,41 @@ class public DllExternResolver : AstVisitor {
         assume subT = expr.subexpr._type
         if (subT.isPointer && subT.firstType.isHandle) {
             assume firstT = subT.firstType
-            set_slot(uid.get_delete_type(firstT), get_jit_delete(firstT.annotation), "delete`handle function pointer for {describe(firstT)}")
+            set_slot(uid.get_delete_type(firstT), get_jit_delete(firstT.annotation)) {
+                return "delete`handle function pointer for {describe(firstT)}"
+            }
         }
     }
 
     def override preVisitExprClone(expr : ExprClone?) : void {
         assume leftT = expr.left._type
         if (leftT.isHandle) {
-            set_slot(uid.get_clone_type(leftT), get_jit_clone(leftT.annotation), "clone`handle function pointer for {describe(leftT)}")
+            set_slot(uid.get_clone_type(leftT), get_jit_clone(leftT.annotation)) {
+                return "clone`handle function pointer for {describe(leftT)}"
+            }
         }
     }
 
     def override preVisitExprAddr(expr : ExprAddr?) {
-        set_slot(uid.get_addr(expr), interpreter_function_addr(jit_context, expr.func), "function pointer for {expr.func.name}")
+        set_slot(uid.get_addr(expr), interpreter_function_addr(jit_context, expr.func)) {
+            return "function pointer for {expr.func.name}"
+        }
     }
 
     def override preVisitExprMakeStructIndex(expr : ExprMakeStruct?; index : int; last : bool) : void {
         if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
-            set_slot(uid.get_ctor(expr), interpreter_function_addr(jit_context, expr.constructor), "function pointer for {expr.constructor.name}")
+            set_slot(uid.get_ctor(expr), interpreter_function_addr(jit_context, expr.constructor)) {
+                return "function pointer for {expr.constructor.name}"
+            }
         }
     }
 
     def override preVisitExprAscend(expr : ExprAscend?) : void {
         if (expr.subexpr._type.isHandle) {
             assume firstT = expr.subexpr._type
-            set_slot(uid.get_ascend_new(expr), get_jit_new(firstT.annotation), "new`handle function pointer for {describe(firstT)}")
+            set_slot(uid.get_ascend_new(expr), get_jit_new(firstT.annotation)) {
+                return "new`handle function pointer for {describe(firstT)}"
+            }
         }
     }
 

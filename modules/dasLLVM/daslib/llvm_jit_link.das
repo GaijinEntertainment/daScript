@@ -27,14 +27,27 @@ class JIT_LLVM : AstSimulateMacro {
     }
 }
 
-def private run_jit_in_emitter(prog : Program?; var ctx : Context?) : bool {
+//! the emitter's load is JIT work, so it prints its own `LLVM JIT time:` line
+def private run_jit_in_emitter(prog : Program?; var ctx : Context?; log_jit_time : bool) : bool {
+    let load_tm = ref_time_ticks()
     let mctx = macro_context_of(EMITTER_MODULE)
     if (mctx == null) {
         panic("LLVM JIT: the emitter module {EMITTER_MODULE} did not load")
     }
+    if (log_jit_time) {
+        to_log(LOG_INFO, "LLVM JIT time: emitter load {jit_sec(get_time_usec(load_tm))}\n")
+    }
     var ok = false
     call_in_context(mctx, "run_jit_codegen", prog, ctx, ok)
     return ok
+}
+
+def private drop_probe(var dll : DLLHandle?; var uids : UidNodes?) {
+    dll.reset()
+    unsafe {
+        delete dll
+        delete uids
+    }
 }
 
 //! the hit path: plan, probe the DLL the plan names, bind what it holds; anything else is the
@@ -48,33 +61,39 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     var phase_tm = ref_time_ticks()
     var plan <- make_jit_plan(prog, ctx, true)
     let t_hash = get_time_usec(phase_tm)
-    if (!plan.use_dll || empty(plan.candidates)) {
-        return run_jit_in_emitter(prog, ctx)
+    if (!plan.use_dll) {
+        return run_jit_in_emitter(prog, ctx, plan.log_jit_time)
+    }
+    if (empty(plan.candidates)) {
+        to_log(LOG_INFO, "LLVM JIT: 0 functions to jit ({length(plan.disabled)} marked no_jit) - the WHOLE program runs interpreted\n")
+        return true
     }
     phase_tm = ref_time_ticks()
     var uids = create_uid_nodes(prog, plan.candidates, false)
     var dll = get_dll_by_path(plan.output_path)
     var probe <- probe_dll(plan.candidates, plan.disabled, dll, uids)
     let t_probe = get_time_usec(phase_tm)
-    if (dll.handle == null || probe.mismatched != 0) {
-        dll.reset()
-        unsafe {
-            delete dll
-            delete uids
-        }
-        to_log(LOG_INFO, "LLVM JIT: DLL cache miss, codegen for {plan.output_path}.dll\n")
-        return run_jit_in_emitter(prog, ctx)
+    // a DLL holding none of the candidates is not a cache of this program: a pinned
+    // `-output` path another program wrote
+    if (dll.handle == null || probe.mismatched != 0 || empty(probe.bound)) {
+        drop_probe(dll, uids)
+        return run_jit_in_emitter(prog, ctx, plan.log_jit_time)
     }
-    to_log(LOG_INFO, "LLVM JIT: DLL cache hit {plan.output_path}.dll\n")
     phase_tm = ref_time_ticks()
     mark_jit_selection(prog, probe.bound)
     let errors <- resolve_dll_externs(dll, ctx, uids, probe.bound)
     if (!empty(errors)) {
+        // a process fact the DLL name does not fold - a builtin with no interop address here, a
+        // handled type's helper from a module this process lacks: the emitter's content gate
+        // decides again and rewrites the DLL, where a panic would repeat on every run
         for (e in errors) {
-            to_log(LOG_ERROR, "LLVM JIT: {e}\n")
+            to_log(LOG_WARNING, "LLVM JIT: {e}\n")
         }
-        panic("LLVM JIT: the cached {plan.output_path}.dll cannot be linked into this process - {length(errors)} extern(s) unresolved")
+        to_log(LOG_WARNING, "LLVM JIT: the cached {plan.output_path}.dll cannot be linked into this process - {length(errors)} extern(s) unresolved, codegen\n")
+        drop_probe(dll, uids)
+        return run_jit_in_emitter(prog, ctx, plan.log_jit_time)
     }
+    to_log(LOG_INFO, "LLVM JIT: DLL cache hit {plan.output_path}.dll\n")
     install_dll_functions(dll, ctx, uids, probe.bound)
     let t_install = get_time_usec(phase_tm)
     phase_tm = ref_time_ticks()
@@ -91,7 +110,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
 [no_jit]
 def private free_jit_engine_in_emitter(ee : void?; ctx : void?) {
     let emitter = get_module("llvm_macro")
-    if (emitter == null) {
+    if (emitter == null || !has_macro_context(emitter)) {
         panic("LLVM JIT: an in-memory engine exists but the emitter module is not in the process")
     }
     unsafe {

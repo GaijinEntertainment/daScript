@@ -233,7 +233,8 @@ static CompileResult compile_script(const string & fn) {
     }
     result.moduleCache.install(cachePath, cachePath, cacheQuiet);
     result.program = compileDaScript(fn, result.access, tout, *result.moduleGroup, policies);
-    {
+    // armed through simulate: a late require from a simulate macro or an [init] joins this stream
+    auto finishModuleCache = [&]() {
         auto cres = result.moduleCache.finish();
         if (!cacheQuiet) {
             switch (cres.verdict) {
@@ -258,13 +259,15 @@ static CompileResult compile_script(const string & fn) {
             if (cres.wrote) tout << "daslang-live: module cache refreshed (" << cres.wroteBytes << " bytes)\n";
         }
         if (cres.saveFailed) tout << "daslang-live: module cache write FAILED '" << cachePath << "'\n";
-    }
+    };
     if (!result.program) {
+        finishModuleCache();
         result.errors = "failed to compile " + fn;
         tout << "ERROR: " << result.errors << "\n";
         return result;
     }
     if (result.program->failed()) {
+        finishModuleCache();
         TextWriter tw;
         for (auto & err : result.program->errors) {
             auto report = reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
@@ -282,6 +285,7 @@ static CompileResult compile_script(const string & fn) {
     tout << "daslang-live: [startup] compile took " << int((get_time_sec() - t_compile) * 1000.0) << " ms\n";
     double t_simulate = get_time_sec();
     result.ctx = SimulateWithErrReport(result.program, tout);
+    finishModuleCache();
     tout << "daslang-live: [startup] simulate took " << int((get_time_sec() - t_simulate) * 1000.0) << " ms (incl. module [init]; HTTP server starts here)\n";
     // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
     {

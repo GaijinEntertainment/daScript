@@ -1398,7 +1398,9 @@ namespace das {
                 }
             }
         }
-        // allocate used variables and functions indices
+        // allocate used variables and functions indices - per pass, so -1 means this pass never saw it
+        functionIndices.clear();
+        variableIndices.clear();
         totalVariables = 0;
         totalFunctions = 0;
         auto log = options.getBoolOption("log_stack");

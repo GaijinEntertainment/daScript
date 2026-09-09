@@ -76,3 +76,35 @@ builtin hash, so the record never serves ("reparsing in place").
 Levers, unmeasured: a macro context that simulates lazily on the first macro call instead of
 at record read; a cheaper simulate for a context whose program did not change (the record could
 carry the simulated context's tables); a `[_macro]`-free module skipping the context entirely.
+
+## Serializer follow-ups from the require-group review (ledgered 2026-09-09)
+
+- **A changed record resumes instead of cutting.** `trySerializeProgramModule` cuts the stream
+  at a changed file ("file changed"), so every record after it - the emitter's ~40 modules a
+  JIT miss appended to the script's stream - parses from source on the run after an edit to
+  the script. The record header carries the payload size, so a changed file could be reparsed
+  in place and the rest served, as the corrupt-record resume already does; the reason it cuts
+  today is that a later module may depend on the changed one through a macro. A resume gated
+  on "no later record lists this file among its macro dependencies" keeps the emitter warm.
+- **`collectRequireNames` scans the source twice more per module** - the reader recomputes the
+  collector's answer for every record whose hash matched, the writer for every fresh parse -
+  and the reader's copy evaluates the guards (a deferred module load inside a cache read). The
+  walk already ran the collector over the same file; the answer could ride the `ModuleInfo`.
+- **`require_module_now` records ride the script's stream**, so a script that ever JIT-missed
+  carries the emitter's records (~34 MB) in its own cache under the default-directory LRU. One
+  emitter stream shared by every script would need a stream the environment can bind beside
+  the host's, which is the persistent-serializer shape a host installs, not the CLI's.
+- **The hit path binds `llvm/bindings/llvm_func`** (2320 `[extern]` lines, ~10 ms of the warm
+  0.08 s) for three host queries - triple, CPU name, CPU features - in `jit_env_salt`. Three
+  C++ binds in the `jit` module would drop the binding from the hit path.
+- **The extern resolver looks every operator and intrinsic node up in the DLL** - the lowered
+  ones answer "no such slot" after a mangled-name build and a `dlsym` miss - where the emitter's
+  visitor skipped them by `has_intrinsic` / `isExprOp2_Func` before any of that.
+- **The in-memory engine's finalizer runs through the emitter's macro context**
+  (`free_jit_engine_in_emitter`), so a host whose context outlives module shutdown reaches a
+  context that is gone; a C++ `free_jit_engine` in the `jit` module would not.
+- **`requestJit` is still a bit on the shared `Function`** (`mark_jit_selection`), the shape
+  the per-program tables removed for `used` and `index`; two programs JIT-ing in one process
+  re-stamp each other's answer between plan and resolve.
+- **`call_in_context` dispatches by bare name** (`pinvoke_named` takes the first `findFunction`
+  match), so two `[export]` overloads of one name in a macro context mis-dispatch silently.

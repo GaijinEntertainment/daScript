@@ -3642,11 +3642,13 @@ namespace das
         }
         thisModule->macroContext = get_context(macroStackSize);
         thisModule->macroContext->category = das::Bitfield(uint32_t(das::ContextCategory::macro_context));
+        thisModule->macroContext->contextMutex = new recursive_mutex;    // invoke_in_context locks its target (ARCHITECTURE.md sec.3)
         auto oldAot = policies.aot;
         auto oldHeap = policies.persistent_heap;
         policies.aot = false;
         policies.persistent_heap = policies.macro_context_persistent_heap;
         simulate(*thisModule->macroContext, logs);
+        thisModule->macroContext->thisProgram = nullptr;    // the context outlives this program (ARCHITECTURE.md sec.4)
         policies.aot = oldAot;
         policies.persistent_heap = oldHeap;
         isCompilingMacros = false;
@@ -3703,6 +3705,14 @@ namespace das
             updateKeepAliveFlags();
         }
         isSimulating = true;
+        // the simulate is this program's compile: its init script and its simulate macros run with it bound
+        auto bound_env = daScriptEnvironment::getBound();
+        struct RestoreBoundProgram {
+            daScriptEnvironment * env;
+            ProgramPtr program;
+            ~RestoreBoundProgram () { env->g_Program = program; }
+        } restoreBoundProgram { bound_env, bound_env->g_Program };
+        bound_env->g_Program = this;
         context.failed = true;
         context.verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         context.maxUnreservedSize = options.getUInt64Option("max_unreserved_size", policies.max_unreserved_size);
@@ -3741,12 +3751,13 @@ namespace das
                 pm->globals.foreach([&](auto pvar){
                     if (!isUsed(pvar))
                         return;
-                    if ( indexOf(pvar)<0 ) {
+                    auto index = indexOf(pvar);
+                    if ( index<0 ) {
                         error("Internal compiler errors. Simulating variable which is not used" + pvar->name,
                             "", "", LineInfo(), CompilationError::internal_variable);
                         return;
                     }
-                    auto & gvar = context.globalVariables[indexOf(pvar)];
+                    auto & gvar = context.globalVariables[index];
                     gvar.name = context.code->allocateName(pvar->name);
                     gvar.size = pvar->type->getSizeOf();
                     gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
@@ -3800,7 +3811,8 @@ namespace das
         if ( totalFunctions ) {
             for (auto & pm : library.modules) {
                 pm->functions.foreach([&](auto pfun){
-                    if (indexOf(pfun) < 0 || !isUsed(pfun) || pfun->isTemplate)
+                    auto index = indexOf(pfun);
+                    if (index < 0 || !isUsed(pfun) || pfun->isTemplate)
                         return;
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
@@ -3810,7 +3822,7 @@ namespace das
                     auto mangledName = pfun->getMangledName();
                     auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());
                     fnByMnh[MNH] = pfun;
-                    auto & gfun = context.functions[indexOf(pfun)];
+                    auto & gfun = context.functions[index];
                     gfun.name = context.code->allocateName(pfun->name);
                     gfun.mangledName = context.code->allocateName(mangledName);
                     gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
@@ -3822,7 +3834,7 @@ namespace das
                         // positions stamp each expression's sim node as it is built (see
                         // SimulateVisitor::setE), and the intervals feed the locals gate
                         // (see LocalVariableInfo::openPos)
-                        gfun.debugInfo->spaceId = frameSpaceId(indexOf(pfun));
+                        gfun.debugInfo->spaceId = frameSpaceId(index);
                         helper.stampFramePositions(pfun->body, gfun.debugInfo->spaceId);
                         helper.appendLocalVariables(gfun.debugInfo, pfun->body);
                         helper.appendGlobalVariables(gfun.debugInfo, pfun);
@@ -3923,9 +3935,10 @@ namespace das
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
-                if (indexOf(pfun) < 0 || !isUsed(pfun) || pfun->isTemplate)
+                auto index = indexOf(pfun);
+                if (index < 0 || !isUsed(pfun) || pfun->isTemplate)
                     return;
-                auto & gfun = context.functions[indexOf(pfun)];
+                auto & gfun = context.functions[index];
                 for ( const auto & an : pfun->annotations ) {
                     auto fna = static_cast<FunctionAnnotation*>(an->annotation);
                     if (!fna->simulate(&context, &gfun)) {
@@ -3933,7 +3946,7 @@ namespace das
                             LineInfo(), CompilationError::runtime_function_annotation);
                     }
                 }
-                indexToFunction[indexOf(pfun)] = pfun;
+                indexToFunction[index] = pfun;
             });
         }
         // verify code and string heaps
@@ -4063,16 +4076,11 @@ namespace das
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
 
-        isSimulating = false;
         context.thisHelper = &helper;   // note - we may need helper for the 'complete'
-        auto bound_env = daScriptEnvironment::getBound();
-        auto boundProgram = bound_env->g_Program;
-        bound_env->g_Program = this;   // node - we are calling macros
         library.foreach_in_order([&](Module * pm) -> bool {
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->preSimulate(this, &context) ) {
                     error("simulate macro " + pm->name + "::" + sm->name + " failed to preSimulate", "", "", LineInfo(), CompilationError::runtime_macro);
-                    bound_env->g_Program = boundProgram;
                     return false;
                 }
             }
@@ -4106,14 +4114,13 @@ namespace das
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->simulate(this, &context) ) {
                     error("simulate macro " + pm->name + "::" + sm->name + " failed to simulate", "", "", LineInfo(), CompilationError::runtime_macro);
-                    bound_env->g_Program = boundProgram;
                     return false;
                 }
             }
             return true;
         }, thisModule.get());
         context.thisHelper = nullptr;
-        bound_env->g_Program = boundProgram;
+        isSimulating = false;   // the simulate macros are the simulate's (is_compiling answers for them)
         // dispatch about new inited context
         context.announceCreation();
         if ( options.getBoolOption("log_debug_mem",false) ) {

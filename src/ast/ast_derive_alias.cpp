@@ -41,7 +41,7 @@ namespace das {
             mod->functions.foreach([&](const FunctionPtr & gfunc){
                 // not built-in, used, address taken, can potentially alias, compatible
                 if ( gfunc->isTemplate ) return;
-                if ( !gfunc->builtIn && program->isUsed(gfunc) && gfunc->addressTaken && !gfunc->aliasCMRES && isCompatibleFunction(gfunc, inv) ) {
+                if ( !gfunc->builtIn && gfunc->addressTaken && !gfunc->aliasCMRES && program->isUsed(gfunc) && isCompatibleFunction(gfunc, inv) ) {
                     appendIndVariables(gfunc, sources, accessed);
                 }
             });
@@ -69,7 +69,7 @@ namespace das {
             mod->functions.foreach([&](const FunctionPtr & gfunc){
                 // not built-in, used, address taken, can potentially alias, compatible
                 if ( gfunc->isTemplate ) return;
-                if ( !gfunc->builtIn && program->isUsed(gfunc) && gfunc->addressTaken && !gfunc->aliasCMRES && gfunc->lambda && isCompatibleLambdaFunction(gfunc, inv) ) {
+                if ( !gfunc->builtIn && gfunc->addressTaken && !gfunc->aliasCMRES && gfunc->lambda && program->isUsed(gfunc) && isCompatibleLambdaFunction(gfunc, inv) ) {
                     appendIndVariables(gfunc, sources, accessed);
                 }
             });

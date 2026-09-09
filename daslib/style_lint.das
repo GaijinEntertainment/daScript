@@ -2349,10 +2349,30 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st030_is_group_line(src : string) : bool {
-        let cut = find(src, "//")
-        let code = cut < 0 ? src : slice(src, 0, cut)
-        let req = find(code, "require")
-        return req >= 0 && find(code, "[", req) >= 0 && find(code, "]", req) >= 0
+        //! `require [group]` or `require ?guard [group]` - the bracket right after the keyword
+        //! and the optional guard, not one anywhere on the line
+        var group = false
+        peek_data(src) $(d) {
+            let req = find(d, "require")
+            if (req < 0) {
+                return
+            }
+            var i = req + length("require")
+            let n = length(d)
+            while (i < n && is_tab_or_space(int(d[i]))) {
+                i++
+            }
+            if (i < n && int(d[i]) == '?') {
+                while (i < n && !is_tab_or_space(int(d[i])) && int(d[i]) != '[') {
+                    i++
+                }
+                while (i < n && is_tab_or_space(int(d[i]))) {
+                    i++
+                }
+            }
+            group = i < n && int(d[i]) == '['
+        }
+        return group
     }
 
     def note_decl_span(var file_first_decl : table<string; uint>; fname : string; s : uint) : void {
