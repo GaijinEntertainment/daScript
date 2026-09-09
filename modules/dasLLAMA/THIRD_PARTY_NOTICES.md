@@ -34,9 +34,9 @@ derive from the Silero VAD project (https://github.com/snakers4/silero-vad), Cop
 
 ## Text-to-speech front end
 
-The TTS front end and the two TTS families reimplement, and pack data from, the following
+The TTS front end and the three TTS families reimplement, and pack data from, the following
 works. The packed files (`tts_g2p.bin` and its American-only twin `tts_g2p_en_us.bin`, `tts_postag.bin`, `kitten-nano.gguf`,
-`kitten-mini.gguf`, `kokoro-82m.gguf`, the `tts_oracle/` dumps) are built by the `harness/` scripts into the
+`kitten-mini.gguf`, `kokoro-82m.gguf`, `pocket-tts-<language>.gguf`, the `tts_oracle/` dumps) are built by the `harness/` scripts into the
 model store (`performance/build_tts_data.das`), each beside a license file naming these
 sources; nothing under this repository redistributes the data itself.
 
@@ -68,6 +68,17 @@ sources; nothing under this repository redistributes the data itself.
   architecture is StyleTTS2 (Yinghao Aaron Li et al., MIT License - see `LICENSE.STYLETTS2`; the
   kokoro package's decoder and iSTFTNet modules are adapted from it), shared with KittenTTS in
   `dasllama/dasllama_styletts2.das` over the block home.
+- **Pocket TTS** (https://github.com/kyutai-labs/pocket-tts), Kyutai, MIT License (the reference
+  implementation, reimplemented in `dasllama/dasllama_pocket.das`; no Kyutai source is included).
+  The `kyutai/pocket-tts` weights, per language, and their unigram SentencePiece tokenizers are
+  Creative Commons Attribution 4.0 International - see `LICENSE.CC-BY-4.0` - converted into
+  `pocket-tts-<language>.gguf` by `harness/convert_pocket.py` at the revisions the package's
+  configs pin; downloading them required accepting Kyutai's acceptable-use terms (no voice
+  impersonation or cloning without explicit and lawful consent), which the model card of every
+  converted file repeats. The bundled voice clips come from `kyutai/tts-voices`: the `voice-zero`
+  and `voice-donations` folders are CC0, the `vctk` clips (VCTK, CSTR, University of Edinburgh)
+  and the `alba-mackenna` clip CC BY 4.0; the package's two clips from CC BY-NC folders are
+  not shipped. Each `.LICENSE` sidecar lists its file's clips and their sources.
 - **spaCy** (https://github.com/explosion/spaCy), Copyright ExplosionAI GmbH, MIT License - see
   `LICENSE.SPACY`. Its English tokenizer exception table is exported into `tts_postag.bin`, and
   its `en_core_web_sm` tagger provides the silver part-of-speech tags the tagger trains on.

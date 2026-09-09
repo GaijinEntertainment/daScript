@@ -151,6 +151,23 @@ MIT, weights CC BY 4.0, `LICENSE.CC-BY-4.0` vendored, the gate's acceptable-use 
 on the model card), `tests/CLAUDE.md` rows, `model_specs.das` rows + `serve_tts_set`, the HF
 repo `borisbat/dasllama-tts` gains the Pocket files with the card's licence table extended.
 
+## Receipts (2026-09-09, M1 Max, f32 lane, `tests/test_tts_pocket.das`)
+
+Reference arm (pip pocket-tts 3.1.0, alba, the 200-sentence fixture through `harness/tts_rig.py`):
+WER 5.00 / UTMOS 4.393 / RTF 0.210 (the package pins torch to one thread); by category harvard
+0.86, ljspeech 5.66, heteronym 0.25, oov 10.89, numeric 10.42 - the reference normalizes no
+numbers. Parity against `harness/pocket_oracle.py` (24 cases, alba and caro_davy): codec decoder
+3e-6 abs on a 0.6 peak, encoder 2e-5 on 8, voice prompt KV 2e-4 on 9, backbone conditioning
+8e-6, EOS logit 1.5e-5, the head alone 4e-6, teacher-forced latents 2e-4, waveform 1.6e-4 on 0.8;
+the free run lands the oracle's frame count. First das RTF, unoptimized f32: 0.15 (backbone
+7.8 ms per frame - the tiled GEMM run as a GEMV; the q8 GEMV is phase 6's first rung).
+
+Two facts the source reading missed: the installed package (3.1.0, what the oracle ran) and
+GitHub main differ in the chunker's terminal-punctuation rule (main replaces a trailing
+comma by a period; 3.1.0 appends a period only after a letter or digit) - the port follows
+3.1.0; and the timestep embedder's RMSNorm epsilon is 1e-5 and load-bearing, since those
+activations' variance is 1e-4: at 1e-6 every latent was off by one percent.
+
 ## Phases (checkpoints, not PRs - one PR for the arc if ruled as the TTS arc was)
 
 0. **Access and the bar.** Boris accepts the gate; `hf download` the six gated bundles, the
@@ -195,9 +212,17 @@ Kokoro sits at 0.069-0.075 on the same box.
    (llama.cpp's name for a unigram SentencePiece model) so the reader also serves any
    llama.cpp-converted T5-class model; piece table, scores and byte fallback shared with the
    BPE arm, only the segmentation differs.
-4. The voice-zero WAVs ride the GGUF as `voice.<name>` PCM tensors (Kokoro's pack pattern),
+4. The bundled voices ride the GGUF as `voice.<name>` PCM tensors (Kokoro's pack pattern),
    encoded into a voice state on first use and cached for the session; the file stays
-   self-contained and the image serves without its GGUF.
+   self-contained and the image serves without its GGUF. CORRECTION after the ruling: the
+   package's 21-name English roster is NOT all voice-zero - it draws on six folders of
+   `kyutai/tts-voices` (`_ORIGINS_OF_PREDEFINED_VOICES` in `pocket_tts/utils/utils.py`):
+   voice-zero (4, CC0), voice-donations (2, CC0), vctk (12, CC BY 4.0), alba-mackenna (alba,
+   CC BY 4.0), and two from CC BY-NC folders - `cosette` (expresso) and `jean` (ears). The
+   shipped roster is the 19 with attribution on the card; the two non-commercial ones are
+   left out. The five non-English defaults (giovanni, lola, juergen, rafael, estelle) are
+   files in the `kyutai/pocket-tts` repo itself (Common Voice clips, CC0) and one
+   unmute-prod-website clip; each is checked at conversion.
 5. Server cloning by NAMED voices only in this arc: the GGUF roster plus a `tts_voices_dir`
    config key whose WAVs join `caps().voices` at boot; an upload route is a ledger row. The
    gate's acceptable-use text goes on the model card, the server README and the control

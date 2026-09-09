@@ -206,6 +206,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_tts_g2p.das",
                     "modules/dasLLAMA/tests/test_tts_kitten.das",
                     "modules/dasLLAMA/tests/test_tts_kokoro.das",
+                    "modules/dasLLAMA/tests/test_tts_pocket.das",
                     "modules/dasLLAMA/tests/test_tts_facade.das",
                     "modules/dasLLAMA/tests/test_vision_chat.das",
                     "modules/dasLLAMA/tests/test_vision_embedder.das",
@@ -244,7 +245,8 @@ def area_tests(area : string) : array<string> {
                     "test_vision_embedder.das" ]
     } elif (area == "tts") {
         return <- [ "test_storyteller_restart.das", "test_tts_blocks.das", "test_tts_facade.das", "test_tts_g2p.das",
-                    "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_postag.das", "test_tts_textnorm.das" ]
+                    "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das", "test_tts_postag.das",
+                    "test_tts_textnorm.das" ]
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das",
                     "test_box_ident.das", "test_box_profile.das", "test_dasllama_lint_contracts.das",
@@ -300,7 +302,7 @@ let MODULE_AREAS <- {
     "dasllama_gemma3v" => "vision", "dasllama_gemma4uv" => "vision", "dasllama_gemma4v" => "vision",
     "dasllama_qwen25v" => "vision", "dasllama_qwen3v" => "vision", "dasllama_vision" => "vision",
     "dasllama_vision_embedder" => "vision", "dasllama_vision_io" => "vision",
-    "dasllama_g2p" => "tts", "dasllama_kitten" => "tts", "dasllama_kokoro" => "tts", "dasllama_postag" => "tts",
+    "dasllama_g2p" => "tts", "dasllama_kitten" => "tts", "dasllama_kokoro" => "tts", "dasllama_pocket" => "tts", "dasllama_postag" => "tts",
     "dasllama_styletts2" => "tts", "dasllama_textnorm" => "tts", "dasllama_tts" => "tts",
     "dasllama_tts_blocks" => "tts", "dasllama_tts_types" => "tts",
     "dasllama_exchange" => "infra", "dasllama_exchange_schema" => "infra", "dasllama_lint" => "infra",

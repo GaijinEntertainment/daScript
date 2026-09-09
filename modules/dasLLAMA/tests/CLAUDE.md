@@ -645,6 +645,18 @@ the token count, `bf_emma` speaking, and the sample count of that synthesis held
 driven straight from each dialect's string, which is what proves the VOICE's dialect reached the
 synthesis - and the voice refusals (a pack whose language the front end lacks names that language;
 a voice the model has never heard of refuses first, with no language to name).
+`test_tts_pocket.das` - stocked suite (`pocket-tts-en.gguf` + `tts_oracle/pocket_english_2026-04/`
+under the models dir, minted by `harness/convert_pocket.py` and `harness/pocket_oracle.py`): the
+unigram tokenizer id for id against the package on the 200-sentence corpus and the byte-fallback
+probes (`_tts_fixtures/pocket_tokens.json`, the oracle script's `--tokens-fixture`), the decode
+round trip; the parity rail - the codec decoder over the oracle's latents (one shot), the codec
+encoder and the voice prompt's key-value rows per layer, then teacher-forced frames (the oracle's
+noise and its own frames fed back): the head alone on the oracle's conditioning, the backbone
+conditioning and EOS logit per frame, the latents and the waveform, plus a free run logged; the
+facade cells - caps (cloning, one language, the 19-voice roster), the reference's chunk lists over
+multi-sentence texts, one sentence spoken with the family's own timing stages, a cloned voice
+joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
+a clip at another rate).
 `test_tts_facade.das` - stocked suite; model-free cells: the sentence chunker (the reference
 driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
 the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the
@@ -667,7 +679,10 @@ that move the row split - batch lane cap 1 against 0, and jobque worker limit 1 
 box's job count, the axis that reaches the AdaIN column stats and the bare `lanes_for_work`
 sites the cap never touches - each axis carrying a witness arm that its narrow leg shapes a
 rows GEMM to fewer lanes than its wide one) and the must-panic cells for the rows conv's shape
-refusals.
+refusals; then the continuous-audio family's kernels - the causal cached attention (`TtsKvCache`,
+`attention_causal_rows`) against its double-precision reference at a prompt, a decode step, a
+key window and a one-key window, bit-equal on both split axes, the cache's overflow panic - and
+`elu_rows`, `layer_scale_rows` and `pad_edge_left_rows` against their scalar forms.
 `_tts_parity.das` - the rail both families run: token ids against the reference driver on every
 oracle case, identical durations on every case, and on the bring-up set every stage through the
 decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,

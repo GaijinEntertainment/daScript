@@ -995,6 +995,154 @@ def test_rows_split_invariance(t : T?) {
     }
 }
 
+// ===== the causal cached attention, ELU and layer scale (the continuous-audio family's kernels) =====
+
+let CATT_HIDDEN = 256l
+let CATT_HEADS = 4l
+
+// a cache filled with `n` random positions, plus the q rows of the last `t` of them
+def private catt_fixture(var r : TtsRng; n, t : int64; var kc : TtsKvCache; var q : array<float>) {
+    kv_cache_init(kc, CATT_HEADS, CATT_HIDDEN / CATT_HEADS, n + 8l)
+    var inscope k : array<float>
+    var inscope v : array<float>
+    rand_fill(r, k, n * CATT_HIDDEN, 1.0)
+    rand_fill(r, v, n * CATT_HIDDEN, 1.0)
+    kv_cache_append(kc, k, v, n, CATT_HIDDEN)
+    rand_fill(r, q, t * CATT_HIDDEN, 1.0)
+}
+
+// the rows form against the double-precision reference over the same cache: an absolute bar,
+// since the softmax bounds every output by the values' magnitude
+def private catt_case(name : string; n, t, context : int64; seed : uint64) : BlockCase {
+    var r = TtsRng()
+    rng_seed(r, seed)
+    var inscope kc = TtsKvCache()
+    var inscope q : array<float>
+    catt_fixture(r, n, t, kc, q)
+    var inscope want : array<float>
+    var inscope got : array<float>
+    attention_causal_ref(q, t, CATT_HIDDEN, context, kc, want)
+    attention_causal_rows(q, t, CATT_HIDDEN, context, kc, got)
+    var inscope env : array<float>
+    env |> resize(length(want))
+    for (e in env) {
+        e = 1.0
+    }
+    return score_at(name, got, want, env, 0.0, 1.0e-5)
+}
+
+// the same fixture under a pinned split leg: the rows form must not move with the lanes
+def private catt_split_case(name : string; n, t : int64; axis : SplitAxis) : SplitCase {
+    var r = TtsRng()
+    rng_seed(r, 0xca77ul + uint64(n))
+    var inscope kc = TtsKvCache()
+    var inscope q : array<float>
+    catt_fixture(r, n, t, kc, q)
+    var inscope one : array<float>
+    var inscope many : array<float>
+    at_split(axis, true) {
+        attention_causal_rows(q, t, CATT_HIDDEN, 0l, kc, one)
+    }
+    at_split(axis, false) {
+        attention_causal_rows(q, t, CATT_HIDDEN, 0l, kc, many)
+    }
+    return split_diff(name, one, many)
+}
+
+[test]
+def test_causal_attention(t : T?) {
+    with_job_que() {
+        setup_dasllama_jobque_()
+        for (c in [catt_case("prompt 40 of 40, full", 40l, 40l, 0l, 11ul), catt_case("decode step at 41", 41l, 1l, 0l, 12ul),
+                   catt_case("prompt 300 of 300, window 250", 300l, 300l, 250l, 13ul), catt_case("decode at 301, window 250", 301l, 1l, 250l, 14ul),
+                   catt_case("17 new rows over 90, window 64", 90l, 17l, 64l, 15ul)]) {
+            t |> success(c.bad == 0, "{c.name}: {c.bad} over the bar, max |diff| {c.max_abs}")
+        }
+        // a window that admits one key is the value row itself
+        var r = TtsRng()
+        rng_seed(r, 16ul)
+        var inscope kc = TtsKvCache()
+        var inscope q : array<float>
+        catt_fixture(r, 12l, 1l, kc, q)
+        var inscope got : array<float>
+        attention_causal_rows(q, 1l, CATT_HIDDEN, 1l, kc, got)
+        var worst = 0.0
+        for (h in range64(CATT_HEADS)) {
+            for (e in range64(CATT_HIDDEN / CATT_HEADS)) {
+                worst = max(worst, abs(got[h * (CATT_HIDDEN / CATT_HEADS) + e] - kc.v[(h * kc.cap + 11l) * (CATT_HIDDEN / CATT_HEADS) + e]))
+            }
+        }
+        t |> success(worst < 1.0e-6, "a one-key window returns that key's value row (max |diff| {worst})")
+        for (axis in [SplitAxis.lane_cap, SplitAxis.worker_limit]) {
+            t |> success(shaped_lanes(axis, true) < shaped_lanes(axis, false), "the {axis_name(axis)} axis moves the split")
+            let s = catt_split_case("prompt 200 on the {axis_name(axis)} axis", 200l, 200l, axis)
+            t |> equal(s.diffs, 0, "{s.name}: elements that differ between the legs")
+        }
+        // the cache refuses to overflow, and a query count past the fill is refused
+        var tripped = false
+        try {
+            var inscope k : array<float>
+            rand_fill(r, k, 20l * CATT_HIDDEN, 1.0)
+            kv_cache_append(kc, k, k, 20l, CATT_HIDDEN)
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "kv_cache_append panics past the cache's capacity")
+    }
+}
+
+[test]
+def test_elu_and_layer_scale(t : T?) {
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var r = TtsRng()
+        rng_seed(r, 21ul)
+        var inscope x : array<float>
+        rand_fill(r, x, 4096l, 6.0)
+        var inscope want : array<float>
+        want |> resize(length(x))
+        for (src, dst in x, want) {
+            dst = src > 0.0 ? src : exp(src) - 1.0
+        }
+        elu_rows(x, 4096l)
+        var worst = 0.0
+        for (g, w in x, want) {
+            worst = max(worst, abs(g - w))
+        }
+        t |> success(worst <= 1.0e-6, "elu_rows against the scalar form (max |diff| {worst})")
+        var inscope y : array<float>
+        rand_fill(r, y, 16l * 64l, 1.0)
+        var inscope s : array<float>
+        rand_fill(r, s, 64l, 0.5)
+        var inscope want2 : array<float>
+        want2 |> resize(length(y))
+        for (i in range64(16l * 64l)) {
+            want2[i] = y[i] * s[i % 64l]
+        }
+        layer_scale_rows(y, 16l, 64l, s)
+        var exact = 0
+        for (g, w in y, want2) {
+            if (g != w) {
+                exact++
+            }
+        }
+        t |> equal(exact, 0, "layer_scale_rows elements that differ from the per-channel product")
+        var inscope padded : array<float>
+        pad_edge_left_rows(y, 16l, 64l, 3l, padded)
+        t |> equal(length(padded), 19 * 64, "pad_edge_left_rows grows by the pad rows")
+        var edge_ok = true
+        for (rr in range64(3l)) {
+            for (j in range64(64l)) {
+                edge_ok = edge_ok && padded[rr * 64l + j] == y[j]
+            }
+        }
+        for (i in range64(16l * 64l)) {
+            edge_ok = edge_ok && padded[3l * 64l + i] == y[i]
+        }
+        t |> success(edge_ok, "pad_edge_left_rows repeats the first row and keeps the rest")
+    }
+}
+
 def private rows_conv_panics(c : TtsConv1d; x : array<float>; t_in : int64) : bool {
     var inscope y : array<float>
     var tripped = false

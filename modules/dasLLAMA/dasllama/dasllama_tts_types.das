@@ -5,6 +5,7 @@ options _dasllama_internal = true
 module dasllama_tts_types shared public
 
 require dasllama/dasllama_lint public
+require daslib/strings_boost
 
 //! The TTS floor: the types every family file and the facade share. Family files require
 //! this, never each other.
@@ -31,6 +32,10 @@ struct TtsTimings {
     decoder_us : int64     //! the decoder
     source_us : int64      //! the harmonic-plus-noise source
     generator_us : int64   //! the iSTFTNet generator
+    prompt_us : int64      //! the voice and text prompt through the backbone (the continuous-audio families)
+    backbone_us : int64    //! the frame loop's backbone steps
+    head_us : int64        //! the frame loop's flow head
+    codec_us : int64       //! latents to PCM through the codec decoder
     total_us : int64       //! front end through waveform
     samples : int64        //! PCM samples produced
 }
@@ -41,11 +46,33 @@ def rtf(t : TtsTimings; sample_rate : int) : double {
     return t.samples <= 0l ? 0.0lf : double(t.total_us) / 1e6lf / (double(t.samples) / double(sample_rate))
 }
 
+def private ms_of(us : int64) : string => "{double(us) / 1000.0lf}"
+
+// a stage the family ran joins the line; a stage it lacks stays zero and is left off
+def private stage_part(var parts : array<string>; name : string; us : int64) {
+    if (us != 0l) {
+        parts |> push("{name} {ms_of(us)}")
+    }
+}
+
 [cold_path]
 def timings_line(t : TtsTimings; sample_rate : int) : string {
-    //! One line for the log: seconds of audio, wall time, RTF and the per-stage split in ms.
-    let ms = @(us : int64) : string => "{double(us) / 1000.0lf}"
-    return "{double(t.samples) / double(sample_rate)} s of audio in {ms(t.total_us)} ms (rtf {rtf(t, sample_rate)}): front {ms(t.front_end_us)}, bert {ms(t.bert_us)}, text {ms(t.text_enc_us)}, durations {ms(t.duration_us)}, prosody {ms(t.prosody_us)}, decoder {ms(t.decoder_us)}, source {ms(t.source_us)}, generator {ms(t.generator_us)}"
+    //! One line for the log: seconds of audio, wall time, RTF and the per-stage split in ms - the
+    //! stages a family ran.
+    var inscope parts : array<string>
+    stage_part(parts, "front", t.front_end_us)
+    stage_part(parts, "bert", t.bert_us)
+    stage_part(parts, "text", t.text_enc_us)
+    stage_part(parts, "durations", t.duration_us)
+    stage_part(parts, "prosody", t.prosody_us)
+    stage_part(parts, "decoder", t.decoder_us)
+    stage_part(parts, "source", t.source_us)
+    stage_part(parts, "generator", t.generator_us)
+    stage_part(parts, "prompt", t.prompt_us)
+    stage_part(parts, "backbone", t.backbone_us)
+    stage_part(parts, "head", t.head_us)
+    stage_part(parts, "codec", t.codec_us)
+    return "{double(t.samples) / double(sample_rate)} s of audio in {ms_of(t.total_us)} ms (rtf {rtf(t, sample_rate)}): {join(parts, ", ")}"
 }
 
 struct TtsAudio {
