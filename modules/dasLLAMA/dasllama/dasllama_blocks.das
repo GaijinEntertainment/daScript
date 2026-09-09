@@ -663,6 +663,8 @@ def private attn_dec_store_kv(t : Model; var s : Session; l, pos : int64) {
 var private g_span_args : MoeSpanDec   // reused per token: the per-layer arrays keep their capacity
 var private g_span_k : array<float>
 var private g_span_v : array<float>
+var private g_span_tokens = 0l   //! tokens the span served - the tests' engage witness (read on the main context only)
+def public span_tokens() : int64 => g_span_tokens
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
 def private span_first_layer(t : Model; var s : Session; pos : int64) : int64 {
@@ -671,7 +673,7 @@ def private span_first_layer(t : Model; var s : Session; pos : int64) : int64 {
     while (l0 > 0l) {
         let l = l0 - 1l
         if (l < c.n_layer_dense_lead || !moe_gpu_layer_on_gpu(l) || kq_sb(fmt_at(t.we1_fmt, l)) != kq_sb(fmt_at(t.we3_fmt, l))
-                || !attn_dec_gpu_serves(t, s, l, pos)) {
+                || (c.n_ff_shexp > 0l && !moe_gpu_shexp_on_gpu(l)) || !attn_dec_gpu_serves(t, s, l, pos)) {
             break
         }
         l0 = l
@@ -685,7 +687,7 @@ def private span_model_ok(t : Model) : bool {
     if (!g_env_gpu.gpu_dec_span || !moe_gpu_span_ok() || t.quant != QuantMode.q8 || c.n_expert == 0l
             || c.n_expert_used > 64l || c.n_expert > 256l || c.moe_gate != MoeGate.softmax || c.moe_router_bias || c.moe_exp_probs
             || c.n_layers * c.n_expert * c.dim * 4l > moe_gpu_binding_cap() || !t.blocks.std_chain
-            || c.n_ff_shexp > 0l || c.pre_post_norm || c.layer_out_scale || c.moe_exps_bias || t.experts_mx4) {
+            || (c.n_ff_shexp > 0l && c.moe_dense_shexp) || c.pre_post_norm || c.layer_out_scale || c.moe_exps_bias || t.experts_mx4) {
         return false
     }
     return c.ffn_act != FfnAct.swiglu_oai && !has_ple(c) && c.n_layer_nextn == 0l
@@ -709,6 +711,9 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
     a.f1 |> resize(nl)
     a.f3 |> resize(nl)
     a.f2 |> resize(nl)
+    a.wsh1 |> resize(nl)
+    a.wsh3 |> resize(nl)
+    a.wsh2 |> resize(nl)
     a.rmsq |> resize(nl)
     a.rmsk |> resize(nl)
     a.bq |> reserve(nl)
@@ -734,6 +739,10 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
             a.f1[li] = int(fmt_at(t.we1_fmt, l))
             a.f3[li] = int(fmt_at(t.we3_fmt, l))
             a.f2[li] = int(fmt_at(t.we2_fmt, l))
+            let she = l * dim * c.n_ff_shexp   // the shared expert's planes are q8, one triple per layer
+            a.wsh1[li] = c.n_ff_shexp > 0l ? t.wsh1_off + she : -1l
+            a.wsh3[li] = c.n_ff_shexp > 0l ? t.wsh3_off + she : -1l
+            a.wsh2[li] = c.n_ff_shexp > 0l ? t.wsh2_off + she : -1l
             a.rmsq[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null
             a.rmsk[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null
             a.bq[li] = c.attn_qkv_bias ? addr<float const?>(t.bq[l * a.qd]) : null
@@ -741,6 +750,7 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
             a.bv[li] = c.attn_qkv_bias ? addr<float const?>(t.bv[l * a.kvd]) : null
         }
         a.router = addr<float const?>(t.fblob[t.router_off + l0 * c.n_expert * dim])
+        a.shgate = c.n_ff_shexp > 0l && c.moe_shexp_gated ? addr<float const?>(t.fblob[t.shexp_gate_off + l0 * dim]) : null
         a.att_norm = addr<float const?>(t.fblob[t.rms_att_off + l0 * dim])
         a.ffn_norm = addr<float const?>(t.fblob[t.rms_ffn_off + l0 * dim])
         a.blob = addr<float const?>(t.fblob[0])
@@ -787,6 +797,8 @@ def private span_run(t : Model; var s : Session; pos, l0 : int64) {
     a.qk_norm = c.qk_norm
     a.norm_topk = c.norm_topk_prob
     a.is_gelu = c.ffn_act == FfnAct.gelu
+    a.nsh = c.n_ff_shexp
+    a.sh_gated = c.moe_shexp_gated
     if (!span_args_current(a, t, l0, nl)) {
         span_fill_layers(t, a, l0, nl)
     }
@@ -841,6 +853,7 @@ def private moe_span_decode(t : Model; var s : Session; _token, pos : int64) : b
         prof_add("blk_ffn", ts_blk_ffn)
     }
     span_run(t, s, pos, l0)
+    g_span_tokens++
     return true
 }
 

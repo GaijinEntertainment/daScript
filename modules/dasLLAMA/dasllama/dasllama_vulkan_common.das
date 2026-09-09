@@ -443,6 +443,13 @@ struct SpanLayer {
     s_comb : VkDescriptorSet      // x += sum w_j * down_j
     s_ar_att : VkDescriptorSet    // xb = rms(x) * the NEXT layer's att_norm (absent on the last)
     s_rq_att : VkDescriptorSet    // xb -> the next layer's q-stack feed image
+    sh1 : int = -1                // the shared expert's q8 stacks (-1 = the model has none)
+    sh3 : int = -1
+    sh2 : int = -1
+    s_rq_sh1 : VkDescriptorSet    // xb -> the shared gate stack's feed image
+    s_rq_sh3 : VkDescriptorSet    // xb -> the shared up stack's feed image
+    s_shgate : VkDescriptorSet    // the gate row . xb -> the logit slot past the router's
+    s_comb_sh : VkDescriptorSet   // x += sum w_j * down_j + sigmoid(gate) * the shared down row
 }
 
 // one recurrent layer's pre-recorded deltanet decode-step chain + its device-resident state.
@@ -580,6 +587,7 @@ struct GpuState {
     span_w_dev : uint64           // the combine weights the top-k writes
     span_logits_dev : uint64      // the router logits
     span_router_dev : uint64      // the span's router planes, f32, layer-major
+    span_shgate_dev : uint64      // the shared expert's gate rows per span layer, f32 (gated models)
     span_norms_dev : uint64       // [att | ffn] norm rows per span layer
     span_xin : HostBuf            // the residual row in (host-staged per token, copied at the chain's head)
     span_out : HostBuf            // per-layer raw k/v rows, then the residual row (readback staging)

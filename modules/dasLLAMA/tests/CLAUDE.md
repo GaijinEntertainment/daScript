@@ -262,7 +262,9 @@ two lists together are the census.
 `test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
 era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
 pairings, a q8 pair carrying the q/k/v projection bias, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
-device router + top-k against `moe_select_core`, plus the `vulkan_moe_span` override reached
+device router + top-k against `moe_select_core`, the span with a gated shared expert (the shared
+q8 triple beside the routed pair, its gate logit past the router's, one combine; the reference
+without the shared expert must miss the device row), plus the `vulkan_moe_span` override reached
 through its registry.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and

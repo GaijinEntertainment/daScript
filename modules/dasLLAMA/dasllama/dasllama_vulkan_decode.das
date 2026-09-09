@@ -1607,6 +1607,36 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
         fixed_array(VHS_LOG, VHS_META, VHS_META, VHS_META, VHS_META))
     SL.s_comb = set_dec_combine_cls(fixed_array(g_gpu.span_x_dev, g_gpu.span_w_dev, g_gpu.stacks[SL.s2].y_dev, g_gpu.span_x_dev),
         fixed_array(nb, MAX_ROUTED_SLOTS * 4l, Y_BYTES, nb), fixed_array(VHS_X, VHS_META, VHG_YO, VHS_X))
+    if (a.nsh > 0l) {
+        let q8 = int(KqFmt.q8)
+        SL.sh1 = find_stack(a.wsh1[li], q8, "span shared gate")
+        SL.sh3 = find_stack(a.wsh3[li], q8, "span shared up")
+        SL.sh2 = find_stack(a.wsh2[li], q8, "span shared down")
+        ensure_gemv_scratch(SL.sh1)
+        ensure_gemv_scratch(SL.sh3)
+        ensure_gemv_scratch(SL.sh2)
+        // one fixed region per shared stack: the host writes these metas once; the top-k never touches them
+        var reg1 = fixed_array(a.wsh1[li], 0l, 1l)
+        var reg3 = fixed_array(a.wsh3[li], 0l, 1l)
+        var reg2 = fixed_array(a.wsh2[li], 0l, 1l)
+        unsafe {
+            fill_stack_sched_rows(SL.sh1, addr(reg1[0]), 1l, 1l, dim / 32l)
+            fill_stack_sched_rows(SL.sh3, addr(reg3[0]), 1l, 1l, dim / 32l)
+            fill_stack_sched_rows(SL.sh2, addr(reg2[0]), 1l, 1l, a.nsh / 32l)
+        }
+        SL.s_rq_sh1 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.sh1].xq.buf, g_gpu.stacks[SL.sh1].xs.buf),
+            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
+        SL.s_rq_sh3 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.sh3].xq.buf, g_gpu.stacks[SL.sh3].xs.buf),
+            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
+        if (a.sh_gated) {
+            SL.s_shgate = set_router_gemv_cls(fixed_array(g_gpu.span_shgate_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev),
+                fixed_array(nl * nb, nb, SPAN_LOGITS_BYTES), fixed_array(0u, VHS_XB, VHS_LOG))
+        }
+        SL.s_comb_sh = set_dec_combine_sh_cls(
+            fixed_array(g_gpu.span_x_dev, g_gpu.span_w_dev, g_gpu.stacks[SL.s2].y_dev, g_gpu.stacks[SL.sh2].y_dev, g_gpu.span_logits_dev, g_gpu.span_x_dev),
+            fixed_array(nb, MAX_ROUTED_SLOTS * 4l, Y_BYTES, Y_BYTES, SPAN_LOGITS_BYTES, nb),
+            fixed_array(VHS_X, VHS_META, VHG_YO, VHG_YO, VHS_LOG, VHS_X))
+    }
     if (li + 1l < nl) {
         let sqn = find_stack(a.woq[li + 1l], a.fq[li + 1l], "span next q")
         ensure_gemv_scratch(sqn)
@@ -1619,6 +1649,7 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
 }
 
 let private SPAN_MAX_EXPERTS = 256l   // the top-k kernel's one-workgroup reach
+let private SPAN_LOGITS_BYTES = (SPAN_MAX_EXPERTS + 1l) * 4l   // the router logits, then the shared expert's gate logit
 
 def private rq_enc(raw : VkCommandBuffer; var h : VkHaz; var rq_set : VkDescriptorSet; fmt : int; dim : int64) {
     if (kq_sb(fmt)) {
@@ -1673,8 +1704,23 @@ def private span_record(a : MoeSpanDec) {
         vhz_dep(raw, h, VHS_META, 0u)
         var fc = g_gpu.ffn_cmds[ffn_cmd_key(SL.s1, SL.s3, SL.s2)]
         ffn_chain_enc(raw, h, fc, SL.s1, SL.s3, SL.s2, a.k, dim, a.nfe, a.is_gelu)
-        var pcc = DecCombineArgs(n = uint(dim), k = uint(a.k))
-        enc_dec_combine_cls(raw, h, SL.s_comb, pcc, (dim + 255l) / 256l)
+        if (a.nsh > 0l) {
+            // the shared expert beside the routed slots: its feed off the same normed row, one combine over both
+            rq_enc(raw, h, SL.s_rq_sh1, int(KqFmt.q8), dim)
+            rq_enc(raw, h, SL.s_rq_sh3, int(KqFmt.q8), dim)
+            vhz_dep(raw, h, VHS_GACTS, 0u)
+            if (a.sh_gated) {
+                var pcsg = RouterArgs(ne = 1u, dim = uint(dim), woff = uint(li * dim), obase = uint(SPAN_MAX_EXPERTS))
+                enc_router_gemv_cls(raw, h, SL.s_shgate, pcsg, 1l)
+            }
+            var fsh = g_gpu.ffn_cmds[ffn_cmd_key(SL.sh1, SL.sh3, SL.sh2)]
+            ffn_chain_enc(raw, h, fsh, SL.sh1, SL.sh3, SL.sh2, 1l, dim, a.nsh, a.is_gelu)
+            var pcs = DecCombineShArgs(n = uint(dim), k = uint(a.k), gidx = uint(SPAN_MAX_EXPERTS), gated = a.sh_gated ? 1u : 0u)
+            enc_dec_combine_sh_cls(raw, h, SL.s_comb_sh, pcs, (dim + 255l) / 256l)
+        } else {
+            var pcc = DecCombineArgs(n = uint(dim), k = uint(a.k))
+            enc_dec_combine_cls(raw, h, SL.s_comb, pcc, (dim + 255l) / 256l)
+        }
         if (li + 1l < nl) {
             var pca2 = ArArgs(dim = uint(dim), add_on = 0u, woff = uint((li + 1l) * 2l * dim), eps = a.eps, ascale = 1.0)
             enc_cls_ar(raw, h, SL.s_ar_att, pca2, 1l)
@@ -1690,6 +1736,15 @@ def private span_record(a : MoeSpanDec) {
     vk_check(vkEndCommandBuffer(raw), null)
 }
 
+//! Forget the recorded span so the next token records anew: the span records once per model and
+//! asserts on a changed suffix, and a second model in one process - the tests' shape - has no
+//! model drop between the two. The old record's objects stay model-owned until the drop.
+def vk_span_reset {
+    g_gpu.span_layers |> clear()
+    g_gpu.span_key = -1l
+    g_gpu.span_nl = 0l
+}
+
 [cold_path]   // lazy init, once per span
 def private ensure_span_state(a : MoeSpanDec) {
     let nl = long_length(a.woq)
@@ -1699,15 +1754,21 @@ def private ensure_span_state(a : MoeSpanDec) {
     }
     assert(a.ne <= SPAN_MAX_EXPERTS && a.k <= MAX_ROUTED_SLOTS, "dasLLAMA vulkan tier: decode span routing exceeds the top-k kernel's reach")
     verify(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_dec_combine_cls() && ensure_cls_ar()
-            && ensure_cls_q8k_rq() && ensure_cls_dn_rq(),
+            && ensure_cls_q8k_rq() && ensure_cls_dn_rq() && (a.nsh == 0l || ensure_dec_combine_sh_cls()),
         "vk decode span: the class rails must engage on a live device")
     let dim = a.dim
     g_gpu.span_x_dev = make_device_buf(dim * 4l)
     g_gpu.span_xb_dev = make_device_buf(dim * 4l)
     g_gpu.span_w_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
-    g_gpu.span_logits_dev = make_device_buf(SPAN_MAX_EXPERTS * 4l)
+    g_gpu.span_logits_dev = make_device_buf(SPAN_LOGITS_BYTES)
     g_gpu.span_router_dev = make_device_buf(nl * a.ne * dim * 4l)
     g_gpu.span_norms_dev = make_device_buf(nl * 2l * dim * 4l)
+    if (a.nsh > 0l && a.sh_gated) {
+        g_gpu.span_shgate_dev = make_device_buf(nl * dim * 4l)
+        unsafe {
+            upload_region_at(g_gpu.span_shgate_dev, 0l, reinterpret<uint8 const?>(a.shgate), nl * dim * 4l)
+        }
+    }
     unsafe {
         upload_region_at(g_gpu.span_router_dev, 0l, reinterpret<uint8 const?>(a.router), nl * a.ne * dim * 4l)
         for (li in range64(nl)) {
@@ -1725,7 +1786,8 @@ def private ensure_span_state(a : MoeSpanDec) {
     span_record(a)
     g_gpu.span_key = a.woq[0]
     g_gpu.span_nl = nl
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: decode span engaged ({nl} resident layers as one submit per token; DASLLAMA_GPU_DEC_SPAN=0 runs the per-layer submits)\n")
+    let sh_note = a.nsh > 0l ? " with the shared expert" : ""
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: decode span engaged ({nl} resident layers{sh_note} as one submit per token; DASLLAMA_GPU_DEC_SPAN=0 runs the per-layer submits)\n")
 }
 
 //! MoeGpuSpanDecFn: one token through the resident layers - one submit; the host feeds the

@@ -545,6 +545,39 @@ class DecCombine {
     }
 }
 
+struct DecCombineShArgs {
+    n : uint      // row width
+    k : uint      // routed slots
+    gidx : uint   // the shared expert's gate logit index in `gate`
+    gated : uint  // 1 = the shared row scales by sigmoid(gate[gidx]); 0 = it adds at weight 1
+}
+
+[vk_dispatch(name = "dec_combine_sh_cls", grid = "wgs", params = "wgs : int64")]
+class DecCombineSh {
+    @ssbo @binding = 0 xin : array<float>        // the residual row before the FFN
+    @ssbo @binding = 1 w : array<float>          // the k routing weights
+    @ssbo @binding = 2 down_rows : array<float>  // the routed down GEMV's k rows
+    @ssbo @binding = 3 sh_row : array<float>     // the shared expert's down GEMV row
+    @ssbo @binding = 4 gate : array<float>       // the shared expert's gate logit sits at pa.gidx
+    @ssbo @binding = 5 xout : array<float>       // the residual row after the FFN
+    @push_constant pa : DecCombineShArgs
+
+    [spirv_kernel(local_size_x = 256, name = "dec_combine_sh_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        if (i < pa.n) {
+            var acc = 0.0
+            var j = 0u
+            while (j < pa.k) {
+                acc += w[j] * down_rows[j * pa.n + i]
+                j++
+            }
+            let g = pa.gated != 0u ? 1.0 / (1.0 + exp(-gate[pa.gidx])) : 1.0
+            xout[i] = xin[i] + acc + g * sh_row[i]
+        }
+    }
+}
+
 struct RouterArgs {
     ne : uint     // expert rows
     dim : uint    // row width

@@ -72,11 +72,16 @@ the rest is the per-layer host glue the span would remove, and the span declines
    layer 1 on the router's near-ties (ulp-level residual differences -> Q8 requant roundings ->
    a flipped pick), not on the shared expert's rows, which match the CPU form to 1e-4 (sdot4)
    and 0.5% (f16); two route-off sessions are bit-identical.
-2. **The decode span takes the shared expert.** `span_model_ok` drops `n_ff_shexp > 0`; the
-   span's FFN gains the shexp GEMV triple and the sigmoid gate, summed into the routed combine.
-   Win: the twin and the 35B decode from 26 ms and 24 ms a token toward the 30B's 12. Gate:
-   the span's existing device-vs-CPU witness on the twin, plus the 35B and gemma-4-26B rows
-   (gemma4's `moe_dense_shexp` sandwich norms stay declined until its own arm).
+2. **The decode span takes the shared expert.** DONE 2026-09-09: the shexp triple rides inside
+   the span beside the routed slots (its feed off the same normed row into its own stacks'
+   images, its metas one fixed region the host writes once, its gate logit one more router GEMV
+   row past the router's, one combine `DecCombineSh`); `span_model_ok` declines only gemma4's
+   dense shared expert now. The twin's tg128 38.5 -> 134.0 (llama.cpp 173.8, 0.77x), the token
+   26 -> 7.5 ms. Gates: `test_vulkan_dec_tail.das`'s span cell with a gated shared expert (the
+   no-shexp reference must miss the device row; `vk_span_reset` between the two spans of one
+   process) and the twin's fed steps through the span in `test_gpu_moe_shexp.das` with the
+   span-tokens witness. The 35B and Qwen1.5 Q8 rows ride the same arm; gemma-4-26B waits on its
+   sandwich norms.
 3. **The resident MoE prefill window.** The plan admits a MoE whose stacks fit (the per-op
    walk's sizes; all-or-nothing like the dense case, the room named honestly against the
    desktop); the window chain gains an MoE FFN block: a router GEMM over the window's rows

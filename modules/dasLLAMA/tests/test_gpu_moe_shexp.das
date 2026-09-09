@@ -94,16 +94,19 @@ def private shexp_forced_feed(t : T?; n : int64) {
         var toks <- [for (i in range64(FED_STEPS)); 2000l + (i * 53l) % 4000l]
         set_moe_gpu_shexp_route(true)
         let served0 = shexp_gpu_prefill_layers()
+        let span0 = span_tokens()
         var sd <- create_session(tr)
         var dev <- feed_logits(tr, sd, prompt, toks)
         delete sd
         t |> equal(shexp_gpu_prefill_layers(), served0 + layers, "the device arm served the shared expert of every layer over the {n}-token prompt")
+        t |> equal(span_tokens(), span0 + FED_STEPS, "the decode span served every fed step on the device arm (the shared expert inside it)")
         set_moe_gpu_shexp_route(false)
         var sc <- create_session(tr)
         var cpu <- feed_logits(tr, sc, prompt, toks)
         delete sc
         set_moe_gpu_shexp_route(true)   // the tier as found
         t |> equal(shexp_gpu_prefill_layers(), served0 + layers, "the CPU arm served no shared expert on the device")
+        t |> equal(span_tokens(), span0 + FED_STEPS, "the CPU arm's steps took the per-layer path - the span declines a shared expert off the device")
         for (st in range64(long_length(cpu))) {
             let diff = logits_maxdiff(dev[st], cpu[st])
             let bar = SHEXP_LOGIT_BAR_REL * logits_maxabs(cpu[st])
