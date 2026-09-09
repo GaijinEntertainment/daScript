@@ -425,7 +425,16 @@ def LLVMLookupIntrinsicID(name : string) {
     return LLVMLookupIntrinsicID(name, uint64(long_length(name)))
 }
 
-def LLVMGetIntrinsicDeclaration(mod : LLVMOpaqueModule?; id : uint; var argTypes : array<LLVMOpaqueType?>) {
+//! Looks up an intrinsic name the emitter BUILT, and panics naming it when LLVM has none. A built name that does not resolve is an emitter defect - a table row, a stem, or a type suffix - and no caller can recover from it. A target-specific literal a trimmed LLVM may genuinely lack keeps the raw lookup and its own fallback.
+def public intrinsic_id(name : string) : uint {
+    let id = LLVMLookupIntrinsicID(name, uint64(long_length(name)))
+    panic("no LLVM intrinsic named '{name}'") if (id == 0u)
+    return id
+}
+
+//! Panics on intrinsic id 0. LLVMLookupIntrinsicID answers 0 only for a name that is no intrinsic - an emitter that built the name wrongly, never a target LLVM lacks - and the C API dereferences the id.
+def LLVMGetIntrinsicDeclaration(mod : LLVMOpaqueModule?; id : uint; var argTypes : array<LLVMOpaqueType?>) : LLVMOpaqueValue? {
+    panic("LLVM intrinsic id is 0 - the emitter asked for a name LLVM has no intrinsic for") if (id == 0u)
     return LLVMGetIntrinsicDeclaration(mod, id, array_data_ptr(argTypes), uint64(long_length(argTypes)))
 }
 

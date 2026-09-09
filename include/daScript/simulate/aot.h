@@ -593,6 +593,9 @@ namespace das {
         static __forceinline TT * cast ( const QQ & expr ) {
             return const_cast<TT *>(reinterpret_cast<const TT *>(&expr));
         }
+        static __forceinline TT * cast ( const Func & expr ) {
+            return (TT *) expr.PTR;
+        }
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable:4312)   // reinterpret_cast used between related classes
