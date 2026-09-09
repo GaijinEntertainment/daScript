@@ -203,6 +203,28 @@ the rest is the per-layer host glue the span would remove, and the span declines
    What is left of the 30B window against theirs: the expert tiles ~10 ms, the attention head
    28 ms (q 9.0, wo 7.7, attn 5.0, qkn 2.8, rope 1.6, k+v 2.1), the router 6.6 and schedule
    8.1, the combine 4.0, act 2.8, gather 1.6, the residual adds and requants ~4.
+   5c DONE 2026-09-09 - one more pass on the two parity misses, from the reference engine's own
+   per-op tables (`GGML_VK_PERF_LOGGER=1`): on the 30B window we beat it on the attention head
+   (qkn + rope 4.4 ms against its 10.7, the adds and norms 3.7 against 5.4) and lose on the
+   router (6.6 against 1.2), the schedule (8.1 against none: it gathers inside its tile) and the
+   gate/up tiles (~70 us per plane); on the twin's token its shared-expert GEMVs read 1.46 ms
+   against our 2.39 because the loader held the shared expert as a q8 transcode of the file's
+   Q4_K / Q6_K, twice the bytes the token reads. Three levers landed: (1) the loader keeps the
+   shared expert's K-quant planes beside the q8 transcode the CPU and Metal chains read
+   (`wsh*_fmt`, `wshk*_offs`; `IMAGE_VERSION` 36), and the whole-model driver places those - the
+   twin's image 10107 -> 9756 MB, its token 7.06 -> 6.12 ms (sh_gate 793 -> 466 us, sh_up 776 ->
+   457, sh_down 820 -> 558, the experts' own requant gone since they share the feed), tg128
+   142.5 -> 162.7 (0.94x), pp512 5172.7; (2) the schedule's two per-expert slot walks became an
+   atomic tally and an atomic cursor (`atomicAdd` on workgroup memory; the rows within a bucket
+   land in an order nothing downstream reads, the kernel cell checks the map as a permutation):
+   8.1 -> 0.46 ms on the 30B window; (3) the router tile is 64 x 32 with 4 x 2 blocks and the
+   next K step's rows prefetched into registers as float4: 6.6 -> 4.3 ms. The 30B window 153.9
+   -> 144.9 ms (llama.cpp 142.3), pp512 3448.9 (0.98x), tg128 124.6 (1.07x). With all three:
+   the twin 5348.3 / 163.4 (5099.8 / 173.8: 1.05x / 0.94x; the six-rep pp mean still wanders
+   with the first measured rep's driver warm-up), the 35B 2946.0 / 95.2 (2853.1 / 71.6: 1.03x /
+   1.33x). A post-reboot run had read every role 5-15% slower and the 30B's tg128 at 119.7 - a
+   throttled clock state (`nvidia-smi` beside the re-run showed the SM at 2827 MHz under load
+   again), so a whole-row regression is re-measured before it is believed.
 
 Slices 1 and 2 are small and land the shared-expert families' rows; slice 3 is the arc's body.
 

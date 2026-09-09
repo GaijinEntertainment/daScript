@@ -7869,6 +7869,27 @@ def private sched_shape(nk, ne, wt_gu, wt_dn : int) : SchedShape {
     return s
 }
 
+//! expert e's bucket: its first row (the slots of the experts before it) and its row count
+def private bucket_start(idx : array<uint>; e : int) : int {
+    var run = 0
+    for (r in idx) {
+        if (int(r) < e) {
+            run++
+        }
+    }
+    return run
+}
+
+def private bucket_rows(idx : array<uint>; e : int) : int {
+    var n = 0
+    for (r in idx) {
+        if (int(r) == e) {
+            n++
+        }
+    }
+    return n
+}
+
 //! one piece's record `ri` and its map words on the three planes (the CPU twin of MoeSched.write_piece)
 def private oracle_piece(var s1, s3, s2 : array<uint>; bases : uint[6]; e : int; ri : uint; row0, rows, rt, wt_gu, wt_dn, wg_gu, wg_dn, map_gu, map_dn : int) {
     let rb = int(ri) * 4
@@ -8002,7 +8023,7 @@ def private moe_router_arm(t : T?) {
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
             var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(MR_NER), dim = uint(MR_DIM), woff = uint(MR_NER * MR_DIM), ostride = uint(MR_NER))
-            enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + 31) / 32) * ((MR_NER + 31) / 32)))
+            enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + int(ROUTER_TP) - 1) / int(ROUTER_TP)) * ((MR_NER + int(ROUTER_TE) - 1) / int(ROUTER_TE))))
             vkd_run_copy(raw, h, ld, host, l_bytes, 2u)
             memcpy(addr<void?>(got[0]), host.mapped, l_bytes)
         }
@@ -8168,7 +8189,24 @@ def private moe_sched_arm(t : T?) {
             memcpy(addr<void?>(g3[0]), reinterpret<void?>(hp + uint64(i_bytes + s_bytes)), s_bytes)
             memcpy(addr<void?>(g2[0]), reinterpret<void?>(hp + uint64(i_bytes + 2l * s_bytes)), s_bytes)
         }
-        t |> success(mismatch_qbytes(ginv, winv, 0) == 0, "the schedule's slot -> bucket row map is the CPU walk's ({nk} slots)")
+        // the map hands each slot a row of its expert's bucket through an atomic cursor, so the rows within
+        // a bucket land in an order the schedule does not fix: the check is per bucket, a permutation of its rows
+        var inv_bad = 0
+        var seen : array<bool>
+        seen |> resize(nk)
+        for (r in range(nk)) {
+            let e = int(idx[r])
+            let base = uint(bucket_start(idx, e))
+            let rows = uint(bucket_rows(idx, e))
+            let row = ginv[r]
+            if (row < base || row >= base + rows || seen[int(row)]) {
+                inv_bad++
+            } else {
+                seen[int(row)] = true
+            }
+        }
+        t |> success(inv_bad == 0, "the schedule's slot -> bucket row map is a permutation of each bucket's rows ({nk} slots, {inv_bad} off)")
+        delete seen
         t |> success(mismatch_qbytes(g1, w1, 0) == 0, "the gate plane's s and m records, maps and sentinel tails match the CPU twin word for word ({length(w1)} words)")
         t |> success(mismatch_qbytes(g3, w3, 0) == 0, "the up plane's schedule matches")
         t |> success(mismatch_qbytes(g2, w2, 0) == 0, "the down plane's schedule matches (its own tile counts and tails)")

@@ -284,10 +284,11 @@ staging form: the index travels, the callee chains through the plane) is an ordi
 the device, against the same method run on the CPU. `test_vkd_moe_routing` holds the resident MoE
 block's routing kernels to CPU oracles: the batched router GEMM at a second layer's offset, the
 per-row top-k against `moe_select_core` (renormalized, and scaled), the device bucket schedule
-against its CPU twin word for word over the whole planes (the tile ladder's two piece lists over
-a whole m column with an s remainder, partial m columns and s-column buckets; empty experts; the
-four sentinel tails), and the gated combine over two accumulating windows - every bar with its
-own poison.
+against its CPU twin - the records and maps word for word over the whole planes (the tile
+ladder's two piece lists over a whole m column with an s remainder, partial m columns and
+s-column buckets; empty experts; the four sentinel tails), the slot-to-bucket-row map as a
+permutation of each bucket's rows (its atomic cursor fixes no order within a bucket) - and the
+gated combine over two accumulating windows - every bar with its own poison.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the

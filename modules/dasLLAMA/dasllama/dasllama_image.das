@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 35   // the vulkan flavor's iq4xs/iq3s/iq3xxs/iq2xxs scale planes are two-word rows; a BPE vocab without add_bos takes upstream's per-pre default
+let IMAGE_VERSION = 36   // the shared expert's K-quant planes ride beside its q8 transcode (wsh*_fmt, wshk*_offs)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and

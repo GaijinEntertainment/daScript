@@ -304,8 +304,9 @@ A model the plan admits therefore takes neither the span nor the per-op rails - 
 prefill (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2af) fills the one mirror the token command reads.
 
 The experts' feed is the layer's quantized row when their form is the dense triple's, else a
-second requant of the normed row in their own form (a K-quant expert stack beside the shared
-expert's q8 triple). The fused add+rms+requant twins are off on a MoE: the router reads the
+second requant of the normed row in their own form (a K-quant expert stack beside a shared
+expert the loader could only transcode to q8; a shared expert kept in the file's K-quant form
+shares the experts' feed). The fused add+rms+requant twins are off on a MoE: the router reads the
 normed row those twins never store. The MoE seats install separately
 (`install_moe_gpu_resident_moe`), so a tier without them declines a MoE by name, and the plan
 declines a router the top-k kernels do not serve - a non-softmax gate, a router or selection

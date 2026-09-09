@@ -899,76 +899,134 @@ struct RouterGemmArgs {
     ostride : uint   // the logits row stride (elements)
 }
 
-// the span's router GEMV batched over the window: a 32 x 32 tile of positions by router rows per
-// workgroup, each invocation a 2 x 2 block, K in 64-wide steps through shared (a 64-multiple
+let ROUTER_TP = 64u   //! the router tile's positions per workgroup
+let ROUTER_TE = 32u   //! ... and router rows
+let ROUTER_LD = 68u   //! the stage's row stride: 64 k plus a float4 of pad, so the sixteen rows of a fetch spread the banks
+
+// the span's router GEMV batched over the window: a 64 x 32 tile of positions by router rows per
+// workgroup, each invocation a 4 x 2 block, K in 64-wide steps through shared memory, the next
+// step's rows fetched into registers as float4 while the current step computes (a 64-multiple
 // row width); logits[p * ostride + e]
 [vk_dispatch(name = "router_gemm_cls", grid = "wgs", params = "wgs : int64")]
 class RouterGemm {
-    @ssbo @binding = 0 @role = "weight" w : array<float>   // the router rows, row-major [ne x dim] per layer
-    @ssbo @binding = 1 x : array<float>        // the FFN-normed rows
+    @ssbo @binding = 0 @role = "weight" w4 : array<float4>   // the router rows, row-major [ne x dim] per layer, as the stage's float4
+    @ssbo @binding = 1 x4 : array<float4>      // the FFN-normed rows, as float4
     @ssbo @binding = 2 logits : array<float>   // [npos x ostride]
     @push_constant pa : RouterGemmArgs
-    @workgroup xs : float[2080]                // 32 positions x 64 k, stride 65 (bank-spread)
-    @workgroup ws : float[2080]                // 32 rows x 64 k, stride 65
+    @workgroup xs : float[4352]                // 64 positions x 64 k at the stage stride
+    @workgroup ws : float[2176]                // 32 rows x 64 k
+
+    //! the stage's float4 of slot `s` (row s / 16, k4 s % 16) of x rows from `p0` at step `kb`; zero past the window
+    def fetch_x(p0, kb, s : uint) : float4 {
+        let row = s / 16u
+        if (p0 + row >= pa.npos) return float4(0.0)
+        return x4[((p0 + row) * pa.dim + kb) / 4u + (s % 16u)]
+    }
+
+    //! ... and of the router rows from `eg0`; zero past the experts
+    def fetch_w(eg0, kb, s : uint) : float4 {
+        let row = s / 16u
+        if (eg0 + row >= pa.ne) return float4(0.0)
+        return w4[(pa.woff + (eg0 + row) * pa.dim + kb) / 4u + (s % 16u)]
+    }
+
+    //! a fetched float4 into its stage row at k4 `s % 16`
+    def stage_x(s : uint; v : float4) {
+        let at = (s / 16u) * ROUTER_LD + (s % 16u) * 4u
+        xs[at] = v.x
+        xs[at + 1u] = v.y
+        xs[at + 2u] = v.z
+        xs[at + 3u] = v.w
+    }
+
+    def stage_w(s : uint; v : float4) {
+        let at = (s / 16u) * ROUTER_LD + (s % 16u) * 4u
+        ws[at] = v.x
+        ws[at + 1u] = v.y
+        ws[at + 2u] = v.z
+        ws[at + 3u] = v.w
+    }
 
     [spirv_kernel(local_size_x = 256, name = "router_gemm_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
     def run {
         let tid = gl_LocalInvocationID.x
-        let egroups = (pa.ne + 31u) / 32u
-        let p0 = (gl_WorkGroupID.x / egroups) * 32u
-        let eg0 = (gl_WorkGroupID.x % egroups) * 32u
-        let tp = tid / 16u         // the invocation's position pair
-        let te = tid % 16u         // ... and row pair
-        let sr = tid / 8u          // the stage: row sr, eight consecutive k per invocation
-        let sk = (tid % 8u) * 8u
+        let egroups = (pa.ne + ROUTER_TE - 1u) / ROUTER_TE
+        let p0 = (gl_WorkGroupID.x / egroups) * ROUTER_TP
+        let eg0 = (gl_WorkGroupID.x % egroups) * ROUTER_TE
+        let tp = tid / 16u         // the invocation's four positions 4tp..4tp+3
+        let te = tid % 16u         // ... and row pair 2te, 2te+1
         var a00 = 0.0
         var a01 = 0.0
         var a10 = 0.0
         var a11 = 0.0
+        var a20 = 0.0
+        var a21 = 0.0
+        var a30 = 0.0
+        var a31 = 0.0
+        // the stage: 64 x rows x 16 float4 = four per invocation, 32 w rows x 16 = two
+        var xr0 = fetch_x(p0, 0u, tid)
+        var xr1 = fetch_x(p0, 0u, tid + 256u)
+        var xr2 = fetch_x(p0, 0u, tid + 512u)
+        var xr3 = fetch_x(p0, 0u, tid + 768u)
+        var wr0 = fetch_w(eg0, 0u, tid)
+        var wr1 = fetch_w(eg0, 0u, tid + 256u)
         var kb = 0u
         while (kb < pa.dim) {
-            for [unroll] (q in range(8)) {
-                let kq = sk + uint(q)
-                if (p0 + sr < pa.npos) {
-                    xs[sr * 65u + kq] = x[(p0 + sr) * pa.dim + kb + kq]
-                } else {
-                    xs[sr * 65u + kq] = 0.0
-                }
-                if (eg0 + sr < pa.ne) {
-                    ws[sr * 65u + kq] = w[pa.woff + (eg0 + sr) * pa.dim + kb + kq]
-                } else {
-                    ws[sr * 65u + kq] = 0.0
-                }
-            }
+            stage_x(tid, xr0)
+            stage_x(tid + 256u, xr1)
+            stage_x(tid + 512u, xr2)
+            stage_x(tid + 768u, xr3)
+            stage_w(tid, wr0)
+            stage_w(tid + 256u, wr1)
             barrier()
+            let nb = kb + 64u
+            if (nb < pa.dim) {   // the next step's rows in flight while this step computes
+                xr0 = fetch_x(p0, nb, tid)
+                xr1 = fetch_x(p0, nb, tid + 256u)
+                xr2 = fetch_x(p0, nb, tid + 512u)
+                xr3 = fetch_x(p0, nb, tid + 768u)
+                wr0 = fetch_w(eg0, nb, tid)
+                wr1 = fetch_w(eg0, nb, tid + 256u)
+            }
+            let xb = (4u * tp) * ROUTER_LD
+            let wb = (2u * te) * ROUTER_LD
             var kk = 0u
             while (kk < 64u) {
-                let x0 = xs[(2u * tp) * 65u + kk]
-                let x1 = xs[(2u * tp + 1u) * 65u + kk]
-                let w0 = ws[(2u * te) * 65u + kk]
-                let w1 = ws[(2u * te + 1u) * 65u + kk]
+                let x0 = xs[xb + kk]
+                let x1 = xs[xb + ROUTER_LD + kk]
+                let x2 = xs[xb + 2u * ROUTER_LD + kk]
+                let x3 = xs[xb + 3u * ROUTER_LD + kk]
+                let w0 = ws[wb + kk]
+                let w1 = ws[wb + ROUTER_LD + kk]
                 a00 += x0 * w0
                 a01 += x0 * w1
                 a10 += x1 * w0
                 a11 += x1 * w1
+                a20 += x2 * w0
+                a21 += x2 * w1
+                a30 += x3 * w0
+                a31 += x3 * w1
                 kk++
             }
             barrier()
-            kb += 64u
+            kb = nb
         }
-        let pa0 = p0 + 2u * tp
+        let pa0 = p0 + 4u * tp
         let ea0 = eg0 + 2u * te
-        if (pa0 < pa.npos && ea0 < pa.ne) {
-            logits[pa0 * pa.ostride + ea0] = a00
+        store_pair(pa0, ea0, a00, a01)
+        store_pair(pa0 + 1u, ea0, a10, a11)
+        store_pair(pa0 + 2u, ea0, a20, a21)
+        store_pair(pa0 + 3u, ea0, a30, a31)
+    }
+
+    //! position p's two logits at rows e, e + 1, each within the window and the experts
+    def store_pair(p, e : uint; v0, v1 : float) {
+        if (p >= pa.npos) return
+        if (e < pa.ne) {
+            logits[p * pa.ostride + e] = v0
         }
-        if (pa0 < pa.npos && ea0 + 1u < pa.ne) {
-            logits[pa0 * pa.ostride + ea0 + 1u] = a01
-        }
-        if (pa0 + 1u < pa.npos && ea0 < pa.ne) {
-            logits[(pa0 + 1u) * pa.ostride + ea0] = a10
-        }
-        if (pa0 + 1u < pa.npos && ea0 + 1u < pa.ne) {
-            logits[(pa0 + 1u) * pa.ostride + ea0 + 1u] = a11
+        if (e + 1u < pa.ne) {
+            logits[p * pa.ostride + e + 1u] = v1
         }
     }
 }
@@ -1003,12 +1061,13 @@ def sched_ladder_m_rows(c : uint) : uint {
     return (c % SCHED_M_ROWS) > SCHED_S_ROWS ? c : (c / SCHED_M_ROWS) * SCHED_M_ROWS
 }
 
-// the window's bucket schedule on the device, one workgroup: thread e counts expert e's slots, the
-// scans place its bucket rows and its tiles, the three GEMMs' region records and per-wg maps land
-// in the layout the host fill writes (regions in expert order, empty experts skipped) - the s
-// pieces' records at [0, ne), the m pieces' at [ne, 2 ne), each dispatch's map at its own offset -
-// the map tails past the real workgroup counts read the sentinel, and inv maps every slot row to
-// its bucket row in slot order - the CPU bucket walk's order
+// the window's bucket schedule on the device, one workgroup: the experts' slot counts are an atomic
+// tally over the window (the threads stride the slots), the scans place each bucket's rows and its
+// tiles, the three GEMMs' region records and per-wg maps land in the layout the host fill writes
+// (regions in expert order, empty experts skipped) - the s pieces' records at [0, ne), the m
+// pieces' at [ne, 2 ne), each dispatch's map at its own offset - the map tails past the real
+// workgroup counts read the sentinel, and inv hands every slot row the next row of its expert's
+// bucket through an atomic cursor (the rows within a bucket land in an order nothing downstream reads)
 [vk_dispatch(name = "moe_sched_cls", grid = "one", params = "one : int64")]
 class MoeSched {
     @ssbo @binding = 0 idx : array<uint>       // [nk] the picked expert per slot row
@@ -1018,18 +1077,7 @@ class MoeSched {
     @ssbo @binding = 4 sched2 : array<uint>
     @push_constant pa : SchedArgs
     @workgroup scan : uint[256]
-    @workgroup idxs : uint[256]   // the slot walk's chunk: 256 picks staged from global memory, read by every thread
-
-    // the slots of a 256-slot chunk staged into idxs; returns the chunk's slot count
-    def stage_chunk(c0 : uint) : uint {
-        let tid = gl_LocalInvocationID.x
-        barrier()   // the previous chunk's readers are done with idxs
-        if (c0 + tid < pa.nk) {
-            idxs[tid] = idx[c0 + tid]
-        }
-        barrier()
-        return min(256u, pa.nk - c0)
-    }
+    @workgroup cnt : uint[256]    // the experts' slot counts, then their bucket cursors
 
     // one piece's record and per-wg map on the three planes: expert `tid`'s `rows` from `row0`,
     // record `ri`, its `rt` column tiles from workgroup `wg_gu` / `wg_dn` of the dispatch whose
@@ -1114,19 +1162,15 @@ class MoeSched {
     def run {
         let tid = gl_LocalInvocationID.x
         let mine = tid < pa.ne
-        var c = 0u
-        var c0 = 0u
-        while (c0 < pa.nk) {
-            let cn = stage_chunk(c0)
-            var j = 0u
-            while (j < cn) {
-                if (idxs[j] == tid) {
-                    c++
-                }
-                j++
-            }
-            c0 += 256u
+        cnt[tid] = 0u
+        barrier()
+        var i = tid
+        while (i < pa.nk) {   // the counts: one atomic per slot, the picks read coalesced (the top-k clamps them under ne)
+            let _c = atomicAdd(cnt[idx[i]], 1u)
+            i += 256u
         }
+        barrier()
+        let c = mine ? cnt[tid] : 0u
         let st = excl_scan(c)
         let mrows = mine ? sched_ladder_m_rows(c) : 0u
         let srows = mine ? c - mrows : 0u
@@ -1146,19 +1190,13 @@ class MoeSched {
             write_piece(ri_m, st, mrows, rt_m, g_gu >> 16u, g_dn >> 16u, pa.map_off_mgu, pa.map_off_mdn)
         }
         write_tails(total_gu, total_dn)
-        var b = st
-        c0 = 0u
-        while (c0 < pa.nk) {
-            let cn = stage_chunk(c0)
-            var j = 0u
-            while (j < cn) {
-                if (idxs[j] == tid) {
-                    inv[c0 + j] = b
-                    b++
-                }
-                j++
-            }
-            c0 += 256u
+        barrier()   // every thread has read its count
+        cnt[tid] = st   // the bucket cursors
+        barrier()
+        i = tid
+        while (i < pa.nk) {   // each slot takes the next row of its expert's bucket
+            inv[i] = atomicAdd(cnt[idx[i]], 1u)
+            i += 256u
         }
     }
 }

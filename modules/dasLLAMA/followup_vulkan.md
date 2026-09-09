@@ -924,8 +924,16 @@ module) is independent and can land any time - it is pure structure.
     Qwen3.6-35B-A3B UD-IQ2_XXS 2837.7 / 95.9 (2853.1 / 71.6: 0.99x / 1.34x), the Qwen1.5-MoE
     twin 5152.9 / 142.5 (5099.8 / 173.8; its window 94.5 ms, the first measured rep after the
     warmup reads 101 on every row here, a driver warm-up the bench's one warmup does not absorb).
-    Still open under this item: the 30B prefill's last 8% (the attention head 28 ms, the router
-    and schedule 15, the act, combine and gather 8), the decode levers (the shared and expert
-    GEMVs' bandwidth, the twelve small dispatches per layer), the fused add+rms twin that also
-    stores the normed row (the router's feed, so a MoE could take the fused rail), and an LPT
-    order for the device schedule's pieces (the m dispatch already leads the s one).
+    One more pass the same day: the shared expert's K-quant planes ride beside its q8 transcode
+    and the whole-model driver places those (the twin's token 7.06 -> 6.12 ms, tg128 162.7 =
+    0.94x), the schedule's slot walks are an atomic tally and cursor (8.1 -> 0.46 ms on the 30B
+    window), the router tile prefetches its stage as a 64 x 32 tile (6.6 -> 4.3 ms): the 30B
+    3448.9 / 124.6 (0.98x / 1.07x, the window 144.9 ms against 142.3), the 35B 2946.0 / 95.2
+    (1.03x / 1.33x), the twin 5348.3 / 163.4 (1.05x / 0.94x). Still open under this
+    item: the 30B prefill's last 2% (the gate/up tiles ~70 us per plane over the reference's -
+    a 64-wide column for the 33-64-row buckets - the router's 4.3 ms, the combine, act and gather
+    8), the twin's decode 6% (the expert GEMVs at 63% of bandwidth, the twelve small dispatches
+    per layer), the fused add+rms twin that also stores the normed row (the router's feed, so a
+    MoE could take the fused rail), the CPU chain's shared expert on the same K-quant planes
+    (it reads the q8 transcode, so the resident-vs-CPU bar carries the two forms' rounding), and
+    an LPT order for the device schedule's pieces (the m dispatch already leads the s one).

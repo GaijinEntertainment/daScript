@@ -87,9 +87,10 @@ table is the one optional plane today.
 
 **A MoE is planned like a dense model with bigger FFN planes.** Its weight planes are the
 attention quads, every MoE layer's expert triple (`[ne x nfe x dim]` twice and `[ne x dim x
-nfe]`, sliced per expert as the per-op walk gathers them), its shared expert's q8 triple where it
-has one, the classifier, and the router plane - every MoE layer's f32 rows with a gated shared
-expert's gate row beside them. The scratch adds the window's routed planes: the gathered f16
+nfe]`, sliced per expert as the per-op walk gathers them), its shared expert's triple where it
+has one - in the file's K-quant format where the loader kept those planes beside the q8
+transcode the CPU chain reads (`wshk*_offs`), the transcode otherwise - the classifier, and the
+router plane - every MoE layer's f32 rows with a gated shared expert's gate row beside them. The scratch adds the window's routed planes: the gathered f16
 rows, the gate and up rows, the f16 hidden rows and the routed down rows over `PF_WINDOW x k`
 bucket rows plus 32 of tile slack, and the routing smalls. The dense planes size at the shared
 expert's width, or the expert width where no layer has one. The plan is all-or-nothing as ever:

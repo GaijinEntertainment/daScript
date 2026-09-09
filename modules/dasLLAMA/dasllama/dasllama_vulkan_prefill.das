@@ -773,7 +773,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let ner = g_rd.ner
     let nk = wlen * k
     var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(ner), dim = uint(dim), woff = uint(L.moe_li * ner * dim), ostride = uint(ner))
-    enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + 31l) / 32l) * ((ner + 31l) / 32l))
+    enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
     pfq_ts(raw)
     var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale)
     enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)

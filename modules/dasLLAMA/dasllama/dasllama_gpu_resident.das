@@ -458,10 +458,27 @@ def private resident_moe_layer_bytes(t : Model; l : int64) : int64 {
     bytes += moe_gpu_plane_bytes(c.dim, ne * nfe, int(fmt_at(t.we3_fmt, l)))
     bytes += moe_gpu_plane_bytes(nfe, ne * c.dim, int(fmt_at(t.we2_fmt, l)))
     if (c.n_ff_shexp > 0l) {
-        let q8 = int(KqFmt.q8)
-        bytes += 2l * moe_gpu_plane_bytes(c.dim, c.n_ff_shexp, q8) + moe_gpu_plane_bytes(c.n_ff_shexp, c.dim, q8)
+        bytes += moe_gpu_plane_bytes(c.dim, c.n_ff_shexp, int(resident_shexp_plane(t, l, 1).f))
+        bytes += moe_gpu_plane_bytes(c.dim, c.n_ff_shexp, int(resident_shexp_plane(t, l, 3).f))
+        bytes += moe_gpu_plane_bytes(c.n_ff_shexp, c.dim, int(resident_shexp_plane(t, l, 2).f))
     }
     return bytes
+}
+
+//! the shared expert's plane of `kind` (1 gate, 3 up, 2 down) on layer l: the K-quant plane where the
+//! loader kept one, else the q8 transcode the CPU chain reads
+def private resident_shexp_plane(t : Model; l : int64; kind : int) : tuple<f : KqFmt; off : int64> {
+    let she = t.config.dim * t.config.n_ff_shexp
+    if (kind == 1) {
+        if (l < long_length(t.wshk1_offs) && t.wshk1_offs[l] >= 0l) return (f = fmt_at(t.wsh1_fmt, l), off = t.wshk1_offs[l])
+        return (f = KqFmt.q8, off = t.wsh1_off + l * she)
+    }
+    if (kind == 3) {
+        if (l < long_length(t.wshk3_offs) && t.wshk3_offs[l] >= 0l) return (f = fmt_at(t.wsh3_fmt, l), off = t.wshk3_offs[l])
+        return (f = KqFmt.q8, off = t.wsh3_off + l * she)
+    }
+    if (l < long_length(t.wshk2_offs) && t.wshk2_offs[l] >= 0l) return (f = fmt_at(t.wsh2_fmt, l), off = t.wshk2_offs[l])
+    return (f = KqFmt.q8, off = t.wsh2_off + l * she)
 }
 
 // the router plane: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated
@@ -731,6 +748,26 @@ def resident_unserved_features(c : Config) : string {
     return names
 }
 
+//! The decline reason for a MoE layer's shared expert triple - its formats on the dense rail, one
+//! feed form for gate and up, the down plane's block multiple - or "" when the driver serves it.
+def private resident_shexp_decline(t : Model; l : int64) : string {
+    let c = t.config
+    if (c.n_ff_shexp <= 0l) return ""
+    let s1 = resident_shexp_plane(t, l, 1).f
+    let s3 = resident_shexp_plane(t, l, 3).f
+    let s2 = resident_shexp_plane(t, l, 2).f
+    if (!dense_plane_ok(t, s1) || !dense_plane_ok(t, s3) || !dense_plane_ok(t, s2)) {
+        return "layer {l}'s shared expert carries a format ({int(s1)}/{int(s3)}/{int(s2)}) the dense rail does not serve"
+    }
+    if (rdec_quant_class(s1) != rdec_quant_class(s3)) {
+        return "layer {l}'s shared expert gate and up planes mix activation-quant forms ({int(s1)}/{int(s3)}) - one feed serves both"
+    }
+    if (!rdec_rows_ok(c.n_ff_shexp, s2)) {
+        return "layer {l}'s shared width {c.n_ff_shexp} is not a block multiple of its down plane's format {int(s2)}"
+    }
+    return ""
+}
+
 //! Why layer `l` keeps the whole-model driver off the model - "" when the layer fits the
 //! recorder's one fixed geometry (hidden `hid0`, head size `hs`, kv width `kvd`, own K/V).
 def resident_layer_decline(t : Model; l, hid0, hs, kvd : int64) : string {
@@ -748,6 +785,8 @@ def resident_layer_decline(t : Model; l, hid0, hs, kvd : int64) : string {
         if (!rdec_rows_ok(c.n_ff_exp, fe2)) {
             return "layer {l}'s expert width {c.n_ff_exp} is not a block multiple of its down plane's format {int(fe2)}"
         }
+        let shexp_why = resident_shexp_decline(t, l)
+        if (!empty(shexp_why)) return shexp_why
     } elif (c.n_expert > 0l && l >= c.n_layer_dense_lead) {
         return "layer {l} lacks an expert plane"
     }
@@ -920,9 +959,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = fmt_at(t.we3_fmt, l)))
             planes |> push((n = c.n_ff_exp, rows = c.n_expert * dim, f = fmt_at(t.we2_fmt, l)))
             if (c.n_ff_shexp > 0l) {
-                planes |> push((n = dim, rows = c.n_ff_shexp, f = KqFmt.q8))
-                planes |> push((n = dim, rows = c.n_ff_shexp, f = KqFmt.q8))
-                planes |> push((n = c.n_ff_shexp, rows = dim, f = KqFmt.q8))
+                planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 1).f))
+                planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 3).f))
+                planes |> push((n = c.n_ff_shexp, rows = dim, f = resident_shexp_plane(t, l, 2).f))
             }
             n_moe++
         }
@@ -1001,15 +1040,18 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         var b3 = -1l
         var b2 = -1l
         if (moe) {
-            // the dense triple is the shared expert's q8 planes; a layer without one keeps -1 blocks and the experts' feed form
-            let she = dim * c.n_ff_shexp
+            // the dense triple is the shared expert's planes (the file's K-quant where the loader kept it, else
+            // the q8 transcode); a layer without one keeps -1 blocks and the experts' feed form
             if (c.n_ff_shexp > 0l) {
-                lf.f1 = KqFmt.q8
-                lf.f3 = KqFmt.q8
-                lf.f2 = KqFmt.q8
-                b1 = resident_place(t, KqFmt.q8, t.wsh1_off + l * she, dim, c.n_ff_shexp, mr, kg, wb)
-                b3 = resident_place(t, KqFmt.q8, t.wsh3_off + l * she, dim, c.n_ff_shexp, mr, kg, wb)
-                b2 = resident_place(t, KqFmt.q8, t.wsh2_off + l * she, c.n_ff_shexp, dim, mr, kg, wb)
+                let p1 = resident_shexp_plane(t, l, 1)
+                let p3 = resident_shexp_plane(t, l, 3)
+                let p2 = resident_shexp_plane(t, l, 2)
+                lf.f1 = p1.f
+                lf.f3 = p3.f
+                lf.f2 = p2.f
+                b1 = resident_place(t, p1.f, p1.off, dim, c.n_ff_shexp, mr, kg, wb)
+                b3 = resident_place(t, p3.f, p3.off, dim, c.n_ff_shexp, mr, kg, wb)
+                b2 = resident_place(t, p2.f, p2.off, c.n_ff_shexp, dim, mr, kg, wb)
                 if (b1 < 0l || b3 < 0l || b2 < 0l) return rdec_decline("arena placement failed at layer {l} (the shared expert)")
             } else {
                 lf.f1 = fmt_at(t.we1_fmt, l)

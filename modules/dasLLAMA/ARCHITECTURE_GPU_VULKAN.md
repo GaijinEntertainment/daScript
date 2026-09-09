@@ -155,21 +155,24 @@ sec.2.2n), and the window then never leaves the device between layers: the CPU's
 bucketing and combine of the per-op tier (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q) become
 five device stages over the window's FFN-normed rows.
 
-- **The router GEMM** (`RouterGemm`) is the span's router GEMV batched: a 32 x 32 tile of
-  positions by router rows per workgroup, each invocation a 2 x 2 block, K in 64-wide steps
-  through shared memory (a 16 x 16 tile of one output each, stepping K by 32, was
-  barrier-bound at 243 us per layer for 268 MFLOP on the 30B; the 32 x 32 tile reads 142),
-  which is why the MoE seats ask for a 64-multiple row width. The router plane holds every MoE
-  layer's f32 rows, and a gated shared expert's gate vector rides as one more row past the
-  experts, so one dispatch writes the logits row `[ne | gate]` per position.
+- **The router GEMM** (`RouterGemm`) is the span's router GEMV batched: a 64 x 32 tile of
+  positions by router rows per workgroup, each invocation a 4 x 2 block, K in 64-wide steps
+  through shared memory with the next step's rows fetched into registers as float4 while the
+  current step computes (a 16 x 16 tile of one output each, stepping K by 32, was
+  barrier-bound at 243 us per layer for 268 MFLOP on the 30B; a 32 x 32 tile of 2 x 2 blocks
+  staging each step before computing it read 142, latency-bound on the stage), which is why the
+  MoE seats ask for a 64-multiple row width. The router plane holds every MoE layer's f32 rows,
+  and a gated shared expert's gate vector rides as one more row past the experts, so one
+  dispatch writes the logits row `[ne | gate]` per position.
 - **The per-row select** (`TopKRows`, one workgroup per position) is the decode top-k's core
   over each row: the softmax, k picks largest-first with ties to the lower index, the
   renormalized or scaled weights - the host `moe_select_core`'s arithmetic - written
   position-major as the picked expert and its weight per slot.
 - **The bucket schedule** (`MoeSched`, one workgroup) writes what the host fill writes for the
-  per-op chain: thread e counts expert e's slots over the window, exclusive scans place its
-  bucket rows, its region indices (experts with rows, in expert order) and its tile workgroups,
-  and the three expert planes' schedules land as 4-word records plus per-workgroup maps. A
+  per-op chain: the experts' slot counts are an atomic tally over the window (the 256 threads
+  stride the picks, one workgroup atomic per slot), exclusive scans place each bucket's rows,
+  its region indices (experts with rows, in expert order) and its tile workgroups, and the
+  three expert planes' schedules land as 4-word records plus per-workgroup maps. A
   bucket is cut into at most two pieces by the tile ladder: a bucket within the s column (32
   rows) is one s piece; a bigger bucket takes whole m columns (128 rows) with the last one
   partial, unless the remainder past the whole columns fits the s column, which then takes it
@@ -183,11 +186,13 @@ five device stages over the window's FFN-normed rows.
   hold over 128 rows (the largest 467) - so the ladder runs about 90 column tiles where the s
   column alone ran 175 (`DASLLAMA_GPU_PROF=1` prints the last MoE layer's buckets and both
   counts): the expert planes at 593 / 650 us against 842 / 915 on the s column alone
-  (`harness/vk_gemm_probe.das -- moesk:iq2xxs`, that window's profile). The two slot walks (the
-  counts, the slot-to-bucket-row map) stage the picks through workgroup memory in 256-slot chunks
-  rather than reading every slot from global memory per thread (258 us per layer to 163 on the
-  30B). The slot-to-bucket-row map lands in slot order, the CPU walk's order, so the device
-  buckets equal the host's.
+  (`harness/vk_gemm_probe.das -- moesk:iq2xxs`, that window's profile). The slot-to-bucket-row
+  map hands every slot the next row of its expert's bucket through an atomic cursor, so the
+  rows within a bucket land in an order the schedule does not fix - which nothing downstream
+  reads: the tiles compute rows apart and the combine reads each slot's row through the map, so
+  the sums are the CPU walk's to the bit (the kernel cell checks the map as a permutation of
+  each bucket's rows). The per-expert slot walks this replaced - thread e scanning every slot
+  twice, staged through workgroup memory in 256-slot chunks - cost 163 us per layer on the 30B.
 - **The gather, the expert tiles and the act** are the per-op chain's: the f16 gather scatters
   each position's row into its bucket rows, gate and up run the cm2 tiles over the gathered
   image - each plane's m dispatch then its s dispatch, the two writing disjoint rows of one

@@ -1048,6 +1048,15 @@ struct Model {
     wsh1_off : int64        // ffn_gate_shexp: layers x (dim x n_ff_shexp)
     wsh2_off : int64        // ffn_down_shexp: layers x (n_ff_shexp x dim)
     wsh3_off : int64        // ffn_up_shexp:   layers x (dim x n_ff_shexp)
+    // the shared expert's K-quant planes beside its q8 transcode (the CPU and Metal chains' form): per
+    // layer, the file's format and its plane offset, the whole-model driver's form; -1 / q8 where the
+    // file's shexp is not a K-quant the dense rail serves (an empty table = q8 alone)
+    wsh1_fmt : array<KqFmt>
+    wsh2_fmt : array<KqFmt>
+    wsh3_fmt : array<KqFmt>
+    wshk1_offs : array<int64>
+    wshk2_offs : array<int64>
+    wshk3_offs : array<int64>
     wcls_off : int64
     // Tied-classifier Q8: the classifier lives in qblob at wcls_off (repacked); set only by
     // load_gguf for shared_weights + QuantMode.q8 + Q8_0 token_embd on disk.
