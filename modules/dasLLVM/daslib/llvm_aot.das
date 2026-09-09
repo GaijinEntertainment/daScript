@@ -72,7 +72,7 @@ def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<F
 // there) and points ExprAddr globals at their publ symbols. No module/function registration.
 def public emit_aot_object_globinit(ctx : LLVMContextRef; mod : LLVMOpaqueModule?;
                                     var types : PrimitiveTypes?; var funcs : array<FunctionPtr>;
-                                    var uids : UidNodes?) : LLVMOpaqueValue? {
+                                    var uids : UidNodes?; prog : Program?) : LLVMOpaqueValue? {
     // void das_aot_object_globinit_constructor(Context* ctx): ctx is used to
     // resolve Func-value globs to the host's SimFunction* (das_aot_get_func_by_mnh).
     let fnType = LLVMFunctionType(types.t_void, fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType()))
@@ -83,6 +83,7 @@ def public emit_aot_object_globinit(ctx : LLVMContextRef; mod : LLVMOpaqueModule
     // Aliases the caller's uids; do NOT delete it (deletion cascades into that shared uid, which the
     // caller still uses). It's a gc_node, reclaimed by the surrounding ast_gc_guard / process teardown.
     var extern_resolver = new CollectExternVisitor(null, ctx, b, mod, types, uids, false, LlvmJitMode.LLVM_AOT)
+    extern_resolver.prog = prog     // the selection a constructor is checked against is the program's
     extern_resolver.aot_ctx_arg = LLVMGetParam(ctor, 0u)
     make_visitor(*extern_resolver) $(adapter_resolve) {
         ast_gc_guard() {
@@ -100,7 +101,7 @@ def public emit_aot_object_globinit(ctx : LLVMContextRef; mod : LLVMOpaqueModule
 //! Build both offline-AOT-object ctors (the extern-resolver globinit + the das_aot_register ctor) and
 //! return the (ctor, dtor) pair to append to llvm.global_ctors/dtors. Called by run_jit in emit_aot_object mode.
 def public build_llvm_aot_ctors(ctx : LLVMContextRef; mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; var funcs : array<FunctionPtr>; var uids : UidNodes?; prog : Program?) : tuple<LLVMOpaqueValue?, LLVMOpaqueValue?> {
-    let glob_ctor = emit_aot_object_globinit(ctx, mod, types, funcs, uids)
+    let glob_ctor = emit_aot_object_globinit(ctx, mod, types, funcs, uids, prog)
     return emit_aot_register_ctor_dtor(types, funcs, uids, prog, glob_ctor)
 }
 
