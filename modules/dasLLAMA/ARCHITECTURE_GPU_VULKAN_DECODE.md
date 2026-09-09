@@ -1,11 +1,12 @@
 # dasLLAMA Architecture - the Vulkan per-op tier's decode era
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2r-2.2v: the decode attention block over per-layer K/V mirrors,
+document carries sections 2.2r-2.2v and 2.2ag: the decode attention block over per-layer K/V mirrors,
 the streamed expert layer's GPU/CPU split, the whole-token decode span, the deltanet decode
-step's per-session resident state, and the whole-model driver's hybrid token command. The
+step's per-session resident state, the whole-model driver's hybrid token command, and its MoE
+token command. The
 prefill window chain and byte stores these build on are `ARCHITECTURE_GPU_VULKAN.md` sections
-2.2j, 2.2p, 2.2ab, 2.2ac and 2.2ad; the cm2 tiles, the MoE expert chain on them and the KHR
+2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad and 2.2af; the cm2 tiles, the MoE expert chain on them and the KHR
 arm's kq tile are `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the
 residency plan and the marks
 swap under them are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o.
@@ -272,3 +273,33 @@ session's prefill superseded is hydrated on the host; the decode override upload
 layers' rows `[0, pos)` into the mirror (`rdec_take_mirror`), mints a generation and serves - the
 same sync the batch decode does per row. The gap decline remains for a session that owns the
 mirror and asks past its rows.
+
+### 2.2ag The whole-model driver's MoE token command {#resident-moe-token}
+
+**An MoE layer rides the same recorded token command as a dense layer; its FFN tail is a routed
+block over arena expert planes.** After the layer's attention head and the FFN norm, a layer
+with a shared expert runs the dense tail over the shared triple (gate, up, the act, down into
+`ffnout`), then the routed block: the router GEMV (`RouterGemv`) over the f32 normed row reads
+the driver's router plane - every MoE layer's rows and, when the shared expert is gated, its gate
+row last - into one logits row; the top-k (`TopK`, the span's kernel over the decode's core)
+writes the k routing weights and the three expert GEMVs' slot regions, each a `(block, feed
+block)` pair whose block is the expert plane's slab-local base plus the pick's stride; gate and
+up run the class GEMV over k regions, the act writes k hidden rows, down runs k regions into the
+routed rows; and the combine lands the layer's FFN row in `ffnout` - the gated combine over the
+shared row already there, the plain combine from zero on a layer without one - so the residual
+step never learns which FFN ran. The slot regions are device buffers the top-k fills each token;
+the dense triple's host-filled regions stay what they are.
+
+**The routed block is the decode span's FFN half transplanted, not a second copy of the span.**
+The kernels are the span's (sec.2.2t); what differs is the home: the arena's expert planes and
+the resident driver's activation row instead of the per-op tier's stacks and the span's own row.
+A model the plan admits therefore takes neither the span nor the per-op rails - the resident
+prefill (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2af) fills the one mirror the token command reads.
+
+The experts' feed is the layer's quantized row when their form is the dense triple's, else a
+second requant of the normed row in their own form (a K-quant expert stack beside the shared
+expert's q8 triple). The fused add+rms+requant twins are off on a MoE: the router reads the
+normed row those twins never store. The MoE seats install separately
+(`install_moe_gpu_resident_moe`), so a tier without them declines a MoE by name, and the plan
+declines a router the top-k kernels do not serve - a non-softmax gate, a router or selection
+bias, biased or mx4 expert stacks, more than 256 experts or 64 routed slots - by name too.

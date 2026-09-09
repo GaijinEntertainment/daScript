@@ -80,17 +80,28 @@ the rest is the per-layer host glue the span would remove, and the span declines
    26 -> 7.5 ms. Gates: `test_vulkan_dec_tail.das`'s span cell with a gated shared expert (the
    no-shexp reference must miss the device row; `vk_span_reset` between the two spans of one
    process) and the twin's fed steps through the span in `test_gpu_moe_shexp.das` with the
-   span-tokens witness. The 35B and Qwen1.5 Q8 rows ride the same arm; gemma-4-26B waits on its
+   span-tokens witness. The Qwen1.5 Q8_0 row (board row 20, layers 0-2 streamed) reads
+   1139.9 / 96.2 on both slices against its 506.1 / 39.0 (llama.cpp 3507 / 52.2): the decode
+   above llama.cpp's, the prefill 0.33x. The 35B rides the same arm; gemma-4-26B waits on its
    sandwich norms.
-3. **The resident MoE prefill window.** The plan admits a MoE whose stacks fit (the per-op
-   walk's sizes; all-or-nothing like the dense case, the room named honestly against the
-   desktop); the window chain gains an MoE FFN block: a router GEMM over the window's rows
-   (f32 plane, the span's arithmetic batched), top-k per row, a device bucket schedule (counts,
-   prefix sums, region metas, the tile dispatch indirect), the existing gather + cm2 expert
-   chain + combine, the residual add fused; the shared expert as the dense block with the row
-   scale. The projections ride the f16-feed coopmat tiles, nothing crosses the bus per layer.
-   Win: the profile puts it at ~200 ms of the 30B's 560, i.e. ~0.9x llama.cpp before the
-   expert GEMMs themselves move.
+3. **The resident MoE prefill window.** DONE 2026-09-09: the whole-model driver admits a MoE
+   whose expert stacks fit the arena (the plan counts the expert triples, the shared triples
+   and the f32 router plane; sized before the per-op reserves, which a fitting plan forgoes);
+   the window chain's routed block is five device stages over the FFN-normed rows - the router
+   GEMM (16x16 tiles over the f32 plane, the gate row beside the experts), the per-row select
+   (the decode top-k's core over each row), the device bucket schedule (one workgroup: counts,
+   scans, the three planes' records and per-wg maps in the host fill's layout, a sentinel tail
+   past the real workgroup count that the cm2 tile returns on, so the dispatch is an upper
+   bound and nothing is indirect), the existing f16 gather + cm2 tiles + act, and the combine
+   onto the FFN rows (the gated form over the shared expert's rows, which ride the dense
+   tail); and the token command gains the same block in decode form (the span's router GEMV
+   and top-k over the driver's routing smalls, the expert GEMVs over the arena planes through
+   the top-k's slot regions, the combine). The twin: pp512 1435.9 -> 5069.2 (llama.cpp 5099.8,
+   0.99x), tg128 134.0 -> 142.2 (173.8, 0.82x). Gates: the four routing kernels against CPU
+   oracles with poisons in `test_vulkan_kernels.das`, the twin's forced feed against the
+   all-CPU chain at one and two windows in `test_gpu_resident_moe.das` (0.15 bar, the
+   one-step-off control 3.7-9.1 logits off, the census witnesses), the per-op tier's shexp
+   file pinned to its own arm through `set_gpu_resident_route`. `DASLLAMA_GPU_RESIDENT=0` is the A/B lever.
 4. **The hybrid MoE.** The 35B rides slice 3 with the deltanet block already in the chain.
 5. **The expert GEMMs at small M.** The last term (192 ms on the 30B): a tile pick for
    32-row buckets, or a mul_mat_id-shaped kernel; measured on the probe first.

@@ -14,7 +14,7 @@ def private allow_cpu_prefill_intent() {
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
-require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto / moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route
+require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto / moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route / set_gpu_resident_route
 require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers: the device arm's engage witness
 require _model_tier   // models_dir() + model_available() presence/size-tier gate, the logits compares
 
@@ -25,7 +25,8 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // the same prompt and fed tokens with the route ON (the device arm) and OFF (the CPU form), the
 // logits within a bar of the CPU arm after the prefill and at every step, the one-step-off
 // control past it, and the engage witness - the arm's layer count grows by the model's layer
-// count per prefill on the device arm and not at all on the CPU arm.
+// count per prefill on the device arm and not at all on the CPU arm. The whole-model driver is
+// pinned off for the load: it would take the twin whole (test_gpu_resident_moe.das is its gate).
 
 let private TWIN = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"   //! the Q4_K_M mint of the Q8_0 carrier (its recipe row in ../performance/model_specs.das)
 //! of the step's max |logit|. The arms agree to 1e-8 at layer 0 and part from layer 1 on: the device chain's
@@ -74,7 +75,9 @@ def private shexp_forced_feed(t : T?; n : int64) {
         t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the MoE tier")
         return
     }
+    set_gpu_resident_route(false)   // the per-op rails' claims: the whole-model driver would take the twin (test_gpu_resident_moe.das holds that arm)
     var tr <- load_model_(path, QuantMode.q8)
+    set_gpu_resident_route(true)   // the lever reads at the load alone
     t |> success(tr.config.n_ff_shexp > 0l && !tr.config.moe_dense_shexp, "the twin carries a gated shared expert")
     let layers = tr.config.n_layers
     var marked = 0l

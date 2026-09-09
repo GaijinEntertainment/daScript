@@ -642,11 +642,161 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
 
 // the prefill profile's stamps per layer: the attention head's roles (+ qkn), or the recurrent head's
 // (rq_x qkv z [beta alpha | ba] conv scan onorm tail rq_o out), then the shared FFN tail's seven
-def private pf_roles_per_layer(recurrent : bool) : int64 {
-    if (recurrent) {
+def private pf_roles_per_layer(L : RLayer) : int64 {
+    if (L.recurrent) {
         return 7l + (g_rd.dn_ba_f32 ? 10l : 11l)
     }
-    return g_rd.qk_norm ? 16l : 15l
+    var n = g_rd.qk_norm ? 16l : 15l
+    if (L.moe) {   // the routed block's nine stamps; a layer without a shared expert has no dense-block stamps
+        n += PF_MOE_ROLES - (L.b1 < 0l ? 4l : 0l)
+    }
+    return n
+}
+
+let private PF_MOE_ROLES = 9l   // router topk sched gather e_gate e_up e_act e_down comb
+let private PF_MOE_MAP_OFF = 1_024l   // the schedules' per-wg map word offset: 4-word records for up to 256 experts
+
+//! Does the resident MoE block admit an expert triple of these formats: the f16-fed cm2 tiles
+//! serve it, so a coopmat2 device in cm2 mode with every format the f16 feed admits.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+def vk_rdec_moe_ok(f1, f3, f2 : int) : bool {
+    if (!vk_moe_init() || !g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
+        return false
+    }
+    return pf_f16_feed(f1) && pf_f16_feed(f3) && pf_f16_feed(f2)
+}
+
+//! the expert tiles' dispatch bounds for a window of `nk` slot rows at token column `tc`: every
+//! expert may take a partial tile, so the schedule's map is sized for one region per expert
+def private pf_moe_bounds(nk, tc : int64) : tuple<gu : int64; dn : int64> {
+    let rt = (nk + tc - 1l) / tc + min(g_rd.ne, nk)
+    return (gu = rt * ((g_rd.nfe + 127l) / 128l), dn = rt * ((g_rd.dim + 127l) / 128l))
+}
+
+// the window chain's MoE block buffers and class rails, once per residency
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+def private pf_moe_setup {
+    let np = g_rd.pf_np
+    let dim = g_rd.dim
+    let nfe = g_rd.nfe
+    let nk = np * g_rd.k
+    g_rd.pf_nk = nk
+    verify(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_gather_f16_cls()
+        && ensure_actf16_cls() && ensure_combine_cls() && ensure_combine_sh_cls(),
+        "vk prefill: the MoE block's class rails must engage on a live device")
+    g_rd.moe_tc = cm2_tile_cols(nfe, max(nk / g_rd.ne, 1l))
+    let bounds = pf_moe_bounds(nk, g_rd.moe_tc)
+    assert((PF_MOE_MAP_OFF + max(bounds.gu, bounds.dn)) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: the MoE block's schedule exceeds its plane")
+    g_rd.pf_mlog = make_device_buf(np * g_rd.ner * 4l)
+    g_rd.pf_midx = make_device_buf(nk * 4l)
+    g_rd.pf_mw = make_device_buf(nk * 4l)
+    g_rd.pf_minv = make_device_buf(nk * 4l)
+    g_rd.pf_msch1 = make_device_buf(BATCH_META_BYTES)
+    g_rd.pf_msch3 = make_device_buf(BATCH_META_BYTES)
+    g_rd.pf_msch2 = make_device_buf(BATCH_META_BYTES)
+    g_rd.pf_mxg = make_device_buf((nk + TILE_READ_SLACK) * dim * 2l)
+    g_rd.pf_my1 = make_device_buf(nk * nfe * 4l)
+    g_rd.pf_my2 = make_device_buf(nk * nfe * 4l)
+    g_rd.pf_mhf = make_device_buf((nk + TILE_READ_SLACK) * nfe * 2l)
+    g_rd.pf_mdn = make_device_buf(nk * dim * 4l)
+}
+
+// one MoE layer's window sets: the router GEMM and per-row select over the routing planes, the
+// schedule, the gather, the three expert tiles over the device-written schedules, the act, the combine
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+def private pf_moe_layer_sets(l : int64) {
+    var L & = unsafe(g_rd.layers[l])
+    let np = g_rd.pf_np
+    let dim = g_rd.dim
+    let nfe = g_rd.nfe
+    let nk = g_rd.pf_nk
+    let ner = g_rd.ner
+    let tc = g_rd.moe_tc
+    let xg_bytes = (nk + TILE_READ_SLACK) * dim * 2l
+    let y_bytes = nk * nfe * 4l
+    let hf_bytes = (nk + TILE_READ_SLACK) * nfe * 2l
+    let dn_bytes = nk * dim * 4l
+    let pe1 = arena_planes(L.fe1, L.be1)
+    let pe3 = arena_planes(L.fe3, L.be3)
+    let pe2 = arena_planes(L.fe2, L.be2)
+    verify(cm2_cls_ensure(L.fe1, tc) && cm2_cls_ensure(L.fe3, tc) && cm2_cls_ensure(L.fe2, tc), "vk prefill: the expert tile class rails must engage")
+    L.pf_router_set = set_router_gemm_cls(fixed_array(g_rd.router_dev, g_rd.pf_xb, g_rd.pf_mlog),
+        fixed_array(g_rd.router_bytes, np * dim * 4l, np * ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
+    L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw),
+        fixed_array(np * ner * 4l, nk * 4l, nk * 4l), fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT))
+    L.pf_sched_set = set_moe_sched_cls(fixed_array(g_rd.pf_midx, g_rd.pf_minv, g_rd.pf_msch1, g_rd.pf_msch3, g_rd.pf_msch2),
+        fixed_array(nk * 4l, nk * 4l, BATCH_META_BYTES, BATCH_META_BYTES, BATCH_META_BYTES),
+        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT))
+    L.pf_gather_set = set_moe_gather_f16_cls(fixed_array(g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mxg),
+        fixed_array(np * dim * 4l, nk * 4l, xg_bytes), fixed_array(VHZ_XB, VHZ_MRT, VHZ_MXG))
+    L.pf_e1_set = cm2_cls_set(L.fe1, tc, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
+        fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE))
+    L.pf_e3_set = cm2_cls_set(L.fe3, tc, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
+        fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP))
+    L.pf_eact_set = set_actf16_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf),
+        fixed_array(y_bytes, y_bytes, hf_bytes), fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ))
+    L.pf_e2_set = cm2_cls_set(L.fe2, tc, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
+        fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
+    if (L.b1 >= 0l) {
+        L.pf_ecomb_set = set_combine_sh_cls(fixed_array(g_rd.pf_ffnout, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
+            fixed_array(np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
+            fixed_array(VHZ_FFO, VHZ_MRT, VHZ_MRT, VHZ_MDN, VHZ_MRT))
+    } else {
+        L.pf_ecomb_set = set_combine_cls(fixed_array(g_rd.pf_ffnout, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn),
+            fixed_array(np * dim * 4l, nk * 4l, nk * 4l, dn_bytes),
+            fixed_array(VHZ_FFO, VHZ_MRT, VHZ_MRT, VHZ_MDN))
+    }
+}
+
+//! The routed block of an MoE layer's window: the router GEMM over the FFN-normed rows, the per-row
+//! select, the bucket schedule, the f16 gather, the expert tiles over the device-written schedules
+//! (gate, up, the act, down) and the combine onto the FFN rows, over the shared expert's rows when the layer has one
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
+def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
+    var L & = unsafe(g_rd.layers[l])
+    let dim = g_rd.dim   // nolint:LINT021 — composed into the plane offsets and the push words as int64
+    let ne = g_rd.ne   // nolint:LINT021 — the push words take the int64 geometry narrowed
+    let k = g_rd.k
+    let nfe = g_rd.nfe
+    let ner = g_rd.ner
+    let nk = wlen * k
+    var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(ner), dim = uint(dim), woff = uint(L.moe_li * ner * dim), ostride = uint(ner))
+    enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + 15l) / 16l) * ((ner + 15l) / 16l))
+    pfq_ts(raw)
+    var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale)
+    enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)
+    pfq_ts(raw)
+    let tc = g_rd.moe_tc
+    let bounds = pf_moe_bounds(nk, tc)
+    var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), tc = uint(tc), wt_gu = uint((nfe + 127l) / 128l), wt_dn = uint((dim + 127l) / 128l),
+        map_off = uint(PF_MOE_MAP_OFF), bound_gu = uint(bounds.gu), bound_dn = uint(bounds.dn),
+        base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / fmt_unit(L.fe1)),
+        base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / fmt_unit(L.fe3)),
+        base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / fmt_unit(L.fe2)))
+    enc_moe_sched_cls(raw, h, L.pf_sched_set, pcs, 1l)
+    pfq_ts(raw)
+    var pcg = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
+    enc_moe_gather_f16_cls(raw, h, L.pf_gather_set, pcg, nk)
+    pfq_ts(raw)
+    var pc1 = BatchArgs(n = uint(dim), d = uint(nfe), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
+    cm2_cls_enc(L.fe1, tc, raw, h, L.pf_e1_set, pc1, bounds.gu)
+    pfq_ts(raw)
+    cm2_cls_enc(L.fe3, tc, raw, h, L.pf_e3_set, pc1, bounds.gu)
+    pfq_ts(raw)
+    var pca = ActArgs(nelem = uint(nk * nfe), gelu = g_rd.is_gelu ? 1u : 0u, nblk = uint(nk * nfe / 32l), elem0 = 0u)
+    enc_actf16_cls(raw, h, L.pf_eact_set, pca, (nk * nfe / 4l + 255l) / 256l)
+    pfq_ts(raw)
+    var pc2 = BatchArgs(n = uint(nfe), d = uint(dim), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
+    cm2_cls_enc(L.fe2, tc, raw, h, L.pf_e2_set, pc2, bounds.dn)
+    pfq_ts(raw)
+    if (L.b1 >= 0l) {
+        var pcc = CombineShArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk), lstride = uint(ner), gidx = uint(ne), gated = g_rd.sh_gated ? 1u : 0u)
+        enc_combine_sh_cls(raw, h, L.pf_ecomb_set, pcc, wlen)
+    } else {
+        var pcc = CombineArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
+        enc_combine_cls(raw, h, L.pf_ecomb_set, pcc, wlen)
+    }
+    pfq_ts(raw)
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]   // once per residency — buffers, sets, fa arming
@@ -771,6 +921,9 @@ def private pf_setup {
     if (nkvm > 0l) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: merged k/v prefill GEMM armed ({nkvm} of {g_rd.n_layers} layers; DASLLAMA_VK_KV_MERGE=0 pins the split pair)\n")
     }
+    if (g_rd.moe) {
+        pf_moe_setup()
+    }
     if (g_rd.hybrid) {
         ensure_dn_state()   // dn_ws_dev (the scan workspace) + the staging buffers the reset/handoff ride
         verify(ensure_dn_conv_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls()
@@ -796,6 +949,9 @@ def private pf_setup {
         let b = int(l * PF_ROLES)
         if (L.recurrent) {
             pf_dn_layer_sets(l, dim, g_rd.dn_cd, g_rd.dn_di)
+        }
+        if (L.moe) {
+            pf_moe_layer_sets(l)
         }
         let qkv6 = !L.recurrent && pf_qkv6(l)
         let wo6 = pf_f16_feed(L.fo)
@@ -1206,7 +1362,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     po.wqb, po.wsb, aqn, asn, np * dim * 4l, VHZ_AQ, VHZ_XB2, qd, dim, g_rd.layers[l].bo, wlen, fo6)
                 }
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
-                if (fuse_arq && !guk) {
+                let moe = g_rd.layers[l].moe   // the routed block reads the normed rows the fused twin never stores
+                if (fuse_arq && !guk && !moe) {
                     if (gu6) {
                         enc_cls_ar_f16_b(raw, h, g_rd.pf_arq_sets[int(l * 2l)], pc8, wlen)
                     } else {
@@ -1228,37 +1385,42 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let p1 = arena_planes(g_rd.layers[l].f1, g_rd.layers[l].b1)
-                let p3 = arena_planes(g_rd.layers[l].f3, g_rd.layers[l].b3)
-                let gqb = gu6 ? g_rd.pf_xf : g_rd.pf_xq
-                let gsb = gu6 ? g_rd.dummy : g_rd.pf_xs
-                let gqn = gu6 ? np * dim * 2l : np * dim
-                let gsn = gu6 ? 256l : np * (dim / 32l) * 4l
-                let ffn_row0 = pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6, dn6)
+                let ffn_row0 = pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
                 let ffn_rows = wlen - ffn_row0
-                let tgu = cm2_tiles(hid, ffn_rows)
-                pf_gemm_enc(raw, h, b + 10, g_rd.layers[l].f1, p1.wq, p1.ws, gqb, gsb, g_rd.pf_gate,
-                    p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, ffn_rows, gu6, tgu, ffn_row0)
-                pf_gemm_enc(raw, h, b + 11, g_rd.layers[l].f3, p3.wq, p3.ws, gqb, gsb, g_rd.pf_up,
-                    p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, ffn_rows, gu6, tgu, ffn_row0)
-                if (dn6) {
-                    var pc12 = ActArgs(nelem = uint(ffn_rows * hid), gelu = 0u, nblk = uint(ffn_rows * hid / 32l), elem0 = uint(ffn_row0 * hid))
-                    enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (ffn_rows * hid / 4l + 255l) / 256l)
-                } elif (dnk) {
-                    var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 256l))
-                    enc_q8k_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 8l + 255l) / 256l)
-                } else {
-                    var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
-                    enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
+                if (g_rd.layers[l].b1 >= 0l) {   // the dense triple: the layer's FFN, or an MoE layer's shared expert
+                    let p1 = arena_planes(g_rd.layers[l].f1, g_rd.layers[l].b1)
+                    let p3 = arena_planes(g_rd.layers[l].f3, g_rd.layers[l].b3)
+                    let gqb = gu6 ? g_rd.pf_xf : g_rd.pf_xq
+                    let gsb = gu6 ? g_rd.dummy : g_rd.pf_xs
+                    let gqn = gu6 ? np * dim * 2l : np * dim
+                    let gsn = gu6 ? 256l : np * (dim / 32l) * 4l
+                    let tgu = cm2_tiles(hid, ffn_rows)
+                    pf_gemm_enc(raw, h, b + 10, g_rd.layers[l].f1, p1.wq, p1.ws, gqb, gsb, g_rd.pf_gate,
+                        p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, ffn_rows, gu6, tgu, ffn_row0)
+                    pf_gemm_enc(raw, h, b + 11, g_rd.layers[l].f3, p3.wq, p3.ws, gqb, gsb, g_rd.pf_up,
+                        p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, ffn_rows, gu6, tgu, ffn_row0)
+                    if (dn6) {
+                        var pc12 = ActArgs(nelem = uint(ffn_rows * hid), gelu = 0u, nblk = uint(ffn_rows * hid / 32l), elem0 = uint(ffn_row0 * hid))
+                        enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (ffn_rows * hid / 4l + 255l) / 256l)
+                    } elif (dnk) {
+                        var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 256l))
+                        enc_q8k_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 8l + 255l) / 256l)
+                    } else {
+                        var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = 0u, nblk = uint(wlen * hid / 32l))
+                        enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
+                    }
+                    pfq_ts(raw)
+                    let p2 = arena_planes(g_rd.layers[l].f2, g_rd.layers[l].b2)
+                    let hqb = dn6 ? g_rd.pf_hf : g_gpu.hq_dev
+                    let hsb = dn6 ? g_rd.dummy : g_gpu.hs_dev
+                    let hqn = dn6 ? np * hid * 2l : np * hid
+                    let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
+                    pf_gemm_enc(raw, h, b + 13, g_rd.layers[l].f2, p2.wq, p2.ws, hqb, hsb, g_rd.pf_ffnout,
+                        p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, ffn_rows, dn6, 0l, ffn_row0)
                 }
-                pfq_ts(raw)
-                let p2 = arena_planes(g_rd.layers[l].f2, g_rd.layers[l].b2)
-                let hqb = dn6 ? g_rd.pf_hf : g_gpu.hq_dev
-                let hsb = dn6 ? g_rd.dummy : g_gpu.hs_dev
-                let hqn = dn6 ? np * hid * 2l : np * hid
-                let hsn = dn6 ? 256l : np * (hid / 32l) * 4l
-                pf_gemm_enc(raw, h, b + 13, g_rd.layers[l].f2, p2.wq, p2.ws, hqb, hsb, g_rd.pf_ffnout,
-                    p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, ffn_rows, dn6, 0l, ffn_row0)
+                if (moe) {
+                    pf_moe_block(raw, h, l, wlen)
+                }
                 let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   // nolint:LINT021 — composed from int64 layout offsets
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0, row0 = uint(ffn_row0))
                 let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
@@ -1313,7 +1475,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
 def private pf_prof_report(npos : int64) {
     var want = 5u
     for (L in g_rd.layers) {
-        want += uint(pf_roles_per_layer(L.recurrent))
+        want += uint(pf_roles_per_layer(L))
     }
     if (g_pfq_n != want) {
         to_log(LOG_INFO, "vk_rdpf gpu: roles unaggregated ({g_pfq_n} stamps, the table expects {want})\n")
@@ -1321,14 +1483,18 @@ def private pf_prof_report(npos : int64) {
     }
     var att : double[16]
     var dn : double[18]
+    var moe : double[26]
     var natt = 0l
     var ndn = 0l
+    var nmoe = 0l
     var qi = 3u
     for (L in g_rd.layers) {
-        let n = pf_roles_per_layer(L.recurrent)
+        let n = pf_roles_per_layer(L)
         for (s in range64(n)) {
             if (L.recurrent) {
                 dn[s] += pfq_us(qi + uint(s))
+            } elif (L.moe) {
+                moe[s] += pfq_us(qi + uint(s))
             } else {
                 att[s] += pfq_us(qi + uint(s))
             }
@@ -1336,6 +1502,8 @@ def private pf_prof_report(npos : int64) {
         qi += uint(n)
         if (L.recurrent) {
             ndn++
+        } elif (L.moe) {
+            nmoe++
         } else {
             natt++
         }
@@ -1349,8 +1517,27 @@ def private pf_prof_report(npos : int64) {
     for (v in dn) {
         tdn += v
     }
-    tot += tatt + tdn
-    to_log(LOG_INFO, "vk_rdpf gpu ({npos} tokens, last window) prologue {int(pfq_us(2u))} fin_rq {int(pfq_us(qi))} cls {int(pfq_us(qi + 1u))} attention layers {natt}: {int(tatt)} recurrent layers {ndn}: {int(tdn)} total {int(tot)} us\n")
+    var tmoe = 0.0lf
+    for (v in moe) {
+        tmoe += v
+    }
+    tot += tatt + tdn + tmoe
+    to_log(LOG_INFO, "vk_rdpf gpu ({npos} tokens, last window) prologue {int(pfq_us(2u))} fin_rq {int(pfq_us(qi))} cls {int(pfq_us(qi + 1u))} attention layers {natt}: {int(tatt)} recurrent layers {ndn}: {int(tdn)} MoE layers {nmoe}: {int(tmoe)} total {int(tot)} us\n")
+    if (nmoe > 0l) {
+        // an MoE layer's stamps: the attention roles (the qkn one shifts them by one), ar1, rq_f, the shared expert's four when the layer has one, then the routed block's nine and ar2
+        let q = g_rd.qk_norm ? 1 : 0
+        var sh = 0
+        for (L in g_rd.layers) {
+            if (L.moe && L.b1 >= 0l) {
+                sh = 4
+            }
+        }
+        let a0 = 10 + q   // the first stamp past ar1 / rq_f
+        let shexp = sh > 0 ? "sh_gate {int(moe[a0])} sh_up {int(moe[a0 + 1])} sh_act {int(moe[a0 + 2])} sh_down {int(moe[a0 + 3])} " : ""
+        let qkn = q > 0 ? "qkn {int(moe[4])} " : ""
+        let m0 = a0 + sh
+        to_log(LOG_INFO, "vk_rdpf moe rq_x {int(moe[0])} q {int(moe[1])} k {int(moe[2])} v {int(moe[3])} {qkn}rope_kv {int(moe[4 + q])} attn {int(moe[5 + q])} rq_a {int(moe[6 + q])} wo {int(moe[7 + q])} ar1 {int(moe[8 + q])} rq_f {int(moe[9 + q])} {shexp}router {int(moe[m0])} topk {int(moe[m0 + 1])} sched {int(moe[m0 + 2])} gather {int(moe[m0 + 3])} e_gate {int(moe[m0 + 4])} e_up {int(moe[m0 + 5])} e_act {int(moe[m0 + 6])} e_down {int(moe[m0 + 7])} comb {int(moe[m0 + 8])} ar2 {int(moe[m0 + 9])}\n")
+    }
     if (natt > 0l) {
         // the qkn dispatch stamps between v and rope_kv, shifting every later role by one
         if (g_rd.qk_norm) {

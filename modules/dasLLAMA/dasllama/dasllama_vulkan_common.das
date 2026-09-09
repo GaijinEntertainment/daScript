@@ -2150,6 +2150,21 @@ struct RLayer {
     pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (batched router GEMV)
     pf_dn_cvt_set : VkDescriptorSet        // the cm2 route: pf_xb -> pf_xf, the qkv / z GEMMs' f16 feed
     m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
+    // the MoE form: the routed expert triple beside the dense triple (the shared expert's, or none: b1 < 0)
+    moe : bool
+    moe_li : int64 = -1l            // this layer's slot in the router plane (the MoE layers in order)
+    be1, be3, be2 : int64           // arena blocks of the expert stacks [ne x nfe x dim] / [ne x nfe x dim] / [ne x dim x nfe]
+    fe1, fe3, fe2 : int
+    xe_own : bool                   // the experts' feed is its own image: their quant form differs from the dense triple's
+    s_quant_xe : VkDescriptorSet    // the second requant of xb, the experts' form
+    s_router, s_topk : VkDescriptorSet
+    s_egate, s_eup : VkDescriptorSet
+    s_eact : VkDescriptorSet
+    s_edown : VkDescriptorSet
+    s_ecomb : VkDescriptorSet       // the combine (the shared-expert form or the plain one)
+    pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   // the window chain's MoE block
+    pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   // the expert tiles over the device-written schedules
+    pf_eact_set, pf_ecomb_set : VkDescriptorSet
 }
 
 struct RDec {
@@ -2244,6 +2259,29 @@ struct RDec {
     pf_dnrq_set : VkDescriptorSet // the o requant (dn_ws_dev DN_O_OFF rows -> hq/hs), shared by every recurrent layer
     pf_dnof : uint64              // the o rows' f16 feed for the cm2 out tile [np x di] (the cm2 route; 0 when the device has no cm2)
     pf_dnof_set : VkDescriptorSet // dn_ws_dev o rows -> pf_dnof, shared by every recurrent layer
+    // the MoE form: the router plane and the routed block's device state (rdec_prepare_moe)
+    moe : bool
+    ne, k, nfe, nsh, ner : int64  // experts, routed slots, the expert width, the shared expert's width (0 = none), the router rows per layer (ne, + the gate row)
+    n_moe : int64                 // MoE layers (the router plane's slots)
+    sh_gated, norm_topk, is_gelu : bool
+    wscale : float
+    moe_tc : int64                // the expert tiles' token column
+    router_dev : uint64           // [n_moe x ner x dim] f32 router rows, the gate row last
+    router_bytes : int64
+    moe_ident_dev : uint64        // 0..MAX_ROUTED_SLOTS-1: the decode combine's identity slot map
+    moe_dlog_dev : uint64         // the decode's logits row (ner floats)
+    moe_dw_dev : uint64           // the decode's k routing weights
+    moe_meta1_dev, moe_meta3_dev, moe_meta2_dev : uint64   // the decode GEMVs' slot regions, written by the top-k
+    moe_xq_dev, moe_xs_dev : uint64   // the experts' own feed image when their form differs from the dense triple's
+    egate_dev, eup_dev, edown_dev : uint64   // the decode's k expert rows
+    pf_nk : int64                 // the window's slot rows (PF_WINDOW x k)
+    pf_mlog : uint64              // [np x ner] logits
+    pf_midx, pf_mw, pf_minv : uint64   // [nk] picks, weights, slot -> bucket row
+    pf_msch1, pf_msch3, pf_msch2 : uint64   // the three expert planes' device-written schedules
+    pf_mxg : uint64               // [nk + slack x dim] the gathered f16 rows
+    pf_my1, pf_my2 : uint64       // [nk x nfe] the gate / up rows
+    pf_mhf : uint64               // [nk + slack x nfe] the hidden rows, f16
+    pf_mdn : uint64               // [nk x dim] the routed down rows
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
@@ -2304,6 +2342,7 @@ var g_rdq_pro = 0.0lf
 var g_rdq_tail = 0.0lf
 var g_rdq_role : double[16]
 var g_rdq_dn : double[13]   // a hybrid's recurrent-head roles (rdq_sample's second table)
+var g_rdq_moe : table<string; double>   // an MoE layer's tail stamps by name (rdq_sample's third table)
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
 
 let PFQ_CAP = 2048u
@@ -2384,6 +2423,7 @@ let VHZ_GATE = 0x800u     // ffn gate plane
 let VHZ_UP = 0x1000u      // ffn up plane
 let VHZ_HQ = 0x2000u      // requantized hidden hq+hs
 let VHZ_FFO = 0x4000u     // ffn down out
+let VHZ_MRT = 0x8000u     // the MoE block's routing planes: logits, picks, weights, the slot map, the schedules
 let VHZ_LOG = 0x10000u    // logits
 let VHZ_COS = 0x20000u    // rope cos/sin rows
 
@@ -2440,6 +2480,8 @@ let VHZ_DNWS = 0x800000u  // the deltanet window chain's scan workspace (dn_ws_d
 let VHZ_DNBG = 0x1000000u // the prefill's beta/alpha rows scratch (pf_dnbg)
 let VHZ_DNC = 0x2000000u  // the prefill's deltanet conv output rows (pf_dnconv)
 let VHZ_DNZ = 0x4000000u  // the prefill's deltanet z rows (pf_dnz)
+let VHZ_MXG = 0x8000000u  // the MoE block's gathered f16 rows (pf_mxg)
+let VHZ_MDN = 0x10000000u // the MoE block's routed down rows (pf_mdn / edown_dev)
 
 struct VkHaz {
     w : uint            // bits with a pending (unbarriered) write

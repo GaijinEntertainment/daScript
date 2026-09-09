@@ -281,7 +281,11 @@ NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat 
 `test_vkd_direct_decode`
 proves a `[spirv_decode]` method called from a kernel body on the plane element (the KHR arm's
 staging form: the index travels, the callee chains through the plane) is an ordinary call on
-the device, against the same method run on the CPU.
+the device, against the same method run on the CPU. `test_vkd_moe_routing` holds the resident MoE
+block's routing kernels to CPU oracles: the batched router GEMM at a second layer's offset, the
+per-row top-k against `moe_select_core` (renormalized, and scaled), the device bucket schedule
+against its CPU twin word for word over the whole planes (empty experts, the sentinel tails), and
+the gated combine over two accumulating windows - every bar with its own poison.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -334,9 +338,12 @@ deltanet decode step, and skips otherwise.
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
-shape is named in the text a user reads, a served one yields ""; plus the KV mirror's binding cap
-(`resident_binding_ctx`) on a hybrid shell whose layer 0 is recurrent, its dense twin, and a
-shell with no attention layer.
+shape is named in the text a user reads, a served one yields ""; the MoE names among them (the
+router shapes the routed block's kernels do not serve, the expert and slot counts past their
+reach) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a layer routes only
+past the dense lead with all three expert planes, and its dense width is the shared expert's);
+plus the KV mirror's binding cap (`resident_binding_ctx`) on a hybrid shell whose layer 0 is
+recurrent, its dense twin, and a shell with no attention layer.
 
 `test_gpu_resident_hybrid.das` - stocked suite, `-jit` only; the whole-model resident driver on a
 deltanet hybrid under `DASLLAMA_GPU=1`. Each fixture is a row in `../performance/model_specs.das`:
@@ -389,6 +396,15 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
+`test_gpu_resident_moe.das` - stocked suite; the whole-model resident driver on a MoE
+(Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, `DASLLAMA_GPU=1`): the expert stacks in the arena, the window
+chain's routed block and the token command's routed block - the hybrid file's forced-feed
+logits-tolerance form at the routed chain's 12% bar (the arms part on the router's near-ties from
+layer 1 on, the bar's `//!` carries the reading) with the one-step-off control, at one window and
+two windows, plus the census witnesses: the device bucket schedule and the per-row select ran once
+per MoE layer per window, the token command's top-k once per MoE layer per fed step; the twin is
+large-tier (`DASLLAMA_PARITY_FULL=1`), and the cells skip without it, the armed tier, or the driver
+declining the twin (the load log names why).
 `test_gpu_moe_shexp.das` - stocked suite; the shared expert's prefill on the device
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
 shexp triple as one region over every position of the routed experts' chain, gated by the tier's
@@ -399,6 +415,8 @@ reading), the one-step-off control,
 and the engage witness (the arm's layer count grows by the model's layers per device prefill, not at
 all on the CPU arm) at 64 and 600 tokens; the twin is large-tier, so the cells run under
 `DASLLAMA_PARITY_FULL=1`, and skip without the twin, the armed tier, or a shexp mark on every layer.
+The whole-model driver is pinned off for the load (`set_gpu_resident_route`): it would take the
+twin whole, and its arm is the resident MoE file's.
 `test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
 (Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
 weights, the pin on the upload rail dropping a still-installed model's device state first; skips

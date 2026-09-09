@@ -1,10 +1,11 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j, 2.2p, 2.2ab, 2.2ac and 2.2ad - the Vulkan resident driver's prefill
+carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2af and 2.2ad - the Vulkan resident driver's prefill
 chain, its byte stores, and the tile probe's set layout: the prefill window chain, the Q8
 requant byte store, the decode GEMV family's grid codebook buffer, the tile probe's shared
-descriptor set layout, and the recurrent block of the prefill window. The cooperative-matrix
+descriptor set layout, the MoE block of the prefill window, and the recurrent block of the
+prefill window. The cooperative-matrix
 tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and the coopmat mode
 ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and the KHR arm's
 hand-staged kq tile - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and
@@ -144,6 +145,49 @@ The `nil` arm is the ceiling arm: its weight stage writes constants, so its rate
 tile's ceiling with the weight loads removed. It still binds the weight plane and the scale
 words the shared layout declares, and its stage reads neither (`KhrPxNil`, whose `wq` field
 carries `@role = "alias"`). Those two are the probe's deliberately unread bindings.
+
+### 2.2af The MoE block of the prefill window {#vk-prefill-moe-block}
+
+**An MoE layer's window block replaces the dense FFN tail with a routed block on the device;
+the attention head and the residual steps are shared.** The whole-model driver admits a MoE
+whose expert stacks fit the arena beside its attention quads (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`
+sec.2.2n), and the window then never leaves the device between layers: the CPU's routing,
+bucketing and combine of the per-op tier (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q) become
+five device stages over the window's FFN-normed rows.
+
+- **The router GEMM** (`RouterGemm`) is the span's router GEMV batched: 16 positions by 16
+  router rows per workgroup, K in 32-wide steps through shared memory. The router plane holds
+  every MoE layer's f32 rows, and a gated shared expert's gate vector rides as one more row past
+  the experts, so one dispatch writes the logits row `[ne | gate]` per position.
+- **The per-row select** (`TopKRows`, one workgroup per position) is the decode top-k's core
+  over each row: the softmax, k picks largest-first with ties to the lower index, the
+  renormalized or scaled weights - the host `moe_select_core`'s arithmetic - written
+  position-major as the picked expert and its weight per slot.
+- **The bucket schedule** (`MoeSched`, one workgroup) writes what the host fill writes for the
+  per-op chain: thread e counts expert e's slots over the window, exclusive scans place its
+  bucket rows, its region index (experts with rows, in expert order) and its tile workgroups,
+  and the three expert planes' schedules land as 4-word records plus per-workgroup maps at a
+  fixed map offset (4 words for up to 256 experts). The dispatch is sized for the worst case -
+  a partial tile per expert - and the map's tail past the real workgroup count carries the
+  sentinel (`SCHED_NONE`): a tile workgroup that reads it sees a zero-row region and returns
+  before its first barrier. The slot-to-bucket-row map lands in slot order, the CPU walk's
+  order, so the device buckets equal the host's.
+- **The gather, the expert tiles and the act** are the per-op chain's: the f16 gather scatters
+  each position's row into its bucket rows, gate and up run the cm2 tiles at the 32-row column
+  over the gathered image, the act writes the f16 hidden rows, and down runs the tiles again.
+  The window planes carry 32 rows of read slack past the last bucket row (the s tile loads a
+  whole column unclamped, sec.2.2j) and hold a whole window of `PF_WINDOW x k` bucket rows, so
+  the block never chunks.
+- **The combine** lands the routed slots' weighted down rows on the layer's FFN rows. A layer
+  with a shared expert runs the dense tail first - the shared triple is the layer's dense
+  triple, at the shared width - and the gated combine (`MoeCombineSh`) starts from those rows
+  scaled by the sigmoid of the gate logit; a layer without one takes the plain combine from
+  zero. The residual step after it never learns which FFN ran.
+
+The router reads the f32 normed rows, so an MoE layer takes the split add+rms arm at the FFN
+site (the fused twins never store `xb`), and the last-layer FFN slice of sec.2.2j does not apply
+to the routed block. The tile family is the f16-fed cm2 tiles, so the plan admits a MoE only in
+cm2 mode on a coopmat2 device with every expert format the f16 feed admits (`rdec_moe_ok`).
 
 ### 2.2ad The recurrent block of the prefill window {#vk-prefill-dn-block}
 

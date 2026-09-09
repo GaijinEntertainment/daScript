@@ -896,4 +896,12 @@ module) is independent and can land any time - it is pure structure.
     construction, and the per-op tier reads 0.14x prefill / 0.75x decode against the reference
     engine on the one such row measured (the arc board's row 20, both engines fully resident).
     Done = every family and tower row on the board with a Vulkan column at parity, and the
-    serving census (`coverage-vk`) with no carrier the tier declines.
+    serving census (`coverage-vk`) with no carrier the tier declines. The fully-resident MoE
+    chain landed 2026-09-09: the whole-model driver admits a MoE whose expert stacks fit the arena
+    (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n), the window chain's routed block
+    (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2af) and the token command's (`ARCHITECTURE_GPU_VULKAN_DECODE.md`
+    sec.2.2ag); the per-op tier keeps the files that stream. Still open under this item: the
+    30B and 35B rows on the resident driver (the plan at their sizes on the 16 GB card), the
+    hybrid MoE (the deltanet head beside the routed block), the small-M expert tiles, the fused
+    add+rms twin that also stores the normed row (the router's feed, so a MoE could take the fused
+    rail), and an LPT order for the device schedule's regions.

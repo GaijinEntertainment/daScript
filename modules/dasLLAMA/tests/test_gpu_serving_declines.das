@@ -131,8 +131,54 @@ def test_resident_layer_decline(t : T?) {
         m.wq_offs[0] = -1l
         t |> success(says(resident_layer_decline(m, 0l, hid0, hs, kvd), "layer 0 lacks a q/k/v plane"), "missing plane named")
         m.ffn_w <- [64l, 96l, 64l]
-        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 FFN width 96"), "FFN width named")
+        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's dense FFN width 96"), "FFN width named")
         delete m
+    }
+    t |> run("a MoE layer's dense width is its shared expert's; a layer past the dense lead without expert planes is named") @(t : T?) {
+        var m <- shell(3l, 0ul)
+        m.config.n_expert = 8l
+        m.config.n_expert_used = 2l
+        m.config.n_ff_exp = 256l
+        m.config.n_ff_shexp = 512l
+        m.config.n_layer_dense_lead = 1l
+        t |> success(!layer_is_moe(m, 1l), "no expert offsets at all: no layer routes")
+        m.we1_offs <- [-1l, 0l, 0l]
+        m.we3_offs <- [-1l, 0l, 0l]
+        m.we2_offs <- [-1l, 0l, -1l]
+        t |> success(!layer_is_moe(m, 0l) && layer_is_moe(m, 1l) && !layer_is_moe(m, 2l), "a layer routes only past the dense lead with all three expert planes")
+        t |> equal(resident_dense_width(m, 0l), 64l, "the dense-lead layer's width is its FFN's")
+        t |> equal(resident_dense_width(m, 1l), 512l, "an MoE layer's width is the shared expert's")
+        let hs = layer_head_size(m.config, 0l)
+        let kvd = layer_kv_dim(m.config, 0l)
+        t |> success(says(resident_layer_decline(m, 2l, 512l, hs, kvd), "layer 2 lacks an expert plane"), "a layer past the dense lead without its expert planes is named")
+        t |> success(says(resident_layer_decline(m, 0l, 512l, hs, kvd), "layer 0's dense FFN width 64 differs"), "the dense-lead layer's width differs from the shared expert's - named")
+        delete m
+    }
+}
+
+[test]
+def test_resident_unserved_moe_features(t : T?) {
+    t |> run("the routed block's reach: a softmax router with plain expert stacks is served, every other router shape is named") @(t : T?) {
+        var c = Config()
+        c.n_expert = 60l
+        c.n_expert_used = 4l
+        t |> equal(resident_unserved_features(c), "", "a plain softmax MoE names nothing")
+        c.moe_gate = MoeGate.sigmoid
+        t |> equal(resident_unserved_features(c), "a non-softmax router")
+        c.moe_gate = MoeGate.softmax
+        c.moe_router_bias = true
+        c.moe_exp_probs = true
+        let s = resident_unserved_features(c)
+        t |> success(says(s, "a router bias") && says(s, "an expert selection bias"), "the two biases named together: {s}")
+        c.moe_router_bias = false
+        c.moe_exp_probs = false
+        c.n_expert = 300l
+        c.n_expert_used = 70l
+        let g = resident_unserved_features(c)
+        t |> success(says(g, "300 experts") && says(g, "70 routed experts"), "the kernels' reach named with the counts: {g}")
+        var d = Config()
+        d.moe_gate = MoeGate.sigmoid
+        t |> equal(resident_unserved_features(d), "", "a dense model's router field is no feature")
     }
 }
 

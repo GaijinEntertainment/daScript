@@ -260,10 +260,11 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 `modules/dasMetal/REVIEW.das` descriptor gate; this section keeps only the refuted shapes
 and why they lose.
 
-Sections 2.2j, 2.2p, 2.2ab, 2.2ac and 2.2ad, the Vulkan resident driver's prefill chain and
+Sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad and 2.2af, the Vulkan resident driver's prefill chain and
 byte stores, are `ARCHITECTURE_GPU_VULKAN.md`; its 2.2k-2.2m, 2.2q and 2.2ae - the cooperative-matrix
 GEMM tiles - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`; its 2.2n-2.2o - the residency plan and the
-marks swap - are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
+marks swap - are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; its 2.2ag - the whole-model driver's MoE
+token command - is `ARCHITECTURE_GPU_VULKAN_DECODE.md`.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 

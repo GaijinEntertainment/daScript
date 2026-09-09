@@ -18,6 +18,8 @@ require ?vulkan dasllama/dasllama_vulkan_seams
 require ?vulkan dasllama/dasllama_kqformat
 require ?vulkan dasllama/dasllama_gemm_schema   // kq_dev_ssb_i - the fixtures size their device scale planes per format
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
+require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
+require dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
 
 // The model-less Vulkan kernel-unit suite ([vk_dispatch] bring-up): a class kernel dispatched
 // through the GENERATED surface (ensure/set/enc — per-class layout, push constants, hazard rail)
@@ -7823,6 +7825,433 @@ def test_vkd_ar_f16_fused(t0 : T?) {
             delete wnh
         } else {
             t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+// ===== the resident MoE block's routing kernels (router GEMM, per-row top-k, the bucket schedule, the gated combine) =====
+
+let private MR_NPOS = 37
+let private MR_NE = 20
+let private MR_K = 3
+let private MR_DIM = 96
+let private MR_NER = MR_NE + 1   // the shared expert's gate row rides past the experts
+let private MR_SENT = 0x5A5A5A5Au   // the schedule planes' fill: a word the kernel never writes stays this on both sides
+
+//! one 32-bit word to a float in [-2, 2)
+def private hash_unit(i : uint) : float => float(hash_word(i) % 4096u) / 1024.0 - 2.0
+
+//! the device: the recorded dispatches over `raw`, then `bytes` of `dev` back into `host`
+def private vkd_run_copy(var raw : VkCommandBuffer; var h : VkHaz; dev : uint64; host : HostBuf; bytes : int64; bits : uint) {
+    vhz_dep(raw, h, bits, 0u, true)
+    cmd_copy_whole(raw, dev, host.buf, bytes)
+    vk_check(vkEndCommandBuffer(raw), null)
+    submit_wait(raw)
+}
+
+// the CPU twin of MoeSched: the records in expert order (empty experts skipped), the per-wg maps,
+// the sentinel tails past the real workgroup counts, and inv in slot order
+def private sched_oracle(idx : array<uint>; ne, tc, wt_gu, wt_dn, map_off, bound_gu, bound_dn : int; bases : uint[6];
+                         var inv : array<uint>; var s1, s3, s2 : array<uint>) {
+    let nk = length(idx)
+    var cnt : array<int>
+    cnt |> resize(ne)
+    for (r in range(nk)) {
+        cnt[int(idx[r])]++
+    }
+    var start : array<int>
+    start |> resize(ne)
+    var run = 0
+    for (e in range(ne)) {
+        start[e] = run
+        run += cnt[e]
+    }
+    inv |> resize(nk)
+    var cursor := start
+    for (r in range(nk)) {
+        let e = int(idx[r])
+        inv[r] = uint(cursor[e])
+        cursor[e]++
+    }
+    let words = map_off + max(bound_gu, bound_dn)
+    s1 |> resize(words)
+    s3 |> resize(words)
+    s2 |> resize(words)
+    for (i in range(words)) {
+        s1[i] = MR_SENT
+        s3[i] = MR_SENT
+        s2[i] = MR_SENT
+    }
+    var ri = 0u
+    var wg_gu = 0
+    var wg_dn = 0
+    for (e in range(ne)) {
+        continue if (cnt[e] == 0)
+        let rt = (cnt[e] + tc - 1) / tc
+        let rb = int(ri) * 4
+        s1[rb] = bases[0] + uint(e) * bases[1]
+        s3[rb] = bases[2] + uint(e) * bases[3]
+        s2[rb] = bases[4] + uint(e) * bases[5]
+        s1[rb + 1] = uint(start[e])
+        s3[rb + 1] = uint(start[e])
+        s2[rb + 1] = uint(start[e])
+        s1[rb + 2] = uint(cnt[e])
+        s3[rb + 2] = uint(cnt[e])
+        s2[rb + 2] = uint(cnt[e])
+        s1[rb + 3] = uint(wg_gu)
+        s3[rb + 3] = uint(wg_gu)
+        s2[rb + 3] = uint(wg_dn)
+        for (g in range(rt * wt_gu)) {
+            s1[map_off + wg_gu + g] = ri
+            s3[map_off + wg_gu + g] = ri
+        }
+        for (g in range(rt * wt_dn)) {
+            s2[map_off + wg_dn + g] = ri
+        }
+        wg_gu += rt * wt_gu
+        wg_dn += rt * wt_dn
+        ri++
+    }
+    for (g in range(wg_gu, bound_gu)) {
+        s1[map_off + g] = SCHED_NONE
+        s3[map_off + g] = SCHED_NONE
+    }
+    for (g in range(wg_dn, bound_dn)) {
+        s2[map_off + g] = SCHED_NONE
+    }
+    delete cnt
+    delete start
+    delete cursor
+}
+
+// the router GEMM: two layers' [ner x dim] rows, the second layer's dispatched through woff; logits at the ner stride
+def private moe_router_arm(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let nw = 2 * MR_NER * MR_DIM
+        var wh : array<float>
+        var xh : array<float>
+        wh |> resize(nw)
+        xh |> resize(MR_NPOS * MR_DIM)
+        for (i in range(nw)) {
+            wh[i] = hash_unit(uint(i) + 11u) * 0.25
+        }
+        for (i in range(MR_NPOS * MR_DIM)) {
+            xh[i] = hash_unit(uint(i) + 7_777u)
+        }
+        let w_bytes = int64(nw) * 4l
+        let x_bytes = int64(MR_NPOS * MR_DIM) * 4l
+        let l_bytes = int64(MR_NPOS * MR_NER) * 4l
+        let wd = make_device_buf(w_bytes)
+        let xd = make_device_buf(x_bytes)
+        let ld = make_device_buf(l_bytes)
+        var host = make_host_buf(l_bytes, true, [cached = true])
+        var got : array<float>
+        got |> resize(MR_NPOS * MR_NER)
+        unsafe {
+            upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+            upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
+            var sc = set_router_gemm_cls(fixed_array(wd, xd, ld), fixed_array(w_bytes, x_bytes, l_bytes), fixed_array(0u, 1u, 2u))
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(MR_NER), dim = uint(MR_DIM), woff = uint(MR_NER * MR_DIM), ostride = uint(MR_NER))
+            enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + 15) / 16) * ((MR_NER + 15) / 16)))
+            vkd_run_copy(raw, h, ld, host, l_bytes, 2u)
+            memcpy(addr<void?>(got[0]), host.mapped, l_bytes)
+        }
+        var want : array<float>
+        want |> resize(MR_NPOS * MR_NER)
+        for (p in range(MR_NPOS)) {
+            for (e in range(MR_NER)) {
+                var acc = 0.0
+                for (c in range(MR_DIM)) {
+                    acc += wh[MR_NER * MR_DIM + e * MR_DIM + c] * xh[p * MR_DIM + c]
+                }
+                want[p * MR_NER + e] = acc
+            }
+        }
+        let bad = mismatch_rel(got, want, 1e-4)
+        t |> success(bad == 0, "router GEMM matches the CPU oracle at the second layer's offset ({bad} of {MR_NPOS * MR_NER} off)")
+        want[5 * MR_NER + 3] += 0.5   // the poison: a value added to one expected element must miss
+        t |> success(mismatch_rel(got, want, 1e-4) == 1, "router GEMM control: the bar reds one poisoned element")
+        delete wh
+        delete xh
+        delete got
+        delete want
+    }
+}
+
+// the per-row select against moe_select_core over the same rows: norm on with no scale, norm off with a scale
+def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var lh : array<float>
+        lh |> resize(MR_NPOS * MR_NER)
+        for (i in range(MR_NPOS * MR_NER)) {
+            lh[i] = hash_unit(uint(i) * 3u + 101u) * 2.0 + float(i % 7) * 0.0625   // spread past any near-tie
+        }
+        let l_bytes = int64(MR_NPOS * MR_NER) * 4l
+        let s_bytes = int64(MR_NPOS * MR_K) * 4l
+        let ld = make_device_buf(l_bytes)
+        let idxd = make_device_buf(s_bytes)
+        let wd = make_device_buf(s_bytes)
+        var hosti = make_host_buf(s_bytes, true, [cached = true])
+        var hostw = make_host_buf(s_bytes, true, [cached = true])
+        var gidx : array<uint>
+        var gw : array<float>
+        gidx |> resize(MR_NPOS * MR_K)
+        gw |> resize(MR_NPOS * MR_K)
+        unsafe {
+            upload_region_at(ld, 0l, addr<uint8 const?>(lh[0]), l_bytes)
+            var sc = set_topk_rows_cls(fixed_array(ld, idxd, wd), fixed_array(l_bytes, s_bytes, s_bytes), fixed_array(1u, 2u, 4u))
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            var pc = TopkRowsArgs(npos = uint(MR_NPOS), ne = uint(MR_NE), k = uint(MR_K), norm = norm ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale)
+            enc_topk_rows_cls(raw, h, sc, pc, int64(MR_NPOS))
+            vhz_dep(raw, h, 2u | 4u, 0u, true)
+            cmd_copy_whole(raw, idxd, hosti.buf, s_bytes)
+            cmd_copy_whole(raw, wd, hostw.buf, s_bytes)
+            vk_check(vkEndCommandBuffer(raw), null)
+            submit_wait(raw)
+            memcpy(addr<void?>(gidx[0]), hosti.mapped, s_bytes)
+            memcpy(addr<void?>(gw[0]), hostw.mapped, s_bytes)
+        }
+        var widx : array<int64>
+        var ww : array<float>
+        widx |> resize(MR_NPOS * MR_K)
+        ww |> resize(MR_NPOS * MR_K)
+        var row : array<float>
+        row |> resize(MR_NE)
+        for (p in range(MR_NPOS)) {
+            for (e in range(MR_NE)) {
+                row[e] = lh[p * MR_NER + e]
+            }
+            unsafe {
+                moe_select_core(MoeGate.softmax, int64(MR_NE), int64(MR_K), norm, wscale, addr(row[0]), addr(widx[0]), addr(ww[0]), int64(p * MR_K))
+            }
+        }
+        var badi = 0
+        for (i in range(MR_NPOS * MR_K)) {
+            if (int64(gidx[i]) != widx[i]) {
+                badi++
+            }
+        }
+        let badw = mismatch_rel(gw, ww, 1e-4)
+        let arm = norm ? "renormalized" : "scaled by {wscale}"
+        t |> success(badi == 0, "per-row top-k picks the host select's experts ({arm}; {badi} of {MR_NPOS * MR_K} off)")
+        t |> success(badw == 0, "per-row top-k weights match the host select ({arm}; {badw} of {MR_NPOS * MR_K} off)")
+        ww[4] += 0.5
+        t |> success(mismatch_rel(gw, ww, 1e-4) == 1, "per-row top-k control: the bar reds one poisoned weight")
+        delete lh
+        delete gidx
+        delete gw
+        delete widx
+        delete ww
+        delete row
+    }
+}
+
+// the bucket schedule against its CPU twin, word for word over the whole planes (three empty experts, a sentinel fill)
+def private moe_sched_arm(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let nk = MR_NPOS * MR_K
+        let tc = 32
+        let wt_gu = 3
+        let wt_dn = 2
+        let map_off = 4 * MR_NE
+        let rt = (nk + tc - 1) / tc + min(MR_NE, nk)
+        let bound_gu = rt * wt_gu
+        let bound_dn = rt * wt_dn
+        var idx : array<uint>
+        idx |> resize(nk)
+        for (r in range(nk)) {
+            idx[r] = hash_word(uint(r) + 55u) % uint(MR_NE - 3)   // the last three experts route nothing
+        }
+        let bases = fixed_array(1_000u, 96u, 2_000u, 96u, 3_000u, 48u)
+        var winv : array<uint>
+        var w1 : array<uint>
+        var w3 : array<uint>
+        var w2 : array<uint>
+        sched_oracle(idx, MR_NE, tc, wt_gu, wt_dn, map_off, bound_gu, bound_dn, bases, winv, w1, w3, w2)
+        let i_bytes = int64(nk) * 4l
+        let s_bytes = long_length(w1) * 4l
+        let idxd = make_device_buf(i_bytes)
+        let invd = make_device_buf(i_bytes)
+        let s1d = make_device_buf(s_bytes)
+        let s3d = make_device_buf(s_bytes)
+        let s2d = make_device_buf(s_bytes)
+        var fill : array<uint>
+        fill |> resize(length(w1))
+        for (f in fill) {
+            f = MR_SENT
+        }
+        var host = make_host_buf(i_bytes + 3l * s_bytes, true, [cached = true])
+        var ginv : array<uint>
+        var g1 : array<uint>
+        var g3 : array<uint>
+        var g2 : array<uint>
+        ginv |> resize(nk)
+        g1 |> resize(length(w1))
+        g3 |> resize(length(w1))
+        g2 |> resize(length(w1))
+        unsafe {
+            upload_region_at(idxd, 0l, addr<uint8 const?>(idx[0]), i_bytes)
+            upload_region_at(s1d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
+            upload_region_at(s3d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
+            upload_region_at(s2d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
+            var sc = set_moe_sched_cls(fixed_array(idxd, invd, s1d, s3d, s2d), fixed_array(i_bytes, i_bytes, s_bytes, s_bytes, s_bytes), fixed_array(1u, 2u, 2u, 2u, 2u))
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            var pc = SchedArgs(nk = uint(nk), ne = uint(MR_NE), tc = uint(tc), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn), map_off = uint(map_off),
+                bound_gu = uint(bound_gu), bound_dn = uint(bound_dn), base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5])
+            enc_moe_sched_cls(raw, h, sc, pc, 1l)
+            vhz_dep(raw, h, 2u, 0u, true)
+            cmd_copy_range(raw, invd, 0l, host.buf, 0l, i_bytes)
+            cmd_copy_range(raw, s1d, 0l, host.buf, i_bytes, s_bytes)
+            cmd_copy_range(raw, s3d, 0l, host.buf, i_bytes + s_bytes, s_bytes)
+            cmd_copy_range(raw, s2d, 0l, host.buf, i_bytes + 2l * s_bytes, s_bytes)
+            vk_check(vkEndCommandBuffer(raw), null)
+            submit_wait(raw)
+            let hp = intptr(host.mapped)
+            memcpy(addr<void?>(ginv[0]), host.mapped, i_bytes)
+            memcpy(addr<void?>(g1[0]), reinterpret<void?>(hp + uint64(i_bytes)), s_bytes)
+            memcpy(addr<void?>(g3[0]), reinterpret<void?>(hp + uint64(i_bytes + s_bytes)), s_bytes)
+            memcpy(addr<void?>(g2[0]), reinterpret<void?>(hp + uint64(i_bytes + 2l * s_bytes)), s_bytes)
+        }
+        t |> success(mismatch_qbytes(ginv, winv, 0) == 0, "the schedule's slot -> bucket row map is the CPU walk's ({nk} slots)")
+        t |> success(mismatch_qbytes(g1, w1, 0) == 0, "the gate plane's records, map and sentinel tail match the CPU twin word for word ({length(w1)} words)")
+        t |> success(mismatch_qbytes(g3, w3, 0) == 0, "the up plane's schedule matches")
+        t |> success(mismatch_qbytes(g2, w2, 0) == 0, "the down plane's schedule matches (its own tile count and tail)")
+        w2[map_off + bound_dn - 1] = 0u   // the poison: the last sentinel word flipped must miss
+        t |> success(mismatch_qbytes(g2, w2, 0) > 0, "schedule control: one flipped tail word reds the compare")
+        delete idx
+        delete winv
+        delete w1
+        delete w3
+        delete w2
+        delete fill
+        delete ginv
+        delete g1
+        delete g3
+        delete g2
+    }
+}
+
+// the gated combine: the shared rows scaled by the gate's sigmoid plus the routed slots, over two accumulating windows
+def private moe_combine_sh_arm(t : T?; gated : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let n = 64
+        let k = 3
+        let npos = 5
+        let nrows = npos * k
+        var sidx : array<uint>
+        var sw : array<float>
+        var rows : array<float>
+        var accs : array<float>
+        var lg : array<float>
+        sidx |> resize(nrows)
+        sw |> resize(nrows)
+        rows |> resize(nrows * n)
+        accs |> resize(npos * n)
+        lg |> resize(npos * MR_NER)
+        for (i in range(nrows)) {
+            sidx[i] = uint((i * 7) % nrows)   // a permutation of the bucket rows
+            sw[i] = 0.125 + float(i % 5) * 0.25
+        }
+        for (i in range(nrows * n)) {
+            rows[i] = float((i * 7) % 93) * 0.13 - 5.5
+        }
+        for (i in range(npos * n)) {
+            accs[i] = float((i * 5) % 41) * 0.2 - 3.0
+        }
+        for (i in range(npos * MR_NER)) {
+            lg[i] = hash_unit(uint(i) + 9u)
+        }
+        let si_bytes = int64(nrows) * 4l
+        let ac_bytes = int64(npos * n) * 4l
+        let lg_bytes = int64(npos * MR_NER) * 4l
+        // two windows over the bucket rows, each window's down rows a plane of its own from row 0 (the chain's chunk form): the first scales the shared rows, the second accumulates onto them
+        let r_mid = 6
+        let ro0_bytes = int64(r_mid * n) * 4l
+        let ro1_bytes = int64((nrows - r_mid) * n) * 4l
+        let sid = make_device_buf(si_bytes)
+        let swd = make_device_buf(si_bytes)
+        let rod0 = make_device_buf(ro0_bytes)
+        let rod1 = make_device_buf(ro1_bytes)
+        let acd = make_device_buf(ac_bytes)
+        let lgd = make_device_buf(lg_bytes)
+        var host = make_host_buf(ac_bytes, true, [cached = true])
+        var got : array<float>
+        got |> resize(npos * n)
+        unsafe {
+            upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
+            upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
+            upload_region_at(rod0, 0l, addr<uint8 const?>(rows[0]), ro0_bytes)
+            upload_region_at(rod1, 0l, addr<uint8 const?>(rows[r_mid * n]), ro1_bytes)
+            upload_region_at(acd, 0l, addr<uint8 const?>(accs[0]), ac_bytes)
+            upload_region_at(lgd, 0l, addr<uint8 const?>(lg[0]), lg_bytes)
+            var sc0 = set_combine_sh_cls(fixed_array(acd, sid, swd, rod0, lgd),
+                fixed_array(ac_bytes, si_bytes, si_bytes, ro0_bytes, lg_bytes), fixed_array(1u, 2u, 4u, 8u, 16u))
+            var sc1 = set_combine_sh_cls(fixed_array(acd, sid, swd, rod1, lgd),
+                fixed_array(ac_bytes, si_bytes, si_bytes, ro1_bytes, lg_bytes), fixed_array(1u, 2u, 4u, 32u, 16u))
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            var pc0 = CombineShArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(r_mid), lstride = uint(MR_NER), gidx = uint(MR_NE), gated = gated ? 1u : 0u)
+            enc_combine_sh_cls(raw, h, sc0, pc0, int64(npos))
+            var pc1 = CombineShArgs(n = uint(n), k = uint(k), r0 = uint(r_mid), r1 = uint(nrows), lstride = uint(MR_NER), gidx = uint(MR_NE), gated = gated ? 1u : 0u)
+            enc_combine_sh_cls(raw, h, sc1, pc1, int64(npos))
+            vkd_run_copy(raw, h, acd, host, ac_bytes, 1u)
+            memcpy(addr<void?>(got[0]), host.mapped, ac_bytes)
+        }
+        var want : array<float>
+        want |> resize(npos * n)
+        for (p in range(npos)) {
+            let g = gated ? 1.0 / (1.0 + exp(-lg[p * MR_NER + MR_NE])) : 1.0
+            for (i in range(n)) {
+                var acc = g * accs[p * n + i]
+                for (j in range(k)) {
+                    acc += sw[p * k + j] * rows[int(sidx[p * k + j]) * n + i]
+                }
+                want[p * n + i] = acc
+            }
+        }
+        let bad = mismatch_approx(got, want)
+        let arm = gated ? "gated" : "ungated"
+        t |> success(bad == 0, "the {arm} combine over two accumulating windows matches the CPU oracle ({bad} of {npos * n} off)")
+        want[2 * n + 9] += 0.5
+        t |> success(mismatch_approx(got, want) == 1, "combine control: the bar reds one poisoned element")
+        delete sidx
+        delete sw
+        delete rows
+        delete accs
+        delete lg
+        delete got
+        delete want
+    }
+}
+
+[test]
+def test_vkd_moe_routing(t0 : T?) {
+    t0 |> run("the resident MoE block's routing kernels == the CPU oracles: router GEMM, per-row top-k, the bucket schedule, the gated combine") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_combine_sh_cls())) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            moe_router_arm(t)
+            moe_topk_rows_arm(t, true, 0.0)
+            moe_topk_rows_arm(t, false, 2.5)
+            moe_sched_arm(t)
+            moe_combine_sh_arm(t, true)
+            moe_combine_sh_arm(t, false)
+        } else {
+            feint("dasVulkan not present - skipping\n")
         }
     }
 }
