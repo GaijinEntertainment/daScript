@@ -843,7 +843,7 @@ def private word_count(cps : array<int>) : int {
 //! The reference driver's preparation of one chunk: line breaks to spaces and ONE pass of two
 //! spaces to one (its own rule, not a whitespace fold), an initial capital, a terminal mark, the
 //! short-input padding; the frames it keeps generating after EOS. An empty text is refused, as there.
-def pocket_prepare(m : PocketModel; text : string) : tuple<prepared : string; frames_after_eos : int> {
+def prepare_pocket_text(m : PocketModel; text : string) : tuple<prepared : string; frames_after_eos : int> {
     var s = strip(text) |> replace("\n", " ") |> replace("\r", " ") |> replace("  ", " ")
     if (empty(s)) {
         panic("dasLLAMA pocket: the text is empty - nothing to say")
@@ -960,7 +960,7 @@ def private warn_over_budget(n, max_tokens : int; text : string) {
 def pocket_chunks(m : PocketModel; text : string; max_tokens : int = POCKET_MAX_TOKENS) : array<string> {
     var inscope chunks : array<string>
     return <- chunks if (empty(strip(text)))
-    let prepared = strip(pocket_prepare(m, text).prepared)
+    let prepared = strip(prepare_pocket_text(m, text).prepared)
     var inscope ids <- pocket_text_ids(m, prepared)
     var inscope ends <- marker_ids(m, ".!...?")
     var inscope weak <- marker_ids(m, ",;:")
@@ -1176,7 +1176,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
 //! prepared here as the reference prepares each of its chunks; the facade's entry.
 def pocket_speak(var m : PocketModel; chunk : string; voice : string; temp : float; seed : uint64; var tm : TtsTimings; var sc : PocketScratch) : int64 {
     ensure_voice_state(m, voice, sc)
-    let p = pocket_prepare(m, chunk)
+    let p = prepare_pocket_text(m, chunk)
     var inscope ids <- pocket_text_ids(m, p.prepared)
     let fae = m.frames_after_eos >= 0 ? m.frames_after_eos : p.frames_after_eos + 2
     rng_seed(sc.rng, seed)

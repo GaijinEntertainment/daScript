@@ -169,7 +169,7 @@ def test_pocket_tokenizer(t : T?) {
 // the reference's own text preparation, row by row: the oracle prepared every corpus sentence
 // (`prepared`, `frames_after_eos`) and ours must land the same string and the same tail
 [test]
-def test_pocket_prepare(t : T?) {
+def test_prepare_pocket_text(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
         return
@@ -184,7 +184,7 @@ def test_pocket_prepare(t : T?) {
         let text = by_id?[r.id] ?? ""
         continue if (empty(text))
         checked++
-        let p = pocket_prepare(m, text)
+        let p = prepare_pocket_text(m, text)
         if (p.prepared != r.prepared || p.frames_after_eos + 2 != r.frames_after_eos) {
             bad++
             if (bad <= 3) {
@@ -195,19 +195,19 @@ def test_pocket_prepare(t : T?) {
     t |> equal(checked, 200, "every fixture row found its corpus sentence")
     t |> equal(bad, 0, "sentences whose preparation differs from the reference's")
     // the terminal period follows the reference's isalnum: an accented final letter takes one
-    t |> equal(pocket_prepare(m, "spero che ti piacerò").prepared, "Spero che ti piacerò.", "an accented final letter takes the period")   // nolint:STYLE039 - the accent is the case
-    t |> equal(pocket_prepare(m, "Hello there,").prepared, "Hello there,", "a trailing mark is left as it is")
+    t |> equal(prepare_pocket_text(m, "spero che ti piacerò").prepared, "Spero che ti piacerò.", "an accented final letter takes the period")   // nolint:STYLE039 - the accent is the case
+    t |> equal(prepare_pocket_text(m, "Hello there,").prepared, "Hello there,", "a trailing mark is left as it is")
     // the word count folds whitespace runs and tabs, as the reference's split() does
-    t |> equal(pocket_prepare(m, "One two three   four.").frames_after_eos, 3, "four words: the short-text tail")
-    t |> equal(pocket_prepare(m, "One\ttwo three four five.").frames_after_eos, 1, "five words across a tab: the long-text tail")
+    t |> equal(prepare_pocket_text(m, "One two three   four.").frames_after_eos, 3, "four words: the short-text tail")
+    t |> equal(prepare_pocket_text(m, "One\ttwo three four five.").frames_after_eos, 1, "five words across a tab: the long-text tail")
     // an empty text is refused, as the reference refuses it; the chunker answers no chunks
     var tripped = false
     try {
-        let p = pocket_prepare(m, "   ")
+        let p = prepare_pocket_text(m, "   ")
     } recover {
         tripped = true
     }
-    t |> success(tripped, "pocket_prepare panics on a blank text")
+    t |> success(tripped, "prepare_pocket_text panics on a blank text")
     var inscope none <- pocket_chunks(m, "  \n ")
     t |> equal(length(none), 0, "a blank text has no chunks")
 }
