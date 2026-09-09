@@ -3324,7 +3324,7 @@ function renderTtsOffer() {
     }
     if (ttsOfferArm(strip, dl, kept)) return;
     label.textContent = "no speech model configured — point the tts field in the config editor at a"
-        + " kitten or kokoro GGUF (tts_g2p.bin + tts_postag.bin sit beside it)";
+        + " kitten or kokoro GGUF (tts_g2p.bin + tts_postag.bin sit beside it), or at a pocket-tts file, which stands alone";
     strip.append(label);
 }
 

@@ -206,9 +206,9 @@ def tts_normalize(text : string) : string {
 
 def tts_needs_packs(path : string) : bool {
     //! Whether the model at ``path`` reads the front-end packs (``tts_g2p.bin``, ``tts_postag.bin``)
-    //! from its directory: the phoneme families do, a Pocket TTS GGUF reads text and needs neither.
-    //! Answerable before a load, from the file's architecture alone.
-    return !(path |> ends_with(".gguf")) || gguf_file_arch(path) != "pocket-tts"
+    //! from its directory: the phoneme families do, a Pocket TTS GGUF reads text and needs neither -
+    //! decided before any load, by the architecture test ``load_tts_model`` makes (a ``.dlim`` is a phoneme family).
+    return (path |> ends_with(".dlim")) || gguf_file_arch(path) != "pocket-tts"
 }
 
 def tts_has_phonemes(m : TtsModel) : bool {

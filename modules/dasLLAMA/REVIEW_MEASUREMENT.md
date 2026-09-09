@@ -12,7 +12,8 @@ provenance line covers it.
 
 **A `PERF_LEDGER.md` entry never states a tok/s figure or a turn wall that the `-jit` script
 produced - a `-jit` A/B pair enters as its ratio, with the arms' absolute rates left in the
-run's report.** A served turn is one whole prefill-plus-decode run; a turn wall is its wall.
+run's report.** A served turn is one whole request the engine serves - a prefill-plus-decode
+run, or one synthesis; a turn wall is its wall.
 
 **A `PERF_LEDGER.md` entry states a served-turn figure only when the released `lcpp_bench` exe
 (`benchmarks/lcpp_bench.das` built by `daspkg release`) or a board cell produced it.**
@@ -78,18 +79,20 @@ exercises the path, the diff mints one. The board is the module's committed reco
 serving costs; a kernel win that never lands there is invisible to the next regression check.
 
 **A timing figure of a served turn as a whole - tok/s, latency, a whole-turn model or engine
-comparison, the 512-token prefill (pp512) and 128-token decode (tg128) rates - written down as
-a measurement rather than as a prediction - is a defect without either a board cell behind it
-or a provenance line naming harness, flags, box, and the exe or script that ran it.** The board
+comparison, the 512-token prefill (pp512) and 128-token decode (tg128) rates, a synthesis's
+real-time factor (RTF) - written down as a measurement rather than as a prediction - is a
+defect without either a board cell behind it or a provenance line naming harness, flags,
+environment overrides, box, and the exe or script that ran it.** Flags are the tier (`-jit` or
+not), the `DAS_TUNE_POLICY` value in force, and the kernel backend the run served on. The board
 cell states its quant mode and stamps box and engine provenance, so a number can never silently
 describe a format nobody serves or a kernel set nobody ships.
 
-**A figure that is not a whole served-turn reading and whose value depends on the box it ran
-on - timing or not - names the harness, the flags and the box that produced it.** A figure a
-committed board cell or ruler record produced names the record and row instead.
+**A figure that covers less than one whole served turn and whose value depends on the box it
+ran on - timing or not - names the harness, the flags and the box that produced it.** A figure
+a committed board cell or ruler record produced names the record and row instead.
 
-**A figure that any build, fixture, or command reproduces on any box names that build,
-fixture, or command.**
+**A figure whose value is the same on every box names the build, fixture, or command that
+reproduces it.**
 
 **A diff that adds a race - a timed run-off between candidate implementations at startup whose
 winner sets a knob - to a shipped exe's startup races on synthetic inputs only, never loading a

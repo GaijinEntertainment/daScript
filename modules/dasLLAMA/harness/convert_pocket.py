@@ -12,7 +12,7 @@ package ships for that language, and the bundled voice clips, and writes
 - every weight as f16 (the bundles are bf16; f16 keeps 3 more mantissa bits - the loss is the
   bf16 file's own), under the CANONICAL names below (GGML caps a name at 63 bytes; 16 of the
   bundle's names are longer), [out, in] like PyTorch;
-- the unigram SentencePiece tokenizer as `tokenizer.ggml.model = "t5"` (llama.cpp's name for a
+- the unigram SentencePiece tokenizer as `tokenizer.ggml.model = "t5"` (upstream's name for a
   unigram model) with `tokenizer.ggml.tokens` / `scores` / `token_type` and the special ids;
 - the model's scalars as `pocket.*` metadata (from the config, not guessed);
 - each bundled voice clip as `voice.<name>` [samples] f32 PCM at 24 kHz mono - the language's

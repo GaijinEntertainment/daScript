@@ -344,8 +344,9 @@ def private cpt_end(d : array<uint8> const#; i, n : int) : int {
 }
 
 // the Viterbi lattice over byte positions: best[j] the highest score reaching j, back_len /
-// back_id the piece that got there; ties go to the earliest candidate (the reference's strict >)
-def private unigram_lattice(tk : SpmTokenizer; d : array<uint8> const#; unk_id : int64;
+// back_id the piece that got there; ties go to the earliest candidate (the reference's strict >);
+// a byte piece or a reserved control piece never matches text, as in the reference's trie
+def private unigram_lattice(tk : SpmTokenizer; d : array<uint8> const#; unk_id : int64; reserved : array<int64>;
                             var best : array<float>; var back_len : array<int>; var back_id : array<int64>) {
     let n = length(d)
     let unk_score = unigram_unk_score(tk)
@@ -364,7 +365,7 @@ def private unigram_lattice(tk : SpmTokenizer; d : array<uint8> const#; unk_id :
         var j = ni
         while (j <= n && j - i <= max_len) {
             let id = tk.lookup?[spm_piece_of(d, i, j - i)] ?? -1l
-            if (id >= 0l && byte_token_val(tk.vocab[id]) < 0) {   // a byte piece never matches text
+            if (id >= 0l && byte_token_val(tk.vocab[id]) < 0 && find_index(reserved, id) < 0) {
                 has_single = has_single || j == ni
                 let sc = best[i] + tk.scores[id]
                 if (sc > best[j]) {
@@ -389,22 +390,28 @@ def private unigram_lattice(tk : SpmTokenizer; d : array<uint8> const#; unk_id :
 
 //! Encode text as a UNIGRAM SentencePiece model does: the dummy-space prefix, the segmentation of
 //! highest total piece score over the codepoint lattice (an unspellable codepoint is the unknown
-//! piece at the penalty score), and with `byte_fallback` each unknown as its bytes. No BOS or EOS.
-def unigram_encode(tk : SpmTokenizer; text : string; unk_id : int64; byte_fallback : bool) : array<int64> {
+//! piece at the penalty score; a `reserved` control id never matches; `byte_fallback` spells an unknown as its bytes).
+def unigram_encode(tk : SpmTokenizer; text : string; unk_id : int64; byte_fallback : bool; reserved : array<int64>) : array<int64> {
     var inscope ids : array<int64>
     return <- ids if (empty(text))
+    if (unk_id < 0l || unk_id >= long_length(tk.vocab)) {
+        panic("dasLLAMA spm: unigram encode with no unknown piece (id {unk_id} of {length(tk.vocab)})")
+    }
     let input = tk.add_space_prefix ? " {text}" : text
     peek_data(input) $(d : array<uint8> const#) {
         var inscope best : array<float>
         var inscope back_len : array<int>
         var inscope back_id : array<int64>
-        unigram_lattice(tk, d, unk_id, best, back_len, back_id)
+        unigram_lattice(tk, d, unk_id, reserved, best, back_len, back_id)
         // the pieces come off the lattice last first
         var inscope rev : array<int64>
         var inscope rev_at : array<int>
         var inscope rev_len : array<int>
         var p = length(d)
         while (p > 0) {
+            if (back_len[p] <= 0) {   // only a score that is not a number leaves a boundary unreached
+                panic("dasLLAMA spm: the unigram lattice reached byte {p} of '{text}' through no piece - a vocabulary score is not a number")
+            }
             rev |> push(back_id[p])
             rev_at |> push(p - back_len[p])
             rev_len |> push(back_len[p])

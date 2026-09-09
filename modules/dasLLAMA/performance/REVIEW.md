@@ -138,10 +138,11 @@ on presence alone, so its run cannot tell a re-mint from the stale file the old 
 **A diff that changes `fetch_models.das` beyond its comments records its settling evidence in
 the PR description: one unscoped `fetch_models.das --` run ending `0 failed`.**
 
-**A url-only re-pin - a row's `url` changed with its `bytes` and `sha256` unchanged -
-records its settling evidence in the PR description: a fetch through the new url into a
-scratch dir, or a documented resolve of the pinned revision's size and content sha against
-the row's canonical values** - the verify never reads the url of a file already on disk.
+**A `url` a diff adds or re-points on a `model_specs.das` or `profile_common.das` row, or on
+one of that row's `companions` entries, records its settling evidence in the PR description: a
+fetch through that url into a scratch dir, or the size and content sha the url's host reports
+for that file, pasted with the command that asked, matching the row's `bytes` and `sha256`** -
+`fetch_models` checks a file already on disk by size and hash, never through its url.
 
 **A diff that refreshes `last_known_good_sidecar.json` replaces it with one complete mint from
 the box its provenance names, at the current `DASLLAMA_RELEASE` - never a hand-edited copy.**

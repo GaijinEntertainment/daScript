@@ -541,6 +541,12 @@ def configure_tts(path : string; lane : string = TTS_LANE_DEFAULT; voices_dir : 
     g_tts_id = empty(path) ? "" : stem(base_name(path))
     g_tts_lane = pick_tts_lane(lane)
     g_tts_voices_dir = voices_dir
+    // the answer-side facts belong to the model the worker loads, never to the previous one
+    g_tts_cloning = false
+    g_tts_speed = false
+    g_tts_lang = ""
+    g_tts_sample_rate = 0
+    g_tts_voices |> clear()
     if (!g_has_tts) {
         return
     }
@@ -3555,7 +3561,7 @@ let private CONFIG_KEY_KINDS <- {
     "model" => "s", "port" => "i", "quant" => "s", "kv_dtype" => "s", "metal" => "s",
     "gpu" => "s", "gpu_layers" => "i", "gpu_stream" => "i", "gpu_dn" => "b", "gpu_attn" => "b",
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
-    "tts" => "s", "tts_lane" => "s",
+    "tts" => "s", "tts_lane" => "s", "tts_voices_dir" => "s",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
     "mtp" => "b", "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
@@ -4535,15 +4541,23 @@ def private register_voice_clips(var model : TtsModel; voices_dir : string) {
         return
     }
     var added = 0
+    var clips = 0
+    var seen : table<string>
     dir(voices_dir) $(fname) {
         return if (!is_voice_clip_name(fname))
+        clips++
         let clip_path = path_join(voices_dir, fname)
+        let name = stem(fname)
+        if (key_exists(seen, name)) {
+            to_log(LOG_WARNING, "dasllama-server: voice clip {clip_path} shares its stem with an earlier clip - it replaces that voice\n")
+        } elif (find_index(c.voices, name) >= 0) {
+            to_log(LOG_WARNING, "dasllama-server: voice clip {clip_path} replaces the model's own voice '{name}'\n")
+        }
         let pcm <- load_audio_mono(clip_path, c.sample_rate)
         if (empty(pcm)) {
             to_log(LOG_ERROR, "dasllama-server: voice clip {clip_path} did not decode - skipped\n")
             return
         }
-        let name = stem(fname)
         var why = ""
         let refused = catch_worker_panic(why) {
             tts_register_voice(model, name, pcm, c.sample_rate)
@@ -4552,11 +4566,14 @@ def private register_voice_clips(var model : TtsModel; voices_dir : string) {
             to_log(LOG_ERROR, "dasllama-server: voice clip {clip_path} refused: {why} - skipped\n")
             return
         }
+        seen |> insert(name)
         added++
         to_log(LOG_INFO, "dasllama-server: voice '{name}' cloned from {clip_path} ({float(length(pcm)) / float(c.sample_rate)} s)\n")
     }
-    if (added == 0) {
-        to_log(LOG_WARNING, "dasllama-server: tts_voices_dir '{voices_dir}' added no voice - no clip there decoded\n")
+    if (clips == 0) {
+        to_log(LOG_WARNING, "dasllama-server: tts_voices_dir '{voices_dir}' holds no clip - a voice is a {join(TTS_VOICE_CLIP_EXTENSIONS, " / ")} file\n")
+    } elif (added == 0) {
+        to_log(LOG_WARNING, "dasllama-server: tts_voices_dir '{voices_dir}' added no voice - every clip there was skipped\n")
     }
 }
 
@@ -4644,7 +4661,7 @@ def private tts_route_unavailable(srv : WebSocketServer; var writer : HttpRespon
 // bytes, and a dash or a curly quote pasted from a document costs three of them
 def private tts_input_field(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?; verb : string) : string {
     let input = js?["input"] ?? ""
-    if (empty(input)) {
+    if (empty(strip(input))) {   // blank text has nothing to say: every family would answer no samples
         bad_request(srv, writer, "'input' is required (the text to {verb})")
         return ""
     }

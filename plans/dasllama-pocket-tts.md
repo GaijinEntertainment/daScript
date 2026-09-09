@@ -153,6 +153,12 @@ repo `borisbat/dasllama-tts` gains the Pocket files with the card's licence tabl
 
 ## Receipts (2026-09-09, M1 Max, f32 lane, `tests/test_tts_pocket.das`)
 
+Every das figure in this section ran on the M1 Max (10 cores, the m1 tune manifest) under
+`bin/daslang -jit`, the default tune policy, the lane the row names; the rig rows through
+`harness/tts_rig.py --models pocket-tts-en:alba` (`--q8` / `--f32`, 200 sentences, parakeet WER
++ UTMOS), the parity figures through `tests/test_tts_pocket.das` over `harness/pocket_oracle.py`'s
+dumps, the per-stage timings from the `timings_line` the facade logs per synthesis.
+
 Reference arm (pip pocket-tts 3.1.0, alba, the 200-sentence fixture through `harness/tts_rig.py`):
 WER 5.00 / UTMOS 4.393 / RTF 0.210 (the package pins torch to one thread); by category harvard
 0.86, ljspeech 5.66, heteronym 0.25, oov 10.89, numeric 10.42 - the reference normalizes no
@@ -160,7 +166,8 @@ numbers. Parity against `harness/pocket_oracle.py` (24 cases, alba and caro_davy
 3e-6 abs on a 0.6 peak, encoder 2e-5 on 8, voice prompt KV 2e-4 on 9, backbone conditioning
 8e-6, EOS logit 1.5e-5, the head alone 4e-6, teacher-forced latents 2e-4, waveform 1.6e-4 on 0.8;
 the free run lands the oracle's frame count. First das RTF, unoptimized f32: 0.15 (backbone
-7.8 ms per frame - the tiled GEMM run as a GEMV; the q8 GEMV is phase 6's first rung).
+7.8 ms per frame, read off the `timings_line` of one `synthesize` on the f32 lane, `-jit`, M1
+Max - the tiled GEMM run as a GEMV; the q8 GEMV is phase 6's first rung).
 
 The q8 lane (same day): the transformer GEMMs and the 32-wide codec convs as Q8_0 rows, the
 decode step on the q8 GEMV entry. The rig at alba, 200 sentences, the same scorer:
@@ -225,7 +232,8 @@ activations' variance is 1e-4: at 1e-6 every latent was off by one percent.
 Prediction (the game): on the M1 Max, JIT, q8 lane, warm - RTF <= 0.05 for a 10-second
 sentence (the reference's torch path is framework-bound per 80 ms frame; ours is a 75 MB
 GEMV plus 260M MAC of GEMM per frame), first audio chunk under 100 ms after the text prompt.
-Kokoro sits at 0.069-0.075 on the same box.
+Kokoro sits at 0.069-0.075 on the same box (`harness/tts_rig.py --models kokoro-82m --q8`,
+`-jit`, the rig table of `plans/dasllama-tts.md`).
 
 ## Design rulings (Boris, 2026-09-09)
 
@@ -233,8 +241,8 @@ Kokoro sits at 0.069-0.075 on the same box.
 2. One family file, `dasllama_pocket.das`, holding the family rules and the assembly; the
    StyleTTS2 split is not repeated until a second model shares this lineage.
 3. The unigram tokenizer is an arm inside `dasllama_spm.das`, keyed on the GGUF value `t5`
-   (llama.cpp's name for a unigram SentencePiece model) so the reader also serves any
-   llama.cpp-converted T5-class model; piece table, scores and byte fallback shared with the
+   (upstream's name for a unigram SentencePiece model) so the reader also serves any
+   upstream-converted T5-class model; piece table, scores and byte fallback shared with the
    BPE arm, only the segmentation differs.
 4. The bundled voices ride the GGUF as `voice.<name>` PCM tensors (Kokoro's pack pattern),
    encoded into a voice state on first use and cached for the session; the file stays

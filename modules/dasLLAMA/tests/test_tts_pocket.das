@@ -19,6 +19,7 @@ require daslib/rtti   // this_context().last_exception: the refusals are read as
 require strings
 require math
 require _tts_oracle
+require _tts_corpus   // the corpus sentences the oracle prepared: the prepare-parity cell's inputs
 require _model_tier
 
 // The Pocket TTS family. Model-gated (`pocket-tts-en.gguf` under models_dir(), minted by
@@ -96,23 +97,31 @@ def test_pocket_tokenizer(t : T?) {
     }
     var inscope tk <- load_tokenizer_gguf(path)
     var unk_id = 0l
+    var eos_id = 2l
     var byte_fallback = true
+    var inscope reserved : array<int64>
     let f = fopen(path, "rb")
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
         t |> equal(gguf_str(m, bytes, "tokenizer.ggml.model"), "t5", "the GGUF names a unigram SentencePiece model")
         unk_id = gguf_int(m, bytes, "tokenizer.ggml.unknown_token_id")
+        eos_id = gguf_int(m, bytes, "tokenizer.ggml.eos_token_id")
         byte_fallback = gguf_int(m, bytes, "tokenizer.ggml.byte_fallback") != 0l
+        reserved |> push(unk_id)
+        reserved |> push(gguf_int(m, bytes, "tokenizer.ggml.bos_token_id"))
+        reserved |> push(eos_id)
+        reserved |> push(gguf_int(m, bytes, "tokenizer.ggml.padding_token_id"))
     }
     fclose(f)
     t |> equal(length(tk.vocab), 4000, "the 4000-piece vocabulary")
     t |> success(tk.add_space_prefix, "the dummy-space prefix is on")
     t |> equal(tk.max_token_length, 7, "the longest piece in bytes, its three-byte space marker read as one space")
     var inscope fx <- load_tokens_fixture()
+    t |> equal(length(fx.rows), 200, "the 200-sentence corpus, one row each")
     // every corpus sentence, prepared as the package prepares it, tokenizes id for id
     var bad = 0
     for (r in fx.rows) {
-        var inscope ours <- unigram_encode(tk, r.prepared, unk_id, byte_fallback)
+        var inscope ours <- unigram_encode(tk, r.prepared, unk_id, byte_fallback, reserved)
         if (!same_ids(ours, r.ids)) {
             bad++
             if (bad <= 3) {
@@ -123,7 +132,7 @@ def test_pocket_tokenizer(t : T?) {
     t |> equal(bad, 0, "sentences whose ids differ from the reference, of {length(fx.rows)}")
     // the probes: byte fallback on an emoji and a Cyrillic capital, whitespace runs, tabs and newlines
     for (p in fx.probes) {
-        var inscope ours <- unigram_encode(tk, p.text, unk_id, byte_fallback)
+        var inscope ours <- unigram_encode(tk, p.text, unk_id, byte_fallback, reserved)
         t |> success(same_ids(ours, p.ids), "'{p.text}': ours [{ids_text(ours)}] reference [{ids_text(p.ids)}]")
     }
     // decode returns the text the ids came from
@@ -137,8 +146,70 @@ def test_pocket_tokenizer(t : T?) {
     for (p in fx.probes) {
         t |> equal(spm_decode_ids(tk, p.ids), p.text, "'{p.text}' decodes back")
     }
-    var inscope none <- unigram_encode(tk, "", unk_id, byte_fallback)
+    var inscope none <- unigram_encode(tk, "", unk_id, byte_fallback, reserved)
     t |> equal(length(none), 0, "an empty text has no tokens")
+    // a control piece typed into the text is its bytes, never the control id (the reference keeps
+    // control pieces out of its trie); the unreserved encode is the control that shows the id would win
+    var inscope typed <- unigram_encode(tk, "</s>", unk_id, byte_fallback, reserved)
+    t |> success(find_index(typed, eos_id) < 0, "'</s>' in text never encodes to the EOS id: [{ids_text(typed)}]")
+    t |> equal(spm_decode_ids(tk, typed), "</s>", "and decodes back to the text")
+    var inscope no_reserve : array<int64>
+    var inscope unguarded <- unigram_encode(tk, "</s>", unk_id, byte_fallback, no_reserve)
+    t |> success(find_index(unguarded, eos_id) >= 0, "without the reserved set the score-0 control piece wins: [{ids_text(unguarded)}]")
+    // an encode with no unknown piece is refused, not fed -1
+    var tripped = false
+    try {
+        var inscope bad_ids <- unigram_encode(tk, "hello", -1l, byte_fallback, reserved)
+    } recover {
+        tripped = true
+    }
+    t |> success(tripped, "unigram_encode panics on an unknown id outside the vocabulary")
+}
+
+// the reference's own text preparation, row by row: the oracle prepared every corpus sentence
+// (`prepared`, `frames_after_eos`) and ours must land the same string and the same tail
+[test]
+def test_pocket_prepare(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    var inscope m <- load_pocket(path)
+    var inscope fx <- load_tokens_fixture()
+    var inscope corpus <- load_tts_corpus()
+    var inscope by_id <- {for (row in corpus); row.id => row.text}
+    var bad = 0
+    var checked = 0
+    for (r in fx.rows) {
+        let text = by_id?[r.id] ?? ""
+        continue if (empty(text))
+        checked++
+        let p = pocket_prepare(m, text)
+        if (p.prepared != r.prepared || p.frames_after_eos + 2 != r.frames_after_eos) {
+            bad++
+            if (bad <= 3) {
+                to_log(LOG_ERROR, "pocket prepare {r.id}: ours '{p.prepared}' +{p.frames_after_eos + 2} reference '{r.prepared}' +{r.frames_after_eos}\n")
+            }
+        }
+    }
+    t |> equal(checked, 200, "every fixture row found its corpus sentence")
+    t |> equal(bad, 0, "sentences whose preparation differs from the reference's")
+    // the terminal period follows the reference's isalnum: an accented final letter takes one
+    t |> equal(pocket_prepare(m, "spero che ti piacerò").prepared, "Spero che ti piacerò.", "an accented final letter takes the period")   // nolint:STYLE039 - the accent is the case
+    t |> equal(pocket_prepare(m, "Hello there,").prepared, "Hello there,", "a trailing mark is left as it is")
+    // the word count folds whitespace runs and tabs, as the reference's split() does
+    t |> equal(pocket_prepare(m, "One two three   four.").frames_after_eos, 3, "four words: the short-text tail")
+    t |> equal(pocket_prepare(m, "One\ttwo three four five.").frames_after_eos, 1, "five words across a tab: the long-text tail")
+    // an empty text is refused, as the reference refuses it; the chunker answers no chunks
+    var tripped = false
+    try {
+        let p = pocket_prepare(m, "   ")
+    } recover {
+        tripped = true
+    }
+    t |> success(tripped, "pocket_prepare panics on a blank text")
+    var inscope none <- pocket_chunks(m, "  \n ")
+    t |> equal(length(none), 0, "a blank text has no chunks")
 }
 
 // ===== the parity rail against harness/pocket_oracle.py =====
@@ -193,6 +264,12 @@ def private rel_diff(t : T?; tag : string; ours, ref : array<float>; bar : float
     let d = max_abs_diff(ours, ref)
     to_log(LOG_INFO, "pocket {tag}: maxdiff {d} over {length(ref)} (oracle peak {peak})\n")
     t |> success(d <= bar * peak, "{tag}: maxdiff {d} <= {bar * peak}")
+    // the control: one expected element moved by twice the bar must land outside it
+    if (!empty(ref)) {
+        var inscope poisoned := ref
+        poisoned[0] += 2.0 * bar * peak
+        t |> success(max_abs_diff(ours, poisoned) > bar * peak, "{tag}: the bar discriminates a poisoned expectation")
+    }
 }
 
 let CODEC_BAR = 2.0e-3    // the codec chain: eleven convs and a transformer of f32 GEMMs in a different order
@@ -362,20 +439,37 @@ def test_pocket_frames(t : T?) {
 // the q8 lane against the f32 oracle: a frame's latent is a flow sample, and a quantized
 // conditioning row moves a few of its 32 elements by whole tenths, so the per-element figures are
 // logged and the lane's quality gate is the rig (harness/tts_rig.py --q8 against --f32)
-def private q8_report(t : T?; tag : string; ours, ref : array<float>) {
-    if (length(ours) != length(ref)) {
-        t |> failure("{tag}: {length(ours)} elements against the oracle's {length(ref)}")
-        return
-    }
+def private rms_relative(ours, ref : array<float>) : double {
     var ssd = 0.0lf
     var ssr = 0.0lf
     for (a, b in ours, ref) {
         ssd += double((a - b) * (a - b))
         ssr += double(b * b)
     }
-    let rel = sqrt(ssd / max(ssr, 1e-30lf))
+    return sqrt(ssd / max(ssr, 1e-30lf))
+}
+
+let Q8_RMS_BAR = 0.5lf   // a quantized conditioning row moves a flow sample by tenths on a few elements
+
+def private q8_report(t : T?; tag : string; ours, ref : array<float>) {
+    if (length(ours) != length(ref)) {
+        t |> failure("{tag}: {length(ours)} elements against the oracle's {length(ref)}")
+        return
+    }
+    let rel = rms_relative(ours, ref)
     to_log(LOG_INFO, "pocket {tag}: rms relative {rel}, max |diff| {max_abs_diff(ours, ref)}\n")
-    t |> success(rel < 0.5lf, "{tag}: rms relative {rel} is in the same picture as the oracle")
+    t |> success(rel < Q8_RMS_BAR, "{tag}: rms relative {rel} is in the same picture as the oracle")
+    // the control: the expectation shifted by its own rms lands outside the bar
+    var ssr = 0.0lf
+    for (b in ref) {
+        ssr += double(b * b)
+    }
+    let shift = float(sqrt(ssr / double(max(length(ref), 1))))
+    var inscope poisoned := ref
+    for (v in poisoned) {
+        v += shift
+    }
+    t |> success(rms_relative(ours, poisoned) >= Q8_RMS_BAR, "{tag}: the rms bar discriminates a poisoned expectation")
 }
 
 [test]
@@ -391,8 +485,13 @@ def test_pocket_q8_lane(t : T?) {
     }
     with_job_que() {
         setup_dasllama_jobque_()
-        var inscope m <- load_pocket(path)   // the policy default
-        t |> success(m.q8, "the served default is the q8 lane")
+        defer() {
+            reset_pocket_q8()
+        }
+        set_pocket_q8(true)   // the lane this cell measures, pinned - the sibling cells pin the other
+        var inscope m <- load_pocket(path)
+        t |> success(m.q8, "the pinned q8 lane serves")
+        t |> success(pocket_serves_q8(), "the pin is what the policy answers")
         t |> success(m.backbone.layers[0].in_proj.q8 && m.mimi.dec_in.q8 && !m.mimi.enc_in.q8 && !m.mimi.dec_out.q8,
             "the GEMMs on 32-wide inputs minted q8; the one-channel convs stayed f32")
         var inscope sc = PocketScratch()
@@ -466,6 +565,10 @@ def test_pocket_q8_file(t : T?) {
     with_job_que() {
         setup_dasllama_jobque_()
         var inscope sc = PocketScratch()
+        defer() {
+            reset_pocket_q8()
+        }
+        set_pocket_q8(true)
         var inscope mq <- load_pocket(q8path)
         var inscope mf <- load_pocket(path)
         t |> success(mq.q8 && mf.q8, "both loads serve the q8 lane")
@@ -492,11 +595,34 @@ def test_pocket_q8_file(t : T?) {
             // the file's block scales are f16 (the Q8_0 format), the load-time quantizer keeps
             // them f32, and the flow head amplifies that half-a-thousandth per block into
             // percents of a frame; the published file's own rig row is its quality gate
-            t |> success(rel < 5.0e-2lf, "{c.id}: the file's blocks and the load-time quants are the same lane (rms relative {rel})")
+            t |> success(rel < Q8_FILE_BAR, "{c.id}: the file's blocks and the load-time quants are the same lane (rms relative {rel})")
+            var inscope poisoned := b
+            for (v in poisoned) {
+                v += 2.0
+            }
+            t |> success(rms_relative(a, poisoned) >= Q8_FILE_BAR, "{c.id}: the bar discriminates a poisoned expectation")
+            break
+        }
+        // the same file on the f32 lane: every Q8_0 tensor dequantized and re-laid, against the f16
+        // file's f32 lane - the published file's other lane, the one a --tts-lane f32 boot serves
+        set_pocket_q8(false)
+        var inscope mq32 <- load_pocket(q8path)
+        var inscope mf32 <- load_pocket(path)
+        t |> success(!mq32.q8 && !mf32.q8, "both loads serve the f32 lane")
+        t |> success(!mq32.backbone.layers[0].in_proj.q8 && !mq32.mimi.dec_in.q8, "the published file's Q8_0 tensors dequantized into f32 planes")
+        for (c in man.cases) {
+            continue if (!c.stages || c.voice != "alba")
+            var inscope a <- forced_latents(mq32, c, man, sc)
+            var inscope b <- forced_latents(mf32, c, man, sc)
+            let rel = rms_relative(a, b)
+            to_log(LOG_INFO, "pocket {c.id} q8 file on the f32 lane vs the f16 file: rms relative {rel}\n")
+            t |> success(rel < Q8_FILE_BAR, "{c.id}: the dequantized file serves the f16 file's frames (rms relative {rel})")
             break
         }
     }
 }
+
+let Q8_FILE_BAR = 5.0e-2lf
 
 // ===== the other five languages: one Q8_0 file each, its own tokenizer, one default voice =====
 
@@ -529,6 +655,10 @@ def private language_cells(t : T?; L : PocketLang) {
         return
     }
     var inscope man <- load_lang_manifest(odir)
+    if (empty(man.cases)) {
+        t |> skip("{L.config}: no oracle dumps under {odir}")
+        return
+    }
     var inscope fx <- load_tokens_fixture("{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/pocket_tokens_{L.config}.json")
     var inscope m <- load_pocket(path)
     t |> equal(m.lang, L.code, "{L.config}: the language code")
@@ -537,11 +667,17 @@ def private language_cells(t : T?; L : PocketLang) {
     var bad = 0
     for (r in fx.rows) {
         var inscope ours <- pocket_text_ids(m, r.prepared)
-        bad += same_ids(ours, r.ids) ? 0 : 1
+        if (!same_ids(ours, r.ids)) {
+            bad++
+            to_log(LOG_ERROR, "pocket {L.config} tokens {r.id} '{r.prepared}': ours [{ids_text(ours)}] '{spm_decode_ids(m.tok, ours)}' reference [{ids_text(r.ids)}]\n")
+        }
     }
     for (p in fx.probes) {
         var inscope ours <- pocket_text_ids(m, p.text)
-        bad += same_ids(ours, p.ids) ? 0 : 1
+        if (!same_ids(ours, p.ids)) {
+            bad++
+            to_log(LOG_ERROR, "pocket {L.config} probe '{p.text}': ours [{ids_text(ours)}] '{spm_decode_ids(m.tok, ours)}' reference [{ids_text(p.ids)}]\n")
+        }
     }
     t |> equal(bad, 0, "{L.config}: sentences and probes whose ids differ from the reference")
     var inscope sc = PocketScratch()
@@ -568,7 +704,7 @@ def private language_cells(t : T?; L : PocketLang) {
         t |> success(speech_stats(sc.wave).rms > 0.01, "{L.config} {c.id}: the decoded frames carry speech")
         cases++
     }
-    t |> success(cases > 0 || empty(man.cases), "{L.config}: {cases} oracle cases ran")
+    t |> success(cases > 0, "{L.config}: {cases} oracle cases ran")
     var inscope tm <- load_tts_model(path)
     var inscope c2 <- caps(tm)
     t |> equal(c2.langs[0], L.code, "{L.config}: the facade reports the language")

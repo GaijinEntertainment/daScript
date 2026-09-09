@@ -40,6 +40,7 @@ let STALE_PACK_PORT = 18143   // the spawned boot whose front-end pack predates 
 let POCKET_PORT = 18144    // the Pocket boot: its own worker, so its own port
 let POCKET_CLIP_PORT = 18145    // the Pocket boot that speaks the clip the next one clones
 let POCKET_CLONE_PORT = 18146   // the Pocket boot with a voices directory
+let POCKET_NOCLONE_PORT = 18147   // the kitten boot under the same voices directory: ignored
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
 let CHILD_TIMEOUT_SEC = 420.0   // the child parses, JITs and loads before it listens
 let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, so a hung boot still joins
@@ -545,6 +546,9 @@ def test_speech_route_pocket(t : T?) {
         speech_request(base_url, "\{\"input\": \"Hello.\", \"voice\": \"nobody\"}") $(status, _ctype, _bytes, text) {
             t |> equal(status, 400, "an unknown voice: {text}")
         }
+        speech_request(base_url, "\{\"input\": \"   \", \"voice\": \"alba\"}") $(status, _ctype, _bytes, text) {
+            t |> equal(status, 400, "a blank text is refused, not answered with no samples: {text}")
+        }
         phonemes_request(base_url, "\{\"input\": \"Dr. Chen paid $12. Then he left.\"}") $(status, text) {
             t |> equal(status, 200, text)
             var err = ""
@@ -600,18 +604,35 @@ def test_pocket_voices_dir(t : T?) {
             f |> fwrite("RIFF junk")
         }
     }
+    let note_path = path_join(voices_dir, "readme.txt")   // no clip extension: passed over, never decoded
+    fopen(note_path, "wb") $(f) {
+        if (f != null) {
+            f |> fwrite("not audio")
+        }
+    }
     with_speech_server(POCKET_PATH, POCKET_CLONE_PORT, "q8", voices_dir) $(base_url) {
         with_tts_stats(base_url) $(tts) {
             var inscope voices <- json_strings(tts?["voices"])
-            t |> equal(length(voices), roster + 1, "the clip joined the roster; the junk file did not")
+            t |> equal(length(voices), roster + 1, "the clip joined the roster; the junk file and the note did not")
             t |> success(find_index(voices, "mine") >= 0, "the cloned voice carries its file's stem ({length(voices)} voices)")
         }
         speech_request(base_url, "\{\"input\": \"Hello from a cloned voice.\", \"voice\": \"mine\"}") $(status, ctype, bytes, text) {
             expect_speech_wav(t, status, ctype, bytes, text, 12000)   // over half a second in the cloned voice
         }
     }
+    // the same directory on a model that cannot clone: logged, ignored, the route serves its own roster
+    if (stat(TTS_PATH).is_valid && stat(path_join(models_dir(), "tts_g2p.bin")).is_valid && stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
+        with_speech_server(TTS_PATH, POCKET_NOCLONE_PORT, "q8", voices_dir) $(base_url) {
+            with_tts_stats(base_url) $(tts) {
+                var inscope voices <- json_strings(tts?["voices"])
+                t |> equal(length(voices), 8, "a phoneme family keeps its own eight voices under a voices directory")
+                t |> success(!(tts?["cloning"] ?? true), "and still says it clones nothing")
+            }
+        }
+    }
     remove(clip_path)
     remove(junk_path)
+    remove(note_path)
     rmdir(voices_dir)
 }
 

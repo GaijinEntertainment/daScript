@@ -130,6 +130,7 @@ struct PocketModel {
     mimi : PocketMimi = PocketMimi()
     tok : SpmTokenizer = SpmTokenizer()
     unk_id : int64
+    reserved_ids : array<int64>   // the control ids (unknown, BOS, EOS, padding): text never encodes to them
     byte_fallback : bool
     q8 : bool                // the lane this model serves: the GEMM weights as Q8_0 quants, or f32
 }
@@ -283,8 +284,19 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 }
 
 // a Q8_0 tensor of the published file: its blocks go straight into the int8 plane on the q8 lane
+var private g_stage_file_q8 = false   // the file's `pocket.weights` says q8: its Q8_0 tensors are in the kernels' layout
+
+// a Q8_0 tensor is read as the kernels' own blocks only where the converter wrote it that way:
+// `pocket.weights = "q8"` names the layout, and the block-home rule (32-wide on both dims, a
+// dense stride-1 conv) is what the converter's q8_linear / q8_conv wrote a second time
 def private is_q8_tensor(m : GGUFMeta; name : string) : bool {
-    return gguf_tensor_type(m, name) == GGML_TYPE_Q8_0
+    if (gguf_tensor_type(m, name) != GGML_TYPE_Q8_0) {
+        return false
+    }
+    if (!g_stage_file_q8) {
+        panic("dasLLAMA pocket: '{name}' is Q8_0 in a file whose pocket.weights is not q8 - the reader takes the blocks' layout from the converter's q8 form only")
+    }
+    return true
 }
 
 def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; vec_only : bool = false) : TtsLinear {
@@ -295,6 +307,9 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     l.nout = m.tensors[ti].dims[1]
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
+    }
+    if (is_q8_tensor(m, wname) && (vec_only || l.nin % 32l != 0l || l.nout % 32l != 0l)) {
+        panic("dasLLAMA pocket: '{wname}' [{l.nout}][{l.nin}] is Q8_0, a shape the q8 lane does not serve ({vec_only ? "a vector-only layer" : "not 32-wide on both dims"})")
     }
     if (g_stage_q8 && !vec_only && is_q8_tensor(m, wname)) {
         let n = l.nout * l.nin
@@ -320,14 +335,19 @@ def private read_norm(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) :
 }
 
 // the published file's conv: a Q8_0 slab [cout][k][cin] (the tap-stacked rows layout, innermost
-// cin) - taken as the q8 lane's blocks, or dequantized and re-laid into PyTorch's [cout][cin][k]
+// cin) - taken as the q8 lane's blocks, or dequantized and re-laid into PyTorch's [cout][cin][k];
+// the slab is the dense stride-1 conv's shape alone, any other Q8_0 conv is refused, never guessed
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-q8-file")]
 def private read_conv_q8(m : GGUFMeta; bytes : array<uint8> | #; wname : string; var c : TtsConv1d) {
     let ti = need_tensor(m, wname)
     c.cin = m.tensors[ti].dims[0]
     c.k = m.tensors[ti].dims[1]
     c.cout = m.tensors[ti].dims[2]
     let kc = c.k * c.cin
-    if (g_stage_q8 && c.stride == 1l && !c.transposed && c.groups == 1l) {   // the rows q8 conv's shape; anything else dequantizes
+    if (c.stride != 1l || c.transposed || c.groups != 1l || c.cin % 32l != 0l || c.cout % 32l != 0l) {
+        panic("dasLLAMA pocket: '{wname}' is Q8_0 with stride {c.stride}, groups {c.groups}{c.transposed ? ", transposed" : ""}, {c.cin} -> {c.cout} channels: not the dense stride-1 32-wide conv the slab layout is for")
+    }
+    if (g_stage_q8) {
         c.wq |> reserve_resize(c.cout * kc)
         c.wqs |> reserve_resize(c.cout * kc / 32l)
         gguf_transcode_q8_0(m, bytes, wname, c.wq, c.wqs, 0l, 0l, c.cout * kc)
@@ -352,7 +372,8 @@ def private read_conv_q8(m : GGUFMeta; bytes : array<uint8> | #; wname : string;
 }
 
 // a causal conv's context is its geometry: a forward conv's left zero pad of `k - stride`, or
-// the `k - stride` tail of a transposed conv the stream never emits (sec.2.46)
+// the `k - stride` tail of a transposed conv the stream never emits
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-one-shot-codec")]
 def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; stride, groups : int64; transposed : bool) : TtsConv1d {
     var c = TtsConv1d()
     let wname = "{prefix}.weight"
@@ -429,7 +450,7 @@ def private time_embed_at(m : GGUFMeta; bytes : array<uint8> | #; prefix : strin
     var inscope alpha <- read_arr(m, bytes, "{prefix}.mlp.3.alpha")
     let half = long_length(freqs)
     var inscope emb : array<float>
-    emb |> resize(2l * half)
+    emb |> reserve_resize(2l * half)
     for (j in range64(half)) {
         let a = float(t * double(freqs[j]))
         emb[j] = cos(a)
@@ -440,25 +461,11 @@ def private time_embed_at(m : GGUFMeta; bytes : array<uint8> | #; prefix : strin
     silu(h1, long_length(h1))
     var inscope h2 : array<float>
     linear_vec(w2, h1, h2)
-    let n = long_length(h2)
-    var mean = 0.0lf
-    for (v in h2) {
-        mean += double(v)
-    }
-    mean /= double(n)
-    var variance = 0.0lf
-    for (v in h2) {
-        let dv = double(v) - mean
-        variance += dv * dv
-    }
-    variance /= double(n - 1l)
-    let inv = 1.0 / sqrt(float(variance) + TIME_RMS_EPS)
-    for (j in range64(n)) {
-        h2[j] = h2[j] * alpha[j] * inv
-    }
+    var_scale_norm(h2, alpha, long_length(h2), TIME_RMS_EPS)
     return <- h2
 }
 
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-one-step-head")]
 def private read_head(m : GGUFMeta; bytes : array<uint8> | #; var hd : PocketHead; depth : int64) {
     hd.input_proj <- read_linear(m, bytes, "head.input_proj", true)
     hd.cond_embed <- read_linear(m, bytes, "head.cond_embed", true)
@@ -466,11 +473,11 @@ def private read_head(m : GGUFMeta; bytes : array<uint8> | #; var hd : PocketHea
     // one decode step integrates from s = 0 to t = 1: the two embeddings are constants
     var inscope t0 <- time_embed_at(m, bytes, "head.time_embed.0", 0.0lf)
     var inscope t1 <- time_embed_at(m, bytes, "head.time_embed.1", 1.0lf)
-    hd.time_const.a |> resize(hd.dim)
+    hd.time_const.a |> reserve_resize(hd.dim)
     for (j in range64(hd.dim)) {
         hd.time_const.a[j] = (t0[j] + t1[j]) * 0.5
     }
-    hd.blocks |> resize(int(depth))
+    hd.blocks |> reserve_resize(depth)
     for (i in range64(depth)) {
         let p = "head.res_blocks.{i}"
         hd.blocks[i].ln <- read_norm(m, bytes, "{p}.in_ln")
@@ -561,7 +568,8 @@ def load_pocket(path : string) : PocketModel {
         m.append_terminal_punctuation = gguf_int(g, bytes, "pocket.append_terminal_punctuation") != 0l
         m.bos_before_voice = gguf_int(g, bytes, "pocket.bos_before_voice") != 0l
         m.default_voice = gguf_str(g, bytes, "pocket.default_voice")
-        if (gguf_has(g, "pocket.weights") && gguf_str(g, bytes, "pocket.weights") == "q8" && !m.q8) {
+        g_stage_file_q8 = gguf_has(g, "pocket.weights") && gguf_str(g, bytes, "pocket.weights") == "q8"
+        if (g_stage_file_q8 && !m.q8) {
             to_log(LOG_INFO, "dasLLAMA pocket: '{path}' carries Q8_0 GEMM weights; the f32 lane serves them dequantized\n")
         }
         m.voice_names <- gguf_str_array(g, bytes, "pocket.voices")
@@ -593,8 +601,15 @@ def load_pocket(path : string) : PocketModel {
         m.frame_samples = m.mimi.hop * m.mimi.frame_steps
         m.unk_id = gguf_int(g, bytes, "tokenizer.ggml.unknown_token_id")
         m.byte_fallback = gguf_int(g, bytes, "tokenizer.ggml.byte_fallback") != 0l
+        m.reserved_ids |> push(m.unk_id)
+        for (key in ["tokenizer.ggml.bos_token_id", "tokenizer.ggml.eos_token_id", "tokenizer.ggml.padding_token_id"]) {
+            if (gguf_has(g, key)) {
+                m.reserved_ids |> push(gguf_int(g, bytes, key))
+            }
+        }
     }
     fclose(f)
+    g_stage_file_q8 = false
     m.tok <- load_tokenizer_gguf(path)
     return <- m
 }
@@ -617,19 +632,29 @@ def private split_qkv(qkv : array<float>; t, d : int64; @scratch @exact_size var
     }
 }
 
+// a projection over t rows: one row - a frame step - takes the decode entry (the q8 GEMV), the
+// prompt's rows the rows GEMM
+def private proj(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_size var y : array<float>) {
+    if (t == 1l) {
+        linear_rows_decode(l, x, y)
+    } else {
+        linear_rows(l, x, t, y)
+    }
+}
+
 def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : array<float>; t, pos0 : int64;
                             var kc : TtsKvCache; var sc : PocketScratch) {
     let d = tf.d
     let dh = d / tf.heads
     copy_rows(sc.xb, x, t * d)
     layernorm_rows(sc.xb, t, d, l.norm1, tf.eps)
-    linear_rows(l.in_proj, sc.xb, t, sc.qkv)
+    proj(l.in_proj, sc.xb, t, sc.qkv)
     split_qkv(sc.qkv, t, d, sc.q, sc.k, sc.v)
     rope_rows(sc.q, t, d, dh, pos0, tf.period)
     rope_rows(sc.k, t, d, dh, pos0, tf.period)
     kv_cache_append(kc, sc.k, sc.v, t, d)
     attention_causal_rows(sc.q, t, d, tf.context, kc, sc.ctx)
-    linear_rows(l.out_proj, sc.ctx, t, sc.xb)
+    proj(l.out_proj, sc.ctx, t, sc.xb)
     if (!empty(l.scale1.a)) {
         layer_scale_rows(sc.xb, t, d, l.scale1.a)
     }
@@ -640,9 +665,9 @@ def private layer_ffn(l : PocketLayer; tf : PocketTransformer; var x : array<flo
     let d = tf.d
     copy_rows(sc.xb, x, t * d)
     layernorm_rows(sc.xb, t, d, l.norm2, tf.eps)
-    linear_rows(l.ffn1, sc.xb, t, sc.h)
+    proj(l.ffn1, sc.xb, t, sc.h)
     gelu(sc.h, t * tf.ffn)
-    linear_rows(l.ffn2, sc.h, t, sc.xb)
+    proj(l.ffn2, sc.h, t, sc.xb)
     if (!empty(l.scale2.a)) {
         layer_scale_rows(sc.xb, t, d, l.scale2.a)
     }
@@ -708,6 +733,7 @@ def pocket_encode_latents(m : PocketModel; pcm : array<float>; var sc : PocketSc
 //! Latent frames [frames][latent_dim] (denormalized) through the codec decoder into
 //! `frames * frame_samples` PCM samples - the whole chunk in one pass, which the causal padding
 //! makes sample-identical to the reference's frame-by-frame stream.
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-one-shot-codec")]
 def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int64; var sc : PocketScratch; @scratch @exact_size var wave : array<float>) {
     let mm & = unsafe(m.mimi)
     conv1d_rows(mm.quant_proj, latents, frames, sc.ca)
@@ -737,6 +763,7 @@ let private VOICE_CACHE_SLACK = 1024l   // positions past the prompt a chunk's t
 
 //! The backbone's memory of a clip: its latents projected into the model's width, the BOS row in
 //! front, run through the backbone at positions 0..; the state a synthesis continues from.
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-voice-state")]
 def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScratch) : PocketVoiceState {
     var inscope vs = PocketVoiceState()
     var inscope lat : array<float>
@@ -744,7 +771,7 @@ def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScrat
     let d = m.backbone.d
     let bos = m.bos_before_voice ? 1l : 0l
     var inscope rows : array<float>
-    rows |> resize((frames + bos) * d)
+    rows |> reserve_resize((frames + bos) * d)
     var inscope proj : array<float>
     linear_rows(m.speaker_proj, lat, frames, proj)
     for (j in range64(bos * d)) {
@@ -760,16 +787,24 @@ def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScrat
 }
 
 //! Add (or replace) a voice: `pcm` at the model's sample rate, mono. It joins the roster under
-//! `name`; the state is computed here so a later synthesis pays nothing for it.
+//! `name` once its state is built (a clip the encoder refuses leaves no half voice behind), and a
+//! replaced voice's state is freed rather than left in the table's slot.
 def pocket_register_voice(var m : PocketModel; name : string; pcm : array<float>; var sc : PocketScratch) {
     if (empty(pcm)) {
         panic("dasLLAMA pocket: voice '{name}' has no samples")
+    }
+    var inscope vs <- pocket_voice_state(m, pcm, sc)
+    if (key_exists(m.voice_states, name)) {
+        m.voice_states |> get(name) $(var old) {
+            delete old
+        }
+        m.voice_states |> erase(name)
     }
     if (!key_exists(m.voices, name)) {
         m.voice_names |> push(name)
     }
     m.voices[name] := pcm
-    m.voice_states[name] <- pocket_voice_state(m, pcm, sc)
+    m.voice_states[name] <- vs
 }
 
 // a roster voice's state, encoded on first use
@@ -787,29 +822,47 @@ def private ensure_voice_state(var m : PocketModel; name : string; var sc : Pock
 
 // ===== the text =====
 
+// the words of a text the way the reference counts them: runs between whitespace of any kind
+def private word_count(cps : array<int>) : int {
+    var words = 0
+    var in_word = false
+    for (c in cps) {
+        let space = cpt_is_whitespace(c)
+        if (!space && !in_word) {
+            words++
+        }
+        in_word = !space
+    }
+    return words
+}
+
 //! The reference driver's preparation of one chunk: whitespace folded, an initial capital, a
-//! terminal mark, the short-input padding; and the frames it keeps generating after EOS.
+//! terminal mark, the short-input padding; and the frames it keeps generating after EOS. An
+//! empty text is refused, as the reference refuses it.
 def pocket_prepare(m : PocketModel; text : string) : tuple<prepared : string; frames_after_eos : int> {
     var s = strip(text) |> replace("\n", " ") |> replace("\r", " ") |> replace("  ", " ")
+    if (empty(s)) {
+        panic("dasLLAMA pocket: the text is empty - nothing to say")
+    }
     if (m.remove_semicolons) {
         s = replace(s, ";", ",")
     }
-    let words = length(split(s, " "))
-    let guess = words <= 4 ? 3 : 1
     var inscope cps <- utf8_to_cpts(s)
-    if (!empty(cps)) {
-        // the reference upper-cases the first character; an accented one stays as it is here
-        let first = cpts_to_utf8(cps, 0, 1)
-        let up = to_upper(first)
-        if (up != first) {
-            s = "{up}{cpts_to_utf8(cps, 1, length(cps))}"
-        }
+    let words = word_count(cps)
+    let guess = words <= 4 ? 3 : 1
+    // the reference upper-cases the first character; an ASCII one turns here, an accented one
+    // stays as it is (no case table for it in the engine)
+    let first = cpts_to_utf8(cps, 0, 1)
+    let up = to_upper(first)
+    if (up != first) {
+        s = "{up}{cpts_to_utf8(cps, 1, length(cps))}"
     }
     // the released driver's rule (pocket-tts 3.1.0, the oracle): a prompt ending in a letter or
-    // digit takes a period; any mark, a comma included, is left as it is
-    if (m.append_terminal_punctuation && !empty(cps)) {
+    // digit - accented letters included, the reference asks isalnum - takes a period; any mark,
+    // a comma included, is left as it is
+    if (m.append_terminal_punctuation) {
         let last = cps[length(cps) - 1]
-        if (is_alpha(last) || cpt_is_number(last)) {
+        if (cpt_is_letter(last) || cpt_is_number(last)) {
             s = "{s}."
         }
     }
@@ -821,7 +874,7 @@ def pocket_prepare(m : PocketModel; text : string) : tuple<prepared : string; fr
 
 //! Token ids of a prepared chunk.
 def pocket_text_ids(m : PocketModel; prepared : string) : array<int64> {
-    return <- unigram_encode(m.tok, prepared, m.unk_id, m.byte_fallback)
+    return <- unigram_encode(m.tok, prepared, m.unk_id, m.byte_fallback, m.reserved_ids)
 }
 
 let POCKET_MAX_TOKENS = 50   // the reference driver's chunk budget; past it the model skips words
@@ -891,13 +944,19 @@ def private segments_of(m : PocketModel; ids : array<int64>; bounds : array<int>
     return <- out
 }
 
+[cold_path]
+def private warn_over_budget(n, max_tokens : int; text : string) {
+    to_log(LOG_WARNING, "dasLLAMA pocket: a chunk of {n} tokens over the {max_tokens} budget, the model may skip words: '{text}'\n")
+}
+
 //! The chunks one text takes, the reference driver's rule: the whole text prepared, split on
 //! its sentence-mark ids (a decimal point excepted), an over-long sentence re-split on its
-//! comma, semicolon and colon ids, then the pieces regrouped under the token budget.
+//! comma, semicolon and colon ids, then regrouped under the token budget; a piece nothing splits stays whole, warned.
+[arch(at="../ARCHITECTURE_POCKET.md#pocket-chunker")]
 def pocket_chunks(m : PocketModel; text : string; max_tokens : int = POCKET_MAX_TOKENS) : array<string> {
     var inscope chunks : array<string>
+    return <- chunks if (empty(strip(text)))
     let prepared = strip(pocket_prepare(m, text).prepared)
-    return <- chunks if (empty(prepared))
     var inscope ids <- pocket_text_ids(m, prepared)
     var inscope ends <- marker_ids(m, ".!...?")
     var inscope weak <- marker_ids(m, ",;:")
@@ -913,6 +972,7 @@ def pocket_chunks(m : PocketModel; text : string; max_tokens : int = POCKET_MAX_
         if (length(subs) > 1) {
             refined |> push_from(subs)
         } else {
+            warn_over_budget(s.n, max_tokens, s.text)
             refined |> push(s)
         }
     }
@@ -941,7 +1001,7 @@ def pocket_chunks(m : PocketModel; text : string; max_tokens : int = POCKET_MAX_
 //! in `x1`, the decoder's denormalized copy in `latent`.
 def private frame_step(m : PocketModel; var vs : PocketVoiceState; pos : int64; var sc : PocketScratch) : float {
     let d = m.backbone.d
-    linear_rows(m.input_linear, sc.x_in, 1l, sc.rows)
+    linear_rows_decode(m.input_linear, sc.x_in, sc.rows)
     transformer_rows(m.backbone, sc.rows, 1l, pos, vs.caches, sc)
     copy_rows(sc.cond, sc.rows, d)
     layernorm_rows(sc.cond, 1l, d, m.out_norm, m.backbone.eps)

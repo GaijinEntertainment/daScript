@@ -1089,15 +1089,16 @@ def private linear_rows_q8(l : TtsLinear; x : array<float>; t : int64; var y : a
     xq |> reserve_resize(t * nin)
     xs |> reserve_resize(t * nin / 32l)
     quantize_q8_0_into(x, t * nin, xq, xs, 0l, 0l)
-    if (t == 1l) {
-        matmul_q8q8(y, l.wq, l.wqs, xq, xs, nin, nout)   // the decode step: the GEMV entry, not a one-row batch
-    } else {
-        unsafe {
-            invoke(g_mm_q8q8_batch, addr(y[0]), addr<int8 const?>(l.wq[0]), addr<float const?>(l.wqs[0]),
-                addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), nin, nout, t)
-        }
+    unsafe {
+        invoke(g_mm_q8q8_batch, addr(y[0]), addr<int8 const?>(l.wq[0]), addr<float const?>(l.wqs[0]),
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), nin, nout, t)
     }
+    linear_rows_add_bias(l, t, y)
+}
+
+def private linear_rows_add_bias(l : TtsLinear; t : int64; var y : array<float>) {
     return if (empty(l.b))
+    let nout = l.nout
     var yp = unsafe(addr(y[0]))
     let b4 = unsafe(addr<float4 const?>(l.b[0]))
     maybe_parallel_for(0, int(t), lanes_for_work(t * nout, 0)) $(rb, re) {
@@ -1111,6 +1112,25 @@ def private linear_rows_q8(l : TtsLinear; x : array<float>; t : int64; var y : a
             }
         }
     }
+}
+
+//! y [1][nout] = x [1][nin] . w^T + b for one row - a decode step: on the q8 lane the GEMV entry
+//! (`matmul_q8q8`) instead of a one-row batch, else `linear_rows` at t = 1. The continuous-audio
+//! family's frame loop calls this; the phoneme families' rows GEMMs never take it.
+def linear_rows_decode(l : TtsLinear; x : array<float>; @scratch @exact_size var y : array<float>) {
+    if (!l.q8) {
+        linear_rows(l, x, 1l, y)
+        return
+    }
+    let nin = l.nin
+    var xq & = g_q8_xq
+    var xs & = g_q8_xs
+    xq |> reserve_resize(nin)
+    xs |> reserve_resize(nin / 32l)
+    quantize_q8_0_into(x, nin, xq, xs, 0l, 0l)
+    y |> reserve_resize(l.nout)
+    matmul_q8q8(y, l.wq, l.wqs, xq, xs, nin, l.nout)
+    linear_rows_add_bias(l, 1l, y)
 }
 
 //! y [t][nout] = x [t][nin] . w^T + b: the tiled GEMM over row blocks when `wt` was minted,
@@ -1872,7 +1892,7 @@ def elu_rows(var x : array<float>; n : int64) {
     rows_width_check(n, "elu_rows")
     var xp = unsafe(addr(x[0]))
     let n4 = int(n / 4l)
-    maybe_parallel_for(0, n4, lanes_for_work(n * 4l, 0)) $(rb, re) {
+    maybe_parallel_for(0, n4, lanes_for_work(n, 0)) $(rb, re) {
         unsafe {
             var x4 = reinterpret<float4?>(xp)
             let one = float4(1.0)
@@ -1882,6 +1902,26 @@ def elu_rows(var x : array<float>; n : int64) {
                 x4[i] = max(v, zero) + min(exp(v) - one, zero)   // the two halves are disjoint: one of them is zero
             }
         }
+    }
+}
+
+//! x[j] *= alpha[j] / sqrt(var + eps) over one row of n, `var` the variance around the row's mean
+//! with N - 1 (the mean itself is not subtracted): the continuous-audio head's timestep norm.
+def var_scale_norm(var x : array<float>; alpha : array<float>; n : int64; eps : float) {
+    var mean = 0.0lf
+    for (j in range64(n)) {
+        mean += double(x[j])
+    }
+    mean /= double(n)
+    var variance = 0.0lf
+    for (j in range64(n)) {
+        let dv = double(x[j]) - mean
+        variance += dv * dv
+    }
+    variance /= double(max(n - 1l, 1l))
+    let inv = 1.0 / sqrt(float(variance) + eps)
+    for (j in range64(n)) {
+        x[j] = x[j] * alpha[j] * inv
     }
 }
 
@@ -2306,7 +2346,6 @@ def pad_reflect_left_rows_inplace(@scratch @exact_size var x : array<float>; t, 
     }
 }
 
-//! The rows twin of `pad_reflect_left`: y [t + left][c] from x [t][c].
 //! y [left + t][c] = x [t][c] with its first row repeated `left` times in front (replicate padding).
 def pad_edge_left_rows(x : array<float>; t, c, left : int64; @scratch @exact_size var y : array<float>) {
     y |> reserve_resize((left + t) * c)
@@ -2320,6 +2359,7 @@ def pad_edge_left_rows(x : array<float>; t, c, left : int64; @scratch @exact_siz
     }
 }
 
+//! The rows twin of `pad_reflect_left`: y [t + left][c] from x [t][c].
 def pad_reflect_left_rows(x : array<float>; t, c, left : int64; @scratch @exact_size var y : array<float>) {
     let t_out = t + left
     y |> reserve_resize(t_out * c)

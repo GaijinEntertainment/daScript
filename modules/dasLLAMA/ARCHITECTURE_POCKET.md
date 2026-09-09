@@ -9,7 +9,7 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
 ### 1.7d Pocket TTS
 
 - **`dasllama_pocket.das`** - the Pocket TTS family (Kyutai; the reference is the `pocket-tts`
-  package at 3.1.0, the weights `kyutai/pocket-tts` under CC BY 4.0): a continuous-audio
+  package at 3.1.0, the weights `kyutai/pocket-tts`): a continuous-audio
   language model, not a StyleTTS2 assembly, so it holds both the family's rules and its own
   assembly. The weight map of the converted GGUF (`harness/convert_pocket.py`: the canonical
   tensor names `backbone.N.*`, `head.*`, `mimi.enc_tf.N.*` / `mimi.dec_tf.N.*`, the rest as the
@@ -53,7 +53,8 @@ front - through the backbone at positions 0.., filling every layer's key-value c
 `len` and a later one forgets them by resetting each cache's fill to `len`; nothing is copied.
 The roster's clips ride the GGUF and encode on first use; a cloned voice is the same path over a
 caller's clip (`tts_register_voice`). The package's precomputed states differ from the clip path
-by 1.5e-2 (they come from another checkpoint revision); the clip path is the reference.
+by 1.5e-2 (they come from another checkpoint revision; `harness/pocket_oracle.py` dumps both and
+`test_pocket_parity`'s voice cell compares the clip path); the clip path is the reference.
 
 ### 2.48 One flow step makes the timestep embeddings constants {#pocket-one-step-head}
 
@@ -63,7 +64,8 @@ two sinusoidal timestep embeddings at the fixed times 0 and 1, so the loader eva
 embedders once and bakes their mean (`time_const`); at inference the head is dense GEMVs alone.
 The embedders end in a variance-scaled norm (`x * alpha / sqrt(var + 1e-5)`, the variance with N
 - 1) whose activations have a variance near 1e-4, so its epsilon of 1e-5 is load-bearing - at
-1e-6 every latent lands one percent off. The backbone's input for the first frame is the
+1e-6 every latent lands one percent off (`test_pocket_frames`'s head cell against the oracle's
+flow output is what moved). The backbone's input for the first frame is the
 learned BOS latent; for the next, the previous frame's normalized `x1`; the codec reads
 `x1 * emb_std + emb_mean`. Generation runs to EOS (the logit over `out_norm`'s row against
 -4.0) plus `frames_after_eos` (the config's, else the text-length guess plus 2), capped at
@@ -97,5 +99,6 @@ file serves the same weights dequantized. The converter's `q8_linear` / `q8_conv
 engine's eligibility rule written a second time; `test_pocket_q8_file` holds the two files to
 each other and the rig holds the published file to the reference. The file's block scales
 are f16, the load-time quantizer's f32, and the flow head amplifies that half a thousandth per
-block into about one percent of a frame - the same picture as the lane itself against the f32
+block into about one percent of a frame (`test_pocket_q8_file`'s teacher-forced compare of the
+two loads) - the same picture as the lane itself against the f32
 oracle, and why the rig, not a per-element bar, is the q8 gate.
