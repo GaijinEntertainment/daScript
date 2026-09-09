@@ -10,6 +10,7 @@ require llvm/daslib/llvm_exe
 require llvm/daslib/llvm_aot
 require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_common
+require llvm/daslib/llvm_jit_di
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_env
@@ -38,11 +39,11 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x7aul   // a lambda <-> int64/uint64 reinterpret lowers through ptrtoint / inttoptr, not a bitcast (0x79: an intrinsic emitter keys off the declared name, so a module-qualified call (math::sqrt) builds llvm.sqrt.f32; a function <-> int64/uint64 reinterpret extracts and inserts the { ptr } aggregate instead of bitcasting itd flag (0x77: a vector of a handled element type registers into the element's module, so the externs a DLL binds by mangled name moved out of `$` (0x76: a statement after a terminator in the same block list lands in its own dead block instead of after the ret (0x75: the global-offset lookup is memory(none) and emitted at its use site - LLVM dedups and hoists it, an untaken branch never pays it; a solid-context global resolves once per function at entry (0x74: a runtime-only exe emits no register_native_path rows, and a whole-lib exe emits them once (0x73: computed goto lowers to one switch with the trap as its default, not an icmp chain (0x72: policies.fast_math defaults to the host's float flags, so a fast-math host now JITs fast-math (0x71: a CPU class row's cpu is the arch's bare baseline, so a DAS_JIT_BASELINE build enables the row's set and nothing a level implies (0x70: the wasm feature string drops +relaxed-simd and the idot family keeps only the exact extmul + extadd_pairwise lowering on wasm SIMD128 (0x6f: the first wasm idot lowering; 0x6e: the aarch64 SDOT / SMMLA tables gate on DotProd / i8mm, not the arch alone, and the force env reaches the generic exe machine (0x6d: the inline polynomial rail carries NaN: tanh selects the operand back over its ordered clamp, and the sincos quadrant / tan octant convert through llvm.fptosi.sat instead of poisoning on NaN and out-of-range (0x6c: aarch64 vector tan/exp2/log2/log/pow join the inline polynomial rail bit-exactly with the interpreter, sinh/cosh/tanh ride the exp one; 0x6b: aarch64 vector sin/cos ride the inline polynomial; 0x6a: srem/urem for 32-bit %; 0x69: every string argument of an extern is substituted, not just the ones which asked))))
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x7bul   // under --jit-debug every das local, argument and block variable carries a DILocalVariable with a real DIType, a das block opens a DILexicalBlock, a subprogram is named as the das source names it and carries no linkage name, one compile unit covers the whole module, and the prologue and a loop latch carry no stale line
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xe62f349446ec3d5dul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x6416ae2fd7f1057bul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -371,6 +372,7 @@ def finalize_jit(use_dll : bool; gen_exe : bool; lib_handle : DLLHandle?) : JitS
 // unjittable file instead of the next run_jit inheriting it and cascade-failing.
 [macro_function]
 def reset_jit_globals_after_failure() {
+    di_finalize()
     // --jit-split-modules: drain the stashed partition states (the ambient one is handled below)
     for (p in g_split_parts) {
         dispose_split_part(p, p.ctx != g_ctx)
@@ -395,7 +397,7 @@ def reset_jit_globals_after_failure() {
 // always-on summary (a silent multi-second jit is indistinguishable from a hang) + the
 // log_compile_time per-phase breakdown; both artifact paths report through here
 def private jit_log_report(funcs : array<FunctionPtr>; recompiled : bool; opt_level : int; tier_known : bool;
-                           split : bool; split_parts : int; log_time : bool; totalTime : int64;
+                           split : bool; split_parts : int; debug_info : bool; log_time : bool; totalTime : int64;
                            t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, t_install, t_finalize : int) {
     var tuneStamped = 0
     for (fn in funcs) {
@@ -410,8 +412,9 @@ def private jit_log_report(funcs : array<FunctionPtr>; recompiled : bool; opt_le
     let tierTail = tier_known ? ", O{opt_level}" : ""
     // always announce split - a split-built DLL's profile is not comparable to a monolith build
     let splitTail = !split ? "" : (split_parts > 0 ? ", split {split_parts} modules" : ", split")
+    let debugTail = debug_info ? ", --jit-debug" : ""
     let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
-    to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions{tuneTail} in {totalDt} sec ({recompiled ? "codegen" : "cache"}{tierTail}{splitTail})\n")
+    to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions{tuneTail} in {totalDt} sec ({recompiled ? "codegen" : "cache"}{tierTail}{splitTail}{debugTail})\n")
     if (log_time) {
         to_log(LOG_INFO, "LLVM JIT time: hash {jit_sec(t_hash)} init {jit_sec(t_init)} declare {jit_sec(t_declare)} probe {jit_sec(t_probe)} irgen {jit_sec(t_irgen)} optimize {jit_sec(t_opt)} emit+link {jit_sec(t_emit)} install {jit_sec(t_install)} finalize {jit_sec(t_finalize)}\n")
     }
@@ -614,6 +617,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         }
         // the has_externals return is meaningful only on the wasm path, unreachable under split - discard
         irgen_functions(ctx, uids, attrs, buckets[pname], jit_flags, LlvmJitMode.JIT, prog)
+        di_finalize()
         verify_module_or_panic(buckets[pname])
         // fileinfo ctors ride llvm.global_ctors (private; the link appends all, LoadLibrary runs every one)
         generate_global_ctors_dtors(g_prim_t, false)
@@ -993,12 +997,15 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
                     cli_opts.register_all_modules |> unwrap_or(false))
                 LINK_WHOLE_LIB = res.link_whole_lib
                 if (res.fn == null) {
+                    // before finalize_jit, which disposes the engine that owns g_mod
+                    di_finalize()
                     finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
                     // JIT failed. Couldn't create executable.
                     // Still return true, codegen ran correctly.
                     return true
                 }
             }
+            di_finalize()
             verify_module_or_panic(funcs)
             // Offline AOT object: build the self-registration + glob-re-resolution ctors (llvm_aot pass).
             var aot_ctor : LLVMOpaqueValue? = null
@@ -1060,7 +1067,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             unsafe {
                 delete g_str2v
             }
-            jit_log_report(funcs, true, opt_level, true, false, 0, log_jit_time, totalTime,
+            jit_log_report(funcs, true, opt_level, true, false, 0, debug_info, log_jit_time, totalTime,
                 t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, 0, 0)
             return true
         }
@@ -1100,7 +1107,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
         // so the tier label is asserted only when this run built the DLL or the content-addressed
         // name (which folds opt_level) matched
         let tier_known = recompile_prog || !empty(dll_hash_basename)
-        jit_log_report(funcs, recompile_prog, opt_level, tier_known, jit_split, split_parts, log_jit_time, totalTime,
+        jit_log_report(funcs, recompile_prog, opt_level, tier_known, jit_split, split_parts, debug_info, log_jit_time, totalTime,
             t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, t_install, t_finalize)
     } else {
         to_log(LOG_INFO, "LLVM JIT: 0 functions to jit ({length(disabled)} marked no_jit, {visitorDisabled} disabled by content) - the WHOLE program runs interpreted\n")

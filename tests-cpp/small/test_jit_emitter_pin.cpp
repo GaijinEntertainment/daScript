@@ -11,12 +11,14 @@
 
 using namespace das;
 
-// files whose text change can alter emitted machine code without changing the user
-// program's AOT hashes. llvm_tune.das stays out by design (selection only);
-// x64_avx/aarch64_neon/f16_cvt are plain das reference bodies, visible to the AOT hash;
-// llvm_aot/llvm_exe emit explicit artifacts, not silently cached DLLs.
+// files whose text change can alter what a silently cached DLL carries - emitted machine code,
+// or the debug metadata beside it - without changing the user program's AOT hashes.
+// llvm_tune.das stays out by design (selection only); x64_avx/aarch64_neon/f16_cvt are plain
+// das reference bodies, visible to the AOT hash; llvm_aot/llvm_exe emit explicit artifacts,
+// not silently cached DLLs.
 static const char * EMITTER_FILES[] = {
     "llvm_jit.das",
+    "llvm_jit_di.das",
     "llvm_jit_common.das",
     "llvm_boost.das",
     "llvm_macro.das",
