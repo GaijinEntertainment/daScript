@@ -5732,6 +5732,12 @@ class public LlvmJitVisitor : AstVisitor {
             // reinterpret<Fn>(h)
             let fn_ptr = subT.isPointer ? subE : LLVMBuildIntToPtr(g_builder, subE, LLVMPointerType(g_t_simFunction, 0u), "fn_ptr")
             res = LLVMBuildInsertValue(g_builder, LLVMGetUndef(g_t_function), fn_ptr, 0u, "cast_fn")
+        } elif (subT.baseType == Type.tLambda && is_int64_or_uint64(ect.baseType)) {
+            // reinterpret<uint64>(lam) - the value is its capture pointer
+            res = LLVMBuildPtrToInt(g_builder, subE, type_to_llvm_type(ect), "cast_lam_i")
+        } elif (ect.baseType == Type.tLambda && is_int64_or_uint64(subT.baseType)) {
+            // reinterpret<Lam>(h)
+            res = LLVMBuildIntToPtr(g_builder, subE, type_to_llvm_type(ect), "cast_i_lam")
         } elif ((ect.isPointer || ect.isString) && subT.isInteger) {
             res = LLVMBuildIntToPtr(g_builder, subE, type_to_llvm_type(ect), "cast_i_p")
         } elif (!ect.isRefType && !subT.isRefType) {

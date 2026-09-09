@@ -36,6 +36,18 @@ def intptr(p : smart_ptr<auto>) : uint64 {
     }
 }
 
+//! The address a function or lambda value carries, as `uint64` - the portable handle spelling,
+//! since it switches on `sizeof` and so zero-extends the 4-byte address of a 32-bit host.
+[generic]
+def intptr(f : auto) : uint64 {
+    concept_assert(typeinfo is_function(f) || typeinfo is_lambda(f), "intptr of a value that is not a pointer, a function or a lambda")
+    static_if (typeinfo sizeof(f) == 4) {
+        return uint64(unsafe(reinterpret<uint>(f)))
+    } else {
+        return unsafe(reinterpret<uint64>(f))
+    }
+}
+
 [unused_argument(Arr, newSize)]
 def private _finalize_shrunk(var Arr : array<auto(numT)>; newSize : int) {
     static_if (typeinfo needs_container_finalize(type<numT>)) {

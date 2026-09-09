@@ -1,0 +1,1 @@
+Converts a function or lambda value `f` to the `uint64` integer representation of the address it carries. This is the portable handle spelling: on a 32-bit host the 4-byte address is zero-extended, where `reinterpret<uint64>(f)` would read past it.

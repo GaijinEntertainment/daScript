@@ -1405,3 +1405,18 @@
    release, and after the Vulkan tier covers every carrier the module already serves
    (`followup_vulkan.md` item 43) - no new family before either. Done = one arc per arch,
    `deepseek2` first, each with its board rows.
+123. **LINT candidate (approved 2026-09-08): a `reinterpret` whose target is wider than its
+    source.** `reinterpret<T>(e)` is a same-size bit cast by its documentation, but inference
+    checks no sizes, and the interpreter relabels memory at the target's width: a `function`,
+    `lambda` or pointer local is 4 bytes on a 32-bit host, so `reinterpret<uint64>(f)` on a
+    parameter or local reads four uninitialized bytes past it (the auto-inliner turns a parameter
+    into exactly such a local - issue #3979, tests/language/func_addr.das). The same shape on an
+    `int` local reads garbage on every host. Neither the compiler nor a 64-bit lint host sees the
+    pointer case as a size mismatch (pointer and `uint64` are both 8 bytes there), so the rule is
+    type-based, not size-based: fire on `reinterpret<int64|uint64>(e)` where `e` is a pointer,
+    function, lambda or smart_ptr, and on `reinterpret<T>(e)` where both sides are scalars of
+    known unequal width; the fix text names `intptr(e)` for the handle case (it switches on
+    `sizeof`, and takes function and lambda values). Note `doc/source/reference/language/expressions.rst`
+    itself shows `reinterpret<void?>(13)`, an `int` widened to a pointer - a const node's whole
+    vec4f is zero so it happens to work; that example wants a same-size spelling once the rule
+    lands.

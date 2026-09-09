@@ -215,7 +215,9 @@ unsafe { delete pt }                    // frees and nulls
 
 Safe without `unsafe`: `new`, `*p` / `deref(p)`, `p.field`, `p?.field`, `p ?? default`,
 `safe_addr(x)` (from `daslib/safe_addr`; `x` must be a local or global), `intptr(p)` (address as
-`uint64`). Needs `unsafe`: `addr(x)`, `delete p`, `p[i]`, `++p` / `p += n`, `reinterpret<T>(x)`.
+`uint64`; also takes a function or lambda value, and is the portable spelling of that handle -
+`reinterpret<uint64>(f)` reads past a 4-byte slot on a 32-bit host). Needs `unsafe`: `addr(x)`,
+`delete p`, `p[i]`, `++p` / `p += n`, `reinterpret<T>(x)`.
 
 **A `void?` carries no stride, so arithmetic on one is refused outright** - `error[30950]
 operations on 'void' pointers are prohibited`, even inside `unsafe`. Do byte math on `intptr(p)`,

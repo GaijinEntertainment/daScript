@@ -596,6 +596,9 @@ namespace das {
         static __forceinline TT * cast ( const Func & expr ) {
             return (TT *) expr.PTR;
         }
+        static __forceinline TT * cast ( const Lambda & expr ) {
+            return (TT *) expr.capture;
+        }
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable:4312)   // reinterpret_cast used between related classes

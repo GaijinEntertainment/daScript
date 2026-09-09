@@ -145,6 +145,11 @@ correctness required it, and the alternative that was rejected.
   three slots assert and return 0, which in a build with `DAS_NO_ASSERTIONS` is a silent null:
   `reinterpret<uint64>(@@fn)` written on the address-of expression is typed uint64, so every
   store of it - a local, a field, an array element, an arithmetic operand, a return - reads the
-  uint64 slot, while the same cast through a parameter, an argument, JIT and AOT all answer the
-  address. Rejected alternative: rejecting the cast during inference, which would break the
-  reverse spelling and the two tiers that already answer correctly.
+  uint64 slot, while JIT and AOT already answer the address. The slots widen by value:
+  `cast<SimFunction *>::from` fills a whole vec4f, so a 32-bit host reads the pointer
+  zero-extended. The same cast on a `function` parameter or local is a different path:
+  `reinterpret` relabels memory at the target's width, and on a 32-bit host that reads four
+  bytes past a 4-byte slot. The inliner turns a parameter into exactly such a local. The
+  portable handle spelling is `intptr`, which switches on `sizeof`. Rejected alternative:
+  rejecting the cast during inference, which would break the reverse spelling and the two
+  tiers that already answer correctly.
