@@ -6,6 +6,7 @@ require dastest/testing_boost public
 require strings
 require daslib/fio
 require daslib/strings_boost
+require daslib/module_group
 require _mc_common
 
 // alpha joins probe_group under a guard the build has and path_group under a path guard the
@@ -236,6 +237,15 @@ def arm_cache_stamps_the_expansion(t : T?; fx : Fixture) {
         t |> success(find(out, "re-parsed from") >= 0 && find(out, "mid.das") >= 0 && find(out, "(require set changed)") >= 0, "the requirer's record is the cutoff, named with its reason:\n{out}")
         t |> success(report_child(t, "rewritten", run_driver(fx, script, out, cache), out, "PROBE 1"), "the rewritten cache serves again")
         t |> success(find(out, "FALLBACK") < 0, "the rewritten cache carries the grown expansion:\n{out}")
+    }
+}
+
+[test]
+def test_member_module_name(t : T?) {
+    t |> run("a member's module is its last path segment, less the .das a relative spelling carries") @(t : T?) {
+        t |> equal(module_group_module_name("sqlite/sqlite_provider"), "sqlite_provider")
+        t |> equal(module_group_module_name("./foo.das"), "foo")
+        t |> equal(module_group_module_name("bar"), "bar")
     }
 }
 

@@ -13,8 +13,10 @@ require rtti
 require strings
 
 def public module_group_module_name(member : string) : string {
-    //! The module a group member's require path names: its last segment.
-    return base_name(member)
+    //! The module a group member's require path names: its last segment, less the `.das` a
+    //! relative spelling (`./foo.das`) may carry.
+    let name = base_name(member)
+    return extension(name) == ".das" ? slice(name, 0, length(name) - 4) : name
 }
 
 [call_macro(name="call_module_group")]
