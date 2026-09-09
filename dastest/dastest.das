@@ -758,7 +758,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
                                 log::info("to get more information, run the test manually\n> {isoRes.cmd}")
                             } elif (!isoRes.parsedResult) {
                                 reason = "crashed (exit status {isoRes.exitCode})"
-                                log::red("`{isoRes.uri}` execution was interrupted, crashed for example")
+                                log::red("`{isoRes.uri}` ended without a result: the child exited with status {isoRes.exitCode} before printing its summary - a crash, an abort, or a panic outside any test")
                                 log::info("to get more information, run the test manually\n> {isoRes.cmd}")
                             } else {
                                 reason = "{isoRes.status.failed} failed, {isoRes.status.errors} errors"
