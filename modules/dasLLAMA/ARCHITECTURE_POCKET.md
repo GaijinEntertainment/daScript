@@ -1,7 +1,7 @@
 # dasLLAMA architecture - the Pocket TTS family
 
 The companion `ARCHITECTURE.md` indexes: the Pocket TTS charter (sec.1.7d) and the mechanisms
-the family implements (sec.2.46-2.49). `ARCHITECTURE_COMMON.md` (repo root) is the contract.
+the family implements (sec.2.46-2.50). `ARCHITECTURE_COMMON.md` (repo root) is the contract.
 The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
 
 ## 1. File charters
@@ -82,3 +82,20 @@ reference splits abbreviations ("Dr." ends a sentence) and joins segments with s
 parity matter. The English facade path normalizes the text first (numbers, units, abbreviations
 become words) - the reference does not, which is where its numeric WER comes from; a model in
 another language takes the text as it is, since the normalizer reads English.
+
+### 2.50 The published file carries the served quants {#pocket-q8-file}
+
+Two lanes, as the StyleTTS2 families have: f32, the parity rail's reference, and q8, the
+served default - the transformer layers' four matrices, the frame input projection and every
+dense stride-1 codec conv on 32-wide channels as Q8_0 rows (`linear_prepare`,
+`conv1d_q8_eligible`), the decode step on the q8 GEMV entry. The published GGUF
+(`convert_pocket.py --q8`) stores exactly those tensors as Q8_0 in the layout the kernels read
+- a linear as [nout][nin], a conv as the tap-stacked slab [cout][k][cin] with the 32-blocks
+along the input channels - so `read_linear` and `read_conv_q8` take the blocks into the int8
+planes and repack for the backend; every other tensor stays f16, and the f32 lane of such a
+file serves the same weights dequantized. The converter's `q8_linear` / `q8_conv` are the
+engine's eligibility rule written a second time; `test_pocket_q8_file` holds the two files to
+each other and the rig holds the published file to the reference. The file's block scales
+are f16, the load-time quantizer's f32, and the flow head amplifies that half a thousandth per
+block into about one percent of a frame - the same picture as the lane itself against the f32
+oracle, and why the rig, not a per-element bar, is the q8 gate.

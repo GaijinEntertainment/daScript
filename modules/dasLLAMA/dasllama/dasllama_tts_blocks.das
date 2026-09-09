@@ -1089,9 +1089,13 @@ def private linear_rows_q8(l : TtsLinear; x : array<float>; t : int64; var y : a
     xq |> reserve_resize(t * nin)
     xs |> reserve_resize(t * nin / 32l)
     quantize_q8_0_into(x, t * nin, xq, xs, 0l, 0l)
-    unsafe {
-        invoke(g_mm_q8q8_batch, addr(y[0]), addr<int8 const?>(l.wq[0]), addr<float const?>(l.wqs[0]),
-            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), nin, nout, t)
+    if (t == 1l) {
+        matmul_q8q8(y, l.wq, l.wqs, xq, xs, nin, nout)   // the decode step: the GEMV entry, not a one-row batch
+    } else {
+        unsafe {
+            invoke(g_mm_q8q8_batch, addr(y[0]), addr<int8 const?>(l.wq[0]), addr<float const?>(l.wqs[0]),
+                addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), nin, nout, t)
+        }
     }
     return if (empty(l.b))
     var yp = unsafe(addr(y[0]))
@@ -2084,8 +2088,12 @@ def rng_uniform(var r : TtsRng) : float {
     return float(rng_u32(r) >> 8u) * (1.0 / 16777216.0)
 }
 
-//! Standard normal (Marsaglia polar).
+//! Standard normal (Marsaglia polar). A generator nobody seeded is a stuck stream (an even
+//! increment of zero), and the rejection loop would spin on it forever, so it panics instead.
 def rng_normal(var r : TtsRng) : float {
+    if (r.inc == 0ul) {
+        panic("dasLLAMA tts: the noise generator was never seeded - call rng_seed first")
+    }
     if (r.has_spare) {
         r.has_spare = false
         return r.spare

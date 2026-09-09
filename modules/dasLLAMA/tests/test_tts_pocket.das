@@ -12,6 +12,7 @@ require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
+require daslib/defer   // defer() { reset_pocket_q8() } - a lane pin never outlives its cell
 require daslib/fio
 require daslib/json_boost
 require daslib/rtti   // this_context().last_exception: the refusals are read as text
@@ -212,8 +213,13 @@ def test_pocket_parity(t : T?) {
     }
     with_job_que() {
         setup_dasllama_jobque_()
+        defer() {
+            reset_pocket_q8()
+        }
+        set_pocket_q8(false)   // the parity rail holds the f32 lane
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
+        t |> success(!m.q8, "the reference lane serves f32")
         t |> equal(m.lang, "en", "the English model reports en")
         t |> equal(m.default_voice, "alba")
         t |> equal(m.frame_samples, 1920l, "samples per latent frame")
@@ -298,6 +304,10 @@ def test_pocket_frames(t : T?) {
     }
     with_job_que() {
         setup_dasllama_jobque_()
+        defer() {
+            reset_pocket_q8()
+        }
+        set_pocket_q8(false)
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
         var done = 0
@@ -347,6 +357,145 @@ def test_pocket_frames(t : T?) {
             break if (done >= 2)
         }
         t |> success(done > 0, "at least one stage case ran")
+    }
+}
+
+// the q8 lane against the f32 oracle: a frame's latent is a flow sample, and a quantized
+// conditioning row moves a few of its 32 elements by whole tenths, so the per-element figures are
+// logged and the lane's quality gate is the rig (harness/tts_rig.py --q8 against --f32)
+def private q8_report(t : T?; tag : string; ours, ref : array<float>) {
+    if (length(ours) != length(ref)) {
+        t |> failure("{tag}: {length(ours)} elements against the oracle's {length(ref)}")
+        return
+    }
+    var ssd = 0.0lf
+    var ssr = 0.0lf
+    for (a, b in ours, ref) {
+        ssd += double((a - b) * (a - b))
+        ssr += double(b * b)
+    }
+    let rel = sqrt(ssd / max(ssr, 1e-30lf))
+    to_log(LOG_INFO, "pocket {tag}: rms relative {rel}, max |diff| {max_abs_diff(ours, ref)}\n")
+    t |> success(rel < 0.5lf, "{tag}: rms relative {rel} is in the same picture as the oracle")
+}
+
+[test]
+def test_pocket_q8_lane(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var inscope m <- load_pocket(path)   // the policy default
+        t |> success(m.q8, "the served default is the q8 lane")
+        t |> success(m.backbone.layers[0].in_proj.q8 && m.mimi.dec_in.q8 && !m.mimi.enc_in.q8 && !m.mimi.dec_out.q8,
+            "the GEMMs on 32-wide inputs minted q8; the one-channel convs stayed f32")
+        var inscope sc = PocketScratch()
+        var done = 0
+        for (c in man.cases) {
+            continue if (!c.stages || c.voice != "alba")
+            var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+            let tag = "{c.id} {c.voice} q8"
+            var inscope ids <- pocket_text_ids(m, c.prepared)
+            var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
+            var tm = TtsTimings()
+            var inscope x0 := dump["x0"].f
+            var inscope x1 := dump["x1"].f
+            rng_seed(sc.rng, uint64(c.seed))
+            let frames = pocket_synthesize(m, ids, vs, man.temp, c.n_frames - c.eos_frame, x0, x1, tm, sc)
+            t |> equal(int(frames), c.n_frames, "{tag}: frame count under teacher forcing")
+            var inscope lat : array<float>
+            lat |> resize(frames * m.latent_dim)
+            for (i in range64(frames * m.latent_dim)) {
+                lat[i] = sc.latents[i]
+            }
+            q8_report(t, "{tag} latents (teacher-forced)", lat, dump["latent"].f)
+            var inscope none : array<float>
+            let free = pocket_synthesize(m, ids, vs, man.temp, c.n_frames - c.eos_frame, x0, none, tm, sc)
+            t |> success(abs(int(free) - c.n_frames) <= 4, "{tag}: the free run's {free} frames sit by the oracle's {c.n_frames}")
+            t |> success(speech_stats(sc.wave).rms > 0.01, "{tag}: the free run carries speech")
+            to_log(LOG_INFO, "pocket {tag}: free run {free} frames against the oracle's {c.n_frames}, {timings_line(tm, m.sample_rate)}\n")
+            done++
+            break if (done >= 2)
+        }
+        t |> success(done > 0, "at least one stage case ran")
+    }
+}
+
+def private q8_gguf_path() : string {
+    return path_join(models_dir(), "pocket-tts-en-q8.gguf")
+}
+
+// the frames of one teacher-forced case on a model, for a lane-to-lane compare
+def private forced_latents(m : PocketModel; c : PocketCase; man : PocketManifest; var sc : PocketScratch) : array<float> {
+    var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+    var inscope ids <- pocket_text_ids(m, c.prepared)
+    var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
+    var tm = TtsTimings()
+    var inscope x0 := dump["x0"].f
+    var inscope x1 := dump["x1"].f
+    rng_seed(sc.rng, uint64(c.seed))
+    let frames = pocket_synthesize(m, ids, vs, man.temp, c.n_frames - c.eos_frame, x0, x1, tm, sc)
+    var inscope lat : array<float>
+    lat |> resize(frames * m.latent_dim)
+    for (i in range64(frames * m.latent_dim)) {
+        lat[i] = sc.latents[i]
+    }
+    return <- lat
+}
+
+[test]
+def test_pocket_q8_file(t : T?) {
+    //! The published form: a file whose served GEMM weights are Q8_0 blocks in the kernels'
+    //! layout, read straight into the int8 planes, against the f16 file quantized at load.
+    let path = gguf_path()
+    let q8path = q8_gguf_path()
+    if (!model_available(t, path) || !model_available(t, q8path)) {
+        return
+    }
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var inscope sc = PocketScratch()
+        var inscope mq <- load_pocket(q8path)
+        var inscope mf <- load_pocket(path)
+        t |> success(mq.q8 && mf.q8, "both loads serve the q8 lane")
+        var from_file = 0
+        for (l in mq.backbone.layers) {
+            from_file += (l.in_proj.q8 && l.out_proj.q8 && l.ffn1.q8 && l.ffn2.q8) ? 1 : 0
+        }
+        t |> equal(from_file, length(mq.backbone.layers), "every backbone layer's four GEMMs came in as Q8_0")
+        t |> success(mq.mimi.dec_in.q8 && mq.mimi.enc_out.q8 && mq.mimi.dec_res[0].conv1.q8 && !mq.mimi.enc_in.q8 && !mq.mimi.dec_out.q8,
+            "the codec's 32-wide convs came in as Q8_0 slabs, the one-channel ends as f16")
+        t |> equal(mq.mimi.dec_in.q8_k, mq.mimi.dec_in.k * mq.mimi.dec_in.cin, "the slab's row is kernel times input channels")
+        for (c in man.cases) {
+            continue if (!c.stages || c.voice != "alba")
+            var inscope a <- forced_latents(mq, c, man, sc)
+            var inscope b <- forced_latents(mf, c, man, sc)
+            var ssd = 0.0lf
+            var ssr = 0.0lf
+            for (x, y in a, b) {
+                ssd += double((x - y) * (x - y))
+                ssr += double(y * y)
+            }
+            let rel = sqrt(ssd / max(ssr, 1e-30lf))
+            to_log(LOG_INFO, "pocket {c.id} q8 file vs q8 lane: rms relative {rel}\n")
+            // the file's block scales are f16 (the Q8_0 format), the load-time quantizer keeps
+            // them f32, and the flow head amplifies that half-a-thousandth per block into
+            // percents of a frame; the published file's own rig row is its quality gate
+            t |> success(rel < 5.0e-2lf, "{c.id}: the file's blocks and the load-time quants are the same lane (rms relative {rel})")
+            break
+        }
     }
 }
 

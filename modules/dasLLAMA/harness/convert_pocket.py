@@ -22,6 +22,14 @@ package ships for that language, and the bundled voice clips, and writes
 Canonical names: `flow_lm.transformer.layers.N.*` -> `backbone.N.*`; `flow_lm.flow_net.*` ->
 `head.*`; `mimi.encoder_transformer.transformer.layers.N.*` -> `mimi.enc_tf.N.*`, the decoder
 twin `mimi.dec_tf.N.*`; every other `flow_lm.` / `mimi.` name kept as is.
+
+`--q8` writes the published form: every GEMM weight the engine serves as Q8_0 quants is stored
+as Q8_0 in the layout the kernels read - a linear as [nout][nin] with the 32-blocks along nin,
+a dense stride-1 conv on 32-wide channels as the tap-stacked slab [cout][k][cin] (the f16 form
+keeps PyTorch's [cout][cin][k]) - and the reader takes the blocks straight into its int8 plane.
+The rest of the file is unchanged. The engine's eligibility rule (`conv1d_q8_eligible`,
+`linear_prepare`) is mirrored here in `q8_linear` / `q8_conv`; `tests/test_tts_pocket.das`
+holds the two files to each other.
 """
 import argparse
 import json
@@ -71,6 +79,25 @@ LANGUAGE_VOICES = {
 DEFAULT_VOICE = {"english_2026-04": "alba", "english": "alba", "italian": "giovanni", "spanish": "lola",
                  "german": "juergen", "portuguese": "rafael", "french_24l": "estelle"}
 DEFAULT_TEMPERATURE = 0.7   # pocket_tts/default_parameters.py when the config carries none
+
+
+def q8_linear(name, shape):
+    """The linears the engine serves through the rows GEMM as Q8_0: the transformer layers'
+    four matrices and the frame input projection, on widths that quantize per 32. The head's
+    GEMVs, the EOS head, the speaker projection and the norms stay f16."""
+    rows_served = (".self_attn." in name or ".linear1." in name or ".linear2." in name) and name.endswith(".weight") \
+        and (name.startswith("backbone.") or name.startswith("mimi.enc_tf.") or name.startswith("mimi.dec_tf."))
+    rows_served = rows_served or name == "flow_lm.input_linear.weight"
+    return rows_served and len(shape) == 2 and shape[0] % 32 == 0 and shape[1] % 32 == 0
+
+
+def q8_conv(name, shape, stride, transposed):
+    """The convs the engine serves q8: dense, forward, stride 1, both channel counts on 32 -
+    every codec conv (the latent projection included) but the strided encoder stages and the
+    downsampler, the transposed decoder stages, the depthwise resampler and the two
+    single-channel ends."""
+    is_conv = name.startswith("mimi.") and (name.endswith(".conv.weight") or name == "mimi.quantizer.output_proj.weight")
+    return is_conv and len(shape) == 3 and not transposed and stride == 1 and shape[0] % 32 == 0 and shape[1] % 32 == 0
 
 
 def canonical(name):
@@ -141,9 +168,11 @@ def main():
     ap.add_argument("--out", required=True, help="directory for pocket-tts-<language>.gguf")
     ap.add_argument("--llama-cpp", default=os.path.expanduser("~/Work/llama.cpp"), help="for gguf-py")
     ap.add_argument("--name", default=None, help="output file stem (default pocket-tts-<language>)")
+    ap.add_argument("--q8", action="store_true", help="the published form: the served GEMM weights as Q8_0 in the kernels' layout")
     a = ap.parse_args()
     sys.path.insert(0, os.path.join(a.llama_cpp, "gguf-py"))
     import gguf
+    from gguf.quants import quantize as gguf_quantize
 
     lang = a.language
     cfg = load_config(lang)
@@ -155,12 +184,27 @@ def main():
     pieces, scores, ttype, spec = tokenizer_records(os.path.join(a.hub, "pocket-tts-without-voice-cloning", "languages", lang, "tokenizer.model"))
     assert len(pieces) == cfg["flow_lm"]["lookup_table"]["n_bins"], (len(pieces), cfg["flow_lm"]["lookup_table"]["n_bins"])
 
+    # the codec's strided stages carry the ratios as their strides; a transposed conv's name says so
+    ratios = [int(r) for r in cfg["mimi"]["seanet"]["ratios"]]
+    conv_stride = {}
+    for i, r in enumerate(reversed(ratios)):
+        conv_stride[f"mimi.encoder.model.{3 + 3 * i}.conv.weight"] = r
+    conv_stride["mimi.downsample.conv.conv.weight"] = st["mimi.downsample.conv.conv.weight"].shape[2] // 2   # kernel 2 x stride
     tensors = {}
+    quantized = []
     for k, v in st.items():
         name = canonical(k)
         assert len(name) < GGML_MAX_NAME, name
         assert name not in tensors, name
-        tensors[name] = np.ascontiguousarray(v.astype(np.float16))
+        if a.q8 and q8_linear(name, v.shape):
+            tensors[name] = ("q8", np.ascontiguousarray(v.astype(np.float32)))
+            quantized.append(name)
+        elif a.q8 and q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name):
+            slab = np.ascontiguousarray(np.transpose(v, (0, 2, 1)).astype(np.float32))   # [cout][cin][k] -> [cout][k][cin]
+            tensors[name] = ("q8", slab)
+            quantized.append(name)
+        else:
+            tensors[name] = np.ascontiguousarray(v.astype(np.float16))
 
     voices = {}
     sources = {}
@@ -184,10 +228,11 @@ def main():
 
     fl = cfg["flow_lm"]
     mm = cfg["mimi"]
-    stem = a.name or f"pocket-tts-{lang}"
+    stem = a.name or (f"pocket-tts-{lang}-q8" if a.q8 else f"pocket-tts-{lang}")
     path = os.path.join(a.out, stem + ".gguf")
     w = gguf.GGUFWriter(path, ARCH)
-    w.add_name(f"Pocket TTS {lang}")
+    w.add_name(f"Pocket TTS {lang}" + (" Q8_0" if a.q8 else ""))
+    w.add_string("pocket.weights", "q8" if a.q8 else "f16")
     w.add_string("pocket.language", lang)
     w.add_string("pocket.revision", weights_rev)
     w.add_string("pocket.tokenizer_revision", tok_rev)
@@ -237,13 +282,18 @@ def main():
     w.add_remove_extra_whitespaces(spec["remove_extra_whitespaces"])
     w.add_bool("tokenizer.ggml.byte_fallback", spec["byte_fallback"])
     for name in sorted(tensors):
-        w.add_tensor(name, tensors[name])
+        t = tensors[name]
+        if isinstance(t, tuple):
+            data = gguf_quantize(t[1], gguf.GGMLQuantizationType.Q8_0)   # the writer derives the element shape from the byte shape
+            w.add_tensor(name, data, raw_dtype=gguf.GGMLQuantizationType.Q8_0)
+        else:
+            w.add_tensor(name, t)
     w.write_header_to_file()
     w.write_kv_data_to_file()
     w.write_tensors_to_file()
     w.close()
     with open(path + ".LICENSE", "w", encoding="utf8") as f:
-        f.write(f"{stem}.gguf - Kyutai Pocket TTS ({lang}) weights, CC BY 4.0 (Kyutai), converted from kyutai/pocket-tts "
+        f.write(f"{stem}.gguf - Kyutai Pocket TTS ({lang}) weights{' (the served GEMMs as Q8_0)' if a.q8 else ''}, CC BY 4.0 (Kyutai), converted from kyutai/pocket-tts "
                 f"languages/{lang}/model.safetensors @ {weights_rev} and the unigram SentencePiece tokenizer @ {tok_rev} by "
                 "modules/dasLLAMA/harness/convert_pocket.py; the reference implementation is MIT (github.com/kyutai-labs/pocket-tts). "
                 "Downloading the weights required accepting Kyutai's acceptable-use terms (no voice impersonation or cloning "
@@ -254,8 +304,7 @@ def main():
             if lang.startswith("english"):
                 f.write(f"  not shipped: {vname} - {why}\n")
         f.write("see the dasLLAMA THIRD_PARTY_NOTICES.md\n")
-    total = sum(t.nbytes for t in tensors.values())
-    print(f"wrote {path}: {len(tensors)} tensors, {total / 1e6:.1f} MB, {len(pieces)} pieces, {len(voices)} voices "
+    print(f"wrote {path}: {len(tensors)} tensors ({len(quantized)} as Q8_0), {len(pieces)} pieces, {len(voices)} voices "
           f"(default {default_voice}); {os.path.getsize(path)} bytes on disk")
 
 

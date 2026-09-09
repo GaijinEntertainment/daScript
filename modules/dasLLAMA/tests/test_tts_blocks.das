@@ -1140,6 +1140,18 @@ def test_elu_and_layer_scale(t : T?) {
             edge_ok = edge_ok && padded[3l * 64l + i] == y[i]
         }
         t |> success(edge_ok, "pad_edge_left_rows repeats the first row and keeps the rest")
+        // an unseeded generator must refuse, not spin: its polar loop never leaves the unit disc
+        var fresh = TtsRng()
+        var tripped = false
+        try {
+            let v = rng_normal(fresh)
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "rng_normal panics on a generator nobody seeded")
+        rng_seed(fresh, 5ul)
+        let v2 = rng_normal(fresh)
+        t |> success(abs(v2) < 10.0, "a seeded generator draws")
     }
 }
 

@@ -16,16 +16,19 @@ tags:
   - kittentts
   - kokoro
   - styletts2
+  - pocket-tts
+  - voice-cloning
 ---
 
 # dasLLAMA text-to-speech models
 
-The three speech models dasLLAMA serves, converted to GGUF, and the two front-end packs every
-one of them loads. dasLLAMA is the daslang inference engine
+The speech models dasLLAMA serves, converted to GGUF, and the two front-end packs the phoneme
+families load. dasLLAMA is the daslang inference engine
 (https://github.com/GaijinEntertainment/daScript, `modules/dasLLAMA`); the models are the
 StyleTTS2 lineage - KittenTTS nano and mini, Kokoro-82M - behind one facade and one das-native
-text front end (a normalizer, a part-of-speech tagger, a grapheme-to-phoneme pass). No espeak-ng,
-no phonemizer: the front end is data, and the data is in the two packs.
+text front end (a normalizer, a part-of-speech tagger, a grapheme-to-phoneme pass), and Kyutai's
+Pocket TTS, a continuous-audio language model that reads text and clones a voice from a clip.
+No espeak-ng, no phonemizer: the front end is data, and the data is in the two packs.
 
 ## Files
 
@@ -37,6 +40,7 @@ no phonemizer: the front end is data, and the data is in the two packs.
 | `tts_g2p.bin` | the grapheme-to-phoneme pack: misaki's gold and silver lexicons in both English dialects (one merged table per tier), CMUdict 0.7a rendered into the American inventory, the g2p_en GRU spelling model | 14011554 | `d7b6afea7a0901a877d10531054d3f967845c58f415f0ea937decd8a3081ccd5` |
 | `tts_g2p_en_us.bin` | the same pack with the American tier alone - no British values, CMUdict pruned of every word the American lexicon carries; the web serving set's pack, British voices are not offered on it | 10257455 | `6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154` |
 | `tts_postag.bin` | the tokenizer exception table and the averaged-perceptron PTB tagger | 12566510 | `38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4` |
+| `pocket-tts-en-q8.gguf` | Kyutai Pocket TTS, English (english_2026-04): the served GEMM weights as Q8_0, the rest f16, its unigram tokenizer and 19 voice clips inside; reads text, needs no pack | 152613664 | `9fca82dbe1a550a0bce958d3dfcf51f3c793c89db6aee850823724826b56589c` |
 
 The packs sit beside whichever GGUF you load; the loader reads them from the model's
 directory - `tts_g2p.bin` when it is there, else `tts_g2p_en_us.bin`. The GGUFs carry f32 weights: dasLLAMA quantizes the served layouts to Q8_0 at first
@@ -50,7 +54,16 @@ dasllama-server --tts kitten-nano.gguf          # POST /v1/audio/speech, the Ope
 daslang utils/dasllama-server/txt2wav.das -- --tts kitten-nano.gguf --voice expr-voice-2-f --text "Hello." --out hello.wav
 ```
 
-Kitten nano is the served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
+Pocket TTS English is the cloning model: 152 MB, 19 voices (`alba` the default, `bill_boerst`,
+`caro_davy`, `anna`, `george`, ...), and any voice from a few seconds of 24 kHz audio through
+`tts_register_voice`. It reads text, so it needs neither pack; the English normalizer runs in
+front of it. On the 200-sentence rig at `alba` this file reads WER 4.13 / UTMOS 4.330 at a
+real-time factor of 0.057 on an Apple M1 Max, against the reference package's 5.00 / 4.393 /
+0.210 (measured 2026-09-09; the record is the repository's `plans/dasllama-pocket-tts.md`). Its use is bound by Kyutai's acceptable-use terms, which the download
+of the source weights required accepting: no voice impersonation or cloning without explicit
+and lawful consent, no misinformation, no unlawful or harmful content.
+
+Kitten nano is the phoneme families' served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
 M1 Max (measured 2026-09-02; the record is the repository's `plans/dasllama-tts.md` until the
 module's `PERF_LEDGER.md` carries a speech row). Its voices are `expr-voice-2-m` through
 `expr-voice-5-f`, and the upstream's alias names
@@ -77,6 +90,12 @@ voices.
   g2p_en 2.1.0 (`checkpoint20.npz`), plus `harness/g2p_local_additions.json`.
 - `tts_postag.bin`: `modules/dasLLAMA/harness/train_postag.py` over UD English-EWT and Project
   Gutenberg prose tagged by spaCy's `en_core_web_sm`; the tokenizer exception table is spaCy's.
+- `pocket-tts-en-q8.gguf`: converted by `modules/dasLLAMA/harness/convert_pocket.py --q8` from
+  `kyutai/pocket-tts` `languages/english_2026-04/model.safetensors` at
+  `19f95fe2df36e79fbd9f10008595cc4c977a0fcc` and the tokenizer of
+  `kyutai/pocket-tts-without-voice-cloning` at `d29db7978e464fb90cb3359ee0c69a273b9142cc`; the
+  voice clips from `kyutai/tts-voices` at `323332d33f997de8394f24a193e1a76df720e01a`
+  (`voice-zero/`, `voice-donations/`, `vctk/`, `alba-mackenna/casual.wav`).
 
 The whole set is rebuilt by `modules/dasLLAMA/performance/build_tts_data.das`. Parity against
 the reference implementations (block by block, and the front end sentence by sentence on a
@@ -90,6 +109,7 @@ the reference implementations (block by block, and the front end sentence by sen
 | `kokoro-82m.gguf` | Apache-2.0 | hexgrad's weights and voices, converted; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
 | `tts_g2p.bin` | Apache-2.0 and BSD-2-Clause | misaki and g2p_en (Apache-2.0), CMUdict (`LICENSE.CMUDICT`, Carnegie Mellon University) |
 | `tts_postag.bin` | CC BY-SA 4.0 | the tagger weights are trained on UD English-EWT (`LICENSE.UD_EWT`); the exception table and the silver tags come from spaCy (MIT, `LICENSE.SPACY`); Gutenberg prose is public domain |
+| `pocket-tts-en-q8.gguf` | CC BY 4.0 | Kyutai's weights and tokenizer, converted (`LICENSE.CC-BY-4.0`); the reference implementation is MIT and not included; the voice clips: `voice-zero` and `voice-donations` CC0, VCTK (CSTR, University of Edinburgh) and Alba Mackenna CC BY 4.0 - the sidecar lists each |
 
 Each `.LICENSE` sidecar beside a file names its sources; the full texts are in this repository.
 The engine that reads these files is under the daslang licence in its own repository.

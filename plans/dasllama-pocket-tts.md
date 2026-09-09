@@ -162,6 +162,21 @@ numbers. Parity against `harness/pocket_oracle.py` (24 cases, alba and caro_davy
 the free run lands the oracle's frame count. First das RTF, unoptimized f32: 0.15 (backbone
 7.8 ms per frame - the tiled GEMM run as a GEMV; the q8 GEMV is phase 6's first rung).
 
+The q8 lane (same day): the transformer GEMMs and the 32-wide codec convs as Q8_0 rows, the
+decode step on the q8 GEMV entry. The rig at alba, 200 sentences, the same scorer:
+
+| lane | WER | UTMOS | RTF | numeric | oov |
+|---|---|---|---|---|---|
+| reference (pocket-tts 3.1.0, torch, one thread) | 5.00 | 4.393 | 0.210 | 10.42 | 10.89 |
+| das f32 | 4.13 | 4.368 | 0.143 | 2.08 | 10.51 |
+| das q8 | 4.09 | 4.339 | 0.056 | 2.38 | 11.67 |
+| das, the published Q8_0 file | 4.13 | 4.330 | 0.057 | 2.38 | 10.51 |
+
+The WER gain is the English normalizer in front of the tokenizer (numbers, units and
+abbreviations as words); q8 holds WER and costs 0.03 MOS. The published form is the Q8_0
+file (`convert_pocket.py --q8`, 152 MB for English, 56 tensors as Q8_0 in the kernels' layout,
+read straight into the int8 planes); its own rig row is the number on the card.
+
 Two facts the source reading missed: the installed package (3.1.0, what the oracle ran) and
 GitHub main differ in the chunker's terminal-punctuation rule (main replaces a trailing
 comma by a period; 3.1.0 appends a period only after a letter or digit) - the port follows

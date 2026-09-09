@@ -131,7 +131,43 @@ struct PocketModel {
     tok : SpmTokenizer = SpmTokenizer()
     unk_id : int64
     byte_fallback : bool
+    q8 : bool                // the lane this model serves: the GEMM weights as Q8_0 quants, or f32
 }
+
+// ===== the serving lane: f32 planes (the parity rail's form) or Q8_0 quants on the GEMMs, the
+// same pin and policy as the StyleTTS2 families' =====
+
+enum private PocketLane {
+    unset
+    exact
+    q8
+}
+var private g_pocket_q8_pin = PocketLane.unset
+
+def private pocket_serve_q8_() : bool {
+    if (g_pocket_q8_pin != PocketLane.unset) {
+        return g_pocket_q8_pin == PocketLane.q8
+    }
+    return true
+}
+
+//! Pin the GEMM weights' format for subsequent loads: Q8_0 quants or the file's own f32.
+//! ``reset_pocket_q8`` returns to the policy default. The facade spells these ``set_tts_q8`` /
+//! ``reset_tts_q8`` for every family at once.
+def set_pocket_q8(on : bool) {
+    g_pocket_q8_pin = on ? PocketLane.q8 : PocketLane.exact
+}
+
+def reset_pocket_q8() {
+    g_pocket_q8_pin = PocketLane.unset
+}
+
+//! Would the next load serve its GEMMs as q8 - the pin when set, the policy otherwise.
+def pocket_serves_q8() : bool => pocket_serve_q8_()
+
+// what the readers mint while a load runs: the lane's quant choice and the backend's repack
+var private g_stage_q8 = false
+var private g_stage_repack = false
 
 def finalize(var m : PocketModel) {
     delete m.voice_names
@@ -246,16 +282,33 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
     return <- w
 }
 
+// a Q8_0 tensor of the published file: its blocks go straight into the int8 plane on the q8 lane
+def private is_q8_tensor(m : GGUFMeta; name : string) : bool {
+    return gguf_tensor_type(m, name) == GGML_TYPE_Q8_0
+}
+
 def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; vec_only : bool = false) : TtsLinear {
     var l = TtsLinear()
-    l.w <- read_arr(m, bytes, "{prefix}.weight")
-    let ti = need_tensor(m, "{prefix}.weight")
+    let wname = "{prefix}.weight"
+    let ti = need_tensor(m, wname)
     l.nin = m.tensors[ti].dims[0]
     l.nout = m.tensors[ti].dims[1]
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    linear_prepare(l, true, false, false, vec_only)
+    if (g_stage_q8 && !vec_only && is_q8_tensor(m, wname)) {
+        let n = l.nout * l.nin
+        l.wq |> reserve_resize(n)
+        l.wqs |> reserve_resize(n / 32l)
+        gguf_transcode_q8_0(m, bytes, wname, l.wq, l.wqs, 0l, 0l, n)
+        if (g_stage_repack) {
+            repack_q8q8_weight(l.wq, l.wqs, 0l, l.nin, l.nout)
+        }
+        l.q8 = true
+        return <- l
+    }
+    l.w <- read_arr(m, bytes, wname)   // a Q8_0 tensor dequantizes here: the f32 lane of a published file
+    linear_prepare(l, true, g_stage_q8 && !vec_only, g_stage_repack, vec_only)
     return <- l
 }
 
@@ -266,19 +319,59 @@ def private read_norm(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) :
     return <- n
 }
 
-// a causal conv: `left` samples of context before the first output (a forward conv's left
-// zero pad), or the transposed conv's tail of `right` the stream never emits
+// the published file's conv: a Q8_0 slab [cout][k][cin] (the tap-stacked rows layout, innermost
+// cin) - taken as the q8 lane's blocks, or dequantized and re-laid into PyTorch's [cout][cin][k]
+def private read_conv_q8(m : GGUFMeta; bytes : array<uint8> | #; wname : string; var c : TtsConv1d) {
+    let ti = need_tensor(m, wname)
+    c.cin = m.tensors[ti].dims[0]
+    c.k = m.tensors[ti].dims[1]
+    c.cout = m.tensors[ti].dims[2]
+    let kc = c.k * c.cin
+    if (g_stage_q8 && c.stride == 1l && !c.transposed && c.groups == 1l) {   // the rows q8 conv's shape; anything else dequantizes
+        c.wq |> reserve_resize(c.cout * kc)
+        c.wqs |> reserve_resize(c.cout * kc / 32l)
+        gguf_transcode_q8_0(m, bytes, wname, c.wq, c.wqs, 0l, 0l, c.cout * kc)
+        if (g_stage_repack) {
+            repack_q8q8_weight(c.wq, c.wqs, 0l, kc, c.cout)
+        }
+        c.q8 = true
+        c.q8_k = kc
+        c.cout_s = c.cout
+        return
+    }
+    var inscope slab <- read_arr(m, bytes, wname)
+    c.w |> reserve_resize(c.cout * kc)
+    for (co in range64(c.cout)) {
+        for (kk in range64(c.k)) {
+            for (ci in range64(c.cin)) {
+                c.w[(co * c.cin + ci) * c.k + kk] = slab[co * kc + kk * c.cin + ci]
+            }
+        }
+    }
+    conv1d_prepare(c, g_stage_q8, g_stage_repack)
+}
+
+// a causal conv's context is its geometry: a forward conv's left zero pad of `k - stride`, or
+// the `k - stride` tail of a transposed conv the stream never emits (sec.2.46)
 def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; stride, groups : int64; transposed : bool) : TtsConv1d {
     var c = TtsConv1d()
-    c.w <- read_arr(m, bytes, "{prefix}.weight")
+    let wname = "{prefix}.weight"
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         c.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    let ti = need_tensor(m, "{prefix}.weight")
-    c.k = m.tensors[ti].dims[0]
     c.stride = stride
     c.groups = groups
     c.transposed = transposed
+    c.served_rows = true
+    if (is_q8_tensor(m, wname)) {
+        read_conv_q8(m, bytes, wname, c)
+        c.pad_l = c.k - stride
+        c.pad_r = 0l
+        return <- c
+    }
+    c.w <- read_arr(m, bytes, wname)
+    let ti = need_tensor(m, wname)
+    c.k = m.tensors[ti].dims[0]
     if (transposed) {
         c.cin = m.tensors[ti].dims[2]
         c.cout = m.tensors[ti].dims[1] * groups
@@ -290,8 +383,7 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; s
         c.pad_l = c.k - stride
         c.pad_r = 0l
     }
-    c.served_rows = true
-    conv1d_prepare(c)
+    conv1d_prepare(c, g_stage_q8, g_stage_repack)
     return <- c
 }
 
@@ -442,6 +534,10 @@ def private lang_code_of(language : string) : string {
 //! prepared for the rows kernels, the tokenizer, and the roster's clips (encoded on first use).
 def load_pocket(path : string) : PocketModel {
     var inscope m = PocketModel()
+    m.q8 = pocket_serve_q8_()
+    g_stage_q8 = m.q8
+    g_stage_repack = m.q8 && select_matmul_backend_for_load_()
+    to_log(LOG_INFO, "dasLLAMA pocket: GEMM lane {m.q8 ? "q8" : "f32"} - {g_pocket_q8_pin != PocketLane.unset ? "pinned via set_tts_q8" : "the policy default"}\n")
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA pocket: cannot open model '{path}'")
@@ -465,6 +561,9 @@ def load_pocket(path : string) : PocketModel {
         m.append_terminal_punctuation = gguf_int(g, bytes, "pocket.append_terminal_punctuation") != 0l
         m.bos_before_voice = gguf_int(g, bytes, "pocket.bos_before_voice") != 0l
         m.default_voice = gguf_str(g, bytes, "pocket.default_voice")
+        if (gguf_has(g, "pocket.weights") && gguf_str(g, bytes, "pocket.weights") == "q8" && !m.q8) {
+            to_log(LOG_INFO, "dasLLAMA pocket: '{path}' carries Q8_0 GEMM weights; the f32 lane serves them dequantized\n")
+        }
         m.voice_names <- gguf_str_array(g, bytes, "pocket.voices")
         for (v in m.voice_names) {
             m.voices[v] <- read_arr(g, bytes, "voice.{v}")
@@ -638,7 +737,7 @@ let private VOICE_CACHE_SLACK = 1024l   // positions past the prompt a chunk's t
 
 //! The backbone's memory of a clip: its latents projected into the model's width, the BOS row in
 //! front, run through the backbone at positions 0..; the state a synthesis continues from.
-def pocket_voice_state(var m : PocketModel; pcm : array<float>; var sc : PocketScratch) : PocketVoiceState {
+def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScratch) : PocketVoiceState {
     var inscope vs = PocketVoiceState()
     var inscope lat : array<float>
     let frames = pocket_encode_latents(m, pcm, sc, lat)

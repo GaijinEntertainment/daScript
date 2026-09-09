@@ -14,8 +14,9 @@ import argparse, hashlib, os, re, shutil, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODULE = os.path.dirname(HERE)
 CARD = os.path.join(HERE, "tts_model_card.md")
-FILES = ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin"]
-LICENCES = ["LICENSE.APACHE-2.0", "LICENSE.CMUDICT", "LICENSE.UD_EWT", "LICENSE.SPACY", "LICENSE.STYLETTS2"]
+FILES = ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin",
+         "pocket-tts-en-q8.gguf"]
+LICENCES = ["LICENSE.APACHE-2.0", "LICENSE.CMUDICT", "LICENSE.UD_EWT", "LICENSE.SPACY", "LICENSE.STYLETTS2", "LICENSE.CC-BY-4.0"]
 
 
 def sha256_of(path):

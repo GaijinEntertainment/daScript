@@ -108,15 +108,17 @@ def private log_dropped_voices(m : TtsModel) {
 }
 
 def set_tts_q8(on : bool) {
-    //! Pin the rows GEMMs' format for subsequent TTS loads: Q8_0 quants (their own prepared image
-    //! beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to the policy default.
-    //! The pin is per context: a worker thread pins for itself.
+    //! Pin the GEMM weights' format for subsequent TTS loads of every family: Q8_0 quants (their
+    //! own prepared image beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to
+    //! the policy default. The pin is per context: a worker thread pins for itself.
     set_styletts2_q8(on)
+    set_pocket_q8(on)
 }
 
 def reset_tts_q8() {
     //! Drop the ``set_tts_q8`` pin: the next load follows the policy default again.
     reset_styletts2_q8()
+    reset_pocket_q8()
 }
 
 def tts_serves_q8() : bool {
