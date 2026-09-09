@@ -126,7 +126,26 @@ When a block's line info belongs to a different file than its parent scope - wha
 takes its file from its scope, so without the re-point every line of the included body would be
 reported against the host function's file.
 
-### 12.4 A composite DIType is built with no metadata cycle {#di-composite-types}
+### 12.4 A das global is described where its address is known {#di-globals}
+
+A das global has no static address: it lives at `context->globals + stackTop`, and the same
+jitted module serves every Context of the program, each with its own base. A
+`DIGlobalVariableExpression` would therefore need one address to stand for all of them, and
+whichever Context wrote it, the value printed in the others would be confidently wrong.
+
+The emitter does not need a static address, because it already computes the right one. Every
+function that touches a global materializes a pointer to it - through `jit_get_global_mnh` at
+the use site, or from `context->globals` in the entry block under `options solid_context` - and
+that pointer is derived from the `ctx` the call actually received. The global is described as a
+variable of that function, located at that pointer, once per function that mentions it. The
+location is per-Context correct by construction.
+
+The cost is scope rather than accuracy: a global reads in any frame whose function touches it,
+and not in a frame that never mentions it. That is the honest shape for a variable whose address
+is a function of the running context, and it is the shape a debugger user experiences anyway -
+the value is asked for from inside a frame.
+
+### 12.5 A composite DIType is built with no metadata cycle {#di-composite-types}
 
 A das structure, tuple or variant becomes a real `DW_TAG_structure_type` with one member per
 field, at the field's own byte offset - independent of the `[N x i8]` blob the value has as an

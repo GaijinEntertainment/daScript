@@ -20,12 +20,15 @@ enum Mode {
     slow
 }
 
+var g_calls = 0
+
 def private invoke_block(blk : block<(a : int) : int>) {
     return invoke(blk, 3)
 }
 
 [export]
 def hot(n : int; scale : float; p : Point; m : Mode; tag : string) : int {
+    g_calls++
     var acc = 0
     var f4 = float4(1.0, 2.0, 3.0, 4.0)
     f4 = f4 * scale
@@ -53,7 +56,7 @@ def hot(n : int; scale : float; p : Point; m : Mode; tag : string) : int {
         acc_ref += a
         return a * 2
     }
-    return (acc + dim3[1] + length(xs) + pair._0 + node.value + blocked + int(f4.w)
+    return (acc + g_calls + dim3[1] + length(xs) + pair._0 + node.value + blocked + int(f4.w)
         + (m == Mode.slow ? length(tag) : 0))
 }
 

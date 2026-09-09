@@ -307,6 +307,7 @@ class public LlvmJitVisitor : AstVisitor {
     heapMkaData : array<LLVMOpaqueValue?>
     v2v : table<Variable?; LLVMOpaqueValue?>
     g2v : table<Variable?; LLVMOpaqueValue?>    //! a solid-context global's entry-block pointer, cleared per LLVM function
+    di_globals : table<Variable?; bool>         //! the globals this function already describes, cleared with g2v
     v2t : table<LLVMOpaqueValue?; LLVMOpaqueType?>
     call2cmres : table<Expression?; LLVMOpaqueValue?>
     ffunc, wfunc : LLVMOpaqueValue?
@@ -489,6 +490,15 @@ class public LlvmJitVisitor : AstVisitor {
 
     def debug_declare_parameter(v : VariablePtr; storage : LLVMOpaqueValue?; argNo : int) {
         debug_declare_variable(v, storage, argNo, false)
+    }
+
+    //! A das global is described once per function that touches it, at the address that
+    //! function computed from its own `ctx` (arch doc sec.12.4).
+    [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-globals")]
+    def debug_declare_global(v : VariablePtr; slot : LLVMOpaqueValue?) {
+        return if (!debug_info_enabled() || v == null || slot == null || di_globals |> key_exists(v))
+        di_globals[v] = true
+        debug_declare_variable(v, slot, 0, false)
     }
 
     [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-variable-locations")]
@@ -1022,6 +1032,7 @@ class public LlvmJitVisitor : AstVisitor {
         thisFunc = fun
         uid.reset(fun)
         g2v |> clear()
+        di_globals |> clear()
         ldu_hint = LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS
         let fnmna = uid.get_dll_fn_name(fun)
         ffunc = LLVMGetNamedFunction(g_mod, fnmna.impl())
@@ -6157,6 +6168,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 g2v[expr.variable] = tryV
             }
+            debug_declare_global(expr.variable, tryV)
             if (expr.varFlags.r2v) {
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), tryV, expr._type.alignOf, "global_var_r2v_{expr.variable.name}"))
             } else {

@@ -166,6 +166,19 @@ def test_locals_and_arguments_are_described(t : T?) {
 }
 
 [test]
+def test_a_global_is_described(t : T?) {
+    t |> run("a das global reads in every function that touches it") @(t : T?) {
+        let out = jit_dump(t, true)
+        //! a global has no static address - it is described at the pointer the function computed
+        //! from its own ctx, so it lands as a variable of that function (arch doc sec.12.4)
+        t |> success(find(out, "!DILocalVariable(name: \"g_calls\"") >= 0,
+            "the fixture's global is described:\n{out_tail(out)}")
+        t |> equal(-1, find(out, "!DIGlobalVariableExpression"),
+            "no static-address global expression - one address cannot stand for every Context")
+    }
+}
+
+[test]
 def test_types_are_described(t : T?) {
     t |> run("a struct, an enum, a string and a vector each reach DWARF as themselves") @(t : T?) {
         let out = jit_dump(t, true)

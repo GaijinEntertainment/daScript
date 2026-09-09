@@ -39,11 +39,11 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x7bul   // under --jit-debug every das local, argument and block variable carries a DILocalVariable with a real DIType, a das block opens a DILexicalBlock, a subprogram is named as the das source names it and carries no linkage name, one compile unit covers the whole module, and the prologue and a loop latch carry no stale line
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x7cul   // under --jit-debug a das global is described too, at the ctx-derived pointer each function computes for it; every das local, argument and block variable carries a DILocalVariable with a real DIType, a das block opens a DILexicalBlock, a subprogram is named as the das source names it and carries no linkage name, one compile unit covers the whole module, and the prologue and a loop latch carry no stale line
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x6416ae2fd7f1057bul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x65480ff16be6cbadul
 
 let JIT_FNV_PRIME : uint64 = 1099511628211ul
 
