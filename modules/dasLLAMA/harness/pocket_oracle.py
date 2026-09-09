@@ -105,6 +105,8 @@ def main():
     ap.add_argument("--tokens-fixture", default=None,
                     help="also write the whole corpus's prepared text and token ids as JSON (the tokenizer-parity fixture)")
     ap.add_argument("--tokens-only", action="store_true", help="write the tokens fixture and stop")
+    ap.add_argument("--texts", default=None,
+                    help="a JSON list of {id, text} rows to use instead of the English corpus (a language's own sentences)")
     a = ap.parse_args()
     import torch
     from pocket_tts import TTSModel
@@ -122,6 +124,11 @@ def main():
     trace = FrameTrace()
     trace.install(model.flow_lm)
     rows = json.load(open(FIXTURE, encoding="utf8"))
+    if a.texts:
+        texts = json.load(open(a.texts, encoding="utf8"))
+        if isinstance(texts, dict):   # tests/_tts_fixtures/pocket_sentences.json: one list per language config
+            texts = texts[a.language]
+        rows = [dict(r, norm=r["text"]) for r in texts]
     if a.tokens_fixture:
         # every corpus sentence through the package's prepare rule and tokenizer, plus the chunk
         # list of a few multi-sentence texts (the chunker-parity rows) - the byte-fallback probes
@@ -134,8 +141,9 @@ def main():
                                                   model.append_terminal_punctuation)
             fx["rows"].append({"id": r["id"], "prepared": prepared, "frames_after_eos": guess + 2,
                                "ids": [int(i) for i in tok(prepared)[0].tolist()]})
-        long_texts = [" ".join(r["text"] for r in rows[i:i + 6]) for i in (0, 40, 100, 150)]
-        long_texts.append("Dr. Smith paid $12.50 at 3.14 p.m.; then he left! Really? Yes... quite so. " * 3)
+        long_texts = [" ".join(r["text"] for r in rows[i:i + 6]) for i in (0, 40, 100, 150) if rows[i:i + 6]]
+        if not a.texts:
+            long_texts.append("Dr. Smith paid $12.50 at 3.14 p.m.; then he left! Really? Yes... quite so. " * 3)
         for text in long_texts:
             fx["chunks"].append({"text": text, "chunks": split_into_best_sentences(tok, text, a.max_tokens, model.pad_with_spaces_for_short_inputs,
                                                                                     model.remove_semicolons, model.append_terminal_punctuation)})
@@ -147,7 +155,7 @@ def main():
         print(f"tokens fixture: {len(fx['rows'])} rows, {len(fx['chunks'])} chunk texts, {len(fx['probes'])} probes -> {a.tokens_fixture}", flush=True)
         if a.tokens_only:
             return
-    picked = pick_sentences(rows, a.count)
+    picked = rows if a.texts else pick_sentences(rows, a.count)
     out_dir = os.path.join(a.out, f"pocket_{a.language}")
     os.makedirs(out_dir, exist_ok=True)
     manifest = {"size": a.language, "revision": revision, "seed_base": a.seed_base, "temp": model.temp,

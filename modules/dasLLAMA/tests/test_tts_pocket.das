@@ -60,8 +60,7 @@ struct private TokFixture {
     probes : array<TokProbe>
 }
 
-def private load_tokens_fixture() : TokFixture {
-    let path = tokens_fixture_path()
+def private load_tokens_fixture(path : string = tokens_fixture_path()) : TokFixture {
     let text = fread(path)
     if (empty(text)) {
         panic("pocket tokens fixture missing: {path}")
@@ -433,8 +432,8 @@ def private q8_gguf_path() : string {
 }
 
 // the frames of one teacher-forced case on a model, for a lane-to-lane compare
-def private forced_latents(m : PocketModel; c : PocketCase; man : PocketManifest; var sc : PocketScratch) : array<float> {
-    var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+def private forced_latents(m : PocketModel; c : PocketCase; man : PocketManifest; var sc : PocketScratch; odir : string = oracle_dir()) : array<float> {
+    var inscope dump <- load_tts_dump(path_join(odir, c.file))
     var inscope ids <- pocket_text_ids(m, c.prepared)
     var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
     var tm = TtsTimings()
@@ -495,6 +494,96 @@ def test_pocket_q8_file(t : T?) {
             // percents of a frame; the published file's own rig row is its quality gate
             t |> success(rel < 5.0e-2lf, "{c.id}: the file's blocks and the load-time quants are the same lane (rms relative {rel})")
             break
+        }
+    }
+}
+
+// ===== the other five languages: one Q8_0 file each, its own tokenizer, one default voice =====
+
+struct private PocketLang {
+    code : string        // what caps reports
+    config : string      // the package's config name: the oracle dir and the tokens fixture carry it
+    voice : string
+}
+
+let private LANGS <- [PocketLang(code = "de", config = "german", voice = "juergen"), PocketLang(code = "es", config = "spanish", voice = "lola"),
+                      PocketLang(code = "it", config = "italian", voice = "giovanni"), PocketLang(code = "pt", config = "portuguese", voice = "rafael"),
+                      PocketLang(code = "fr", config = "french_24l", voice = "estelle")]
+
+def private load_lang_manifest(dir_path : string) : PocketManifest {
+    var m = PocketManifest()
+    let text = fread(path_join(dir_path, "manifest.json"))
+    return <- m if (empty(text))
+    if (!sscan_json(text, m)) {
+        panic("pocket oracle manifest does not parse: {dir_path}")
+    }
+    return <- m
+}
+
+// one language's cells: the tokenizer on its own sentences and the probes, the teacher-forced
+// frames of every stage case on the published file, one sentence through the facade
+def private language_cells(t : T?; L : PocketLang) {
+    let path = path_join(models_dir(), "pocket-tts-{L.code}-q8.gguf")
+    let odir = path_join(models_dir(), "tts_oracle/pocket_{L.config}")
+    if (!model_available(t, path)) {
+        return
+    }
+    var inscope man <- load_lang_manifest(odir)
+    var inscope fx <- load_tokens_fixture("{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/pocket_tokens_{L.config}.json")
+    var inscope m <- load_pocket(path)
+    t |> equal(m.lang, L.code, "{L.config}: the language code")
+    t |> equal(m.default_voice, L.voice, "{L.config}: the default voice")
+    t |> equal(length(m.voice_names), 1, "{L.config}: one bundled voice")
+    var bad = 0
+    for (r in fx.rows) {
+        var inscope ours <- pocket_text_ids(m, r.prepared)
+        bad += same_ids(ours, r.ids) ? 0 : 1
+    }
+    for (p in fx.probes) {
+        var inscope ours <- pocket_text_ids(m, p.text)
+        bad += same_ids(ours, p.ids) ? 0 : 1
+    }
+    t |> equal(bad, 0, "{L.config}: sentences and probes whose ids differ from the reference")
+    var inscope sc = PocketScratch()
+    var cases = 0
+    for (c in man.cases) {
+        continue if (!c.stages)
+        var inscope lat <- forced_latents(m, c, man, sc, odir)
+        var inscope dump <- load_tts_dump(path_join(odir, c.file))
+        // on the q8 lane an EOS logit near the threshold moves the frame count by one, and
+        // teacher forcing keeps the frames comparable up to the shorter of the two runs
+        let ours = long_length(lat) / m.latent_dim
+        let theirs = long_length(dump["latent"].f) / m.latent_dim
+        t |> success(abs(ours - theirs) <= 2l, "{L.config} {c.id}: {ours} frames against the oracle's {theirs}")
+        let n = min(long_length(lat), long_length(dump["latent"].f))
+        var inscope a : array<float>
+        var inscope b : array<float>
+        a |> resize(n)
+        b |> resize(n)
+        for (i in range64(n)) {
+            a[i] = lat[i]
+            b[i] = dump["latent"].f[i]
+        }
+        q8_report(t, "{L.config} {c.id} latents (teacher-forced)", a, b)
+        t |> success(speech_stats(sc.wave).rms > 0.01, "{L.config} {c.id}: the decoded frames carry speech")
+        cases++
+    }
+    t |> success(cases > 0 || empty(man.cases), "{L.config}: {cases} oracle cases ran")
+    var inscope tm <- load_tts_model(path)
+    var inscope c2 <- caps(tm)
+    t |> equal(c2.langs[0], L.code, "{L.config}: the facade reports the language")
+    var inscope a <- synthesize(tm, fx.rows[0].prepared, L.voice)
+    let st = speech_stats(a.pcm)
+    t |> success(st.finite && st.rms > 0.01, "{L.config}: '{fx.rows[0].prepared}' speaks ({length(a.pcm)} samples, rms {st.rms})")
+    to_log(LOG_INFO, "pocket {L.config}: {timings_line(a.timings, a.sample_rate)}\n")
+}
+
+[test]
+def test_pocket_languages(t : T?) {
+    with_job_que() {
+        setup_dasllama_jobque_()
+        for (L in LANGS) {
+            language_cells(t, L)
         }
     }
 }

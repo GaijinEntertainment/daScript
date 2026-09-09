@@ -4,6 +4,11 @@ license_name: per-file
 license_link: https://github.com/GaijinEntertainment/daScript/blob/master/modules/dasLLAMA/THIRD_PARTY_NOTICES.md
 language:
   - en
+  - de
+  - es
+  - it
+  - pt
+  - fr
 language_bcp47:
   - en-US
   - en-GB
@@ -41,6 +46,11 @@ No espeak-ng, no phonemizer: the front end is data, and the data is in the two p
 | `tts_g2p_en_us.bin` | the same pack with the American tier alone - no British values, CMUdict pruned of every word the American lexicon carries; the web serving set's pack, British voices are not offered on it | 10257455 | `6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154` |
 | `tts_postag.bin` | the tokenizer exception table and the averaged-perceptron PTB tagger | 12566510 | `38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4` |
 | `pocket-tts-en-q8.gguf` | Kyutai Pocket TTS, English (english_2026-04): the served GEMM weights as Q8_0, the rest f16, its unigram tokenizer and 19 voice clips inside; reads text, needs no pack | 152613664 | `9fca82dbe1a550a0bce958d3dfcf51f3c793c89db6aee850823724826b56589c` |
+| `pocket-tts-de-q8.gguf` | Pocket TTS German (6 layers), the same form, one voice (`juergen`) | 134667200 | `a7f69bff844d796a164a62766071457f56c5bd8d854a0a743f88c2d8c4790d9e` |
+| `pocket-tts-es-q8.gguf` | Pocket TTS Spanish (6 layers), one voice (`lola`) | 134624480 | `40b36e28cbc1d6d01ef660751b63b37b44f25b6887a93102bc29bfb516e93ade` |
+| `pocket-tts-it-q8.gguf` | Pocket TTS Italian (6 layers), one voice (`giovanni`) | 134415072 | `3c5739d544b1b7c8284fd3df9d7122557cf700c91895d3dc45b3fdc5ef6e2670` |
+| `pocket-tts-pt-q8.gguf` | Pocket TTS Portuguese (6 layers), one voice (`rafael`) | 134667488 | `3375c31e742c8783c6dddbbd3bd152e8dff9d188fdaceb1cbb4d187514291c57` |
+| `pocket-tts-fr-q8.gguf` | Pocket TTS French (24 layers, the only French model Kyutai ships), one voice (`estelle`) | 375793696 | `f06ffac80b96a34d2e51ca40c41111469d8b44e0269b27a64e707a7a9be1ec20` |
 
 The packs sit beside whichever GGUF you load; the loader reads them from the model's
 directory - `tts_g2p.bin` when it is there, else `tts_g2p_en_us.bin`. The GGUFs carry f32 weights: dasLLAMA quantizes the served layouts to Q8_0 at first
@@ -61,7 +71,12 @@ front of it. On the 200-sentence rig at `alba` this file reads WER 4.13 / UTMOS 
 real-time factor of 0.057 on an Apple M1 Max, against the reference package's 5.00 / 4.393 /
 0.210 (measured 2026-09-09; the record is the repository's `plans/dasllama-pocket-tts.md`). Its use is bound by Kyutai's acceptable-use terms, which the download
 of the source weights required accepting: no voice impersonation or cloning without explicit
-and lawful consent, no misinformation, no unlawful or harmful content.
+and lawful consent, no misinformation, no unlawful or harmful content. The five other
+languages are the same form, one file each with Kyutai's default clip for that language as its
+only voice (German `juergen`, Spanish `lola`, Italian `giovanni`, Portuguese `rafael`, French
+`estelle`); the German, Spanish, Italian and Portuguese files are the six-layer models, French
+exists only as the 24-layer one. A voice cloned from any clip speaks the file's language with
+the clip's accent. Text in those languages is read as it is, since the normalizer is English.
 
 Kitten nano is the phoneme families' served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
 M1 Max (measured 2026-09-02; the record is the repository's `plans/dasllama-tts.md` until the

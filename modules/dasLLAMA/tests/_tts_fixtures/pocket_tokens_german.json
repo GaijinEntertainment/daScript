@@ -1,0 +1,234 @@
+{
+ "language": "german",
+ "revision": "39592ff23c9ef80098bb74895d104c26275fe2c9",
+ "rows": [
+  {
+   "id": "de001",
+   "prepared": "Der schnelle braune Fuchs springt über den faulen Hund.",
+   "frames_after_eos": 3,
+   "ids": [
+    532,
+    373,
+    711,
+    264,
+    260,
+    3042,
+    836,
+    264,
+    447,
+    1112,
+    269,
+    260,
+    2627,
+    276,
+    333,
+    292,
+    260,
+    1602,
+    736,
+    263,
+    1335,
+    262
+   ]
+  },
+  {
+   "id": "de002",
+   "prepared": "Guten Morgen, wie geht es Ihnen heute?",
+   "frames_after_eos": 3,
+   "ids": [
+    1342,
+    263,
+    260,
+    2329,
+    261,
+    308,
+    404,
+    279,
+    2278,
+    513,
+    324
+   ]
+  },
+  {
+   "id": "de003",
+   "prepared": "Die Bibliothek öffnet um neun Uhr und schließt um sechs.",
+   "frames_after_eos": 3,
+   "ids": [
+    395,
+    1799,
+    459,
+    620,
+    2959,
+    418,
+    260,
+    2916,
+    357,
+    3187,
+    1551,
+    266,
+    373,
+    2622,
+    276,
+    357,
+    1553,
+    262
+   ]
+  }
+ ],
+ "chunks": [
+  {
+   "text": "Der schnelle braune Fuchs springt über den faulen Hund. Guten Morgen, wie geht es Ihnen heute? Die Bibliothek öffnet um neun Uhr und schließt um sechs.",
+   "chunks": [
+    "Der schnelle braune Fuchs springt über den faulen Hund. Guten Morgen, wie geht es Ihnen heute?",
+    "Die Bibliothek öffnet um neun Uhr und schließt um sechs."
+   ]
+  }
+ ],
+ "probes": [
+  {
+   "text": "Hello world, this is a test of 3.14 kg.",
+   "ids": [
+    2967,
+    962,
+    363,
+    388,
+    1685,
+    261,
+    260,
+    1057,
+    657,
+    260,
+    657,
+    260,
+    475,
+    260,
+    1351,
+    1931,
+    260,
+    511,
+    262,
+    368,
+    580,
+    1076,
+    450,
+    262
+   ]
+  },
+  {
+   "text": "The café served crème brûlée 😀 to Москва.",
+   "ids": [
+    1469,
+    260,
+    1400,
+    412,
+    199,
+    173,
+    260,
+    269,
+    274,
+    1468,
+    399,
+    260,
+    542,
+    388,
+    199,
+    172,
+    642,
+    260,
+    1580,
+    199,
+    191,
+    413,
+    199,
+    173,
+    264,
+    260,
+    244,
+    163,
+    156,
+    132,
+    260,
+    866,
+    260,
+    212,
+    160,
+    212,
+    194,
+    213,
+    133,
+    212,
+    190,
+    212,
+    182,
+    212,
+    180,
+    262
+   ]
+  },
+  {
+   "text": "a",
+   "ids": [
+    260,
+    475
+   ]
+  },
+  {
+   "text": "  spaces   everywhere  ",
+   "ids": [
+    260,
+    260,
+    260,
+    683,
+    2036,
+    335,
+    260,
+    260,
+    260,
+    264,
+    478,
+    405,
+    488,
+    749,
+    264,
+    260,
+    260
+   ]
+  },
+  {
+   "text": "ALL CAPS SHOUTING",
+   "ids": [
+    434,
+    1033,
+    1033,
+    674,
+    681,
+    696,
+    577,
+    346,
+    1341,
+    1431,
+    2031,
+    858,
+    1201,
+    1383,
+    973
+   ]
+  },
+  {
+   "text": "tabs\tand\nnewlines",
+   "ids": [
+    260,
+    276,
+    677,
+    269,
+    13,
+    956,
+    14,
+    658,
+    488,
+    2629,
+    269
+   ]
+  }
+ ]
+}

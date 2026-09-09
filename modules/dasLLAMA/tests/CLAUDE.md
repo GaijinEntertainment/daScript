@@ -656,7 +656,16 @@ conditioning and EOS logit per frame, the latents and the waveform, plus a free 
 facade cells - caps (cloning, one language, the 19-voice roster), the reference's chunk lists over
 multi-sentence texts, one sentence spoken with the family's own timing stages, a cloned voice
 joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
-a clip at another rate).
+a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, the one-channel
+convs f32, teacher-forced frames logged against the f32 oracle at an rms figure, the free run's
+frame count and speech - the rig is the lane's quality gate); the published Q8_0 file
+(`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM and
+32-wide codec conv arrived as Q8_0, the same lane within a few percent; and the five other
+languages (`pocket-tts-{de,es,it,pt,fr}-q8.gguf`, oracle dirs `tts_oracle/pocket_<config>/`
+minted over `_tts_fixtures/pocket_sentences.json`, token fixtures `pocket_tokens_<config>.json`):
+the language code and the one default voice, the tokenizer on the language's own sentences
+and the probes, the teacher-forced frames of every oracle case, one sentence through the
+facade.
 `test_tts_facade.das` - stocked suite; model-free cells: the sentence chunker (the reference
 driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
 the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the

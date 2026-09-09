@@ -1,0 +1,209 @@
+{
+ "language": "italian",
+ "revision": "39592ff23c9ef80098bb74895d104c26275fe2c9",
+ "rows": [
+  {
+   "id": "it001",
+   "prepared": "La volpe marrone salta sopra il cane pigro.",
+   "frames_after_eos": 3,
+   "ids": [
+    400,
+    260,
+    413,
+    347,
+    863,
+    284,
+    2289,
+    312,
+    3007,
+    521,
+    273,
+    3013,
+    846,
+    2092,
+    263
+   ]
+  },
+  {
+   "id": "it002",
+   "prepared": "Buongiorno, come sta oggi?",
+   "frames_after_eos": 5,
+   "ids": [
+    3319,
+    636,
+    261,
+    303,
+    388,
+    506,
+    316
+   ]
+  },
+  {
+   "id": "it003",
+   "prepared": "La biblioteca apre alle nove e chiude alle sei.",
+   "frames_after_eos": 3,
+   "ids": [
+    400,
+    3919,
+    285,
+    287,
+    422,
+    3324,
+    504,
+    3041,
+    265,
+    260,
+    1829,
+    504,
+    662,
+    263
+   ]
+  }
+ ],
+ "chunks": [
+  {
+   "text": "La volpe marrone salta sopra il cane pigro. Buongiorno, come sta oggi? La biblioteca apre alle nove e chiude alle sei.",
+   "chunks": [
+    "La volpe marrone salta sopra il cane pigro. Buongiorno, come sta oggi? La biblioteca apre alle nove e chiude alle sei."
+   ]
+  }
+ ],
+ "probes": [
+  {
+   "text": "Hello world, this is a test of 3.14 kg.",
+   "ids": [
+    2275,
+    747,
+    260,
+    807,
+    726,
+    1951,
+    261,
+    260,
+    1330,
+    1812,
+    260,
+    1812,
+    266,
+    1828,
+    2153,
+    260,
+    456,
+    263,
+    343,
+    505,
+    260,
+    827,
+    465,
+    263
+   ]
+  },
+  {
+   "text": "The café served crème brûlée 😀 to Москва.",
+   "ids": [
+    2084,
+    543,
+    678,
+    2512,
+    1464,
+    590,
+    310,
+    355,
+    339,
+    495,
+    260,
+    674,
+    355,
+    199,
+    191,
+    347,
+    2512,
+    293,
+    260,
+    244,
+    163,
+    156,
+    132,
+    260,
+    276,
+    260,
+    212,
+    160,
+    212,
+    194,
+    213,
+    133,
+    212,
+    190,
+    212,
+    182,
+    212,
+    180,
+    263
+   ]
+  },
+  {
+   "text": "a",
+   "ids": [
+    266
+   ]
+  },
+  {
+   "text": "  spaces   everywhere  ",
+   "ids": [
+    260,
+    260,
+    1378,
+    402,
+    325,
+    260,
+    260,
+    265,
+    764,
+    472,
+    807,
+    1241,
+    269,
+    260,
+    260
+   ]
+  },
+  {
+   "text": "ALL CAPS SHOUTING",
+   "ids": [
+    384,
+    1905,
+    1905,
+    539,
+    621,
+    1132,
+    945,
+    541,
+    2202,
+    1044,
+    2170,
+    926,
+    788,
+    1322,
+    2103
+   ]
+  },
+  {
+   "text": "tabs\tand\nnewlines",
+   "ids": [
+    260,
+    289,
+    674,
+    325,
+    13,
+    279,
+    1064,
+    14,
+    312,
+    807,
+    2249,
+    325
+   ]
+  }
+ ]
+}

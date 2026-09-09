@@ -1,0 +1,220 @@
+{
+ "language": "french_24l",
+ "revision": "39592ff23c9ef80098bb74895d104c26275fe2c9",
+ "rows": [
+  {
+   "id": "fr001",
+   "prepared": "Le rapide renard brun saute par-dessus le chien paresseux.",
+   "frames_after_eos": 3,
+   "ids": [
+    435,
+    1092,
+    269,
+    807,
+    708,
+    1009,
+    363,
+    304,
+    1531,
+    269,
+    309,
+    287,
+    777,
+    271,
+    2459,
+    309,
+    818,
+    700,
+    263
+   ]
+  },
+  {
+   "id": "fr002",
+   "prepared": "Bonjour, comment allez-vous aujourd'hui ?",
+   "frames_after_eos": 3,
+   "ids": [
+    875,
+    1330,
+    261,
+    389,
+    283,
+    788,
+    287,
+    940,
+    274,
+    447,
+    262,
+    437,
+    260,
+    348
+   ]
+  },
+  {
+   "id": "fr003",
+   "prepared": "La bibliothèque ouvre à neuf heures et ferme à six heures.",
+   "frames_after_eos": 3,
+   "ids": [
+    480,
+    1682,
+    1525,
+    1702,
+    3769,
+    260,
+    1665,
+    273,
+    310,
+    1721,
+    260,
+    1467,
+    272,
+    2476,
+    273,
+    1865,
+    260,
+    1467,
+    263
+   ]
+  }
+ ],
+ "chunks": [
+  {
+   "text": "Le rapide renard brun saute par-dessus le chien paresseux. Bonjour, comment allez-vous aujourd'hui ? La bibliothèque ouvre à neuf heures et ferme à six heures.",
+   "chunks": [
+    "Le rapide renard brun saute par-dessus le chien paresseux. Bonjour, comment allez-vous aujourd'hui ?",
+    "La bibliothèque ouvre à neuf heures et ferme à six heures."
+   ]
+  }
+ ],
+ "probes": [
+  {
+   "text": "Hello world, this is a test of 3.14 kg.",
+   "ids": [
+    729,
+    590,
+    789,
+    260,
+    787,
+    497,
+    402,
+    551,
+    261,
+    260,
+    867,
+    421,
+    260,
+    421,
+    274,
+    366,
+    268,
+    2005,
+    260,
+    444,
+    263,
+    351,
+    488,
+    260,
+    578,
+    561,
+    263
+   ]
+  },
+  {
+   "text": "The café served crème brûlée 😀 to Москва.",
+   "ids": [
+    2376,
+    2739,
+    2795,
+    1433,
+    266,
+    332,
+    1886,
+    3473,
+    405,
+    260,
+    244,
+    163,
+    156,
+    132,
+    260,
+    947,
+    260,
+    212,
+    160,
+    212,
+    194,
+    213,
+    133,
+    212,
+    190,
+    212,
+    182,
+    212,
+    180,
+    263
+   ]
+  },
+  {
+   "text": "a",
+   "ids": [
+    274
+   ]
+  },
+  {
+   "text": "  spaces   everywhere  ",
+   "ids": [
+    260,
+    260,
+    304,
+    1744,
+    380,
+    265,
+    260,
+    260,
+    260,
+    269,
+    952,
+    359,
+    787,
+    407,
+    285,
+    269,
+    260,
+    260
+   ]
+  },
+  {
+   "text": "ALL CAPS SHOUTING",
+   "ids": [
+    486,
+    1198,
+    1198,
+    313,
+    566,
+    3515,
+    454,
+    1413,
+    790,
+    1353,
+    1056,
+    762,
+    1167,
+    1295
+   ]
+  },
+  {
+   "text": "tabs\tand\nnewlines",
+   "ids": [
+    366,
+    713,
+    265,
+    13,
+    711,
+    14,
+    642,
+    787,
+    2589,
+    265
+   ]
+  }
+ ]
+}
