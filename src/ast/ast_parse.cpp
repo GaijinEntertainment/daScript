@@ -260,7 +260,7 @@ namespace das {
                                 return !hasReqGuard || guardAvailable(reqGuard);
                             };
                             auto publicFollows = [&]() {
-                                while ( src < src_end && src[0] == ' ' ) {
+                                while ( src < src_end && isspace(src[0]) ) {    // the parser reads tokens: any whitespace before `public`
                                     src ++;
                                 }
                                 return src + 6 < src_end && memcmp(src, "public", 6) == 0;

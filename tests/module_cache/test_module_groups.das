@@ -26,6 +26,7 @@ let CALL_GROUP_BAD_ARGS = "options gen2\nrequire daslib/module_group\nrequire [p
 let CALL_GROUP_SIDE_EFFECT = "options gen2\nrequire daslib/module_group\nrequire [probe_group]\nvar counter = 0\ndef bump() : int \{\n    counter++\n    return counter\n\}\n[export]\ndef main \{\n    call_module_group(\"probe_group\", \"probe_entry\", bump())\n    print(\"PROBE \{counter\}\\n\")\n\}\n"
 let CALL_PATH_GROUP = "options gen2\nrequire daslib/module_group\nrequire [path_group]\n[export]\ndef main \{\n    call_module_group(\"path_group\", \"probe_entry\", 3)\n    print(\"PROBE done\\n\")\n\}\n"
 let MID_PUBLIC = "options gen2\nmodule mid\nrequire [probe_group] public\n"
+let MID_PUBLIC_TAB = "options gen2\nmodule mid_tab\nrequire [probe_group]\tpublic\n"
 let MID_PRIVATE = "options gen2\nmodule mid_private\nrequire [probe_group]\n"
 
 def driver(requires : string; expr : string) : string {
@@ -57,6 +58,7 @@ def make_fixture(tmp : string) : Fixture {
     fwrite(path_join(gammaDir, ".das_module"), DESCRIPTOR_GAMMA)
     fwrite(path_join(deltaDir, ".das_module"), DESCRIPTOR_DELTA)
     fwrite(path_join(tmp, "mid.das"), MID_PUBLIC)
+    fwrite(path_join(tmp, "mid_tab.das"), MID_PUBLIC_TAB)
     fwrite(path_join(tmp, "mid_private.das"), MID_PRIVATE)
     return Fixture(
         tmp = tmp,
@@ -158,6 +160,8 @@ def arms_expand(t : T?; fx : Fixture) {
         var out : string
         let viaPublic = write_driver(fx, "use_public.das", "require mid", "alpha_value() + beta_value()")
         t |> success(report_child(t, "public", run_driver(fx, viaPublic, out), out, "PROBE 11"), "a module requiring the group public re-exports the members")
+        let viaTab = write_driver(fx, "use_public_tab.das", "require mid_tab", "alpha_value() + beta_value()")
+        t |> success(report_child(t, "public after a tab", run_driver(fx, viaTab, out), out, "PROBE 11"), "the collector reads `public` after any whitespace, as the parser does")
         let viaPrivate = write_driver(fx, "use_private.das", "require mid_private", "alpha_value()")
         let rc = run_driver(fx, viaPrivate, out)
         t |> success(rc != 0 && find(out, "alpha_value") >= 0, "a private group require keeps the members out of the requirer's requirer: rc={rc}\n{out}")
