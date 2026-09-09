@@ -7834,7 +7834,7 @@ def test_vkd_ar_f16_fused(t0 : T?) {
 let private MR_NPOS = 37
 let private MR_NE = 20
 let private MR_K = 3
-let private MR_DIM = 96
+let private MR_DIM = 128   // the router tile steps K by 64
 let private MR_NER = MR_NE + 1   // the shared expert's gate row rides past the experts
 let private MR_SENT = 0x5A5A5A5Au   // the schedule planes' fill: a word the kernel never writes stays this on both sides
 
@@ -7956,7 +7956,7 @@ def private moe_router_arm(t : T?) {
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
             var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(MR_NER), dim = uint(MR_DIM), woff = uint(MR_NER * MR_DIM), ostride = uint(MR_NER))
-            enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + 15) / 16) * ((MR_NER + 15) / 16)))
+            enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + 31) / 32) * ((MR_NER + 31) / 32)))
             vkd_run_copy(raw, h, ld, host, l_bytes, 2u)
             memcpy(addr<void?>(got[0]), host.mapped, l_bytes)
         }

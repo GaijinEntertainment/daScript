@@ -899,65 +899,76 @@ struct RouterGemmArgs {
     ostride : uint   // the logits row stride (elements)
 }
 
-// the span's router GEMV batched over the window: 16 positions x 16 router rows per workgroup,
-// K in 32-wide steps through shared (DnBaGemm's shape); logits[p * ostride + e]
+// the span's router GEMV batched over the window: a 32 x 32 tile of positions by router rows per
+// workgroup, each invocation a 2 x 2 block, K in 64-wide steps through shared (a 64-multiple
+// row width); logits[p * ostride + e]
 [vk_dispatch(name = "router_gemm_cls", grid = "wgs", params = "wgs : int64")]
 class RouterGemm {
     @ssbo @binding = 0 @role = "weight" w : array<float>   // the router rows, row-major [ne x dim] per layer
     @ssbo @binding = 1 x : array<float>        // the FFN-normed rows
     @ssbo @binding = 2 logits : array<float>   // [npos x ostride]
     @push_constant pa : RouterGemmArgs
-    @workgroup xs : float[528]                 // 16 positions x 32 k, stride 33 (bank-spread)
-    @workgroup ws : float[528]                 // 16 rows x 32 k, stride 33
+    @workgroup xs : float[2080]                // 32 positions x 64 k, stride 65 (bank-spread)
+    @workgroup ws : float[2080]                // 32 rows x 64 k, stride 65
 
     [spirv_kernel(local_size_x = 256, name = "router_gemm_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-moe-block")]
     def run {
         let tid = gl_LocalInvocationID.x
-        let egroups = (pa.ne + 15u) / 16u
-        let p0 = (gl_WorkGroupID.x / egroups) * 16u
-        let eg0 = (gl_WorkGroupID.x % egroups) * 16u
-        let p = tid / 16u
-        let el = tid % 16u
-        let e = eg0 + el
-        let live = p0 + p < pa.npos && e < pa.ne
-        let r = tid / 32u
-        let k = tid % 32u
-        var a = 0.0
+        let egroups = (pa.ne + 31u) / 32u
+        let p0 = (gl_WorkGroupID.x / egroups) * 32u
+        let eg0 = (gl_WorkGroupID.x % egroups) * 32u
+        let tp = tid / 16u         // the invocation's position pair
+        let te = tid % 16u         // ... and row pair
+        let sr = tid / 8u          // the stage: row sr, eight consecutive k per invocation
+        let sk = (tid % 8u) * 8u
+        var a00 = 0.0
+        var a01 = 0.0
+        var a10 = 0.0
+        var a11 = 0.0
         var kb = 0u
         while (kb < pa.dim) {
-            if (p0 + r < pa.npos) {
-                xs[r * 33u + k] = x[(p0 + r) * pa.dim + kb + k]
-            } else {
-                xs[r * 33u + k] = 0.0
-            }
-            if (p0 + r + 8u < pa.npos) {
-                xs[(r + 8u) * 33u + k] = x[(p0 + r + 8u) * pa.dim + kb + k]
-            } else {
-                xs[(r + 8u) * 33u + k] = 0.0
-            }
-            if (eg0 + r < pa.ne) {
-                ws[r * 33u + k] = w[pa.woff + (eg0 + r) * pa.dim + kb + k]
-            } else {
-                ws[r * 33u + k] = 0.0
-            }
-            if (eg0 + r + 8u < pa.ne) {
-                ws[(r + 8u) * 33u + k] = w[pa.woff + (eg0 + r + 8u) * pa.dim + kb + k]
-            } else {
-                ws[(r + 8u) * 33u + k] = 0.0
-            }
-            barrier()
-            if (live) {
-                var kk = 0u
-                while (kk < 32u) {
-                    a += xs[p * 33u + kk] * ws[el * 33u + kk]
-                    kk++
+            for [unroll] (q in range(8)) {
+                let kq = sk + uint(q)
+                if (p0 + sr < pa.npos) {
+                    xs[sr * 65u + kq] = x[(p0 + sr) * pa.dim + kb + kq]
+                } else {
+                    xs[sr * 65u + kq] = 0.0
+                }
+                if (eg0 + sr < pa.ne) {
+                    ws[sr * 65u + kq] = w[pa.woff + (eg0 + sr) * pa.dim + kb + kq]
+                } else {
+                    ws[sr * 65u + kq] = 0.0
                 }
             }
             barrier()
-            kb += 32u
+            var kk = 0u
+            while (kk < 64u) {
+                let x0 = xs[(2u * tp) * 65u + kk]
+                let x1 = xs[(2u * tp + 1u) * 65u + kk]
+                let w0 = ws[(2u * te) * 65u + kk]
+                let w1 = ws[(2u * te + 1u) * 65u + kk]
+                a00 += x0 * w0
+                a01 += x0 * w1
+                a10 += x1 * w0
+                a11 += x1 * w1
+                kk++
+            }
+            barrier()
+            kb += 64u
         }
-        if (live) {
-            logits[(p0 + p) * pa.ostride + e] = a
+        let pa0 = p0 + 2u * tp
+        let ea0 = eg0 + 2u * te
+        if (pa0 < pa.npos && ea0 < pa.ne) {
+            logits[pa0 * pa.ostride + ea0] = a00
+        }
+        if (pa0 < pa.npos && ea0 + 1u < pa.ne) {
+            logits[pa0 * pa.ostride + ea0 + 1u] = a01
+        }
+        if (pa0 + 1u < pa.npos && ea0 < pa.ne) {
+            logits[(pa0 + 1u) * pa.ostride + ea0] = a10
+        }
+        if (pa0 + 1u < pa.npos && ea0 + 1u < pa.ne) {
+            logits[(pa0 + 1u) * pa.ostride + ea0 + 1u] = a11
         }
     }
 }
@@ -993,6 +1004,18 @@ class MoeSched {
     @ssbo @binding = 4 sched2 : array<uint>
     @push_constant pa : SchedArgs
     @workgroup scan : uint[256]
+    @workgroup idxs : uint[256]   // the slot walk's chunk: 256 picks staged from global memory, read by every thread
+
+    // the slots of a 256-slot chunk staged into idxs; returns the chunk's slot count
+    def stage_chunk(c0 : uint) : uint {
+        let tid = gl_LocalInvocationID.x
+        barrier()   // the previous chunk's readers are done with idxs
+        if (c0 + tid < pa.nk) {
+            idxs[tid] = idx[c0 + tid]
+        }
+        barrier()
+        return min(256u, pa.nk - c0)
+    }
 
     // the exclusive prefix over the 256 threads' v; scan[255] holds the total after the call
     def excl_scan(v : uint) : uint {
@@ -1019,12 +1042,17 @@ class MoeSched {
         let tid = gl_LocalInvocationID.x
         let mine = tid < pa.ne
         var c = 0u
-        var r = 0u
-        while (r < pa.nk) {
-            if (idx[r] == tid) {
-                c++
+        var c0 = 0u
+        while (c0 < pa.nk) {
+            let cn = stage_chunk(c0)
+            var j = 0u
+            while (j < cn) {
+                if (idxs[j] == tid) {
+                    c++
+                }
+                j++
             }
-            r++
+            c0 += 256u
         }
         let st = excl_scan(c)
         let has = mine && c > 0u ? 1u : 0u
@@ -1072,13 +1100,18 @@ class MoeSched {
             t += 256u
         }
         var b = st
-        r = 0u
-        while (r < pa.nk) {
-            if (idx[r] == tid) {
-                inv[r] = b
-                b++
+        c0 = 0u
+        while (c0 < pa.nk) {
+            let cn = stage_chunk(c0)
+            var j = 0u
+            while (j < cn) {
+                if (idxs[j] == tid) {
+                    inv[c0 + j] = b
+                    b++
+                }
+                j++
             }
-            r++
+            c0 += 256u
         }
     }
 }

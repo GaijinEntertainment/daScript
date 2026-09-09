@@ -322,8 +322,8 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     }
     assert(g_rd != null, "vk_rdec_prepare_moe before prepare")
     let dim = g_rd.dim
-    if (!reach || k * max(nfe, dim) * 4l > Y_BYTES) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the MoE geometry ({ne} experts, {k} routed, expert width {nfe}) is outside the routing kernels' reach\n")
+    if (!reach || k * max(nfe, dim) * 4l > Y_BYTES || dim % 64l != 0l) {   // the router tile steps K by 64
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the MoE geometry ({ne} experts, {k} routed, expert width {nfe}, dim {dim}) is outside the routing kernels' reach\n")
         return false
     }
     var r & = unsafe(*g_rd)

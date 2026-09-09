@@ -27,6 +27,13 @@ only the router and the glue); reference = llama-bench b10660 (build-vulkan-357)
 | Qwen3-30B-A3B-Instruct-2507 UD-Q3_K_XL | 13.83 | 931.7 / 81.3 | 1859.9 / 54.2 | 0.50x / 1.50x | layer 0 streamed; decode span ON |
 | Qwen3.6-35B-A3B UD-IQ3_S | 13.68 | 638.3 / 41.1 | 2775.3 / 77.3 | 0.23x / 0.53x | layer 0 streamed; span declines (shared expert) |
 
+After slice 3 (2026-09-09, the same instruments; the whole-model driver on both):
+
+| file | GB | ours pp512 / tg128 | llama.cpp pp512 / tg128 | ratio | on the card |
+|---|---|---|---|---|---|
+| Qwen1.5-MoE-A2.7B Q4_K_M (local mint) | 9.50 | 5069.2 / 142.2 | 5099.8 / 173.8 | 0.99x / 0.82x | whole: 10107 MB, mirror 3069 MB at ctx 16368 |
+| Qwen3-30B-A3B-Instruct-2507 UD-IQ2_XXS | 10.34 | 2176.7 / 124.4 | 3520.0 / 116.6 | 0.62x / 1.07x | whole: 10296 MB, mirror 2841 MB at ctx 30305 |
+
 The 512-token window on the 30B (`--prof --jobque-profiling`, `DASLLAMA_GPU_PROF=1`, the two
 timed reps agreeing within a few ms; wall 560 ms, llama.cpp's whole window 275 ms):
 
@@ -102,6 +109,38 @@ the rest is the per-layer host glue the span would remove, and the span declines
    all-CPU chain at one and two windows in `test_gpu_resident_moe.das` (0.15 bar, the
    one-step-off control 3.7-9.1 logits off, the census witnesses), the per-op tier's shexp
    file pinned to its own arm through `set_gpu_resident_route`. `DASLLAMA_GPU_RESIDENT=0` is the A/B lever.
+   The token on the twin (`DASLLAMA_GPU_PROF=1`, 7.1-7.3 ms of GPU per token, 7.4-7.7 ms host
+   wall; llama.cpp's token 5.75 ms): the shared expert's three q8 GEMVs 2.37 ms over 24 layers
+   (830 MB, 78% of the card's bandwidth), the routed expert GEMVs 1.64 ms (k4, 467 MB, 63%), the
+   attention quads 0.9 ms (at bandwidth), the classifier 0.6 ms, and ~1.1 ms of small dispatches
+   (router, top-k, the norms, the requants, the acts, the combine - twelve per layer, launch-bound).
+   The decode levers are therefore the GEMV efficiency on the shared and expert planes and the
+   small-kernel count per layer (fusing the router with the top-k, the act into the down GEMV's
+   feed), not the routing itself. The window (99.2 ms of GPU for 512 tokens, llama.cpp's 100.4):
+   the expert tiles 58.6 ms (gate 18.5, up 17.2, down 22.9 - the small-bucket regime, slice 5),
+   the shared expert 15.8, the attention head 10.9, the router GEMM 4.5 (187 us per layer for
+   128 MFLOP), the bucket schedule 3.3 (137 us per layer), the rest 6. The 30B UD-IQ2_XXS
+   window (230.7 ms of GPU; llama.cpp's 145.5): the expert tiles 165.7 ms (gate 57.9, up 57.0,
+   down 50.8 - 4096 bucket rows over 128 experts, 32 rows each, the iq2xxs s tile at 10.7
+   TFLOP/s: slice 5's term, 72% of the window), the attention head 28.5, the router GEMM 11.7
+   (243 us per layer), the schedule 12.4 (258 us per layer), the rest 12. Its token (7.74 ms of
+   GPU, llama.cpp's 8.58): the attention head 3.2 ms over 48 layers, the expert GEMVs 2.3, the
+   small dispatches 1.6, the classifier 0.6. The router retiled (a 32x32 tile, 2x2 per
+   invocation, K by 64) and the schedule's slot walk staged through shared memory took the 30B
+   window to 221.2 ms (router 6.8, schedule 7.8): 2270.5 / 124.6 (0.65x / 1.07x); the twin
+   5195.2 / 142.4 (1.02x / 0.82x). What is left in those two is latency: the schedule is one
+   workgroup whose per-thread slot walk is serial (no atomics or subgroup prefix in the
+   emitter yet), the router 142 us per layer for 268 MFLOP.
+   Slice 5's reading of llama.cpp's `mul_mat_id` on coopmat2 (`ggml-vulkan.cpp`,
+   `mul_mm_cm2.comp`): one workgroup per (expert, 128-row weight tile, token tile), the
+   expert's rows gathered INSIDE the tile from the ids (`load_row_ids`, a subgroup ballot
+   compaction after a `count_experts` pass), the tile picked by the TOTAL token count (the l
+   tile, BN 256, at 512 tokens) and shrunk to BN/4 or BN/2 when the expert holds fewer rows
+   (`enable_smaller_matrices`), so a 32-row expert runs a 128 x 64 x 64 MMA per K step on one
+   A decode - our s tile runs 128 x 32 x 64 on the same decode. Both decode every expert
+   weight once per window at 32 rows per expert; the levers to probe are the decode itself
+   (their `DECODE_VECTOR` arm against our DECV4 twin on iq2xxs) and the row gather inside the
+   tile (no gather kernel, no schedule).
 4. **The hybrid MoE.** The 35B rides slice 3 with the deltanet block already in the chain.
 5. **The expert GEMMs at small M.** The last term (192 ms on the 30B): a tile pick for
    32-row buckets, or a mul_mat_id-shaped kernel; measured on the probe first.
