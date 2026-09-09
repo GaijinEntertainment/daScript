@@ -818,4 +818,46 @@ def private pocket_refusals(t : T?; var m : TtsModel; clip : array<float>) {
         tts_register_voice(m, "wrong", clip, 16000)
     }
     t |> success(why |> find("16000") >= 0, "a clip at another rate is refused: {why}")
+    var inscope long_clip : array<float>
+    long_clip |> resize((POCKET_MAX_VOICE_SECONDS + 1l) * 24000l)
+    why = panic_text_of() {
+        tts_register_voice(m, "endless", long_clip, 24000)
+    }
+    t |> success(why |> find("{POCKET_MAX_VOICE_SECONDS} s") >= 0, "a clip past the cap is refused by the cap: {why}")
+    var inscope c3 <- caps(m)
+    t |> equal(find_index(c3.voices, "endless"), -1, "and left no half voice in the roster")
+}
+
+// a text the chunker cannot split - no sentence mark, no comma - is one chunk past the token
+// budget: the voice's caches grow to hold its text and every frame the cap allows, and the
+// synthesis runs to EOS instead of panicking on the cache
+[test]
+def test_pocket_long_chunk(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var inscope m <- load_tts_model(path)
+        let text = build_string() $(w) {
+            for (i in range(230)) {
+                w |> write(i == 0 ? "word" : " word")
+            }
+        }
+        var inscope chunks <- tts_chunks(m, text)
+        t |> equal(length(chunks), 1, "an unsplittable text is one chunk")
+        var inscope ids <- pocket_text_ids(m.pocket, chunks[0])
+        t |> success(length(ids) >= 194, "{length(ids)} tokens: past the 1024-row slack with its frame cap")
+        var inscope a <- synthesize(m, text, "alba")
+        t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
+        var grown = 0l
+        m.pocket.voice_states |> get("alba") $(vs) {
+            grown = vs.caches[0].cap
+        }
+        t |> success(grown > 63l + 1024l + 1024l, "the voice's caches grew past the slack ({grown} positions)")
+        // the next short sentence on the same voice still starts from the voice alone
+        var inscope b <- synthesize(m, "And a short one after it.", "alba")
+        t |> success(speech_stats(b.pcm).rms > 0.01, "a short sentence after the long one speaks")
+    }
 }

@@ -113,7 +113,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--tts-voices-dir``
      -
      - ---
-     - Directory of voice clips (wav / flac / mp3 / ogg, a few seconds of one speaker each) a cloning speech model adds to its voices at boot, each under its file's stem; a clip that does not decode is logged and skipped, the key on a model that cannot clone is logged and ignored
+     - Directory of voice clips (wav / flac / mp3 / ogg, a few seconds of one speaker each, 60 s at most) a cloning speech model adds to its voices at boot, each under its file's stem; a clip that does not decode or runs past 60 s is logged and skipped, the key on a model that cannot clone is logged and ignored
    * - ``--image-mmproj``
      -
      - ---

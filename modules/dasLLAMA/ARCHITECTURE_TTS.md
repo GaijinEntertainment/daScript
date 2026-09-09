@@ -69,8 +69,10 @@ TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) 
   harmonic-plus-noise sine source, multi-head attention, and the STFT pieces (edge pad, magnitude
   and phase, polar to rectangular, reflection pad); for the continuous-audio family
   (`ARCHITECTURE_POCKET.md`) the causal cached attention over a per-layer `TtsKvCache` (keys
-  transposed per head, values per head, a key window), rope over rows, per-channel layer scale
-  and the replicate left pad. A weight is an ONNX-layout array plus the served layout
+  transposed per head, values per head, a key window; the queries go in blocks, each scored over
+  the keys its rows can see, so the scratch is a block by its window and never the cache
+  squared; a cache grows with its fill kept), rope over rows, per-channel layer scale and the
+  replicate left pad. A weight is an ONNX-layout array plus the served layout
   `conv1d_prepare` / `linear_prepare` mint for the consumer the reader names (`served_rows`,
   `rows_only`, `vec_only`), the unread one dropped; beside every weight array sits its `TtsSpan` into the
   model's blob, and `weights_walk` is the one walk that moves weights into a staging blob or

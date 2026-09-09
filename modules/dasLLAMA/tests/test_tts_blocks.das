@@ -1077,8 +1077,34 @@ def test_causal_attention(t : T?) {
         setup_dasllama_jobque_()
         for (c in [catt_case("prompt 40 of 40, full", 40l, 40l, 0l, 11ul), catt_case("decode step at 41", 41l, 1l, 0l, 12ul),
                    catt_case("prompt 300 of 300, window 250", 300l, 300l, 250l, 13ul), catt_case("decode at 301, window 250", 301l, 1l, 250l, 14ul),
-                   catt_case("17 new rows over 90, window 64", 90l, 17l, 64l, 15ul)]) {
+                   catt_case("17 new rows over 90, window 64", 90l, 17l, 64l, 15ul),
+                   catt_case("prompt 700 of 700, window 250: three query blocks", 700l, 700l, 250l, 17ul),
+                   catt_case("prompt 600 of 600, full: the window is the whole prefix", 600l, 600l, 0l, 18ul),
+                   catt_case("300 new rows over 900, window 100", 900l, 300l, 100l, 19ul)]) {
             t |> success(c.bad == 0, "{c.name}: {c.bad} over the bar, max |diff| {c.max_abs}")
+        }
+        // a grown cache answers as the cache it grew from
+        {
+            var rg = TtsRng()
+            rng_seed(rg, 20ul)
+            var inscope kc = TtsKvCache()
+            var inscope q : array<float>
+            catt_fixture(rg, 30l, 5l, kc, q)
+            var inscope before : array<float>
+            attention_causal_rows(q, 5l, CATT_HIDDEN, 0l, kc, before)
+            kv_cache_grow(kc, 200l)
+            t |> equal(int(kc.cap), 200, "the cache grew to the asked capacity")
+            t |> equal(int(kc.n), 30, "the fill survived the growth")
+            var inscope after : array<float>
+            attention_causal_rows(q, 5l, CATT_HIDDEN, 0l, kc, after)
+            let g = split_diff("grown cache", before, after)
+            t |> equal(g.diffs, 0, "elements that differ after the growth")
+            kv_cache_grow(kc, 100l)
+            t |> equal(int(kc.cap), 200, "a smaller capacity leaves the cache as it is")
+            var inscope k : array<float>
+            rand_fill(rg, k, 150l * CATT_HIDDEN, 1.0)
+            kv_cache_append(kc, k, k, 150l, CATT_HIDDEN)
+            t |> equal(int(kc.n), 180, "the grown cache takes rows the old capacity refused")
         }
         let poison = catt_poison_case("prompt 40, one expected element poisoned", 11ul)
         t |> success(poison.bad > 0, "{poison.name}: the bar must red a poisoned expectation ({poison.bad} over)")

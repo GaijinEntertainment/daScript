@@ -250,8 +250,9 @@ Cloning a voice
 Pocket TTS does: a few seconds of one speaker, mono, at the model's own rate,
 become a voice in the roster. ``load_audio_mono`` decodes a wav, flac, mp3 or
 ogg file to that rate, and ``tts_register_voice`` adds the samples under the
-name you give. From then on the name works like any bundled voice. A phoneme
-model panics here: it has no voice to take.
+name you give. From then on the name works like any bundled voice. A clip
+longer than a minute is refused, and a phoneme model panics here: it has no
+voice to take.
 
 .. code-block:: das
 

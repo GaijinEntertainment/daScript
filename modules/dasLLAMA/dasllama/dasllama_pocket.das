@@ -759,7 +759,8 @@ def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int6
 
 // ===== the voice prompt =====
 
-let private VOICE_CACHE_SLACK = 1024l   // positions past the prompt a chunk's text and frames may take
+let private VOICE_CACHE_SLACK = 1024l   // positions past the prompt a chunk's text and frames may take before the caches grow
+let POCKET_MAX_VOICE_SECONDS = 60l   // the longest clip a voice is cloned from: the state is the clip's frames per layer
 
 //! The backbone's memory of a clip: its latents projected into the model's width, the BOS row in
 //! front, run through the backbone at positions 0..; the state a synthesis continues from.
@@ -792,6 +793,9 @@ def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScrat
 def pocket_register_voice(var m : PocketModel; name : string; pcm : array<float>; var sc : PocketScratch) {
     if (empty(pcm)) {
         panic("dasLLAMA pocket: voice '{name}' has no samples")
+    }
+    if (long_length(pcm) > POCKET_MAX_VOICE_SECONDS * int64(m.sample_rate)) {
+        panic("dasLLAMA pocket: voice '{name}' is a {long_length(pcm) / int64(m.sample_rate)} s clip; a voice is cloned from at most {POCKET_MAX_VOICE_SECONDS} s")
     }
     var inscope vs <- pocket_voice_state(m, pcm, sc)
     if (key_exists(m.voice_states, name)) {
@@ -1061,6 +1065,24 @@ def pocket_head(m : PocketModel; cond, x0 : array<float>; var sc : PocketScratch
     }
 }
 
+// a chunk past the voice's cache: an event of one long unpunctuated input, off the frame loop
+[cold_path]
+def private grow_cache(var kc : TtsKvCache; cap : int64) {
+    kv_cache_grow(kc, cap)
+}
+
+// the voice's rows stay; the previous chunk's text and frames are forgotten, and a chunk the
+// caches cannot hold - `n_txt` text rows plus every frame the cap allows - grows them first
+def private caches_ready(var vs : PocketVoiceState; n_txt : int64) {
+    let need = vs.len + n_txt + pocket_max_frames(n_txt) + 1l
+    for (kc in vs.caches) {
+        kc.n = vs.len
+        if (kc.cap < need) {
+            grow_cache(kc, need + VOICE_CACHE_SLACK)
+        }
+    }
+}
+
 [cold_path]
 def private warn_no_eos(frames, n_txt : int64) {
     to_log(LOG_WARNING, "dasLLAMA pocket: {frames} frames without an end of speech - the cap for {n_txt} tokens\n")
@@ -1081,10 +1103,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
     let ld = m.latent_dim
     let n_txt = long_length(ids)
     let clock = ref_time_ticks()
-    // the voice's rows stay; the previous chunk's text and frames are forgotten
-    for (kc in vs.caches) {
-        kc.n = vs.len
-    }
+    caches_ready(vs, n_txt)
     unsafe {
         scratch_resize(sc.rows, n_txt * d)
     }

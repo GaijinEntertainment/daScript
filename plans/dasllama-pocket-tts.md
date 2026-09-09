@@ -178,6 +178,8 @@ decode step on the q8 GEMV entry. The rig at alba, 200 sentences, the same score
 | das f32 | 4.13 | 4.368 | 0.143 | 2.08 | 10.51 |
 | das q8 | 4.09 | 4.339 | 0.056 | 2.38 | 11.67 |
 | das, the published Q8_0 file | 4.13 | 4.330 | 0.057 | 2.38 | 10.51 |
+| after the review batch (query-blocked attention, the decode GEMV entry): f32 | 4.32 | 4.366 | 0.137 | 2.68 | 10.51 |
+| after the review batch: the published Q8_0 file, q8 | 3.91 | 4.328 | 0.051 | 2.08 | 10.89 |
 
 The WER gain is the English normalizer in front of the tokenizer (numbers, units and
 abbreviations as words); q8 holds WER and costs 0.03 MOS. The published form is the Q8_0
@@ -223,7 +225,14 @@ activations' variance is 1e-4: at 1e-6 every latent was off by one percent.
    beside the voice picker of a cloning model and drops the speed knob where `speed` is false,
    `caps().speed` is the facade's own word for it, the tutorial gains `--clone` and the
    sections that read the new caps, and `load_audio_mono(path, rate)` is the clip decode rail.
-   The upload route is followup_general.md row 125.
+   The upload route is followup_general.md row 125. The review round (same day) added: the
+   voice caches grow per chunk (an unsplittable run of two hundred tokens used to panic past the
+   1024-row slack), the causal attention scores query blocks over the keys they can see (a 30 s
+   clip took 1.2 GB of scratch for a 250-key window), a clip is at most 60 s, the decode step's
+   GEMV entry is Pocket's own (`linear_rows_decode`; the phoneme families' GEMMs are as on
+   master), the terminal-period rule reads accented letters, the lattice keeps control ids out
+   of a match, the Q8_0 reader refuses what the converter never writes, and the page's config
+   save takes `tts_voices_dir`.
 6. **Perf.** The `[hot_path]` carrier (`PocketScratch`), the image rail (`.dlim`, q8 lane:
    backbone and codec GEMMs as Q8_0 tap-stacked rows; the 1->64 and 64->1 convs stay f32),
    the q8 GEMV for the decode step, then frame-block decoding for first-chunk latency.

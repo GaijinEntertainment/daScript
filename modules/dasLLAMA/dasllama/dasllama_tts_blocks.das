@@ -1310,11 +1310,36 @@ def kv_cache_append(var kc : TtsKvCache; k, v : array<float>; t, hidden : int64)
     kc.n += t
 }
 
+//! Grow a cache to `cap2` positions, the `n` filled ones kept; a cache already that wide is left.
+def kv_cache_grow(var kc : TtsKvCache; cap2 : int64) {
+    return if (cap2 <= kc.cap)
+    let hh = kc.heads
+    let dh = kc.dh
+    let cap = kc.cap
+    var inscope k2 : array<float>
+    var inscope v2 : array<float>
+    k2 |> reserve_resize(hh * dh * cap2)
+    v2 |> reserve_resize(hh * cap2 * dh)
+    for (h in range64(hh)) {
+        for (p in range64(kc.n)) {
+            for (j in range64(dh)) {
+                k2[(h * dh + j) * cap2 + p] = kc.k[(h * dh + j) * cap + p]
+                v2[(h * cap2 + p) * dh + j] = kc.v[(h * cap + p) * dh + j]
+            }
+        }
+    }
+    kc.k <- k2
+    kc.v <- v2
+    kc.cap = cap2
+}
+
 var @scratch g_catt_heads : array<float>
+
+let private CATT_QUERY_BLOCK = 256l   // queries scored together: the scratch is this many rows by the widest window they see
 
 //! Causal multi-head attention of the `t` newest queries q [t][hidden] (positions kc.n - t ..
 //! kc.n - 1, keys and values already appended) over the cache into ctx [t][hidden]: a query sees
-//! the keys up to its own position, or the last `context` of them; one head per lane on the tiles.
+//! the keys up to its own position, or the last `context` of them - in query blocks, each scored over the keys its rows can see.
 def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; kc : TtsKvCache; @scratch @exact_size var ctx : array<float>) {
     let hh = kc.heads
     let dh = kc.dh
@@ -1324,7 +1349,9 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
         panic("dasLLAMA tts: {t} queries against a cache of {n} positions")
     }
     let p0 = n - t
-    let per_head = t * dh + t * cap + t * dh   // qh, s, oh
+    let bq = min(t, CATT_QUERY_BLOCK)
+    let wmax = context > 0l ? min(n, bq + context - 1l) : n   // the widest key range one block sees
+    let per_head = bq * dh + bq * wmax + bq * dh + dh * wmax   // qh, s, oh, the key slice
     ctx |> reserve_resize(t * hidden)
     var head_scratch & = g_catt_heads
     head_scratch |> reserve_resize(hh * per_head)
@@ -1339,40 +1366,51 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
             for (hd in range64(int64(hb), int64(he))) {
                 let off = hd * dh
                 var qh = sp + hd * per_head
-                var s = qh + t * dh
-                var oh = s + t * cap
-                for (i in range64(t)) {
+                var s = qh + bq * dh
+                var oh = s + bq * wmax
+                var ks = oh + bq * dh
+                var i0 = 0l
+                while (i0 < t) {
+                    let i1 = min(t, i0 + bq)
+                    let rows = i1 - i0
+                    let lo = context > 0l ? max(0l, p0 + i0 - context + 1l) : 0l
+                    let hi = p0 + i1
+                    let w = hi - lo
+                    for (i in range64(rows)) {
+                        for (e in range64(dh)) {
+                            qh[i * dh + e] = qp[(i0 + i) * hidden + off + e]
+                        }
+                    }
                     for (e in range64(dh)) {
-                        qh[i * dh + e] = qp[i * hidden + off + e]
+                        let krow = kp + (hd * dh + e) * cap + lo
+                        for (j in range64(w)) {
+                            ks[e * w + j] = krow[j]
+                        }
                     }
-                }
-                for (i in range64(t * cap)) {
-                    s[i] = 0.0
-                }
-                gemm_f32_jo(s, qh, kp + hd * dh * cap, t, dh, cap)
-                for (i in range64(t)) {
-                    var row = s + i * cap
-                    let last = p0 + i
-                    let first = context > 0l ? max(0l, last - context + 1l) : 0l
-                    for (j in range64(first, last + 1l)) {
-                        row[j] *= scale
+                    for (i in range64(rows * w)) {
+                        s[i] = 0.0
                     }
-                    for (j in range64(first)) {
-                        row[j] = -1e30
+                    gemm_f32_jo(s, qh, ks, rows, dh, w)
+                    for (i in range64(rows)) {
+                        var row = s + i * w
+                        let last = p0 + i0 + i
+                        let first = context > 0l ? max(0l, last - context + 1l) : 0l
+                        for (j in range64(w)) {
+                            let key = lo + j
+                            row[j] = key >= first && key <= last ? row[j] * scale : -1e30
+                        }
+                        softmax(row, w)
                     }
-                    for (j in range64(last + 1l, cap)) {
-                        row[j] = -1e30
+                    for (i in range64(rows * dh)) {
+                        oh[i] = 0.0
                     }
-                    softmax(row, cap)
-                }
-                for (i in range64(t * dh)) {
-                    oh[i] = 0.0
-                }
-                gemm_f32_jo(oh, s, vp + hd * cap * dh, t, cap, dh)
-                for (i in range64(t)) {
-                    for (e in range64(dh)) {
-                        cp[i * hidden + off + e] = oh[i * dh + e]
+                    gemm_f32_jo(oh, s, vp + (hd * cap + lo) * dh, rows, w, dh)
+                    for (i in range64(rows)) {
+                        for (e in range64(dh)) {
+                            cp[(i0 + i) * hidden + off + e] = oh[i * dh + e]
+                        }
                     }
+                    i0 = i1
                 }
             }
         }

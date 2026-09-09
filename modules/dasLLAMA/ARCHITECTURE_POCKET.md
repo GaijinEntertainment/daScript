@@ -51,6 +51,10 @@ frames at 12.5 Hz, through `speaker_proj` into the backbone's width, and - with 
 front - through the backbone at positions 0.., filling every layer's key-value cache. That cache
 (`PocketVoiceState`, `len` positions) is the voice. A synthesis appends its text and frames after
 `len` and a later one forgets them by resetting each cache's fill to `len`; nothing is copied.
+The caches are sized for the clip plus 1024 rows and grow, the voice's rows kept, when a chunk's
+text plus every frame its cap allows needs more - one unsplittable run of two hundred tokens is
+such a chunk. A clip is at most 60 s (`POCKET_MAX_VOICE_SECONDS`): the state is the clip's frames
+per layer, and the codec encoder's attention is a query block by the 250-key window it sees.
 The roster's clips ride the GGUF and encode on first use; a cloned voice is the same path over a
 caller's clip (`tts_register_voice`). The package's precomputed states differ from the clip path
 by 1.5e-2 (they come from another checkpoint revision; `harness/pocket_oracle.py` dumps both and
