@@ -20,6 +20,7 @@ var late_answer_out = 0
 var late_sum_out = 0
 var late_sum3_out = 0
 var late_pick_out = 0
+var late_pick_refused = false
 var late_pick_why : string
 var late_nomacro_mod : Module?
 var late_nomacro_ctx : Context?
@@ -46,7 +47,8 @@ def late_probe {
                 }
                 late_pick_why = "answered {late_pick_out}"
             } recover {
-                late_pick_why = this_context().last_exception
+                late_pick_refused = true
+                late_pick_why = this_context().last_exception   // AOT-compiled code need not preserve the text
             }
         }
     }
@@ -114,7 +116,8 @@ def test_require_module_now(t : T?) {
         t |> equal(late_answer_out, 42)
         t |> equal(late_sum_out, 42)
         t |> equal(late_sum3_out, 42)
-        t |> success(find(late_pick_why, "'late_pick' is ambiguous") >= 0, "the shared name is refused: {late_pick_why}")
+        t |> success(late_pick_refused, "the shared name is refused: {late_pick_why}")
+        t |> success(empty(late_pick_why) || find(late_pick_why, "'late_pick' is ambiguous") >= 0, "the refusal names the ambiguity where the text survives: {late_pick_why}")
         t |> equal(late_pick_out, 0, "neither late_pick ran")
     }
     t |> run("a shared module with no macro context is required, and macro_context_of answers null for it") @(t : T?) {
