@@ -2152,6 +2152,9 @@ struct Session {
     @scratch moe_w_cpu : array<float>      // ... and with the GPU slots zeroed (the CPU reduce's)
     @scratch moe_exp_gpu : array<int8>   // per expert: 1 = this layer's GPU share (n_expert)
     @scratch @exact_size moe_gpu_out : array<float>  // the GPU half's combined rows (npos x dim), joined after the CPU half
+    @scratch @exact_size moe_shout : array<float>    // the shared expert's rows off the device chain (npos x dim)
+    @scratch moe_sh_inv : array<uint>      // the device shared expert's identity slot map (npos; the f16-fed arm)
+    @scratch moe_sh_w : array<float>       // ... and its unit combine weights (npos)
     ffn_offs : array<int64>     // dense/shexp gate+up fuse: 2 region (weight, activation) offset pairs
     ffn_gu : array<float>       // dense/shexp gate+up fuse output — gate half then up half (2 x max_ffn_width)
     mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)

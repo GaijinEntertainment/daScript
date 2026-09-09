@@ -1461,6 +1461,9 @@ def set_moe_gpu_prefill_route(on : bool) {
 
 def gpu_prefill_route_on() : bool => g_gpu_prefill_route
 
+var private g_shexp_gpu_layers = 0l   //! layers whose shared expert the device chain served in a prefill - the arm's engage witness (read on the main context only)
+def public shexp_gpu_prefill_layers() : int64 => g_shexp_gpu_layers
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
@@ -1588,6 +1591,43 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         }
     } else {
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
+    }
+
+    // 2b. the shared expert on the device: one region over every position on the routed chain's arm
+    let sh_gpu = (nsh > 0l && !c.moe_dense_shexp && moe_gpu_shexp_on_gpu(l) && npos >= 32l && gpu_prefill_route_on())
+    if (sh_gpu) {
+        trace_tag(TRACE_TAG_SHEXP)
+        let ts_shg = prof_ticks()
+        let she = dim * nsh
+        let q8 = int(KqFmt.q8)
+        s.moe_shout |> zeroed_resize(npos * dim)
+        s.moe_offs1 |> clear()
+        s.moe_offs1 |> push(t.wsh1_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs1 |> push(0l)
+        s.moe_offs1 |> push(npos)
+        s.moe_offs3 |> clear()
+        s.moe_offs3 |> push(t.wsh3_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs3 |> push(0l)
+        s.moe_offs3 |> push(npos)
+        s.moe_offs2 |> clear()
+        s.moe_offs2 |> push(t.wsh2_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs2 |> push(0l)
+        s.moe_offs2 |> push(npos)
+        if (gpu_combine_on() && moe_gpu_ffn_xf_ok(npos, dim, q8, q8, q8)) {
+            s.moe_sh_inv |> resize(npos)
+            s.moe_sh_w |> resize(npos)
+            for (p in range64(npos)) {
+                s.moe_sh_inv[p] = uint(p)
+                s.moe_sh_w[p] = 1.0
+            }
+            matmul_moe_gpu_ffn_combined_xf(s.moe_shout, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l,
+                s.xb_b, s.moe_sh_w, s.moe_sh_inv, dim, nsh, npos, npos, q8, q8, q8, c.ffn_act == FfnAct.gelu)
+        } else {
+            matmul_moe_gpu_ffn(s.moe_shout, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l,
+                s.xqb, s.xsb, dim, nsh, npos, q8, q8, q8, c.ffn_act == FfnAct.gelu)
+        }
+        prof_add("shexp_gpu", ts_shg)
+        g_shexp_gpu_layers++
     }
 
     // 3F. fused: gate/up/down each run as ONE region-list dispatch (3 fork/joins/layer, not 3/expert)
@@ -1896,7 +1936,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     }
 
     // 4. shared expert for ALL positions — a plain dense batched FFN off the whole-batch image
-    if (nsh > 0l) {
+    if (nsh > 0l && !sh_gpu) {
         trace_tag(TRACE_TAG_SHEXP)
         let she = dim * nsh
         mm_b_q8_pre(s.moe_ghb, t, t.wsh1_off + l * she, s.xqb, s.xsb, dim, nsh, npos)
@@ -1916,7 +1956,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         let ep = addr<float const?>(s.moe_eout[0])
         let wp = split_gpu_regions > 0l ? addr<float const?>(s.moe_w_cpu[0]) : addr<float const?>(s.moe_w_b[0])
         let split_gpu_rows = split_gpu_regions > 0l ? addr<float const?>(s.moe_gpu_out[0]) : null
-        let sp = nsh > 0l ? addr<float const?>(s.moe_gout[0]) : null
+        let sp = nsh > 0l ? (sh_gpu ? addr<float const?>(s.moe_shout[0]) : addr<float const?>(s.moe_gout[0])) : null
         let gp = nsh > 0l && c.moe_shexp_gated ? addr<float const?>(s.moe_gl_b[0]) : null
         maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
             unsafe {

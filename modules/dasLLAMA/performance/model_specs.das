@@ -433,6 +433,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // weights + a sigmoid-gated shared expert; QKV bias, NEOX rope); the fixture runs
             // BOTH MoE prefill paths off one load — bit-identical by construction
             parity <- ev_qwen_count([moe_reference = true])),
+        // the small twin of the routed-experts arch for the resident MoE chain's cells
+        // (tests/test_gpu_moe_shexp.das): 9.5 GB, whole on a 16 GB card with room to spare
+        ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf",
+            recipe = "llama-quantize --allow-requantize Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf Q4_K_M"),
         // the qwen vision pairs (the qwen3vl arc): parity-less provenance carriers —
         // test_vision_chat's deepstack/qwen25o legs and the qwen tier-1 suites are their coverage
         ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B", official = true,

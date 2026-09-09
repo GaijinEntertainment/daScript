@@ -265,7 +265,9 @@ pairings, a q8 pair carrying the q/k/v projection bias, the hydrate arms), the d
 device router + top-k against `moe_select_core`, plus the `vulkan_moe_span` override reached
 through its registry.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
-device-side f16 gather, the streamed-group slot hand-off, and the streamed split's async head.
+device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
+the shared expert's call shape - one region over every position, the identity slot map at unit
+weight.
 `test_vulkan_kernels.das` - model-free (a Vulkan device, else skips): the per-class CPU-oracle
 units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
@@ -385,6 +387,16 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
+`test_gpu_moe_shexp.das` - stocked suite; the shared expert's prefill on the device
+(Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
+shexp triple as one region over every position of the routed experts' chain, gated by the tier's
+in-process route lever - the same prompt and fed tokens with the route on (the device arm) and off
+(the CPU form), the logits within the 12% bar at the prefill and every step (the arms part on the
+router's near-ties from layer 1 on, not on the shared expert's rows - the bar's `//!` carries the
+reading), the one-step-off control,
+and the engage witness (the arm's layer count grows by the model's layers per device prefill, not at
+all on the CPU arm) at 64 and 600 tokens; the twin is large-tier, so the cells run under
+`DASLLAMA_PARITY_FULL=1`, and skip without the twin, the armed tier, or a shexp mark on every layer.
 `test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
 (Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
 weights, the pin on the upload rail dropping a still-installed model's device state first; skips

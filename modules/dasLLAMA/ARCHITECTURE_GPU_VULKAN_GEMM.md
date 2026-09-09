@@ -158,6 +158,13 @@ the layer's FFN is the routing alone. The f16 form is the combined (`npos > 0`) 
 combine is what makes the device-side gather pay, since neither the gathered image nor the
 bucket rows ever cross PCIe. Streamed groups take the same arm after the slot bind.
 
+**The shared expert of a qwen2moe-class layer takes the same arm as ONE region over every
+position of the window** - its q8 triple is resident under the shexp mark, the slot map is the
+identity and the combine runs at unit weight, so the host reduce scales its rows by the per-row
+sigmoid gate in the CPU form's order. The CPU form of the same triple costs 582 ms of a 945 ms
+window on Qwen1.5-MoE-A2.7B (`benchmarks/lcpp_bench.das -p 512 --prof`, the Q4_K_M mint, RTX
+5060 Ti), the one term the arm exists to move.
+
 **The per-op attention chain runs the same cm2 flash-attention tile the resident chain runs**
 (`fa_cm2_h64` / `h128`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j) when the device reports the cm2
 flash-attention features (`has_coopmat2_fa` - cooperative-matrix reductions, conversions and

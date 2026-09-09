@@ -1728,8 +1728,8 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 delete uploads
                 break
             }
-            // deliberately NOT set_moe_gpu_dense_off: that would also route the PREFILL shexp GEMMs
-            // onto the dense rail (a separately measured wash) and stop this being a decode-only lever
+            // the shexp mark, not set_moe_gpu_dense_off: the prefill's shared expert rides the
+            // expert chain as one region (dasllama_blocks), never the dense rail's three submits
             set_moe_gpu_shexp_layer(l)
             sh_marked++
             delete uploads
