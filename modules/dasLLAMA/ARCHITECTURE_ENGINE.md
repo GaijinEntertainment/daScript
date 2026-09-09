@@ -263,7 +263,7 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr quad * `
 - **`dasllama/dasllama_exchange_schema.das`** - engine-free validation for exchange submissions
   (record stores + tune sidecars); the dasllama.io ladder service builds on it.
 - **`dasllama/dasllama_exchange.das`** - the sidecar-exchange client (a sanctioned public entry point,
-  and the engine's only `dashv` requirer: `performance/REVIEW.das` walks the module for a second
+  and the engine's only `dashv` requirer: `performance/REVIEW.das` walks `dasllama/` for a second
   one; a measurement harness under `harness/` talking HTTP to a reference engine's server sits
   outside that walk by design): the boot-time
   lookup/apply (llvm_tune's scope resolver - a verified per-box match downloads instead of a

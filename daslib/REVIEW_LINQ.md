@@ -1,8 +1,8 @@
 # daslib linq family Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_LINQ.md`. A diff touching the linq family - `linq*.das`, `sql_*.das` -
-applies this checklist together with `REVIEW.md`.
+**A diff touching the linq family - `linq*.das`, `sql_*.das` - applies this checklist
+together with `REVIEW.md`.** `REVIEW_COMMON.md` (repo root) binds this file too.
+Architecture doc: `ARCHITECTURE_LINQ.md`.
 
 **A fused emit that binds a terminator's default or compare argument lazily, more than once, or
 below the top of the generated invoke, every `*_or_default` decs lane included, is a defect** -

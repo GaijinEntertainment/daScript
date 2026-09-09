@@ -9,10 +9,10 @@ file) or the repo root's `CMakeLists.txt` building or shipping it, or through th
 `.das_package` declaring it with `release_program` - under `utils/`, or outside `utils/` when
 one of those two files builds or ships it. An arm is one `t |> run(...)` case of a `[test]` function. An arm's load-bearing
 assertions are the ones that prove the change, never a skip-path assertion. A CI row is a
-workflow step whose command reaches the arm. Load-bearing assertions no CI row can reach - the
-arm skips them on every CI run, or no suite a CI row runs includes the arm's file - are
-assertions no CI row can run (a failure-path `return` is not a skip); one arm may hold both -
-assertions a CI row executes and assertions no CI row can run.
+workflow step whose command reaches the arm. Load-bearing assertions no CI row executes - the
+arm returns or skips before them, or no suite a CI row runs includes the arm's file - are
+assertions no CI row can run; one arm may hold both - assertions a CI row executes and
+assertions no CI row can run.
 
 **A changed file that belongs to a tool, wherever it sits under `utils/`, is reviewed with that
 tool's own `REVIEW.md`, where one exists, as well as with this checklist.**

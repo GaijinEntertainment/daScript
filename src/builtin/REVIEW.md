@@ -12,10 +12,12 @@
   that diff before the folder's gate runs** - the scan reads the binds compiled into the running
   binary, so a stale binary is a false green.
 
-- **`review_nttp.das`'s `require` list gains a row in the change that adds a module under this
-  folder - directly, or through the daslib wrapper that requires it - and loses one only in the
-  change that removes the module.** The list is what sets the modules the scan covers: a module
-  the list does not reach is a module the scan never sees.
+- **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require` list in
+  the same change - directly, or through the daslib wrapper that requires it.** A module the list
+  does not reach is a module the scan never sees.
+
+- **Never drop a module from `review_nttp.das`'s `require` list.** The list is what sets the
+  modules the scan covers.
 
 - **A diff that changes the bytes a module-cache record carries or what they resolve to - a
   field added, removed, reordered, re-typed or given a new meaning, wherever the edit lives, or
