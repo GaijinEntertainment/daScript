@@ -11,7 +11,8 @@ IMAGE_VERSION the images carry.
 The GGUFs are cached by sha256 (a download is verified before it is used, and never trusted from
 the cache without its hash in the name); the images are minted on every run - it takes
 milliseconds, and a mint for THIS build is the whole point. --expect-image-version is the deploy
-gate: the version read from each minted image's header must be the tree's, or the run fails.
+gate: the version read from each minted image's header must be the tree's, or the run exits 3 (any
+other failure exits 1, so a deploy can tell the correctness gate from a transient).
 --stamp-page writes that version into the shell's `/* @image-version */ 0` slot, so the page can
 refuse a set minted for another version before it fetches one.
 
@@ -101,7 +102,8 @@ def main():
         raise SystemExit(f"the minted images disagree on IMAGE_VERSION: {sorted(versions)}")
     version = versions.pop()
     if a.expect_image_version and version != a.expect_image_version:
-        raise SystemExit(f"minted images carry IMAGE_VERSION {version}, the tree says {a.expect_image_version} - the converter that minted them is not this tree's")
+        sys.stderr.write(f"minted images carry IMAGE_VERSION {version}, the tree says {a.expect_image_version} - the converter that minted them is not this tree's\n")
+        sys.exit(3)   # the deploy tells this exit apart: a version mismatch reds the run, every other failure stages a placeholder
 
     manifest = {"image_version": version, "files": files}
     with open(os.path.join(a.out, "manifest.json"), "w") as f:

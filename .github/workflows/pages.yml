@@ -124,7 +124,7 @@ jobs:
         # The workflow file itself is a build input (it carries the configure flags
         # for web/build64 below), so hash it too — a change to the build steps must
         # miss a stale cache rather than skip the rebuild and reuse old archives.
-        key: wasm-${{ runner.os }}-${{ hashFiles('.github/workflows/pages.yml', 'CMakeLists.txt', 'web/CMakeLists.txt', 'web/stage_playground_imgui_samples.cmake', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daslang/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'examples/pathTracer/**', 'examples/dasLLAMA/storyteller/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
+        key: wasm-${{ runner.os }}-${{ hashFiles('.github/workflows/pages.yml', 'CMakeLists.txt', 'web/CMakeLists.txt', 'web/stage_playground_imgui_samples.cmake', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daslang/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'examples/pathTracer/**', 'examples/dasLLAMA/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
 
     # Host daslang — one games-capable build (dasLLVM for cross-compile + dasGlfw
     # + dasOpenGL shared modules for the games) that serves BOTH das2rst and the
@@ -615,33 +615,46 @@ jobs:
         # step-7 probe), copies the packs, writes models/manifest.json (the file list + the
         # IMAGE_VERSION the images carry) and stamps that version into the page, which refuses a
         # set minted for another version before it fetches one. --expect-image-version is the
-        # gate: an image whose header disagrees with the tree's IMAGE_VERSION fails the stage.
-        # Served same-origin, so the page needs no CORS; the Caddy vhost adds the isolation
-        # headers under /examples/ (caddy.snippet). A missing build, probe or set stages a
-        # placeholder page, so the card never 404s.
+        # gate: an image whose header disagrees with the tree's IMAGE_VERSION (mint_models.py
+        # exits 3) REDS THIS DEPLOY - that is this tree's converter minting a version this tree's
+        # loader does not read, never a transient. Served same-origin, so the page needs no CORS;
+        # the Caddy vhost adds the isolation headers under /examples/ (caddy.snippet). A missing
+        # build or probe, or a set that would not fetch or mint, stages a placeholder page under a
+        # warning annotation, so the card never 404s.
         IMAGE_VERSION=$(sed -n 's/^let IMAGE_VERSION = \([0-9][0-9]*\).*/\1/p' modules/dasLLAMA/dasllama/dasllama_image.das)
         test -n "$IMAGE_VERSION"
+        placeholder_page() {
+            echo "::warning title=dasllama.io $1::$2 - staging a placeholder so the card doesn't 404"
+            rm -rf "_site_dasllama/examples/$1/models"
+            printf '%s' "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>$1 - building</title><style>html,body{margin:0;height:100%}body{background:#12101a;color:#d6cfbf;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>" > "_site_dasllama/examples/$1/$1.html"
+        }
         for ex in storyteller storywish; do
             mkdir -p "_site_dasllama/examples/$ex"
             if [ -f "web/output64/examples/$ex/$ex.html" ] \
                && [ -f "web/output64/examples/$ex/$ex.js" ] \
                && [ -f "web/output64/examples/$ex/$ex.wasm" ] \
-               && [ -s web/output64/examples/dlim_config/wasm64.json ] \
-               && cp "web/output64/examples/$ex/$ex.html" "_site_dasllama/examples/$ex/" \
-               && python3 examples/dasLLAMA/wasm/mint_models.py \
+               && [ -s web/output64/examples/dlim_config/wasm64.json ]; then
+                cp "web/output64/examples/$ex/$ex.html" "_site_dasllama/examples/$ex/"
+                rc=0
+                python3 examples/dasLLAMA/wasm/mint_models.py \
                     --example "examples/dasLLAMA/$ex" \
                     --config web/output64/examples/dlim_config/wasm64.json \
                     --daslang ./bin/daslang \
                     --out "_site_dasllama/examples/$ex/models" \
                     --cache "$HOME/.cache/dasllama-web-models" \
                     --expect-image-version "$IMAGE_VERSION" \
-                    --stamp-page "_site_dasllama/examples/$ex/$ex.html"; then
-                cp "web/output64/examples/$ex/$ex.js"   "_site_dasllama/examples/$ex/"
-                cp "web/output64/examples/$ex/$ex.wasm" "_site_dasllama/examples/$ex/"
+                    --stamp-page "_site_dasllama/examples/$ex/$ex.html" || rc=$?
+                if [ "$rc" -eq 3 ]; then
+                    echo "::error title=dasllama.io $ex::the images minted for $ex do not carry the tree's IMAGE_VERSION $IMAGE_VERSION - this tree's converter and loader disagree"
+                    exit 1
+                elif [ "$rc" -ne 0 ]; then
+                    placeholder_page "$ex" "the model set did not fetch or mint (exit $rc)"
+                else
+                    cp "web/output64/examples/$ex/$ex.js"   "_site_dasllama/examples/$ex/"
+                    cp "web/output64/examples/$ex/$ex.wasm" "_site_dasllama/examples/$ex/"
+                fi
             else
-                echo "WARNING: $ex build, probe or model set incomplete — staging a placeholder so the card doesn't 404."
-                rm -rf "_site_dasllama/examples/$ex/models"
-                printf '%s' "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>$ex — building</title><style>html,body{margin:0;height:100%}body{background:#12101a;color:#d6cfbf;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>" > "_site_dasllama/examples/$ex/$ex.html"
+                placeholder_page "$ex" "the wasm build or the DlimConfiguration probe is missing"
             fi
         done
         mkdir -p _site_dasllama/stories
