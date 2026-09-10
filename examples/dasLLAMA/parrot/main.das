@@ -223,7 +223,7 @@ def on_ready(var a : Answer) {
     g_roster <- a.voices
     rebuild_voice_names()
     VOICE.value = 0
-    g_jobs_max = max(get_total_hw_cores() - 1, 1)   // the engine's own cap: one core stays with the caller
+    g_jobs_max = max(get_total_hw_jobs(), 1)   // the workers the pool spawned: cores minus the caller on a desktop, the wasm build's own cap in a browser
     JOBS.bounds = (1, g_jobs_max)
     JOBS.value = clamp(get_jobque_worker_limit(), 1, g_jobs_max)   // the limit reads as a huge number when unset
     TEAM.value = get_jobque_team_mode()
@@ -858,7 +858,7 @@ def draw_lab_panel() {
     text("rate  {g_mic_rate} Hz   voices  {length(g_roster)}   clones  {g_can_clone ? "yes" : "no"}")
     text("platform  {get_running_platform_name()}   cores  {get_total_hw_cores()}")
     spacing()
-    text("job queue  (up to {g_jobs_max} workers)")
+    text("job queue  ({g_jobs_max} workers in the pool)")
     with_item_width(160.0) {
         slider_int(JOBS, (text = "jobs"))
     }
