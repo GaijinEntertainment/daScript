@@ -994,13 +994,33 @@ module) is independent and can land any time - it is pure structure.
     reads 1.05x / 1.50x (b10886 5461.2 / 148.1 on the same box: the version moves 2%). The per-role
     profile (`DASLLAMA_GPU_PROF=1`, both boxes) splits it three ways.
     (a) The four-wide decode twin is off on Linux: `cooperative_matrix2_decode_vector_supported`
-    reads `VK_NV_cooperative_matrix_decode_vector`, which the 580 driver does not list (it lists
-    `VK_NV_cooperative_matrix`, `_matrix2` and `_vector`), so every cm2 tile runs the scalar arm;
-    on the 5060 Ti that arm costs 32% of the window (160181 -> 236883 us with `DASLLAMA_VK_DECVEC=0`,
-    pp512 2996 -> 2049), and the expert-tile probe reads the same 0.71 ms per iq2xxs gate/up plane
-    on the 5080 no-twin as the 5060 Ti twin-on (0.73; twin-off 1.33). Arm-matched, the tiles scale
-    1.80-1.90x, qkv 1.85, conv 1.94, gather 1.82 (SMs 2.33x). A driver that exposes the extension
-    is the whole lever there; the tier now warns at device init.
+    reads `VK_NV_cooperative_matrix_decode_vector`, which the 580.173 driver does not list (it lists
+    `VK_NV_cooperative_matrix`, `_matrix2` and `_vector`; the Windows 616.56 driver lists it), so
+    every cm2 tile runs the scalar arm - and so do llama.cpp's there: its shaders carry the extension
+    and it strips them at pipeline creation when the driver lacks it (`ggml_vk_strip_decode_vector`),
+    running its expert tiles' k step at 32 on that arm and 64 with the four-wide one (`mmqid_bk`; its
+    PR 23991 raised the step together with the four-wide B loads, neither alone consistently faster).
+    Same box, same source (b10660), the 5060 Ti, the 35B pp512: llama.cpp four-wide 2828.9 (the
+    record's 2853.1); scalar at k step 32 2385-2393 (`GGML_VK_DISABLE_COOPMAT2_DECODE_VECTOR=1` on
+    either build below); scalar at k step 64 2080 - the DEFAULT of a build whose glslc does not know
+    the extension (Vulkan SDK 1.4.350's; 1.4.357's does): its device flag reads the driver's extension
+    list, not the shader build, so that build keeps the 64-deep step over a scalar decode, under-reads
+    the reference by 27% and says `NV_coopmat2` in its device banner where the four-wide build says
+    `NV_coopmat2v`. Ours: twin 2995.8, scalar (k step 64, `DASLLAMA_VK_DECVEC=0`) 2049, the window
+    160181 -> 236883 us. Per gate/up plane at the 30B's shape (its `GGML_VK_PERF_LOGGER=1`
+    `MUL_MAT_ID iq2_xxs` row against our `moe:iq2xxs` probe at uniform buckets): theirs 612 / 829 /
+    1014 us (four-wide / scalar k32 / scalar k64), ours 730 / 1330-1380 (twin / scalar k64); in the
+    window's real schedule our e_gate plane reads 695 twin and 1229 scalar. Arm- and k-step-matched
+    the two engines read the same whole model (2049 against 2080), so llama.cpp's whole Linux edge on
+    this axis is the 32-deep k step on its scalar arm (1.15x for it), while the tiles alone stay
+    1.2-1.3x behind at either matched arm (695 against 612, 1229 against 1014): its scalar decode
+    computes a pair's shared work once and selects the element last - the form the driver's own
+    two-wide commoning relies on (its PR 23541) - where ours reads its scale from the `ws` plane and
+    shifts per element. The expert-tile probe reads the same 0.71 ms per iq2xxs gate/up plane on the
+    5080 no-twin as the 5060 Ti twin-on (0.73; twin-off 1.33); arm-matched, the tiles scale 1.80-1.90x,
+    qkv 1.85, conv 1.94, gather 1.82 (SMs 2.33x). Levers, in order: a 32-deep k step for the scalar
+    arm (a template constant; the probe twin-off at 32 against 64, and twin-on at both to check the
+    twin still wants 64), then the decode body's pair form. The tier warns at device init.
     (b) Three window roles stay flat on the wider card whatever the arm: the deltanet scan (13037 ->
     12654 us, a serial recurrence over chunks - 8.7% of the 5080's window), the shared expert's
     k5/k6 tiles (sh_gate 3518 -> 3379, sh_down 1582 -> 1452 - one dispatch per layer whose grid is a

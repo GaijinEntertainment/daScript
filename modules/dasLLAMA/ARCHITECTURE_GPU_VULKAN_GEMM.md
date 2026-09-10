@@ -149,8 +149,9 @@ extension and every load's `DecodeVectorFunc` operand removed, the scalar callba
 serve), after the override and before the shader module, so a dumped or overridden blob is
 always the emitted, unstripped one. The scalar arm costs a MoE prefill window about a third
 (the 35B-A3B's 512-row window 160 ms with the twin against 237 without on the RTX 5060 Ti), and
-the tier warns at device init when the driver reports no such extension - the NVIDIA Linux 580
-branch does not, the Windows 616 branch does. The seat is also the in-process A/B: `vkd_pipes_rebuild`
+the tier warns at device init when the driver reports no such extension; which drivers list it,
+and the reference exe's own two arms measured beside ours, are `followup_vulkan.md` item 45. The
+seat is also the in-process A/B: `vkd_pipes_rebuild`
 marks every class slot stale, so the next ensure rebuilds it under whatever `decvec_on` says,
 which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
 
