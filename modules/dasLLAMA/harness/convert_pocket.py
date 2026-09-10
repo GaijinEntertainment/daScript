@@ -100,15 +100,15 @@ def q8_conv(name, shape, stride, transposed):
     return is_conv and len(shape) == 3 and not transposed and stride == 1 and shape[0] % 32 == 0 and shape[1] % 32 == 0
 
 
-FAKE_GROUPS = ("attn", "ffn", "input", "speaker", "embed", "head", "codec", "strided")
+FAKE_GROUPS = ("attn", "ffn", "input", "speaker", "embed", "head", "codec", "codecconv", "strided")
 
 
 def fake_group(name, shape, conv_served=False):
     """The tensor group a `--fake` spec names: the backbone's attention projections, its two FFN
     matrices, the frame input projection, the speaker projection, the text embedding table, the
-    flow head's matrices, the codec's GEMMs and the convs the engine serves q8 (`codec`), and the
-    codec's strided, transposed and resampling convs the file keeps f16 (`strided`). Norms,
-    biases and the voices are never in a group."""
+    flow head's matrices, the codec transformers' GEMMs (`codec`), the convs the engine serves
+    q8 (`codecconv`), and the codec's strided, transposed and resampling convs the file keeps
+    f16 (`strided`). Norms, biases and the voices are never in a group."""
     if not name.endswith(".weight") or len(shape) < 2:
         return None
     if name.startswith("backbone."):
@@ -126,8 +126,8 @@ def fake_group(name, shape, conv_served=False):
     if name.startswith("head."):
         return "head"
     if name.startswith("mimi."):
-        if len(shape) == 3 and not conv_served:
-            return "strided"
+        if len(shape) == 3:
+            return "codecconv" if conv_served else "strided"
         return "codec"
     return None
 
