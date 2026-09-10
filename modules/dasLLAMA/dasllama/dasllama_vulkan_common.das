@@ -175,7 +175,8 @@ def cm2_tiles_at(d, cnt, tc : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tiles(d, cnt : int64) : int64 => cm2_tiles_at(d, cnt, cm2_tile_cols(d, cnt))
 
-//! Returns (chunks, 256-aligned chunk); (1, 0) = off. `sib_tiles` = the workgroups of the roles this one co-runs beside.
+//! Returns (chunks, 256-aligned chunk); (1, 0) = off. `sib_tiles` = the workgroups of the roles this one co-runs
+//! beside: the group decides whether a split engages, the role's own workgroups how many chunks it takes
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_split_k(d, cnt, n, tc : int64; sib_tiles : int64 = 0l) : tuple<nsplit : int64; ksplit : int64> {
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
@@ -187,9 +188,10 @@ def cm2_split_k(d, cnt, n, tc : int64; sib_tiles : int64 = 0l) : tuple<nsplit : 
     if (forced > 0l) {
         sk = forced
     } elif (cores != 0l && n >= 2048l && d >= 128l && cnt >= tc) {
-        let tiles = cm2_tiles_at(d, cnt, tc) + sib_tiles
+        let own = cm2_tiles_at(d, cnt, tc)
+        let tiles = own + sib_tiles
         if (tiles <= cores / 2l) {
-            sk = cores / tiles
+            sk = cores / own
         } elif (tiles <= cores * 2l / 3l) {
             sk = 3l
         }

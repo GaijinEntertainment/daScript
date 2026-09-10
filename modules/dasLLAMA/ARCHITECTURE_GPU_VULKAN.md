@@ -83,7 +83,15 @@ Ordering between chunks is the hazard rail's: a barrier recorded in chunk N+1 co
 writes of chunk N because submission order on one queue spans submits, and the terminal
 fence covers every earlier submit the same way. The command-buffer ring holds
 `3 + ceil(depth/8)` buffers, so chunk N records into a free buffer while chunk N-1 executes;
-the per-role GPU profile pins the single submit, so a chunk gap never bills to a role.
+the per-role GPU profile pins the single submit, so a chunk gap never bills to a role. The
+profile's stamps are bottom-of-pipe timestamps, and what a driver does at one decides how the
+roles read: the Windows driver (616) writes it in passing, so two roles the hazard rail lets
+co-run (q with k and v, gate with up) share one span and the second reads near zero; the Linux
+driver (580) drains the queue at every stamp, so the same roles serialize, each reads its
+standalone time, and the profiled window runs about 5% longer than the served one (the 35B on
+the RTX 5080: pp512 3833 unprofiled, 3661 profiled; `harness/vk_gemm_probe.das -- ts:<fmt>`
+measures the drain). A Linux profile's per-role figures are therefore standalone figures, and
+the served window is their sum less the co-runs the rail permits.
 
 A `VkHaz` is private to one RECORDING SESSION, not to one command buffer: the chunked chain
 carries the same `h` across every buffer in the window, so a barrier it records in chunk N+1

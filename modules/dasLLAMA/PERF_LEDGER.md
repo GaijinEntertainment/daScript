@@ -85,6 +85,19 @@ what it costs today and what the fix would change.
   in item 45) the 35B's twin arm moves from 1.06x to 1.14x of its four-wide arm and the scalar arm
   from 0.86x to 1.00x of its scalar arm [direction-grade - one commit].
 
+- **LANDED (2026-09-10) - a split role takes as many k chunks as fill the device by itself.**
+  `cm2_split_k` still lets the dispatch group (a role plus the neighbours it co-runs beside)
+  decide whether k splits, but the chunk count is the SM count over the role's own workgroups,
+  since a split role serializes its group through the one scratch plane anyway
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l). On a Linux RTX 5080 (84 SMs, driver 580.173,
+  the scalar decode arm, `-t 8`, the bench form of the row above at `-n 32`) the 35B's shared
+  expert gate and up move from two chunks of 32 workgroups to four of 64: pp512 3832.7 +- 36.0
+  and 3853.8 +- 46.5 -> 3906.6 +- 43.8, tg32 130.6 / 129.3 -> 129.3; the profiled window's
+  sh_gate + sh_up 8.25 -> 5.42 ms. The 36-SM card's rows are unchanged by construction: no
+  stocked model's window there has a group at half the SMs whose member alone would take more
+  chunks than the group (the 35B's pair fills 32 of 36 and runs whole) [direction-grade -
+  one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

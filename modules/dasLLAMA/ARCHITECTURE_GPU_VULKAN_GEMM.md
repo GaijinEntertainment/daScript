@@ -97,18 +97,18 @@ against 5443 pp512, and the dense k4 l and m tiles 44.2 against 48.8 and 38.5 ag
 (`cm2:k4`). Whole model the 35B's pp512 reads 2996 -> 3236 (twin) and 2049 -> 2391 (scalar), the
 reference exe 2829 and 2385-2393 on its arms (`PERF_LEDGER.md`); a whole-model row settles a step.
 
-**The split-k pick counts the dispatch group, not the GEMM.** With long K (2048 and up), a grid
-that fills at most half the SMs splits its reduction across f32 partial planes that
-`SplitKReduce` sums, into as many chunks as fill the device (SM count over workgroups); a grid
-that fills up to two thirds splits into three. Eight chunks is the ceiling. Each chunk is
-256-aligned, and a chunk count whose last chunk would then be empty drops by one. The grid it
-measures is the role's own workgroups PLUS those of the chain neighbours it runs beside - q
-with k and v, gate with up (`cm2_tiles`, the same pick each neighbour's own dispatch makes) -
+**The dispatch group decides whether k splits; the role's own grid decides into how many.** With
+long K (2048 and up), a group that fills at most half the SMs splits each of its roles' reduction
+across f32 partial planes that `SplitKReduce` sums, into as many chunks as fill the device with the
+role alone (SM count over its workgroups); a group filling up to two thirds splits into three; eight
+is the ceiling; a chunk is 256-aligned, and a count whose last chunk would be empty drops by one.
+The group is the role's workgroups plus its chain neighbours' - q with k and v, gate with up -
 because the hazard-mask rail lets independent roles co-run, while every split role serializes
-through the one scratch plane (`VHZ_SK`) its neighbours would also claim. Counted alone, a
-512-wide k or v projection over a 512-row window fills 16 of 36 SMs and splits in two; counted
-beside q it runs whole, and k and v fill the device together. Split-k is left to the lone
-role - wo, down, a small model's classifier - whose grid nothing else pads.
+through the one scratch plane (`VHZ_SK`): a group that fills the device runs whole and co-runs; one
+that cannot gives the co-run up to the split, and each role then fills the device alone. So k and v
+beside q run whole on 36 SMs, and the 35B's shared expert gate and up (16 m tiles each) run whole
+there but split in four on 84 SMs (64 workgroups of K 512, 27 us against 55 at two chunks);
+otherwise split-k is the lone role's - wo, down, a small model's classifier (`cold:k6`, RTX 5080).
 
 **The f16 feed admits q8 and every kq superblock format** (`kq_sb`) - the set the cm2 decode
 callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class. The

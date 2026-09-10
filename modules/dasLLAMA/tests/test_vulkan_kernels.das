@@ -7902,6 +7902,11 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_split_k(512l, 512l, 2048l, 128l).nsplit, 2l)        // ... alone it fills under half the SMs: split in two
             t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 80l).nsplit, 1l)   // ... beside q and the other kv projection (96 in the group): never
             t |> equal(cm2_split_k(2048l, 512l, 2048l, 128l).nsplit, 1l)       // the 1B q shape: 64 workgroups, no split
+            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 1l)   // the 35B shexp gate beside up (32 in the group): whole, the pair co-runs
+            g_gpu.sm_count = 84
+            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 4l)   // ... on 84 SMs the pair engages the split and the role's own 16 set the chunks: five, shed to four by the 256-aligned chunk
+            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 144l).nsplit, 1l)  // ... k beside q's 128 and v's 16: never
+            g_gpu.sm_count = 36
             t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 0l, 0l).nsplit, 2l)     // the sliced down shape from row 0 would split in two
             t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 480l, 0l).nsplit, 1l)   // ... from row 480 it never splits
             t |> equal(pf_ffn_slice_row0(15l, 16l, 512l, true, true), 480l)   // the last layer on the f16 route starts 32 rows below the window's end

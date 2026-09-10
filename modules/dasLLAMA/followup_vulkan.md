@@ -1063,3 +1063,37 @@ module) is independent and can land any time - it is pure structure.
     The pod's card ran 2910-2925 MHz at 250-263 W of its 307 W limit under the probe, so no clock
     cap stands behind (b) or (c). Research before any kernel work; each of (b) and (c) is a slice
     of its own.
+    (d) The second Linux pass (2026-09-10, a second RTX 5080 pod, driver 580.173.02, 84 SMs, 8
+    vCPU) re-read (b). First the instrument: the Linux driver drains the queue at a bottom-of-pipe
+    timestamp (`ts:k5`: two 16-workgroup m stamps 103 us plain, 210 with the profile's stamp between
+    them, 209 with a barrier; the Windows 616 driver reads 58 / 58 / 106), so every pair the hazard
+    rail co-runs reads serialized under the profile - k 143 and v 113 us after q, sh_up 84 after
+    sh_gate, z 99 after qkv - and the profiled window runs 4.6% past the served one (pp512 3833 ->
+    3661; the 5060 Ti's profile costs nothing). The window companion's chunk paragraph carries the
+    reading rule. Then the shared expert: its gate and up (k5, 512 rows over K 2048, 16 m tiles each)
+    fell under the split-k group rule at 84 SMs - the pair (32 workgroups) fills under half the device,
+    so each split in two (32 workgroups of K 1024) and the two serialized through the one scratch
+    plane, the worst of both forms; the probe reads the m stamp at 105 us alone (16 workgroups, K
+    2048), 27 us at 64 workgroups of K 512 (`cm2:k6 shdown`, warm or cold), and the reference exe's
+    logger reads its q5_K GEMM at 23 and its q6_K at 27 on the same shapes. The chunk count now
+    follows the role's own grid (four chunks, 64 workgroups): pp512 3833 / 3854 -> 3907, the profiled
+    sh_gate + sh_up 206 -> 136 us per layer (`PERF_LEDGER.md`). What stays open on that card: (1) the
+    window's small cm2 GEMMs read 20-40 us past the probe's figure for the same stamp, grid and shape
+    (sh_down 56 against 27 at 64 workgroups; the split gate 88 and up 48 against 31 + a 4 us reduce; k
+    143 against 105) while the elementwise roles read 3-15 us and the 5060 Ti's engine matches its
+    probe - and no probe form reproduces it: not L2-cold planes (+5%), not the schedule in host memory,
+    not the weight plane at the far end of a 3 GB slab, not 8192-row feed planes, not a barrier or a
+    pipeline change between stamps, not the l/m/s stamps taking turns over cold planes, not ReBAR off
+    (`DASLLAMA_VK_REBAR=0` reads the same profile), and the card holds 2827 MHz through both; the
+    reference exe's per-op logger stamps the same way (`eAllCommands`) and reads no such excess, so it
+    is the engine's, and finding it means stamping inside the engine (a stamp between the barrier and
+    the dispatch, per role) rather than another probe form; with ~490 cm2 dispatches per window it
+    bounds at 10-15 ms of the 35 ms gap. (2) The q5_K stamps run 0.74x of the reference's rate on the
+    big shapes there (`cm2:k5 gate` l 70.6 TFLOP/s against its 93-96; k6 85.3 against its 72.7, so the
+    q6_K stamp is already ahead): the reference's q5_K decoder beats its own q6_K by 1.18x through the
+    `shAscales` shared-scale cache, ours trails k6 by 1.2x - the K-quant shared-scale lever of (a),
+    worth ~4 ms across the 35B's q5_K roles (qkv, z, the attention q, the shared expert's gate and
+    up). (3) The rest of (b) as measured: the deltanet scan 13.2 ms against the reference's 7.5
+    (`GATED_DELTA_NET` 30 x 250 us), conv 3.5 against 1.0, the expert down plane (iq2_s, K 512) 26.6
+    against 19.6, the routed gate and up 30.5 against 31.5 profiled - under the drain, so the served
+    figure is lower - and the host side of the window about 7 ms of the 134 (the 5060 Ti's is nil).

@@ -94,8 +94,23 @@ ladder again on the dense 64-deep m stamp, and - on the formats that carry one -
 buckets on the s stamp's other-depth twin, the probe's own stamp of the format template at the
 k step the engine does not run for that format (64 where the engine runs 32, 32 where it runs
 64). `cm2:<fmt>` runs the same twin beside the s stamp on a 64-row window (`gate@64`),
-the dense chain's s use. The reference row is `test-backend-ops perf MUL_MAT_ID`
-at `n_mats=128,n_used=8,m=768,n=512,k=2048`.
+the dense chain's s use, and the 35B's shared expert shapes (`shexp`: 512 rows over K 2048;
+`shdown`: 2048 over 512), where the m column takes 16 and 64 workgroups on a 512-token window.
+The reference row is `test-backend-ops perf MUL_MAT_ID` at `n_mats=128,n_used=8,m=768,n=512,k=2048`.
+Two arms read the window chain's own overheads at those shapes rather than a tile: `ts:<fmt>`
+dispatches two m stamps back to back into two planes - plain, with the profile's bottom-of-pipe
+timestamp between them, with a barrier between them (the second writes the first's plane), and
+with the split-k reduce between them on that plane - so a driver that drains the queue at a
+timestamp reads the stamped pair at the barrier row (the Linux 580 driver does: 103 us plain
+against 210 stamped and 209 with a barrier on the RTX 5080; the Windows 616 driver reads the
+plain figure on all but the barrier row), and a pipeline change that costs the device a
+reconfiguration reads the reduce row past the barrier row by more than the reduce (neither
+driver does). `cold:<fmt>` runs the l, m and s stamps warm (one copy of the planes, L2-resident
+across dispatches) and cold (a ring of 96 copies, past a 64 MB L2), the m stamp with its
+schedule words in host memory (the prefill's meta) and over the engine's plane forms (the weight
+planes at the far end of a 3 GB slab; the feed and output planes sized to an 8192-row window),
+and the three stamps taking turns over the ring; the warm row is the alternate every other row
+ranks against (the RTX 5080 reads the 64-workgroup m stamp at 26-27 us on every row).
 
 **A measured number proves its kernel provenance through `tune_gate()`
 (`performance/profile_common.das`), one arm per world it can run in.** Four worlds, because

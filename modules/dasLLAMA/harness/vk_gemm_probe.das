@@ -8,8 +8,10 @@ options _dasllama_internal = true
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
 // k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m tiles; moe:<fmt> its s tile over the
-// MoE expert schedule; cm2x|k6x|ref the bisect and reference arms; khrx the KHR kq tile's
-// weight-stage and structural bisect; mmqx the integer tile prototypes.
+// MoE expert schedule; ts:<fmt> a timestamp between two of its m stamps; cold:<fmt> its m stamp
+// on planes the L2 cannot hold; cm2x|k6x|ref the bisect
+// and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
+// integer tile prototypes.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
@@ -442,11 +444,22 @@ def private cm2_fmt_names : string {
     }
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+//! a kq shape's synthetic planes on the device: the weight blocks and scales, the f16 and q8 feeds, one output plane
+struct private Cm2ShapeDev {
+    wqd, wsd, xfd, xqd, axsd, yd : uint64
+    wq_bytes, ws_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes : int64
+    wblk0 : int   //! the weight plane's first superblock in its buffer
+}
+
+//! `slab_blocks` past the plane's own puts the weight planes at the far end of a slab that many superblocks long
+//! (the engine's arena form; the schedule then carries the plane's block base), `plane_rows` past `cnt` sizes the
+//! feed and output planes to a wider window (the engine's capacity planes) with the GEMM reading the first `cnt` rows
+def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; plane_rows : int = 0) : Cm2ShapeDev {
     let nsb = n / 256
     let totsb = d * nsb
     let bb = arena_block_bytes(fmt)
+    let blk0 = max(slab_blocks - totsb, 0)
+    let prow = max(plane_rows, cnt)
     let wq_words = int(bb.wq / 4l)
     let ws_words = int(bb.ws / 4l)
     var wqh : array<uint>
@@ -477,80 +490,204 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
     for (i in range(cnt * nsb)) {
         axsh[i] = 0.0625
     }
-    let wq_bytes = int64(totsb) * bb.wq
-    let ws_bytes = long_length(wsuh) * 4l
-    let xf_bytes = int64(cnt * n) * 2l
-    let xq_bytes = long_length(xqh) * 4l
-    let axs_bytes = int64(cnt * nsb) * 4l
-    let y_bytes = int64(cnt * d) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xfd = make_device_buf(xf_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let axsd = make_device_buf(axs_bytes)
-    let yd = make_device_buf(y_bytes)
-    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    var dv = Cm2ShapeDev(wq_bytes = int64(blk0 + totsb) * bb.wq, ws_bytes = int64(blk0 + totsb) * bb.ws, xf_bytes = int64(prow * n) * 2l,
+        xq_bytes = long_length(xqh) * 4l, axs_bytes = int64(cnt * nsb) * 4l, y_bytes = int64(prow * d) * 4l, wblk0 = blk0)
+    dv.wqd = make_device_buf(dv.wq_bytes)
+    dv.wsd = make_device_buf(dv.ws_bytes)
+    dv.xfd = make_device_buf(dv.xf_bytes)
+    dv.xqd = make_device_buf(dv.xq_bytes)
+    dv.axsd = make_device_buf(dv.axs_bytes)
+    dv.yd = make_device_buf(dv.y_bytes)
     unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
-        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        //! the l/m/s stamps, the s stamp's other-depth twin where the format has one, and the kq batch tile
-        let vnames = fixed_array("cm2l", "cm2m", "cm2s", "s{probe_stwin_depth(fmt)} ", "kq  ")
-        for (v in range(5)) {
-            if (v == 3 && !probe_stwin_has(fmt)) continue
-            let ttile = v == 0 ? 256 : (v == 1 ? 128 : 32)
-            if (cnt < ttile) continue   //! a column wider than the region: the pick never takes it, and the m stamp's unclamped load would read past the plane
-            let wtile = v == 4 ? 32 : 128
-            let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
-            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            if (v == 4) {
-                var s = kq_batch_cls_set_for(fmt, false,
-                    fixed_array(wqd, wsd, scd, xqd, axsd, yd),
-                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
-                for (_k in range(DISPATCHES)) {
-                    var hz2 : VkHaz
-                    kq_batch_cls_enc_for(fmt, false, raw, hz2, s, pc, int64(wgs))
-                }
-            } elif (v == 3) {
-                var s = probe_stwin_set(fmt, fixed_array(wqd, wsd, scd, xfd, yd),
-                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 16u))
-                for (_k in range(DISPATCHES)) {
-                    probe_stwin_enc(fmt, raw, hz, s, pc, int64(wgs))
-                }
-            } else {
-                var s = cm2_cls_set(fmt, int64(ttile), fixed_array(wqd, wsd, scd, xfd, yd),
-                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 16u))
-                for (_k in range(DISPATCHES)) {
-                    cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
-                }
-            }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
-            let tf = flop / (us * 1000000.0lf)
-            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
-        }
+        upload_region_at(dv.wqd, int64(blk0) * bb.wq, addr<uint8 const?>(wqh[0]), int64(totsb) * bb.wq)
+        upload_region_at(dv.wsd, int64(blk0) * bb.ws, addr<uint8 const?>(wsuh[0]), long_length(wsuh) * 4l)
+        upload_region_at(dv.xfd, 0l, addr<uint8 const?>(xfh[0]), int64(cnt * n) * 2l)
+        upload_region_at(dv.xqd, 0l, addr<uint8 const?>(xqh[0]), dv.xq_bytes)
+        upload_region_at(dv.axsd, 0l, addr<uint8 const?>(axsh[0]), dv.axs_bytes)
     }
     delete wqh
     delete wsuh
     delete xfh
     delete xqh
     delete axsh
+    return dv
+}
+
+//! one region of `cnt` rows for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4,
+//! in a device buffer, or in host memory as the prefill's per-role meta (`pf_meta`) keeps them
+def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
+    var sched : array<uint>
+    sched |> resize(4 + wgs)
+    sched[0] = uint(wblk0)
+    sched[2] = uint(cnt)
+    let sc_bytes = int64(4 + wgs) * 4l
+    var scd = 0ul
+    unsafe {
+        if (host) {
+            let hb = make_host_buf(sc_bytes, true)
+            memcpy(hb.mapped, addr<void?>(sched[0]), sc_bytes)
+            scd = hb.buf
+        } else {
+            scd = make_device_buf(sc_bytes)
+            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        }
+    }
+    delete sched
+    return (buf = scd, bytes = sc_bytes)
+}
+
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    //! the l/m/s stamps, the s stamp's other-depth twin where the format has one, and the kq batch tile
+    let vnames = fixed_array("cm2l", "cm2m", "cm2s", "s{probe_stwin_depth(fmt)} ", "kq  ")
+    for (v in range(5)) {
+        if (v == 3 && !probe_stwin_has(fmt)) continue
+        let ttile = v == 0 ? 256 : (v == 1 ? 128 : 32)
+        if (cnt < ttile) continue   //! a column wider than the region: the pick never takes it, and the m stamp's unclamped load would read past the plane
+        let wtile = v == 4 ? 32 : 128
+        let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
+        let sc = one_region_sched(cnt, wgs)
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        if (v == 4) {
+            var s = kq_batch_cls_set_for(fmt, false,
+                fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd),
+                fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+            for (_k in range(DISPATCHES)) {
+                var hz2 : VkHaz
+                kq_batch_cls_enc_for(fmt, false, raw, hz2, s, pc, int64(wgs))
+            }
+        } elif (v == 3) {
+            var s = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd),
+                fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 16u))
+            for (_k in range(DISPATCHES)) {
+                probe_stwin_enc(fmt, raw, hz, s, pc, int64(wgs))
+            }
+        } else {
+            var s = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd),
+                fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 16u))
+            for (_k in range(DISPATCHES)) {
+                cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+            }
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        let tf = flop / (us * 1000000.0lf)
+        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
+    }
+}
+
+// ===== the m stamp on planes the L2 cannot hold (arg "cold:<fmt>") =====
+let private COLD_COPIES = 96   //! copies of a shape's planes, 67 MB and up at the shared expert's shapes: past a 64 MB L2, so every dispatch reads its planes from VRAM
+
+//! the l, m and s stamps at a shape over one copy of its planes (the L2 holds them across dispatches) and
+//! over a ring of `COLD_COPIES` copies (each dispatch's planes arrive from VRAM); the m stamp over the one
+//! copy with its schedule words in host memory (the prefill's meta); and the three stamps taking turns over
+//! the ring (each dispatch runs a pipeline the last one did not, as the window chain does) - the in-window
+//! cost of a small GEMM is its cold row, plus whatever the turns row reads past the three cold rows' mean
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+    var dvs <- [for (_c in range(COLD_COPIES)); cm2_shape_upload(fmt, d, n, cnt)]
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    let tiles = fixed_array(256, 128, 32)
+    let tnames = fixed_array("cm2l", "cm2m", "cm2s")
+    var scs : tuple<buf : uint64; bytes : int64>[3]
+    var wgs : int[3]
+    for (t in range(3)) {
+        wgs[t] = ((cnt + tiles[t] - 1) / tiles[t]) * ((d + 127) / 128)
+        scs[t] = one_region_sched(cnt, wgs[t])
+    }
+    let sch = one_region_sched(cnt, wgs[1], true)
+    //! the engine's forms: the weight planes at the far end of a 3 GB slab, and the feed and output planes sized to an 8192-row window
+    let deep = cm2_shape_upload(fmt, d, n, cnt, int(3_000_000_000l / arena_block_bytes(fmt).wq))
+    let scd = one_region_sched(cnt, wgs[1], false, deep.wblk0)
+    let wide = cm2_shape_upload(fmt, d, n, cnt, 0, 8192)
+    //! rows 0-5: the three stamps warm then cold; 6: the m stamp on the host schedule; 7: the stamps' turns; 8-9: the m stamp on the engine's forms
+    let vnames = fixed_array("warm    ", "cold    ", "warm    ", "cold    ", "warm    ", "cold    ", "hostmeta", "turns   ", "deepslab", "wideplan")
+    for (v in range(10)) {
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        var wsum = 0
+        for (c in range(COLD_COPIES)) {
+            let t = v < 6 ? v / 2 : (v == 7 ? c % 3 : 1)
+            let cold = v == 7 || (v < 6 && v % 2 == 1)
+            let dv = v == 8 ? deep : (v == 9 ? wide : dvs[cold ? c : 0])
+            let m = v == 6 ? sch : (v == 8 ? scd : scs[t])
+            var s = cm2_cls_set(fmt, int64(tiles[t]), fixed_array(dv.wqd, dv.wsd, m.buf, dv.xfd, dv.yd),
+                fixed_array(dv.wq_bytes, dv.ws_bytes, m.bytes, dv.xf_bytes, dv.y_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 16u))
+            cm2_cls_enc(fmt, int64(tiles[t]), raw, hz, s, pc, int64(wgs[t]))
+            wsum += wgs[t]
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw, COLD_COPIES)
+        let tf = flop / (us * 1000000.0lf)
+        let tn = v < 6 ? tnames[v / 2] : (v == 7 ? "l/m/s" : "cm2m")
+        print("{name} {tn} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  ({wsum / COLD_COPIES} workgroups)  timing-only\n")
+    }
+    delete dvs
+}
+
+// ===== a timestamp between two independent dispatches (arg "ts:<fmt>") =====
+//! two m stamps at the shared expert's shape, back to back into two output planes: the pair plain, with a
+//! bottom-of-pipe timestamp between them (the profile's stamp), with a barrier between them (the second
+//! writes the first's plane), and with the split-k reduce between them on that one plane (a barrier each
+//! side and a pipeline of another shape, as the window chain runs its GEMMs) - a driver that drains the
+//! queue at a timestamp reads the stamped pair at the barrier's time, and a pipeline change that costs
+//! the device a reconfiguration reads the reduce row past the barrier row by more than the reduce
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def private run_ts_pair(fmt : int; d, n, cnt : int) {
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let yd2 = make_device_buf(dv.y_bytes)
+    let wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
+    let sc = one_region_sched(cnt, wgs)
+    ensure_pfq()
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
+    var sr = set_splitk_reduce_cls(fixed_array(dv.yd, dv.yd), fixed_array(dv.y_bytes, dv.y_bytes), fixed_array(16u, 16u))
+    var pcr = SkRedArgs(nelem = uint(cnt * d), k = 1u)
+    let vnames = fixed_array("plain    ", "timestamp", "barrier  ", "reduce   ")
+    for (v in range(4)) {
+        let one_plane = v >= 2
+        var sa = cm2_cls_set(fmt, 128l, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd),
+            fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes),
+            fixed_array(1u, 2u, 0u, 4u, 16u))
+        var sb = cm2_cls_set(fmt, 128l, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, one_plane ? dv.yd : yd2),
+            fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes),
+            fixed_array(1u, 2u, 0u, 4u, one_plane ? 16u : 32u))
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        g_pfq_on = v == 1
+        g_pfq_n = 0u
+        if (g_pfq_on) {
+            cmd_reset_query_pool(vk_value_to_boost(raw), g_pfq_pool, 0u, PFQ_CAP)
+        }
+        var hz : VkHaz
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        for (_k in range(DISPATCHES)) {
+            cm2_cls_enc(fmt, 128l, raw, hz, sa, pc, int64(wgs))
+            pfq_ts(raw)
+            if (v == 3) {
+                enc_splitk_reduce_cls(raw, hz, sr, pcr, int64(cnt * d + 1023) / 1_024l)
+            }
+            cm2_cls_enc(fmt, 128l, raw, hz, sb, pc, int64(wgs))
+        }
+        g_pfq_on = false
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        print("ts {vnames[v]}: {us / 1000.0lf} ms per pair of {wgs}-workgroup m stamps ({d} x {n} over {cnt} rows)  timing-only\n")
+    }
 }
 
 // ===== the expert schedule (args "moe:<fmt>", "moesk:<fmt>") =====
@@ -2519,14 +2656,14 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
 }
 
 // two warmup submits (pipeline compile + clocks settle), then the timed window
-def private usec_per_dispatch(var raw : VkCommandBuffer) : double {
+def private usec_per_dispatch(var raw : VkCommandBuffer; dispatches : int = DISPATCHES) : double {
     submit_wait(raw)
     submit_wait(raw)
     let t0 = ref_time_ticks()
     for (_s in range(SUBMITS)) {
         submit_wait(raw)
     }
-    return double(get_time_usec(t0)) / double(SUBMITS * DISPATCHES)
+    return double(get_time_usec(t0)) / double(SUBMITS * dispatches)
 }
 
 def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
@@ -3039,6 +3176,14 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             only = "moesk:"
             var pf : KqFmt
             cm2_fmt = kq_fmt_of_name(slice(a, 6), pf) ? int(pf) : -1
+        } elif (a |> starts_with("ts:")) {
+            only = "ts:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 3), pf) ? int(pf) : -1
+        } elif (a |> starts_with("cold:")) {
+            only = "cold:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
         } elif (a |> starts_with("khrprof:")) {
             only = "khrprof"
             g_prof_arm = slice(a, 8)
@@ -3086,9 +3231,32 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
                 //! the s stamp's dense half: a 64-row window (the pick's s column) on the gate shape
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@64", 9728, 2560, 64)
+                //! the 35B's shared expert (512 rows over K 2048) and its down plane: the m column takes 16 and 64 workgroups on a 512-token window, one wave short of the device
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shexp", 512, 2048, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shdown", 2048, 512, 512)
             }
         }
         g_gpu.decvec_on = twin_device
+        return
+    }
+    if (only == "ts:" || only == "cold:") {
+        if (!g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
+            print("{only}<fmt> reads the cm2 m stamp; run on a coopmat2 device with DASLLAMA_COOPMAT=cm2\n")
+            return
+        }
+        if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
+            print("{only}<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            return
+        }
+        verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l), "the l, m and s stamps' probe pipelines must engage")
+        print("ATTRIBUTION SWEEP {only}{cm2_fmt_names()}: timing-only rows, no output compared\n")
+        if (only == "ts:") {
+            run_ts_pair(cm2_fmt, 512, 2048, 512)
+            run_ts_pair(cm2_fmt, 2048, 512, 512)
+        } else {
+            run_cold_shape(cm2_fmt, "shexp", 512, 2048, 512)
+            run_cold_shape(cm2_fmt, "shdown", 2048, 512, 512)
+        }
         return
     }
     if (only == "moe:" || only == "moesk:") {
