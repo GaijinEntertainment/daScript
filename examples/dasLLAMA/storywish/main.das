@@ -139,9 +139,8 @@ var g_backspace_held_s = 0.0
 var display_w = 0
 var display_h = 0
 
-//! the speech thread's setup rides its own stream ahead of the sentences: the model path, then the voice. A string
-//! captured by the lambda is a pointer into the frame thread's heap, which that thread reuses before a slow worker
-//! reads it; an archived line is copied out of the stream into the thread's own heap
+//! the speech thread's setup rides its own stream ahead of the sentences: the model path, then the voice
+[arch(at = "../ARCHITECTURE.md#speech-thread-stream")]
 def start_speech_thread(var say, speech : Stream?; var now : SeqBox?; var done : Channel?) {
     new_thread() <| @capture(= say, = speech, = now, = done) {
         setup_dasllama_jobque()   // the fork-context pool is per context: without it every parallel kernel clones the program
@@ -400,6 +399,7 @@ def key_pressed_now(key : int) : bool {
 }
 
 //! a printable GLFW key code is its upper-case ASCII, so the key range IS the character range
+[arch(at = "../ARCHITECTURE.md#polled-keys")]
 def poll_typing() {
     for (key in range(GLFW_KEY_SPACE, GLFW_KEY_GRAVE_ACCENT + 1)) {
         if (key_pressed_now(key)) {

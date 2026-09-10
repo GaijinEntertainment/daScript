@@ -10,7 +10,7 @@ require dasllama/dasllama          // the facade: the DlimConfiguration contract
 //
 //   node dlim_config.js > wasm64.json
 
-[export]
+[export, arch(at = "../../ARCHITECTURE.md#dlim-config-probe")]
 def main() {
     print("{dlim_config_json(dlim_config_current())}\n")
 }

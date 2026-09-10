@@ -3,12 +3,13 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_env
+require daslib/env_registry
 require daslib/fio
 require daslib/strings_boost
 require strings
 require math
 require _model_tier
+require _example_rail
 require ../../../examples/dasLLAMA/storywish/wish.das
 
 // Storywish (examples/dasLLAMA/storywish): the request side is pure and tested directly - the
@@ -59,16 +60,6 @@ def test_line_is_a_field(t : T?) {
     }
 }
 
-def private self_daslang() : string {
-    let argv <- get_command_line_arguments()
-    return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-}
-
-//! the example opens a GLFW window: a Linux box reached over ssh has no window server, and that is the box's fact, not a red
-def private has_window_server() : bool {
-    return get_platform_name() != "linux" || !empty(g_env_test.display) || !empty(g_env_test.wayland_display)
-}
-
 //! the window server and every fixture file, each absence registering its own loud skip
 def private ready(t : T?) : bool {
     if (!has_window_server()) {
@@ -92,7 +83,7 @@ def private run_storywish(words : string; var out : string&) : int {
     let prev_image = env_value_of("DASLLAMA_IMAGE")
     set_env_variable("DASLLAMA_IMAGE", "0")   //! never mint a sidecar beside the stocked models
     let root = get_das_root()
-    let argv <- [self_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/storywish/main.das", "--",
+    let argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/storywish/main.das", "--",
                  "--models", models_dir(), "--smoke", "--words", words, "--seed", "7", "--null-audio"]
     let rc = run_and_capture(argv, out, 300.0)
     set_env_variable("DASLLAMA_IMAGE", prev_image)
@@ -114,6 +105,7 @@ def test_smoke_tells_the_wished_story(t : T?) {
         return if (!ready(t))
         var out = ""
         let rc = run_storywish(SMOKE_WORDS, out)
+        return if (skip_without_window(t, rc, out))
         t |> equal(0, rc, "the smoke run exits clean: {tail_of(out)}")
         t |> success(find(out, START_LINE) >= 0, "the story starts at frame 0 with the words the rail named:\n{witness(out)}")
         t |> success(find(out, DONE_LINE) >= 0, "the story was written and read out to the end:\n{witness(out)}")

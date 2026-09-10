@@ -218,8 +218,10 @@ The wasm build and a desktop build of the same tree write their module archives 
 written those names the wasm build stops replacing them - its build directory finds the outputs
 already up to date and skips the targets - so a plain stage copies native archives and
 `release wasm` then fails to link on every module symbol. Staging therefore identifies each
-archive by content rather than by name and refuses a native one, naming the desktop build in the
-error.
+module archive by content rather than by name - it walks the archive's members to the first
+object and asks for the wasm magic - and refuses a native one, naming the desktop build in the
+error. The runtime archive is staged from the web build's own output directory, which a desktop
+build never writes.
 
 ## Tests
 

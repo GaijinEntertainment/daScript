@@ -3,7 +3,6 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_env
 require daslib/fio
 require daslib/strings_boost
 require daslib/strings_convert
@@ -11,6 +10,7 @@ require daslib/env_registry
 require math
 require strings
 require _model_tier
+require _example_rail
 
 // The storyteller's restart rails (examples/dasLLAMA/storyteller/main.das): a space press while a
 // story is being read stops the clip and starts another, and the speech thread skips the queued
@@ -32,16 +32,6 @@ let RESTART_MARK = "storyteller: story 2 starts at frame "
 let CAP_FRAMES = 30
 let NO_CAP = 0   //! a story takes a minute to read out at any frame rate - the spawn's wall clock is the guard
 let PACK_FILES <- ["tts_g2p.bin", "tts_postag.bin"]
-
-def private self_daslang() : string {
-    let argv <- get_command_line_arguments()
-    return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-}
-
-//! the example opens a GLFW window: a Linux box reached over ssh has no window server, and that is the box's fact, not a red
-def private has_window_server() : bool {
-    return get_platform_name() != "linux" || !empty(g_env_test.display) || !empty(g_env_test.wayland_display)
-}
 
 //! the window server and every fixture file, each absence registering its own loud skip
 def private ready(t : T?) : bool {
@@ -72,7 +62,7 @@ def private run_storyteller(restart_at, restart_on_clip, max_frames : int; lanes
         set_env_variable("DAS_JOBQUE_THREADS", lanes)
     }
     let root = get_das_root()
-    var argv <- [self_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/storyteller/main.das", "--",
+    var argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/storyteller/main.das", "--",
                  "--models", models_dir(), "--smoke", "--max-frames", "{max_frames}", "--null-audio"]
     if (restart_at > 0) {
         argv |> push("--restart-at")
@@ -126,6 +116,7 @@ def test_restart_while_reading(t : T?) {
         return if (!ready(t))
         var out = ""
         let rc = run_storyteller(0, 2, NO_CAP, "", out)   // as story 1's second clip begins: written out, being read
+        return if (skip_without_window(t, rc, out))
         t |> equal(0, rc, "the smoke run exits clean: {tail_of(out)}")
         t |> equal(count_of(out, RESTART_MARK), 1, "one restart:\n{witness(out)}")
         t |> equal(count_of(out, STOP_LINE), 1, "story 1's clip was playing and stopped once:\n{witness(out)}")
@@ -141,6 +132,7 @@ def test_restart_skips_the_replaced_story_queue(t : T?) {
         var out = ""
         let restart_at = 100   // story 1 is still being written; the starved speech thread has sentences queued
         let rc = run_storyteller(restart_at, 0, NO_CAP, "2", out)
+        return if (skip_without_window(t, rc, out))
         t |> equal(0, rc, "the smoke run exits clean: {tail_of(out)}")
         t |> equal(count_of(out, "{RESTART_MARK}{restart_at}"), 1, "one restart, at the frame the rail named:\n{witness(out)}")
         let skipped = count_of(out, SKIP_LINE)
@@ -156,6 +148,7 @@ def test_frame_cap_and_no_restart_by_default(t : T?) {
         return if (!ready(t))
         var out = ""
         let rc = run_storyteller(0, 0, CAP_FRAMES, "", out)
+        return if (skip_without_window(t, rc, out))
         t |> equal(0, rc, "the capped run exits clean: {tail_of(out)}")
         t |> success(find(out, FIRST_START) >= 0, "the first story starts at frame 0:\n{witness(out)}")
         t |> success(find(out, CAP_LINE) >= 0, "the cap line names the story and the frame it stopped at:\n{witness(out)}")
