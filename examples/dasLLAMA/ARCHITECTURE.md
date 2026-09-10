@@ -144,7 +144,9 @@ icon buttons naming the voice, the say's chunks in their state's colour) with th
 it (the say's waveform growing chunk by chunk with a tick at each chunk's start and the
 playhead, the per-chunk table of stage times), and the lab on the right (the model's facts, the
 job queue's knobs, the measure button). The shell keeps the space bar's keydown for the editor:
-a prevented keydown swallows the keypress the editor reads, and the page cannot scroll anyway.
+a prevented keydown swallows the keypress the editor reads, and the page cannot scroll anyway;
+the editor takes Tab as a character (`AllowTabInput`), since a Tab that moves focus is no use
+in a text one types into.
 The say is a ledger of chunks (`ChunkRow` in `take.das`): the speech thread answers a say with
 its chunk count, then each chunk's text before its synthesis and its clip with the stage times
 after, so a chunk reads pending, generating, generated, speaking and spoken in turn, and the

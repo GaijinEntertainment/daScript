@@ -813,7 +813,7 @@ def chunk_color(state : ChunkState) : uint {
 def draw_text_panel() {
     let avail = GetContentRegionAvail()
     let editor_h = max(100.0, avail.y * 0.6)
-    input_text_multiline(SCRIPT, (text = "##script", size = float2(avail.x, editor_h)))
+    input_text_multiline(SCRIPT, (text = "##script", size = float2(avail.x, editor_h), flags = ImGuiInputTextFlags.AllowTabInput))
     let who = chosen_voice()
     if (icon_button(SAY_BTN, (glyph = "play", tip = empty(who) ? "say" : "say as {who}", size = 26.0))) {
         say_text()
