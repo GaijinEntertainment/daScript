@@ -26,9 +26,10 @@ and every kq superblock format - is spelled the 16-bit way, which is why the blo
 its lane by a shift - `(uint(int(blk.qs[i >> 1u])) & 0xFFFFu) >> ((i & 1u) * 8u)` - not by an
 `unpack8(w)[i & 1u]` byte2 lane select: the select reads the same lane, but a decode built on
 selects runs 1.1x to 1.5x slower than the shift form on the expert-schedule shape
-(`harness/vk_gemm_probe.das -- moe:<fmt>`, RTX 5060 Ti, per gate/up plane: iq2xxs 955 -> 749
-us, iq3xxs 728 -> 585, iq3s 1141 -> 767, iq2s 830 -> 772, against llama.cpp's cm2
-`mul_mat_id` tile at 754 / 788 / 870 / 797). A sign index that straddles two bytes (the
+(`harness/vk_gemm_probe.das -- moe:<fmt>`, RTX 5060 Ti, per gate/up plane, the shift form:
+iq2xxs 724 us, iq3xxs 569, iq3s 766, iq2s 736 against llama.cpp's cm2 `mul_mat_id` tile at
+754 / 788 / 870 / 797; the select form read 1.28x, 1.24x, 1.49x and 1.08x of those times on the
+same shape). A sign index that straddles two bytes (the
 IQ2_XXS and IQ3_XXS aux32 words) is assembled from its two lanes and shifted, never built from
 two selected bytes.
 Every table a decode reads at a runtime index is staged into a `@workgroup` array ahead of the
@@ -77,7 +78,10 @@ The s and m tiles' fast path loads a partial column UNCLAMPED (the layout's row 
 rounded up to the column) and clamps only the store, so every f16 plane the chain feeds them -
 the gathered activation image and the hidden plane - is sized with 128 rows of slack past its
 last region (`TILE_READ_SLACK`, `ffn_cm2_chunk_rows`); the l tile takes the edge path on a
-partial column, since only a window's last column is ever partial there.
+partial column, since only a window's last column is ever partial there. The dense chain's
+planes carry no slack: they hold the whole window's rows whatever the last window's length, so
+a partial m column's unclamped load stays inside them. The store-layout constant the m and s
+tiles read (`STILE`) is inert on the KHR classes, whose tile never reads it.
 
 **The split-k pick counts the dispatch group, not the GEMM.** With long K (2048 and up), a grid
 that fills at most half the SMs splits its reduction across f32 partial planes that
@@ -124,7 +128,8 @@ served shape is; it exists to make the alignment PROVABLE to the driver's addres
 which is what keeps the loads on the wide path. A partial-column stamp gates only the weight
 tile: its partial token column loads unclamped and that column's store clamps
 (`tensorLayout2DPad`), while a whole column stores unclamped on every stamp (the clamp on a
-whole column measured free on the k4 m tile, 48.0 against 48.1 TFLOP/s at the gate shape, so
+whole column measured free on the k4 m tile, 48.0 against 48.1 TFLOP/s at the gate shape
+(`harness/vk_gemm_probe.das -- cm2:k4`, RTX 5060 Ti), so
 the branch is there for the layout's meaning, not its cost). Everything else takes the edge
 path with clamped layouts.
 
@@ -258,12 +263,16 @@ lanes keeps nb / 32 loads in flight per lane: two at K 2048, under one at a MoE'
 third of the k4 band. `gemv_lanes_per_row` picks the lanes per row from the row's blocks - 8 to
 24 blocks; 8 for the grid formats and 16 for the k-lattice to 48; 16 to 96; past that the whole
 subgroup for the k-lattice and 16 for the grid formats - and `gemv_enc` sizes the grid to match
-(a workgroup's subgroups each take subgroup_size / lanes rows). The push block carries the
-lanes (0 = the whole subgroup, the q8 GEMV's one form), the fold is `subgroupClusteredAdd` at 8
-or 16, and every lane reduces, a dead row at zero, so the clusters stay whole. The lane-to-block
-map sets the row's summation order, so a resident-vs-CPU bar reads a different noise sample
-than the one-row form did, inside the same class. Measured on the reference card
-(`harness/vk_gemv_probe.das <n> <d>`, DRAM-bound planes, GB/s at 32 / 16 / 8 lanes): K 512 iq2s
+(a workgroup's subgroups each take subgroup_size / lanes rows). The grid formats are the
+codebook and grid decodes (iq2s, iq2xs, iq2xxs, iq3xxs, iq4xs, iq4nl, `gemv_grid_fmt`); iq3s
+takes the k-lattice split (K 1408: 354 / 395 / 386 GB/s at 32 / 16 / 8 lanes). The push block
+carries the lanes (0 = the whole subgroup, the q8 GEMV's one form); the fold is an xor-shuffle
+butterfly over the row's lanes at 8 or 16 - the subgroup shuffle every GEMV already requires,
+where a clustered add would ask for the clustered subgroup feature the tier never checks - and
+the whole-subgroup add otherwise, and every lane reduces, a dead row at zero, so the butterflies
+stay whole. The lane-to-block map sets the row's summation order, so a resident-vs-CPU bar reads
+a different noise sample than the one-row form did, inside the same class. Measured on the RTX
+5060 Ti (`harness/vk_gemv_probe.das <n> <d>`, DRAM-bound planes, GB/s at 32 / 16 / 8 lanes): K 512 iq2s
 100 / 194 / 297, iq2xxs 142 / 233 / 351, k4 394 / 402 / 413, k6 386 / 414 / 407; K 768 iq2s
 148 / 221 / 337, iq2xxs 213 / 269 / 376, k4 403 / 404 / 414, k6 407 / 392 / 387; K 1408 iq2s
 198 / 299 / 368, k6 386 / 399 / 373, k4 394 / 394 / 382; K 2048 iq2s 311 / 384 / 388, k6 417 /

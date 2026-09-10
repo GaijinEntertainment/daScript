@@ -7,8 +7,9 @@ per-session resident state, and the whole-model driver's hybrid token command. T
 window chain and byte stores these build on are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j,
 2.2p, 2.2ab, 2.2ac and 2.2ad; the routed block an MoE layer takes in either era - the prefill
 window's and the token command's - is `ARCHITECTURE_GPU_VULKAN_MOE.md` sections 2.2af and
-2.2ag; the cm2 tiles, the MoE expert chain on them and the KHR arm's kq tile are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the residency plan and
+2.2ag; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq tile and the decode GEMV
+family's lane split are `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q, 2.2ae and
+2.2ah; the residency plan and
 the marks swap under them are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o.
 
 ### 2.2r The per-op tier's decode attention block {#decode-attention-block}

@@ -26,9 +26,9 @@ let private STREAM_MB = 128   //! the least a dispatch streams: four times the 3
 
 let private YBIT = 32u   //! the y buffer's hazard bit in the binding order below
 
-//! one format at [n x d] with `lpr` lanes per row (0 = the whole subgroup): the shipped class over as
+//! one format at [n x d] with `lanes_per_row` lanes per row (0 = the whole subgroup): the shipped class over as
 //! many d-row region copies as one dispatch needs to stream STREAM_MB
-def private probe_fmt(fmt : KqFmt; n, d : int; lpr : uint) : tuple<mb : double; us : double> {
+def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint) : tuple<mb : double; us : double> {
     let nsb = n / 256
     let nwsb = d * nsb
     let qsb_words = int(kq_qsb(fmt) / 4l)
@@ -72,7 +72,7 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lpr : uint) : tuple<mb : double; 
     let yd = make_device_buf(y_bytes)
     let rgd = make_device_buf(rg_bytes)
     var regs <- [for (i in range(copies * 2)); (i % 2 == 0) ? uint(i / 2 * nwsb) : 0u]   //! region r: its own plane copy, the one x
-    let wgs = gemv_wgs(int64(d) * int64(copies), lpr)
+    let wgs = gemv_wgs(int64(d) * int64(copies), lanes_per_row)
     var raw = alloc_cmd()
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
@@ -87,7 +87,7 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lpr : uint) : tuple<mb : double; 
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
-        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(copies), ybase = 0u, lanes_per_row = lpr)
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(copies), ybase = 0u, lanes_per_row = lanes_per_row)
         for (_i in range(DISPATCHES)) {
             gemv_cls_enc(int(fmt), raw, h, s_cls, pc, wgs)
             vhz_dep(raw, h, YBIT, 0u, true)   //! the next dispatch waits on this one's y
@@ -128,12 +128,12 @@ def main : int {
     print("vk_gemv_probe: decode GEMV classes at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, plane copies to {STREAM_MB} MB per dispatch, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up; lanes = lanes per output row (32 = one row per subgroup)\n")
     print("| fmt    | lanes |   MB/dispatch |  us/dispatch |    GB/s |             |\n")
     print("| :----- | ----: | ------------: | -----------: | ------: | :---------- |\n")
-    let lanes = fixed_array(0u, 16u, 8u)
+    let splits = fixed_array(0u, 16u, 8u)
     for (f in fmts) {
-        for (lpr in lanes) {
-            let r = probe_fmt(f, n, d, lpr)
+        for (lanes_per_row in splits) {
+            let r = probe_fmt(f, n, d, lanes_per_row)
             let gbs = r.mb * 1048576.0lf / (r.us * 1000.0lf)
-            print("| {f} | {lpr == 0u ? g_gpu.subgroup_size : int64(lpr):5d} | {r.mb:13.1f} | {r.us:12.1f} | {gbs:7.1f} | timing-only |\n")
+            print("| {f} | {lanes_per_row == 0u ? g_gpu.subgroup_size : int64(lanes_per_row):5d} | {r.mb:13.1f} | {r.us:12.1f} | {gbs:7.1f} | timing-only |\n")
         }
     }
     return 0

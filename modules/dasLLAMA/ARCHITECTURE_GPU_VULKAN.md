@@ -10,7 +10,7 @@ window and the token command's routed twin are `ARCHITECTURE_GPU_VULKAN_MOE.md`'
 tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and the coopmat mode
 ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and the KHR arm's
 hand-staged kq tile - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and
-2.2ae. What a model has to fit on
+2.2ae, and the decode GEMV family's lane split by row length its section 2.2ah. What a model has to fit on
 the card before any of this runs - the residency plan, and the marks swap that lets one GPU
 slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The
 decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections
@@ -32,8 +32,9 @@ starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `Act
 `ArArgs.row0`). Thirty-two, not one, because the s tile - the cm2 tile with 32-row columns
 (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l) - loads a whole 32-row column unclamped on its
 fast path, and the resident prefill's activation planes (`pf_xf`, `pf_hf`) carry no read slack
-past the window - unlike the MoE chain's gathered image and hidden plane, which sec.2.2l sizes
-with 32 rows of slack past their last region. Rows below the slice keep stale gate, up,
+past the window - unlike the MoE chain's gathered image and hidden plane, which
+`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l sizes with 128 rows of slack past their last region
+(`TILE_READ_SLACK`). Rows below the slice keep stale gate, up,
 hidden and residual values that nothing reads. The sliced GEMMs do not split k: the split-k
 reduce sums partial planes from row 0, so a region starting below the window's end would reduce
 the wrong rows. The slice takes the f16-fed cm2 route only (`gu6 && dn6`); the other feeds run

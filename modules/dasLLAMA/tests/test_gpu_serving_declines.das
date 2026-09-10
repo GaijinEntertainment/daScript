@@ -176,6 +176,14 @@ def test_resident_unserved_moe_features(t : T?) {
         c.n_expert_used = 70l
         let g = resident_unserved_features(c)
         t |> success(says(g, "300 experts") && says(g, "70 routed experts"), "the kernels' reach named with the counts: {g}")
+        c.n_expert = 60l
+        c.n_expert_used = 4l
+        c.moe_exps_bias = true
+        c.ffn_act = FfnAct.swiglu_oai
+        c.layer_out_scale = true
+        let e = resident_unserved_features(c)
+        t |> success(says(e, "biased expert stacks") && says(e, "the clamped swiglu expert activation") && says(e, "a layer output scale"),
+            "the expert stack's bias, the clamped activation and the layer output scale named together: {e}")
         var d = Config()
         d.moe_gate = MoeGate.sigmoid
         t |> equal(resident_unserved_features(d), "", "a dense model's router field is no feature")

@@ -670,10 +670,11 @@ module) is independent and can land any time - it is pure structure.
     & 0xFF` but costs against it, and the IQ2_XXS / IQ3_XXS sign index was built from two
     selected bytes where the aux32 word assembled from its two lanes and shifted serves.
     `harness/vk_gemm_probe.das -- moe:<fmt>` (the 30B expert schedule: 128 buckets of 32
-    rows, gate/up d 768 K 2048, per plane, RTX 5060 Ti): iq2xxs 955 -> 749 us, iq3xxs 728 ->
-    585, iq3s 1141 -> 767, iq2s 830 -> 772, against llama.cpp's cm2 `mul_mat_id` tile at 754 /
-    788 / 870 / 797 on the same uniform buckets (its `test-backend-ops perf`); iq2xs 664, iq4xs
-    632, k4 728 and q8 892 already sat under its 744 / 959 / 1009 / 998. The rule in
+    rows, gate/up d 768 K 2048, per plane, two alternating output planes under fresh hazards,
+    RTX 5060 Ti): the shift form iq2xxs 724 us, iq3xxs 569, iq3s 766, iq2s 736, against
+    llama.cpp's cm2 `mul_mat_id` tile at 754 / 788 / 870 / 797 on the same uniform buckets (its
+    `test-backend-ops perf`), the select form 1.28x / 1.24x / 1.49x / 1.08x of those times;
+    iq2xs 651, iq4xs 632, k4 746 and q8 885 already sat under its 744 / 959 / 1009 / 998. The rule in
     `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k. The selects left: k5's qh byte in its twin,
     the k3 and K-quant scalar decodes (the edge path and the scalar-callback arm) - the same
     lever, unmeasured.
@@ -918,8 +919,16 @@ module) is independent and can land any time - it is pure structure.
     routed block after the deltanet head, and the expert tiles took two levers: the grid decodes'
     lane shifts (item 36's 2026-09-09 status) and the schedule's tile ladder (a bucket past the s
     column takes m columns, the last partial: `ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af; the real
-    window's skew put 4096 rows in 175 s tiles where the ladder runs 85). The rows on the RTX
-    5060 Ti against llama.cpp b357x, pp512 / tg128: Qwen3-30B-A3B UD-IQ2_XXS 3242.0 / 123.6
+    window's skew put 4096 rows in 175 s tiles where the ladder runs 85). Every pp512 / tg128
+    rate under this item is a `benchmarks/lcpp_bench.das` reading on the RTX 5060 Ti box
+    (`bin/Release/daslang.exe -jit benchmarks/lcpp_bench.das -- -m <file> -o md
+    --for-debug-purposes -r 3 -p 512 -n 128 -t 16` under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0
+    DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048 DAS_JOBQUE_THREADS=16`), debug-jit, and
+    every reference rate beside one is `llama-bench -ngl 99 -fa 1 -t 16 -r 3` at b10660
+    (build-vulkan-357) on that box; every window and token millisecond under this item is the
+    same bench's `DASLLAMA_GPU_PROF=1 ... -n 32 --prof --jobque-profiling` profile - its
+    `vk_rdpf` window lines and its `vk_rdec gpu avg/token` / `vk_rdec moe avg/token` lines. The
+    rows, pp512 / tg128: Qwen3-30B-A3B UD-IQ2_XXS 3242.0 / 123.6
     (3520.0 / 116.6: 0.92x / 1.06x; the window 153.9 ms against 142.3, the expert tiles 97.7),
     Qwen3.6-35B-A3B UD-IQ2_XXS 2837.7 / 95.9 (2853.1 / 71.6: 0.99x / 1.34x), the Qwen1.5-MoE
     twin 5152.9 / 142.5 (5099.8 / 173.8; its window 94.5 ms, the first measured rep after the

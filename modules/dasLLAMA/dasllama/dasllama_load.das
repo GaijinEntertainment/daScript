@@ -1558,8 +1558,11 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
     }
     // the shared expert's tags: its K-quant planes ride beside the q8 transcode
     if (t.config.n_expert > 0l && t.config.n_ff_shexp > 0l && (t.config.dim * t.config.n_ff_shexp) % 256l == 0l) {
+        t.wsh1_fmt |> reserve(layers)
         t.wsh1_fmt |> resize(layers)
+        t.wsh2_fmt |> reserve(layers)
         t.wsh2_fmt |> resize(layers)
+        t.wsh3_fmt |> reserve(layers)
         t.wsh3_fmt |> resize(layers)
         for (l in range64(layers)) {
             let has = l >= t.config.n_layer_dense_lead && l < t.config.n_layers

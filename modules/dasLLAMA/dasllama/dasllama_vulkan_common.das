@@ -443,9 +443,9 @@ struct SpanLayer {
     s_comb : VkDescriptorSet      // x += sum w_j * down_j
     s_ar_att : VkDescriptorSet    // xb = rms(x) * the NEXT layer's att_norm (absent on the last)
     s_rq_att : VkDescriptorSet    // xb -> the next layer's q-stack feed image
-    sh1 : int = -1                //! the shared expert's q8 stacks (-1 = the model has none)
-    sh3 : int = -1
-    sh2 : int = -1
+    sh1 : int = -1                //! the shared expert's q8 gate stack (-1 = the model has none)
+    sh3 : int = -1                //! ... its up stack
+    sh2 : int = -1                //! ... its down stack
     s_rq_sh1 : VkDescriptorSet    //! xb -> the shared gate stack's feed image
     s_rq_sh3 : VkDescriptorSet    //! xb -> the shared up stack's feed image
     s_shgate : VkDescriptorSet    //! the gate row . xb -> the logit slot past the router's
@@ -594,6 +594,7 @@ struct GpuState {
     span_cmd : VkCommandBuffer
     span_key : int64 = -1l        // the recorded span's first q plane offset (-1 = none)
     span_nl : int64
+    span_form : int64             //! ... and the routing shape the record depends on (experts, slots, the shared expert's width, its gate)
     span_layers : array<SpanLayer>
     ffn_pend_bytes : int64
     qkv_cmds : table<int64; QkvCmd>   // q plane offset -> the layer's decode q/k/v group
@@ -1743,6 +1744,7 @@ def vk_drop_model_state {
     for (i in range(13)) {
         g_rdq_dn[i] = 0.0lf
     }
+    g_rdq_moe |> clear()
     // host-visible buffers: host_mem tracks every make_host_buf result minus the exempt pair
     for (buf, mem in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
         unsafe {
@@ -1771,6 +1773,7 @@ def vk_drop_model_state {
     g_gpu.tail_xout = null
     g_gpu.span_key = -1l
     g_gpu.span_nl = 0l
+    g_gpu.span_form = 0l
     g_gpu.dnd_steps |> clear()
     delete g_gpu.heat_pools
     g_gpu.stream_max_gu_wq = 0l
@@ -2152,7 +2155,7 @@ struct RLayer {
     m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
     //! the MoE form: the routed expert triple beside the dense triple (the shared expert's, or none: b1 < 0)
     moe : bool
-    moe_li : int64 = -1l            //! this layer's slot in the router plane (the MoE layers in order)
+    router_slot : int64 = -1l       //! this layer's slot in the router plane (the MoE layers in order)
     be1, be3, be2 : int64           //! arena blocks of the expert stacks [ne x nfe x dim] / [ne x nfe x dim] / [ne x dim x nfe]
     fe1, fe3, fe2 : int
     xe_own : bool                   //! the experts' feed is its own image: their quant form differs from the dense triple's
@@ -2167,6 +2170,9 @@ struct RLayer {
     pf_eact_set : VkDescriptorSet
     pf_arcomb_set, pf_arcomb_f16_set : VkDescriptorSet   //! the residual step with the combine folded in: the f32 and f16 normed-row forms
 }
+
+//! the layer's dense FFN triple is placed: its own FFN, or an MoE layer's shared expert (an MoE layer without one has none)
+def has_dense_triple(L : RLayer) : bool => L.b1 >= 0l
 
 struct RDec {
     ready : bool
@@ -2484,8 +2490,8 @@ let VHZ_DNZ = 0x4000000u  // the prefill's deltanet z rows (pf_dnz)
 let VHZ_MXG = 0x8000000u  //! the MoE block's gathered f16 rows (pf_mxg)
 let VHZ_MDN = 0x10000000u //! the MoE block's routed down rows (pf_mdn / edown_dev)
 let VHZ_GATE_M = 0x20000000u   //! the m-column dispatch's rows of the VHZ_GATE plane
-let VHZ_UP_M = 0x40000000u     //! ... of VHZ_UP, and below of VHZ_MDN
-let VHZ_MDN_M = 0x80000000u
+let VHZ_UP_M = 0x40000000u     //! ... of the VHZ_UP plane
+let VHZ_MDN_M = 0x80000000u    //! ... of the VHZ_MDN plane
 
 struct VkHaz {
     w : uint            // bits with a pending (unbarriered) write

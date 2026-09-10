@@ -21,6 +21,8 @@ require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the C
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
 require dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
 
+let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: the s and m tiles load a partial column unclamped
+
 // The model-less Vulkan kernel-unit suite ([vk_dispatch] bring-up): a class kernel dispatched
 // through the GENERATED surface (ensure/set/enc — per-class layout, push constants, hazard rail)
 // against the CPU run of the SAME method (the class body is ordinary daslang; the driver loop
@@ -769,13 +771,14 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     let cg = fixed_array(1u, 2u, 4u, 8u, 16u, 32u)
                     var s_cls = gemv_cls_set(fmt, cb, cs, cg)
                     //! the three lane splits of a subgroup: one row, two rows, four rows (the 16-block row keeps every lane busy at eight)
-                    for (lpr in fixed_array(0u, 16u, 8u)) {
-                        let wgs = gemv_wgs(int64(rows), lpr)
+                    for (lanes_per_row in fixed_array(0u, 16u, 8u)) {
+                        let wgs = gemv_wgs(int64(rows), lanes_per_row)
+                        nan_sentinel_upload(yd2, y_bytes)   //! a lane split that stores no row leaves the sentinel, not the last split's rows
                         var raw2 = alloc_cmd()
                         let begin = VkCommandBufferBeginInfo()
                         vk_check(vkBeginCommandBuffer(raw2, begin), null)
                         var h2 : VkHaz
-                        var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lpr)
+                        var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row)
                         if (fmt == int(KqFmt.k4)) {
                             enc_kq_gemv_k4_cls(raw2, h2, s_cls, pc, wgs)
                         } elif (fmt == int(KqFmt.q40)) {
@@ -809,7 +812,8 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                         submit_wait(raw2)
                         memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
                         let bad = mismatch_approx(y_cls, y_ref)
-                        t |> success(bad == 0, "fmt {fmt} at {lpr == 0u ? 32u : lpr} lanes per row: class kernel matches the CPU oracle ({bad} of {rows} rows off)")
+                        let lanes = lanes_per_row == 0u ? g_gpu.subgroup_size : int64(lanes_per_row)
+                        t |> success(bad == 0, "fmt {fmt} at {lanes} lanes per row: class kernel matches the CPU oracle ({bad} of {rows} rows off)")
                     }
                 }
                 if (fmt == int(KqFmt.iq4xs)) {   // the codebook pack has an independent float witness
@@ -2069,7 +2073,7 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 32)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 32)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary nibble bytes
             }
@@ -2081,12 +2085,12 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
                     wsuh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + 613u)   // sc / mn bytes
                 }
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 128l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -2107,8 +2111,11 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
                 let wgs = wgs0 + wgs1
+                //! two map words past the live workgroups carry the sentinel: the dispatch runs over them as the
+                //! device-written schedules' upper bound does, and a tile that reads one returns before its first store
+                let tail = 2
                 var sched : array<uint>
-                sched |> resize(2 * 4 + wgs)
+                sched |> resize(2 * 4 + wgs + tail)
                 sched[0] = 0u
                 sched[1] = 0u
                 sched[2] = uint(cnt0)
@@ -2120,12 +2127,15 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
                 for (w in range(wgs)) {
                     sched[8 + w] = w < wgs0 ? 0u : 1u
                 }
+                for (w in range(wgs, wgs + tail)) {
+                    sched[8 + w] = SCHED_NONE
+                }
                 unsafe {
                     upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
                     upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
                     upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
                     nan_sentinel_upload(yd2, y_bytes)
-                    let sc_bytes = int64(2 * 4 + wgs) * 4l
+                    let sc_bytes = int64(2 * 4 + wgs + tail) * 4l
                     let scd = make_device_buf(sc_bytes)
                     upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
@@ -2141,13 +2151,13 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
                     if (ml == 0) {
-                        enc_kq_batch_k4_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
+                        enc_kq_batch_k4_cm2l_cls(raw2, h2, sc, pc, int64(wgs + tail))
                     } elif (ml == 1) {
-                        enc_kq_batch_k4_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
+                        enc_kq_batch_k4_cm2m_cls(raw2, h2, sc, pc, int64(wgs + tail))
                     } elif (ml == 2) {
-                        enc_kq_batch_k4_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
+                        enc_kq_batch_k4_cm2s_cls(raw2, h2, sc, pc, int64(wgs + tail))
                     } else {
-                        khr_cls_enc(int(KqFmt.k4), raw2, h2, sc, pc, int64(wgs))
+                        khr_cls_enc(int(KqFmt.k4), raw2, h2, sc, pc, int64(wgs + tail))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -2208,7 +2218,7 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 40)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 40)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2220,12 +2230,12 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
                     wsuh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + 613u)   // sc / mn bytes
                 }
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 160l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -2347,7 +2357,7 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 32)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 32)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2358,12 +2368,12 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
                 }
                 wsuh[sb * 5 + 4] = 0u
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 128l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -2485,7 +2495,7 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 16)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 16)) {
                 wqh[i] = hash_word(uint(i) + 31u)     // arbitrary quant bytes
             }
@@ -2495,12 +2505,12 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
                     wsuh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + 91u)
                 }
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 7u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 64l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -2622,7 +2632,7 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 32)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 32)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2633,12 +2643,12 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
                 }
                 wsuh[sb * 5 + 4] = 0u
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 128l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -2760,7 +2770,7 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 32)
             wsuh |> resize(totsb * 2)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 32)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2768,12 +2778,12 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
                 wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d | the row's high bits
                 wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit sub-scale fields
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 128l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -2895,7 +2905,7 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 24)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 24)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -2905,12 +2915,12 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
                 }
                 wsuh[sb * 5 + 4] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0))   // cool d
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 96l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -3032,7 +3042,7 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 26)
             wsuh |> resize(totsb * 2)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 26)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3040,12 +3050,12 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
                 wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d | the row's high bits
                 wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit sub-scale fields
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 104l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -3167,7 +3177,7 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 18)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 18)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3178,12 +3188,12 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
                 wsuh[sb * 5 + 3] = hash_word(uint(sb * 4 + 2) + 613u)
                 wsuh[sb * 5 + 4] = hash_word(uint(sb * 4 + 3) + 613u)
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 72l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -3305,7 +3315,7 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 16)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 16)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3316,12 +3326,12 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
                 wsuh[sb * 5 + 3] = hash_word(uint(sb * 4 + 2) + 613u)
                 wsuh[sb * 5 + 4] = hash_word(uint(sb * 4 + 3) + 613u)
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 64l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -3443,7 +3453,7 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 16)
             wsuh |> resize(totsb * 2)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 16)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3451,12 +3461,12 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
                 wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d8 | the row's high bits
                 wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit (2ls + 1) fields
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 64l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -3578,7 +3588,7 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 24)
             wsuh |> resize(totsb * 2)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 24)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
             }
@@ -3586,12 +3596,12 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
                 wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d | the row's high bits
                 wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit sub-scale fields
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)   // f16 activation pairs
             }
             let wq_bytes = int64(totsb) * 96l
             let ws_bytes = int64(length(wsuh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -3713,7 +3723,7 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totsb * 48)
             wsuh |> resize(totsb * 5)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totsb * 48)) {
                 wqh[i] = hash_word(uint(i) + 41u)     // arbitrary ql/qh bytes
             }
@@ -3723,12 +3733,12 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
                 }
                 wsuh[sb * 5 + 4] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0))   // cool d: the f16 acc must stay far from 65504
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 3u + 5u)
             }
             let wq_bytes = int64(totsb) * 192l
             let ws_bytes = int64(totsb * 5) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -3847,19 +3857,19 @@ def test_vkd_cm2m_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totblk * 8)
             wsh |> resize((totblk + 1) / 2)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totblk * 8)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary bytes — s8 quants
             }
             for (i in range((totblk + 1) / 2)) {
                 wsh[i] = ws_word(uint(i) + 733u)      // f16 scale pairs, finite halves
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 5u + 11u)  // f16 activation pairs
             }
             let wq_bytes = int64(totblk) * 32l
             let ws_bytes = int64(length(wsh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -3951,19 +3961,19 @@ def test_vkd_cm2s_batch(t0 : T?) {
             var xfh : array<uint>
             wqh |> resize(totblk * 8)
             wsh |> resize((totblk + 1) / 2)
-            xfh |> resize((rows + TILE_READ_SLACK) * n / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
             for (i in range(totblk * 8)) {
                 wqh[i] = hash_word(uint(i) + 29u)     // arbitrary bytes — s8 quants
             }
             for (i in range((totblk + 1) / 2)) {
                 wsh[i] = ws_word(uint(i) + 733u)      // f16 scale pairs, finite halves
             }
-            for (i in range((rows + TILE_READ_SLACK) * n / 2)) {
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
                 xfh[i] = ws_word(uint(i) * 5u + 11u)  // f16 activation pairs
             }
             let wq_bytes = int64(totblk) * 32l
             let ws_bytes = int64(length(wsh)) * 4l
-            let xf_bytes = int64((rows + 128) * n) * 2l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
             let y_bytes = int64(rows * d) * 4l
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
@@ -7837,10 +7847,9 @@ def test_vkd_ar_f16_fused(t0 : T?) {
 let private MR_NPOS = 37
 let private MR_NE = 20
 let private MR_K = 3
-let private MR_DIM = 128   //! the router tile steps K by 64
+let private MR_DIM = 2 * 64   //! two of the router tile's 64-wide K steps
 let private MR_NER = MR_NE + 1   //! the shared expert's gate row rides past the experts
 let private MR_SENT = 0x5A5A5A5Au   //! the schedule planes' fill: a word the kernel never writes stays this on both sides
-let private TILE_READ_SLACK = 128   //! the cm2 fixtures' rows past the last: the s and m tiles load a partial column unclamped
 
 //! one 32-bit word to a float in [-2, 2)
 def private hash_unit(i : uint) : float => float(hash_word(i) % 4096u) / 1024.0 - 2.0
@@ -7866,7 +7875,7 @@ struct private SchedShape {
 }
 
 def private sched_shape(nk, ne, wt_gu, wt_dn : int) : SchedShape {
-    let rt_m = nk / 128 + ne
+    let rt_m = nk / int(SCHED_M_ROWS) + ne
     var s = SchedShape(map_off = 2 * 4 * ne, bound_gu = ne * wt_gu, bound_dn = ne * wt_dn, bound_mgu = rt_m * wt_gu, bound_mdn = rt_m * wt_dn)
     s.map_off_mgu = s.map_off + s.bound_gu
     s.map_off_mdn = s.map_off + s.bound_dn
@@ -7958,12 +7967,17 @@ def private sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedSh
     var wg_dn_s = 0
     var wg_gu_m = 0
     var wg_dn_m = 0
+    let s_col = int(SCHED_S_ROWS)
+    let m_col = int(SCHED_M_ROWS)
     for (e in range(ne)) {
         continue if (cnt[e] == 0)
-        let mrows = int(sched_ladder_m_rows(uint(cnt[e])))
-        let srows = cnt[e] - mrows
+        //! the ladder spelled out (the shipped rule is the thing under test): a bucket within the s column
+        //! takes it whole; past it, whole m columns, and a remainder past the s column joins the last as a partial
+        let c = cnt[e]
+        let mrows = c <= s_col ? 0 : ((c % m_col) > s_col ? c : (c / m_col) * m_col)
+        let srows = c - mrows
         if (mrows > 0) {
-            let rt = (mrows + 127) / 128
+            let rt = (mrows + m_col - 1) / m_col
             oracle_piece(s1, s3, s2, bases, e, ri_m, start[e], mrows, rt, wt_gu, wt_dn, wg_gu_m, wg_dn_m, sh.map_off_mgu, sh.map_off_mdn)
             wg_gu_m += rt * wt_gu
             wg_dn_m += rt * wt_dn
@@ -7995,10 +8009,11 @@ def private sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedSh
     delete cursor
 }
 
-//! the router GEMM: two layers' [ner x dim] rows, the second layer's dispatched through woff; logits at the ner stride
-def private moe_router_arm(t : T?) {
+//! the router GEMM: two layers' [ner x dim] rows, the second layer's dispatched through woff; logits at the ner
+//! stride; `ner` past a half-tile exercises both rows of an invocation, under it the second row's guard alone
+def private moe_router_arm(t : T?; ner : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let nw = 2 * MR_NER * MR_DIM
+        let nw = 2 * ner * MR_DIM
         var wh : array<float>
         var xh : array<float>
         wh |> resize(nw)
@@ -8011,41 +8026,42 @@ def private moe_router_arm(t : T?) {
         }
         let w_bytes = int64(nw) * 4l
         let x_bytes = int64(MR_NPOS * MR_DIM) * 4l
-        let l_bytes = int64(MR_NPOS * MR_NER) * 4l
+        let l_bytes = int64(MR_NPOS * ner) * 4l
         let wd = make_device_buf(w_bytes)
         let xd = make_device_buf(x_bytes)
         let ld = make_device_buf(l_bytes)
         var host = make_host_buf(l_bytes, true, [cached = true])
         var got : array<float>
-        got |> resize(MR_NPOS * MR_NER)
+        got |> resize(MR_NPOS * ner)
         unsafe {
             upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
+            nan_sentinel_upload(ld, l_bytes)
             var sc = set_router_gemm_cls(fixed_array(wd, xd, ld), fixed_array(w_bytes, x_bytes, l_bytes), fixed_array(0u, 1u, 2u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
-            var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(MR_NER), dim = uint(MR_DIM), woff = uint(MR_NER * MR_DIM), ostride = uint(MR_NER))
-            enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + int(ROUTER_TP) - 1) / int(ROUTER_TP)) * ((MR_NER + int(ROUTER_TE) - 1) / int(ROUTER_TE))))
+            var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM), ostride = uint(ner))
+            enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + int(ROUTER_TP) - 1) / int(ROUTER_TP)) * ((ner + int(ROUTER_TE) - 1) / int(ROUTER_TE))))
             vkd_run_copy(raw, h, ld, host, l_bytes, 2u)
             memcpy(addr<void?>(got[0]), host.mapped, l_bytes)
         }
         var want : array<float>
-        want |> resize(MR_NPOS * MR_NER)
+        want |> resize(MR_NPOS * ner)
         for (p in range(MR_NPOS)) {
-            for (e in range(MR_NER)) {
+            for (e in range(ner)) {
                 var acc = 0.0
                 for (c in range(MR_DIM)) {
-                    acc += wh[MR_NER * MR_DIM + e * MR_DIM + c] * xh[p * MR_DIM + c]
+                    acc += wh[ner * MR_DIM + e * MR_DIM + c] * xh[p * MR_DIM + c]
                 }
-                want[p * MR_NER + e] = acc
+                want[p * ner + e] = acc
             }
         }
         let bad = mismatch_rel(got, want, 1e-4)
-        t |> success(bad == 0, "router GEMM matches the CPU oracle at the second layer's offset ({bad} of {MR_NPOS * MR_NER} off)")
-        want[5 * MR_NER + 3] += 0.5   //! the poison: a value added to one expected element must miss
-        t |> success(mismatch_rel(got, want, 1e-4) == 1, "router GEMM control: the bar reds one poisoned element")
+        t |> success(bad == 0, "router GEMM over {ner} rows matches the CPU oracle at the second layer's offset ({bad} of {MR_NPOS * ner} off)")
+        want[5 * ner + 3] += 0.5
+        t |> success(mismatch_rel(got, want, 1e-4) == 1, "router GEMM control ({ner} rows): the bar reds one poisoned element")
         delete wh
         delete xh
         delete got
@@ -8074,6 +8090,8 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
         gw |> resize(MR_NPOS * MR_K)
         unsafe {
             upload_region_at(ld, 0l, addr<uint8 const?>(lh[0]), l_bytes)
+            nan_sentinel_upload(idxd, s_bytes)
+            nan_sentinel_upload(wd, s_bytes)
             var sc = set_topk_rows_cls(fixed_array(ld, idxd, wd), fixed_array(l_bytes, s_bytes, s_bytes), fixed_array(1u, 2u, 4u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
@@ -8133,10 +8151,14 @@ def private moe_sched_arm(t : T?) {
         let sh = sched_shape(nk, MR_NE, wt_gu, wt_dn)
         var idx : array<uint>
         idx |> resize(nk)
+        //! the ladder's four shapes: expert 0 a whole m column plus an s remainder, 1 and 2 one partial
+        //! m column each, 3 within the s column; the rest spread thin, the last three route nothing
+        let c0 = int(SCHED_M_ROWS) + int(SCHED_S_ROWS) - 10
+        let c1 = int(SCHED_M_ROWS) - 28
+        let c2 = int(SCHED_S_ROWS) + 8
+        let c3 = int(SCHED_S_ROWS) - 12
         for (r in range(nk)) {
-            //! the ladder's four shapes: expert 0 a whole m column plus an s remainder, 1 and 2 one partial
-            //! m column each, 3 within the s column; the rest spread thin, the last three route nothing
-            idx[r] = r < 150 ? 0u : (r < 250 ? 1u : (r < 290 ? 2u : (r < 310 ? 3u : 4u + hash_word(uint(r) + 55u) % uint(MR_NE - 7))))
+            idx[r] = r < c0 ? 0u : (r < c0 + c1 ? 1u : (r < c0 + c1 + c2 ? 2u : (r < c0 + c1 + c2 + c3 ? 3u : 4u + hash_word(uint(r) + 55u) % uint(MR_NE - 7))))
         }
         let bases = fixed_array(1_000u, 96u, 2_000u, 96u, 3_000u, 48u)
         var winv : array<uint>
@@ -8167,6 +8189,7 @@ def private moe_sched_arm(t : T?) {
         g2 |> resize(length(w1))
         unsafe {
             upload_region_at(idxd, 0l, addr<uint8 const?>(idx[0]), i_bytes)
+            nan_sentinel_upload(invd, i_bytes)
             upload_region_at(s1d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
             upload_region_at(s3d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
             upload_region_at(s2d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
@@ -8213,8 +8236,8 @@ def private moe_sched_arm(t : T?) {
         t |> success(mismatch_qbytes(g1, w1, 0) == 0, "the gate plane's s and m records, maps and sentinel tails match the CPU twin word for word ({length(w1)} words)")
         t |> success(mismatch_qbytes(g3, w3, 0) == 0, "the up plane's schedule matches")
         t |> success(mismatch_qbytes(g2, w2, 0) == 0, "the down plane's schedule matches (its own tile counts and tails)")
-        w2[sh.map_off_mdn + sh.bound_mdn - 1] = 0u   //! the poison: the m map's last sentinel word flipped must miss
-        t |> success(mismatch_qbytes(g2, w2, 0) > 0, "schedule control: one flipped tail word reds the compare")
+        w2[sh.map_off_mdn + sh.bound_mdn - 1] = 0u
+        t |> success(mismatch_qbytes(g2, w2, 0) > 0, "schedule control: the m map's last sentinel word flipped reds the compare")
         delete idx
         delete winv
         delete w1
@@ -8291,7 +8314,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
         got_y |> resize(npos * n)
         got_h |> resize(npos * n / 2)
         var pc = ArArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
-            k = uint(k), lstride = uint(MR_NER), gidx = uint(MR_NE), gated = gated ? 1u : 0u)
+            slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u)
         unsafe {
             upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
             upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
@@ -8299,6 +8322,8 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
             upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
             upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), wn_bytes)
             upload_region_at(lgd, 0l, addr<uint8 const?>(lg[0]), lg_bytes)
+            nan_sentinel_upload(yod, x_bytes)
+            nan_sentinel_upload(yhd, x_bytes / 2l)
             //! the f32 form: x updated in place, the normed row to yo
             upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
             var sc = set_cls_ar_comb(fixed_array(xd, shd, wnd, yod, sid, swd, rod, lgd),
@@ -8352,6 +8377,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
             }
         }
         let arm = (with_sh ? (gated ? "gated shared" : "ungated shared") : "no shared") + " expert"
+        t |> success(mismatch_approx(got_x, xs) > 0, "the combine-folded residual step ({arm}): the in-place residual rows moved off their input")
         let bad_x = mismatch_approx(got_x, want_x)
         t |> success(bad_x == 0, "the combine-folded residual step ({arm}): the residual rows match the CPU oracle ({bad_x} of {npos * n} off)")
         let bad_y = mismatch_approx(got_y, want_y)
@@ -8363,10 +8389,16 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
             got_yf[2 * i] = pr.x
             got_yf[2 * i + 1] = pr.y
         }
-        let bad_h = mismatch_bars(got_yf, want_y, 2.0e-3, 2.0e-3 * max_abs(want_y))
+        //! the f16 bar: a half rounds to 2^-11 of the value (4.9e-4 relative); the bar is four halves of
+        //! that, and the same fraction of the row's largest value as the floor the near-zero elements read
+        let f16_bar = 2.0e-3
+        let bad_h = mismatch_bars(got_yf, want_y, f16_bar, f16_bar * max_abs(want_y))
         t |> success(bad_h == 0, "the combine-folded residual step ({arm}): the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
         want_x[2 * n + 9] += 0.5
-        t |> success(mismatch_approx(got_x, want_x) == 1, "combine-folded residual control: the bar reds one poisoned element")
+        t |> success(mismatch_approx(got_x, want_x) == 1, "combine-folded residual control: the residual bar reds one poisoned element")
+        want_y[3 * n + 5] += 0.5
+        t |> success(mismatch_approx(got_y, want_y) == 1, "combine-folded residual control: the f32 normed-row bar reds one poisoned element")
+        t |> success(mismatch_bars(got_yf, want_y, f16_bar, f16_bar * max_abs(want_y)) == 1, "combine-folded residual control: the f16 normed-row bar reds one poisoned element")
         delete sidx
         delete sw
         delete rows
@@ -8388,10 +8420,11 @@ def test_vkd_moe_routing(t0 : T?) {
     t0 |> run("the resident MoE block's routing kernels == the CPU oracles: router GEMM, per-row top-k, the bucket schedule, the combine-folded residual step") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b())) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device")
                 return
             }
-            moe_router_arm(t)
+            moe_router_arm(t, MR_NER)
+            moe_router_arm(t, 9)   //! fewer rows than the tile's half: the second row of every invocation is guarded off
             moe_topk_rows_arm(t, true, 0.0)
             moe_topk_rows_arm(t, false, 2.5)
             moe_sched_arm(t)
@@ -8399,7 +8432,33 @@ def test_vkd_moe_routing(t0 : T?) {
             moe_ar_comb_arm(t, false, true)
             moe_ar_comb_arm(t, false, false)
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the GEMV family's lanes-per-row rule, pinned per (format, row length): the codebook and grid formats
+//! take fewer lanes than the k-lattice formats at the same length, the q8 GEMV always the whole subgroup
+[test]
+def test_vkd_gemv_lane_rule(t0 : T?) {
+    t0 |> run("gemv_lanes_per_row: the measured lane split per format class and row length") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl)
+            let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s)
+            //! row length -> (the grid formats' lanes, the k-lattice formats' lanes); 0 = the whole subgroup
+            let rows = fixed_array((n = 768l, g = 8u, l = 8u), (n = 1024l, g = 8u, l = 16u), (n = 1536l, g = 8u, l = 16u),
+                (n = 2048l, g = 16u, l = 16u), (n = 3072l, g = 16u, l = 16u), (n = 4096l, g = 16u, l = 0u), (n = 8192l, g = 16u, l = 0u))
+            for (r in rows) {
+                for (f in grid) {
+                    t |> equal(gemv_lanes_per_row(int(f), r.n), r.g, "{f} at K {r.n}: a grid format takes {r.g} lanes per row")
+                }
+                for (f in lattice) {
+                    t |> equal(gemv_lanes_per_row(int(f), r.n), r.l, "{f} at K {r.n}: a k-lattice format takes {r.l} lanes per row")
+                }
+                t |> equal(gemv_lanes_per_row(int(KqFmt.q8), r.n), 0u, "q8 at K {r.n}: the whole subgroup")
+            }
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }

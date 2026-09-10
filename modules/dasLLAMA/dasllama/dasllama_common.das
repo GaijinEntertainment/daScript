@@ -1048,15 +1048,12 @@ struct Model {
     wsh1_off : int64        // ffn_gate_shexp: layers x (dim x n_ff_shexp)
     wsh2_off : int64        // ffn_down_shexp: layers x (n_ff_shexp x dim)
     wsh3_off : int64        // ffn_up_shexp:   layers x (dim x n_ff_shexp)
-    //! the shared expert's K-quant planes beside its q8 transcode: per layer, the file's format and
-    //! its plane offset; -1 / q8 where the file's shexp is not a K-quant the dense rail serves (an
-    //! empty table = q8 alone)
-    wsh1_fmt : array<KqFmt>
-    wsh2_fmt : array<KqFmt>
-    wsh3_fmt : array<KqFmt>
-    wshk1_offs : array<int64>
-    wshk2_offs : array<int64>
-    wshk3_offs : array<int64>
+    wsh1_fmt : array<KqFmt>     //! the shared expert's gate plane format per layer, beside its q8 transcode (q8 where the file's is not a K-quant the dense rail serves; an empty table = q8 alone)
+    wsh2_fmt : array<KqFmt>     //! ... its down plane's
+    wsh3_fmt : array<KqFmt>     //! ... its up plane's
+    wshk1_offs : array<int64>   //! the shared expert's K-quant gate plane offset per layer (-1 = none)
+    wshk2_offs : array<int64>   //! ... its down plane's
+    wshk3_offs : array<int64>   //! ... its up plane's
     wcls_off : int64
     // Tied-classifier Q8: the classifier lives in qblob at wcls_off (repacked); set only by
     // load_gguf for shared_weights + QuantMode.q8 + Q8_0 token_embd on disk.
@@ -2163,7 +2160,7 @@ struct Session {
     @scratch @exact_size moe_gpu_out : array<float>  // the GPU half's combined rows (npos x dim), joined after the CPU half
     @scratch @exact_size moe_shout : array<float>    //! the shared expert's rows off the device chain (npos x dim)
     @scratch moe_sh_inv : array<uint>      //! the device shared expert's identity slot map (npos; the f16-fed arm)
-    @scratch moe_sh_w : array<float>       //! ... and its unit combine weights (npos)
+    @scratch moe_sh_w : array<float>       //! the device shared expert's unit combine weights (npos; the f16-fed arm)
     ffn_offs : array<int64>     // dense/shexp gate+up fuse: 2 region (weight, activation) offset pairs
     ffn_gu : array<float>       // dense/shexp gate+up fuse output — gate half then up half (2 x max_ffn_width)
     mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)

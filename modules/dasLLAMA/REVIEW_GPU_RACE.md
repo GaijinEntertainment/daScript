@@ -9,10 +9,10 @@ together with it.**
 
 **A hand-binding arm that binds a field at a position the class does not declare for that field
 is a defect.** A hand-binding arm is a race or knockout timing arm - a race times two
-implementations of one computation on one queue and compares their outputs, a knockout skips a
-stage to measure that stage's cost - that mirrors a class's binding order by hand, with a
-literal bind number or a positional buffer and size array, instead of naming the class's fields.
-A mis-bound arm dispatches, reads the wrong buffer, and its timing selects the wrong kernel
+implementations of one computation on one queue, a knockout skips a stage to measure that
+stage's cost - that restates a bind order no generated setter checks (Metal `kn_buffer(enc, n)`
+calls, a probe class redeclaring `@binding` slots), instead of naming the class's fields. A
+mis-bound arm dispatches, reads the wrong buffer, and its timing selects the wrong kernel
 silently.
 
 **A hand-binding arm outside `dasllama/`, or one whose pipeline source or threadgroup-memory
@@ -47,10 +47,10 @@ count; the tile's own width where it is dispatched at one fixed width; each powe
 spans on a power-of-two batch grid.** A ranking timed at one width alone is applied at widths it
 was never ranked at.
 
-**A timing arm for a prefill tile over a variable window, whose ranking a checked-in document,
-box profile or sidecar records as decided, times its kernel at one window whose token count is
-a whole multiple of the tile's row count and at one where it is not.** The short last tile is
-what makes the tile take its partial-tile store path.
+**A timing arm for a prefill tile over a variable region, whose ranking a checked-in document,
+box profile or sidecar records as decided, times its kernel at one region whose row count is a
+whole multiple of the tile's row count and at one where it is not.** A region that is not a
+whole multiple is what makes the tile take its partial-tile store path.
 
 **An `ARCHITECTURE_GPU.md` sec.2.2b entry for a kernel ranked on a power-of-two batch grid names
 that grid.**

@@ -71,6 +71,15 @@ the rest is the per-layer host glue the span would remove, and the span declines
 
 ## The slices, in order
 
+Every pp512 / tg128 rate in the slices below is a `benchmarks/lcpp_bench.das` reading on the RTX
+5060 Ti (16 GB) box, run as `bin/Release/daslang.exe -jit benchmarks/lcpp_bench.das -- -m <file>
+-o md --for-debug-purposes -r 3 -p 512 -n 128 -t 16` under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0
+DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048 DAS_JOBQUE_THREADS=16` - debug-jit readings,
+not board cells. Every llama.cpp rate beside them is `llama-bench` at b10660 (build-vulkan-357),
+`-ngl 99 -fa 1 -t 16 -r 3`, on the same box. The per-role window and token milliseconds come from
+the same bench with `DASLLAMA_GPU_PROF=1 ... -n 32 --prof --jobque-profiling`: its `vk_rdpf`
+window lines and its `vk_rdec gpu avg/token` / `vk_rdec moe avg/token` lines.
+
 1. **The shared expert's prefill on the device.** DONE 2026-09-08: the shexp triple rides the
    routed experts' chain as one region over every position (the f16-fed cm2 form with an
    identity slot map at unit weight, else the quant form over the Q8_0 image); the reduce applies
@@ -140,9 +149,11 @@ the rest is the per-layer host glue the span would remove, and the span declines
    tile, BN 256, at 512 tokens) and shrunk to BN/4 or BN/2 when the expert holds fewer rows
    (`enable_smaller_matrices`), so a 32-row expert runs a 128 x 64 x 64 MMA per K step on one
    A decode - our s tile runs 128 x 32 x 64 on the same decode. Both decode every expert
-   weight once per window at 32 rows per expert; the levers to probe are the decode itself
-   (their `DECODE_VECTOR` arm against our DECV4 twin on iq2xxs) and the row gather inside the
-   tile (no gather kernel, no schedule). Their own harness at the 30B expert shape
+   weight once per window at 32 rows per expert, and their tile gathers its expert's rows
+   inside itself, with no gather kernel and no schedule beside it; its decode arm is
+   `DECODE_VECTOR`. The levers we probe next are our own two: the decode body (our DECV4 twin
+   on iq2xxs, read against that arm) and moving the row gather into the expert tile, which
+   would retire our gather kernel and our schedule. Their own harness at the 30B expert shape
    (`test-backend-ops perf -o MUL_MAT_ID -p "n_mats=128,n_used=8,b=0,m=768,n=512,k=2048"`,
    build-vulkan-357, the same card): iq2_xs 737 us (17.5 TFLOP/s), q4_0 853 (15.1), q8_0 988
    (13.1), q4_K 985 (13.1), q6_K 1031 (12.5), f16 1181 (10.9). Ours on the 30B window's
@@ -160,7 +171,8 @@ the rest is the per-layer host glue the span would remove, and the span declines
    (0.79x / 1.34x). Gate: `test_gpu_resident_moe.das`'s hybrid fixture at one and two windows
    (the conv tail and the state across the seam), the same bar and controls.
 5. **The expert GEMMs at small M.** The last term (192 ms on the 30B): a tile pick for
-   32-row buckets, or a mul_mat_id-shaped kernel; measured on the probe first.
+   32-row buckets, or an expert tile over the bucket schedule that gathers its own rows in
+   place of the gather kernel; measured on the probe first.
    5a DONE 2026-09-09 - the decode, not the tile. llama.cpp's coopmat2 branch creates no
    integer-dot `mul_mat_id` pipeline (`ggml-vulkan.cpp`, the `CREATE_MMQ ... _id_q8_1` block
    sits in the KHR branch), so every harness figure above is its cm2 tile, and its pick
@@ -168,24 +180,31 @@ the rest is the per-layer host glue the span would remove, and the span declines
    64) whose `enable_smaller_matrices` shrinks a 32-row bucket's column to BN/4 = 32: the
    same 128 x 32 x 64 geometry as our s tile. The new probe arm (`harness/vk_gemm_probe.das
    -- moe:<fmt>`: the 30B schedule, 128 buckets of 32 rows, gate/up d 768 K 2048 and down
-   d 2048 K 768, the device bound with its sentinel tail) put our tile beside theirs per
-   format, gate/up plane in us: q8 892 (theirs 998), k4 728 (1009), iq4xs 632 (959), iq2xs 664
+   d 2048 K 768, the device bound with its sentinel tail), on the RTX 5060 Ti, put our tile
+   beside theirs per format - every microsecond figure in 5a is that arm on that box -
+   gate/up plane in us: q8 892 (theirs 998), k4 728 (1009), iq4xs 632 (959), iq2xs 664
    (744) - ahead - but iq2xxs 955 (754), iq3xxs 728 (788), iq3s 1141 (870), iq2s 830 (797).
    The tile was not the term; the decode bodies were: iq2xs's decode reads one 16-bit lane
    while the four slow formats selected bytes out of lanes (`unpack8(lane)[i & 1]`) and built
    the IQ2_XXS / IQ3_XXS sign index from two selected bytes. Respelled as lane shifts (the
-   aux32 assembled from two lanes): iq2xxs 749, iq3xxs 585, iq3s 767, iq2s 772. The rows:
+   aux32 assembled from two lanes): iq2xxs 749, iq3xxs 585, iq3s 767, iq2s 772 (the probe then
+   bound one output plane for every dispatch, which serialized them on its write-after-write;
+   on two alternating planes under fresh hazards the same shift decodes read iq2xxs 724, iq3xxs
+   569, iq3s 766, iq2s 736, iq2xs 651, iq4xs 632, k4 746, q8 885). The rows:
    the 30B window 221.2 -> 187.7 ms (expert tiles 166 -> 133), pp512 2670.7 (0.76x), tg128
    124.6; the 35B 2542.7 (0.89x), tg128 95.3; the twin (k4) unchanged at 5208.4 / 143.1.
    5b DONE 2026-09-09 - the schedule's shape. llama.cpp's own per-op logger on the real 30B
-   window (`GGML_VK_PERF_LOGGER=1 llama-bench -p 512`) reads its iq2_xxs gate/up plane at 594
+   window (`GGML_VK_PERF_LOGGER=1 llama-bench -p 512`, the `MUL_MAT_ID` rows of its expert
+   tile `mul_mm_cm2.comp`) reads its iq2_xxs gate/up plane at 594
    us - FASTER than its 754 on uniform buckets - because the l pipeline's column widens to 64
    or 128 rows on a big bucket, so the real router's skew amortizes each A decode over more
    rows; our s tile decoded the 128-row weight tile once per 32 rows whatever the bucket. The
    real window (the profile's new bucket report, the last MoE layer): 69 of 128 experts route,
    nine hold over 128 rows (the largest 467), 48 sit within 32 - 175 s tiles where a 32/128
    ladder runs 87. The first cut, whole 128-row chunks on the m class with the remainders on
-   s, gained 2% on a 1 / (rank + 8) profile (`moesk:`): the mid-sized buckets (33 to 127 rows)
+   s, gained 2% on a 1 / (rank + 8) profile (the probe's `moesk:` arm,
+   `harness/vk_gemm_probe.das` on the RTX 5060 Ti, which every microsecond figure in 5b
+   is read from): the mid-sized buckets (33 to 127 rows)
    were the cost, and a whole-column rule leaves them on the s tile. The ladder that landed:
    the m class takes the s tile's partial-column fast path (`STILE` generalized to the stamp's
    column, the store clamped, every f16 plane the tiles read carrying 128 rows of slack), and
@@ -195,8 +214,10 @@ the rest is the per-layer host glue the span would remove, and the span declines
    piece lists (records [0, ne) s, [ne, 2 ne) m, the maps at 2048 words on, one packed two-way
    scan), two dispatches per plane under separate hazard bits (`VHZ_GATE_M` / `VHZ_UP_M` /
    `VHZ_MDN_M`) so they co-run. On the probe's real-shape profile (`moesk:iq2xxs`): gate/up 842
-   -> 593 us, down 915 -> 650. The rows: the 30B window 187.7 -> 153.9 ms (expert tiles 133 ->
-   97.7; llama.cpp 142.3 with its tiles at ~88), pp512 3242.0 (0.92x), tg128 123.6; the 35B
+   -> 593 us, down 915 -> 650 (on the two-plane arm 815 -> 563 and 896 -> 652). The rows: the
+   30B window 187.7 -> 153.9 ms (expert tiles 133 ->
+   97.7; llama.cpp 142.3 with its tiles at ~88, the same logger's `MUL_MAT_ID` rows), pp512
+   3242.0 (0.92x), tg128 123.6; the 35B
    2837.7 (0.99x), tg128 95.9; the twin's window 99.2 -> 94.5 ms, its row 5152.9 (the first
    measured rep after the warmup reads 101 ms on every model here - a driver warm-up the
    bench's one warmup does not absorb - so its three-rep mean and spread wander).
@@ -204,7 +225,10 @@ the rest is the per-layer host glue the span would remove, and the span declines
    28 ms (q 9.0, wo 7.7, attn 5.0, qkn 2.8, rope 1.6, k+v 2.1), the router 6.6 and schedule
    8.1, the combine 4.0, act 2.8, gather 1.6, the residual adds and requants ~4.
    5c DONE 2026-09-09 - one more pass on the two parity misses, from the reference engine's own
-   per-op tables (`GGML_VK_PERF_LOGGER=1`): on the 30B window we beat it on the attention head
+   per-op tables (`GGML_VK_PERF_LOGGER=1`; every figure of theirs below is one of those op rows -
+   `MUL_MAT_ID` for its expert tiles, `MUL_MAT` for its dense GEMMs, its router and its
+   `mul_mat_vec_*` GEMVs, `ADD` / `RMS_NORM` for its residual steps): on the 30B window we beat
+   it on the attention head
    (qkn + rope 4.4 ms against its 10.7, the adds and norms 3.7 against 5.4) and lose on the
    router (6.6 against 1.2), the schedule (8.1 against none: it gathers inside its tile) and the
    gate/up tiles (~70 us per plane); on the twin's token its shared-expert GEMVs read 1.46 ms
@@ -278,8 +302,9 @@ the rest is the per-layer host glue the span would remove, and the span declines
    GEMV family's lanes per row. The family put one subgroup on one output row, a lane per
    32-block, so a MoE's expert rows (K 512 to 1408) left most lanes idle: the 30B's expert
    GEMVs ran at 40-54% of the card's bandwidth, the twin's k6 down at 65%, where the dense rows
-   at K 2048-5120 sat at 75-100%. `vk_gemv_probe.das` gained a lanes sweep (`<n> <d>`, three
-   lane splits per format, DRAM-bound planes), and the sweep over K 512 / 768 / 1408 / 2048 /
+   at K 2048-5120 sat at 75-100%. `harness/vk_gemv_probe.das` gained a lanes sweep (`<n> <d>`,
+   three lane splits per format, DRAM-bound planes; every GB/s figure in this slice is that
+   probe on the RTX 5060 Ti), and the sweep over K 512 / 768 / 1408 / 2048 /
    2560 / 4096 / 5632 set the rule (`gemv_lanes_per_row`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`
    sec.2.2ah): 8 lanes to 24 blocks, 8 for the grid formats and 16 for the k-lattice to 48, 16
    to 96, past that the whole subgroup for the k-lattice and 16 for the grid formats; the fold
@@ -305,7 +330,8 @@ Slices 1 and 2 are small and land the shared-expert families' rows; slice 3 is t
 - Kernel cells with CPU oracles for every new kernel (router GEMM, batched top-k, the bucket
   schedule, the row scale), `tests/test_vulkan_kernels.das`.
 - A forced-feed logits-tolerance file on the twin in the hybrid file's form
-  (`test_gpu_resident_hybrid.das`), plus a routing witness: the device's picks equal the CPU's
+  (`test_gpu_resident_moe.das`, three fixtures: the twin, the 35B hybrid, and the 30B with no
+  shared expert), plus a routing witness: the device's picks equal the CPU's
   `moe_select_core` on the window up to ties.
 - The twin gets its `model_specs.das` row (recipe: `llama-quantize --allow-requantize
   Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf <out> Q4_K_M`) and a parity fixture; the board rows for the

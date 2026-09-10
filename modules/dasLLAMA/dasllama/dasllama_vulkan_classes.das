@@ -39,10 +39,9 @@ struct ArArgs {
     eps : float
     ascale : float
     row0 : uint
-    k : uint        //! the combine twins: routed slots per position
-    lstride : uint  //! ... the logits row stride, the shared expert's gate logit index, and whether that gate scales the shared row
-    gidx : uint
-    gated : uint
+    slots : uint    //! the combine twins: routed slots per position
+    lstride : uint  //! the combine twins: the logits row stride (the gate logit, when `gated`, is the row's last)
+    gated : uint    //! the combine twins: the shared expert's gate scales its row
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -197,15 +196,15 @@ class ArCombBase : ArBase {
     @ssbo @binding = 4 slot_idx : array<uint>    //! position -> its k slot rows
     @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights
     @ssbo @binding = 6 down_rows : array<float>  //! the routed down-GEMM output rows
-    @ssbo @binding = 7 logits : array<float>     //! [npos x lstride]; the gate logit sits at gidx
+    @ssbo @binding = 7 logits : array<float>     //! [npos x lstride]; the gate logit is the row's last
 
     def override accum_row(base : uint) : float {
         let p = base / pa.dim
         var g = 1.0
-        if (pa.add_on != 0u && pa.gated != 0u) {
-            g = 1.0 / (1.0 + exp(-logits[p * pa.lstride + pa.gidx]))
+        if (pa.gated != 0u) {
+            g = 1.0 / (1.0 + exp(-logits[p * pa.lstride + pa.lstride - 1u]))
         }
-        let pk = p * pa.k
+        let pk = p * pa.slots
         var ss = 0.0
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
@@ -214,7 +213,7 @@ class ArCombBase : ArBase {
                 f = g * aa[base + k]
             }
             var j = 0u
-            while (j + 8u <= pa.k) {
+            while (j + 8u <= pa.slots) {
                 let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
                 let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
                 let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
@@ -233,7 +232,7 @@ class ArCombBase : ArBase {
                 f += slot_w[pk + j + 7u] * d7
                 j += 8u
             }
-            if (j + 4u <= pa.k) {
+            if (j + 4u <= pa.slots) {
                 let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
                 let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
                 let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
@@ -244,7 +243,7 @@ class ArCombBase : ArBase {
                 f += slot_w[pk + j + 3u] * d3
                 j += 4u
             }
-            while (j < pa.k) {
+            while (j < pa.slots) {
                 f += slot_w[pk + j] * down_rows[slot_idx[pk + j] * pa.dim + k]
                 j++
             }
@@ -1002,7 +1001,9 @@ struct RouterGemmArgs {
 
 let ROUTER_TP = 64u   //! the router tile's positions per workgroup
 let ROUTER_TE = 32u   //! ... and router rows
-let ROUTER_LD = 17u   //! the stage's row stride in float4: a 64-wide step's 16 plus one of pad, so the sixteen rows a warp reads (and a fetch writes) spread the eight bank groups
+let ROUTER_TH = ROUTER_TE / 2u   //! an invocation's two rows sit a half-tile apart: e and e + ROUTER_TH
+let ROUTER_K4 = 16u   //! a 64-wide K step in float4
+let ROUTER_LD = ROUTER_K4 + 1u   //! the stage's row stride in float4: the step plus one of pad, so the sixteen rows a warp reads (and a fetch writes) spread the eight bank groups
 
 [vk_dispatch(name = "router_gemm_cls", grid = "wgs", params = "wgs : int64")]
 class RouterGemm {
@@ -1013,27 +1014,27 @@ class RouterGemm {
     @workgroup xs : float4[int(ROUTER_TP * ROUTER_LD)]
     @workgroup ws : float4[int(ROUTER_TE * ROUTER_LD)]
 
-    //! the stage's float4 of slot `s` (row s / 16, k4 s % 16) of x rows from `p0` at step `kb`; zero past the window
+    //! the stage's float4 of slot `s` (row s / ROUTER_K4, k4 s % ROUTER_K4) of x rows from `p0` at step `kb`; zero past the window
     def fetch_x(p0, kb, s : uint) : float4 {
-        let row = s / 16u
+        let row = s / ROUTER_K4
         if (p0 + row >= pa.npos) return float4(0.0)
-        return x4[((p0 + row) * pa.dim + kb) / 4u + (s % 16u)]
+        return x4[((p0 + row) * pa.dim + kb) / 4u + (s % ROUTER_K4)]
     }
 
     //! ... and of the router rows from `eg0`; zero past the experts
     def fetch_w(eg0, kb, s : uint) : float4 {
-        let row = s / 16u
+        let row = s / ROUTER_K4
         if (eg0 + row >= pa.ne) return float4(0.0)
-        return w4[(pa.woff + (eg0 + row) * pa.dim + kb) / 4u + (s % 16u)]
+        return w4[(pa.woff + (eg0 + row) * pa.dim + kb) / 4u + (s % ROUTER_K4)]
     }
 
-    //! a fetched float4 into its stage row at k4 `s % 16`
+    //! a fetched float4 into its stage row at k4 `s % ROUTER_K4`
     def stage_x(s : uint; v : float4) {
-        xs[(s / 16u) * ROUTER_LD + (s % 16u)] = v
+        xs[(s / ROUTER_K4) * ROUTER_LD + (s % ROUTER_K4)] = v
     }
 
     def stage_w(s : uint; v : float4) {
-        ws[(s / 16u) * ROUTER_LD + (s % 16u)] = v
+        ws[(s / ROUTER_K4) * ROUTER_LD + (s % ROUTER_K4)] = v
     }
 
     //! `a` plus the four products in k order - the scalar loop's sums to the bit
@@ -1052,8 +1053,8 @@ class RouterGemm {
         let egroups = (pa.ne + ROUTER_TE - 1u) / ROUTER_TE
         let p0 = (gl_WorkGroupID.x / egroups) * ROUTER_TP
         let eg0 = (gl_WorkGroupID.x % egroups) * ROUTER_TE
-        let tp = tid / 16u         //! the invocation's four positions 4tp..4tp+3
-        let te = tid % 16u         //! ... and rows te, te + 16
+        let tp = tid / ROUTER_TH   //! the invocation's four positions 4tp..4tp+3
+        let te = tid % ROUTER_TH   //! ... and rows te, te + ROUTER_TH
         var a00 = 0.0
         var a01 = 0.0
         var a10 = 0.0
@@ -1089,9 +1090,9 @@ class RouterGemm {
             }
             let xb = (4u * tp) * ROUTER_LD
             let wb = te * ROUTER_LD
-            let wb1 = wb + 16u * ROUTER_LD
+            let wb1 = wb + ROUTER_TH * ROUTER_LD
             var kk = 0u
-            while (kk < 16u) {
+            while (kk < ROUTER_K4) {
                 let x0 = xs[xb + kk]
                 let x1 = xs[xb + ROUTER_LD + kk]
                 let x2 = xs[xb + 2u * ROUTER_LD + kk]
@@ -1119,14 +1120,14 @@ class RouterGemm {
         store_pair(pa0 + 3u, ea0, a30, a31)
     }
 
-    //! position p's two logits at rows e, e + 16, each within the window and the experts
+    //! position p's two logits at rows e, e + ROUTER_TH, each within the window and the experts
     def store_pair(p, e : uint; v0, v1 : float) {
         if (p >= pa.npos) return
         if (e < pa.ne) {
             logits[p * pa.ostride + e] = v0
         }
-        if (e + 16u < pa.ne) {
-            logits[p * pa.ostride + e + 16u] = v1
+        if (e + ROUTER_TH < pa.ne) {
+            logits[p * pa.ostride + e + ROUTER_TH] = v1
         }
     }
 }
@@ -7445,10 +7446,10 @@ class KqGemvBase {
     }
 
     def gemv_shell {
-        let lpr = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
+        let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
         let lane = gl_SubgroupInvocationID
-        let li = lane % lpr
-        let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lpr) + lane / lpr
+        let row_lane = lane % lanes_per_row
+        let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
         let live = rg < pa.nreg * pa.d
         var acc = 0.0
         if (live) {
@@ -7460,22 +7461,29 @@ class KqGemvBase {
             let nb = nsb * 8u
             var b0 = 0u
             while (b0 < nb) {
-                let bb = b0 + li
+                let bb = b0 + row_lane
                 if (bb < nb) {
                     acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)
                 }
-                b0 += lpr
+                b0 += lanes_per_row
             }
         }
-        var total = 0.0
-        if (lpr == 8u) {
-            total = subgroupClusteredAdd(acc, 8u)
-        } elif (lpr == 16u) {
-            total = subgroupClusteredAdd(acc, 16u)
+        //! the row's fold is an xor-shuffle butterfly over its lanes (the shuffle every GEMV already requires;
+        //! a clustered add would want the clustered subgroup feature the tier never checks)
+        var total = acc
+        if (lanes_per_row == 8u) {
+            total += subgroupShuffleXor(total, 4u)
+            total += subgroupShuffleXor(total, 2u)
+            total += subgroupShuffleXor(total, 1u)
+        } elif (lanes_per_row == 16u) {
+            total += subgroupShuffleXor(total, 8u)
+            total += subgroupShuffleXor(total, 4u)
+            total += subgroupShuffleXor(total, 2u)
+            total += subgroupShuffleXor(total, 1u)
         } else {
             total = subgroupAdd(acc)
         }
-        if (live && li == 0u) {
+        if (live && row_lane == 0u) {
             y[pa.ybase + rg] = total
         }
     }
@@ -7721,10 +7729,10 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
     }
 }
 
-//! the GEMV family's dispatch grid over `rows` output rows at `lanes` per row (0 = a whole subgroup per
-//! row, the q8 GEMV's only form): a workgroup's subgroups each take subgroup_size / lanes rows
-def gemv_wgs(rows : int64; lanes : uint) : int64 {
-    let l = lanes == 0u ? g_gpu.subgroup_size : int64(lanes)
+//! the GEMV family's dispatch grid over `rows` output rows at `lanes_per_row` (0 = a whole subgroup per
+//! row, the q8 GEMV's only form): a workgroup's subgroups each take subgroup_size / lanes_per_row rows
+def gemv_wgs(rows : int64; lanes_per_row : uint) : int64 {
+    let l = lanes_per_row == 0u ? g_gpu.subgroup_size : int64(lanes_per_row)
     let rpw = g_gpu.rows_per_wg * (g_gpu.subgroup_size / l)
     return (rows + rpw - 1l) / rpw
 }

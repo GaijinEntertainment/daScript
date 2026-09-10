@@ -78,8 +78,8 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     delete h16
 }
 
-//! ident = the shared expert's call shape: one region over every row, the identity slot map at unit weight
-def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_only : bool = false; ident : bool = false) {
+//! one_region = the shared expert's call shape: one region over every row, the identity slot map at unit weight
+def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_only : bool = false; one_region : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var wq1 : array<uint8>
         var ws1 : array<uint8>
@@ -122,9 +122,9 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         w |> resize(nk)
         expert_of_row |> resize(nk)
         for (j in range64(nk)) {
-            let b = ident ? j : (j * 7l) % nk
+            let b = one_region ? j : (j * 7l) % nk
             inv[j] = uint(b)
-            w[j] = ident ? 1.0 : 0.25 + 0.5 * float((j * 7l) % 5l) / 4.0
+            w[j] = one_region ? 1.0 : 0.25 + 0.5 * float((j * 7l) % 5l) / 4.0
             expert_of_row[b] = b < cnt_a ? 1 : 0
         }
         let ege1 = nfe * n

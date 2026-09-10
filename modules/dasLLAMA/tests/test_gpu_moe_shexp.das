@@ -14,6 +14,7 @@ def private allow_cpu_prefill_intent() {
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: the route lever kept the whole-model driver off the twin
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto / moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route / set_gpu_resident_route
 require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers: the device arm's engage witness
 require _model_tier   // models_dir() + model_available() presence/size-tier gate, the logits compares
@@ -78,6 +79,7 @@ def private shexp_forced_feed(t : T?; n : int64) {
     set_gpu_resident_route(false)   //! the per-op rails' claims: the whole-model driver would take the twin (test_gpu_resident_moe.das holds that arm)
     var tr <- load_model_(path, QuantMode.q8)
     set_gpu_resident_route(true)   //! the lever reads at the load alone
+    t |> success(!moe_gpu_resident_active(), "the route lever kept the whole-model driver off the twin")
     t |> success(tr.config.n_ff_shexp > 0l && !tr.config.moe_dense_shexp, "the twin carries a gated shared expert")
     let layers = tr.config.n_layers
     var marked = 0l

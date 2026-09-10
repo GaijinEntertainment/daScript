@@ -32,6 +32,22 @@ what it costs today and what the fix would change.
   vehicles' vulkan pp512 rows re-minted by `gen_bench_records`, direction-grade against the
   rows they replace; done when they sit in `performance/records/zen2.json`.
 
+- **LANDED (2026-09-09) - the shared expert's K-quant planes are minted beside the q8
+  transcode, and the whole-model resident driver reads those.** A MoE's shared expert reached
+  the device only as the loader's q8 transcode of the file's Q4_K / Q6_K planes - twice the
+  bytes its decode GEMVs read. The loader now keeps the gate/up/down planes in the file's own
+  K-quant format beside that transcode (`wsh*_fmt`, `wshk*_offs`; `IMAGE_VERSION` 36, so every
+  image re-mints once) and the whole-model resident driver places the K-quant copies. On the
+  Qwen1.5-MoE-A2.7B-Chat Q4_K_M twin the device image reads 10107 -> 9756 MB and the token
+  7.06 -> 6.12 ms (the `vk_rdec gpu avg/token` line of `benchmarks/lcpp_bench.das --prof
+  --jobque-profiling` under `DASLLAMA_GPU_PROF=1`, RTX 5060 Ti) [direction-grade - two commits].
+  The pair to read is footprint against wall clock: the device image and the token both fall,
+  while every image flavor now carries BOTH copies - the planar CPU image grows by about 537 MB
+  on the twin (three planes x layers x dim x n_ff_shexp weights in the file's format). That
+  growth stands until the CPU chain reads the K-quant planes too and the q8 transcode goes,
+  which `followup_vulkan 43` owns in its still-open list (the CPU chain's shared expert on the
+  same K-quant planes; today the resident-vs-CPU bar carries the two forms' rounding).
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

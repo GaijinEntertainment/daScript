@@ -26,20 +26,31 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // at its recording). Two prompt lengths: one window, two windows. Three fixtures: the twin, the
 // Qwen3.6-35B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block after the deltanet head,
 // and the Qwen3-30B UD-IQ2_XXS, the MoE with no shared expert (the residual step's add partner off).
+// All three fixtures are large-tier (DASLLAMA_PARITY_FULL=1); the file is -jit only, and skips
+// without the file, the armed tier, or a device with no cm2 tile family (the routed block's only
+// tile); on a cm2 device the driver's admission of every fixture is asserted, never skipped.
 
 [init]
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
 }
 
-let private TWIN = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"   //! the Q4_K_M mint of the Q8_0 carrier (its recipe row in ../performance/model_specs.das)
-let private HYBRID = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf"   //! the deltanet hybrid MoE with a gated shared expert, the 16 GB card's whole-model fit
-let private NO_SHEXP = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"   //! the MoE with no shared expert: the routed block alone at the FFN site
-//! of the step's max |logit| - the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's reading): the arms
-//! agree to 1e-8 at layer 0 and part from layer 1 on, where the device chain's summation order moves the residual by ulps,
-//! the next layer's Q8 requant rounds a few elements the other way and the router flips a near-tie; against the all-CPU
-//! chain 24 layers of that read 0.05-0.095 on the twin at 40 and 600 tokens, the one-step-off control 3.7-9.1 logits off
-let private MOE_LOGIT_BAR_REL = 0.15
+//! a fixture file and whether it carries a shared expert
+struct private Fixture {
+    file : string
+    shexp : bool
+}
+
+let private TWIN = Fixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf", shexp = true)   //! the Q4_K_M mint of the Q8_0 carrier (its recipe row in ../performance/model_specs.das)
+let private HYBRID = Fixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", shexp = true)   //! the deltanet hybrid MoE with a gated shared expert, the 16 GB card's whole-model fit
+let private NO_SHEXP = Fixture(file = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf", shexp = false)   //! the MoE with no shared expert: the routed block alone at the FFN site
+//! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's
+//! reading) - the arms agree to 1e-8 at layer 0 and part from layer 1 on, where the device chain's summation order moves the
+//! residual by ulps, the next layer's Q8 requant rounds a few elements the other way and the router flips a near-tie; against
+//! the all-CPU chain that reads 0.07-0.11 on the twin and the 30B at 40 and 600 tokens and 0.09-0.16 on the 35B, whose
+//! two-window step 4 sits on a router near-tie that any change of the device's summation order flips (0.04 under one order,
+//! 0.155-0.16 under two others); the one-step-off control reads 0.42-0.95, so the bar discriminates it by 2x and more
+let private MOE_LOGIT_BAR_REL = 0.20
 let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 let private FED_STEPS = 6l
 let private NO_CENSUS = -1l   //! the census count with no vulkan module: the routed-block witnesses stand down
@@ -74,6 +85,15 @@ def private census(kernel : string) : int64 {
     }
 }
 
+//! the device carries the cm2 tile family the routed block's expert tiles need (the driver declines a MoE without it)
+def private device_has_cm2() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu != null && g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2
+    } else {
+        return false
+    }
+}
+
 def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
     let n = long_length(prompt)
     var out : array<array<float>>
@@ -89,23 +109,30 @@ def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks
 
 //! prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it, the routed
-//! block's census growing by the MoE layer count per window and per step; `shexp` = the fixture
-//! carries a shared expert
-def private moe_forced_feed(t : T?; n : int64; file : string; shexp : bool) {
+//! block's census growing by the MoE layer count per window and per step
+def private moe_forced_feed(t : T?; n : int64; fx : Fixture) {
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return
     }
-    let path = path_join(models_dir(), file)
+    let path = path_join(models_dir(), fx.file)
     if (!model_available(t, path)) return
     if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
         t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
         return
     }
+    let route0 = gpu_want_resident()
+    set_gpu_resident_route(true)   //! the whole-model driver's arm, whatever lever an earlier cell left
     var tr <- load_model_(path, QuantMode.q8)
-    t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == shexp, "the fixture routes experts {shexp ? "beside" : "with no"} shared expert")
+    set_gpu_resident_route(route0)
+    t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp, "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
+    if (!device_has_cm2()) {
+        t |> skip("the device has no cm2 tile family - the whole-model driver declines a MoE by design")
+        delete tr
+        return
+    }
+    t |> success(moe_gpu_resident_active(), "the whole-model driver took {fx.file} (a decline names its reason in the load log: the plan, a seat, a plane's format)")
     if (!moe_gpu_resident_active()) {
-        t |> skip("the whole-model driver declined {file} (the load log names why: the plan, the tile family or a seat)")
         delete tr
         return
     }
@@ -166,32 +193,32 @@ def private moe_forced_feed(t : T?; n : int64; file : string; shexp : bool) {
 [test]
 def test_gpu_resident_moe(t : T?) {
     t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the resident MoE prefill window + the routed token command vs the CPU chain, one window") @(t : T?) {
-        moe_forced_feed(t, 40l, TWIN, true)
+        moe_forced_feed(t, 40l, TWIN)
     }
     t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the same across two windows") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
         }
-        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, TWIN, true)
+        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, TWIN)
     }
 }
 
 [test]
 def test_gpu_resident_moe_hybrid(t : T?) {
     t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS: the deltanet hybrid MoE - the recurrent head beside the routed block, one window") @(t : T?) {
-        moe_forced_feed(t, 40l, HYBRID, true)
+        moe_forced_feed(t, 40l, HYBRID)
     }
     t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS: the same across two windows (the conv tail and the state carry the seam)") @(t : T?) {
-        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, HYBRID, true)
+        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, HYBRID)
     }
 }
 
 [test]
 def test_gpu_resident_moe_no_shexp(t : T?) {
     t |> run("Qwen3-30B-A3B-UD-IQ2_XXS: the MoE with no shared expert - the routed block alone at the FFN site, one window") @(t : T?) {
-        moe_forced_feed(t, 40l, NO_SHEXP, false)
+        moe_forced_feed(t, 40l, NO_SHEXP)
     }
     t |> run("Qwen3-30B-A3B-UD-IQ2_XXS: the same across two windows") @(t : T?) {
-        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, NO_SHEXP, false)
+        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, NO_SHEXP)
     }
 }

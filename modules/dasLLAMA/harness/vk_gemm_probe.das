@@ -19,6 +19,7 @@ require vulkan
 require vulkan/vulkan_boost
 require spirv/spirv_shader
 require dasllama/dasllama_vulkan_common
+require dasllama/dasllama_gpu_tier   // TILE_READ_SLACK: the rows the moe: arm's gathered plane carries past its last region
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_prefill
@@ -464,9 +465,9 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
 
 // ===== the expert schedule (args "moe:<fmt>", "moesk:<fmt>") =====
 let private MOE_NE = 128
-let private MOE_ROWS = 32   //! the s column: rows per expert region on the uniform profile
-let private MOE_READ_SLACK = 128   //! the m column's unclamped partial-column load: rows of slack past the last region
-let private MOE_CHUNK = 128   //! the m column
+let private S_ROWS = int(SCHED_S_ROWS)   //! the engine's s column: rows per expert region on the uniform profile
+let private M_ROWS = int(SCHED_M_ROWS)   //! the engine's m column
+let private READ_SLACK = int(TILE_READ_SLACK)
 
 //! a schedule form over the buckets: the whole buckets at the s column, or the ladder's m and s halves
 enum private MoeSchedForm {
@@ -475,28 +476,25 @@ enum private MoeSchedForm {
     ladder_s
 }
 
-//! the bucket rows per expert: 32 each, or the 30B window's profile
+//! the bucket rows per expert: the s column's count each, or the 30B window's profile
 def private moe_bucket_counts(skew : bool) : array<int> {
     var cnt : array<int>
     cnt |> resize(MOE_NE)
     if (!skew) {
         for (c in cnt) {
-            c = MOE_ROWS
+            c = S_ROWS
         }
         return <- cnt
     }
     for (e in range(MOE_NE)) {
         cnt[e] = e < 9 ? 250 : (e < 17 ? 96 : (e < 21 ? 48 : (e < 69 ? 18 : 0)))
     }
-    cnt[0] += MOE_NE * MOE_ROWS - 9 * 250 - 8 * 96 - 4 * 48 - 48 * 18   //! the rows left onto the biggest bucket
+    var placed = 0
+    for (c in cnt) {
+        placed += c
+    }
+    cnt[0] += MOE_NE * S_ROWS - placed   //! the rows left onto the biggest bucket
     return <- cnt
-}
-
-//! the ladder's m rows of a bucket: none up to the s column, else whole m columns plus a partial one
-//! when the remainder passes the s column (a remainder within it takes the s column)
-def private moe_ladder_m_rows(c : int) : int {
-    if (c <= MOE_ROWS) return 0
-    return c % MOE_CHUNK > MOE_ROWS ? c : (c / MOE_CHUNK) * MOE_CHUNK
 }
 
 //! the device schedule's words for one form: a record per bucket piece [block base, row base, rows,
@@ -509,7 +507,7 @@ def private moe_sched_words(cnt : array<int>; plane_blk, wtiles, tc, bound : int
     var wg = 0
     var row0 = 0
     for (e in range(MOE_NE)) {
-        let mrows = moe_ladder_m_rows(cnt[e])
+        let mrows = int(sched_ladder_m_rows(uint(cnt[e])))
         let rows = form == MoeSchedForm.whole ? cnt[e] : (form == MoeSchedForm.ladder_m ? mrows : cnt[e] - mrows)
         let r0 = row0 + (form == MoeSchedForm.ladder_s ? mrows : 0)
         row0 += cnt[e]
@@ -540,8 +538,8 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     let totblk = MOE_NE * plane_blk
     let bb = arena_block_bytes(fmt)
     let wq_words = int(bb.wq / 4l)
-    let nk = MOE_NE * MOE_ROWS
-    let xrows = nk + MOE_READ_SLACK
+    let nk = MOE_NE * S_ROWS
+    let xrows = nk + READ_SLACK
     var wqh : array<uint>
     var wsuh : array<uint>
     var xfh : array<uint>
@@ -575,48 +573,53 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     let wtiles = (d + 127) / 128
     let map_off = MOE_NE * 4
     var cnt <- moe_bucket_counts(skew)
-    let bound_whole = (nk / MOE_ROWS + MOE_NE) * wtiles   //! every bucket may straddle a column
-    let bound_chunks = (nk / MOE_CHUNK + MOE_NE) * wtiles   //! every bucket may own a partial m column
-    let bound_rest = MOE_NE * wtiles   //! at most one s tile per bucket
+    let bound_whole = (nk / S_ROWS + MOE_NE) * wtiles   //! every bucket may straddle a column
+    let bound_ladder_m = (nk / M_ROWS + MOE_NE) * wtiles   //! every bucket may own a partial m column
+    let bound_ladder_s = MOE_NE * wtiles   //! at most one s tile per bucket
     var live_whole = 0
-    var live_chunks = 0
-    var live_rest = 0
-    var sw <- moe_sched_words(cnt, plane_blk, wtiles, MOE_ROWS, bound_whole, MoeSchedForm.whole, live_whole)
-    var sc <- moe_sched_words(cnt, plane_blk, wtiles, MOE_CHUNK, bound_chunks, MoeSchedForm.ladder_m, live_chunks)
-    var sr <- moe_sched_words(cnt, plane_blk, wtiles, MOE_ROWS, bound_rest, MoeSchedForm.ladder_s, live_rest)
+    var live_ladder_m = 0
+    var live_ladder_s = 0
+    var words_whole <- moe_sched_words(cnt, plane_blk, wtiles, S_ROWS, bound_whole, MoeSchedForm.whole, live_whole)
+    var words_ladder_m <- moe_sched_words(cnt, plane_blk, wtiles, M_ROWS, bound_ladder_m, MoeSchedForm.ladder_m, live_ladder_m)
+    var words_ladder_s <- moe_sched_words(cnt, plane_blk, wtiles, S_ROWS, bound_ladder_s, MoeSchedForm.ladder_s, live_ladder_s)
     let wq_bytes = int64(totblk) * bb.wq
     let ws_bytes = long_length(wsuh) * 4l
     let xf_bytes = int64(xrows * n) * 2l
-    let sw_bytes = long_length(sw) * 4l
-    let sc_bytes = long_length(sc) * 4l
-    let sr_bytes = long_length(sr) * 4l
+    let whole_bytes = long_length(words_whole) * 4l
+    let ladder_m_bytes = long_length(words_ladder_m) * 4l
+    let ladder_s_bytes = long_length(words_ladder_s) * 4l
     let y_bytes = int64(nk * d) * 4l
     let wqd = make_device_buf(wq_bytes)
     let wsd = make_device_buf(ws_bytes)
     let xfd = make_device_buf(xf_bytes)
-    let swd = make_device_buf(sw_bytes)
-    let scd = make_device_buf(sc_bytes)
-    let srd = make_device_buf(sr_bytes)
-    let yd = make_device_buf(y_bytes)
+    let whole_d = make_device_buf(whole_bytes)
+    let ladder_m_d = make_device_buf(ladder_m_bytes)
+    let ladder_s_d = make_device_buf(ladder_s_bytes)
+    //! two output planes alternate across the dispatches, each under a fresh hazard rail: no barrier between
+    //! consecutive dispatches, the served graph's shape (one plane would serialize them on its write-after-write)
+    let yd_a = make_device_buf(y_bytes)
+    let yd_b = make_device_buf(y_bytes)
     let flop = 2.0lf * double(nk) * double(d) * double(n)
     let profile = skew ? "skewed " : "uniform"
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
         upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
-        upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), sw_bytes)
-        upload_region_at(scd, 0l, addr<uint8 const?>(sc[0]), sc_bytes)
-        upload_region_at(srd, 0l, addr<uint8 const?>(sr[0]), sr_bytes)
+        upload_region_at(whole_d, 0l, addr<uint8 const?>(words_whole[0]), whole_bytes)
+        upload_region_at(ladder_m_d, 0l, addr<uint8 const?>(words_ladder_m[0]), ladder_m_bytes)
+        upload_region_at(ladder_s_d, 0l, addr<uint8 const?>(words_ladder_s[0]), ladder_s_bytes)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(map_off))
         let begin = VkCommandBufferBeginInfo()
         var raw = alloc_cmd()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        var s_whole = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, swd, xfd, yd),
-            fixed_array(wq_bytes, ws_bytes, sw_bytes, xf_bytes, y_bytes),
-            fixed_array(1u, 2u, 0u, 4u, 16u))
-        for (_k in range(DISPATCHES)) {
-            cm2_cls_enc(fmt, 32l, raw, hz, s_whole, pc, int64(bound_whole))
+        let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+        var s_whole_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, whole_d, xfd, yd_a),
+            fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
+        var s_whole_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, whole_d, xfd, yd_b),
+            fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
+        for (k in range(DISPATCHES)) {
+            var hz : VkHaz
+            cm2_cls_enc(fmt, 32l, raw, hz, k % 2 == 0 ? s_whole_a : s_whole_b, pc, int64(bound_whole))
         }
         vk_check(vkEndCommandBuffer(raw), null)
         let us = usec_per_dispatch(raw)
@@ -624,29 +627,32 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         var raw2 = alloc_cmd()
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
-        var hz2 : VkHaz
-        var s_chunks = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, scd, xfd, yd),
-            fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-            fixed_array(1u, 2u, 0u, 4u, 16u))
-        var s_rest = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, srd, xfd, yd),
-            fixed_array(wq_bytes, ws_bytes, sr_bytes, xf_bytes, y_bytes),
-            fixed_array(1u, 2u, 0u, 4u, 16u))
-        for (_k in range(DISPATCHES)) {
-            cm2_cls_enc(fmt, 128l, raw2, hz2, s_chunks, pc, int64(bound_chunks))
-            cm2_cls_enc(fmt, 32l, raw2, hz2, s_rest, pc, int64(bound_rest))
+        var s_ladder_m_a = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
+            fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
+        var s_ladder_m_b = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
+            fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
+        var s_ladder_s_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, ladder_s_d, xfd, yd_a),
+            fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
+        var s_ladder_s_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, ladder_s_d, xfd, yd_b),
+            fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
+        for (k in range(DISPATCHES)) {
+            var hz_m : VkHaz
+            var hz_s : VkHaz
+            cm2_cls_enc(fmt, 128l, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
+            cm2_cls_enc(fmt, 32l, raw2, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
         }
         vk_check(vkEndCommandBuffer(raw2), null)
         let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
-        print("{name} {profile} ladder m+s:   d={d} K={n} wgs={bound_chunks}+{bound_rest} ({live_chunks}+{live_rest} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
+        print("{name} {profile} ladder m+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
     }
     delete wqh
     delete wsuh
     delete xfh
     delete cnt
-    delete sw
-    delete sc
-    delete sr
+    delete words_whole
+    delete words_ladder_m
+    delete words_ladder_s
 }
 
 // k4 (Q4_K) cm2 decode-in-load vs the serving kq tile - per-shape rate on the qwen role shapes

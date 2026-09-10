@@ -711,8 +711,11 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
     a.f1 |> resize(nl)
     a.f3 |> resize(nl)
     a.f2 |> resize(nl)
+    a.wsh1 |> reserve(nl)
     a.wsh1 |> resize(nl)
+    a.wsh3 |> reserve(nl)
     a.wsh3 |> resize(nl)
+    a.wsh2 |> reserve(nl)
     a.wsh2 |> resize(nl)
     a.rmsq |> resize(nl)
     a.rmsk |> resize(nl)
@@ -739,10 +742,10 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
             a.f1[li] = int(fmt_at(t.we1_fmt, l))
             a.f3[li] = int(fmt_at(t.we3_fmt, l))
             a.f2[li] = int(fmt_at(t.we2_fmt, l))
-            let sh_off = l * dim * c.n_ff_shexp   //! the shared expert's q8 triple
-            a.wsh1[li] = c.n_ff_shexp > 0l ? t.wsh1_off + sh_off : -1l
-            a.wsh3[li] = c.n_ff_shexp > 0l ? t.wsh3_off + sh_off : -1l
-            a.wsh2[li] = c.n_ff_shexp > 0l ? t.wsh2_off + sh_off : -1l
+            let she = dim * c.n_ff_shexp
+            a.wsh1[li] = c.n_ff_shexp > 0l ? t.wsh1_off + l * she : -1l
+            a.wsh3[li] = c.n_ff_shexp > 0l ? t.wsh3_off + l * she : -1l
+            a.wsh2[li] = c.n_ff_shexp > 0l ? t.wsh2_off + l * she : -1l
             a.rmsq[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null
             a.rmsk[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null
             a.bq[li] = c.attn_qkv_bias ? addr<float const?>(t.bq[l * a.qd]) : null
@@ -1477,6 +1480,14 @@ def gpu_prefill_route_on() : bool => g_gpu_prefill_route
 var private g_shexp_gpu_layers = 0l   //! layers whose shared expert the device chain served in a prefill - the arm's engage witness (read on the main context only)
 def public shexp_gpu_prefill_layers() : int64 => g_shexp_gpu_layers
 
+//! why this prefill's shared expert stays on the CPU rail: the model's shape, the tier's marks, or the call's size and route
+def private shexp_gpu_decline_reason(c : Config; l, npos : int64) : string {
+    if (c.moe_dense_shexp) return "the model's shared expert is a dense FFN, not the device chain's call shape"
+    if (!moe_gpu_shexp_on_gpu(l)) return "the shared expert's planes are not resident on the tier"
+    if (npos < 32l) return "a prefill under 32 positions"
+    return "the prefill route lever is off"
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
@@ -1608,6 +1619,9 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
 
     // 2b. the shared expert on the device
     let sh_gpu = (nsh > 0l && !c.moe_dense_shexp && moe_gpu_shexp_on_gpu(l) && npos >= 32l && gpu_prefill_route_on())
+    if (nsh > 0l && !sh_gpu) {
+        moe_gpu_shexp_declined(shexp_gpu_decline_reason(c, l, npos))
+    }
     if (sh_gpu) {
         trace_tag(TRACE_TAG_SHEXP)
         let ts_shg = prof_ticks()

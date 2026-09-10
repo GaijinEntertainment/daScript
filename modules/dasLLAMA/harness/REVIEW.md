@@ -24,9 +24,7 @@ declaring file's bodies alone - reports such a binding as never accessed, and `@
 that report by leaving the binding out of the read and write binding sets the generated
 dispatch builds its barriers from.
 
-**A diff that adds an arm to `vk_gemm_probe.das` joins it to one of the probe's three axes
-(`../ARCHITECTURE_MEASUREMENT.md` sec.2.5): the kernel the engine serves a dense role shape
-with, against its alternates; the shipped tile against a copy of itself with one lever moved
-back; or the shipped tile against the reference engine's own GEMM shader, served in its place
-through `DASLLAMA_VK_SPV_OVERRIDE`.** An arm off those axes has no alternate its number can be
-ranked against.
+**A diff that adds an arm to `vk_gemm_probe.das` ships the alternate that arm's number is ranked
+against - the prior tile, the reference engine's own kernel, the other lane count, whichever the
+arm exists to beat (`../ARCHITECTURE_MEASUREMENT.md` sec.2.5).** A number with no alternate
+beside it ranks nothing.

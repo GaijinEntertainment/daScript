@@ -10,7 +10,8 @@ token command's attention and recurrent heads this block's tail follows, and the
 decode era - the decode span whose kernels the routed block runs - are
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections 2.2r-2.2v. The cooperative-matrix tiles the
 expert GEMMs run on and the per-op tier's MoE expert chain are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and 2.2ae. What a model has to fit
+`ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and 2.2ae, and the lane split of
+the decode GEMV family the token command's expert GEMVs take is its section 2.2ah. What a model has to fit
 on the card before any of this runs - the residency plan that sizes the expert planes, and the
 marks swap - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The GPU backend
 role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
@@ -22,7 +23,9 @@ the attention head and the residual steps are shared.** The whole-model driver a
 whose expert stacks fit the arena beside its attention quads (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`
 sec.2.2n), and the window then never leaves the device between layers: the CPU's routing,
 bucketing and combine of the per-op tier (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q) become
-five device stages over the window's FFN-normed rows.
+five device stages over the window's FFN-normed rows. Every window millisecond and per-layer
+microsecond below is the `DASLLAMA_GPU_PROF=1` window profile (`vk_rdpf`) on the RTX 5060 Ti,
+except where a probe arm is named.
 
 - **The router GEMM** (`RouterGemm`) is the span's router GEMV batched: a 64 x 32 tile of
   positions by router rows per workgroup, each invocation a 4 x 2 block whose two rows sit 16
@@ -33,7 +36,7 @@ five device stages over the window's FFN-normed rows.
   eight 16-byte bank groups, so a warp's two weight loads take two wavefronts each and its four
   activation loads (two distinct rows) one. The scalar stage this replaced - rows 2te and 2te+1
   at a stride of 68 floats - put four of every sixteen lanes on one bank, and the tile ran at
-  about 17 FMAs per cycle per SM: 4.3 ms per 30B window against 2.4 now (a 16 x 16 tile of one
+  about 17 FMAs per cycle per SM: 4.3 ms per 30B window against the float4 stage's 2.4 (a 16 x 16 tile of one
   output each, stepping K by 32, was barrier-bound at 243 us per layer for 268 MFLOP; a 32 x
   32 tile of 2 x 2 blocks staging each step before computing it read 142). The 64-wide K step
   is why the MoE seats ask for a 64-multiple row width. The router plane holds every MoE layer's f32 rows,
@@ -53,14 +56,15 @@ five device stages over the window's FFN-normed rows.
   partial, unless the remainder past the whole columns fits the s column, which then takes it
   (`sched_ladder_m_rows`). The s pieces' records sit at `[0, ne)`, the m pieces' at `[ne, 2 ne)`,
   and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 2048 words for up
-  to 256 experts twice), the two tile counts scanned as one packed word. Every dispatch is sized
+  to 256 experts twice), the two tile counts scanned as one packed word (its halves stay under
+  65536 for any admitted shape: 512 tokens by 64 slots over 256 experts). Every dispatch is sized
   for its worst case - one s tile per expert; every expert's whole columns plus a partial one -
   and the map's tail past the real workgroup count carries the sentinel (`SCHED_NONE`): a tile
   workgroup that reads it sees a zero-row region and returns before its first barrier. A real
   window's router is skewed - on the Qwen3-30B-A3B at 512 tokens, 69 of 128 experts route, nine
   hold over 128 rows (the largest 467) - so the ladder runs about 90 column tiles where the s
   column alone ran 175 (`DASLLAMA_GPU_PROF=1` prints the last MoE layer's buckets and both
-  counts): the expert planes at 593 / 650 us against 842 / 915 on the s column alone
+  counts): the expert planes at 563 / 652 us against 815 / 896 on the s column alone
   (`harness/vk_gemm_probe.das -- moesk:iq2xxs`, that window's profile). The slot-to-bucket-row
   map hands every slot the next row of its expert's bucket through an atomic cursor, so the
   rows within a bucket land in an order the schedule does not fix - which nothing downstream
@@ -121,7 +125,8 @@ logit, the k weighted routed rows through the top-k's slot map, then the next la
 layer without a shared expert takes the same step with the add partner off. A one-row dispatch is
 latency: the step loads eight slots' rows together, then four, then one at a time (the sums
 still in slot order), so an element waits on one load round per group rather than per slot - on
-the Qwen1.5-MoE twin's 24 layers at four slots the step reads about 290 us per token where a
+the `DASLLAMA_GPU_PROF=1` token profile (`vk_rdec moe avg/token`, RTX 5060 Ti) the Qwen1.5-MoE
+twin's 24 layers at four slots read about 290 us per token in the step where a
 plain slot loop read 360 and the add plus the separate combine 199 and 233; on the 30B's 48
 layers at eight slots 440 where a four-slot group alone read 490 (the compiler's own unroll of
 the plain loop served eight slots but left four to a scalar tail). The slot regions are device

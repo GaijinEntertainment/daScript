@@ -21,11 +21,11 @@ the wrong buffer and passes on garbage that happens to compare.
 output - missing a compare against a CPU oracle that can witness the cell's property is a
 defect.**
 
-**A kernel that gains a kargs field whose non-default value changes what it computes or which
-elements it reads or writes - a branch selector, a row or element base, a stride - ships a
-model-less kernel-unit cell that sets that field to a non-default value, in the same change.**
-At the default the new field has no visible effect: a CPU oracle that ignores it and the kernel
-that honors it agree.
+**A kernel that gains a new branch a cell can select - a kargs field, or a sentinel value in a
+bound buffer - whose non-default value changes what it computes or which elements it reads or
+writes ships a model-less kernel-unit cell that sets that branch to a non-default value, in the
+same change.** At the default the new branch has no visible effect: a CPU oracle that ignores it
+and the kernel that honors it agree.
 
 **A kernel-unit cell fills a GPU output buffer with a sentinel before every dispatch whose
 output it then reads.** An unprefilled output can pass by staying stale - the previous
@@ -45,10 +45,10 @@ the same gate that must RED - a poisoned input, a poisoned expectation, a discon
 mechanism, or a second independent lane; a gate's own reference is never its control.
 
 **A kernel-unit cell whose kernel computes at a narrower precision than its oracle at any
-step - operands or accumulator - bounds that step's error by construction - f16-exact inputs,
-magnitude-bounded fixtures - or states in the cell how its new bar follows from that step's
-error.** A bar moved without that derivation is a loosening: the compare then measures the
-narrowing until it no longer discriminates.
+step - operands, accumulator, or the stored result - bounds that step's error by construction
+(f16-exact inputs, magnitude-bounded fixtures) or states in the cell how its new bar follows
+from that step's error.** A bar moved without that derivation is a loosening: the compare then
+measures the narrowing until it no longer discriminates.
 
 **A gate for a kernel that attends inside a restricted horizon - a window, a sliding span, a
 block-diagonal range - writes its CPU oracle to attend strictly inside that horizon.** A leak

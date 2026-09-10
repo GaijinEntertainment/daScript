@@ -13,7 +13,8 @@ checklist's own.
 **A function whose KIND the file's sec.1 charter line seats in another file lands in that
 file, or the charter line changes in the same diff.**
 
-**A tensor format conversion lands in `dasllama/dasllama_convert.das`.**
+**A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
+decode helper rides its backend's kernel home.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
 a CPU row core reads in `dasllama/dasllama_repack.das`, a transform into the layout a GPU plane
@@ -38,10 +39,11 @@ a template declared elsewhere is not a kernel body: it compiles its own PSO wher
 **A quirk of one family - one model architecture's file, or one backend driver's - lands in that
 file, never sideways into a sibling.**
 
-**A piece two files need lands in their nearest shared file (its own file when none exists) -
-never a second copy.** A predicate, a constant, or a helper spelled once in each of two files
-drifts on the first edit to one copy; an enum-and-int twin of one predicate inside one file is
-the tier's idiom, not a copy. A piece two folders outside each other both need lands in the folder that
+**A piece two files both execute lands in their nearest shared file (its own file when none
+exists) - never a second copy.** A predicate, a constant, or a helper spelled once in each of
+two files drifts on the first edit to one copy; an enum-and-int twin of one predicate inside one
+file is the tier's idiom, not a copy, and a test's CPU oracle that restates the arithmetic is a
+witness, not a copy. A piece two folders outside each other both need lands in the folder that
 owns the concern; one landing under `dasllama/` that code outside `modules/dasLLAMA/` drives
 lands as a public entry module - one `dasllama/dasllama_lint.das` licenses a consumer to
 require directly.
@@ -49,7 +51,7 @@ require directly.
 **A family gaining an arm for a media kind adds that kind's span markers to that family's chat
 template, never to a second renderer.** Span markers are the template text that opens and
 closes the media rows. A family whose template or vocab lacks them has no arm for that media
-kind - `create_chat_` panics at create, not at render.
+kind.
 
 **No signature in `dasllama/dasllama_tower.das` takes a type that
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares.**
@@ -84,9 +86,10 @@ it does, `dasllama/dasllama_common.das` panics on the unset hook with a message 
 module to require. A program root (test, harness, benchmark, tool) requires the registration
 module it needs directly.
 
-**A `dasllama/` module whose `[init]` registers a hook the engine dispatches through is
-required from `dasllama/dasllama_transformer.das` in the same change that adds it** - a
-registration no umbrella reaches never fires for a consumer of the `dasllama.das` facade.
+**A `dasllama/` module whose `[init]` registers a hook the engine dispatches through gets its
+side-effect require in the same change that adds it - in `dasllama/dasllama_transformer.das`,
+or in `dasllama/dasllama_common.das` where the rule above seats it there** - a registration
+neither file reaches never fires for a consumer of the `dasllama.das` facade.
 
 **An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
 family name on a shared path, is a defect - it carries declarative registration only.**

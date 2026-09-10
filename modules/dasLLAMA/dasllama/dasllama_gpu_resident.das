@@ -432,8 +432,6 @@ let private RDEC_VRAM_HEADROOM_PCT = 27l
 let private RDEC_OS_RESERVE = 1_073_741_824l
 let private RDEC_MISC_BYTES = 67_108_864l          // decode smalls + batch act planes + metas
 
-let private RDEC_MOE_TILE_SLACK = 32l   //! rows of read slack past the MoE block's last bucket row (the s tile's unclamped column)
-
 //! Layer `l` routes through expert stacks: past the dense lead, with its expert planes present.
 def layer_is_moe(t : Model; l : int64) : bool => (t.config.n_expert > 0l && l >= t.config.n_layer_dense_lead
     && l < long_length(t.we1_offs) && t.we1_offs[l] >= 0l && t.we3_offs[l] >= 0l && t.we2_offs[l] >= 0l)
@@ -510,7 +508,7 @@ def private rdec_scratch_bytes(t : Model) : int64 {
     if (c.n_expert > 0l) {
         let nk = RDEC_PF_ROWS * c.n_expert_used
         let nfe = c.n_ff_exp
-        moe = ((nk + RDEC_MOE_TILE_SLACK) * (c.dim + nfe) * 2l + nk * (2l * nfe + c.dim) * 4l
+        moe = ((nk + TILE_READ_SLACK) * (c.dim + nfe) * 2l + nk * (2l * nfe + c.dim) * 4l
             + RDEC_PF_ROWS * (c.n_expert + 1l) * 4l + nk * 12l)
     }
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * layer_kv_dim(c, 0l)
@@ -1030,7 +1028,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     // gate/up another), so a group must agree on its quant form — mixed groups decline
     var mir_idx = 0l
     var rec_idx = 0l
-    var moe_li = 0l
+    var router_slot = 0l
     for (l in range64(c.n_layers)) {
         var lf = resident_layer_fmts(t, l)
         let moe = layer_is_moe(t, l)
@@ -1088,8 +1086,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             if (moe) {
                 let eb = resident_place_experts(t, l, mr, kg, wb)
                 if (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) return rdec_decline("arena placement failed at recurrent layer {l} (the expert stacks)")
-                rdec_set_moe_experts(l, moe_li, eb.be1, eb.be3, eb.be2, int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)))
-                moe_li++
+                rdec_set_moe_experts(l, router_slot, eb.be1, eb.be3, eb.be2, int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)))
+                router_slot++
             }
             continue
         }
@@ -1106,10 +1104,10 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         if (moe) {
             let eb = resident_place_experts(t, l, mr, kg, wb)
             if (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) return rdec_decline("arena placement failed at layer {l} (the expert stacks)")
-            rdec_set_moe_layer(l, mir_idx, moe_li, bq, bk, bv, bo, b1, b3, b2, eb.be1, eb.be3, eb.be2,
+            rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, eb.be1, eb.be3, eb.be2,
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2),
                 int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)))
-            moe_li++
+            router_slot++
         } else {
             rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2,
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2))
@@ -1821,7 +1819,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             rdec_decline_say(empty(plan.reason) ? "the residency plan does not fit" : plan.reason)
         }
     } elif (moe_gpu_resident_installed() && !gpu_want_resident()) {
-        to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - the per-op rails were asked for (DASLLAMA_GPU_RESIDENT=0, or the in-process route lever)\n")
+        to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - the per-op rails were asked for (DASLLAMA_GPU_RESIDENT=0, or set_gpu_resident_route(false) in process)\n")
+    } elif (moe_gpu_resident_installed() && t.config.n_expert > 0l && !rdec_moe_installed()) {
+        to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - the tier installed no MoE seats for its {t.config.n_expert} routed experts; the per-op tier's expert rails serve\n")
     } elif (moe_gpu_resident_installed() && t.config.n_expert == 0l) {
         to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - DASLLAMA_GPU is not set (the individual DASLLAMA_GPU_* rails alone are armed)\n")
     }

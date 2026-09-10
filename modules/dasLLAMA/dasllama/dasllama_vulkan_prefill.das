@@ -641,16 +641,21 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
 }
 
 // the prefill profile's stamps per layer: the attention head's roles (+ qkn), or the recurrent head's
-// (rq_x qkv z [beta alpha | ba] conv scan onorm tail rq_o out), then the shared FFN tail's seven
+// (rq_x qkv z [beta alpha | ba] conv scan onorm tail rq_o out), then the shared FFN tail's seven; an MoE
+// layer adds the routed block's eight and drops the dense block's four when it has no shared expert
 def private pf_roles_per_layer(L : RLayer) : int64 {
-    if (L.recurrent) {
-        return 7l + (g_rd.dn_ba_f32 ? 10l : 11l)
-    }
-    var n = g_rd.qk_norm ? 16l : 15l
-    if (L.moe) {   //! the routed block's eight stamps; a layer without a shared expert has no dense-block stamps
-        n += PF_MOE_ROLES - (L.b1 < 0l ? 4l : 0l)
+    var n = L.recurrent ? 7l + (g_rd.dn_ba_f32 ? 10l : 11l) : (g_rd.qk_norm ? 16l : 15l)
+    if (L.moe) {
+        n += PF_MOE_ROLES - (has_dense_triple(L) ? 0l : 4l)
     }
     return n
+}
+
+//! the routed block's stamps of an MoE layer's tail past ar1 / rq_f at `m0`: the shared expert's four when the layer has one, then the block's eight and ar2
+def private pf_moe_tail_text(acc : double[26]; m0 : int; shexp : bool) : string {
+    let s = shexp ? "sh_gate {int(acc[m0])} sh_up {int(acc[m0 + 1])} sh_act {int(acc[m0 + 2])} sh_down {int(acc[m0 + 3])} " : ""
+    let r = m0 + (shexp ? 4 : 0)
+    return "{s}router {int(acc[r])} topk {int(acc[r + 1])} sched {int(acc[r + 2])} gather {int(acc[r + 3])} e_gate {int(acc[r + 4])} e_up {int(acc[r + 5])} e_act {int(acc[r + 6])} e_down {int(acc[r + 7])} ar2+comb {int(acc[r + 8])}"
 }
 
 let private PF_MOE_ROLES = 8l   //! router topk sched gather e_gate e_up e_act e_down (the combine rides the layer's ar2 stamp)
@@ -761,7 +766,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let nfe = g_rd.nfe
     let ner = g_rd.ner
     let nk = wlen * k
-    var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(ner), dim = uint(dim), woff = uint(L.moe_li * ner * dim), ostride = uint(ner))
+    var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(ner), dim = uint(dim), woff = uint(L.router_slot * ner * dim), ostride = uint(ner))
     enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
     pfq_ts(raw)
     var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale)
@@ -806,8 +811,8 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
-    var pcc = ArArgs(dim = uint(dim), add_on = L.b1 >= 0l ? 1u : 0u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
-        k = uint(g_rd.k), lstride = uint(g_rd.ner), gidx = uint(g_rd.ne), gated = g_rd.sh_gated ? 1u : 0u)
+    var pcc = ArArgs(dim = uint(dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
+        slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u)
     let next_fused = l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)
     if (next_fused && pf_qkv6(l + 1l)) {
         enc_cls_ar_comb_f16_b(raw, h, L.pf_arcomb_f16_set, pcc, wlen)
@@ -1401,14 +1406,14 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 } else {
                     enc_cls_ar(raw, h, g_rd.pf_sets[b + 8], pc8, wlen)
                     pfq_ts(raw)
-                    if (moe && g_rd.layers[l].b1 < 0l) {   //! no dense triple reads the feed: the routed block takes the f32 rows
-                    } elif (gu6) {
+                    let feed_read = !moe || has_dense_triple(g_rd.layers[l])   //! the routed block takes the f32 rows; only a dense triple reads the feed
+                    if (feed_read && gu6) {
                         var pc9 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
-                    } elif (guk) {
+                    } elif (feed_read && guk) {
                         var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
                         enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 8l + 255l) / 256l)
-                    } else {
+                    } elif (feed_read) {
                         var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
                         enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
                     }
@@ -1416,7 +1421,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
                 let ffn_row0 = pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
                 let ffn_rows = wlen - ffn_row0
-                if (g_rd.layers[l].b1 >= 0l) {   //! the dense triple: the layer's FFN, or an MoE layer's shared expert
+                if (has_dense_triple(g_rd.layers[l])) {
                     let p1 = arena_planes(g_rd.layers[l].f1, g_rd.layers[l].b1)
                     let p3 = arena_planes(g_rd.layers[l].f3, g_rd.layers[l].b3)
                     let gqb = gu6 ? g_rd.pf_xf : g_rd.pf_xq
@@ -1516,6 +1521,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
 def private pf_moe_bucket_report(wlen : int64) {
     let nk = wlen * g_rd.k
     var cnt : array<int64>
+    cnt |> reserve(g_rd.ne)
     cnt |> resize(g_rd.ne)
     unsafe {
         let picks = reinterpret<uint?>(g_rd.pf_midx_host.mapped)
@@ -1531,7 +1537,7 @@ def private pf_moe_bucket_report(wlen : int64) {
     var b32 = 0l
     var b64 = 0l
     var b128 = 0l
-    var big = 0l
+    var b_over = 0l
     var tiles_s = 0l
     var tiles_ladder = 0l
     for (c in cnt) {
@@ -1549,12 +1555,12 @@ def private pf_moe_bucket_report(wlen : int64) {
             if (c <= 128l) {
                 b128++
             } else {
-                big++
+                b_over++
             }
             tiles_ladder += (c + 127l) / 128l
         }
     }
-    to_log(LOG_INFO, "vk_rdpf moe buckets (the last MoE layer, {nk} rows over {g_rd.ne} experts): {used} non-empty, the largest {largest}; sizes <=32: {b32} 33-64: {b64} 65-128: {b128} >128: {big}; 32-row tiles {tiles_s}, a 32/64/128 ladder {tiles_ladder}\n")
+    to_log(LOG_INFO, "vk_rdpf moe buckets (the last MoE layer, {nk} rows over {g_rd.ne} experts): {used} non-empty, the largest {largest}; sizes <=32: {b32} 33-64: {b64} 65-128: {b128} >128: {b_over}; 32-row tiles {tiles_s}, a 32/64/128 ladder {tiles_ladder}\n")
     delete cnt
 }
 
@@ -1571,14 +1577,18 @@ def private pf_prof_report(npos : int64) {
     var att : double[16]
     var dn : double[18]
     var moe : double[26]
+    var dnm : double[26]   //! a recurrent MoE layer: the deltanet head's stamps, then the routed tail's
     var natt = 0l
     var ndn = 0l
     var nmoe = 0l
+    var ndnm = 0l
     var qi = 3u
     for (L in g_rd.layers) {
         let n = pf_roles_per_layer(L)
         for (s in range64(n)) {
-            if (L.recurrent) {
+            if (L.recurrent && L.moe) {
+                dnm[s] += pfq_us(qi + uint(s))
+            } elif (L.recurrent) {
                 dn[s] += pfq_us(qi + uint(s))
             } elif (L.moe) {
                 moe[s] += pfq_us(qi + uint(s))
@@ -1587,7 +1597,9 @@ def private pf_prof_report(npos : int64) {
             }
         }
         qi += uint(n)
-        if (L.recurrent) {
+        if (L.recurrent && L.moe) {
+            ndnm++
+        } elif (L.recurrent) {
             ndn++
         } elif (L.moe) {
             nmoe++
@@ -1608,23 +1620,27 @@ def private pf_prof_report(npos : int64) {
     for (v in moe) {
         tmoe += v
     }
-    tot += tatt + tdn + tmoe
-    to_log(LOG_INFO, "vk_rdpf gpu ({npos} tokens, last window) prologue {int(pfq_us(2u))} fin_rq {int(pfq_us(qi))} cls {int(pfq_us(qi + 1u))} attention layers {natt}: {int(tatt)} recurrent layers {ndn}: {int(tdn)} MoE layers {nmoe}: {int(tmoe)} total {int(tot)} us\n")
+    var tdnm = 0.0lf
+    for (v in dnm) {
+        tdnm += v
+    }
+    tot += tatt + tdn + tmoe + tdnm
+    to_log(LOG_INFO, "vk_rdpf gpu ({npos} tokens, last window) prologue {int(pfq_us(2u))} fin_rq {int(pfq_us(qi))} cls {int(pfq_us(qi + 1u))} attention layers {natt}: {int(tatt)} recurrent layers {ndn}: {int(tdn)} MoE layers {nmoe}: {int(tmoe)} recurrent MoE layers {ndnm}: {int(tdnm)} total {int(tot)} us\n")
+    var has_shexp = false
+    for (L in g_rd.layers) {
+        has_shexp ||= L.moe && has_dense_triple(L)
+    }
     if (nmoe > 0l) {
-        //! an MoE layer's stamps: the attention roles (the qkn one shifts them by one), ar1, rq_f,
-        //! the shared expert's four when the layer has one, then the routed block's nine and ar2
+        //! an MoE layer's stamps: the attention roles (the qkn one shifts them by one), ar1, rq_f, then the tail
         let q = g_rd.qk_norm ? 1 : 0
-        var sh = 0
-        for (L in g_rd.layers) {
-            if (L.moe && L.b1 >= 0l) {
-                sh = 4
-            }
-        }
-        let a0 = 10 + q   //! the first stamp past ar1 / rq_f
-        let shexp = sh > 0 ? "sh_gate {int(moe[a0])} sh_up {int(moe[a0 + 1])} sh_act {int(moe[a0 + 2])} sh_down {int(moe[a0 + 3])} " : ""
         let qkn = q > 0 ? "qkn {int(moe[4])} " : ""
-        let m0 = a0 + sh
-        to_log(LOG_INFO, "vk_rdpf moe rq_x {int(moe[0])} q {int(moe[1])} k {int(moe[2])} v {int(moe[3])} {qkn}rope_kv {int(moe[4 + q])} attn {int(moe[5 + q])} rq_a {int(moe[6 + q])} wo {int(moe[7 + q])} ar1 {int(moe[8 + q])} rq_f {int(moe[9 + q])} {shexp}router {int(moe[m0])} topk {int(moe[m0 + 1])} sched {int(moe[m0 + 2])} gather {int(moe[m0 + 3])} e_gate {int(moe[m0 + 4])} e_up {int(moe[m0 + 5])} e_act {int(moe[m0 + 6])} e_down {int(moe[m0 + 7])} ar2+comb {int(moe[m0 + 8])}\n")
+        to_log(LOG_INFO, "vk_rdpf moe rq_x {int(moe[0])} q {int(moe[1])} k {int(moe[2])} v {int(moe[3])} {qkn}rope_kv {int(moe[4 + q])} attn {int(moe[5 + q])} rq_a {int(moe[6 + q])} wo {int(moe[7 + q])} ar1 {int(moe[8 + q])} rq_f {int(moe[9 + q])} {pf_moe_tail_text(moe, 10 + q, has_shexp)}\n")
+    }
+    if (ndnm > 0l) {
+        //! a recurrent MoE layer's stamps: the deltanet head's (the f32 beta/alpha arm folds two into one), ar1, rq_f, then the tail
+        let b = g_rd.dn_ba_f32 ? 0 : 1
+        let ba = g_rd.dn_ba_f32 ? "ba {int(dnm[3])}" : "beta {int(dnm[3])} alpha {int(dnm[4])}"
+        to_log(LOG_INFO, "vk_rdpf dnmoe rq_x {int(dnm[0])} qkv {int(dnm[1])} z {int(dnm[2])} {ba} conv {int(dnm[4 + b])} scan {int(dnm[5 + b])} onorm {int(dnm[6 + b])} tail {int(dnm[7 + b])} rq_o {int(dnm[8 + b])} out {int(dnm[9 + b])} ar1 {int(dnm[10 + b])} rq_f {int(dnm[11 + b])} {pf_moe_tail_text(dnm, 12 + b, has_shexp)}\n")
     }
     if (natt > 0l) {
         // the qkn dispatch stamps between v and rope_kv, shifting every later role by one
@@ -2941,8 +2957,6 @@ def private ensure_xf_state {
     g_gpu.xf_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 expert chain engaged\n")
 }
-
-let private TILE_READ_SLACK = 128l   //! rows of read slack past a region's last row: the m column's unclamped partial load
 
 //! chunk row cap of the cm2 chain: the gathered f16 image (batch_xq window), the f16 hidden plane
 //! (hq_dev) and the f32 output planes must all fit; 128-aligned like the tiles' columns

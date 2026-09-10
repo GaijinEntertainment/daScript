@@ -223,7 +223,7 @@ def private quad_up(var q : Quad; fmt : int; base : int64; seed : int64; phase :
 
 // the expert stacks: gate/up k4 over N, down k6 over NFE; expert e's plane starts at e * NFE * N;
 // slot j routes expert j
-def private ffn_up(t : T?; var f : Ffn; base : int64 = 30l) : bool {
+def private ffn_up(t : T?; var f : Ffn; base_slot : int64 = 30l) : bool {
     var wq1 : array<uint8>
     var ws1 : array<uint8>
     var wq3 : array<uint8>
@@ -233,9 +233,9 @@ def private ffn_up(t : T?; var f : Ffn; base : int64 = 30l) : bool {
     fill_kq_stack(1, NE * NFE, N, 41l, true, wq1, ws1)
     fill_kq_stack(1, NE * NFE, N, 43l, true, wq3, ws3)
     fill_kq_stack(3, NE * N, NFE, 47l, false, wq2, ws2)
-    let woff1 = base * STRIDE
-    let woff3 = (base + 1l) * STRIDE
-    let woff2 = (base + 2l) * STRIDE
+    let woff1 = base_slot * STRIDE
+    let woff3 = (base_slot + 1l) * STRIDE
+    let woff2 = (base_slot + 2l) * STRIDE
     if (!moe_gpu_upload_stack(wq1, ws1, woff1, N, NE * NFE, 1)) {
         return false
     }
@@ -574,11 +574,11 @@ def private span_args(qa, qb : Quad; f : Ffn) : MoeSpanDec {
     return <- a
 }
 
-//! the span's arguments with a gated shared expert beside the routed pair (both layers share its triple)
-def private span_args_sh(qa, qb : Quad; f : Ffn; sh : Shexp) : MoeSpanDec {
+//! the span's arguments with a shared expert beside the routed pair (both layers share its triple), gated or not
+def private span_args_sh(qa, qb : Quad; f : Ffn; sh : Shexp; gated : bool) : MoeSpanDec {
     var a <- span_args(qa, qb, f)
     a.nsh = NFE
-    a.sh_gated = true
+    a.sh_gated = gated
     a.wsh1 <- [sh.off1, sh.off1]
     a.wsh3 <- [sh.off3, sh.off3]
     a.wsh2 <- [sh.off2, sh.off2]
@@ -587,8 +587,8 @@ def private span_args_sh(qa, qb : Quad; f : Ffn; sh : Shexp) : MoeSpanDec {
 
 //! one span layer's reference with a shared expert: span_layer_ref's steps, the shared gate on the
 //! same f32 normed row, then the shared FFN on the Q8_0 feed (its hidden row requantized Q8_0 as
-//! the q8 down GEMV reads it) scaled by sigmoid(gate) onto the residual
-def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<float>; li : int64; var x : array<float>; pos : int64; cossin : array<float>; var kraw : array<float>) {
+//! the q8 down GEMV reads it) scaled by sigmoid(gate) - or by one, ungated - onto the residual
+def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<float>; li : int64; var x : array<float>; pos : int64; cossin : array<float>; var kraw : array<float>; gated : bool) {
     var xb2 : array<float>
     block_ref(q, x, pos, cossin, xb2, kraw)
     for (i in range64(N)) {
@@ -610,7 +610,7 @@ def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<
     for (i in range64(N)) {
         gl += sh.gate[li * N + i] * xb[i]
     }
-    let g = 1.0 / (1.0 + exp(-gl))
+    let g = gated ? 1.0 / (1.0 + exp(-gl)) : 1.0
     var idx : array<int64>
     var w : array<float>
     idx |> resize(K)
@@ -778,63 +778,66 @@ def test_vulkan_dec_span_shexp(t : T?) {   // nolint:STYLE038 — one span cell:
         var qb : Quad
         t |> success(quad_up(qa, 1, 110l * STRIDE, 51l, 0.4, true, false), "dec span shexp: layer A's quad uploaded")
         t |> success(quad_up(qb, 1, 120l * STRIDE, 63l, 0.8, true, false), "dec span shexp: layer B's quad uploaded")
-        let gen = moe_gpu_attn_dec_claim(true)
-        matmul_moe_gpu_attn_dec_hydrate(qa.woq, null, null, 0l, KVD, true)
-        matmul_moe_gpu_attn_dec_hydrate(qb.woq, null, null, 0l, KVD, true)
-        t |> success(moe_gpu_attn_dec_ok(qa.woq, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, 0l, gen) == DAT_SERVE,
-            "dec span shexp: both layers serve position 0")
         var router : array<float>
         var att_norms : array<float>
         var ffn_norms : array<float>
         span_planes(qa, qb, f, router, att_norms, ffn_norms)
-        var a <- span_args_sh(qa, qb, f, sh)
-        var kout : array<float>
-        var vout : array<float>
-        kout |> resize(2l * KVD)
-        vout |> resize(2l * KVD)
         var no_freqs : array<float>
         var cossin : array<float>
         cossin |> resize(HS)
-        for (pos in range64(2)) {
-            build_rope_row_packed(cossin, 0l, pos, HS, 10000.0, 1.0, 1.0, no_freqs)
-            var x : array<float>
-            fill_row(x, N, 0.5 + 0.7 * float(pos))
-            var x_ref := x
-            var xd : array<float>
-            var xq : array<int8>
-            var xs : array<float>
-            feed_ref(x, qa.norm, 1, xd, xq, xs)
-            unsafe {
-                a.pos = pos
-                a.router = addr<float const?>(router[0])
-                a.shgate = addr<float const?>(sh.gate[0])
-                a.att_norm = addr<float const?>(att_norms[0])
-                a.ffn_norm = addr<float const?>(ffn_norms[0])
-                a.xq = addr<int8 const?>(xq[0])
-                a.xs = addr<float const?>(xs[0])
-                a.cossin = addr<float const?>(cossin[0])
-                a.x = addr(x[0])
-                a.kout = addr(kout[0])
-                a.vout = addr(vout[0])
-            }
-            matmul_moe_gpu_span_dec(a)
-            var kraw_a : array<float>
-            var kraw_b : array<float>
-            span_layer_ref_sh(qa, f, sh, router, 0l, x_ref, pos, cossin, kraw_a)
-            span_layer_ref_sh(qb, f, sh, router, 1l, x_ref, pos, cossin, kraw_b)
-            check_row(t, "span shexp pos {pos} residual row after both layers", x, x_ref)
-            if (pos == 0l) {
-                var poison := x   //! the bar's control: one element pushed past both bars must red
-                poison[0] += 1.0 + 2.0 * max_abs(x_ref)
-                t |> success(count_bad(poison, x_ref, ABS_BAR, REL_BAR * max_abs(x_ref)) == 1, "span shexp: the bars catch a poisoned element")
-                //! the shared expert is load-bearing: the reference without it must miss the device row
-                var x_no : array<float>
-                fill_row(x_no, N, 0.5)
-                var ka : array<float>
-                var kb : array<float>
-                span_layer_ref(qa, f, router, 0l, x_no, 0l, cossin, ka)
-                span_layer_ref(qb, f, router, 1l, x_no, 0l, cossin, kb)
-                t |> success(count_bad(x, x_no, ABS_BAR, REL_BAR * max_abs(x_no)) > 0, "span shexp: the reference without the shared expert misses the device row")
+        for (gated in fixed_array(true, false)) {
+            vk_span_reset()   //! the record keys on the shared expert's gate: the ungated arm is a new span
+            let tag = gated ? "gated" : "ungated"
+            let gen = moe_gpu_attn_dec_claim(true)
+            matmul_moe_gpu_attn_dec_hydrate(qa.woq, null, null, 0l, KVD, true)
+            matmul_moe_gpu_attn_dec_hydrate(qb.woq, null, null, 0l, KVD, true)
+            t |> success(moe_gpu_attn_dec_ok(qa.woq, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, 0l, gen) == DAT_SERVE,
+                "dec span shexp ({tag}): both layers serve position 0")
+            var a <- span_args_sh(qa, qb, f, sh, gated)
+            var kout : array<float>
+            var vout : array<float>
+            kout |> resize(2l * KVD)
+            vout |> resize(2l * KVD)
+            for (pos in range64(2)) {
+                build_rope_row_packed(cossin, 0l, pos, HS, 10000.0, 1.0, 1.0, no_freqs)
+                var x : array<float>
+                fill_row(x, N, 0.5 + 0.7 * float(pos))
+                var x_ref := x
+                var xd : array<float>
+                var xq : array<int8>
+                var xs : array<float>
+                feed_ref(x, qa.norm, 1, xd, xq, xs)
+                unsafe {
+                    a.pos = pos
+                    a.router = addr<float const?>(router[0])
+                    a.shgate = addr<float const?>(sh.gate[0])
+                    a.att_norm = addr<float const?>(att_norms[0])
+                    a.ffn_norm = addr<float const?>(ffn_norms[0])
+                    a.xq = addr<int8 const?>(xq[0])
+                    a.xs = addr<float const?>(xs[0])
+                    a.cossin = addr<float const?>(cossin[0])
+                    a.x = addr(x[0])
+                    a.kout = addr(kout[0])
+                    a.vout = addr(vout[0])
+                }
+                matmul_moe_gpu_span_dec(a)
+                var kraw_a : array<float>
+                var kraw_b : array<float>
+                span_layer_ref_sh(qa, f, sh, router, 0l, x_ref, pos, cossin, kraw_a, gated)
+                span_layer_ref_sh(qb, f, sh, router, 1l, x_ref, pos, cossin, kraw_b, gated)
+                check_row(t, "span shexp ({tag}) pos {pos} residual row after both layers", x, x_ref)
+                if (pos == 0l) {
+                    var poison := x
+                    poison[0] += 1.0 + 2.0 * max_abs(x_ref)
+                    t |> success(count_bad(poison, x_ref, ABS_BAR, REL_BAR * max_abs(x_ref)) == 1, "span shexp ({tag}): the bars catch a poisoned element")
+                    var x_no : array<float>
+                    fill_row(x_no, N, 0.5)
+                    var ka : array<float>
+                    var kb : array<float>
+                    span_layer_ref(qa, f, router, 0l, x_no, 0l, cossin, ka)
+                    span_layer_ref(qb, f, router, 1l, x_no, 0l, cossin, kb)
+                    t |> success(count_bad(x, x_no, ABS_BAR, REL_BAR * max_abs(x_no)) > 0, "span shexp ({tag}): the reference without the shared expert misses the device row")
+                }
             }
         }
     } else {

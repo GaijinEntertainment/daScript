@@ -7,8 +7,9 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 **A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
 output - or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it, and
 a diff that changes a `[metal_dispatch]` or `[vk_dispatch]` class's dispatch geometry, its
-kernel-argument struct (`kargs`) or that struct's fields, apply `REVIEW_KERNEL_CELLS.md`
-(beside this file) together with this list.**
+kernel-argument struct (`kargs`), that struct's fields, or which branch the class takes on a
+value in a buffer it binds, apply `REVIEW_KERNEL_CELLS.md` (beside this file) together with
+this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -47,16 +48,18 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds, removes or moves a gate - one test cell, or a file between suites - updates
-the `CLAUDE.md` census entry of the file it lands in, in the same change.** A `{a,b}` shorthand
-naming several files at once, or a suite roster, carries nothing to correct.
+**A diff that changes what a file covers - a cell added, removed or moved, its suite, an axis or
+bar an existing cell asserts - corrects that file's `CLAUDE.md` census entry, numbers included,
+in the same change.** A `{a,b}` shorthand naming several files at once, or a suite roster,
+carries nothing to correct.
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
 
 **A diff that adds, changes, or drops a gate's skip condition - the model, fixture, device or
-arm it needs - updates the test file's own header in the same change, and adds or corrects the
-skip clause in that file's `CLAUDE.md` entry where `CLAUDE.md` carries one.**
+arm it needs - updates the test file's own header - the top comment block carrying every fact a
+`t |> skip` in the file keys on (model, tier, device, arm, knob) - in the same change, and adds
+or corrects the skip clause in that file's `CLAUDE.md` entry where `CLAUDE.md` carries one.**
 
 **A diff that adds, moves, or removes a `[test]` file outside `modules/dasLLAMA/` that carries
 a `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -69,11 +72,6 @@ block and `../CLAUDE.md` in the same change.** A data row in a table `run.das` l
 `MODULE_AREAS`, a suite's or an area's file list - is not the surface. Both documents restate
 the surface for an agent that reads them cold; a copy the code has left behind sends that agent
 to a flag that no longer does what the text says.
-
-**A new test file listed in `run.das`'s `model-free` or `stocked` suite, or in no `run.das`
-suite at all, whose name does not say what it covers, gets a `CLAUDE.md` entry in the same
-change** - `run.das`'s `model-free` and `stocked` lists together are the complete census, the
-`CLAUDE.md` map is deliberately partial.
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm
@@ -103,13 +101,11 @@ worker-local fork pools, shared queue policy.
 kernel regressing, adds it to the pinned set in the same change** - as a file when every
 cell of it pins, as a named cell otherwise.
 
-**On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell
-that returns without asserting - whatever the reason - registers `t |> skip` there; `feint` is a
-print, not a skip.
-
-**A cell whose claim needs a capability the box may lack - a device, a window server, an audio
-device, a module the build omits, a stocked model - registers `t |> skip` on that fact before
-it asserts: never a bare return, never a red.**
+**On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
+returns without asserting - whatever the reason - registers `t |> skip` there, and one whose
+claim needs a capability the box may lack (a device, a window server, an audio device, a module
+the build omits, a stocked model) registers that skip on the fact before it asserts, never a
+bare return and never a red; `feint` is a print, not a skip.
 
 **A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
 value, a host toolchain's presence, a compile-time module-presence check
