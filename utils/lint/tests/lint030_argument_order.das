@@ -6,7 +6,7 @@ options _lint = "LINT030"   // the rule ships default-off; the fixture arms it
 // differs between tiers, so the read sees the value before or after the write by the tier's
 // choice.
 
-expect 50503:11
+expect 50503:12
 
 require daslib/lint
 
@@ -110,6 +110,13 @@ def reads_through(var d : Draft) : int {
 
 def bumps_through(var d : Draft) : int {
     return bump(d.n)
+}
+
+def bump_ints_only(var v : auto(T)&) : int {
+    static_if (typeinfo is_int(v)) {
+        v++
+    }
+    return 0
 }
 
 // === Positives - a sibling argument reads what the nested call writes ===
@@ -227,6 +234,16 @@ def good_method_through_pointer_field(var d : Draft) : int {
 // copying a pointer out of the variable is a read, whatever the copy is later used for
 def good_pointer_field_read(var d : Draft) : int {
     return pair(reads_pointer_field(d), d.n)
+}
+
+// a generic's instances are read one by one: the float instance of bump_ints_only writes nothing ...
+def good_generic_instance_that_reads(var f : float) : int {
+    return pair(bump_ints_only(f), int(f))
+}
+
+// ... and the int instance, scanned after it, still counts as the write it is
+def bad_generic_instance_that_writes(var x : int) : int {
+    return pair(bump_ints_only(x), x)   // LINT030
 }
 
 // a marked site is the author's call

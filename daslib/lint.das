@@ -180,8 +180,9 @@ struct private Lint030Frame {
     writes : array<Lint030Write>
 }
 
-//! `lint030_callee_writes`' memo, `<file>:<line>:<column>#<k>` -> whether that function writes its
-//! k-th parameter; a key sits at `true` while its scan runs, so a recursive chain reads as writing
+//! `lint030_callee_writes`' memo, `<mangled name hash>#<k>` -> whether that function writes its
+//! k-th parameter - a generic's instances key apart, since `static_if` can make one write and
+//! another not; a key sits at `true` while its scan runs, so a recursive chain reads as writing
 var private lint030_writers : table<string; bool>
 
 def private lint030_bare_var(e : Expression?) : Variable const? {
@@ -349,8 +350,7 @@ def private lint030_callee_writes(fn : Function const?; k : int) : bool {
     let p = fn.arguments[k]
     return false if (p._type == null || p._type.flags.constant || !(p._type.flags.ref || p._type.isRefType))
     return true if (fn.body == null)
-    let site = string(fn.at.fileInfo != null ? fn.at.fileInfo.name : fn.name)
-    let key = "{site}:{fn.at.line}:{fn.at.column}#{k}"
+    let key = "{fn.getMangledNameHash}#{k}"
     if (key_exists(lint030_writers, key)) {
         return lint030_writers?[key] ?? true
     }
