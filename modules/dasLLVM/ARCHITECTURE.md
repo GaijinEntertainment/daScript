@@ -298,3 +298,17 @@ a global written on one branch is looked up on that branch only. Every access to
 function therefore shares one base pointer, which is what lets LLVM see `xs[j]` and `xs[j + 1]` as
 adjacent. Under `options solid_context` the address is instead `context->globals + stackTop`,
 computed once per function in the entry block.
+
+## 12. A standalone exe fills a global initializer's addresses at startup
+
+The exe emitter leaves every address global - a `@@fn` value, a handled type's `new`, the
+table accessors - null and private, since a JIT-process address means nothing in the exe, and
+`collect_external_functions` (`daslib/llvm_exe.das`) walks the used functions and the used
+global initializers at startup to store the exe-resident address into each, registering the
+function with the context on the way. The walk covers a promoted das module - one declared
+`module X shared`, which the front end promotes and marks `builtIn` like a C++ module - because
+its initializers are program code `init_globals` emits like any other; only the C++ modules,
+which have no das initializer to walk, are skipped. A shared module's global that holds `@@fn`
+is the shape daslib's dispatch tables and icon catalogs take, and a walk that skipped the module
+left such a Func null: nothing referenced the function, LLVM dropped it, and the first invoke
+threw. `tests/llvm_exe_shared_addr.das` holds the shape.

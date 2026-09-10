@@ -174,6 +174,12 @@ there.
   widening an exemption list without naming the exempted input's reason beside it, or a finding
   text that no longer names what failed. What the gate enforces is read from the gate itself.
 
+- **An emitter walk over the program's modules under `daslib/` that leaves a module out by
+  `moduleFlags.builtIn` alone is a defect - a promoted das module (`module X shared`) is
+  builtIn too; a walk that means the C++ modules tests `builtIn && !promoted`**
+  (`ARCHITECTURE.md` sec.12). A promoted module's global initializers are program code, and a
+  walk that skips them leaves the address globals they need null in the exe.
+
 - **A diff that builds an x64 or aarch64 machine's feature string appends the forced ones
   (`x64_forced_plus_features` / `arm64_forced_plus_features`, `daslib/llvm_jit_common.das`) AFTER
   the detected host features.** LLVM's `SubtargetFeatures` takes the last occurrence of a name, so

@@ -629,9 +629,9 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             for (fn in funcs) {
                 visit(fn, adapter_resolve)
             }
-            // Register builtins reachable only from top-level `let X = builtin()` (#2582); init_globals must JIT first so the globals exist.
+            // The used global initializers too (#2582), promoted das modules included - only the C++ modules have none to walk (ARCHITECTURE.md sec.12).
             prog |> for_each_module() $(m) {
-                if (m.moduleFlags.builtIn) return ;
+                if (m.moduleFlags.builtIn && !m.moduleFlags.promoted) return ;
                 m |> for_each_global() $(var glob) {
                     if (glob.init != null && is_used(prog, glob)) {
                         visit_expression(glob.init, adapter_resolve)
