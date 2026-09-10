@@ -140,6 +140,6 @@ when to come back - the watchdog every 250 ms. The pipe's capacity is therefore 
 write budget between two drains, and a child that fills it blocks until the next one; it is also
 the most a single drain hands the caller, which is what the caller's heap sees between two
 collects. A POSIX pipe carries 64 KB by default, and Windows sizes an anonymous pipe at 4 KB
-when asked for the default - a chatty child under the watchdog's tick writes 16 KB a second
-into one of those, four pipes' worth between two drains - so the Windows pipe is created at the
-POSIX capacity, and every platform drains the same bursts.
+when asked for the default - a chatty child under the watchdog's tick moves at most 16 KB a
+second through one of those, the pipe's 4 KB four drains a second - so the Windows pipe is
+created at the POSIX capacity, and every platform drains the same bursts.
