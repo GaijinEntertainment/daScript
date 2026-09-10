@@ -10,7 +10,8 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   frame, KittenTTS reads each finished sentence. `main.das` is the whole program, `web_shell.html`
   the page around its canvas, `.das_package` the release, `models.json` its model set.
 - `storywish/` - a browser example: the typed words become a request in the TinyStoriesInstruct
-  corpus's layout, tinystories-instruct-27M writes the story, KittenTTS reads it. Same four files;
+  corpus's layout, tinystories-instruct-27M writes the story, Pocket TTS reads it in one baked
+  voice from a file without the codec encoder (text in, no packs, no cloning). Same four files;
   `wish.das` holds the request side pure (typed line -> words -> prompt, the field-line stop) so a
   test reaches it without a window.
 - `wasm/dlim_config/` - a wasm-only program: prints the running build's DlimConfiguration JSON.
@@ -62,8 +63,10 @@ character range for a typed line, and repeats come from a hold timer.
 ### 3.4 The model set is minted for the build that ships it
 
 Each browser example's `models.json` names its source files by Hugging Face repository, file
-and sha256. `wasm/mint_models.py` fetches them (cached by sha256), bakes each GGUF into a
-`.dlim` image against the wasm64 build's own DlimConfiguration, copies the packs, writes
+and sha256, in three lists: `images` (a GGUF the build bakes into a `.dlim`), `packs` (a
+front-end pack) and `files` (a GGUF that is its own served form - a Pocket TTS file). `wasm/mint_models.py`
+fetches them (cached by sha256), bakes each image against the wasm64 build's own
+DlimConfiguration, copies the packs and files as they are, writes
 `models/manifest.json` (the file list, their sizes, the IMAGE_VERSION the images carry) and
 stamps that version into the page's `/* @image-version */ 0` slot. The shell reads the manifest,
 refuses a set minted for another version before fetching it, and shows a program abort's last

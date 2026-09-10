@@ -114,8 +114,10 @@ struct PocketModel {
     bos_before_voice : bool
     default_voice : string
     voice_names : array<string>
-    voices : table<string; array<float>>   // the roster's clips, 24 kHz mono
+    voices : table<string; array<float>>          // a voice as a clip, 24 kHz mono: a cloned one, or a roster of the older file form
+    voice_latents : table<string; array<float>>   // a voice as its clip's latent frames [frames][latent_dim]: the roster's stored form
     voice_states : table<string; PocketVoiceState>
+    cloning : bool           // the file carries the codec encoder, so a clip can become a voice
     text_emb : TtsWeight = TtsWeight()     // [n_bins + 1][d]
     bos_emb : TtsWeight = TtsWeight()      // [latent_dim]: the first frame's input
     bos_voice : TtsWeight = TtsWeight()    // [d]: the row before the voice prompt
@@ -173,6 +175,7 @@ var private g_stage_repack = false
 def finalize(var m : PocketModel) {
     delete m.voice_names
     delete m.voices
+    delete m.voice_latents
     delete m.voice_states
     delete m.text_emb
     delete m.bos_emb
@@ -495,30 +498,34 @@ def private read_head(m : GGUFMeta; bytes : array<uint8> | #; var hd : PocketHea
     }
 }
 
-def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMimi; n_layers, d, heads, ffn, context : int64; period : float) {
+def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMimi; n_layers, d, heads, ffn, context : int64; period : float; encoder : bool) {
     mm.ratios <- gguf_int_array(m, bytes, "pocket.mimi.ratios")
     let nr = long_length(mm.ratios)
     mm.hop = 1l
     for (r in mm.ratios) {
         mm.hop *= r
     }
-    // the encoder's stages read the ratios reversed: 1 -> 64 channels first, doubling per stage
-    mm.enc_in <- read_conv(m, bytes, "mimi.encoder.model.0.conv", 1l, 1l, false)
-    mm.enc_res |> resize(int(nr))
-    mm.enc_down |> resize(int(nr))
-    for (i in range64(nr)) {
-        let ratio = mm.ratios[nr - 1l - i]
-        mm.enc_res[i] <- read_res_conv(m, bytes, "mimi.encoder.model.{1l + 3l * i}")
-        mm.enc_down[i] <- read_conv(m, bytes, "mimi.encoder.model.{3l + 3l * i}.conv", ratio, 1l, false)
-    }
-    mm.enc_out <- read_conv(m, bytes, "mimi.encoder.model.{2l + 3l * nr}.conv", 1l, 1l, false)
-    mm.enc_tf <- read_transformer(m, bytes, "mimi.enc_tf", n_layers, d, heads, ffn, context, period, true)
-    mm.downsample <- read_conv(m, bytes, "mimi.downsample.conv.conv", 0l, 1l, false)
-    mm.frame_steps = mm.downsample.k / 2l
-    mm.downsample.stride = mm.frame_steps
-    mm.downsample.pad_l = 0l   // replicate-padded by the caller, `frame_steps` rows
     mm.quant_proj <- read_conv(m, bytes, "mimi.quantizer.output_proj", 1l, 1l, false)
+    // the two resamplers are kernel 2 x stride and mirror each other; the upsampler is always in the file
+    mm.frame_steps = m.tensors[need_tensor(m, "mimi.upsample.convtr.convtr.weight")].dims[0] / 2l
     mm.upsample <- read_conv(m, bytes, "mimi.upsample.convtr.convtr", mm.frame_steps, d, true)
+    if (encoder) {
+        // the encoder's stages read the ratios reversed: 1 -> 64 channels first, doubling per stage
+        mm.enc_in <- read_conv(m, bytes, "mimi.encoder.model.0.conv", 1l, 1l, false)
+        mm.enc_res |> resize(int(nr))
+        mm.enc_down |> resize(int(nr))
+        for (i in range64(nr)) {
+            let ratio = mm.ratios[nr - 1l - i]
+            mm.enc_res[i] <- read_res_conv(m, bytes, "mimi.encoder.model.{1l + 3l * i}")
+            mm.enc_down[i] <- read_conv(m, bytes, "mimi.encoder.model.{3l + 3l * i}.conv", ratio, 1l, false)
+        }
+        mm.enc_out <- read_conv(m, bytes, "mimi.encoder.model.{2l + 3l * nr}.conv", 1l, 1l, false)
+        mm.enc_tf <- read_transformer(m, bytes, "mimi.enc_tf", n_layers, d, heads, ffn, context, period, true)
+        mm.downsample <- read_conv(m, bytes, "mimi.downsample.conv.conv", 0l, 1l, false)
+        verify(mm.downsample.k / 2l == mm.frame_steps)
+        mm.downsample.stride = mm.frame_steps
+        mm.downsample.pad_l = 0l   // replicate-padded by the caller, `frame_steps` rows
+    }
     mm.dec_tf <- read_transformer(m, bytes, "mimi.dec_tf", n_layers, d, heads, ffn, context, period, true)
     mm.dec_in <- read_conv(m, bytes, "mimi.decoder.model.0.conv", 1l, 1l, false)
     mm.dec_up |> resize(int(nr))
@@ -537,8 +544,29 @@ def private lang_code_of(language : string) : string {
     return language
 }
 
+// the roster: each voice as its stored latent frames, or as a clip in the older file form (which
+// needs the encoder to hear it)
+def private read_roster(g : GGUFMeta; bytes : array<uint8> | #; var m : PocketModel; path : string) {
+    m.voice_names <- gguf_str_array(g, bytes, "pocket.voices")
+    for (v in m.voice_names) {
+        if (gguf_find_tensor(g, "voice_latents.{v}") >= 0) {
+            m.voice_latents[v] <- read_arr(g, bytes, "voice_latents.{v}")
+        } elif (m.cloning) {
+            m.voices[v] <- read_arr(g, bytes, "voice.{v}")
+        } else {
+            panic("dasLLAMA pocket: '{path}' stores voice '{v}' as a clip but carries no codec encoder to hear it with")
+        }
+    }
+}
+
+//! Whether `name` is a voice this model speaks: a roster voice (stored as latent frames, or as
+//! a clip in the older file form) or a cloned one.
+def pocket_has_voice(m : PocketModel; name : string) : bool {
+    return key_exists(m.voice_latents, name) || key_exists(m.voices, name)
+}
+
 //! Load a converted Pocket TTS GGUF: the scalars from its `pocket.*` metadata, the weights
-//! prepared for the rows kernels, the tokenizer, and the roster's clips (encoded on first use).
+//! prepared for the rows kernels, the tokenizer, and the roster (its states built on first use).
 def load_pocket(path : string) : PocketModel {
     var inscope m = PocketModel()
     m.q8 = pocket_serve_q8_()
@@ -572,10 +600,8 @@ def load_pocket(path : string) : PocketModel {
         if (g_stage_file_q8 && !m.q8) {
             to_log(LOG_INFO, "dasLLAMA pocket: '{path}' carries Q8_0 GEMM weights; the f32 lane serves them dequantized\n")
         }
-        m.voice_names <- gguf_str_array(g, bytes, "pocket.voices")
-        for (v in m.voice_names) {
-            m.voices[v] <- read_arr(g, bytes, "voice.{v}")
-        }
+        m.cloning = !gguf_has(g, "pocket.cloning") || gguf_int(g, bytes, "pocket.cloning") != 0l
+        read_roster(g, bytes, m, path)
         let d = gguf_int(g, bytes, "pocket.backbone.d_model")
         let heads = gguf_int(g, bytes, "pocket.backbone.heads")
         let layers = gguf_int(g, bytes, "pocket.backbone.layers")
@@ -597,7 +623,7 @@ def load_pocket(path : string) : PocketModel {
         read_head(g, bytes, m.head, gguf_int(g, bytes, "pocket.head.depth"))
         read_mimi(g, bytes, m.mimi, gguf_int(g, bytes, "pocket.mimi.layers"), gguf_int(g, bytes, "pocket.mimi.d_model"),
             gguf_int(g, bytes, "pocket.mimi.heads"), gguf_int(g, bytes, "pocket.mimi.dim_feedforward"),
-            gguf_int(g, bytes, "pocket.mimi.context"), gguf_f32(g, bytes, "pocket.mimi.rope_max_period"))
+            gguf_int(g, bytes, "pocket.mimi.context"), gguf_f32(g, bytes, "pocket.mimi.rope_max_period"), m.cloning)
         m.frame_samples = m.mimi.hop * m.mimi.frame_steps
         m.unk_id = gguf_int(g, bytes, "tokenizer.ggml.unknown_token_id")
         m.byte_fallback = gguf_int(g, bytes, "tokenizer.ggml.byte_fallback") != 0l
@@ -766,9 +792,15 @@ let POCKET_MAX_VOICE_SECONDS = 60l   // the longest clip a voice is cloned from:
 //! front, run through the backbone at positions 0..; the state a synthesis continues from.
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-voice-state")]
 def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScratch) : PocketVoiceState {
-    var inscope vs = PocketVoiceState()
     var inscope lat : array<float>
     let frames = pocket_encode_latents(m, pcm, sc, lat)
+    return <- voice_state_from_latents(m, lat, frames, sc)
+}
+
+//! The voice state from a clip's latent frames [frames][latent_dim] - the stored roster form,
+//! and the second half of the clip path: the speaker projection, the BOS row, the backbone.
+def voice_state_from_latents(m : PocketModel; lat : array<float>; frames : int64; var sc : PocketScratch) : PocketVoiceState {
+    var inscope vs = PocketVoiceState()
     let d = m.backbone.d
     let bos = m.bos_before_voice ? 1l : 0l
     var inscope rows : array<float>
@@ -791,6 +823,9 @@ def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScrat
 //! `name` once its state is built (a clip the encoder refuses leaves no half voice behind), and a
 //! replaced voice's state is freed rather than left in the table's slot.
 def pocket_register_voice(var m : PocketModel; name : string; pcm : array<float>; var sc : PocketScratch) {
+    if (!m.cloning) {
+        panic("dasLLAMA pocket: voice '{name}': this file carries no codec encoder, so it cannot clone a voice")
+    }
     if (empty(pcm)) {
         panic("dasLLAMA pocket: voice '{name}' has no samples")
     }
@@ -804,16 +839,25 @@ def pocket_register_voice(var m : PocketModel; name : string; pcm : array<float>
         }
         m.voice_states |> erase(name)
     }
-    if (!key_exists(m.voices, name)) {
+    if (!key_exists(m.voices, name) && !key_exists(m.voice_latents, name)) {
         m.voice_names |> push(name)
     }
+    m.voice_latents |> erase(name)
     m.voices[name] := pcm
     m.voice_states[name] <- vs
 }
 
-// a roster voice's state, encoded on first use
+// a roster voice's state, built on first use: from its stored latent frames, or from its clip
 def private ensure_voice_state(var m : PocketModel; name : string; var sc : PocketScratch) {
     return if (key_exists(m.voice_states, name))
+    if (key_exists(m.voice_latents, name)) {
+        var inscope lat : array<float>
+        m.voice_latents |> get(name) $(stored) {
+            lat := stored
+        }
+        m.voice_states[name] <- voice_state_from_latents(m, lat, long_length(lat) / m.latent_dim, sc)
+        return
+    }
     if (!key_exists(m.voices, name)) {
         panic("dasLLAMA pocket: unknown voice '{name}'")
     }

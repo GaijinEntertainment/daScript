@@ -17,11 +17,11 @@ require ../../../examples/dasLLAMA/storywish/wish.das
 // layout, and a line the model writes is recognized as a field the corpus puts after a story.
 // The smoke cell spawns the example under --smoke with fixed words and reads the witness lines it
 // logs: the story starts with those words and is written and read out to the end. Model-gated on
-// tinystories-instruct-27M-Q8_0.gguf (its ../performance/model_specs.das row names the source),
-// kitten-nano.gguf and the front-end packs under models_dir(); the run opens the example's window
-// for about a minute, so a box without a window server skips, and --null-audio keeps it silent.
+// tinystories-instruct-27M-Q8_0.gguf (its ../performance/model_specs.das row names the source)
+// and pocket-tts-en-bill-q8.gguf (the one-voice Pocket file the page ships) under models_dir();
+// the run opens the example's window for about a minute, so a box without a window server
+// skips, and --null-audio keeps it silent.
 
-let PACK_FILES <- ["tts_g2p.bin", "tts_postag.bin"]
 let SMOKE_WORDS = "dragon, cake, moon"
 let START_LINE = "storywish: story 1 starts at frame 0 - words: dragon, cake, moon"
 let DONE_LINE = "storywish: story 1 written and read out"
@@ -66,14 +66,8 @@ def private ready(t : T?) : bool {
         t |> skip("no window server (DISPLAY and WAYLAND_DISPLAY unset) - the example opens a window")
         return false
     }
-    for (name in ["tinystories-instruct-27M-Q8_0.gguf", "kitten-nano.gguf"]) {
+    for (name in ["tinystories-instruct-27M-Q8_0.gguf", "pocket-tts-en-bill-q8.gguf"]) {
         return false if (!model_available(t, path_join(models_dir(), name)))
-    }
-    for (name in PACK_FILES) {
-        if (!stat(path_join(models_dir(), name)).is_valid) {
-            t |> skip("{name} not present")
-            return false
-        }
     }
     return true
 }

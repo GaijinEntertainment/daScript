@@ -828,6 +828,41 @@ def private pocket_refusals(t : T?; var m : TtsModel; clip : array<float>) {
     t |> equal(find_index(c3.voices, "endless"), -1, "and left no half voice in the roster")
 }
 
+// the file shape a demo ships: one voice stored as its latent frames, the codec encoder left out
+// (`convert_pocket.py --voices bill_boerst --no-cloning --q8`) - it speaks its roster from the
+// stored frames, says it cannot clone, and refuses a clip by name
+[test]
+def test_pocket_no_encoder(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-bill-q8.gguf")
+    if (!model_available(t, path)) {
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        t |> success(!tts_needs_packs(path), "a Pocket file needs no packs")
+        var inscope m <- load_tts_model(path)
+        var inscope c <- caps(m)
+        t |> success(!c.cloning, "a file without the encoder does not clone")
+        t |> success(!c.speed, "and has no speed to honour")
+        t |> equal(length(c.voices), 1, "one voice in the roster")
+        t |> equal(c.voices[0], "bill_boerst")
+        t |> equal(length(c.langs), 1)
+        t |> equal(c.langs[0], "en")
+        var inscope a <- synthesize(m, "Whose woods these are I think I know.", "bill_boerst")
+        let st = speech_stats(a.pcm)
+        t |> success(st.finite && st.rms > 0.01, "the stored voice speaks (rms {st.rms})")
+        t |> success(length(a.pcm) >= 24000 && length(a.pcm) <= 24000 * 8, "speech length {length(a.pcm)} samples")
+        var inscope clip : array<float>
+        clip |> resize(24000)
+        let why = panic_text_of() {
+            tts_register_voice(m, "x", clip, 24000)
+        }
+        t |> success(why |> find("no codec encoder") >= 0, "a clip is refused by the missing encoder: {why}")
+        var inscope c2 <- caps(m)
+        t |> equal(length(c2.voices), 1, "and the roster is unchanged")
+    }
+}
+
 // a text the chunker cannot split - no sentence mark, no comma - is one chunk past the token
 // budget: the voice's caches grow to hold its text and every frame the cap allows, and the
 // synthesis runs to EOS instead of panicking on the cache

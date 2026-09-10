@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Stage a browser example's model set: fetch the GGUFs and packs its models.json names from
-Hugging Face, mint each GGUF into a .dlim against the wasm64 build's DlimConfiguration, copy the
-packs, and write models/manifest.json - the list the example's web shell reads, stamped with the
+"""Stage a browser example's model set: fetch the files its models.json names from Hugging Face,
+mint each GGUF under `images` into a .dlim against the wasm64 build's DlimConfiguration, copy the
+`packs` and `files` as they are (a front-end pack; a Pocket TTS GGUF, which is its own served
+form), and write models/manifest.json - the list the example's web shell reads, stamped with the
 IMAGE_VERSION the images carry.
 
     mint_models.py --example examples/dasLLAMA/storywish --config wasm64.json \
@@ -92,7 +93,8 @@ def main():
         files.append({"name": entry["dlim"], "bytes": os.path.getsize(dlim), "sha256": sha256_of(dlim), "source": f"{entry['repo']}/{entry['file']}"})
         print(f"minted {entry['dlim']} ({os.path.getsize(dlim) >> 20} MB, IMAGE_VERSION {version}) from {entry['file']}")
 
-    for entry in spec.get("packs", []):
+    # packs and files ship as they are: a front-end pack, or a GGUF that is its own served form (a Pocket file)
+    for entry in spec.get("packs", []) + spec.get("files", []):
         src = fetch(entry, a.cache)
         dst = os.path.join(a.out, entry["file"])
         shutil.copyfile(src, dst)

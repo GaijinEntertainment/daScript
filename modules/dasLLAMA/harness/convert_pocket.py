@@ -15,9 +15,12 @@ package ships for that language, and the bundled voice clips, and writes
 - the unigram SentencePiece tokenizer as `tokenizer.ggml.model = "t5"` (upstream's name for a
   unigram model) with `tokenizer.ggml.tokens` / `scores` / `token_type` and the special ids;
 - the model's scalars as `pocket.*` metadata (from the config, not guessed);
-- each bundled voice clip as `voice.<name>` [samples] f32 PCM at 24 kHz mono - the language's
-  roster; the CC BY-NC clips of the package's English roster are left out (the sidecar names
-  every clip's source and licence).
+- each bundled voice as `voice_latents.<name>` [frames][latent_dim] f32 - the clip's frames
+  through the package's own codec encoder, the form a voice state is built from (the reader
+  also takes the older `voice.<name>` PCM form, which needs the encoder); `--voices` picks the
+  roster, the CC BY-NC clips of the package's English roster are never in it (the sidecar names
+  every clip's source and licence); `--no-cloning` leaves the codec encoder out and says so in
+  `pocket.cloning`, so the file serves its roster and refuses to clone.
 
 Canonical names: `flow_lm.transformer.layers.N.*` -> `backbone.N.*`; `flow_lm.flow_net.*` ->
 `head.*`; `mimi.encoder_transformer.transformer.layers.N.*` -> `mimi.enc_tf.N.*`, the decoder
@@ -184,6 +187,27 @@ class FakeQuant:
         return back
 
 
+def encoder_tensor(name):
+    """The codec encoder: the SEANet stages, the encoder transformer and the frame downsampler -
+    everything a clip goes through on its way to latents, and nothing a synthesis reads."""
+    return name.startswith("mimi.encoder.") or name.startswith("mimi.enc_tf.") or name.startswith("mimi.downsample.")
+
+
+def clip_encoder(language):
+    """The package's own codec encoder over a 24 kHz clip -> its latent frames [frames][latent_dim],
+    the form the roster is stored in: a voice is the backbone's memory of those frames, so the
+    file needs no clip samples and, with --no-cloning, no encoder."""
+    import torch
+    from pocket_tts import TTSModel
+    model = TTSModel.load_model(language=language)
+
+    def encode(pcm):
+        with torch.no_grad():
+            lat = model.mimi.encode_to_latent(torch.from_numpy(np.ascontiguousarray(pcm, dtype=np.float32))[None, None])
+        return np.ascontiguousarray(lat[0].numpy(), dtype=np.float32)
+    return encode
+
+
 def canonical(name):
     if name.startswith("flow_lm.transformer.layers."):
         return "backbone." + name[len("flow_lm.transformer.layers."):]
@@ -255,6 +279,9 @@ def main():
     ap.add_argument("--q8", action="store_true", help="the published form: the served GEMM weights as Q8_0 in the kernels' layout")
     ap.add_argument("--fake", default="", help="quality experiment, never published: group=fmt[,group=fmt] (attn, ffn, input, speaker, head, "
                     "codec; ggml format names) - the group's weights round through that format before they are stored; needs --name")
+    ap.add_argument("--voices", default="", help="the roster as a comma list of the language's voice names (default: every voice the language ships)")
+    ap.add_argument("--no-cloning", action="store_true", help="leave the codec encoder out: the roster speaks from its stored latents, "
+                    "tts_register_voice refuses, and the file is smaller by the encoder")
     a = ap.parse_args()
     sys.path.insert(0, os.path.join(a.llama_cpp, "gguf-py"))
     import gguf
@@ -281,10 +308,14 @@ def main():
     conv_stride["mimi.downsample.conv.conv.weight"] = st["mimi.downsample.conv.conv.weight"].shape[2] // 2   # kernel 2 x stride
     tensors = {}
     quantized = []
+    dropped = []
     for k, v in st.items():
         name = canonical(k)
         assert len(name) < GGML_MAX_NAME, name
         assert name not in tensors, name
+        if a.no_cloning and encoder_tensor(name):
+            dropped.append(name)
+            continue
         group = fake_group(name, v.shape, q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name)) if fake else None
         if group in fake:
             v = fq.apply(name, np.ascontiguousarray(v.astype(np.float32)), fake[group])
@@ -301,6 +332,12 @@ def main():
     voices = {}
     sources = {}
     roster = dict(ENGLISH_VOICES) if lang.startswith("english") else LANGUAGE_VOICES[lang]
+    if a.voices:
+        picked = [v.strip() for v in a.voices.split(",") if v.strip()]
+        unknown = [v for v in picked if v not in roster]
+        assert not unknown, f"--voices names {unknown}; the {lang} roster is {sorted(roster)}"
+        roster = {v: roster[v] for v in picked}
+    encoder = clip_encoder(lang)
     for vname, (rel, licence) in roster.items():
         if rel.startswith("tts-voices:"):
             path = os.path.join(a.hub, "tts-voices", rel[len("tts-voices:"):])
@@ -312,10 +349,13 @@ def main():
             print(f"  voice {vname}: {path} missing - skipped", flush=True)
             continue
         pcm = read_clip(path)
-        voices[vname] = pcm
+        latents = encoder(pcm)
+        voices[vname] = latents
         sources[vname] = (rel, licence, len(pcm))
-        tensors["voice." + vname] = pcm
+        tensors["voice_latents." + vname] = latents
     default_voice = DEFAULT_VOICE.get(lang, next(iter(voices)))
+    if default_voice not in voices:
+        default_voice = next(iter(voices))
     assert default_voice in voices, (default_voice, list(voices))
 
     fl = cfg["flow_lm"]
@@ -325,6 +365,7 @@ def main():
     w = gguf.GGUFWriter(path, ARCH)
     w.add_name(f"Pocket TTS {lang}" + (" Q8_0" if a.q8 else ""))
     w.add_string("pocket.weights", "q8" if a.q8 else "f16")
+    w.add_bool("pocket.cloning", not a.no_cloning)
     if fake:
         w.add_string("pocket.fake", a.fake)
     w.add_string("pocket.language", lang)
@@ -387,18 +428,19 @@ def main():
     w.write_tensors_to_file()
     w.close()
     with open(path + ".LICENSE", "w", encoding="utf8") as f:
-        f.write(f"{stem}.gguf - Kyutai Pocket TTS ({lang}) weights{' (the served GEMMs as Q8_0)' if a.q8 else ''}, CC BY 4.0 (Kyutai), converted from kyutai/pocket-tts "
+        f.write(f"{stem}.gguf - Kyutai Pocket TTS ({lang}) weights{' (the served GEMMs as Q8_0)' if a.q8 else ''}"
+                f"{' without the codec encoder' if a.no_cloning else ''}, CC BY 4.0 (Kyutai), converted from kyutai/pocket-tts "
                 f"languages/{lang}/model.safetensors @ {weights_rev} and the unigram SentencePiece tokenizer @ {tok_rev} by "
                 "modules/dasLLAMA/harness/convert_pocket.py; the reference implementation is MIT (github.com/kyutai-labs/pocket-tts). "
-                "Bundled voice clips:\n")
+                "Bundled voices (each the codec encoder's latent frames of the clip named):\n")
         for vname, (rel, licence, n) in sources.items():
-            f.write(f"  voice.{vname}: {rel} ({n / SAMPLE_RATE:.1f} s) - {licence}\n")
+            f.write(f"  voice_latents.{vname}: {rel} ({n / SAMPLE_RATE:.1f} s) - {licence}\n")
         for vname, why in EXCLUDED_VOICES.items():
             if lang.startswith("english"):
                 f.write(f"  not shipped: {vname} - {why}\n")
         f.write("see the dasLLAMA THIRD_PARTY_NOTICES.md\n")
-    print(f"wrote {path}: {len(tensors)} tensors ({len(quantized)} as Q8_0), {len(pieces)} pieces, {len(voices)} voices "
-          f"(default {default_voice}); {os.path.getsize(path)} bytes on disk")
+    print(f"wrote {path}: {len(tensors)} tensors ({len(quantized)} as Q8_0{f', {len(dropped)} encoder tensors left out' if dropped else ''}), "
+          f"{len(pieces)} pieces, {len(voices)} voices (default {default_voice}); {os.path.getsize(path)} bytes on disk")
     if fq:
         by_group = {}
         for name, (fmt, nbytes, err) in fq.done.items():

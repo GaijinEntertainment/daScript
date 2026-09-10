@@ -334,7 +334,7 @@ jobs:
 
         # 7. dasllama.io/examples — dasLLAMA itself compiled to wasm64, one app per example
         #    (storyteller: stories15M writes, KittenTTS reads; storywish: you type the words,
-        #    tinystories-instruct-27M writes). Each .das_package turns the GPU modules off, so the
+        #    tinystories-instruct-27M writes, Pocket TTS reads). Each .das_package turns the GPU modules off, so the
         #    host needs no Metal/Vulkan. Non-fatal like the games; the dasllama.io stage step
         #    stages a card's page only when all three outputs exist. The models are prepared .dlim
         #    images the stage step MINTS for this very build: examples/dasLLAMA/wasm/dlim_config is
