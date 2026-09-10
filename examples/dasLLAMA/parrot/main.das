@@ -228,7 +228,7 @@ def on_ready(var a : Answer) {
     JOBS.bounds = (1, g_jobs_max)
     JOBS.value = clamp(get_jobque_worker_limit(), 1, g_jobs_max)   // the limit reads as a huge number when unset
     TEAM.value = get_jobque_team_mode()
-    SPIN.value = true
+    SPIN.value = get_jobque_spin_us() > 0l   // the engine's default for the platform: parked in a browser
     g_jobs_applied = JOBS.value
     g_team_applied = TEAM.value
     g_spin_applied = SPIN.value
@@ -604,7 +604,9 @@ def apply_jobque_knobs() {
     return if (!g_ready)
     if (JOBS.value != g_jobs_applied) {
         g_jobs_applied = JOBS.value
-        set_jobque_worker_limit(JOBS.value >= g_jobs_max ? -1 : JOBS.value)
+        let all = JOBS.value >= g_jobs_max
+        set_dispatch_worker_limit(all ? 0 : JOBS.value)   // the engine's cap: with it set, the per-phase parking of a hybrid box stands down
+        set_jobque_worker_limit(all ? -1 : JOBS.value)   // the live queue, whose setup ran before the knob
     }
     if (TEAM.value != g_team_applied) {
         g_team_applied = TEAM.value

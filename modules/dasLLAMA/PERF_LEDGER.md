@@ -11,6 +11,19 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-10) - a browser's job queue workers park instead of spinning.** The
+  engine's 30 ms spin-before-park window (`g_jobque_spin_us`) was unconditional, and in Chrome
+  the 8 spinning web workers cost the caller its core: Pocket TTS (the parrot page's poem, four
+  chunks, wasm64, 8 workers in the pool, the M-series box) generated at 1.1x real time with the
+  renderer at 680-920% CPU, against 1.4x at ~112% with the workers parked (per chunk, ms:
+  prompt 820 / backbone 1850 / codec 3600 spinning, 550 / 1250 / 2900 parked; three runs each
+  within 3%). Team dispatch stays on there (0.69 against 0.72 rtf off, the head 98 against 140
+  ms). One worker instead of eight, parked or spinning, reads 0.7x (prompt 1370 / backbone 3080
+  / codec 5800), so the pool does pay - 2.2x from one to eight - once nothing spins. The
+  emscripten default is now 0 (`dasllama_jobque_spin_default`); the desktop keeps its window.
+  Untuned kernels (`DASLLAMA_ALLOW_UNTUNED=1`), so the absolute figures are the fallback
+  bodies'; the desktop says the same text at 18x on 7 workers.
+
 - **OWED ROWS - the Vulkan cm2 prefill's board cells.** `performance/records/zen2.json` carries
   one das/vulkan cell (Qwen3-4B Q8_0 under `DASLLAMA_COOPMAT=mm`, 2026-07-25) and no cm2 cell,
   while the Vulkan pp arc (the group-aware split-k, the hand-laid four-wide twins, the

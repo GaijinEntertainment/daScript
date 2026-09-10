@@ -156,8 +156,12 @@ its stopped state, and released when the clip ends - a box shared across clips r
 clip's stop as the next one's, which cuts the say short. A waveform is min/max columns of ten
 milliseconds each, grown as frames land and redone from the column a drain left open, drawn one
 pixel per column or per group of columns. The job queue knobs reach the queue the speech thread
-dispatches on (`set_jobque_worker_limit`, `set_jobque_team_mode`, `set_jobque_worker_spin`),
-applied after the thread's own setup has run, since that setup restores the engine's defaults;
+dispatches on, applied after the thread's own setup has run, since that setup restores the
+engine's defaults: the jobs slider goes through the engine's own cap (`set_dispatch_worker_limit`,
+which also stands the hybrid pool's per-phase parking down - a raw `set_jobque_worker_limit` is
+overridden by it at the next phase) and the live queue's limit, the toggles through
+`set_jobque_team_mode` and `set_jobque_worker_spin`, and the spin toggle starts from the engine's
+default for the platform (`get_jobque_spin_us`: parked in a browser, a 30 ms window on a desktop);
 the measure button says the text three times with playback off and reports each run's speed as
 times real time - seconds of audio per second of generation, the inverse of the engine's
 real-time factor - the same figure on any box. The output waveform keeps a fixed time scale

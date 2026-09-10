@@ -38,7 +38,7 @@ def public dasllama_runtime_snapshot(metal_crowns : string) : JsonValue? {
         rope_par_threshold = get_rope_par_threshold(), kv_store_par_threshold = get_kv_store_par_threshold(),
         act_par_threshold = get_act_par_threshold(), q8_chunks_per_job = get_q8_chunks_per_job(),
         q4_chunks_per_job = get_q4_chunks_per_job(), q8_batch_chunks_per_job = get_q8_batch_chunks_per_job(),
-        jobque_spin_us = get_jobque_spin_us(), jobque_join_poll = get_jobque_join_poll(),
+        jobque_spin_us = get_jobque_spin_us_(), jobque_join_poll = get_jobque_join_poll(),
         threads = lanes, metal_tensor = metal_crowns,   // total lanes (workers + computing main), the DAS_JOBQUE_THREADS unit
         mtp_depth_nextn = get_mtp_depth_nextn(), mtp_depth_assistant = get_mtp_depth_assistant(),
         metal_tall_floor = metal_tall_floor(), metal_devw_small_panel_mb = metal_devw_small_panel_mb(),
