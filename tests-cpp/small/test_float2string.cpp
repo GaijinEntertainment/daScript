@@ -1,3 +1,6 @@
+#if defined(__FAST_MATH__) || defined(_M_FP_FAST)
+#error "test_float2string.cpp compares against fmt, whose float printing a fast-math TU folds; it is pinned to precise math in tests-cpp/CMakeLists.txt"
+#endif
 #include <doctest/doctest.h>
 #include "daScript/daScript.h"
 #include "daScript/misc/float2string.h"

@@ -20,6 +20,13 @@ modules/dasClangBind/src/*.cpp text eol=lf
 modules/dasClangBind/src/*.h text eol=lf
 modules/dasClangBind/src/*.inc text eol=lf
 
+# tree-sitter generated artifacts: the folder's gate regenerates them in a scratch copy and
+# compares bytes; `tree-sitter generate` writes LF, so a CRLF checkout under autocrlf=true
+# reads as every line changed.
+tree-sitter-daslang/src/*.c text eol=lf
+tree-sitter-daslang/src/*.json text eol=lf
+tree-sitter-daslang/src/tree_sitter/*.h text eol=lf
+
 # The v1 -> gen2 converter preserves whatever line endings its input had, and
 # its suite proves that by converting an LF fixture and a CRLF twin it builds
 # from that same fixture. Under autocrlf=true the fixtures check out as CRLF,

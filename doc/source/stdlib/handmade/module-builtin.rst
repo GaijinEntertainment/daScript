@@ -8,11 +8,7 @@ without explicit ``require``. It includes:
 - Profiling (``profile``)
 - Type conversion (``string``)
 
-All functions and symbols are in "builtin" module, use require to get access to it.
-
-.. code-block:: das
-
-    require builtin
+The builtin module is part of every daslang program: nothing needs to ``require`` it.
 
 Example:
 

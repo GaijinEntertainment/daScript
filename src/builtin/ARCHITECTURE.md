@@ -117,3 +117,14 @@ shared library at test time - not wasm, Android or iOS, none of which walks `tes
 dastest's `--ser`/`--deser` sweep, because a deserialized program never applies `[extern]` and
 so never manufactures the `__dasbind__` function it names in the `dasbind` module; a 64-bit
 desktop tree without the library fails the suite instead of skipping it.
+
+## 4. A message that crosses the panic jump
+
+`Context::throw_error_at` formats into a stack buffer and jumps; without C++ exceptions the
+jump is a `longjmp`, which unwinds nothing, so a heap-owning local alive at the call - a
+`string` a builtin built its message in - leaks the allocation on every panic a `try`/`recover`
+catches, and the ASan lane reports it. A builtin that composes a message in a `string` before
+the throw (`pinvoke_named`, `pinvoke_impl2_core` in `module_builtin_debugger.cpp`) goes through
+`throw_pinvoke_error`: the text moves to a stack buffer, the string's storage is released, and
+the throw runs with nothing owning heap on the frame. The same discipline is the `FMT_THROW`
+stash in `das_config.h`, where the temporary dies when the stash statement ends.

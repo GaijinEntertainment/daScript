@@ -34,7 +34,7 @@ without explicit ``require``. It includes:
 - Pointer and memory operations (``intptr``, ``malloc``, ``free``)
 - Profiling (``profile``)
 - Type conversion (``string``)""",
-    "require builtin",
+    "",
     example="""\
     [export]
     def main() {
@@ -1360,9 +1360,12 @@ def format_module_doc(name, desc, require_line, example=None, after_require=""):
     lines = []
     lines.append(desc.strip())
     lines.append("")
-    lines.append(f'All functions and symbols are in "{name}" module, use require to get access to it. ::')
-    lines.append("")
-    lines.append(f"    {require_line}")
+    if require_line:
+        lines.append(f'All functions and symbols are in "{name}" module, use require to get access to it. ::')
+        lines.append("")
+        lines.append(f"    {require_line}")
+    else:
+        lines.append(f'The {name} module is part of every daslang program: nothing needs to ``require`` it.')
     lines.append("")
 
     if after_require:
