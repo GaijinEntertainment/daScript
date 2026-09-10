@@ -1283,7 +1283,7 @@ def vk_rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int6
 //! [npos x kvd] codec rows each), one submit per KV_READBACK_ROWS rows. The host-KV-authoritative
 //! rail — makes continuations, CPU fallback, and slot switches valid after a device-resident prefill.
 [hot_path]   // the hydration rail — per layer, KV_READBACK_ROWS rows per submit
-def vk_rdec_read_kv_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {
+def vk_rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) {
     assert(g_rd != null, "vk_rdec_read_kv_bulk before prepare")
     let mir = g_rd.layers[l].mir_idx
     if (mir < 0l) {
@@ -1315,7 +1315,7 @@ def vk_rdec_read_kv_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {
 //! Batch-decode writeback: read layer `l`'s new K/V row at `pos` from the mirror back into the
 //! caller's cache row (kp/vp, one codec row each). Keeps the CPU cache current after a GPU decode step.
 [hot_path]   // per layer per batch-decode row
-def vk_rdec_read_kv(l, pos : int64; kp : uint8?; vp : uint8?) {
+def vk_rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) {
     assert(g_rd != null, "vk_rdec_read_kv before prepare")
     let mir = g_rd.layers[l].mir_idx
     if (mir < 0l) {

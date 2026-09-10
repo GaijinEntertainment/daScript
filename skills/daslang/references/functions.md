@@ -48,8 +48,8 @@ def bump(var a : int&) { a += 1 }     // caller's variable is modified
 def fill(var out : float?; n : int) { unsafe(out[0]) = float(n) }
 ```
 
-To write *through* a pointer parameter, declare it `var T?`; taking `T const?` and reinterpreting
-the const away licenses the optimizer to drop the write.
+To write *through* a pointer parameter, declare it `var T?`; a `T const?` parameter with the const
+reinterpreted away writes memory the declared type calls read-only (memory.md sec. 1).
 
 ### Single-expression (arrow) body
 

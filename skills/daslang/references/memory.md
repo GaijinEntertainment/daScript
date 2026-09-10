@@ -21,10 +21,10 @@ let cp = unsafe(addr(pt))       // Point? const  -> cp.x is float const
 parameter both must be absent: `def scale_into(var dst : float?; src : float const?)`.
 `addr(arr[0])` binds to both `var T?` and `T const?` - add-const is implicit.
 
-**Never strip const in order to write.** The const type already licensed read-only parameters, dead
-non-aliasing write removal, and dropped calls, so `var q = unsafe(reinterpret<P?>(p))` then
-`q.x = 5` compiles, appears to work, and can silently vanish in optimized builds. Declare the
-parameter `var P?`.
+**Never strip const in order to write.** The type is what the optimizer reads - a const pointer or
+reference parameter is read-only memory to it - so `var q = unsafe(reinterpret<P?>(p))` then
+`q.x = 5` compiles and performs a write the declared type denies; routed through `intptr` and
+back it vanishes in optimized builds. Declare the parameter `var P?`.
 
 ---
 

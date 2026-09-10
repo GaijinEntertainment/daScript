@@ -643,7 +643,8 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     // nolint:STYLE014 - the definition/declaration parity contract below is load-bearing
-    // The impl-half parameter attributes: alignments, readonly on const indirect args, the
+    // The impl-half parameter attributes: alignments, readonly on const indirect args the body
+    // never writes through (a const-stripped write leaves the compiler's access_ref mark), the
     // annotation-driven noalias/nocapture, and the capture/context/cmres tail attrs. Shared by
     // the definition AND get_or_declare_impl's cross-partition declaration - LLVM reads call-site
     // parameter attributes off the DECLARATION, so a split build loses alias precision wherever
@@ -660,7 +661,8 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMSetParamAlignment(param, uint(a._type.firstType.alignOf))
             }
             LLVMSetValueName(param, string(a.name))
-            if ((a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant) {
+            if ((a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant
+                    && !a.access_flags.access_ref) {
                 LLVMAddAttributeToFunctionArgument(fn, ai, attributes.readonly)
             }
             if ((use_option_flags && option_no_alias) || nat.noalias |> key_exists(string(a.name))) {
@@ -4746,7 +4748,7 @@ class public LlvmJitVisitor : AstVisitor {
         setE(expr, mks_ptr)
     }
 
-    def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) : void {
+    def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; var init : ExpressionPtr; last : bool) : void {
         let stride = expr.recordType.sizeOf
         let offset =  index * stride
         // heap literals fill arr.data (top of heapMkaData), not the Array struct held in getE(expr)
@@ -4830,7 +4832,7 @@ class public LlvmJitVisitor : AstVisitor {
         setE(expr, mks_ptr)
     }
 
-    def override preVisitExprMakeTupleIndex(expr : ExprMakeTuple?; index : int; init : ExpressionPtr; last : bool) : void {
+    def override preVisitExprMakeTupleIndex(expr : ExprMakeTuple?; index : int; var init : ExpressionPtr; last : bool) : void {
         let offset = get_tuple_field_offset(expr.makeType, index)
         var v_ptr = getE(expr)
         verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make tuple index, but no pointer")

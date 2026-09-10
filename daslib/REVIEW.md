@@ -98,7 +98,8 @@ statements with one expression - gates the suggestion on receiver type, arity, c
 and duplicate constant keys.**
 
 **A diff that adds or changes the rewrite a lint message suggests adds that rewrite to the
-rule's fixture as a good shape that compiles and does not fire.**
+rule's fixture in `utils/lint/tests/` (repo root) as a good shape that compiles and does not
+fire.**
 
 **A diff that makes two collapse checks fire on one shape is a defect.** Overlaps stay
 partitioned: STYLE021 owns the const-key run over STYLE031, STYLE032 owns fresh-empty

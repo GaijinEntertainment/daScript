@@ -211,9 +211,10 @@ diagnostic in any tier.
 - **A continuation line starting `+` or `-` is its own statement**, and unary plus is pure, so
   the optimizer deletes it: `let x = a` <enter> `+ b` <enter> `+ c` leaves `x == a`. Always wrap a
   multi-line arithmetic RHS in `(...)`.
-- **Stripping `const` in order to write.** The const type already licensed readonly /
-  `noalias` / DCE, so the write vanishes in interp, JIT and AOT alike. Declare the parameter
-  `var T?`; never `reinterpret` the const away.
+- **Stripping `const` in order to write.** The type is what the optimizer reads: a const
+  pointer or reference parameter is read-only memory to it, and a write routed through
+  `intptr` and back is invisible to the compiler's write marks and the JIT's read-only guard.
+  LINT031 rejects the shape. Declare the parameter `var T?`; never `reinterpret` the const away.
 - **`delete` on `array<T?>` frees the POINTEES**, not just the buffer. On borrowed pointers the
   interpreter reports `deleting <ptr>, which is not a chunk pointer`, while Release+JIT corrupts
   the heap silently and crashes later at an unrelated allocation. `clear()` the container first,

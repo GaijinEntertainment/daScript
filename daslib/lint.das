@@ -56,6 +56,9 @@ def private is_block_terminator(expr : ExpressionPtr) : bool {
     return false
 }
 
+//! the memory builtins that write through their first argument
+let private lint031_builtin_writers <- { "memcpy", "memset8", "memset16", "memset32", "memset64", "memset128" }
+
 struct private RefIndex {
     @do_not_delete functions : table<Function const?>
     names : table<string>       //!< references knowable by name only (uninferred generic bodies)
@@ -367,6 +370,165 @@ def private lint030_callee_writes(fn : Function const?; k : int) : bool {
     return writes
 }
 
+var private lint031_writers : table<string; bool>
+
+//! The operand a node carries a value of unchanged: a cast, a reference-to-value or
+//! value-to-pointer step, an intptr round trip, pointer arithmetic (a call whose result aliases
+//! its first argument's pointee); null for any other node.
+def private lint031_carrier(expr : Expression const?) : Expression const? {
+    if (expr is ExprCast) return (expr as ExprCast).subexpr
+    if (expr is ExprRef2Ptr) return (expr as ExprRef2Ptr).subexpr
+    if (expr is ExprRef2Value) return (expr as ExprRef2Value).subexpr
+    if (expr is ExprCall) {
+        let call = expr as ExprCall
+        if (lint031_is_intptr(call) || (call.func != null && call.func.flags.firstArgReturnType && !empty(call.arguments))) {
+            return call.arguments[0]
+        }
+    }
+    return null
+}
+
+//! the name of the generic an instance came from, walked to the root; the function's own otherwise
+def private lint031_root_name(fn : Function const?) : string {
+    var root = fn
+    while (root.fromGeneric != null) {
+        root = root.fromGeneric
+    }
+    return string(root.name)
+}
+
+def private lint031_is_intptr(call : ExprCall const?) : bool {
+    if (call.func == null || length(call.arguments) != 1) return false
+    return lint031_root_name(call.func) == "intptr"
+}
+
+def private lint031_is_integer(t : TypeDecl const?) : bool {
+    let bt = t.baseType
+    return (bt == Type.tInt || bt == Type.tUInt || bt == Type.tInt64 || bt == Type.tUInt64
+        || bt == Type.tInt8 || bt == Type.tUInt8 || bt == Type.tInt16 || bt == Type.tUInt16)
+}
+
+//! The operand a node reaches INTO - a deref, a field, an index, a swizzle - so a write to the
+//! node is a write through the operand; null otherwise. Below the target, a node that yields a
+//! pointer, or a field or index that yields an integer, is a load of an address: not the operand's memory.
+def private lint031_pointee_of(expr : Expression const?; is_target : bool) : Expression const? {
+    let loaded_pointer = !is_target && expr._type != null && expr._type.isPointer
+    if (expr is ExprPtr2Ref) {
+        if (loaded_pointer) return null
+        return (expr as ExprPtr2Ref).subexpr
+    }
+    if (loaded_pointer || (!is_target && expr._type != null && lint031_is_integer(expr._type))) return null
+    if (expr is ExprField) return (expr as ExprField).value
+    if (expr is ExprAt) return (expr as ExprAt).subexpr
+    if (expr is ExprSwizzle) return (expr as ExprSwizzle).value
+    return null
+}
+
+//! The parameter in `params` a write target is reached from; null when the target roots elsewhere.
+//! `through`: the write lands in what the target holds, so a local pointer copy is followed to
+//! its initializer - reassigning the copy itself writes nothing the parameter owns.
+def private lint031_root(params : array<Variable const?>; target : Expression const?; through : bool) : Variable const? {
+    var expr = target
+    var into = through
+    var is_target = true
+    while (expr != null) {
+        let first = is_target
+        is_target = false
+        if (expr is ExprVar) {
+            let v = (expr as ExprVar).variable
+            if (v == null) return null
+            if (params |> find_index(v) >= 0) return into ? v : null
+            if (v.init == null || v._type == null) return null
+            let via_intptr = v.init is ExprCall && lint031_is_intptr(v.init as ExprCall)
+            if (!(v._type.flags.ref || via_intptr || v._type.isPointer)) return null
+            expr = v.init
+            continue
+        }
+        let carried = lint031_carrier(expr)
+        if (carried != null) {
+            expr = carried
+            continue
+        }
+        expr = lint031_pointee_of(expr, first)
+        into = true
+    }
+    return null
+}
+
+//! scans one function body for a write through `params` the LINT031 way - the write sites and
+//! the chase the rule applies to a const parameter, so a callee is judged as its caller would be
+class private Lint031BodyScan : AstVisitor {
+    @do_not_delete params : array<Variable const?>
+    writes : bool = false
+    def note(target : Expression const?; through : bool) : void {
+        if (!writes && lint031_root(params, target, through) != null) {
+            writes = true
+        }
+    }
+    def override preVisitExprCopy(expr : ExprCopy?) : void {
+        note(expr.left, false)
+    }
+    def override preVisitExprClone(expr : ExprClone?) : void {
+        note(expr.left, false)
+    }
+    def override preVisitExprMove(expr : ExprMove?) : void {
+        note(expr.left, false)
+    }
+    def override preVisitExprOp2(expr : ExprOp2?) : void {
+        if (lint030_assigns(string(expr.op))) {
+            note(expr.left, false)
+        }
+    }
+    def override preVisitExprOp1(expr : ExprOp1?) : void {
+        if (lint030_steps(string(expr.op))) {
+            note(expr.subexpr, false)
+        }
+    }
+    def override preVisitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; _last : bool) : void {
+        if (lint031_slot_written(expr, arg)) {
+            note(arg, true)
+        }
+    }
+}
+
+//! whether `fn` writes through its `k`-th parameter: a builtin answers by name (both pointers of a
+//! memory builtin register as `void *`, so the type says nothing), a das function by its body, read
+//! once per (function, slot); a slot still being scanned - recursion - reads as not writing
+def private lint031_callee_writes(fn : Function const?; k : int) : bool {
+    return false if (fn == null || k >= length(fn.arguments))
+    if (fn.flags.builtIn || fn.body == null) {
+        return k == 0 && lint031_builtin_writers |> key_exists(lint031_root_name(fn))
+    }
+    let pt = fn.arguments[k]._type
+    return false if (pt == null || pt.flags.constant || !(pt.isRef || pt.isPointer)
+        || (pt.isPointer && pt.firstType != null && pt.firstType.flags.constant))
+    let key = "{fn.getMangledNameHash}#{k}"
+    if (key_exists(lint031_writers, key)) {
+        return lint031_writers?[key] ?? false
+    }
+    lint031_writers[key] = false
+    var scan = new Lint031BodyScan()
+    scan.params |> push(fn.arguments[k])
+    make_visitor(*scan) $(adapter) {
+        visit(fn.body, adapter)
+    }
+    let writes = scan.writes
+    unsafe {
+        delete scan
+    }
+    lint031_writers[key] = writes
+    return writes
+}
+
+//! `call` writes through what `arg` addresses - `arg` fills a slot whose callee writes through it
+def private lint031_slot_written(call : ExprCall const?; arg : ExpressionPtr) : bool {
+    return false if (call.func == null)
+    for (a, i in call.arguments, count()) {
+        if (a == arg) return lint031_callee_writes(call.func, i)
+    }
+    return false
+}
+
 class LintVisitor : AstVisitor {
     lint030_frames : array<Lint030Frame>
     @do_not_delete lint014_candidates : array<Variable const?>
@@ -375,6 +537,8 @@ class LintVisitor : AstVisitor {
     @do_not_delete lint029_candidates : array<Variable const?>
     @do_not_delete lint029_mutated : array<Variable const?>
     lint029_exempt : bool = false
+    @do_not_delete lint031_params : array<Variable const?>
+    @do_not_delete lint031_reported : array<Variable const?>
     //! AST visitor that performs lint checks.
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -538,6 +702,13 @@ class LintVisitor : AstVisitor {
                 || is_temporary_string_source(value)) return
         lint_error("LINT016: 'push_clone' does not clone a string without 'options multiple_contexts'; use 'push(value)' for same-context storage, or did you mean 'push(clone_string(value))' for a cross-context copy", expr.at)
     }
+    //! the callee-body memos outlive a program: the runner, the MCP server and the LSP keep one
+    //! process across programs, and an edited body keeps its mangled name
+    def override preVisitProgram(_prog : ProgramPtr) : void {
+        lint030_writers |> clear()
+        lint031_writers |> clear()
+    }
+
     def override preVisitFunction(fun : FunctionPtr) : void {
         noLint = lint022_generic_sweep
         funcFile = fun.at.fileInfo != null ? "{fun.at.fileInfo.name}" : ""
@@ -554,6 +725,8 @@ class LintVisitor : AstVisitor {
         }
         branch_depth = 0
         ds_entries |> clear()
+        lint031_params |> clear()
+        lint031_reported |> clear()
         lint021_candidates |> clear()
         lint021_call_kind |> clear()
         lint021_narrow_depth = 0
@@ -836,6 +1009,10 @@ class LintVisitor : AstVisitor {
         if (lint022_generic_sweep) {
             lint022_refs |> note_type_names(arg._type, 0)
         }
+        if (arg._type != null && arg._type.flags.constant && !arg._type.flags._implicit
+                && (arg._type.isRef || arg._type.isPointer)) {
+            lint031_params |> push(arg)
+        }
         if (fun.flags.isClassMethod) return
         for (ann in fun.annotations) {
             if (ann.annotation.name == "extern") return
@@ -844,6 +1021,27 @@ class LintVisitor : AstVisitor {
         validate_unwritten_var_argument(fun, arg)
         lint023_collect_candidate(arg)
         lint029_collect_candidate(fun, arg)
+    }
+
+    def lint031_note_write(target : Expression const?; at : LineInfo) : void {
+        lint031_note_write_root(target, false, at)
+    }
+
+    def lint031_note_write_root(target : Expression const?; through : bool; at : LineInfo) : void {
+        if (noLint || genericDepth > 0 || empty(lint031_params)) return
+        let root = lint031_root(lint031_params, target, through)
+        if (root == null || lint031_reported |> find_index(root) >= 0) return
+        lint031_reported |> push(root)
+        let kind = root._type.isPointer ? "pointer" : "reference"
+        lint_error("LINT031: `{root.name}` is a const {kind} parameter the body writes through at line {int(at.line)} - the const was stripped on the way (a reinterpret, an intptr round trip, or a writable slot of a call), so the declared type denies a write the function performs; declare the parameter `var`", root.at)
+    }
+
+    //! the chase runs first: a callee body is scanned only for an argument rooted at a const parameter
+    def lint031_note_call_argument(call : ExprCall?; arg : ExpressionPtr) : void {
+        if (noLint || genericDepth > 0 || empty(lint031_params)) return
+        if (lint031_root(lint031_params, arg, true) != null && lint031_slot_written(call, arg)) {
+            lint031_note_write_root(arg, true, call.at)
+        }
     }
 
     def private lint029_note_mutation(v : Variable const?) : void {
@@ -1077,10 +1275,11 @@ class LintVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprCallArgument(_expr : ExprCall?; _arg : ExpressionPtr; _last : bool) : void {
+    def override preVisitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; _last : bool) : void {
         if (!empty(lint030_frames)) {
             lint030_frames[length(lint030_frames) - 1].slot++
         }
+        lint031_note_call_argument(expr, arg)
     }
 
     def override preVisitExprCall(expr : ExprCall?) : void {
@@ -1174,6 +1373,9 @@ class LintVisitor : AstVisitor {
 
     def override preVisitExprOp1(expr : ExprOp1?) : void {
         lint022_note(expr.func, "{expr.name}")
+        if (lint030_steps(string(expr.op))) {
+            lint031_note_write(expr.subexpr, expr.at)
+        }
     }
 
     def lint022_is_unreferenced(fn : Function?; mod : Module?) : bool {
@@ -1329,6 +1531,7 @@ class LintVisitor : AstVisitor {
         let op = string(expr.op)
         if (length(op) >= 2 && op |> ends_with("=") && op != "==" && op != "!=" && op != "<=" && op != ">=") {
             lint023_mark_store_target(expr.left)
+            lint031_note_write(expr.left, expr.at)
         }
         if ((op == "/" || op == "%" || op == "/=" || op == "%=") && is_const_zero(expr.right)) {
             lint_error("LINT006: division by zero ({op})", expr.at)
@@ -1476,12 +1679,15 @@ class LintVisitor : AstVisitor {
 
     def override preVisitExprCopy(expr : ExprCopy?) : void {
         lint023_mark_store_target(expr.left)
+        lint031_note_write(expr.left, expr.at)
     }
     def override preVisitExprClone(expr : ExprClone?) : void {
         lint023_mark_store_target(expr.left)
+        lint031_note_write(expr.left, expr.at)
     }
     def override preVisitExprMove(expr : ExprMove?) : void {
         lint023_mark_store_target(expr.left)
+        lint031_note_write(expr.left, expr.at)
     }
     def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
         check_string_clone_assign(expr)

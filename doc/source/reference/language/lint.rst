@@ -44,7 +44,7 @@ Lint Tools
 .. das-doc: given var then_value : int
 .. das-doc: given var else_value : int
 .. das-doc: given var divisor : int
-.. das-doc: given var const_ptr : int?
+.. das-doc: given var void_ptr : void?
 .. das-doc: given var name : string
 .. das-doc: given var lo : int
 .. das-doc: given var hi : int
@@ -331,9 +331,10 @@ LINT005 — redundant ``reinterpret`` cast
 ``reinterpret<T>(x)`` where ``T`` is the same type as ``x`` is a no-op.
 Remove the cast.
 
-The rule skips casts that strip ``const`` or ``temporary`` modifiers (those
-serve a purpose) and casts between ``void?`` and typed pointers. It also
-skips generic instantiations and compiler-generated functions.
+The rule skips casts that strip ``const`` or ``temporary`` modifiers and casts
+between ``void?`` and typed pointers. It also skips generic instantiations and
+compiler-generated functions. A cast that strips ``const`` so the body can
+write through the result is LINT031.
 
 .. das-doc: alt
 .. code-block:: das
@@ -344,8 +345,8 @@ skips generic instantiations and compiler-generated functions.
     // Good
     var y = x
 
-    // Good — strips const (not flagged)
-    var y = unsafe(reinterpret<int?>(const_ptr))
+    // Not flagged — void? to a typed pointer
+    var y = unsafe(reinterpret<int?>(void_ptr))
 
 LINT006 — division by zero (constant zero divisor)
 ====================================================
@@ -1247,6 +1248,50 @@ is.
     def sequenced(var x : int) : int {
         let bumped = bump(x)
         return pair(bumped, x)
+    }
+
+LINT031 — a const parameter is written through
+==============================================
+
+A pointer or reference parameter declared without ``var`` is const, and the
+type is what the optimizer reads: a const indirect parameter reaches the code
+generator as read-only memory. A body that strips the const and writes anyway
+— through ``reinterpret``, through an ``intptr`` round trip, or by handing the
+pointer to a call slot the callee writes — performs a write the declared type
+denies. The compiler's own write analysis sees a ``reinterpret`` strip, and the
+JIT withholds the read-only attribute where it does; the rule fires all the
+same, because the type is the contract every reader and every later pass
+trusts, and the ``intptr`` spelling hides the write from every analysis. The
+fix is to declare the parameter ``var``.
+
+The rule follows a write target to its root through what the compiler's alias
+chase follows: a local pointer's initializer, casts, ``addr`` and deref,
+fields, indexing and pointer arithmetic. A pointer, or an integer address, read
+out of the parameter's memory is a load, and a write through it is not a write
+through the parameter. Reassigning a local copy of the pointer writes nothing
+the parameter owns, and taking the parameter's address to read through it is
+not a write. A call slot counts as a write when the callee's own body writes
+through that parameter, judged the same way; ``memcpy`` and the ``memset``
+family write their first argument. A parameter declared ``implicit`` waives the
+const contract and is not judged.
+
+.. das-doc: alt
+.. code-block:: das
+
+    // Flagged at the parameter — dst is const, the body writes through it
+    def store_int(dst : void?; v : int) {           // LINT031
+        unsafe {
+            var p = reinterpret<int?>(dst)
+            *p = v
+        }
+    }
+
+    // The parameter says what the body does
+    def store_int_into(var dst : void?; v : int) {
+        unsafe {
+            var p = reinterpret<int?>(dst)
+            *p = v
+        }
     }
 
 .. _perf_lint:

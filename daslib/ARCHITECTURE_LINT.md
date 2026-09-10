@@ -154,6 +154,29 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   state whatever the order. The rule fires once per writing argument, on the outer call. It
   ships default-off in the SDK beside LINT029 (`seed_default_disabled`); `.lint_config` turns
   it on here.
+- **LINT031 follows the write target to its root instead of reading the compiler's marks.**
+  The compiler marks a parameter written on `addr` and on a reassigned local pointer copy
+  alike (the `access_ref` the JIT's readonly guard trusts, over-approximate by design), so
+  the rule walks the target itself: through carriers (a cast, ref-to-value, `addr`, an `intptr`
+  call, a pointer-arithmetic call whose result aliases its first argument) and into operands
+  (deref, field, index, swizzle), following a local pointer, a reference local or an `intptr`
+  result to its initializer - a write to the local pointer itself never reaches a parameter,
+  since the chase returns one only when a deref, field or index was crossed. Below the target,
+  a node that yields a pointer, or a field or index that yields an integer, is a load of an
+  address and ends the chase - a deref that yields an integer is the pointee itself and
+  continues: what a loaded address points at is not the parameter's memory, which is LLVM's
+  `readonly` contract. A call
+  slot is a write when `lint031_callee_writes` says so: a builtin by name only
+  (`lint031_builtin_writers` - both pointers of a memory builtin register as `void *`, and the
+  compiler marks every pointer handed to a modifying builtin, `temp_array`'s view pointer
+  included), a das function by `Lint031BodyScan` over its body - the rule's own write sites and
+  chase with that parameter as the candidate - memoized per (mangled-name hash, slot) in
+  `lint031_writers`, a slot mid-scan reading as not writing; the memo (and LINT030's
+  `lint030_writers`) is cleared when a program's visit starts, since the lint runner, the MCP
+  server and the LSP keep one process across programs and an edited body keeps its mangled
+  name. The chase runs before the callee scan, so a body is read only for an argument rooted
+  at a const parameter. An `implicit` parameter type
+  waives the const contract (`archive.das`'s `read(bytes : void? implicit)`) and is skipped.
 - **Closure bodies are per-rule, not global.** LINT010 counts a closure body as a branch
   (it may run later or never - writes inside must not kill outside stores, reads inside
   must not keep an outside init live); LINT021 counts the same body as an escape - a
@@ -186,7 +209,11 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   (`src/builtin/module_builtin_string.cpp`), each registered over `("value", "hex")` with
   `arg_init` supplying `false` for `hex`. That default is why a one-argument site parses
   decimal and why the remedy repeats the site's own `hex` argument instead of spelling a
-  base of its own. Nothing fails when one side moves alone.
+  base of its own. `lint031_builtin_writers` <-> the `memcpy` and `memset8`, `memset16`,
+  `memset32`, `memset64`, `memset128` bindings in `Module_BuiltIn`
+  (`src/builtin/module_builtin_runtime.cpp`), each registered `modifyArgumentAndExternal`
+  over `void *` for both pointers - the name is the only thing that says which one is
+  written. Nothing fails when one side moves alone.
 
 ## 4. style_lint
 
