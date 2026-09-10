@@ -89,7 +89,8 @@ table is the one optional plane today.
 attention quads, every MoE layer's expert triple (`[ne x nfe x dim]` twice and `[ne x dim x
 nfe]`, sliced per expert as the per-op walk gathers them), its shared expert's triple where it
 has one - in the file's K-quant format where the loader kept those planes beside the q8
-transcode the CPU chain reads (`wshk*_offs`), the transcode otherwise - the classifier, and the
+transcode the CPU chain reads (`wshk*_offs`; it keeps them on a load with a GPU tier armed, so
+a CPU-only load carries the transcode alone), the transcode otherwise - the classifier, and the
 router plane - every MoE layer's f32 rows with a gated shared expert's gate row beside them. The scratch adds the window's routed planes: the gathered f16
 rows, the gate and up rows, the f16 hidden rows and the routed down rows over `PF_WINDOW x k`
 bucket rows plus `TILE_READ_SLACK` rows of tile slack (128 - the m column's unclamped partial

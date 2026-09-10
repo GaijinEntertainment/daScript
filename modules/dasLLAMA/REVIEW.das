@@ -737,6 +737,172 @@ def private check_image_layout_stamp {
     }
 }
 
+// ===== the Vulkan checklist's four mechanical checks (REVIEW_GPU_VULKAN.md) =====
+
+let private VK_CLASSES = "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das"
+let private VK_PREFILL = "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das"
+let private VK_COMMON = "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das"
+let private BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_blocks.das"
+
+// a das integer literal's value at the head of `s` (digit separators and the l/u suffix dropped), -1 when none
+def private int_literal(s : string) : int {
+    let tok = replace(ident_prefix(strip(s)), "_", "")
+    var n = length(tok)
+    peek_data(tok) $(d) {
+        while (n > 0 && (int(d[n - 1]) == 'l' || int(d[n - 1]) == 'u')) {
+            n--
+        }
+    }
+    return try_to_int(slice(tok, 0, n)) ?? -1
+}
+
+// the lines of the class whose header starts with `header`, in order (the body ends at the first
+// line starting with `}`, the file's class convention); empty when the class is not in the file
+def private class_lines(path, header : string) : array<string> {
+    var out : array<string>
+    var in_cls = false
+    for (line in split(strip_line_comments(fread(path)), "\n")) {
+        if (line |> starts_with(header)) {
+            in_cls = true
+            continue
+        }
+        if (in_cls && line |> starts_with("}")) {
+            break
+        }
+        if (in_cls) {
+            out |> push(line)
+        }
+    }
+    return <- out
+}
+
+// The cm2 template's KHR stage stays abstract: a default body lets a format template that forgot
+// its override compile, and that format decodes garbage on every KHR card while the cm2 arms stay green.
+def private check_khr_stage16_abstract {
+    var found = false
+    for (line in class_lines(VK_CLASSES, "class template KqCm2BatchT")) {
+        let s = strip(line)
+        continue if (!(s |> starts_with("def ")) || find(s, "khr_stage16(") < 0)
+        found = true
+        if (!(s |> starts_with("def abstract khr_stage16"))) {
+            gate_finding(VK_CLASSES, "khr_stage16 on KqCm2BatchT has a body - it stays abstract, so a format template that forgets its override fails to compile instead of decoding garbage on every KHR card")
+        }
+    }
+    if (!found) {
+        gate_finding(VK_CLASSES, "no `def khr_stage16` inside `class template KqCm2BatchT` - the KHR stage's abstract rule has nothing to read; keep the spelling or move this check with it")
+    }
+}
+
+// the value the first line of `lines` carrying `marker` declares right after it, -1 when no line does
+def private literal_after(lines : array<string>; marker : string) : int {
+    for (line in lines) {
+        let at = find(line, marker)
+        if (at >= 0) {
+            return int_literal(slice(line, at + length(marker)))
+        }
+    }
+    return -1
+}
+
+// The add+rms row slab triple agrees: the constant, ArBase's @workgroup row slab, and the dense-width
+// cap of the Vulkan servability gate. A cap raised without the slab writes past the slab's end on the device.
+def private check_ar_max_dim_triple {
+    var inscope common_lines <- split(strip_line_comments(fread(VK_COMMON)), "\n")
+    let constant = literal_after(common_lines, "let AR_MAX_DIM = ")
+    var inscope ar_lines <- class_lines(VK_CLASSES, "class ArBase")
+    let slab = literal_after(ar_lines, "@workgroup row : float[")
+    var gate = -1
+    var inscope fns <- function_bodies(BLOCKS_FILE) $(header) {
+        return header |> starts_with("def private attn_dec_shape_ok") || header |> starts_with("def attn_dec_shape_ok")
+    }
+    for (f in fns) {
+        var inscope body_lines <- split(f.body, "\n")
+        gate = literal_after(body_lines, "c.dim > ")
+    }
+    if (constant < 0) {
+        gate_finding(VK_COMMON, "no `let AR_MAX_DIM = N` line - the add+rms slab triple has no constant to compare against")
+    }
+    if (slab < 0) {
+        gate_finding(VK_CLASSES, "no `@workgroup row : float[N]` inside `class ArBase` - the add+rms slab triple has no slab to compare")
+    }
+    if (gate < 0) {
+        gate_finding(BLOCKS_FILE, "no `c.dim > N` inside attn_dec_shape_ok - the add+rms slab triple has no servability cap to compare")
+    }
+    return if (constant < 0 || slab < 0 || gate < 0)
+    if (constant != slab || constant != gate) {
+        gate_finding(VK_CLASSES, "the add+rms row slab triple disagrees: AR_MAX_DIM {constant} (dasllama_vulkan_common.das), ArBase.row[{slab}], attn_dec_shape_ok's c.dim cap {gate} (dasllama_blocks.das) - a cap past the slab writes past its end on the device; change the three together")
+    }
+}
+
+// q8 is no superblock format: its cm2 tiles are the fmt-0 cells with no KHR arm, and the KHR
+// mode serves q8 through its own tile - the one template the KHR set does not reach.
+var private CM2_KHR_EXEMPT <- {"Q8Cm2T"}
+
+// the `<Fmt>Cm2T` format templates on the cm2 base, by name
+def private cm2_format_templates : array<string> {
+    var out : array<string>
+    for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
+        continue if (!(line |> starts_with("class template ")))
+        let name = ident_prefix(slice(line, length("class template ")))
+        if (name |> ends_with("Cm2T") && find(line, ": KqCm2BatchT") >= 0 && !key_exists(CM2_KHR_EXEMPT, name)) {
+            out |> push(name)
+        }
+    }
+    return <- out
+}
+
+// Every superblock format on the cm2 template ships its KHR instantiation and its arm in each of the
+// prefill's three KHR ladders: the f16 feed admits every such format, so a format missing one panics
+// inside the ladder on a card whose cooperative-matrix mode is KHR - a card class this box is not.
+def private check_cm2_khr_set {
+    var inscope templates <- cm2_format_templates()
+    if (empty(templates)) {
+        gate_finding(VK_CLASSES, "no `class template <Fmt>Cm2T : KqCm2BatchT` found - the KHR set rule has no templates to walk; keep the spelling or move this check with it")
+        return
+    }
+    let classes = strip_line_comments(fread(VK_CLASSES))
+    var inscope ladders <- function_bodies(VK_PREFILL) $(header) {
+        return header |> starts_with("def khr_cls_ensure") || header |> starts_with("def khr_cls_set") || header |> starts_with("def khr_cls_enc")
+    }
+    for (tpl in templates) {
+        let pfx = slice(tpl, 0, length(tpl) - length("Cm2T"))
+        let fmt = to_lower(pfx)
+        if (find(classes, "class {pfx}KhrBatch : {tpl}") < 0) {
+            gate_finding(VK_CLASSES, "{tpl} has no `class {pfx}KhrBatch : {tpl}` - a superblock format on the cm2 template ships its KHR instantiation in the same change, or the KHR ladders panic on a KHR-mode card")
+        }
+        if (find(classes, "name = \"kq_batch_{fmt}_khr_cls\"") < 0) {
+            gate_finding(VK_CLASSES, "{tpl} has no `[vk_dispatch(name = \"kq_batch_{fmt}_khr_cls\"` stamp - its KHR class has no dispatch")
+        }
+        for (f in ladders) {
+            let ladder = ident_prefix(slice(f.body, length("def ")))
+            let arm = "{slice(ladder, length("khr_cls_"))}_kq_batch_{fmt}_khr_cls("
+            if (find(f.body, arm) < 0) {
+                gate_finding(VK_PREFILL, f.line, "{ladder} has no arm for {tpl} ({arm}) - the f16 feed admits the format and the ladder panics on a KHR-mode card")
+            }
+        }
+    }
+}
+
+// A Vulkan pipeline is built only by the `[vk_dispatch]`-generated `ensure_*`: a hand build bypasses the
+// hazard rail and the dispatch census, so its races and its coverage are invisible. The two llama.cpp
+// shader ports under performance/ are reference measurements of another engine's kernels, outside this walk.
+def private check_no_hand_pipelines {
+    var files : array<string>
+    for (folder in ["modules/dasLLAMA/dasllama", "modules/dasLLAMA/harness", "modules/dasLLAMA/tests"]) {
+        collect_das_files(folder, files)
+    }
+    for (p in files) {
+        var line_no = 0
+        for (line in split(strip_line_comments(fread(p)), "\n")) {
+            line_no++
+            if (find(line, "vkCreateComputePipelines(") >= 0) {
+                gate_finding(p, line_no, "hand-built Vulkan pipeline - a pipeline is created only by a [vk_dispatch]-generated ensure_*, which puts it on the hazard rail and in the dispatch census")
+            }
+        }
+    }
+    delete files
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
@@ -750,6 +916,10 @@ def main() : int {
     check_gpu_role_partition()
     check_fastmath_default()
     check_image_backing_release()
+    check_khr_stage16_abstract()
+    check_ar_max_dim_triple()
+    check_cm2_khr_set()
+    check_no_hand_pipelines()
     var inscope tut_texts : array<string>
     read_das_stripped(TUTORIAL_DIR, tut_texts)
     var inscope rst_texts : array<string>

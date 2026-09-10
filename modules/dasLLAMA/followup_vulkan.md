@@ -934,7 +934,8 @@ module) is independent and can land any time - it is pure structure.
     twin 5152.9 / 142.5 (5099.8 / 173.8; its window 94.5 ms, the first measured rep after the
     warmup reads 101 on every row here, a driver warm-up the bench's one warmup does not absorb).
     One more pass the same day: the shared expert's K-quant planes ride beside its q8 transcode
-    and the whole-model driver places those (the twin's token 7.06 -> 6.12 ms, tg128 162.7 =
+    on a load with a GPU tier armed (a CPU-only load keeps the transcode alone) and the
+    whole-model driver places those (the twin's token 7.06 -> 6.12 ms, tg128 162.7 =
     0.94x), the schedule's slot walks are an atomic tally and cursor (8.1 -> 0.46 ms on the 30B
     window), the router tile prefetches its stage as a 64 x 32 tile (6.6 -> 4.3 ms): the 30B
     3448.9 / 124.6 (0.98x / 1.07x, the window 144.9 ms against 142.3), the 35B 2946.0 / 95.2
@@ -961,5 +962,10 @@ module) is independent and can land any time - it is pure structure.
     are the next form), the fused add+rms twin that also stores the normed row
     (the router's feed, so a MoE could take the fused rail; ar1 reads 1.8-2.0 ms of the 30B
     window), the CPU chain's shared expert on the same K-quant planes (it reads the q8
-    transcode, so the resident-vs-CPU bar carries the two forms' rounding), and an LPT order for
-    the device schedule's pieces (the m dispatch already leads the s one).
+    transcode, so the resident-vs-CPU bar carries the two forms' rounding), an LPT order for
+    the device schedule's pieces (the m dispatch already leads the s one), and the two probe
+    arms the checklist's race rule asks for - the router tile's float4 stage against its scalar
+    stage and the residual step's slot groups against the plain loop, the old bodies kept as
+    probe twins (both ranked on before/after `DASLLAMA_GPU_PROF=1` profiles across processes,
+    4.3 -> 2.4 ms per 30B window and 490 -> 440 us per twin token; ruled 2026-09-09 to ship as
+    stated claims).

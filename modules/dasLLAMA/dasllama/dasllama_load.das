@@ -1556,8 +1556,8 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
             any ||= t.we1_fmt[l] != KqFmt.q8 || t.we2_fmt[l] != KqFmt.q8 || t.we3_fmt[l] != KqFmt.q8
         }
     }
-    // the shared expert's tags: its K-quant planes ride beside the q8 transcode
-    if (t.config.n_expert > 0l && t.config.n_ff_shexp > 0l && (t.config.dim * t.config.n_ff_shexp) % 256l == 0l) {
+    //! the shared expert's tags: its K-quant planes ride beside the q8 transcode on a load with a GPU tier armed (the resident driver reads them; a CPU-only load keeps the transcode alone)
+    if (moe_gpu_tier_installed() && t.config.n_expert > 0l && t.config.n_ff_shexp > 0l && (t.config.dim * t.config.n_ff_shexp) % 256l == 0l) {
         t.wsh1_fmt |> reserve(layers)
         t.wsh1_fmt |> resize(layers)
         t.wsh2_fmt |> reserve(layers)

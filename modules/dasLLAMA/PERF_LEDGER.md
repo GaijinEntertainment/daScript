@@ -42,9 +42,12 @@ what it costs today and what the fix would change.
   7.06 -> 6.12 ms (the `vk_rdec gpu avg/token` line of `benchmarks/lcpp_bench.das --prof
   --jobque-profiling` under `DASLLAMA_GPU_PROF=1`, RTX 5060 Ti) [direction-grade - two commits].
   The pair to read is footprint against wall clock: the device image and the token both fall,
-  while every image flavor now carries BOTH copies - the planar CPU image grows by about 537 MB
-  on the twin (three planes x layers x dim x n_ff_shexp weights in the file's format). That
-  growth stands until the CPU chain reads the K-quant planes too and the q8 transcode goes,
+  while the loaded model on a GPU box carries BOTH copies - the loader mints the K-quant planes
+  only on a load with a GPU tier armed, so a CPU-only box's planar image is what it was, and the
+  tier-armed load of the twin serves 11781 MB of weights against the CPU-only load's 11291 (the
+  490 MB: three planes x layers x dim x n_ff_shexp weights in the file's format, k4 +381 MB and
+  k6 +109). That growth stands until the per-op and CPU rails read the
+  K-quant planes too and the q8 transcode goes,
   which `followup_vulkan 43` owns in its still-open list (the CPU chain's shared expert on the
   same K-quant planes; today the resident-vs-CPU bar carries the two forms' rounding).
 

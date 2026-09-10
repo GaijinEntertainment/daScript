@@ -7,8 +7,9 @@ docs: `ARCHITECTURE_GPU_VULKAN.md` and the companions it routes to. Planned work
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**A hand-written Vulkan pipeline build is a defect - a Vulkan pipeline is created only by a
-`[vk_dispatch]`-generated `ensure_*`.**
+**A hand-written Vulkan pipeline build is a defect, and so is weakening the `REVIEW.das` check
+that reports a `vkCreateComputePipelines(` call in `dasllama/`, `harness/` and `tests/` - a
+Vulkan pipeline is created only by a `[vk_dispatch]`-generated `ensure_*`.**
 
 **A diff that adds a Vulkan dispatch family adds every piece of state the family keeps per
 model - device buffers, descriptor-set caches, `*_ready` latches, profiler accumulators - to
@@ -80,15 +81,17 @@ master's.** A KHR tile is the `<Fmt>KhrBatch` class stamped per weight format in
 `<Fmt>Cm2T` format template in `dasllama/dasllama_vulkan_classes.das` - ships its KHR
 instantiation (`<Fmt>KhrBatch`, the `kq_batch_<fmt>_khr_cls` dispatch) and its arm in each of
 `khr_cls_ensure`, `khr_cls_set` and `khr_cls_enc` (`dasllama/dasllama_vulkan_prefill.das`), in
-the same change.** `pf_f16_feed` admits every `kq_sb` format, so a format with no KHR
+the same change; weakening the `REVIEW.das` check that requires that set for every `kq_sb`
+format's `<Fmt>Cm2T` template is a defect.** `pf_f16_feed` admits every `kq_sb` format, so a format with no KHR
 class panics in `khr_cls_ensure`, `khr_cls_set` or `khr_cls_enc` on a card whose
 cooperative-matrix mode is KHR.
 
 **A `kq_sb` format that ships a KHR instantiation runs its KHR arm in that format's kernel cell,
 in the same change.**
 
-**`khr_stage16` stays abstract on `KqCm2BatchT` (`dasllama/dasllama_vulkan_classes.das`) - a
-diff that gives it a default body is a defect.**
+**Weakening the `REVIEW.das` check that requires `def abstract khr_stage16` on `class template
+KqCm2BatchT` (`dasllama/dasllama_vulkan_classes.das`) is a defect.** A default body lets a format
+template that forgot its override compile and decode garbage on every KHR card.
 
 **A kernel body that calls a `[spirv_decode]` method directly passes the plane element itself
 (`decode(wq[i], ...)`), never a local copy of it (`let blk = wq[i]` then `decode(blk, ...)`).**
@@ -125,8 +128,7 @@ whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
 
-**A diff that changes `AR_MAX_DIM` (`dasllama/dasllama_vulkan_common.das`) changes the `row`
-`@workgroup` slab of `ArBase` (`dasllama/dasllama_vulkan_classes.das`) and the `c.dim` cap of
-the Vulkan servability gate (`attn_dec_shape_ok`, `dasllama/dasllama_blocks.das`) to the same
-number, in the same change.** The add+rms kernels stage a whole row in that slab, so a slab
-shorter than the cap writes past its end.
+**Weakening the `REVIEW.das` check that compares `AR_MAX_DIM` (`dasllama/dasllama_vulkan_common.das`),
+the `row` `@workgroup` slab of `ArBase` (`dasllama/dasllama_vulkan_classes.das`) and the `c.dim`
+cap of `attn_dec_shape_ok` (`dasllama/dasllama_blocks.das`) is a defect.** The add+rms kernels
+stage a whole row in that slab, so a cap past the slab writes past its end.
