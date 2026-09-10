@@ -100,13 +100,15 @@ def q8_conv(name, shape, stride, transposed):
     return is_conv and len(shape) == 3 and not transposed and stride == 1 and shape[0] % 32 == 0 and shape[1] % 32 == 0
 
 
-FAKE_GROUPS = ("attn", "ffn", "input", "speaker", "head", "codec")
+FAKE_GROUPS = ("attn", "ffn", "input", "speaker", "embed", "head", "codec", "strided")
 
 
-def fake_group(name, shape):
+def fake_group(name, shape, conv_served=False):
     """The tensor group a `--fake` spec names: the backbone's attention projections, its two FFN
-    matrices, the frame input projection, the speaker projection, the flow head's matrices, the
-    codec's GEMMs and convs. Norms, biases and the voices are never in a group."""
+    matrices, the frame input projection, the speaker projection, the text embedding table, the
+    flow head's matrices, the codec's GEMMs and the convs the engine serves q8 (`codec`), and the
+    codec's strided, transposed and resampling convs the file keeps f16 (`strided`). Norms,
+    biases and the voices are never in a group."""
     if not name.endswith(".weight") or len(shape) < 2:
         return None
     if name.startswith("backbone."):
@@ -119,9 +121,13 @@ def fake_group(name, shape):
         return "input"
     if name == "flow_lm.speaker_proj.weight":
         return "speaker"
+    if name == "flow_lm.conditioner.embed.weight":
+        return "embed"
     if name.startswith("head."):
         return "head"
     if name.startswith("mimi."):
+        if len(shape) == 3 and not conv_served:
+            return "strided"
         return "codec"
     return None
 
@@ -161,7 +167,8 @@ class FakeQuant:
         from gguf.quants import dequantize
         t = self.gguf.GGMLQuantizationType[fmt]
         block, type_size = self.gguf.GGML_QUANT_SIZES[t]
-        rows = np.ascontiguousarray(w32.reshape(-1, w32.shape[-1]), dtype=np.float32)
+        # a conv [cout][cin][k] rounds per output channel over its cin*k taps; a matrix per row
+        rows = np.ascontiguousarray(w32.reshape(w32.shape[0], -1) if w32.ndim == 3 else w32.reshape(-1, w32.shape[-1]), dtype=np.float32)
         nrows, n_per_row = rows.shape
         if n_per_row % block != 0:
             self.skipped.append((name, fmt, n_per_row))
@@ -278,7 +285,7 @@ def main():
         name = canonical(k)
         assert len(name) < GGML_MAX_NAME, name
         assert name not in tensors, name
-        group = fake_group(name, v.shape) if fake else None
+        group = fake_group(name, v.shape, q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name)) if fake else None
         if group in fake:
             v = fq.apply(name, np.ascontiguousarray(v.astype(np.float32)), fake[group])
         if a.q8 and q8_linear(name, v.shape):
@@ -395,7 +402,7 @@ def main():
     if fq:
         by_group = {}
         for name, (fmt, nbytes, err) in fq.done.items():
-            g = by_group.setdefault((fake_group(name, (1, 1)), fmt), [0, 0, 0.0])
+            g = by_group.setdefault((fake_group(name, (1, 1)) or "strided", fmt), [0, 0, 0.0])
             g[0] += 1
             g[1] += nbytes
             g[2] = max(g[2], err)
