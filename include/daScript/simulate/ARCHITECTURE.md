@@ -107,8 +107,7 @@ correctness required it, and the alternative that was rejected.
   CRT call is cheaper than the inlined polynomial - that is the rejected alternative. `Log2`
   is the one arm the swap does not speed up: it trades the `v_log2_est_p5` estimate for the
   exact answer the JIT already computes, so interp, AOT and JIT agree. `log`, `sin`, `cos`
-  and `tan` stay on the lane, which is cheaper for them. The measurements behind the split:
-  `plans/benchmark_followups.md` (repo root), the scalar-exp section.
+  and `tan` stay on the lane, which is cheaper for them.
 
 - **`das_ordered2`** (`aot.h`) - a two-member aggregate the AOT emitter wraps around any
   binary op whose operands are not both side-effect-free, because braced aggregate init is

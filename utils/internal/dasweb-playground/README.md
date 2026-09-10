@@ -1,8 +1,8 @@
 # dasweb-playground
 
 The daslang.io playground backend: permanent share links (`daslang.io/s/<hash>`) over a
-content-addressed sample store. Phase 1 of `plans/dasweb_backend.md`; later phases add the
-curated-sample listing and the wasm build queue. Review rules: `REVIEW.md` (binding).
+content-addressed sample store, plus the curated-sample listing and the wasm build queue.
+Review rules: `REVIEW.md` (binding).
 
 ## Run
 
@@ -110,7 +110,7 @@ marker, so a later import cannot silently demote it.
 
 Dedup is content-addressed: same source => same hash => same URL, first writer's metadata wins.
 
-## The wasm build pipeline (phase 3 of `plans/dasweb_wasm_pipeline.md`)
+## The wasm build pipeline
 
 The compute box **pulls**: `utils/internal/dasweb-buildd` on zen4 polls `/api/build/next` over HTTPS
 with a bearer token (`build_token` in the toml; empty disables the whole surface - set it the

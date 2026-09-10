@@ -69,7 +69,8 @@ Pocket TTS English is the cloning model: 152 MB, 19 voices (`alba` the default, 
 `tts_register_voice`. It reads text, so it needs neither pack; the English normalizer runs in
 front of it. On the 200-sentence rig at `alba` this file reads WER 3.91 / UTMOS 4.328 at a
 real-time factor of 0.051 on an Apple M1 Max, against the reference package's 5.00 / 4.393 /
-0.210 (measured 2026-09-09; the record is the Receipts section of the repository's `plans/dasllama-pocket-tts.md`, which names the box, the tier and the rig). The five other
+0.210 (measured 2026-09-09 with the module's `harness/tts_rig.py`, the engine under the JIT
+tier with the box's tune profile, the reference package under torch on one thread). The five other
 languages are the same form, one file each with Kyutai's default clip for that language as its
 only voice (German `juergen`, Spanish `lola`, Italian `giovanni`, Portuguese `rafael`, French
 `estelle`); the German, Spanish, Italian and Portuguese files are the six-layer models, French
@@ -77,8 +78,7 @@ exists only as the 24-layer one. A voice cloned from any clip speaks the file's 
 the clip's accent. Text in those languages is read as it is, since the normalizer is English.
 
 Kitten nano is the phoneme families' served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
-M1 Max (measured 2026-09-02; the record is the repository's `plans/dasllama-tts.md` until the
-module's `PERF_LEDGER.md` carries a speech row). Its voices are `expr-voice-2-m` through
+M1 Max (measured 2026-09-02 with the same rig). Its voices are `expr-voice-2-m` through
 `expr-voice-5-f`, and the upstream's alias names
 (`Bella`, `Jasper`, ...) are accepted for them. Kokoro ships 54 packs, of which the front end
 drives the 28 English ones: the 20 American (`af_*`, `am_*` - `af_heart`, `am_adam`, ...) and
@@ -122,7 +122,7 @@ the reference implementations (block by block, and the front end sentence by sen
 | `kokoro-82m.gguf` | Apache-2.0 | hexgrad's weights and voices, converted; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
 | `tts_g2p.bin` | Apache-2.0 and BSD-2-Clause | misaki and g2p_en (Apache-2.0), CMUdict (`LICENSE.CMUDICT`, Carnegie Mellon University) |
 | `tts_postag.bin` | CC BY-SA 4.0 | the tagger weights are trained on UD English-EWT (`LICENSE.UD_EWT`); the exception table and the silver tags come from spaCy (MIT, `LICENSE.SPACY`); Gutenberg prose is public domain |
-| `pocket-tts-en-q8.gguf` | CC BY 4.0 | Kyutai's weights and tokenizer, converted (`LICENSE.CC-BY-4.0`); the reference implementation is MIT and not included; the voice clips: `voice-zero` and `voice-donations` CC0, VCTK (CSTR, University of Edinburgh) and Alba Mackenna CC BY 4.0 - the sidecar lists each |
+| `pocket-tts-en-q8.gguf` | CC BY 4.0 | Kyutai's weights and tokenizer, converted (`LICENSE.CC-BY-4.0`); the reference implementation is MIT (`LICENSE.POCKET_TTS`) and not included; the voice clips: `voice-zero` and `voice-donations` CC0, VCTK (CSTR, University of Edinburgh) and Alba Mackenna CC BY 4.0 - the sidecar lists each |
 
 Each `.LICENSE` sidecar beside a file names its sources; the full texts are in this repository.
 The engine that reads these files is under the daslang licence in its own repository.

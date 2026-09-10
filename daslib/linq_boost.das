@@ -641,7 +641,7 @@ class private LinqSelectMany2 : AstCallMacro {
 
 [call_macro(name="_group_by_lazy")]
 class private LinqGroupByLazy : AstCallMacro_LinqPred2 {
-    //! implements _group_by_lazy(iterator, key) shorthand notation that expands into group_by_lazy(iterator, $(_) => key). Yields one ``tuple<key; array<elem>>`` per bucket — IGrouping shape, suitable for in-memory per-group processing (top-N per group, group-scoped filtering, grouped JSON emission). See spec ``history/dasSQLITE/API_REWORK.md "### 19-group_by"``.
+    //! implements _group_by_lazy(iterator, key) shorthand notation that expands into group_by_lazy(iterator, $(_) => key). Yields one ``tuple<key; array<elem>>`` per bucket — IGrouping shape, suitable for in-memory per-group processing (top-N per group, group-scoped filtering, grouped JSON emission).
     override predName = "group_by_lazy"
 }
 

@@ -9,9 +9,8 @@ in two of them will drift:
 | `ARCHITECTURE.md` | me | what *belongs* in each file and why the system is shaped this way |
 | `REVIEW.md` | `/code-review`, and us while writing | criteria checkable against a diff |
 
-Shipped-arc plan docs live in `history/dasLLAMA/` (the archive log is `history/README.md`);
-a `*_plan.md` in this folder is an ACTIVE arc's working plan. Passages retired from this
-document are archived in `history/dasLLAMA/architecture_retired_notes.md`.
+A `*_plan.md` in this folder is an ACTIVE arc's working plan - a shipped arc's plan leaves the
+tree.
 
 The companions carry this document's sections, each keeping its sections' numbers. The
 routing block under each numbered heading below is the index: it names every companion that

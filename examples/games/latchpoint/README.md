@@ -5,14 +5,8 @@ free-form robot conversations. The game runtime is daslang, including authoritat
 saves, dialogue, audio and input. It calls a separate local dasllama-server through dasOPENAI;
 the model never owns game state. This is a local prototype, not a browser release.
 
-The older Python experiments are preserved on `archive/latchpoint-python-experiments`.
-The [archive guide](../../../plans/latchpoint-python-experiments.md) describes their contents,
-limitations and proposed daslang port. Historical `plans/latchpoint*.md` reports describe
-individual development passes; their Python commands belong to the archived checkout.
-
-Design: [Latchpoint](../../../plans/latchpoint.md).
-Known issues: [playtest follow-ups](../../../plans/latchpoint-playtest-followups.md).
-Mac bring-up: [M5 validation](../../../plans/latchpoint-m5.md).
+The older Python experiments are preserved on `archive/latchpoint-python-experiments`; their
+Python commands belong to that checkout, not to this one.
 
 ## Build and launch
 

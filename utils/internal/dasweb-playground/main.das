@@ -11,7 +11,7 @@ require live/live_gc
 require live_host
 
 // dasweb-playground — the daslang.io playground backend (share links + sample
-// store; plans/dasweb_backend.md). Canonical application shape: exported
+// store). Canonical application shape: exported
 // init/update/shutdown + a standalone main with the GC boundary; hostable by
 // daslang-live, supervised by utils/watchdog in production.
 

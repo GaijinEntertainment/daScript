@@ -1,7 +1,7 @@
 # dasweb-buildd Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`. Planned work: `plans/dasweb_wasm_pipeline.md` (repo root).
+`README.md`.
 
 **Never put a `[test]` file under the global `tests/` tree, and never register one in a
 `CMakeLists.txt` - a `[test]` file for this directory lives here and requires its siblings by

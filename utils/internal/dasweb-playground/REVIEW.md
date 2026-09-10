@@ -1,7 +1,7 @@
 # dasweb-playground Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`. Planned work: `plans/dasweb_backend.md`.
+`README.md`.
 
 **A diff that adds or changes a route, a store operation, or a config or limit behavior covers
 it with a dastest test in this directory, in the same change.**

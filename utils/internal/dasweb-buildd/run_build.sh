@@ -29,8 +29,7 @@
 #
 # Environment (systemd unit on the box):
 #   DASWEB_WASM_WORKTREE   the dedicated wasm worktree (wasm and native builds
-#                          poison each other's bin/ and lib/ — see
-#                          plans/dasweb_wasm_pipeline.md)
+#                          poison each other's bin/ and lib/)
 #   EMSDK                  the pinned emsdk root (5.0.7, the version pages.yml pins)
 # Optional overrides: DASWEB_BUILDER_IMAGE, DASWEB_LLVM_LIB,
 #   DASWEB_BUILD_MEMORY, DASWEB_BUILD_PIDS, DASWEB_BUILD_CPUS

@@ -20,15 +20,12 @@ def test_walk_collects_governing_checklists(t : T?) {
     let fixture = unsafe(fixture_r.value)
     t |> success(mkdir_rec("{fixture}/a/b"))
     t |> success(mkdir_rec("{fixture}/c"))
-    t |> success(mkdir_rec("{fixture}/history"))
     write_marker("{fixture}/REVIEW.md")
     write_marker("{fixture}/a/REVIEW.md")
-    write_marker("{fixture}/history/REVIEW.md")
 
     // a/b/code.das is governed by a/ and the root; c/ has no checklist of its
-    // own, so only the root governs it; top.md exercises the root-level walk;
-    // the history/ path binds nothing — archives are frozen.
-    var inscope hits <- affected_review_md(fixture, ["a/b/code.das", "c/other.das", "top.md", "history/old.das"])
+    // own, so only the root governs it; top.md exercises the root-level walk.
+    var inscope hits <- affected_review_md(fixture, ["a/b/code.das", "c/other.das", "top.md"])
     t |> equal(2, length(hits))  // nolint:STYLE040 — same pins repeat below on a different input, deliberately
     t |> equal("REVIEW.md", hits[0])
     t |> equal("a/REVIEW.md", hits[1])

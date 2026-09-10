@@ -8,8 +8,9 @@ doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_general.md`, `follow
 it.** The reference build is the third-party engine this module measures itself against - the
 checkout `benchmarks/setup_lcpp_ref.das` pins. Reference-build work is locating a site in that
 build, patching it, running it, regenerating from it, or measuring against it - planned or
-performed. The text this list binds is checked-in text under `modules/dasLLAMA/`; a repo-root
-`plans/` document carrying a reference-build name reaches it through `plans/REVIEW.md`.
+performed. The text this list binds is checked-in text under `modules/dasLLAMA/`; a document
+anywhere else in the tree that carries a reference-build name is bound by these same rules,
+routed here by the checklist covering its own folder.
 
 **A sentence whose job is not reference-build work describes an upstream mechanism in our own
 terms: no "lifted/ported verbatim from", and no name belonging to the reference build - symbol,

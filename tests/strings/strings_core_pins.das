@@ -2,7 +2,7 @@ options gen2
 require dastest/testing_boost
 require strings
 
-// Regression pins for the byte-view string surface (plans/byte-view-strings.md).
+// Regression pins for the byte-view string surface.
 
 // Every haystack goes through heap_str: with all-constant arguments the optimizer const-folds
 // the whole call away, so the pin would freeze the folder instead of the runtime builtin.

@@ -393,7 +393,7 @@ def test_vision_chat_deepstack(t : T?) {   // nolint:STYLE038 — one sequential
             delete chat
             // the zeroed-slices decoder control: the SAME wide rows with their deepstack tails
             // zeroed must move the decoder's logits - a caption gate alone cannot see a decoder
-            // that silently ignores the slices (the plan's slice-H requirement)
+            // that silently ignores the slices (the arc's slice-H requirement)
             var emb2 <- load_vision_embedder(mm)   // create_chat_ moved `emb` into the session
             var st = VisionState()
             var rows : array<float>

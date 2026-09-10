@@ -2,7 +2,6 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`, `ARCHITECTURE_LINQ.md`.
-Planned work: `plans/daslib_comment_sweep.md` (repo root).
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A
 diff touching `daspkg.das` - the functions a `.das_package` manifest body calls - applies
 `utils/daspkg/REVIEW.md` (repo root) too; the folder walk never opens it for a `daslib/` diff.

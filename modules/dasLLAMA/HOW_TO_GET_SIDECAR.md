@@ -134,8 +134,8 @@ LCPP_TBO=~/llama.cpp/build-clean-cpu/bin/test-backend-ops NTOK=0 ROUNDS=5 TEAM=1
 ```
 
 One thread, no model: every format's stamped kernel against the reference exe's `test-backend-ops perf`
-at the same shape, decode and prefill rows, ratio = reference / ours. This is the box's table; it goes
-into `plans/kernel_parity_pass.md`'s fact base (and the records store once the kernel board exists).
+at the same shape, decode and prefill rows, ratio = reference / ours. This is the box's table; the
+records store takes it once the kernel board exists.
 
 ## 6. The mint
 

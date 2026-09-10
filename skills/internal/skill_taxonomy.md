@@ -34,6 +34,6 @@ routing, not a second telling.
 3. A stray repo-only line in a shipped file takes the `repo-only` marker; a file whose
    repo-only content is more than stray lines splits (`writing_tests.md` /
    `tests_in_repo.md` is the pattern).
-4. History encountered in a move dies or goes to `/history`.
+4. History encountered in a move is deleted - git keeps it; no document in the tree archives it.
 5. In doubt - audience, contested duplication, a claim that looks wrong - ask the user
    directly and leave the file working.

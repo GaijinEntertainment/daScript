@@ -20,7 +20,7 @@ Delete files created for diagnostics, staging, and one-off tests before handing 
 
 ## The document system
 
-Three document types split one grammar, each with a repo-root contract:
+The document types split one grammar, each with a repo-root contract:
 
 - **`REVIEW.md`** (per folder) - bans and duties binding a diff, applied at REVIEW time via
   the folder walk. Contract: `REVIEW_COMMON.md`.
@@ -28,19 +28,21 @@ Three document types split one grammar, each with a repo-root contract:
   Contract: `ARCHITECTURE_COMMON.md`. **Read the folder's architecture doc BEFORE writing
   code there** - charters say which file owns what, mechanisms say why shapes win, and the
   exception ledger says what is already ruled. Facts formerly carried by comments live here.
-- **`/history`** - past tense: what happened. Nothing current cites it.
 
 An implementation folder - `daslib/`, a module's `daslib/` or engine folder - holds no `.md`
 besides `REVIEW*.md` and `ARCHITECTURE*.md` (lint-enforced: `.lint_config`
-`rule_docs_only`). Ledgers and plans live at the module root or in `plans/` (repo root). None
-of these documents installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
+`rule_docs_only`). Ledgers live at the module root, and planned work is a row in one - a rule
+document whose ledger sits outside its own folder names it in its opening (`REVIEW_COMMON.md`).
+A plan-shaped document and a past-tense record do not live in the tree at all: git and the
+author's own out-of-tree notes keep them, and no file in the tree cites them. No `REVIEW*.md`,
+`ARCHITECTURE*.md` or ledger installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
 `ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions, and a shipped
 tree with `[arch]` citations installs a GENERATED excerpt of each cited document (the cited
 sections only, banner-marked; `utils/internal/arch-extract`, registered on `DAS_ARCH_EXTRACT_SPECS`
 beside the tree's install rules) so LINT026 stays armed in an installed SDK.
 
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
-fact -> ARCHITECTURE.md; dated or past-tense -> /history.
+fact -> ARCHITECTURE.md; dated or past-tense -> deleted, git keeps it.
 
 **Before editing a function annotated `[arch(at="<doc>.md#<anchor>")]`, read the section it
 cites.** MCP `arch_of` returns each of a file's citations with its section text; `arch_sites`
@@ -133,7 +135,6 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslang/references/strings.md` | Writing regular expressions in `.das` code |
 | `skills/daslang/references/files-and-paths.md` | Writing or reviewing any glob/wildcard pattern handling - file selection, include/exclude masks, pattern-match-on-paths (`*` / `?` / `**` / `[abc]`) |
 | `skills/internal/version_update.md` | Bumping the daslang version number |
-| `skills/internal/doc_archiving.md` | Archiving a completed arc's design/plan/audit docs into `/history` |
 | `skills/internal/doc_sweep.md` | The each-release authored-RST doc sweep, `.. das-doc:` markers, extending `utils/internal/doc-verify/` |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/memory_leak_detection.md` | Any leak report at exit - index of the six leak-detection mechanisms and which to reach for |
@@ -176,7 +177,7 @@ New knowledge about daslang syntax, semantics, or conventions - from compiler er
 
 **Syntax and factual corrections are fix-in-place, always.** A compiler error, probe, or user correction showing a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale gets fixed in the same session and flagged in the end-of-turn summary - never deferred to a proposal. Verify first: grammar truth is `src/parser/ds2_parser.ypp`, behavior truth is a probe-compile with the current binary.
 
-**Rule files carry rules, not history.** CLAUDE.md files, `skills/*.md`, and per-module rule docs state the CURRENT contract only - no incident anecdotes, PR/issue numbers, dated rulings, or "as of" entries. When a rule changes, replace the old text outright and state the timeless WHY; history lives in git, `/history`, and memory, so archive a motivating incident worth keeping in `/history`. A syntax/behavior claim is still probe-verified before it lands, but the verification date is history too: never write an inline `(probe-verified <date>)` tag. These files load into context and are read by weaker models, so every token must carry meaning.
+**Rule files carry rules, not history.** CLAUDE.md files, `skills/*.md`, and per-module rule docs state the CURRENT contract only - no incident anecdotes, PR/issue numbers, dated rulings, or "as of" entries. When a rule changes, replace the old text outright and state the timeless WHY; history lives in git and in the author's out-of-tree notes, so a motivating incident is not written into the tree. A syntax/behavior claim is still probe-verified before it lands, but the verification date is history too: never write an inline `(probe-verified <date>)` tag. These files load into context and are read by weaker models, so every token must carry meaning.
 
 **Every REVIEW.md reviews itself.** A discovered checklist is itself audited under the self-review rule, not just applied - its own defects are findings, fixed in the same batch. The contract all checklists share lives ONCE in `REVIEW_COMMON.md` at the repo root; checklists point at it and never restate it (`skills/review_md.md`). Per-PR discovery, the `REVIEW.das` gates, and the auditor-agent topology: `skills/internal/make_pr.md`, the REVIEW audit row and its agent-topology section.
 

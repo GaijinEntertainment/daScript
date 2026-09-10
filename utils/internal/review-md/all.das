@@ -44,7 +44,7 @@ def main() : int {
         return 1
     }
     var inscope listed <- changed_from_git_output(ls_r.out)
-    var gates <- [for (p in listed); p; where base_name(p) == "REVIEW.das" && !starts_with(p, "history/")]
+    var gates <- [for (p in listed); p; where base_name(p) == "REVIEW.das"]
     gates |> sort
     var rc = 0
     var inscope orphans <- orphan_gates(root, gates)

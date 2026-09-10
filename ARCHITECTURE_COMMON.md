@@ -8,9 +8,11 @@ sibling `REVIEW_COMMON.md` (repo root) is the checklists' contract.
 **An architecture doc is written in the present tense: what is true of the current tree, and
 why that shape wins.** The mood test: a sentence that binds a diff with must/never/"is a
 defect" is a rule - move it to the folder's `REVIEW.md`. A passage that narrates what
-happened - past tense, or dated as a record of an event - is history - archive it to
-`/history`; a version stamp names a current fact and stays, while a `probe-verified <date>` tag is a dated record and is not written. A promise, phase, or plan is planned work - move it to the
-folder's follow-up ledger.
+happened - past tense, or dated as a record of an event - is history: delete it, git keeps
+it. A current fact the narrative carries is not deleted with it: restate that fact in the
+present tense and keep it here. A version stamp names a current fact and stays; a
+`probe-verified <date>` tag is a dated record and is not written. A promise, phase, or plan
+is planned work - move it to the folder's follow-up ledger.
 
 **What belongs in an architecture doc: file charters, mechanisms, definitions, inventories,
 and the exception ledger. Nothing else.**

@@ -2,8 +2,7 @@
 
 Static site for dasllama.io, served from dasweb-1 (own Caddy vhost, own root beside
 daslang.io's). Design originated in the Claude Design forge (`consumers/dasllama-io/`,
-project "daslang.io Forge") on the daslang.io Forge system. Arc plan + follow-up ledger:
-`plans/dasllama_io_site.md`.
+project "daslang.io Forge") on the daslang.io Forge system.
 
 ## Layout
 

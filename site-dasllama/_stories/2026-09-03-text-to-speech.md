@@ -5,7 +5,7 @@ title: The engine learned to talk.
 lede: Three speech models, a text front end that is nothing but data, and an afternoon spent hunting a hiss that turned out to be a comma.
 ---
 
-<!-- figures: plans/dasllama-tts.md receipts, all on our M1 Max (64 GB, 8 worker lanes), das at the
+<!-- figures: receipts all on our M1 Max (64 GB, 8 worker lanes), das at the
      merge b124bef01 (2026-09-03) unless named: the speed ladder and the final speed receipt are dated
      2026-09-02 (one two-sentence input, warm: nano 383 ms for 15 s of audio, RTF 0.026 = 38x real time;
      kokoro 651-671 ms for 9.1 s, RTF 0.071-0.073 = 14x), the references were taken the same day on the

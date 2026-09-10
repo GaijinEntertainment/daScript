@@ -1,7 +1,7 @@
 /* dasLLAMA bench table — the shared measurement-table language.
    Lifted verbatim from site/dasllama.html's dl-* block so daslang.io and dasllama.io
    render identical tables, bars and receipts. dasllama.html still carries its own inline
-   copy — folding it onto this file is a ledgered follow-up (plans/dasllama_io_site.md).
+   copy — folding it onto this file is a ledgered follow-up.
    Markup contract (see site/files/dasllama.js):
      .dl-table-wrap > table.dl-table.dl-table--bench
        thead th.js-sort[.dl-num][.dl-grp][.dl-grp-start][.is-sorted[.is-desc]]

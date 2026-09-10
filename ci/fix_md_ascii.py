@@ -31,13 +31,8 @@ SHIPPED_BASENAMES = {"README.md", "CHANGELIST.md"}
 
 EXEMPT_FILES = {
     "utils/internal/das-herd/LANGUAGE_SUPPORT_PLAN.md",  # non-English samples are the subject
-    "history/examples/dictation/CADMUS_PLAN.md",         # archived non-English content
     "examples/text/README.md",                           # text-rendering demo strings
     "modules/dasLLAMA/README.md",                        # model prompt samples
-    "history/dasLLAMA/qwen2_audio_plan.md",              # model prompt samples
-    "history/dasLLAMA/audio_models_plan.md",             # model prompt samples
-    "plans/dasllama-tutorials.md",                       # non-English tutorial samples
-    "plans/dasllama-tts.md",                             # IPA phoneme inventories are the subject
     "site-dasllama/_stories/2026-09-03-text-to-speech.md",  # the phonemizer's IPA output is shown
 }
 

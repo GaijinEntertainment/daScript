@@ -10,7 +10,7 @@ def affected_review_md(root : string; changed : array<string>) : array<string> {
     var inscope seen : table<string>
     var found : array<string>
     for (f in changed) {
-        continue if (empty(f) || f |> starts_with("history/"))   // archives are frozen
+        continue if (empty(f))
         var d = dir_name(f)
         if (empty(d)) {
             d = "."

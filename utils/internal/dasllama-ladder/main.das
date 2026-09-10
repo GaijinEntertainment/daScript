@@ -11,7 +11,7 @@ require live/live_gc
 require live_host
 
 // dasllama-ladder — the dasllama.io exchange backend (tune sidecars + ladder
-// records; plans/dasllama_io_site.md). Canonical application shape: exported
+// records). Canonical application shape: exported
 // init/update/shutdown + a standalone main with the GC boundary; hostable by
 // daslang-live, supervised by utils/watchdog in production.
 

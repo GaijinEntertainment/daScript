@@ -80,7 +80,7 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   replay/result text builders, reply parsers; Harmony namespace/channels, gemma-4 DSL, mistral
   control tokens, llama JSON). Every byte of tool wire text is produced here - pure string+JSON
   functions, model-free testable; the chat layer assembles the output into ChatParts and the
-  server parses through the parsers. Wire-format provenance: `history/dasLLAMA/tool_formats_plan.md`.
+  server parses through the parsers.
 - **`dasllama_chat.das`** - conversation turns and chat-template application. Per-arch template
   *content* is registered by the arch file (sec.1.6), not written here.
 - **`dasllama_par.das`** - `maybe_parallel_for` and nothing else. Threading policy (job counts,

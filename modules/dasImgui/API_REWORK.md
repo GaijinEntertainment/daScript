@@ -5,7 +5,6 @@
 This is the master plan-doc for the dasImgui boost-API redesign. It captures every pinned decision from the kickoff discussion plus the phased implementation plan. Living document - update as decisions evolve.
 
 Companion docs (when they appear):
-- Per-chunk plans live under `~/.claude/plans/dasimgui_*.md`
 - Design strawmans / fake-tutorials (if/when needed) live in `API_MISSING.md` (separate doc, not yet created)
 
 ---
@@ -505,7 +504,6 @@ Per `~/.claude/projects/d--Work-daScript/memory/project_dasimgui_workflow.md`:
 
 - **Branch per chunk** in `D:\DASPKG\dasImgui` (canonical work copy). Push to remote for backup, not for review.
 - **Fresh-session review** between chunks. New Claude session reads the diff and gives independent feedback (no working memory of writing the code). Plays "better copilot."
-- **Per-chunk plans** in `~/.claude/plans/dasimgui_<phase>.md`.
 - **No PRs, no CI, no Copilot threads** - dasImgui has none of those. Don't try to use that machinery.
 - **Re-install workflow:** edit in `D:\DASPKG\dasImgui`, then `daspkg install --global --force <path>` to update the daslang-tree's `modules/dasImgui/` copy. Or push to github + `daspkg upgrade --global dasImgui`.
 

@@ -1,7 +1,7 @@
 # dasllama-ladder Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`. Planned work: `plans/dasllama_io_site.md`.
+`README.md`.
 
 **Never put a `[test]` file for this folder under the repo-root `tests/` tree, and never
 register one in any `CMakeLists.txt` - a `[test]` file lives in this directory and requires its

@@ -68,8 +68,9 @@ sources; nothing under this repository redistributes the data itself.
   architecture is StyleTTS2 (Yinghao Aaron Li et al., MIT License - see `LICENSE.STYLETTS2`; the
   kokoro package's decoder and iSTFTNet modules are adapted from it), shared with KittenTTS in
   `dasllama/dasllama_styletts2.das` over the block home.
-- **Pocket TTS** (https://github.com/kyutai-labs/pocket-tts), Kyutai, MIT License (the reference
-  implementation, reimplemented in `dasllama/dasllama_pocket.das`; no Kyutai source is included).
+- **Pocket TTS** (https://github.com/kyutai-labs/pocket-tts), Kyutai, MIT License - see
+  `LICENSE.POCKET_TTS` (the reference implementation, reimplemented in
+  `dasllama/dasllama_pocket.das`; no Kyutai source is included).
   The `kyutai/pocket-tts` weights, per language, and their unigram SentencePiece tokenizers are
   Creative Commons Attribution 4.0 International - see `LICENSE.CC-BY-4.0` - converted into
   `pocket-tts-<language>.gguf` by `harness/convert_pocket.py` at the revisions the package's

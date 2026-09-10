@@ -247,8 +247,7 @@ jobs:
         #    rebuilding daslang) + memory64; daspkg build --wasm then populates the
         #    runtime/module archives into it.
         #    This step exists only to serve the game builds below. When those move
-        #    onto the build queue (the game checkpoint of
-        #    plans/dasweb_wasm_pipeline.md), it leaves CI with them.
+        #    onto the build queue, it leaves CI with them.
         #    DAS_WASM_PTHREADS=ON: daspkg `release wasm` now ALWAYS links -pthread
         #    (--shared-memory), so the module archives it links (dasGlfw/dasOpenGL/...)
         #    MUST be compiled with +atomics,+bulk-memory or wasm-ld rejects the link
@@ -331,8 +330,8 @@ jobs:
     - name: "Compile-gate the curated playground samples"
       # The per-sample wasm64 builds used to live here and doubled as the proof
       # that every curated sample still compiles. They now build on demand
-      # through the build queue (plans/dasweb_wasm_pipeline.md), so this gate
-      # keeps that proof without producing anything: -dry-run compiles and
+      # through the build queue, so this gate keeps that proof without
+      # producing anything: -dry-run compiles and
       # simulates each sample and writes nothing. A sample broken by a compiler
       # or daslib change must red this deploy, not the production queue, where
       # the first person to click Run would find it.
@@ -678,9 +677,9 @@ jobs:
         $RSH deploy@89.167.63.131 \
             "curl -sf -m 30 -X POST http://127.0.0.1:8101/admin/reimport || echo 'reimport nudge failed (service down?)'"
         # dasllama.io rides the same box and key, same release layout. Its Caddy vhost may still
-        # mirror daslang.io until the flip (the deploy slice of plans/dasllama_io_site.md) —
-        # staging releases before the flip is harmless. mkdir -p first: rsync only creates the
-        # LAST path component, so the releases parent must exist on the first-ever deploy.
+        # mirror daslang.io until the flip — staging releases before the flip is harmless.
+        # mkdir -p first: rsync only creates the LAST path component, so the releases parent
+        # must exist on the first-ever deploy.
         $RSH deploy@89.167.63.131 "mkdir -p /srv/dasllama.io/releases"
         DLINK=""
         if $RSH deploy@89.167.63.131 "test -d /srv/dasllama.io/current/"; then

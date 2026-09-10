@@ -1,5 +1,5 @@
 // The interpreter/wasm radio in the playground toolbar, and the build flow
-// behind it (phase 3 of plans/dasweb_backend.md).
+// behind it.
 //
 // The wasm engine compiles the editor's code on the build service, so
 // availability is a property of the BROWSER (wasm64 artifacts need memory64)

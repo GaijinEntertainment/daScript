@@ -1,10 +1,10 @@
 # dasweb-buildd
 
-The wasm build worker of the daslang.io playground pipeline
-(`plans/dasweb_wasm_pipeline.md`, phase 3a). Runs on the compute box (`zen4`), **pulls** the
-build queue from `dasweb-playground` over HTTPS with a bearer token, runs each job through a
-sandboxed build command, and uploads the artifact file set (or the compiler error - that text
-is what the playground shows the user). Nothing on the web box ever connects here: builder
+The wasm build worker of the daslang.io playground pipeline. Runs on the compute box
+(`zen4`), **pulls** the build queue from `dasweb-playground` over HTTPS with a bearer token,
+runs each job through a sandboxed build command, and uploads the artifact file set (or the
+compiler error - that text is what the playground shows the user). Nothing on the web box
+ever connects here: builder
 death degrades to a backed-up queue, never a site outage. Review rules: `REVIEW.md`
 (binding).
 
@@ -117,7 +117,7 @@ container or the dlopen fails and every graphics sample reports `missing prerequ
 The box environment (`DASWEB_WASM_WORKTREE`, pinned emsdk, the worktree's own
 `web/build_wasm_host.sh` host build, the sandbox image) is documented in `~/SETUP.md` on zen4 -
 the wasm worktree is dedicated because wasm and native builds poison each other's `bin/` and
-`lib/` (`plans/dasweb_wasm_pipeline.md` has the postmortem). Build the sandbox image once per
+`lib/`. Build the sandbox image once per
 `Containerfile` change (bump the tag here, in `Containerfile`, and in `run_build.sh` together):
 
 ```bash

@@ -26,5 +26,5 @@ the module and install beside these.
 
 - **dasLLAMA** (`modules/dasLLAMA/THIRD_PARTY_NOTICES.md`, installed as
   `DASLLAMA_THIRD_PARTY_NOTICES.md`): llama.cpp / ggml, whisper.cpp, vLLM, Silero VAD, and the
-  text-to-speech set (StyleTTS2, KittenTTS, Kokoro, misaki, g2p_en, CMUdict, spaCy, Universal
-  Dependencies English-EWT), each with its `LICENSE.*` file installed beside this one.
+  text-to-speech set (StyleTTS2, KittenTTS, Kokoro, Pocket TTS, misaki, g2p_en, CMUdict, spaCy,
+  Universal Dependencies English-EWT), each with its `LICENSE.*` file installed beside this one.

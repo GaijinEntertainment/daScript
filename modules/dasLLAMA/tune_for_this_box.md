@@ -6,9 +6,8 @@ without fooling yourself. The second part is the important one: **the make-or-br
 tuner is measurement, not codegen.** Every "breakthrough" we later retracted was a
 measurement artifact; every real win survived the discipline below.
 
-Companion docs (archived in the daslang repo under `history/dasLLAMA/`): `x64_arch.md` (what's universal vs per-box), `get_x64_going.md` (bring-up -
-finish it first; tuning an incorrect kernel is worse than pointless). For the tune *framework*
-itself (the `[tune]`/`[tune_scope]`/`[tune_policy]` annotations, the manifest format, the mode
+Finish bring-up before tuning - tuning an incorrect kernel is worse than pointless. For the
+tune *framework* itself (the `[tune]`/`[tune_scope]`/`[tune_policy]` annotations, the manifest format, the mode
 contract) see `doc/source/reference/tune.rst`; this doc is the dasLLAMA-specific application of
 it plus the measurement discipline.
 
@@ -263,7 +262,7 @@ other models. This is the kernel scoreboard; `benchmarks/lcpp_bench.das` is the 
   mm_qkv / mm_wo / mm_ffn / mm_moe / act / gate / final...) - decode and prefill feed the same
   accumulator, so reset the window around whichever phase you're measuring
   (`benchmarks/lcpp_bench.das` drives both: its pp reps exercise the prefill paths and its tg
-  reps the decode path; archived single-phase drivers live in `history/dasLLAMA/benchmarks/`).
+  reps the decode path).
   Caveat: `mm_gemm`/`mm_requant`
   are inner-leaf timers of the batched matmuls and double-count against the `mm_*` site
   buckets - compare within a tier, don't sum across tiers.

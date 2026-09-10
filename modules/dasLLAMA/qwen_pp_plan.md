@@ -1,7 +1,7 @@
 # qwen img:pp remainder - the two levers (ACTIVE)
 
-Successor of the qwen3vl arc's slice M/J (plan archived: `history/dasLLAMA/qwen3vl_plan.md`)
-and the reduction-split decode GEMV arc (merged). Scope = the two ruled levers:
+Successor of the qwen3vl arc's slice M/J and the reduction-split decode GEMV arc (merged).
+Scope = the two ruled levers:
 
 1. **4B lever** - the image-turn residual (~25 ms at the bench shape; text at parity).
    Candidate mechanism: the wide quantum's staging/eval path (upload, restride, tracked-pool
