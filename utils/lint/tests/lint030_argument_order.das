@@ -6,7 +6,7 @@ options _lint = "LINT030"   // the rule ships default-off; the fixture arms it
 // interpreter and the JIT go left to right, the AOT C++ goes whichever way the compiler
 // does - so the read sees the value before or after the write by the tier's choice.
 
-expect 50503:5
+expect 50503:6
 
 require daslib/lint
 
@@ -56,6 +56,11 @@ def bad_array(var xs : array<int>) : int {
     return pair(grow(xs), length(xs))   // LINT030
 }
 
+// the writing call sits inside an expression, not at the argument's root
+def bad_writer_in_expression(var x : int) : int {
+    return pair(1 + bump(x), x)   // LINT030
+}
+
 // === Negatives ===
 
 // the write is a statement of its own, the read comes after it
@@ -78,4 +83,18 @@ def good_other_variable(var x : int; y : int) : int {
 def good_lambda_reads_later(var x : int) : int {
     let read = @(y : int) : int { return y }
     return pair(bump(x), invoke(read, 0))
+}
+
+// a call inside a block argument's body runs later too - its reads stay inside the block
+def good_block_call_reads_later(var x : int) : int {
+    var seen : int
+    pair(bump(x), 0) |> with_value() $(v : int) {
+        seen = pair(x, v)
+    }
+    return seen
+}
+
+def with_value(v : int; blk : block<(v : int) : void>) : int {
+    invoke(blk, v)
+    return v
 }

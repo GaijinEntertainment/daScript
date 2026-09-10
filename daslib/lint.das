@@ -161,6 +161,14 @@ struct private Lint030Mention {
     @do_not_delete v : Variable const?
 }
 
+//! a variable a call somewhere inside argument `slot` writes through a mutable by-reference
+//! parameter; `callee` names that call for the finding
+struct private Lint030Write {
+    slot : int
+    @do_not_delete v : Variable const?
+    callee : string
+}
+
 //! one call whose argument list the walk is inside: `slot` is the argument being walked,
 //! `closure_depth` the depth the call sits at, so a read inside a lambda argument - run later,
 //! not at the call - is not a mention
@@ -169,6 +177,7 @@ struct private Lint030Frame {
     slot : int
     closure_depth : int
     mentions : array<Lint030Mention>
+    writes : array<Lint030Write>
 }
 
 class LintVisitor : AstVisitor {
@@ -364,6 +373,7 @@ class LintVisitor : AstVisitor {
         lint021_poison_depth = 0
         lint021_closure_depth = 0
         lint023_deferred_depth = 0
+        lint030_frames |> clear()
         flow_jumps = false
         if (fun.moreFlags.isTemplate) {
             noLint = true
@@ -841,24 +851,23 @@ class LintVisitor : AstVisitor {
         return fname == "max" || fname == "abs"
     }
 
-    def private lint030_as_call(e : Expression?) : ExprCall? {
-        return e is ExprCall ? e as ExprCall : null
-    }
-
     def private lint030_bare_var(e : Expression?) : Variable const? {
         return e is ExprVar ? (e as ExprVar).variable : null
     }
 
-    //! whether `inner` writes `v` through a mutable by-reference parameter: the bare variable in
-    //! a slot the callee declares `var` on a `&`, array, table or struct type
-    def private lint030_writes_var(inner : ExprCall?; v : Variable const?) : bool {
-        return false if (inner.func == null)
-        for (k in range(min(length(inner.arguments), length(inner.func.arguments)))) {
-            let p = inner.func.arguments[k]
+    //! the variables `call` writes through a mutable by-reference parameter - a bare variable
+    //! in a slot the callee declares `var` on a `&` or a type the compiler passes by reference
+    //! (`isRefType`) - recorded into `slot` of the frame that holds `call` as an argument
+    def private lint030_note_writes(call : ExprCall const?; slot : int; var into : array<Lint030Write>) : void {
+        return if (call.func == null)
+        for (k in range(min(length(call.arguments), length(call.func.arguments)))) {
+            let p = call.func.arguments[k]
             continue if (p._type == null || p._type.flags.constant || !(p._type.flags.ref || p._type.isRefType))
-            return true if (lint030_bare_var(inner.arguments[k]) == v)
+            let v = lint030_bare_var(call.arguments[k])
+            if (v != null) {
+                into |> push(Lint030Write(slot = slot, v = v, callee = "{call.name}"))
+            }
         }
-        return false
     }
 
     //! whether argument `slot` of `call` is `v` itself handed over by reference: the callee then
@@ -871,12 +880,13 @@ class LintVisitor : AstVisitor {
 
     def private lint030_check(frame : Lint030Frame) : void {
         return if (noLint || genericDepth > 0 || frame.call == null)
-        for (i in range(length(frame.call.arguments))) {
-            let inner = lint030_as_call(frame.call.arguments[i])
-            continue if (inner == null)
+        var reported : table<int>
+        for (w in frame.writes) {
+            continue if (key_exists(reported, w.slot))
             for (m in frame.mentions) {
-                continue if (m.slot == i || !lint030_writes_var(inner, m.v) || lint030_passed_by_ref(frame.call, m.slot, m.v))
-                lint_error("LINT030: argument {m.slot + 1} reads `{m.v.name}` while the call `{inner.name}(...)` in argument {i + 1} writes it by reference - the order arguments are evaluated in is not defined, so the read sees the value before or after the write by the compiler's choice; run the writing call as a statement of its own first", frame.call.at)
+                continue if (m.slot == w.slot || m.v != w.v || lint030_passed_by_ref(frame.call, m.slot, m.v))
+                lint_error("LINT030: argument {m.slot + 1} reads `{m.v.name}` while the call `{w.callee}(...)` in argument {w.slot + 1} writes it by reference - the order arguments are evaluated in is not defined, so the read sees the value before or after the write by the compiler's choice; run the writing call as a statement of its own first", frame.call.at)
+                reported |> insert(w.slot)
                 break
             }
         }
@@ -916,10 +926,15 @@ class LintVisitor : AstVisitor {
             lint030_check(frame)
             if (!empty(lint030_frames)) {
                 let parent = length(lint030_frames) - 1
-                if (lint030_frames[parent].slot >= 0) {
+                let slot = lint030_frames[parent].slot
+                if (slot >= 0 && frame.closure_depth == lint030_frames[parent].closure_depth) {
                     for (m in frame.mentions) {
-                        lint030_frames[parent].mentions |> push(Lint030Mention(slot = lint030_frames[parent].slot, v = m.v))
+                        lint030_frames[parent].mentions |> push(Lint030Mention(slot = slot, v = m.v))
                     }
+                    for (w in frame.writes) {
+                        lint030_frames[parent].writes |> push(Lint030Write(slot = slot, v = w.v, callee = w.callee))
+                    }
+                    lint030_note_writes(expr, slot, lint030_frames[parent].writes)
                 }
             }
         }

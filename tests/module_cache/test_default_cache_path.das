@@ -170,7 +170,8 @@ def test_source_stamp_is_content(t : T?) {
     sleep(1100u)    //! past the mtime's one-second grain, so the rewrite below moves the mtime
     fwrite(leaf, leafSrc)
     var touched : string
-    t |> success(run_reported(t, "stamp touched", cmd, touched, "deser: clean"), "a rewrite that leaves the bytes alone still serves every module:\n{touched}")
+    let touched_ok = run_reported(t, "stamp touched", cmd, touched, "deser: clean")
+    t |> success(touched_ok, "a rewrite that leaves the bytes alone still serves every module:\n{touched}")
     fwrite(leaf, "options gen2\nmodule mc_stamp_leaf\ndef leaf() : int \{\n    return 3\n\}\n")
     var edited : string
     t |> success(run_reported(t, "stamp edited", cmd, edited, "MARK_stamp 3"), "a same-size edit is recompiled")
@@ -198,7 +199,8 @@ def test_source_derived_syntax_policy_serves(t : T?) {
     var cold : string
     t |> success(run_reported(t, "gen2 cold", cmd, cold, "MARK_gen2 5"), "a -v1syntax host compiles a module that opts into gen2")
     var warm : string
-    t |> success(run_reported(t, "gen2 warm", cmd, warm, "deser: clean"), "the warm run serves the gen2 module - no policy mismatch on a source-derived flag:\n{warm}")
+    let warm_ok = run_reported(t, "gen2 warm", cmd, warm, "deser: clean")
+    t |> success(warm_ok, "the warm run serves the gen2 module - no policy mismatch on a source-derived flag:\n{warm}")
     var err : string
     rmdir_rec(tmp, err)
 }
@@ -243,13 +245,15 @@ def test_aot_generation_reads_cached_modules(t : T?) {
     fwrite(fixture, "options gen2\nrequire daslib/strings_boost\n[export]\ndef main \{\n    print(join([\"a\", \"b\"], \",\"))\n\}\n")
     let gen = "{das_exe()} -dasroot {root} {path_join(root, "utils/aot/main.das")} -- -aot {fixture}"
     var cold : string
-    t |> equal(run("{gen} {path_join(tmp, "cold.cpp")}", cold), 0, "the cold generator run exits clean:\n{cold}")
+    let cold_rc = run("{gen} {path_join(tmp, "cold.cpp")}", cold)
+    t |> equal(cold_rc, 0, "the cold generator run exits clean:\n{cold}")
     let coldCpp = fread(path_join(tmp, "cold.cpp"))
     let coldHashes = count_lines_with(coldCpp, "hash=")
     t |> success(coldHashes > 0, "the cold run emits functions")
     t |> success(find(coldCpp, "AOT disabled due to this module") < 0, "no module reads as AOT-disabled on the cold run")
     var warm : string
-    t |> equal(run("{gen} {path_join(tmp, "warm.cpp")}", warm), 0, "the warm generator run exits clean:\n{warm}")
+    let warm_rc = run("{gen} {path_join(tmp, "warm.cpp")}", warm)
+    t |> equal(warm_rc, 0, "the warm generator run exits clean:\n{warm}")
     let warmCpp = fread(path_join(tmp, "warm.cpp"))
     t |> success(find(warmCpp, "AOT disabled due to this module") < 0, "no module reads as AOT-disabled when the generator's modules came from the cache")
     t |> equal(count_lines_with(warmCpp, "hash="), coldHashes, "the warm run emits the same functions as the cold run")
