@@ -1,0 +1,10 @@
+{
+  "images": [
+    { "file": "tinystories-instruct-27M-Q8_0.gguf", "repo": "borisbat/dasllama-stories", "sha256": "92c2b775070b76ee31b9921f7f339ec9fc0e08b54be0616418414d4eec65d282", "dlim": "tinystories-instruct-27M.dlim" },
+    { "file": "kitten-nano.gguf", "repo": "borisbat/dasllama-tts", "sha256": "4556948c36a29e4be5ad521e597a20ae817059c404fea3c5d935afa73506d9da", "dlim": "kitten-nano.dlim" }
+  ],
+  "packs": [
+    { "file": "tts_g2p_en_us.bin", "repo": "borisbat/dasllama-tts", "sha256": "6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154" },
+    { "file": "tts_postag.bin", "repo": "borisbat/dasllama-tts", "sha256": "38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4" }
+  ]
+}

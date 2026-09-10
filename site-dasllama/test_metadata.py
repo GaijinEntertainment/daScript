@@ -107,49 +107,68 @@ class SiteMetadataTest(unittest.TestCase):
         self.assertIn("redir /index.html / 308", snippet)
 
 
-STORYTELLER_SHELL = REPO_ROOT / "examples" / "dasLLAMA" / "storyteller" / "web_shell.html"
+EXAMPLE_SHELLS = {
+    "storyteller": (REPO_ROOT / "examples" / "dasLLAMA" / "storyteller" / "web_shell.html", "runStoryteller"),
+    "storywish": (REPO_ROOT / "examples" / "dasLLAMA" / "storywish" / "web_shell.html", "runStorywish"),
+}
 
 
-class StorytellerShellTest(unittest.TestCase):
-    """The storyteller page (examples/dasLLAMA/storyteller/web_shell.html, served at
-    /examples/storyteller/) guards the browser before it loads the program: emcc's script tag
-    lands in an inert template and only a browser that passes the memory64 and isolation probes
-    gets a live copy. A shell that moved the placeholder out of the template would run emcc's
-    user-agent check on Safari again and leave the download line up forever."""
+class ExampleShellTest(unittest.TestCase):
+    """Each browser example's page (examples/dasLLAMA/<id>/web_shell.html, served at
+    /examples/<id>/) guards the browser before it loads the program: emcc's script tag lands in
+    an inert template and only a browser that passes the memory64 and isolation probes gets a
+    live copy. A shell that moved the placeholder out of the template would run emcc's user-agent
+    check on Safari again and leave the download line up forever. Each shell also reads the
+    deploy's models/manifest.json and carries the IMAGE_VERSION slot the deploy stamps
+    (examples/dasLLAMA/wasm/mint_models.py --stamp-page), so a set minted for another version is
+    refused before it is fetched, and routes a program abort back onto the page."""
 
-    def setUp(self):
-        self.text = STORYTELLER_SHELL.read_text(encoding="utf-8")
+    def shells(self):
+        return [(name, path.read_text(encoding="utf-8"), runner) for name, (path, runner) in EXAMPLE_SHELLS.items()]
 
     def test_program_tag_is_inert_until_the_guard_runs(self):
-        placeholder = "{{{ SCRIPT }}}"
-        self.assertEqual(self.text.count(placeholder), 1, "emcc substitutes exactly one placeholder")
-        start = self.text.index('<template id="loader">')
-        end = self.text.index("</template>", start)
-        self.assertIn(placeholder, self.text[start:end], "the placeholder sits inside the loader template")
-        # the guard is the only path to a live program tag: it copies the template's src
-        self.assertIn("document.getElementById('loader').content.querySelector('script')", self.text)
-        self.assertLess(self.text.index("WebAssembly.validate("), self.text.index("function runStoryteller()"),
-                        "the memory64 probe is decided before the program path")
+        for name, text, runner in self.shells():
+            placeholder = "{{{ SCRIPT }}}"
+            self.assertEqual(text.count(placeholder), 1, "emcc substitutes exactly one placeholder")
+            start = text.index('<template id="loader">')
+            end = text.index("</template>", start)
+            self.assertIn(placeholder, text[start:end], "the placeholder sits inside the loader template")
+            # the guard is the only path to a live program tag: it copies the template's src
+            self.assertIn("document.getElementById('loader').content.querySelector('script')", text)
+            self.assertLess(text.index("WebAssembly.validate("), text.index(f"function {runner}()"),
+                            "the memory64 probe is decided before the program path")
 
     def test_the_only_live_scripts_are_the_site_files(self):
-        parser = MetadataParser()
-        scripts = []
-        parser.handle_starttag_orig = parser.handle_starttag
+        for name, text, runner in self.shells():
+            parser = MetadataParser()
+            scripts = []
+            parser.handle_starttag_orig = parser.handle_starttag
 
-        def handle_starttag(tag, attrs):
-            if tag == "script" and dict(attrs).get("src"):
-                scripts.append(dict(attrs)["src"])
-            parser.handle_starttag_orig(tag, attrs)
+            def handle_starttag(tag, attrs):
+                if tag == "script" and dict(attrs).get("src"):
+                    scripts.append(dict(attrs)["src"])
+                parser.handle_starttag_orig(tag, attrs)
 
-        parser.handle_starttag = handle_starttag
-        parser.feed(self.text)
-        for src in scripts:
-            self.assertTrue(src.startswith("/files/") or src.startswith("//gc.zgo.at/"),
-                            f"a live script tag the guard does not control: {src}")
+            parser.handle_starttag = handle_starttag
+            parser.feed(text)
+            for src in scripts:
+                self.assertTrue(src.startswith("/files/") or src.startswith("//gc.zgo.at/"),
+                                f"a live script tag the guard does not control: {src}")
 
     def test_the_notes_name_what_the_browser_lacks(self):
-        for needle in ("memory64", "Safari", "iPhone", "SharedArrayBuffer", "back to the examples", "force=unsupported"):
-            self.assertIn(needle, self.text, f"the shell names {needle!r}")
+        for name, text, runner in self.shells():
+            for needle in ("memory64", "Safari", "iPhone", "SharedArrayBuffer", "back to the examples", "force=unsupported"):
+                self.assertIn(needle, text, f"the shell names {needle!r}")
+
+    def test_the_model_set_is_read_from_the_manifest_and_version_checked(self):
+        for name, text, runner in self.shells():
+            with self.subTest(shell=name):
+                self.assertEqual(text.count("/* @image-version */ 0"), 1, "exactly one version slot for the deploy to stamp")
+                self.assertIn("manifest.json", text, "the file list comes from the deploy's manifest, never a list in the page")
+                self.assertIn("m.image_version !== PAGE_IMAGE_VERSION", text, "a set minted for another version is refused before the fetch")
+                self.assertIn("onAbort: function (what) { showFailure(", text, "a program abort lands on the page")
+                self.assertIn("m.image_version !== PAGE_IMAGE_VERSION) {\n      throw new Error(", text, "the version check throws, it does not log")
+                self.assertNotIn("MODEL_FILES", text, "no hard-coded model list survives beside the manifest")
 
 
 if __name__ == "__main__":

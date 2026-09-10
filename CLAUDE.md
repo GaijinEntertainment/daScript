@@ -238,6 +238,12 @@ diagnostic in any tier.
   fresh clone per registration, not the same variable passed twice.
 - **`new WithCtor(field = v)` skips the user constructor** - it is plain field-init, so
   inherited fields stay zero. Write `new WithCtor(args)` when the constructor must run.
+- **A string captured into a lambda another thread runs is a pointer into the capturing
+  context's heap** - the capturing thread reuses that memory on its own schedule, and the
+  worker reads whatever sits there by the time it runs. Cross it as a field of an archived
+  record on a `daslib/jobque_boost` `Stream?` - `push_archive` on one side, `pop_archive` on
+  the other, which copies the bytes into the reader's context; a bare `string` payload does not
+  compile. The string never rides in the `@capture` list - the `Stream?` does.
 - **`exit(N)` does not set the process exit code under the daslang CLI.** It unwinds as an
   abnormal termination and the process reports 1, whatever `N` was - a supervisor or shell sees a
   crash. A code the parent must read comes from `def main() : int { return N }`.

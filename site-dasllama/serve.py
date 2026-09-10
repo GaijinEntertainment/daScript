@@ -6,9 +6,11 @@ else from here.
 
 /examples/<id>/ is served from ../web/output64/examples/<id>/ - where `daspkg release wasm`
 writes a browser example - with the two cross-origin-isolation headers the Caddy vhost sends
-there (the -pthread wasm64 builds need SharedArrayBuffer). Build one, copy its model set into
-<id>/models/ (the deploy downloads the same set from the `dasllama-web` release into the staged
-tree), and the card works here as deployed.
+there (the -pthread wasm64 builds need SharedArrayBuffer). Build one, stage its model set into
+<id>/models/ the way the deploy does - `examples/dasLLAMA/wasm/mint_models.py --example
+examples/dasLLAMA/<id> --config <the wasm64 build's DlimConfiguration JSON> --daslang bin/daslang
+--out web/output64/examples/<id>/models --stamp-page web/output64/examples/<id>/<id>.html` - and
+the card works here as deployed.
 
 /api/* is proxied to a locally running ladder service (utils/internal/dasllama-ladder on :8201),
 mirroring the Caddy vhost — start one with real data to preview the live pages:

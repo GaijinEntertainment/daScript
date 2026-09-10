@@ -6,6 +6,11 @@ doc: `ARCHITECTURE_IMAGE.md`. Planned work: `followup_general.md`.
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 `REVIEW.md`.**
 
+**A diff that moves or re-means the `.dlim` header's first two words - the magic number and the
+version - or changes their byte layout, updates `examples/dasLLAMA/wasm/mint_models.py` in the
+same change.** That script reads both words at their offsets to gate a browser deploy, and no
+compile catches it when they move; a bump of the version's value needs nothing there.
+
 **A transform on the go-live path - repacking, quantizing, folding, permuting - is a defect;
 it belongs to the mint.** Going live is `parse_image` pointing a live carrier's planes into the
 mapped `.dlim`.
