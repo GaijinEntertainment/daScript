@@ -267,7 +267,7 @@ Kokoro sits at 0.069-0.075 on the same box (`harness/tts_rig.py --models kokoro-
 5. Server cloning by NAMED voices only in this arc: the GGUF roster plus a `tts_voices_dir`
    config key whose WAVs join `caps().voices` at boot; an upload route is a ledger row. The
    gate's acceptable-use text goes on the model card, the server README and the control
-   page's tts card beside the voice picker; legal sees the wording once.
+   page's tts card beside the voice picker.
 6. `TtsTimings` keeps its fields (the server stats and the studio read them) and gains four:
    `prompt_us`, `backbone_us`, `head_us`, `codec_us`; a family leaves the stages it lacks at
    zero and `timings_line` prints the non-zero ones.
@@ -276,7 +276,7 @@ Kokoro sits at 0.069-0.075 on the same box (`harness/tts_rig.py --models kokoro-
    reference. A per-language WER arm through the engine's own multilingual Whisper is
    possible without new tooling and does not gate the PR.
 8. q8 after parity on the f32 lane, never before.
-9. No watermark (CC BY 4.0 carries no duty; Kyutai ships none); legal confirms.
+9. No watermark (CC BY 4.0 carries no duty; Kyutai ships none).
 10. Each language's default temperature (0.3 English, 0.7 the rest) rides as GGUF metadata
     and is `synthesize`'s default.
 

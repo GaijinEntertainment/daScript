@@ -1421,8 +1421,8 @@
     vec4f is zero so it happens to work; that example wants a same-size spelling once the rule
     lands.
 124. **Pocket TTS at 4 bits - part 2 of the Pocket arc (ruled 2026-09-09).** The q8 lane held
-    the reference's quality on the rig (alba, 200 sentences: WER 4.13 / UTMOS 4.330 on the
-    published Q8_0 file against the package's 5.00 / 4.393, the f32 lane at 4.13 / 4.368), and
+    the reference's quality on the rig (alba, 200 sentences: WER 3.91 / UTMOS 4.328 on the
+    published Q8_0 file against the package's 5.00 / 4.393, the f32 lane at 4.32 / 4.366), and
     that margin is the reason to expect a 4-bit lane to hold too. Try the engine's 4-bit weight
     formats on the same GEMMs the q8 lane quantizes - the backbone's four matrices per layer,
     the codec transformers, the 32-wide codec convs - through the kq plane machinery the LLM

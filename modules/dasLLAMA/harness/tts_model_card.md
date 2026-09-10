@@ -67,8 +67,8 @@ daslang utils/dasllama-server/txt2wav.das -- --tts kitten-nano.gguf --voice expr
 Pocket TTS English is the cloning model: 152 MB, 19 voices (`alba` the default, `bill_boerst`,
 `caro_davy`, `anna`, `george`, ...), and any voice from a few seconds of 24 kHz audio through
 `tts_register_voice`. It reads text, so it needs neither pack; the English normalizer runs in
-front of it. On the 200-sentence rig at `alba` this file reads WER 4.13 / UTMOS 4.330 at a
-real-time factor of 0.057 on an Apple M1 Max, against the reference package's 5.00 / 4.393 /
+front of it. On the 200-sentence rig at `alba` this file reads WER 3.91 / UTMOS 4.328 at a
+real-time factor of 0.051 on an Apple M1 Max, against the reference package's 5.00 / 4.393 /
 0.210 (measured 2026-09-09; the record is the Receipts section of the repository's `plans/dasllama-pocket-tts.md`, which names the box, the tier and the rig). Its use is bound by Kyutai's acceptable-use terms, which the download
 of the source weights required accepting: no voice impersonation or cloning without explicit
 and lawful consent, no misinformation, no unlawful or harmful content. The five other
