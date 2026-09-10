@@ -1202,9 +1202,10 @@ The order a call's arguments are evaluated in is not defined, and it differs
 between tiers. A call whose argument list nests a call that writes a variable
 by reference — a ``var`` parameter on a ``&``, an array, a table or a struct —
 beside another argument that reads the same variable therefore answers
-differently per tier: ``pair(bump(x), x)`` is ``1,1`` on one and ``1,0`` on
-another. The rule fires on the outer call. The fix is to run the writing call
-as a statement of its own and pass its result.
+differently per tier: with ``x`` at ``0``, the read of ``x`` in
+``pair(bump(x), x)`` sees ``1`` on one tier and ``0`` on another, and the call
+below returns ``11`` or ``10``. The rule fires on the outer call. The fix is to
+run the writing call as a statement of its own and pass its result.
 
 The rule ships **off**, like LINT029: the tree carries the shape in library
 code whose callees take ``var`` to hand out a pointer or advance a builder,
@@ -1212,8 +1213,11 @@ and a sweep of those is its own arc. Arm it on a file with
 ``options _lint = "LINT030"``, or for a tree with ``LINT030 = true`` in
 ``.lint_config``.
 
-A read inside a lambda or block argument does not count — the body runs
-later, not while the arguments are evaluated. A variable the outer call takes
+A read inside a lambda body does not count, and neither does one inside a
+block the outer call itself takes — that body runs inside the callee, after
+every argument is evaluated. A block handed to a nested call in a sibling
+argument runs while that argument is evaluated, so its reads do count. A
+variable the outer call takes
 by reference is not a read either: the callee sees its final state whatever
 the order. A variable the nested call reaches through a field or an index is
 not seen; only a bare variable in a mutable by-reference slot is.
