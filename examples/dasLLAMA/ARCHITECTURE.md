@@ -132,7 +132,9 @@ program's reach.
 ### 3.7 Parrot's panels {#parrot-panels}
 
 Parrot draws with Dear ImGui through `imgui_harness`, the same lifecycle the graphics labs run
-in the browser: one full-viewport window, a status chip and line across the top, then three
+in the browser: one full-viewport window, the promise that the recording stays in the window
+as its first line, a status chip that pulses with a spinner beside it while anything is going
+on and the status line, then three
 children - the voice (the record disc with the silence countdown drawn around it, the level, the
 gain, the take's waveform with its kept window shaded, the voice picker), the text (the editor,
 say, the say's chunks in their state's colour) with the output below it (the say's waveform
@@ -149,8 +151,10 @@ milliseconds each, grown as frames land and redone from the column a drain left 
 pixel per column or per group of columns. The job queue knobs reach the queue the speech thread
 dispatches on (`set_jobque_worker_limit`, `set_jobque_team_mode`, `set_jobque_worker_spin`),
 applied after the thread's own setup has run, since that setup restores the engine's defaults;
-the measure button says the text three times with playback off and reports each run's real-time
-factor, the same figure on any box. The chords are Ctrl (or Command) with Enter to say and with R
+the measure button says the text three times with playback off and reports each run's speed as
+times real time - seconds of audio per second of generation, the inverse of the engine's
+real-time factor - the same figure on any box. The output waveform keeps a fixed time scale
+(thirty seconds at least) so the playhead moves at one speed while chunks land. The chords are Ctrl (or Command) with Enter to say and with R
 to record and stop.
 
 ## 4. Exception ledger
