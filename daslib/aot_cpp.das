@@ -764,11 +764,17 @@ class public DebugVarCache {
 }
 
 
+// `\?` is `?` to a C compiler and hides the ??-sequences it would otherwise read as trigraphs
+def private c_literal(s : string implicit) : string {
+    return escape(s) |> replace("?", "\\?")
+}
+
+
 def private writeAnnotationArgInit(var sb : StringBuilderWriter; arg : AnnotationArgumentInfo) {
     if (arg.basicType == Type.tBool) {
         write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.bValue})")
     } elif (arg.basicType == Type.tString) {
-        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", \"{escape(arg.sValue)}\")")
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", \"{c_literal(arg.sValue)}\")")
     } elif (arg.basicType == Type.tInt) {
         write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.iValue})")
     } elif (arg.basicType == Type.tFloat) {
@@ -855,6 +861,7 @@ class public AotDebugInfoHelper {
     def str() {
         return build_string() $(var writer) {
             verify(info2Name.empty() && info2TypeName.empty())
+            annInfoNames |> clear()
             helper |> debug_helper_iter_structs($(_name, ti) {
                 write(writer, "extern StructInfo {structInfoName(ti)};\n");
             });
@@ -897,7 +904,6 @@ class public AotDebugInfoHelper {
             write(writer, "\}\n\n")
             info2Name.clear();
             info2TypeName.clear();
-            annInfoNames |> clear()
         }
     }
 
@@ -2480,7 +2486,8 @@ class public CppAot : AstVisitor {
             }
             write(*ss, ", {vtype.get_variant_field_offset(field.fieldIndex)}, {field.fieldIndex}>::get(");
         } else {
-            let mod_name = (vtype.structType._module.name.empty() ? "" : string(vtype.structType._module.name) + "::");
+            let ns = aotModuleName(vtype.structType._module);
+            let mod_name = (ns |> empty() ? "" : "{ns}::");
             write(*ss, ",&{mod_name}{aotStructName(vtype.structType)}::{aotFieldName(string(field.name))}>::get(");
         }
     }
@@ -2771,7 +2778,7 @@ class public CppAot : AstVisitor {
             write(*ss, "nullptr");
         } else {
             peek(c.value) $(sv) {
-                write(*ss, "((char *) \"{escape(sv)}\")");
+                write(*ss, "((char *) \"{c_literal(sv)}\")");
             }
         }
         return c;
@@ -4477,6 +4484,41 @@ def private canAotModule(mod : Module?) : bool {
     return ok
 }
 
+def private markTypeModules(var used : table<Module?>; var seen : table<Structure?>; t : TypeDeclPtr) {
+    if (t == null) {
+        return
+    }
+    if (t.annotation != null && t.annotation._module != null) {
+        used |> insert(t.annotation._module)
+    }
+    if (t.enumType != null && t.enumType._module != null) {
+        used |> insert(t.enumType._module)
+    }
+    markStructModules(used, seen, t.structType)
+    markTypeModules(used, seen, t.firstType)
+    markTypeModules(used, seen, t.secondType)
+    for (a in t.argTypes) {
+        markTypeModules(used, seen, a)
+    }
+}
+
+
+//! A used structure keeps its field types' modules alive: a field of a handled type is the only
+//! thing that reaches the module owning it, and dropping that module drops its aot_require include.
+def private markStructModules(var used : table<Module?>; var seen : table<Structure?>; st : Structure?) {
+    if (st == null || (seen |> key_exists(st))) {
+        return
+    }
+    seen |> insert(st)
+    if (st._module != null) {
+        used |> insert(st._module)
+    }
+    for (fld in st.fields) {
+        markTypeModules(used, seen, fld._type)
+    }
+}
+
+
 def private collectUsedModules(program : ProgramPtr) : table<Module?> {
     //! Modules owning a function (externs included), struct, enum or handled type the runtime
     //! program still reaches.
@@ -4496,11 +4538,14 @@ def private collectUsedModules(program : ProgramPtr) : table<Module?> {
             visit(fn, adapter)
         }
     }
+    var seenStructs : table<Structure?>
     for (st in keys(utm.useStructs)) {
-        if (st._module != null) {
-            used |> insert(st._module)
-        }
+        markStructModules(used, seenStructs, st)
     }
+    // a standalone context emits its own module's structures even where nothing reaches them
+    program.getThisModule |> for_each_structure($(ps) {
+        markStructModules(used, seenStructs, ps)
+    })
     for (en in keys(utm.useEnums)) {
         if (en._module != null) {
             used |> insert(en._module)

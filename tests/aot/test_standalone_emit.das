@@ -280,6 +280,37 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(find(source, "DECLARE_MODULE(Module_FIO);") >= 0, "Module_FIO is declared")
     }
 
+    t |> run("a structure nothing reaches still keeps its field's module") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_orphan_struct_fixture", out_dir)
+        t |> success(find(source, " // require fio_core\n") >= 0, "an unreferenced struct's handled field still links fio_core")
+    }
+
+    t |> run("a member pointer names a namespace the file declares") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_emit_paths_fixture", out_dir)
+        // the qualifier the member pointer uses, whatever the entry module ends up being called
+        let at = find(source, "das_safe_navigation_ptr<")
+        t |> success(at >= 0, "the safe navigation emitted its member-pointer form")
+        if (at >= 0) {
+            let tail = slice(source, at)
+            let amp = find(tail, ",&")
+            let end = find(tail, "::Node::next>")
+            t |> success(amp >= 0 && end > amp, "the member pointer is spelled in the expected shape")
+            if (amp >= 0 && end > amp) {
+                let ns = slice(tail, amp + 2, end)
+                t |> success(!empty(ns), "the member pointer is qualified")
+                t |> success(find(source, "namespace {ns} \{") >= 0,
+                    "`{ns}` is a namespace the file declares - the das module name is not one")
+            }
+        }
+    }
+
+    t |> run("an emitted literal's trigraph is escaped") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_emit_paths_fixture", out_dir)
+        t |> success(find(source, "\"what\\?\\?>\"") >= 0, "a literal's ?? is escaped, so no C compiler reads it as a trigraph")
+        t |> success(find(source, "\"what??>\"") < 0, "the raw sequence does not survive")
+        t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
+    }
+
     t |> run("options gc and persistent_heap reach the context, so heap_collect is allowed there") @(t : T?) {
         let source = generate_standalone_source(t, "_standalone_gc_fixture", out_dir)
         t |> success(find(source, "policies.persistent_heap = true;") >= 0, "the persistent heap policy is on")
