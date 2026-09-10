@@ -155,13 +155,15 @@ def build_das_tools(var reg : array<ToolDef>) { // nolint:STYLE038 — flat tool
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "list_modules",
-            "List all available daslang modules (builtin and daslib)",
+            "List all available daslang modules: the C++ modules, the daslib files, and the require paths descriptors register (module/path). With project_root or load_modules the listing comes from a child that scanned those descriptors too.",
             {
-                "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (ModuleList with builtin and daslib arrays)")
+                "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (ModuleList with builtin, daslib and registered arrays)"),
+                "project_root" => PROJECT_ROOT_PROP,
+                "load_modules" => LOAD_MODULES_PROP
             },
             []),
         arg_names <- ["json"],
-        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_list_modules(arg1 == "true")))
+        handler = @@(arg1, arg2, arg3, arg4, arg5, arg6, project, project_root : string; load_modules : array<string>) => do_list_modules(arg1 == "true", project_root, load_modules)))
     reg |> emplace(ToolDef(
         tool <- make_tool(
             "find_symbol",

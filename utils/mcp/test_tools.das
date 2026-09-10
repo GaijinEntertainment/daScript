@@ -369,6 +369,80 @@ def test_list_modules(t : T?) {
         parse_result(do_list_modules(), text, is_error)
         t |> success(find(text, "json") >= 0, "should list json module")
     }
+    t |> run("a module this program compiled from das is not a builtin, and the registered paths are a section") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_modules(true), text, is_error)
+        var err : string
+        var parsed = read_json(text, err)
+        t |> success(parsed != null, "json parses: {err}")
+        return if (parsed == null)
+        t |> success(json_array_has(parsed?["builtin"], "math"), "math is a builtin")
+        t |> success(!json_array_has(parsed?["builtin"], "json_boost"), "json_boost, which this program compiled, is not listed as a builtin")
+        t |> success(json_array_has(parsed?["daslib"], "json_boost"), "json_boost is a daslib module")
+        t |> success(parsed?["registered"] != null, "the registered require paths are listed")
+        unsafe { delete parsed; }
+    }
+}
+
+def private json_array_has(arr : JsonValue?; wanted : string) : bool {
+    if (arr == null || !(arr.value is _array)) return false
+    for (m in arr.value as _array) {
+        if (m != null && m.value is _string && (m.value as _string) == wanted) return true
+    }
+    return false
+}
+
+def private project_root_fixture() : string {
+    return path_join(get_das_root(), "utils/mcp/tests/_pretend_root")
+}
+
+//! the pretend root's second module folder: its descriptor registers the tree's UnitTest C++ module
+//! and a require path of its own, and every tool asked with project_root sees both - as does a plain run
+[test]
+def test_project_root_fixture(t : T?) {
+    let root = project_root_fixture()
+    let script = path_join(root, "probe_consumer.das")
+    t |> run("list_modules with project_root lists the descriptor's C++ module and require path") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_modules(true, root), text, is_error)
+        t |> success(!is_error, "should not be error: {text}")
+        var err : string
+        var parsed = read_json(text, err)
+        t |> success(parsed != null, "json parses: {err}")
+        return if (parsed == null)
+        t |> success(json_array_has(parsed?["builtin"], "UnitTest"), "the C++ module the descriptor registered is a builtin")
+        t |> success(json_array_has(parsed?["registered"], "unit_probe/hello"), "the require path the descriptor registered is listed")
+        unsafe { delete parsed; }
+    }
+    t |> run("find_symbol with project_root finds a symbol from the project's own require path") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("probe_hello_value", "", script, "", root), text, is_error)
+        t |> success(!is_error, "should not be error: {text}")
+        t |> success(find(text, "probe_hello_value") >= 0, "should find the project's function")
+    }
+    t |> run("compile_check with project_root compiles a file requiring both") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check(script, "", root), text, is_error)
+        t |> success(!is_error, "should not be error: {text}")
+        t |> success(find(text, "Compilation OK") >= 0, "should compile: {text}")
+    }
+    t |> run("a plain run and an eager run of the file both reach the C++ module and the require path") <| @(t : T?) {
+        let exe = get_daslang_exe()
+        t |> success(!empty(exe), "daslang executable is known")
+        return if (empty(exe))
+        var plain_out : string
+        let plain_rc = run_and_capture([exe, "-project_root", root, script], plain_out, 120.0)
+        t |> equal(plain_rc, 0, "plain run exits 0: {plain_out}")
+        t |> success(find(plain_out, "probe 4242 1234") >= 0, "plain run prints the probe: {plain_out}")
+        var eager_out : string
+        let eager_rc = run_and_capture([exe, "-ignore-manifest", "-project_root", root, script], eager_out, 120.0)
+        t |> equal(eager_rc, 0, "eager run exits 0: {eager_out}")
+        t |> success(find(eager_out, "probe 4242 1234") >= 0, "eager run prints the probe: {eager_out}")
+    }
 }
 
 

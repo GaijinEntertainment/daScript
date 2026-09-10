@@ -337,12 +337,9 @@ Building the foundational tools well creates a platform for everything else.
 
 ## Follow-ups
 
-- **A custom `modules/` fixture.** A test that starts the server with `-project_root` on a
-  fixture holding its own `modules/<x>/.das_module` - a descriptor that registers a require
-  path and a C++ module - and checks `list_modules`, `find_symbol` and `compile_check` see
-  them. The server runs eager (`-ignore-manifest`) while a plain run loads a `.shared_module`
-  at its first `require`; the fixture is what proves a user's tree behaves under both.
-- **Back to an exe form.** Once that fixture passes, the server can build and ship as an exe
+- **Back to an exe form.** `tests/_pretend_root` now carries a descriptor that registers a
+  C++ module and a require path, and `test_tools.das` proves `list_modules`, `find_symbol` and
+  `compile_check` see both under `project_root`, eager and plain. With that, the server can build and ship as an exe
   again: the reason it runs interpreted - development through the python keep-alive supervisor,
   so an exe would ship unrun - is met by the watchdog, which now covers what the supervisor
   did. `utils/REVIEW.das` bans the exe today; lifting the ban is part of this item.

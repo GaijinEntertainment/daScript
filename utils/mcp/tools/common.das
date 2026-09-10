@@ -460,8 +460,12 @@ def subtool_user_args(args : array<string>) : array<string> {
 def public build_subtool_argv(exe, subtool_path : string;
                               args : array<string>;
                               project_root : string;
-                              load_modules : array<string> = array<string>()) : array<string> {
+                              load_modules : array<string> = array<string>();
+                              eager : bool = false) : array<string> {
     var argv <- [exe]
+    if (eager) {
+        argv |> push("-ignore-manifest")
+    }
     if (!empty(project_root)) {
         argv |> push("-project_root")
         argv |> push(project_root)
@@ -480,11 +484,12 @@ def public build_subtool_argv(exe, subtool_path : string;
 def run_mcp_subtool(subtool_name : string; args : array<string>;
                     project_root : string = "";
                     load_modules : array<string> = array<string>();
-                    timeout_sec : float = 120.0) : string {
+                    timeout_sec : float = 120.0;
+                    eager : bool = false) : string {
     let exe = get_daslang_exe()
     if (empty(exe)) return make_tool_result("Cannot determine daslang executable path", true)
     let subtool_path = path_join(get_das_root(), "utils/mcp/subtools/{subtool_name}.das")
-    let argv <- build_subtool_argv(exe, subtool_path, args, project_root, load_modules)
+    let argv <- build_subtool_argv(exe, subtool_path, args, project_root, load_modules, eager)
     var output : string
     let exit_code = run_and_capture(argv, output, timeout_sec)
     if (exit_code == popen_timed_out) return make_tool_result("MCP subtool '{subtool_name}' timed out after {timeout_sec}s:\n{output}", true)

@@ -16,7 +16,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that e
 | `run_script` | Run a `.das` file or inline code snippet and return stdout/stderr. Optional `project` for `.das_project`-bound module resolution. |
 | `ast_dump` | Dump AST of an expression or compiled function. `mode=ast` returns S-expression (node types/fields), `mode=source` returns post-macro daslang code. Optional `lineinfo` to include file and line:col spans on each node |
 | `program_log` | Produce full post-compilation program text (like `options log`). Shows all types, globals, and functions after macro expansion, template instantiation, and inference. Optional `function` filter |
-| `list_modules` | List all available daslang modules (builtin C++ modules and daslib). Optional `json` for structured output |
+| `list_modules` | List all available daslang modules in three sections: the C++ modules the process registered, the daslib files, and the require paths descriptors register (`module/path`). With `project_root` or `load_modules` the listing comes from a child that scanned those descriptors too, eager. Optional `json` for structured output |
 | `find_symbol` | Cross-module symbol search (functions, generics, structs, handled types, enums, globals, typedefs/aliases, fields). Case-insensitive substring by default; `=query` for exact match |
 | `list_requires` | Compile a `.das` file and list all `require` dependencies (direct and transitive), with source file paths and builtin annotations. Optional `json` for structured output |
 | `list_module_api` | List all functions, types, enums, and globals exported by a builtin or daslib module (e.g. `math`, `strings`, `fio`, `daslib/json`). Optional `compact` mode for large modules |
