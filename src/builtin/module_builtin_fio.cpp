@@ -1806,7 +1806,8 @@ namespace das {
         sa.bInheritHandle = TRUE;
         sa.lpSecurityDescriptor = NULL;
         HANDLE hRead = NULL, hWrite = NULL;
-        if ( !CreatePipe(&hRead, &hWrite, &sa, 0) ) {
+        const DWORD spawnPipeBytes = 64 * 1024;   // src/builtin/ARCHITECTURE.md sec.5
+        if ( !CreatePipe(&hRead, &hWrite, &sa, spawnPipeBytes) ) {
             context->throw_error_at(at, "spawn_process: CreatePipe failed");
             return nullptr;
         }

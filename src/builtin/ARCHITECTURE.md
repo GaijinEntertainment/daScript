@@ -128,3 +128,15 @@ the throw (`pinvoke_named`, `pinvoke_impl2_core` in `module_builtin_debugger.cpp
 `throw_pinvoke_error`: the text moves to a stack buffer, the string's storage is released, and
 the throw runs with nothing owning heap on the frame. The same discipline is the `FMT_THROW`
 stash in `das_config.h`, where the temporary dies when the stash statement ends.
+
+## 5. A spawned child's stdout pipe
+
+`spawn_process` (`module_builtin_fio.cpp`) hands the child one pipe for stdout and stderr and
+never blocks on it: `process_drain` takes what the pipe holds and returns, and the caller decides
+when to come back - the watchdog every 250 ms. The pipe's capacity is therefore the child's
+write budget between two drains, and a child that fills it blocks until the next one; it is also
+the most a single drain hands the caller, which is what the caller's heap sees between two
+collects. A POSIX pipe carries 64 KB by default, and Windows sizes an anonymous pipe at 4 KB
+when asked for the default - a chatty child under the watchdog's tick moved 16 KB a second
+there - so the Windows pipe is created at the POSIX capacity, and every platform drains the
+same bursts.

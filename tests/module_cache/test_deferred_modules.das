@@ -175,44 +175,44 @@ def has_shared_modules(dir : string; names : array<string>) : bool {
 def arms_deferred(t : T?; fx : Fixture) {
     t |> run("a cold start loads the module to record its name, and a guard reads it available") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "cold", run_child(child_cmd(fx, fx.guarded), out), out, "GUARD true"), "the cold start runs, and the guard takes its target")
+        t |> success(run_child_reported(t, "cold", child_cmd(fx, fx.guarded), out, "GUARD true"), "the cold start runs, and the guard takes its target")
         t |> equal("compiled (no manifest), manifest written (1 row(s))", descriptor_line(out, UNIT_TEST_FOLDER), "the copied descriptor compiles and records:\n{out}")
         t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": loaded") >= 0, "the recording start loads the module:\n{out}")
     }
     t |> run("a warm start defers the module and loads nothing for a program that requires nothing") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "warm", run_child(child_cmd(fx, fx.plain), out), out, "PLAIN"), "the warm start runs the program")
+        t |> success(run_child_reported(t, "warm", child_cmd(fx, fx.plain), out, "PLAIN"), "the warm start runs the program")
         let line = descriptor_line(out, UNIT_TEST_FOLDER)
         t |> success(line |> starts_with("replayed 1 row(s) in ") && find(line, ", deferred 1)") >= 0, "the descriptor replays its one row deferred:\n{out}")
         t |> equal(-1, find(out, "{UNIT_TEST_CLASS} <- "), "nothing loads the shared module:\n{out}")
     }
     t |> run("the first require naming a deferred module loads it, and the program calls into it") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "uses", run_child(child_cmd(fx, fx.uses), out), out, "LENGTH 5"), "the program calls the module's function")
+        t |> success(run_child_reported(t, "uses", child_cmd(fx, fx.uses), out, "LENGTH 5"), "the program calls the module's function")
         t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the trace names the require that loaded it:\n{out}")
         t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": loaded") >= 0, "the shared module loads:\n{out}")
     }
     t |> run("builtin_module_exists loads a waiting module, with no require naming it") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "exists", run_child(child_cmd(fx, fx.exists), out), out, "EXISTS true"), "the build has the module")
+        t |> success(run_child_reported(t, "exists", child_cmd(fx, fx.exists), out, "EXISTS true"), "the build has the module")
         t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the question loaded it:\n{out}")
     }
     t |> run("has_module answers true for a waiting module and loads nothing") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "has_module", run_child(child_cmd(fx, fx.hasModule), out), out, "HAS true"), "the build has the module")
+        t |> success(run_child_reported(t, "has_module", child_cmd(fx, fx.hasModule), out, "HAS true"), "the build has the module")
         t |> equal(-1, find(out, "{UNIT_TEST_CLASS} <- "), "nothing loads the shared module:\n{out}")
     }
     t |> run("a lazy start and an eager start build the same builtin module") @(t : T?) {
         var lazy : string
-        t |> success(report_child(t, "dollar lazy", run_child(child_cmd(fx, fx.dollar), lazy), lazy, "DOLLAR "), "the lazy start counts")
+        t |> success(run_child_reported(t, "dollar lazy", child_cmd(fx, fx.dollar), lazy, "DOLLAR "), "the lazy start counts")
         var eager : string
-        t |> success(report_child(t, "dollar eager", run_child(child_cmd(fx, fx.dollar, "-ignore-manifest"), eager), eager, "DOLLAR "), "the eager start counts")
+        t |> success(run_child_reported(t, "dollar eager", child_cmd(fx, fx.dollar, "-ignore-manifest"), eager, "DOLLAR "), "the eager start counts")
         t |> success(dollar_count(lazy) > 0, "the count is a count:\n{lazy}")
         t |> equal(dollar_count(lazy), dollar_count(eager), "a C++ module's load registers nothing into $:\nlazy:\n{lazy}\neager:\n{eager}")
     }
     t |> run("a compile of a string, which walks no prerequisites, meets the waiting module at its require") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "nested", run_child(child_cmd(fx, fx.nested), out), out, "NESTED true"), "the nested program compiles")
+        t |> success(run_child_reported(t, "nested", child_cmd(fx, fx.nested), out, "NESTED true"), "the nested program compiles")
         t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the parser's require loaded it:\n{out}")
     }
 }
@@ -220,20 +220,20 @@ def arms_deferred(t : T?; fx : Fixture) {
 def arms_guards_and_caches(t : T?; fx : Fixture) {
     t |> run("a require guard loads a waiting module, whatever else the compile requires") @(t : T?) {
         var alone : string
-        t |> success(report_child(t, "guarded", run_child(child_cmd(fx, fx.guarded), alone), alone, "GUARD true"), "the guard alone takes its target")
+        t |> success(run_child_reported(t, "guarded", child_cmd(fx, fx.guarded), alone, "GUARD true"), "the guard alone takes its target")
         t |> success(find(alone, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the guard loaded the module:\n{alone}")
         var after : string
-        t |> success(report_child(t, "guarded after", run_child(child_cmd(fx, fx.guardedAfter), after), after, "GUARD true"), "a require above the guard")
+        t |> success(run_child_reported(t, "guarded after", child_cmd(fx, fx.guardedAfter), after, "GUARD true"), "a require above the guard")
         var before : string
-        t |> success(report_child(t, "guarded before", run_child(child_cmd(fx, fx.guardedBefore), before), before, "GUARD true"), "a require below the guard")
+        t |> success(run_child_reported(t, "guarded before", child_cmd(fx, fx.guardedBefore), before, "GUARD true"), "a require below the guard")
         var dep : string
-        t |> success(report_child(t, "guarded dep", run_child(child_cmd(fx, fx.guardedDep), dep), dep, "GUARD true"), "a guard inside a module walked before the entry's own require")
+        t |> success(run_child_reported(t, "guarded dep", child_cmd(fx, fx.guardedDep), dep, "GUARD true"), "a guard inside a module walked before the entry's own require")
     }
     t |> run("-ignore-manifest compiles every descriptor, loads every C++ module on start, and writes no manifest") @(t : T?) {
         remove_result(fx.manifest)
         remove_result(fx.utManifest)
         var out : string
-        t |> success(report_child(t, "ignore", run_child(child_cmd(fx, fx.plain, "-ignore-manifest"), out), out, "PLAIN"), "the program runs")
+        t |> success(run_child_reported(t, "ignore", child_cmd(fx, fx.plain, "-ignore-manifest"), out, "PLAIN"), "the program runs")
         t |> equal("compiled (manifests ignored)", descriptor_line(out, UNIT_TEST_FOLDER), "the copied descriptor compiles:\n{out}")
         t |> equal("compiled (manifests ignored)", descriptor_line(out, "deferred_probe"), "the pure-das descriptor compiles:\n{out}")
         t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && find(out, ": loaded") >= 0, "the shared module loads on start:\n{out}")
@@ -241,7 +241,7 @@ def arms_guards_and_caches(t : T?; fx : Fixture) {
     }
     t |> run("a deferred row whose artifact is gone brings every deferred module in, and the require fails as on a cold start") @(t : T?) {
         var warm : string
-        t |> success(report_child(t, "rewarm", run_child(child_cmd(fx, fx.plain), warm), warm, "PLAIN"), "a cold start rewrites the manifest")
+        t |> success(run_child_reported(t, "rewarm", child_cmd(fx, fx.plain), warm, "PLAIN"), "a cold start rewrites the manifest")
         let text = fread(fx.utManifest)
         t |> success(find(text, "\ndm\t") >= 0, "the manifest carries the dm row: {text}")
         fwrite(fx.utManifest, replace(text, UNIT_TEST_ARTIFACT, "absent"))
@@ -256,10 +256,10 @@ def arms_guards_and_caches(t : T?; fx : Fixture) {
     t |> run("a module cache written by an eager start serves a lazy start, and -log-compile-time shows the reads and the timeline") @(t : T?) {
         let cache = "-module-cache \"{path_join(fx.tmp, "mc.bin")}\""
         var cold : string
-        t |> success(report_child(t, "cold cache", run_child(child_cmd(fx, fx.plain, "-ignore-manifest -log-compile-time", cache), cold), cold, "PLAIN"), "the eager start writes the cache")
+        t |> success(run_child_reported(t, "cold cache", child_cmd(fx, fx.plain, "-ignore-manifest -log-compile-time", cache), cold, "PLAIN"), "the eager start writes the cache")
         t |> success(find(cold, "startup: main total") >= 0 && find(cold, "\tmodule scan") >= 0 && find(cold, "\tshutdown ") >= 0, "the timeline prints its laps:\n{cold}")
         var warm : string
-        t |> success(report_child(t, "warm cache", run_child(child_cmd(fx, fx.plain, "-log-compile-time", cache), warm), warm, "PLAIN"), "the lazy start, which loads no C++ module, runs")
+        t |> success(run_child_reported(t, "warm cache", child_cmd(fx, fx.plain, "-log-compile-time", cache), warm, "PLAIN"), "the lazy start, which loads no C++ module, runs")
         t |> equal(-1, find(warm, "cumulative hash"), "a builtin module's hash does not depend on the loaded set:\n{warm}")
         t |> success(find(warm, "cache read took") >= 0, "the lazy start reads the eager start's records:\n{warm}")
     }
@@ -271,9 +271,9 @@ def arms_guards_and_caches(t : T?; fx : Fixture) {
         let stream = path_join(fx.tmp, "tests.ser")
         let dastest = path_join(get_das_root(), "dastest/dastest.das")
         var wrote : string
-        t |> success(report_child(t, "ser", run_child("{child_cmd(fx, dastest)} -- --test \"{testsDir}\" --ser \"{stream}\"", wrote), wrote, "Serialized 1 programs"), "the writer serializes the test program")
+        t |> success(run_child_reported(t, "ser", "{child_cmd(fx, dastest)} -- --test \"{testsDir}\" --ser \"{stream}\"", wrote, "Serialized 1 programs"), "the writer serializes the test program")
         var read : string
-        t |> success(report_child(t, "deser", run_child("{child_cmd(fx, dastest)} -- --test \"{testsDir}\" --deser \"{stream}\"", read), read, "1 tests, 0 error(s)"), "the reader runs the test from the stream")
+        t |> success(run_child_reported(t, "deser", "{child_cmd(fx, dastest)} -- --test \"{testsDir}\" --deser \"{stream}\"", read, "1 tests, 0 error(s)"), "the reader runs the test from the stream")
         t |> success(find(read, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the reader loaded the module the stream names:\n{read}")
     }
 }
@@ -287,7 +287,7 @@ def arm_fallback(t : T?; fx : Fixture) {
     }
     t |> run("a module whose C++ dependencies are deferred too brings every deferred module in") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "app", run_child(child_cmd(fx, fx.app), out), out, "APP"), "the program compiles against imgui_app")
+        t |> success(run_child_reported(t, "app", child_cmd(fx, fx.app), out, "APP"), "the program compiles against imgui_app")
         t |> success(find(out, "[module] require imgui_app: loading the deferred Module_imgui_app") >= 0, "imgui_app loads at its require:\n{out}")
         t |> success(find(out, "[module] loading every deferred module (") >= 0, "its initDependencies asks for glfw and imgui, so the rest loads:\n{out}")
     }
@@ -295,14 +295,14 @@ def arm_fallback(t : T?; fx : Fixture) {
         let imguiDir = copy_module(fx, "dasImgui", ["dasModuleImgui", "imguiApp", "imguiAppHeadless"])
         copy_module(fx, "dasGlfw", ["dasModuleGlfw"])
         var cold : string
-        t |> success(report_child(t, "half-warm cold", run_child(child_cmd(fx, fx.plain), cold), cold, "PLAIN"), "the copies record their manifests")
+        t |> success(run_child_reported(t, "half-warm cold", child_cmd(fx, fx.plain), cold, "PLAIN"), "the copies record their manifests")
         if (!copy_loaded(cold, imguiDir, "imguiApp")) {
             to_log(LOG_INFO, "test_deferred_modules: the copied imguiApp does not load from {imguiDir} - its libraries sit outside the copy - so the half-warm arm has nothing to observe\n")
             return
         }
         remove_result(path_join(imguiDir, ".das_module.manifest"))
         var out : string
-        t |> success(report_child(t, "half-warm", run_child(child_cmd(fx, fx.plain), out), out, "PLAIN"), "the program runs with imgui_app loaded on start and glfw waiting")
+        t |> success(run_child_reported(t, "half-warm", child_cmd(fx, fx.plain), out, "PLAIN"), "the program runs with imgui_app loaded on start and glfw waiting")
         if (!copy_loaded(out, imguiDir, "imguiApp")) {
             to_log(LOG_INFO, "test_deferred_modules: the copied imguiApp did not load on the half-warm start - its libraries sit outside the copy - so initialize had nothing to bring in:\n{out}\n")
             return
