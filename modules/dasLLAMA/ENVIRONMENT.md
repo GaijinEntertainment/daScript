@@ -35,7 +35,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. |
 | `DASLLAMA_GPU_MOE_LAYERS` | number | -1 (auto) | How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split. |
 | `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |
-| `DASLLAMA_GPU_VRAM_MB` | number | probed | Override the detected VRAM budget in MiB that sizes the resident expert stacks. |
+| `DASLLAMA_GPU_VRAM_MB` | number | probed | Override the detected VRAM budget in MiB that sizes the resident expert stacks; a pinned cap takes no headroom and reads no OS room. |
 | `DASLLAMA_GPU_MIN_CTX` | number | built-in floor | Lower the context floor for arming the resident decode driver, for a short-context session on a small card. |
 | `DASLLAMA_GPU_RESIDENT` | flag | on | The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever). |
 | `DASLLAMA_GPU_DN` | flag | follows DASLLAMA_GPU | DeltaNet rail on the GPU. |

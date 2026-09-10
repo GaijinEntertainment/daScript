@@ -969,3 +969,18 @@ module) is independent and can land any time - it is pure structure.
     probe twins (both ranked on before/after `DASLLAMA_GPU_PROF=1` profiles across processes,
     4.3 -> 2.4 ms per 30B window and 490 -> 440 us per twin token; ruled 2026-09-09 to ship as
     stated claims).
+
+44. **The whole-model driver admits K-quant planes only off a repacked load.** Every plane the
+    driver places - the attention quads, the deltanet planes, the expert stacks and the shared
+    expert's triple - passes `kq_servable`, and that predicate (`dasllama_common.das`) is the CPU
+    fused chains' rule: a superblock format serves only when `t.kq_repacked` is set, which
+    `select_matmul_backend_for_load_` sets for a repacking backend alone. On a box that selects
+    the portable backend a K-quant model never reaches the driver - the Qwen3.6-35B-A3B
+    UD-IQ2_XXS declines on "layer 0's shared expert carries a format (2/2/3) the dense rail does
+    not serve" (a reviewer's reading on Linux, 2026-09-10) - while the device gather
+    (`moe_gpu_gather_stack_kq`) takes the layout flag as an argument and reads the disk order
+    too. The driver wants a device-side servability predicate (a format the tier has kernels
+    for, in either layout) in place of the CPU chains' rule at its four sites; done when a
+    portable-backend load of a K-quant model arms the driver and its resident-vs-CPU parity
+    file holds, which needs a box whose backend does not repack (none here: this box's backend
+    is x64-gen).
