@@ -2,6 +2,7 @@ options gen2
 options no_aot
 
 require dastest/testing_boost public
+require math
 require daslib/fio
 
 // argv[0] is the running interpreter (dastest is launched as `daslang dastest/dastest.das ...`),
@@ -31,12 +32,19 @@ def make_temp_root(t : T?; prefix : string) : string {
     return tmp as value
 }
 
+//! a deadline on a child's startup or exit, never a claim about speed: a Debug host compiles
+//! what the child requires several times slower, so the deadline stretches threefold there,
+//! never past five minutes
+def guard(seconds : float) : float {
+    return shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
+}
+
 // drain until the child's ready file appears; the file event drives it, the clock only guards
 def wait_for_ready(t : T?; var p : process; ready : string) {
     let started = ref_time_ticks()
     while (!fexist(ready)) {
         unsafe(process_drain(p) $(_line) {})
-        if (get_time_usec(started) > 15000000) {
+        if (float(get_time_usec(started)) > guard(15.0) * 1000000.0) {
             t |> failure("child never signaled ready")
             return
         }
@@ -66,7 +74,7 @@ def test_process_lifecycle(t : T?) {
             unsafe(process_drain(p) $(line) {
                 lines |> push(clone_string(line))
             })
-            if (get_time_usec(started) > 15000000) {
+            if (float(get_time_usec(started)) > guard(15.0) * 1000000.0) {
                 t |> failure("child never signaled ready")
                 break
             }
@@ -84,7 +92,7 @@ def test_process_lifecycle(t : T?) {
         t |> success(pid > 0, "pid is positive: {pid}")
         t |> success(unsafe(process_alive(pid)), "process_alive is true while running")
         t |> success(fwrite(release, "go"), "wrote the release event")
-        t |> equal(unsafe(process_wait(p, 5.0)), 7, "child exited with its own code")
+        t |> equal(unsafe(process_wait(p, guard(5.0))), 7, "child exited with its own code")
         t |> success(!unsafe(process_alive(pid)), "process_alive is false after exit")
         unsafe(close_process(p))
         let cleanup = rmdir_rec_result(root_dir)
@@ -145,7 +153,7 @@ def test_process_terminate(t : T?) {
         let started = ref_time_ticks()
         while (!fexist(ready)) {
             unsafe(process_drain(p) $(_line) {})
-            if (get_time_usec(started) > 15000000) {
+            if (float(get_time_usec(started)) > guard(15.0) * 1000000.0) {
                 t |> failure("child never signaled ready")
                 break
             }
@@ -154,7 +162,7 @@ def test_process_terminate(t : T?) {
         let pid = unsafe(process_pid(p))
         t |> equal(unsafe(process_wait(p, 0.2)), process_running, "wait answers process_running when the timeout passes first")
         unsafe(process_terminate(p))
-        let rc = unsafe(process_wait(p, 5.0))
+        let rc = unsafe(process_wait(p, guard(5.0)))
         t |> success(rc != process_running, "child stopped after terminate (rc={rc})")
         t |> success(!unsafe(process_alive(pid)), "process_alive is false after terminate")
         unsafe(close_process(p))
