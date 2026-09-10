@@ -228,7 +228,8 @@ def test_runner_dry_run(t : T?) {
         return
     }
     var out : string
-    t |> equal(run_runner("--area audio,vision --das /usr/bin/true", out), 0, "a dry area run exits clean:\n{out}")
+    let area_rc = run_runner("--area audio,vision --das /usr/bin/true", out)
+    t |> equal(area_rc, 0, "a dry area run exits clean:\n{out}")
     t |> success(find(out, "AREAS audio,vision") >= 0, "the AREAS line names the areas")
     t |> success(find(out, "START test_model_image.das: ") >= 0, "the image file runs")
     let image_start = find(out, "START test_model_image.das: ")
@@ -247,10 +248,12 @@ def test_runner_dry_run(t : T?) {
     t |> equal(run_runner("--suite stocked --exclude test", refused), 2, "an exclusion that drops every file is refused")
     t |> success(find(refused, "dropped every file") >= 0, "and says so:\n{refused}")
     var changed : string
-    t |> equal(run_runner("--changed --base HEAD --das /usr/bin/true", changed), 0, "a --changed run against HEAD exits clean:\n{changed}")
+    let changed_rc = run_runner("--changed --base HEAD --das /usr/bin/true", changed)
+    t |> equal(changed_rc, 0, "a --changed run against HEAD exits clean:\n{changed}")
     t |> success(find(changed, "CHANGED") >= 0 || find(changed, "nothing") >= 0, "it either maps a change or says nothing reached an area:\n{changed}")
     var no_base : string
-    t |> equal(run_runner("--changed --base no-such-ref-here --das /usr/bin/true", no_base), 2, "a base git cannot resolve is refused, never read as nothing changed:\n{no_base}")
+    let no_base_rc = run_runner("--changed --base no-such-ref-here --das /usr/bin/true", no_base)
+    t |> equal(no_base_rc, 2, "a base git cannot resolve is refused, never read as nothing changed:\n{no_base}")
 }
 
 [test]

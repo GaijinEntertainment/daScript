@@ -17,8 +17,7 @@
 - **A test in this folder writes only under a directory it created for this process - its own
   files and its children's - and removes that directory.**
 
-- **A test in this folder runs a child as a statement of its own - `run_child_reported`,
-  `run_driver_reported`, or the run's result bound to a local before the compare - never as an
-  argument beside the `out` it writes, and carries `options _lint = "LINT030"`.** The order a
-  call's arguments are evaluated in is not defined, so a nested run reads its output empty on a
-  Windows AOT host and full everywhere else.
+- **Silencing LINT030 for a test in this folder - a `nolint:LINT030` marker or a `.lint_config`
+  exclusion - is a defect.** The order a call's arguments are evaluated in is not defined, so a
+  child run nested beside the `out` it writes reads that output before the child wrote it on
+  some tiers and after on others; the rule is what keeps every run a statement of its own.

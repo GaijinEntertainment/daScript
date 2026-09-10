@@ -1207,20 +1207,24 @@ differently per tier: with ``x`` at ``0``, the read of ``x`` in
 below returns ``11`` or ``10``. The rule fires on the outer call. The fix is to
 run the writing call as a statement of its own and pass its result.
 
-The rule ships **off**, like LINT029: the tree carries the shape in library
-code whose callees take ``var`` to hand out a pointer or advance a builder,
-and a sweep of those is its own arc. Arm it on a file with
+The rule ships **off**, like LINT029. Arm it on a file with
 ``options _lint = "LINT030"``, or for a tree with ``LINT030 = true`` in
 ``.lint_config``.
 
-A read inside a lambda body does not count, and neither does one inside a
-block the outer call itself takes — that body runs inside the callee, after
-every argument is evaluated. A block handed to a nested call in a sibling
-argument runs while that argument is evaluated, so its reads do count. A
-variable the outer call takes
-by reference is not a read either: the callee sees its final state whatever
-the order. A variable the nested call reaches through a field or an index is
-not seen; only a bare variable in a mutable by-reference slot is.
+A nested call counts as writing a variable only when its body writes that
+parameter during the call: a callee that takes ``var`` to hand a pointer out
+of a ``return`` writes nothing, one that reads or writes through a pointer the
+parameter holds touches the pointee and not the parameter, one that passes
+the parameter on is answered by the function it passes it to, and a builtin
+or an extern - no body to read - is taken as writing. A read inside a lambda body does not count, and neither
+does one inside a block the outer call itself takes — that body runs inside
+the callee, after every argument is evaluated. A block handed to a nested call
+in a sibling argument runs while that argument is evaluated, so its reads do
+count. A variable the outer call takes by reference - or a plain field of it,
+not one behind a pointer - is not a read either: the callee sees its final
+state whatever the order. A variable the nested call reaches through a field
+or an index is not seen; only a bare variable in a mutable by-reference slot
+is.
 
 .. das-doc: alt
 .. code-block:: das

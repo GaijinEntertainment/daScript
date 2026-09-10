@@ -229,13 +229,13 @@ backend serving the same path faster or slower is not such a change; a seat of t
 `dasllama_gpu_tier` cooperation SPI lands its entry in sec.1.5's tier role row instead, in the
 same change.
 
-**A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
-on one q8 and one kq (K-quant) model the changed path serves.** That code is anything a
-served GPU decode or prefill call executes OR that selects what it executes - a driver, a
-kernel class it dispatches, that class's builder, a servability gate, a
-race that picks which kernel serves, a forwarder default, a weight-region or residency path,
-the tier forwarders and the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`)
-the call routes through; never the bake paths, never a comment.
+**A change that can alter what a served GPU decode or prefill path computes or selects ships
+GPU-vs-CPU parity on one q8 and one kq (K-quant) model the changed path serves.** That is
+anything a served GPU decode or prefill call executes or that selects what it executes - a
+driver, a kernel class it dispatches, that class's builder, a servability gate, a race that
+picks which kernel serves, a forwarder default, a weight-region or residency path, the tier
+forwarders and the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`) the call
+routes through; a rename, a comment or a bake path cannot.
 
 **Parity evidence counts only when it comes from `harness/parity.das`,
 `benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model list), or an

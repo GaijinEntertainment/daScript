@@ -138,13 +138,22 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   frame's own closure depth, since a lambda argument's body runs later. On `visitExprCall` the
   frame pops, each argument that is a call is asked which mentioned variables it writes through
   a mutable by-reference parameter (a bare variable in a `var` slot of `&`, array, table or
-  struct type), and the frame's mentions flow into the parent frame's current slot, so a read
-  buried in a deeper call still counts for the outer argument list. A mention that is the
-  outer call's own by-reference argument is not a read - the callee sees the final state
-  whatever the order. The rule fires once per writing argument, on the outer call, and ships
-  default-off beside LINT029 (`seed_default_disabled`): a `var` parameter is read as a write
-  contract, so callees that take `var` to hand out a pointer or advance a builder make the
-  tree's library code a sweep of its own.
+  struct type) that the callee writes during the call - `Lint030WriteScan` reads the callee's
+  body once for the write marks the compiler left on that parameter, discounting an address
+  taken inside a `return`, since a callee that hands out a pointer touches nothing before the
+  caller uses it, discounting a pointer the parameter holds read out or reached through, since
+  the compiler marks a mutable pointer's source and a pointee's write alike while neither moves
+  the parameter (an assignment to the pointer field itself still counts), and deciding the mark
+  on a call argument by that callee's own body for that slot, since the compiler marks every
+  writable argument of a call whose callee modifies any argument; a callee with no body, a
+  builtin or an extern, is read as writing - and the
+  frame's mentions flow into the parent frame's current slot, so a read buried in a deeper
+  call still counts for the outer argument list. A mention that is the outer call's own
+  by-reference argument - the variable, or a chain of plain fields rooted at it, since a field
+  behind a pointer is a value a write can repoint - is not a read: the callee sees the final
+  state whatever the order. The rule fires once per writing argument, on the outer call. It
+  ships default-off in the SDK beside LINT029 (`seed_default_disabled`); `.lint_config` turns
+  it on here.
 - **Closure bodies are per-rule, not global.** LINT010 counts a closure body as a branch
   (it may run later or never - writes inside must not kill outside stores, reads inside
   must not keep an outside init live); LINT021 counts the same body as an escape - a

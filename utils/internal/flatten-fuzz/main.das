@@ -506,7 +506,10 @@ def gen_inputs(var g : Gen&; n : int) : array<int3> {
     var res <- [int3(0, 0, 0), int3(1, 1, 1), int3(-1, -1, -1), int3(2, -3, 5), int3(-7, 7, 0)]
     res |> reserve(length(res) + n)
     for (_i in range(n)) {
-        res |> push(int3(rnd(g, 201) - 100, rnd(g, 201) - 100, rnd(g, 201) - 100))
+        let x = rnd(g, 201) - 100
+        let y = rnd(g, 201) - 100
+        let z = rnd(g, 201) - 100
+        res |> push(int3(x, y, z))
     }
     return <- res
 }

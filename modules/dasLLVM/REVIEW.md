@@ -1,8 +1,12 @@
 # dasLLVM Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
-`ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`. Planned work:
-`DEBUGGING.md` (sec. Roadmap), `fat_mode_plan.md`.
+`ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`,
+`ARCHITECTURE_JIT_ENTRY.md`. Planned work: `DEBUGGING.md` (sec. Roadmap), `fat_mode_plan.md`.
+
+**A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
+to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
+there.
 
 - **A change under `modules/dasLLVM/` runs the module-owned suite** (command and build gate:
   `tests/README.md` here). The suite is outside the core `tests/` sweep, so no other lane
@@ -175,7 +179,3 @@
   the detected host features.** LLVM's `SubtargetFeatures` takes the last occurrence of a name, so
   a forced feature placed first is silently overridden by detection. A wasm machine has no force
   knob and no detected features, so the rule does not reach it.
-
-**A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
-to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
-there.
