@@ -328,6 +328,16 @@ with no escape compiles; an internal require does not) via spawned compiles,
 `load_audio_16k_mono`'s empty-on-failure contract, `decode_audio_16k_mono`'s frame cap (a
 synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call still works), and
 `gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
+`test_mtp.das` - stocked suite, `-jit` only: the NextN loader on the Qwen3.5-0.8B-MTP Q8_0 file
+(the extras load; spec off continues the plain file's fixture), the self-speculative greedy decode
+token-for-token against plain decode on the counting and prose fixtures, the poisoned-verify
+rollback, the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
+non-recurrent MTP model, so the only reach of the depth-1 step's shortcut reject (row 0's logits
+and hidden stand, no re-forward): its code fixture runs plain, then again with
+`set_mtp_force_reject_every(3)` rejecting every third draft, both token-for-token against plain
+decode, the forced run's reject count asserted at a third of its drafts or more (the fixture's own
+reject count rides the kernels' summation order and has read zero). The 27B and GLM arms are
+large-tier (`DASLLAMA_PARITY_FULL=1`).
 `test_mtp_snapshot.das` - model-free: the speculative round's deltanet rollback sizes its two
 snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the
 `max_unreserved_size` guard) and restores the state from them.

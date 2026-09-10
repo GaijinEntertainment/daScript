@@ -4565,6 +4565,16 @@ def set_mtp_spec(on : bool) {
 //! Current state of the [[set_mtp_spec]] gate.
 def get_mtp_spec() : bool => g_mtp_spec
 
+var private g_mtp_force_reject_every = 0l
+
+//! The reject arm's test seam: every n-th draft the depth-1 step's greedy walk verifies is rejected
+//! whatever the verify said (0 = off), so a fixture that accepts every draft still walks the arm.
+def set_mtp_force_reject_every(n : int64) {
+    g_mtp_force_reject_every = n
+}
+
+def private mtp_reject_forced(s : Session) : bool => g_mtp_force_reject_every > 0l && s.mtp_drafted % g_mtp_force_reject_every == 0l
+
 var private g_mtp_batch_cls = true
 
 //! the verify's row cap: depth k runs k+1 rows, so the deepest round drafts MTP_MAX_ROWS-1
@@ -4911,7 +4921,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         copy_floats(s.logits, 0l, s.mtp_logits_b, c.vocab_size, c.vocab_size)
         hit = mtp_walk_sampled(s, 1l, c.vocab_size) == 1l
     } else {
-        hit = parallel_argmax(s.mtp_logits, c.vocab_size) == d
+        hit = parallel_argmax(s.mtp_logits, c.vocab_size) == d && !mtp_reject_forced(s)
     }
     prof_add("mtp.walk", ts_walk)
     if (hit) {

@@ -29,7 +29,13 @@ round commits rows 0..a: row a's logits become `s.logits` (the token sampled nex
 post-final-norm hidden becomes `s.mtp_h` (the next round's carry, and the assistant drafter's h
 input), `s.mtp_h_pos1` and the mirror watermark move to `pos + a + 1`, and `n_past` advances by
 `a + 1`. The rows above the new watermark are the rejected drafts' - garbage the next round
-rewrites - and only the watermark keeps them from being read.
+rewrites - and only the watermark keeps them from being read. The CPU depth-1 step
+(`mtp_spec_eval`) takes a rejected draft on a model with no recurrent layer without a re-forward:
+the verify's row 0 already holds the committed token's logits and post-norm hidden, so they stand
+and the draft head is re-seeded from them; a recurrent model restores the pre-verify state and
+re-forwards the committed token. `set_mtp_force_reject_every(n)` rejects every n-th draft of that
+step's greedy walk whatever the verify said - the seam a test reaches the reject arm through on a
+fixture that accepts every draft.
 
 **A sampled stream's walk draws instead of comparing argmaxes, and the same walk serves every
 round - the two Metal rounds and the CPU depth-1 step.** The caller points `s.spec_params` at its
