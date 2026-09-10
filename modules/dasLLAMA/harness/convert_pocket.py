@@ -100,6 +100,83 @@ def q8_conv(name, shape, stride, transposed):
     return is_conv and len(shape) == 3 and not transposed and stride == 1 and shape[0] % 32 == 0 and shape[1] % 32 == 0
 
 
+FAKE_GROUPS = ("attn", "ffn", "input", "speaker", "head", "codec")
+
+
+def fake_group(name, shape):
+    """The tensor group a `--fake` spec names: the backbone's attention projections, its two FFN
+    matrices, the frame input projection, the speaker projection, the flow head's matrices, the
+    codec's GEMMs and convs. Norms, biases and the voices are never in a group."""
+    if not name.endswith(".weight") or len(shape) < 2:
+        return None
+    if name.startswith("backbone."):
+        if ".self_attn." in name:
+            return "attn"
+        if ".linear1." in name or ".linear2." in name:
+            return "ffn"
+        return None
+    if name == "flow_lm.input_linear.weight":
+        return "input"
+    if name == "flow_lm.speaker_proj.weight":
+        return "speaker"
+    if name.startswith("head."):
+        return "head"
+    if name.startswith("mimi."):
+        return "codec"
+    return None
+
+
+def parse_fake(spec):
+    """`group=fmt,group=fmt` - a format per group, ggml's names (q4_0, q4_k, q6_k, iq4_nl, ...)."""
+    out = {}
+    for item in filter(None, spec.split(",")):
+        group, fmt = item.split("=")
+        assert group in FAKE_GROUPS, (group, FAKE_GROUPS)
+        out[group] = fmt.upper()
+    return out
+
+
+class FakeQuant:
+    """Round a float matrix through a ggml quant format and back: ggml's own quantizer (the
+    built llama.cpp's libggml-base) writes the blocks, gguf-py reads them back to f32. The rows
+    then store in the file's usual form, so the engine's lanes measure the format's loss with no
+    new kernel; a width the format's block does not divide is left as it is and reported."""
+
+    def __init__(self, llama_cpp, gguf_mod):
+        import ctypes
+        import glob
+        libs = glob.glob(os.path.join(llama_cpp, "build", "bin", "libggml-base.dylib")) + \
+            glob.glob(os.path.join(llama_cpp, "build", "bin", "libggml-base.so"))
+        assert libs, "no built libggml-base beside llama.cpp/build/bin - build llama.cpp first"
+        self.lib = ctypes.CDLL(libs[0])
+        self.lib.ggml_quantize_chunk.restype = ctypes.c_size_t
+        self.lib.ggml_quantize_chunk.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_float), ctypes.c_void_p,
+                                                 ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, ctypes.POINTER(ctypes.c_float)]
+        self.ctypes = ctypes
+        self.gguf = gguf_mod
+        self.skipped = []
+        self.done = {}
+
+    def apply(self, name, w32, fmt):
+        from gguf.quants import dequantize
+        t = self.gguf.GGMLQuantizationType[fmt]
+        block, type_size = self.gguf.GGML_QUANT_SIZES[t]
+        rows = np.ascontiguousarray(w32.reshape(-1, w32.shape[-1]), dtype=np.float32)
+        nrows, n_per_row = rows.shape
+        if n_per_row % block != 0:
+            self.skipped.append((name, fmt, n_per_row))
+            return w32
+        out = np.empty((nrows, (n_per_row // block) * type_size), dtype=np.uint8)
+        c = self.ctypes
+        n = self.lib.ggml_quantize_chunk(int(t), rows.ctypes.data_as(c.POINTER(c.c_float)), out.ctypes.data_as(c.c_void_p),
+                                         0, nrows, n_per_row, None)
+        assert n == out.nbytes, (name, fmt, n, out.nbytes)
+        back = dequantize(out, t).reshape(w32.shape).astype(np.float32)
+        err = float(np.sqrt(((back - w32) ** 2).mean()) / max(np.sqrt((w32 ** 2).mean()), 1e-12))
+        self.done[name] = (fmt, out.nbytes, err)
+        return back
+
+
 def canonical(name):
     if name.startswith("flow_lm.transformer.layers."):
         return "backbone." + name[len("flow_lm.transformer.layers."):]
@@ -169,10 +246,15 @@ def main():
     ap.add_argument("--llama-cpp", default=os.path.expanduser("~/Work/llama.cpp"), help="for gguf-py")
     ap.add_argument("--name", default=None, help="output file stem (default pocket-tts-<language>)")
     ap.add_argument("--q8", action="store_true", help="the published form: the served GEMM weights as Q8_0 in the kernels' layout")
+    ap.add_argument("--fake", default="", help="quality experiment, never published: group=fmt[,group=fmt] (attn, ffn, input, speaker, head, "
+                    "codec; ggml format names) - the group's weights round through that format before they are stored; needs --name")
     a = ap.parse_args()
     sys.path.insert(0, os.path.join(a.llama_cpp, "gguf-py"))
     import gguf
     from gguf.quants import quantize as gguf_quantize
+    fake = parse_fake(a.fake)
+    assert not fake or a.name, "--fake files are local experiments: give them a --name"
+    fq = FakeQuant(a.llama_cpp, gguf) if fake else None
 
     lang = a.language
     cfg = load_config(lang)
@@ -196,6 +278,9 @@ def main():
         name = canonical(k)
         assert len(name) < GGML_MAX_NAME, name
         assert name not in tensors, name
+        group = fake_group(name, v.shape) if fake else None
+        if group in fake:
+            v = fq.apply(name, np.ascontiguousarray(v.astype(np.float32)), fake[group])
         if a.q8 and q8_linear(name, v.shape):
             tensors[name] = ("q8", np.ascontiguousarray(v.astype(np.float32)))
             quantized.append(name)
@@ -233,6 +318,8 @@ def main():
     w = gguf.GGUFWriter(path, ARCH)
     w.add_name(f"Pocket TTS {lang}" + (" Q8_0" if a.q8 else ""))
     w.add_string("pocket.weights", "q8" if a.q8 else "f16")
+    if fake:
+        w.add_string("pocket.fake", a.fake)
     w.add_string("pocket.language", lang)
     w.add_string("pocket.revision", weights_rev)
     w.add_string("pocket.tokenizer_revision", tok_rev)
@@ -305,6 +392,17 @@ def main():
         f.write("see the dasLLAMA THIRD_PARTY_NOTICES.md\n")
     print(f"wrote {path}: {len(tensors)} tensors ({len(quantized)} as Q8_0), {len(pieces)} pieces, {len(voices)} voices "
           f"(default {default_voice}); {os.path.getsize(path)} bytes on disk")
+    if fq:
+        by_group = {}
+        for name, (fmt, nbytes, err) in fq.done.items():
+            g = by_group.setdefault((fake_group(name, (1, 1)), fmt), [0, 0, 0.0])
+            g[0] += 1
+            g[1] += nbytes
+            g[2] = max(g[2], err)
+        for (group, fmt), (n, nbytes, err) in sorted(by_group.items()):
+            print(f"  fake {group}={fmt}: {n} tensors, {nbytes / 1e6:.1f} MB as {fmt}, worst rms rel err {err:.4f}")
+        for name, fmt, width in fq.skipped:
+            print(f"  fake skipped {name}: width {width} is not a whole number of {fmt} blocks")
 
 
 if __name__ == "__main__":
