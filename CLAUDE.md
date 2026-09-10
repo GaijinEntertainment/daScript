@@ -239,11 +239,11 @@ diagnostic in any tier.
 - **`new WithCtor(field = v)` skips the user constructor** - it is plain field-init, so
   inherited fields stay zero. Write `new WithCtor(args)` when the constructor must run.
 - **A string captured into a lambda another thread runs is a pointer into the capturing
-  context's heap**, the same pointer copy as `:=`; the capturing thread reuses that memory on its
-  own schedule, and the worker reads whatever sits there by the time it runs - in the browser
-  build a slow worker start makes it read story text where a file path was. Hand a thread its
-  strings through a stream or channel it pops (an archived message is copied into the reader's
-  heap), never through `@capture`.
+  context's heap** - a pointer copy that `options multiple_contexts` does not turn into a clone,
+  unlike `:=`; the capturing thread reuses that memory on its own schedule, and the worker reads
+  whatever sits there by the time it runs. Push it into a `daslib/jobque` `Stream?` with
+  `push_archive` and let the thread read it with `pop_archive` - the message is serialized into
+  bytes the stream copies, so the reader gets its own - never `@capture`.
 - **`exit(N)` does not set the process exit code under the daslang CLI.** It unwinds as an
   abnormal termination and the process reports 1, whatever `N` was - a supervisor or shell sees a
   crash. A code the parent must read comes from `def main() : int { return N }`.
