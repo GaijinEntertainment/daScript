@@ -18,7 +18,7 @@ require ../../../examples/dasLLAMA/storywish/wish.das
 // The smoke cell spawns the example under --smoke with fixed words and reads the witness lines it
 // logs: the story starts with those words and is written and read out to the end. Model-gated on
 // tinystories-instruct-27M-Q8_0.gguf (its ../performance/model_specs.das row names the source)
-// and pocket-tts-en-bill-q8.gguf (the one-voice Pocket file the page ships) under models_dir();
+// and pocket-tts-en-stuart-kq.gguf (the one-voice Pocket file the page ships) under models_dir();
 // the run opens the example's window for about a minute, so a box without a window server
 // skips, and --null-audio keeps it silent.
 
@@ -66,7 +66,7 @@ def private ready(t : T?) : bool {
         t |> skip("no window server (DISPLAY and WAYLAND_DISPLAY unset) - the example opens a window")
         return false
     }
-    for (name in ["tinystories-instruct-27M-Q8_0.gguf", "pocket-tts-en-bill-q8.gguf"]) {
+    for (name in ["tinystories-instruct-27M-Q8_0.gguf", "pocket-tts-en-stuart-kq.gguf"]) {
         return false if (!model_available(t, path_join(models_dir(), name)))
     }
     return true

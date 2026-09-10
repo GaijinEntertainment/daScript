@@ -138,7 +138,8 @@ struct PocketModel {
 }
 
 // ===== the serving lane: f32 planes (the parity rail's form) or Q8_0 quants on the GEMMs, the
-// same pin and policy as the StyleTTS2 families' =====
+// same pin and policy as the StyleTTS2 families'; unpinned, a K-quant tensor of the file serves
+// as its own planes (the kq lane), so a file's formats are the lanes it can take =====
 
 enum private PocketLane {
     unset
@@ -154,9 +155,9 @@ def private pocket_serve_q8_() : bool {
     return true
 }
 
-//! Pin the GEMM weights' format for subsequent loads: Q8_0 quants or the file's own f32.
-//! ``reset_pocket_q8`` returns to the policy default. The facade spells these ``set_tts_q8`` /
-//! ``reset_tts_q8`` for every family at once.
+//! Pin the GEMM weights' format for subsequent loads: Q8_0 quants or the file's own f32 (a
+//! K-quant tensor dequantizes into either); ``reset_pocket_q8`` returns to the policy default,
+//! which serves a K-quant tensor as its own planes. The facade: ``set_tts_q8`` / ``reset_tts_q8``.
 def set_pocket_q8(on : bool) {
     g_pocket_q8_pin = on ? PocketLane.q8 : PocketLane.exact
 }
@@ -168,9 +169,13 @@ def reset_pocket_q8() {
 //! Would the next load serve its GEMMs as q8 - the pin when set, the policy otherwise.
 def pocket_serves_q8() : bool => pocket_serve_q8_()
 
+//! Would the next load serve a K-quant tensor as its own planes - true unless a lane is pinned.
+def pocket_serves_native() : bool => g_pocket_q8_pin == PocketLane.unset
+
 // what the readers mint while a load runs: the lane's quant choice and the backend's repack
 var private g_stage_q8 = false
 var private g_stage_repack = false
+var private g_stage_native = false
 
 def finalize(var m : PocketModel) {
     delete m.voice_names
@@ -311,10 +316,25 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    if (is_q8_tensor(m, wname) && (vec_only || l.nin % 32l != 0l || l.nout % 32l != 0l)) {
-        panic("dasLLAMA pocket: '{wname}' [{l.nout}][{l.nin}] is Q8_0, a shape the q8 lane does not serve ({vec_only ? "a vector-only layer" : "not 32-wide on both dims"})")
+    if (is_q8_tensor(m, wname) && (l.nin % 32l != 0l || l.nout % 32l != 0l)) {
+        panic("dasLLAMA pocket: '{wname}' [{l.nout}][{l.nin}] is Q8_0, a shape the q8 lane does not serve (not 32-wide on both dims)")
     }
-    if (g_stage_q8 && !vec_only && is_q8_tensor(m, wname)) {
+    if (g_stage_native && gguf_tensor_type(m, wname) == GGML_TYPE_Q4_K) {
+        // the kq lane: the file's own K-quant planes, straight into the layer
+        let n = l.nout * l.nin
+        if (l.nin % 256l != 0l) {
+            panic("dasLLAMA pocket: '{wname}' [{l.nout}][{l.nin}] is Q4_K on a width that is not a whole number of 256-superblocks")
+        }
+        var inscope kq : array<uint8>
+        var inscope ks : array<uint8>
+        kq |> reserve_resize(n / 256l * kq_qsb(KqFmt.k4))
+        ks |> reserve_resize(n / 256l * kq_ssb(KqFmt.k4))
+        gguf_transcode_q4k(m, bytes, wname, kq, ks, 0l, n)
+        linear_take_kq(l, 4, kq, ks, g_stage_repack)
+        return <- l
+    }
+    if (g_stage_q8 && is_q8_tensor(m, wname)) {
+        // a vector-only layer the file stores Q8_0 (the flow head) takes the blocks too: its GEMV runs on the q8 lane
         let n = l.nout * l.nin
         l.wq |> reserve_resize(n)
         l.wqs |> reserve_resize(n / 32l)
@@ -325,7 +345,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
         l.q8 = true
         return <- l
     }
-    l.w <- read_arr(m, bytes, wname)   // a Q8_0 tensor dequantizes here: the f32 lane of a published file
+    l.w <- read_arr(m, bytes, wname)   // a Q8_0 or K-quant tensor dequantizes here: the f32 lane of a published file, or the q8 lane pinned over a K-quant one
     linear_prepare(l, true, g_stage_q8 && !vec_only, g_stage_repack, vec_only)
     return <- l
 }
@@ -571,8 +591,9 @@ def load_pocket(path : string) : PocketModel {
     var inscope m = PocketModel()
     m.q8 = pocket_serve_q8_()
     g_stage_q8 = m.q8
+    g_stage_native = pocket_serves_native()
     g_stage_repack = m.q8 && select_matmul_backend_for_load_()
-    to_log(LOG_INFO, "dasLLAMA pocket: GEMM lane {m.q8 ? "q8" : "f32"} - {g_pocket_q8_pin != PocketLane.unset ? "pinned via set_tts_q8" : "the policy default"}\n")
+    to_log(LOG_INFO, "dasLLAMA pocket: GEMM lane {m.q8 ? "q8" : "f32"}{g_stage_native ? ", a K-quant tensor as its own planes" : ""} - {g_pocket_q8_pin != PocketLane.unset ? "pinned via set_tts_q8" : "the policy default"}\n")
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA pocket: cannot open model '{path}'")
@@ -636,6 +657,7 @@ def load_pocket(path : string) : PocketModel {
     }
     fclose(f)
     g_stage_file_q8 = false
+    g_stage_native = false
     m.tok <- load_tokenizer_gguf(path)
     return <- m
 }

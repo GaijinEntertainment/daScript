@@ -48,7 +48,7 @@ struct WishArgs {
     story_model : string = "tinystories-instruct-27M-Q8_0.gguf"
 
     @clarg_doc = "The TTS model file inside --models"
-    tts_model : string = "pocket-tts-en-bill-q8.gguf"
+    tts_model : string = "pocket-tts-en-stuart-kq.gguf"
 
     @clarg_doc = "Voice name or alias (default: the model's last voice)"
     voice : string

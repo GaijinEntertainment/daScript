@@ -8,6 +8,7 @@ require dasllama/dasllama_lint public
 require math
 require daslib/archive
 require dasllama/dasllama_math
+require dasllama/dasllama_math_default   // matmul_kq: the portable K-quant GEMV over disk-order planes
 require dasllama/dasllama_par
 require dasllama/dasllama_plane
 require dasllama/dasllama_convert
@@ -134,6 +135,51 @@ def weight_slot_q8(var io : TtsBlobIo; var a : array<int8>; var span : TtsSpan) 
     }
 }
 
+//! `release_weight` for a byte plane (a K-quant quant or scale plane).
+def release_weight_u8(var a : array<uint8>) {
+    if (lock_count(a) != 0) {
+        unsafe {
+            _builtin_forget_temp_array(a)
+        }
+    } else {
+        delete a
+    }
+}
+
+//! `blob_push_q8` for a byte plane: it rides the int8 quant blob byte for byte.
+def blob_push_u8(var qblob : array<int8>; src : array<uint8>) : TtsSpan {
+    let n = long_length(src)
+    return TtsSpan() if (n == 0l)
+    let off = (long_length(qblob) + BLOB_ALIGN_FLOATS - 1l) / BLOB_ALIGN_FLOATS * BLOB_ALIGN_FLOATS
+    qblob |> ensure_capacity(off + n)
+    qblob |> resize(off + n)
+    for (i in range64(n)) {
+        qblob[off + i] = int8(src[i])
+    }
+    return TtsSpan(off = off, n = n)
+}
+
+//! `bind_span_q8` for a byte plane over the int8 quant plane.
+def bind_span_u8(qplane : PlaneI8; span : TtsSpan; var a : array<uint8>) {
+    return if (span.n == 0l)
+    if (span.off < 0l || span.n > qplane.n || span.off > qplane.n - span.n) {
+        panic("dasLLAMA tts: kq span {span.off}+{span.n} lies outside the {qplane.n}-byte quant blob")
+    }
+    unsafe {
+        _builtin_make_temp_array_i64(a, reinterpret<void?>(plane_at(qplane, span.off)), span.n)
+    }
+}
+
+//! `weight_slot` for a byte plane.
+def weight_slot_u8(var io : TtsBlobIo; var a : array<uint8>; var span : TtsSpan) {
+    if (io.staging) {
+        span = blob_push_u8(*io.qblob, a)
+        delete a
+    } else {
+        bind_span_u8(io.qplane, span, a)
+    }
+}
+
 //! A bare weight vector (an embedding table, a Snake alpha, the ISTFT window) with its span.
 struct TtsWeight {
     a : array<float>
@@ -144,7 +190,7 @@ struct TtsWeight {
 // overload; the counts below are the tripwires that catch a field added without a line.
 let private TTS_WEIGHT_META_FIELDS = 1
 let private TTS_CONV1D_META_FIELDS = 21
-let private TTS_LINEAR_META_FIELDS = 8
+let private TTS_LINEAR_META_FIELDS = 12
 let private TTS_NORM_META_FIELDS = 2
 let private TTS_LSTM_META_FIELDS = 5
 
@@ -247,15 +293,21 @@ struct TtsLinear {
     wt : array<float>
     wq : array<int8>     // [nout][nin] Q8_0 quants, repacked for the backend - the q8 rows form's W
     wqs : array<float>
+    kq : array<uint8>    // [nout][nin] as a K-quant plane pair (the file's own format), repacked for a backend that carries kq
+    ks : array<uint8>
     b : array<float>
     w_span : TtsSpan = TtsSpan()
     wt_span : TtsSpan = TtsSpan()
     wq_span : TtsSpan = TtsSpan()
     wqs_span : TtsSpan = TtsSpan()
+    kq_span : TtsSpan = TtsSpan()
+    ks_span : TtsSpan = TtsSpan()
     b_span : TtsSpan = TtsSpan()
     nout : int64
     nin : int64
     q8 : bool
+    kq_fmt : int         // the kernel-layer format id of the kq planes (4 = Q4_K), 0 = the layer has none
+    kq_repacked : bool   // the planes are in the active backend's layout (matmul_kq_active), else disk order (matmul_kq)
 }
 
 def serialize(var arch : Archive; var l : TtsLinear) {
@@ -264,10 +316,14 @@ def serialize(var arch : Archive; var l : TtsLinear) {
     arch |> serialize(l.wt_span)
     arch |> serialize(l.wq_span)
     arch |> serialize(l.wqs_span)
+    arch |> serialize(l.kq_span)
+    arch |> serialize(l.ks_span)
     arch |> serialize(l.b_span)
     arch |> serialize_raw(l.nout)
     arch |> serialize_raw(l.nin)
     arch |> serialize_raw(l.q8)
+    arch |> serialize_raw(l.kq_fmt)
+    arch |> serialize_raw(l.kq_repacked)
 }
 
 def finalize(var l : TtsLinear) {
@@ -275,6 +331,8 @@ def finalize(var l : TtsLinear) {
     release_weight(l.wt)
     release_weight_q8(l.wq)
     release_weight(l.wqs)
+    release_weight_u8(l.kq)
+    release_weight_u8(l.ks)
     release_weight(l.b)
 }
 
@@ -283,6 +341,8 @@ def weights_walk(var io : TtsBlobIo; var l : TtsLinear) {
     weight_slot(io, l.wt, l.wt_span)
     weight_slot_q8(io, l.wq, l.wq_span)
     weight_slot(io, l.wqs, l.wqs_span)
+    weight_slot_u8(io, l.kq, l.kq_span)
+    weight_slot_u8(io, l.ks, l.ks_span)
     weight_slot(io, l.b, l.b_span)
 }
 
@@ -1114,10 +1174,85 @@ def private linear_rows_add_bias(l : TtsLinear; t : int64; var y : array<float>)
     }
 }
 
-//! y [1][nout] = x [1][nin] . w^T + b for one row - a decode step: on the q8 lane the GEMV entry
-//! (`matmul_q8q8`) instead of a one-row batch, else `linear_rows` at t = 1. The continuous-audio
-//! family's frame loop calls this; the phoneme families' rows GEMMs never take it.
+// ===== the K-quant lane: a layer whose weights are the file's own K-quant planes =====
+
+var @scratch g_kq_xq : array<int8>
+var @scratch g_kq_xs : array<float>
+var @scratch g_kq_xbs : array<int>
+var @scratch g_kq_row : array<float>
+
+//! Give a layer the K-quant planes of its [nout][nin] weight (`fmt` the kernel-layer id, 4 =
+//! Q4_K; the planes as the GGUF transcoder wrote them) and repack them for the active backend
+//! where it carries kq kernels; nin is a whole number of 256-superblocks by the format's rule.
+def linear_take_kq(var l : TtsLinear; fmt : int; var kq, ks : array<uint8>; repack : bool) {
+    if (l.nin % 256l != 0l) {
+        panic("dasLLAMA tts: a K-quant layer [{l.nout}][{l.nin}] needs nin on 256")
+    }
+    l.kq <- kq
+    l.ks <- ks
+    l.kq_fmt = fmt
+    l.kq_repacked = false
+    if (repack && kernel_backend_has_kq()) {
+        repack_kq_weight(fmt, l.kq, l.ks, 0l, l.nin, l.nout)
+        l.kq_repacked = true
+    }
+    delete l.w
+}
+
+// one row [nin] through the K-quant GEMV: the row requantized to the Q8_K form, then the
+// backend's core over repacked planes or the portable one over disk order
+def private kq_gemv_row(l : TtsLinear; x : array<float>; xoff : int64; var y : array<float>; yoff : int64) {
+    let nin = l.nin
+    var row & = g_kq_row
+    row |> reserve_resize(nin)
+    for (i in range64(nin)) {
+        row[i] = x[xoff + i]
+    }
+    var xq & = g_kq_xq
+    var xs & = g_kq_xs
+    var xbs & = g_kq_xbs
+    xq |> reserve_resize(nin)
+    xs |> reserve_resize(nin / 256l)
+    xbs |> reserve_resize(nin / 16l)
+    requant_rows_q8k_bs(row, nin, 1l, xq, xs, xbs, false)
+    if (l.kq_repacked) {
+        matmul_kq_active(l.kq_fmt, y, l.kq, l.ks, 0l, xq, xs, xbs, nin, l.nout, yoff)
+    } else {
+        matmul_kq(l.kq_fmt, y, l.kq, l.ks, 0l, xq, xs, xbs, nin, l.nout, yoff)
+    }
+}
+
+// The K-quant lane of linear_rows: the rows requantized to the Q8_K form at once and one batched
+// kq GEMM where the backend carries the tile, else the GEMV per row; then the bias.
+def private linear_rows_kq(l : TtsLinear; x : array<float>; t : int64; var y : array<float>) {
+    let nin = l.nin
+    if (l.kq_repacked && kernel_backend_has_kq_batch()) {
+        var xq & = g_kq_xq
+        var xs & = g_kq_xs
+        var xbs & = g_kq_xbs
+        xq |> reserve_resize(t * nin)
+        xs |> reserve_resize(t * nin / 256l)
+        xbs |> reserve_resize(t * nin / 16l)
+        requant_rows_q8k_bs(x, nin, t, xq, xs, xbs, t * nin >= 65536l)
+        matmul_kq_batch(l.kq_fmt, y, l.kq, l.ks, 0l, xq, xs, xbs, nin, l.nout, t)
+    } else {
+        for (r in range64(t)) {
+            kq_gemv_row(l, x, r * nin, y, r * l.nout)
+        }
+    }
+    linear_rows_add_bias(l, t, y)
+}
+
+//! y [1][nout] = x [1][nin] . w^T + b for one row - a decode step: the q8 lane's GEMV entry
+//! (`matmul_q8q8`) or the K-quant lane's, never a one-row batch; else `linear_rows` at t = 1.
+//! The continuous-audio family's frame loop calls this; the phoneme families' rows GEMMs never take it.
 def linear_rows_decode(l : TtsLinear; x : array<float>; @scratch @exact_size var y : array<float>) {
+    if (l.kq_fmt != 0) {
+        y |> reserve_resize(l.nout)
+        kq_gemv_row(l, x, 0l, y, 0l)
+        linear_rows_add_bias(l, 1l, y)
+        return
+    }
     if (!l.q8) {
         linear_rows(l, x, 1l, y)
         return
@@ -1134,9 +1269,14 @@ def linear_rows_decode(l : TtsLinear; x : array<float>; @scratch @exact_size var
 }
 
 //! y [t][nout] = x [t][nin] . w^T + b: the tiled GEMM over row blocks when `wt` was minted,
-//! the batched dot form otherwise; a layer minted q8 runs the q8 lane.
+//! the batched dot form otherwise; a layer minted q8 runs the q8 lane, a layer holding the
+//! file's K-quant planes the kq lane.
 def linear_rows(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_size var y : array<float>) {
     y |> reserve_resize(t * l.nout)
+    if (l.kq_fmt != 0) {
+        linear_rows_kq(l, x, t, y)
+        return
+    }
     if (l.q8) {
         linear_rows_q8(l, x, t, y)
         return
@@ -1179,6 +1319,10 @@ def linear_rows(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_size
 
 //! y [nout] = w . x + b
 def linear_vec(l : TtsLinear; x : array<float>; @scratch @exact_size var y : array<float>) {
+    if (l.q8 || l.kq_fmt != 0) {   // a vector layer the file stores quantized takes the decode entry's GEMV
+        linear_rows_decode(l, x, y)
+        return
+    }
     y |> reserve_resize(l.nout)
     matmul(y, l.w, x, l.nin, l.nout)
     return if (empty(l.b))

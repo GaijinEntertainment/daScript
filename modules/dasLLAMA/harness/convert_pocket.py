@@ -166,21 +166,30 @@ class FakeQuant:
         self.skipped = []
         self.done = {}
 
-    def apply(self, name, w32, fmt):
-        from gguf.quants import dequantize
+    def quantize_bytes(self, name, rows, fmt):
+        """`rows` [nrows][n_per_row] f32 -> the format's blocks, [nrows][bytes per row] u8 (None
+        where the width is not a whole number of blocks)."""
         t = self.gguf.GGMLQuantizationType[fmt]
         block, type_size = self.gguf.GGML_QUANT_SIZES[t]
-        # a conv [cout][cin][k] rounds per output channel over its cin*k taps; a matrix per row
-        rows = np.ascontiguousarray(w32.reshape(w32.shape[0], -1) if w32.ndim == 3 else w32.reshape(-1, w32.shape[-1]), dtype=np.float32)
         nrows, n_per_row = rows.shape
         if n_per_row % block != 0:
             self.skipped.append((name, fmt, n_per_row))
-            return w32
+            return None
         out = np.empty((nrows, (n_per_row // block) * type_size), dtype=np.uint8)
         c = self.ctypes
         n = self.lib.ggml_quantize_chunk(int(t), rows.ctypes.data_as(c.POINTER(c.c_float)), out.ctypes.data_as(c.c_void_p),
                                          0, nrows, n_per_row, None)
         assert n == out.nbytes, (name, fmt, n, out.nbytes)
+        return out
+
+    def apply(self, name, w32, fmt):
+        from gguf.quants import dequantize
+        t = self.gguf.GGMLQuantizationType[fmt]
+        # a conv [cout][cin][k] rounds per output channel over its cin*k taps; a matrix per row
+        rows = np.ascontiguousarray(w32.reshape(w32.shape[0], -1) if w32.ndim == 3 else w32.reshape(-1, w32.shape[-1]), dtype=np.float32)
+        out = self.quantize_bytes(name, rows, fmt)
+        if out is None:
+            return w32
         back = dequantize(out, t).reshape(w32.shape).astype(np.float32)
         err = float(np.sqrt(((back - w32) ** 2).mean()) / max(np.sqrt((w32 ** 2).mean()), 1e-12))
         self.done[name] = (fmt, out.nbytes, err)
@@ -206,6 +215,18 @@ def clip_encoder(language):
             lat = model.mimi.encode_to_latent(torch.from_numpy(np.ascontiguousarray(pcm, dtype=np.float32))[None, None])
         return np.ascontiguousarray(lat[0].numpy(), dtype=np.float32)
     return encode
+
+
+def kq_tensor(name, shape):
+    """The tensors `--kq` stores as Q4_K: the backbone's and the codec transformers' matrices and
+    the text embedding table - every one 256-wide along its rows, the K-quant rule."""
+    return fake_group(name, shape) in ("attn", "ffn", "codec", "embed") and len(shape) == 2 and shape[1] % 256 == 0
+
+
+def head_q8_linear(name, shape):
+    """The flow head's matrices, which `--kq` stores as Q8_0: the vector layers' GEMVs run on the
+    q8 lane where the file holds the blocks."""
+    return name.startswith("head.") and name.endswith(".weight") and len(shape) == 2 and shape[0] % 32 == 0 and shape[1] % 32 == 0
 
 
 def canonical(name):
@@ -279,6 +300,8 @@ def main():
     ap.add_argument("--q8", action="store_true", help="the published form: the served GEMM weights as Q8_0 in the kernels' layout")
     ap.add_argument("--fake", default="", help="quality experiment, never published: group=fmt[,group=fmt] (attn, ffn, input, speaker, head, "
                     "codec; ggml format names) - the group's weights round through that format before they are stored; needs --name")
+    ap.add_argument("--kq", action="store_true", help="the small form: the backbone's and the codec transformers' matrices and the text embedding "
+                    "as Q4_K, the flow head as Q8_0, the rest as --q8 writes it (implies --q8)")
     ap.add_argument("--voices", default="", help="the roster as a comma list of the language's voice names (default: every voice the language ships)")
     ap.add_argument("--no-cloning", action="store_true", help="leave the codec encoder out: the roster speaks from its stored latents, "
                     "tts_register_voice refuses, and the file is smaller by the encoder")
@@ -288,7 +311,9 @@ def main():
     from gguf.quants import quantize as gguf_quantize
     fake = parse_fake(a.fake)
     assert not fake or a.name, "--fake files are local experiments: give them a --name"
-    fq = FakeQuant(a.llama_cpp, gguf) if fake else None
+    if a.kq:
+        a.q8 = True
+    fq = FakeQuant(a.llama_cpp, gguf) if (fake or a.kq) else None
 
     lang = a.language
     cfg = load_config(lang)
@@ -308,6 +333,7 @@ def main():
     conv_stride["mimi.downsample.conv.conv.weight"] = st["mimi.downsample.conv.conv.weight"].shape[2] // 2   # kernel 2 x stride
     tensors = {}
     quantized = []
+    quantized_k4 = []
     dropped = []
     for k, v in st.items():
         name = canonical(k)
@@ -319,7 +345,10 @@ def main():
         group = fake_group(name, v.shape, q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name)) if fake else None
         if group in fake:
             v = fq.apply(name, np.ascontiguousarray(v.astype(np.float32)), fake[group])
-        if a.q8 and q8_linear(name, v.shape):
+        if a.kq and kq_tensor(name, v.shape):
+            tensors[name] = ("k4", np.ascontiguousarray(v.astype(np.float32)))
+            quantized_k4.append(name)
+        elif a.q8 and (q8_linear(name, v.shape) or (a.kq and head_q8_linear(name, v.shape))):
             tensors[name] = ("q8", np.ascontiguousarray(v.astype(np.float32)))
             quantized.append(name)
         elif a.q8 and q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name):
@@ -365,6 +394,8 @@ def main():
     w = gguf.GGUFWriter(path, ARCH)
     w.add_name(f"Pocket TTS {lang}" + (" Q8_0" if a.q8 else ""))
     w.add_string("pocket.weights", "q8" if a.q8 else "f16")
+    if a.kq:
+        w.add_string("pocket.kq", "q4_k")
     w.add_bool("pocket.cloning", not a.no_cloning)
     if fake:
         w.add_string("pocket.fake", a.fake)
@@ -418,7 +449,10 @@ def main():
     w.add_bool("tokenizer.ggml.byte_fallback", spec["byte_fallback"])
     for name in sorted(tensors):
         t = tensors[name]
-        if isinstance(t, tuple):
+        if isinstance(t, tuple) and t[0] == "k4":
+            data = fq.quantize_bytes(name, t[1], "Q4_K")   # ggml's own quantizer; the writer derives the element shape from the byte shape
+            w.add_tensor(name, data, raw_dtype=gguf.GGMLQuantizationType.Q4_K)
+        elif isinstance(t, tuple):
             data = gguf_quantize(t[1], gguf.GGMLQuantizationType.Q8_0)   # the writer derives the element shape from the byte shape
             w.add_tensor(name, data, raw_dtype=gguf.GGMLQuantizationType.Q8_0)
         else:
@@ -428,7 +462,7 @@ def main():
     w.write_tensors_to_file()
     w.close()
     with open(path + ".LICENSE", "w", encoding="utf8") as f:
-        f.write(f"{stem}.gguf - Kyutai Pocket TTS ({lang}) weights{' (the served GEMMs as Q8_0)' if a.q8 else ''}"
+        f.write(f"{stem}.gguf - Kyutai Pocket TTS ({lang}) weights{' (the backbone and codec transformers as Q4_K, the head as Q8_0)' if a.kq else (' (the served GEMMs as Q8_0)' if a.q8 else '')}"
                 f"{' without the codec encoder' if a.no_cloning else ''}, CC BY 4.0 (Kyutai), converted from kyutai/pocket-tts "
                 f"languages/{lang}/model.safetensors @ {weights_rev} and the unigram SentencePiece tokenizer @ {tok_rev} by "
                 "modules/dasLLAMA/harness/convert_pocket.py; the reference implementation is MIT (github.com/kyutai-labs/pocket-tts). "
@@ -439,7 +473,8 @@ def main():
             if lang.startswith("english"):
                 f.write(f"  not shipped: {vname} - {why}\n")
         f.write("see the dasLLAMA THIRD_PARTY_NOTICES.md\n")
-    print(f"wrote {path}: {len(tensors)} tensors ({len(quantized)} as Q8_0{f', {len(dropped)} encoder tensors left out' if dropped else ''}), "
+    print(f"wrote {path}: {len(tensors)} tensors ({len(quantized)} as Q8_0{f', {len(quantized_k4)} as Q4_K' if quantized_k4 else ''}"
+          f"{f', {len(dropped)} encoder tensors left out' if dropped else ''}), "
           f"{len(pieces)} pieces, {len(voices)} voices (default {default_voice}); {os.path.getsize(path)} bytes on disk")
     if fq:
         by_group = {}

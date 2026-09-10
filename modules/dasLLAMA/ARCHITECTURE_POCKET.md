@@ -96,6 +96,16 @@ another language takes the text as it is, since the normalizer reads English.
 
 ### 2.50 The published file carries the served quants {#pocket-q8-file}
 
+A file has three lanes and its formats decide which it can take. A K-quant tensor
+(`convert_pocket.py --kq`: the backbone's and the codec transformers' matrices and the text
+embedding as Q4_K, the flow head as Q8_0, the rest as the q8 form writes it) serves as its own
+planes unless a lane is pinned - `TtsLinear` holds the plane pair the GGUF transcoder wrote,
+repacked where the backend carries kq kernels, and the frame loop's GEMV and the prompt's GEMM
+take the engine's own K-quant entries (`linear_rows_decode`, `linear_rows_kq`), the rows
+requantized to the Q8_K form the way the engine's own decode does. Pinned q8 or f32, the same
+tensor dequantizes into that lane, so one file serves every lane and the rig compares them on
+the same sentences. A vector layer the file stores Q8_0 (the head) runs its GEMV on the q8 lane.
+
 Two lanes, as the StyleTTS2 families have: f32, the parity rail's reference, and q8, the
 served default - the transformer layers' four matrices, the frame input projection and every
 dense stride-1 codec conv on 32-wide channels as Q8_0 rows (`linear_prepare`,
