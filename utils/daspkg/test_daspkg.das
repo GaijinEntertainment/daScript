@@ -2642,12 +2642,29 @@ def private push_text(var bytes : array<uint8>; text : string) {
     }
 }
 
-//! a fake `!<arch>` file: the member header, then a member that opens with the given magic
-def private write_archive(path : string; magic : array<uint8>) {
+//! a 60-byte ar member header: name, then the decimal size in its column, then the `\n terminator
+def private push_ar_header(var bytes : array<uint8>; name : string; size : int) {
+    let digits = "{size}"
+    push_text(bytes, "{name}{repeat(" ", 48 - length(name))}{digits}{repeat(" ", 10 - length(digits))}`\n")
+}
+
+//! a fake `!<arch>` file: a symbol-table member of `index_bytes` zeros, a GNU long-name table when the
+//! object's name is `/0` (the shape llvm-ar writes for a long file name), then the object opening with the magic
+def private write_archive(path : string; magic : array<uint8>; index_bytes : int = 0; long_name : bool = false) {
     var bytes : array<uint8>
-    bytes |> reserve(128)
+    bytes |> reserve(index_bytes + 256)
     push_text(bytes, "!<arch>\n")
-    push_text(bytes, "member.o/       0           0     0     644     4096      `\n")
+    if (index_bytes > 0) {
+        push_ar_header(bytes, "/", index_bytes)
+        for (_i in range(index_bytes + (index_bytes & 1))) {
+            bytes |> push(0u8)
+        }
+    }
+    if (long_name) {
+        push_ar_header(bytes, "//", 20)
+        push_text(bytes, "a_long_member_name/\n")
+    }
+    push_ar_header(bytes, long_name ? "/0" : "member.o/", 64)
     bytes |> push_from(magic)
     push_text(bytes, "padding past the magic so the member has a body")
     fopen(path, "wb") $(f) {
@@ -2665,10 +2682,17 @@ def test_wasm_archive_detection(t : T?) {
         }
         let root = tmp as value
         let wasm_path = path_join(root, "liblibDasModuleWasm.a")
+        let indexed_path = path_join(root, "liblibDasModuleIndexed.a")
         let native_path = path_join(root, "liblibDasModuleNative.a")
-        write_archive(wasm_path, [0x00u8, 0x61u8, 0x73u8, 0x6du8, 0x01u8, 0x00u8, 0x00u8, 0x00u8])   // "\0asm" + version 1
+        let wasm_magic <- [0x00u8, 0x61u8, 0x73u8, 0x6du8, 0x01u8, 0x00u8, 0x00u8, 0x00u8]   // "\0asm" + version 1
+        write_archive(wasm_path, wasm_magic)
+        write_archive(indexed_path, wasm_magic, 200000)   // a symbol table far past any fixed scan window
+        let long_named_path = path_join(root, "liblibDasModuleLongName.a")
+        write_archive(long_named_path, wasm_magic, 1024, true)   // llvm-ar's shape: `/` table, `//` names, the object as `/0`
         write_archive(native_path, [0xcfu8, 0xfau8, 0xedu8, 0xfeu8, 0x0cu8, 0x00u8, 0x00u8, 0x01u8])   // a 64-bit Mach-O member
-        t |> success(looks_like_wasm_archive(wasm_path), "an archive whose member opens with the wasm magic is a wasm archive")
+        t |> success(looks_like_wasm_archive(wasm_path), "an archive whose first object opens with the wasm magic is a wasm archive")
+        t |> success(looks_like_wasm_archive(indexed_path), "a 200 KB symbol table ahead of that object changes nothing: members are walked, not scanned")
+        t |> success(looks_like_wasm_archive(long_named_path), "an object named through the long-name table is an object, not a table")
         t |> success(!looks_like_wasm_archive(native_path), "an archive of native objects is not, whatever its name")
         t |> success(!looks_like_wasm_archive(path_join(root, "missing.a")), "a file that is not there is not a wasm archive")
         force_rmdir(root)
