@@ -14,6 +14,7 @@ require daslib/strings_boost
 require daslib/ast_boost
 require daslib/strings_boost
 require daslib/lint_config
+require math
 
 [lint_macro]
 class LintEverything : AstPassMacro {
@@ -154,7 +155,24 @@ struct private Lint023Candidate {
     disqualified : bool
 }
 
+//! a variable read somewhere inside argument `slot` of the call a frame tracks
+struct private Lint030Mention {
+    slot : int
+    @do_not_delete v : Variable const?
+}
+
+//! one call whose argument list the walk is inside: `slot` is the argument being walked,
+//! `closure_depth` the depth the call sits at, so a read inside a lambda argument - run later,
+//! not at the call - is not a mention
+struct private Lint030Frame {
+    @do_not_delete call : ExprCall const?
+    slot : int
+    closure_depth : int
+    mentions : array<Lint030Mention>
+}
+
 class LintVisitor : AstVisitor {
+    lint030_frames : array<Lint030Frame>
     @do_not_delete lint014_candidates : array<Variable const?>
     lint023_candidates : array<Lint023Candidate>
     lint023_store_nodes : table<uint64>
@@ -823,7 +841,55 @@ class LintVisitor : AstVisitor {
         return fname == "max" || fname == "abs"
     }
 
+    def private lint030_as_call(e : Expression?) : ExprCall? {
+        return e is ExprCall ? e as ExprCall : null
+    }
+
+    def private lint030_bare_var(e : Expression?) : Variable const? {
+        return e is ExprVar ? (e as ExprVar).variable : null
+    }
+
+    //! whether `inner` writes `v` through a mutable by-reference parameter: the bare variable in
+    //! a slot the callee declares `var` on a `&`, array, table or struct type
+    def private lint030_writes_var(inner : ExprCall?; v : Variable const?) : bool {
+        return false if (inner.func == null)
+        for (k in range(min(length(inner.arguments), length(inner.func.arguments)))) {
+            let p = inner.func.arguments[k]
+            continue if (p._type == null || p._type.flags.constant || !(p._type.flags.ref || p._type.isRefType))
+            return true if (lint030_bare_var(inner.arguments[k]) == v)
+        }
+        return false
+    }
+
+    //! whether argument `slot` of `call` is `v` itself handed over by reference: the callee then
+    //! sees the variable's final state whatever the order, so that read is not a dependency
+    def private lint030_passed_by_ref(call : ExprCall const?; slot : int; v : Variable const?) : bool {
+        return false if (call.func == null || slot >= length(call.func.arguments))
+        let p = call.func.arguments[slot]
+        return p._type != null && (p._type.flags.ref || p._type.isRefType) && lint030_bare_var(call.arguments[slot]) == v
+    }
+
+    def private lint030_check(frame : Lint030Frame) : void {
+        return if (noLint || genericDepth > 0 || frame.call == null)
+        for (i in range(length(frame.call.arguments))) {
+            let inner = lint030_as_call(frame.call.arguments[i])
+            continue if (inner == null)
+            for (m in frame.mentions) {
+                continue if (m.slot == i || !lint030_writes_var(inner, m.v) || lint030_passed_by_ref(frame.call, m.slot, m.v))
+                lint_error("LINT030: argument {m.slot + 1} reads `{m.v.name}` while the call `{inner.name}(...)` in argument {i + 1} writes it by reference - the order arguments are evaluated in is not defined, so the read sees the value before or after the write by the compiler's choice; run the writing call as a statement of its own first", frame.call.at)
+                break
+            }
+        }
+    }
+
+    def override preVisitExprCallArgument(_expr : ExprCall?; _arg : ExpressionPtr; _last : bool) : void {
+        if (!empty(lint030_frames)) {
+            lint030_frames[length(lint030_frames) - 1].slot++
+        }
+    }
+
     def override preVisitExprCall(expr : ExprCall?) : void {
+        lint030_frames |> emplace(Lint030Frame(call = expr, slot = -1, closure_depth = lint021_closure_depth))
         var kind = Lint021CallKind.plain
         if (!noLint && genericDepth == 0) {
             if (lint021_is_narrow_cast(expr)) {
@@ -844,6 +910,19 @@ class LintVisitor : AstVisitor {
     }
 
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        if (!empty(lint030_frames)) {
+            var frame <- lint030_frames[length(lint030_frames) - 1]
+            lint030_frames |> pop()
+            lint030_check(frame)
+            if (!empty(lint030_frames)) {
+                let parent = length(lint030_frames) - 1
+                if (lint030_frames[parent].slot >= 0) {
+                    for (m in frame.mentions) {
+                        lint030_frames[parent].mentions |> push(Lint030Mention(slot = lint030_frames[parent].slot, v = m.v))
+                    }
+                }
+            }
+        }
         if (!empty(lint021_call_kind)) {
             let kind = lint021_call_kind |> back()
             lint021_call_kind |> pop()
@@ -1149,6 +1228,12 @@ class LintVisitor : AstVisitor {
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (lint022_generic_sweep) {
             lint022_refs.names |> insert("{expr.name}")
+        }
+        if (!empty(lint030_frames)) {
+            let top = length(lint030_frames) - 1
+            if (lint030_frames[top].slot >= 0 && lint030_frames[top].closure_depth == lint021_closure_depth) {
+                lint030_frames[top].mentions |> push(Lint030Mention(slot = lint030_frames[top].slot, v = expr.variable))
+            }
         }
         if (noLint || genericDepth > 0) return
         if (key_exists(lint023_store_nodes, intptr(expr))) {

@@ -1,4 +1,5 @@
 options gen2
+options _lint = "LINT030"   // a child run is never an argument beside the out it writes
 options indenting = 4
 
 require dastest/testing_boost public

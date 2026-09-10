@@ -108,9 +108,9 @@ def public load_lint_config_from_path(path : string; var disabled_codes : table<
     }
 }
 
-//! Seeds ``disabled_codes`` with the canonical default-off rule set (STYLE005 and LINT029). Call before ``load_lint_config`` so that a ``STYLE005 = true`` directive in ``.lint_config`` can re-enable it.
+//! Seeds ``disabled_codes`` with the canonical default-off rule set (STYLE005, LINT029 and LINT030). Call before ``load_lint_config`` so that a ``STYLE005 = true`` directive in ``.lint_config`` can re-enable it.
 def public seed_default_disabled(var disabled_codes : table<string>) : void {
-    for (code in ["STYLE005", "LINT029"]) {
+    for (code in ["STYLE005", "LINT029", "LINT030"]) {
         if (!key_exists(disabled_codes, code)) {
             disabled_codes |> insert(code)
         }

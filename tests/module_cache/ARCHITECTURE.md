@@ -102,11 +102,11 @@ this document states what the folder is and why its tests take the shape they do
   `_common` already): the binary to spawn (`das_exe`),
   the scan-trace command prefix (`trace_prefix`), the stderr-joining child run (`run_child`),
   the failure report that echoes the child's output (`report_child`), and the two joined
-  (`run_child_reported`), which every test calls as a statement of its own: a `run_child(cmd,
-  out)` nested beside `out` in one argument list is an evaluation-order dependency the AOT tier
-  hands to the C++ compiler, and MSVC and clang-cl read `out` before the run, so the report
-  saw an empty output on every Windows AOT host. A test whose child needs a different spawn
-  shape - an argv spawn, an environment variable - keeps that one helper local.
+  (`run_child_reported`), which every test calls as a statement of its own: the order a call's
+  arguments are evaluated in is not defined (LINT030), and a `run_child(cmd, out)` nested
+  beside `out` in one argument list read an empty output on every Windows AOT host. A test
+  whose child needs a different spawn shape - an argv spawn, an environment variable - keeps
+  that one helper local.
 
 ## 2. Why every case is a spawned process
 
