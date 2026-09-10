@@ -92,10 +92,10 @@ def test_catalog_table(t : T?) {
                 packs++
             }
         }
-        t |> equal(length(set), 12, "the set is nine models (three phoneme families, six Pocket languages) and three packs")
+        t |> equal(length(set), 14, "the set is eleven models (three phoneme families, six Pocket languages, the two small English Pocket forms) and three packs")
         t |> equal(packs, 3, "three front-end packs: the full phoneme pack, its American-only twin, the tagger")
         for (want in ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin",
-                      "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf", "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf"]) {
+                      "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf", "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf", "pocket-tts-en-kq.gguf", "pocket-tts-en-stuart-kq.gguf"]) {
             t |> success(key_exists(names, want), "the set carries {want}")
         }
     }
