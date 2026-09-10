@@ -75,6 +75,8 @@ storyteller's `models.json`.
   download turns out to matter
 - retraining longer: loss was still falling at 9500 iterations (1.1443 vs 1.1447 at 9000 - the
   cosine floor, not the model's)
+- the formatter's single-file crash on a package file (the last "Found on the way" bullet): a tool
+  fix in its own PR, the tree-wide `--verify` lane CI runs is unaffected
 
 ## Found on the way
 
