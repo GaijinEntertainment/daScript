@@ -504,27 +504,31 @@ def draw_text(text : string; x, y : float; size : float; tint : float3) {
     delete quads
 }
 
-//! a text's width in design pixels at `size`, from the font's own advance
-def text_width(text : string; size : float) : float {
-    return 0.0 if (g_font == null || empty(text))
+//! a text's box in design pixels at `size`, relative to the pen it is drawn at: left, top, right, bottom
+//! (the glyphs sit above the baseline, so the top is negative)
+def text_box(text : string; size : float) : float4 {
+    return float4(0.0) if (g_font == null || empty(text))
     var quads <- (*g_font) |> create_quads(text)
-    let w = quads_dim(quads).vmax.x
+    let d = quads_dim(quads)
     delete quads
-    return w * size
+    return float4(d.vmin.x, d.vmin.y, d.vmax.x, d.vmax.y) * size
 }
 
-//! a button: its label in a bracket, the rectangle it answers to in design pixels
+//! a button: its label in a bracket, drawn at a pen position; it answers to the label's own box
 struct Button {
     text : string
     x : float
     y : float
-    w : float
-    h : float
+    box : float4   //! the label's box relative to the pen: left, top, right, bottom
 }
 
 def button(caption : string; x, y : float) : Button {
-    let w = text_width("[ {caption} ]", TEXT_SIZE)
-    return Button(text = caption, x = x, y = y, w = w, h = 40.0)
+    return Button(text = caption, x = x, y = y, box = text_box("[ {caption} ]", TEXT_SIZE))
+}
+
+//! the pen position after the button, with a gap
+def after(b : Button) : float {
+    return b.x + b.box.z + 30.0
 }
 
 def draw_button(b : Button; lit : bool) {
@@ -560,14 +564,15 @@ def draw_screen() {
     let row = design_height() - 120.0
     let rec = button(g_phase == Phase.recording ? "stop" : "record", 60.0, row)
     draw_button(rec, g_phase == Phase.recording)
-    var x = rec.x + rec.w + 30.0
+    var x = after(rec)
     if (g_phase == Phase.recording) {
-        draw_text(meter_text(), x, row, TEXT_SIZE, accent)
-        draw_text("{float(length(g_take)) / float(MIC_RATE)} s", x + text_width(meter_text(), TEXT_SIZE) + 20.0, row, TEXT_SIZE, dim)
+        let meter = meter_text()
+        draw_text(meter, x, row, TEXT_SIZE, accent)
+        draw_text("{float(length(g_take)) / float(MIC_RATE)} s", x + text_box(meter, TEXT_SIZE).z + 20.0, row, TEXT_SIZE, dim)
     } else {
         let sayb = button("say", x, row)
         draw_button(sayb, true)
-        x = sayb.x + sayb.w + 30.0
+        x = after(sayb)
         draw_text(g_voice_ready ? "voice: yours, from {g_voice_seconds} s" : "voice: the model's own until you record", x, row, SMALL_SIZE, dim)
     }
     draw_text(g_status, 60.0, design_height() - 70.0, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
@@ -593,15 +598,17 @@ def poll_mouse() {
         return
     }
     if (g_phase != Phase.recording) {
-        let sayb = button("say", rec.x + rec.w + 30.0, row)
+        let sayb = button("say", after(rec), row)
         if (hit(sayb, px, py)) {
             say_text()
         }
     }
 }
 
+//! inside the label's box, with a margin around it
 def hit(b : Button; px, py : float) : bool {
-    return px >= b.x && px <= b.x + b.w && py >= b.y - 8.0 && py <= b.y + b.h
+    let pad = 8.0
+    return px >= b.x + b.box.x - pad && px <= b.x + b.box.z + pad && py >= b.y + b.box.y - pad && py <= b.y + b.box.w + pad
 }
 
 // ===== the program =====

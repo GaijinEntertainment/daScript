@@ -70,8 +70,13 @@ never through a GLFW callback. In the browser build a callback lambda fires from
 event outside any frame of the program, where the example's state is not live, and the program
 traps. A printable GLFW key code is its upper-case ASCII, so the key range doubles as the
 character range for a typed line, and repeats come from a hold timer. The mouse is read the same
-way: parrot's buttons are text, and a click is `glfwGetMouseButton` edge-detected against their
-rectangles in design pixels.
+way: parrot's buttons are text, and a click is `glfwGetMouseButton` edge-detected against the
+label's own box (the glyph quads rise above the pen position) in design pixels. In the browser
+the surface is the document viewport, and the page's stage sits below the nav, so the picture is
+letterboxed; Emscripten maps a click through the canvas element's box with one ratio per axis,
+which is exact only when that box is the picture - parrot's shell sizes the canvas element to
+the letterboxed box (`max-width`/`max-height` on the replaced element) instead of stretching it
+over the stage with `object-fit`.
 
 ### 3.4 The model set is minted for the build that ships it
 
