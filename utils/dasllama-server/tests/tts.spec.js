@@ -334,7 +334,6 @@ function withPacksAbsent(doc) {
 
 test('a model that reads no packs enables speech with the packs absent; one that reads them waits for them', async ({ page }) => {
     const idle = fx('catalog_idle');
-    const standsAlone = speechModels(idle).find(m => !m.present);
     const readsPacks = speechModels(idle).find(m => m.present);
     expect(readsPacks.needs_packs).toBe(true);   // the capture stocks one phoneme family
     // the phoneme family alone, packs gone: the ladder re-offers the packs, no enable
@@ -342,14 +341,17 @@ test('a model that reads no packs enables speech with the packs absent; one that
     await openControl(page, { catalog: waiting });
     await expect(page.locator('#tts-offer button', { hasText: 'enable speech' })).toHaveCount(0);
     await expect(page.locator('#tts-offer button', { hasText: 'download the front-end packs' })).toHaveCount(1);
-    // a Pocket file beside it: it is the one enable wires, the packs still absent
-    const doc = withModelPresent(waiting, standsAlone.file);
-    doc.tts.find(i => i.file === standsAlone.file).needs_packs = false;
+    // a second model on disk whose row says it reads no packs - the page reads only that key,
+    // so any absent row of the capture serves, its needs_packs overridden: it is the one enable
+    // wires, the packs still absent
+    const alone = speechModels(idle).find(m => !m.present);
+    const doc = withModelPresent(waiting, alone.file);
+    doc.tts.find(i => i.file === alone.file).needs_packs = false;
     const { posts } = await openControl(page, { catalog: doc });
     await expect(page.locator('#tts-pick')).toHaveCount(0);   // the phoneme family is not a choice without its packs
     await page.locator('#tts-offer button', { hasText: 'enable speech' }).click();
-    await expect(page.locator('#cat-note')).toContainText('speech wired (' + modelName(standsAlone.file) + ')');
-    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(doc.models_dir + '\\' + standsAlone.file);
+    await expect(page.locator('#cat-note')).toContainText('speech wired (' + modelName(alone.file) + ')');
+    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(doc.models_dir + '\\' + alone.file);
 });
 
 test('several downloaded models become a picker that defaults to the smallest', async ({ page }) => {
