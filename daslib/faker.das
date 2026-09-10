@@ -286,19 +286,25 @@ variant BitRepresentation64 { //! 64-bit representation of a float
 
 def public random_int64(var faker : Faker) : int64 {
     //! Generates random int64
-    let b =  BitRepresentation64(ui2 = fixed_array<uint>(faker |> random_uint, faker |> random_uint))
+    let lo = faker |> random_uint
+    let hi = faker |> random_uint
+    let b = BitRepresentation64(ui2 = fixed_array<uint>(lo, hi))
     return unsafe(b.i64)
 }
 
 def public random_uint64(var faker : Faker) : uint64 {
     //! Generates random uint64
-    let b =  BitRepresentation64(ui2 = fixed_array<uint>(faker |> random_uint, faker |> random_uint))
+    let lo = faker |> random_uint
+    let hi = faker |> random_uint
+    let b = BitRepresentation64(ui2 = fixed_array<uint>(lo, hi))
     return unsafe(b.u64)
 }
 
 def public random_double(var faker : Faker) : double {
     //! Generates random double.
-    let b =  BitRepresentation64(ui2 = fixed_array<uint>(faker |> random_uint, faker |> random_uint))
+    let lo = faker |> random_uint
+    let hi = faker |> random_uint
+    let b = BitRepresentation64(ui2 = fixed_array<uint>(lo, hi))
     return unsafe(b.d)
 }
 
