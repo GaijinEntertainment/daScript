@@ -24,7 +24,9 @@ example. Two things came out of building a second one:
 - **Source of record: Hugging Face.** `borisbat/dasllama-stories` (stories15M-Q8_0.gguf converted
   from llama2.c; tinystories-instruct-27M in Q8_0 GGUF, f32 GGUF, llama2.c `.bin`, tokenizer)
   beside the existing `borisbat/dasllama-tts` (kitten-nano.gguf, the two phoneme packs). Per-file
-  `.LICENSE` sidecars and a sha256 table in each card. The rolling `dasllama-web` release retires.
+  `.LICENSE` sidecars and a sha256 table in each card. The rolling `dasllama-web` release (re-minted
+  at 35 on 2026-09-09 as the stopgap that brought the live storyteller back) retires after the first
+  deploy from master has minted both sets green: deleted then, not before.
 - **Each example declares its set**: `examples/dasLLAMA/<example>/models.json` - for every file
   the HF repo, the file name, the sha256, and whether it is a model to mint or a pack to copy.
 - **The deploy mints, every time, against the build it just made.** `examples/dasLLAMA/wasm/dlim_config/`
