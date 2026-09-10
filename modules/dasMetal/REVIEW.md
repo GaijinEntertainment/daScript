@@ -36,10 +36,6 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
 - **A change visible only in the emitted text ships a `tests/msl/` (repo root) fixture.** The
   fixture asserts the emitted text that the change alters.
 
-- **A diff that changes `metal/msl_emit.das` runs the `tests/msl/` (repo root) suite and states
-  the result in the same change.** Whether an emitter edit moved the emitted text is what the
-  suite decides, never the das source.
-
 - **Never commit a `.msl` file and never hand-write MSL outside `metal/msl_emit.das`'s emitted
   text - emit it from a `[metal_kernel]` body instead.**
 

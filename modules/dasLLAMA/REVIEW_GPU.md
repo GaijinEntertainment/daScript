@@ -235,7 +235,7 @@ anything a served GPU decode or prefill call executes or that selects what it ex
 driver, a kernel class it dispatches, that class's builder, a servability gate, a race that
 picks which kernel serves, a forwarder default, a weight-region or residency path, the tier
 forwarders and the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`) the call
-routes through; a local binding of the same call, a rename, a comment or a bake path cannot.
+routes through; a rename, a comment or a bake path cannot.
 
 **Parity evidence counts only when it comes from `harness/parity.das`,
 `benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model list), or an
