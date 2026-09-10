@@ -1,7 +1,7 @@
 # dasllama-server Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `README.md`. Planned work: `CONTROL_PAGE_PLAN.md`.
+doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo root).
 
 **A diff to a file that requires - directly or through another file in this folder - a
 `dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
