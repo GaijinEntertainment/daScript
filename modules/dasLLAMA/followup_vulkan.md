@@ -984,3 +984,39 @@ module) is independent and can land any time - it is pure structure.
     portable-backend load of a K-quant model arms the driver and its resident-vs-CPU parity
     file holds, which needs a box whose backend does not repack (none here: this box's backend
     is x64-gen).
+
+45. **The resident MoE chain does not scale with the card.** Measured 2026-09-10 on a rented Linux
+    RTX 5080 (driver 580.173, 8 vCPU, `-t 8`) against the RTX 5060 Ti (Windows, driver 616.56),
+    both on the Qwen3.6-35B-A3B UD-IQ2_XXS (sha256 2e8f5f70..., the model-set row's), the bench's
+    `-jit --for-debug-purposes -r 3 -p 512 -n 128`: llama.cpp b10660 5352.6 / 147.7 there against
+    2853.1 / 71.6 here (1.88x / 2.06x for a 2.14x bandwidth step, 36 -> 84 SMs), ours 3361.1 / 139.8
+    against 2995.8 / 107.7 (1.12x / 1.30x) - 0.63x / 0.95x of llama.cpp on the 5080 where the 5060 Ti
+    reads 1.05x / 1.50x (b10886 5461.2 / 148.1 on the same box: the version moves 2%). The per-role
+    profile (`DASLLAMA_GPU_PROF=1`, both boxes) splits it three ways.
+    (a) The four-wide decode twin is off on Linux: `cooperative_matrix2_decode_vector_supported`
+    reads `VK_NV_cooperative_matrix_decode_vector`, which the 580 driver does not list (it lists
+    `VK_NV_cooperative_matrix`, `_matrix2` and `_vector`), so every cm2 tile runs the scalar arm;
+    on the 5060 Ti that arm costs 32% of the window (160181 -> 236883 us with `DASLLAMA_VK_DECVEC=0`,
+    pp512 2996 -> 2049), and the expert-tile probe reads the same 0.71 ms per iq2xxs gate/up plane
+    on the 5080 no-twin as the 5060 Ti twin-on (0.73; twin-off 1.33). Arm-matched, the tiles scale
+    1.80-1.90x, qkv 1.85, conv 1.94, gather 1.82 (SMs 2.33x). A driver that exposes the extension
+    is the whole lever there; the tier now warns at device init.
+    (b) Three window roles stay flat on the wider card whatever the arm: the deltanet scan (13037 ->
+    12654 us, a serial recurrence over chunks - 8.7% of the 5080's window), the shared expert's
+    k5/k6 tiles (sh_gate 3518 -> 3379, sh_down 1582 -> 1452 - one dispatch per layer whose grid is a
+    single wave; the tile pick at 84 SMs is the first suspect) and the router (2276 -> 2371: 32 fixed
+    workgroups). And the routed tiles' real schedule (87 buckets, the largest 446 rows, 105 ladder
+    pieces per plane - one workgroup each over the expert's whole width) is one wave on either
+    card: splitting a piece across column groups and an LPT order over the pieces are the levers
+    the uniform probe (1536 workgroups) cannot show.
+    (c) Decode is the per-dispatch floor: the expert GEMV reads 3.3 MB per layer in 8.5 us on the
+    5080 (3.4 us of transfer at 960 GB/s, ~5 fixed) and 11.3 us on the 5060 Ti (7.4 + 3.9); some 600
+    dispatches per token carry it - about 3 ms of a 7.8 ms token - and every small kernel reads
+    SLOWER on the 5080 (sh_gate/sh_up/sh_down 0.87/0.84/0.92, ar2 0.87, topk 0.93, the deltanet step
+    0.76, attention 0.88), while the GEMV probe scales exactly with bandwidth (iq2xxs 410 -> 881 GB/s
+    at the expert shape). The lever is fewer dispatches per layer: gate and up in one, router and
+    top-k in one, the shared expert's three GEMVs as extra slots of the expert dispatch, the
+    activation folded into the down GEMV; the host is 176 us of the token on the pod (2%).
+    The pod's card ran 2910-2925 MHz at 250-263 W of its 307 W limit under the probe, so no clock
+    cap stands behind (b) or (c). Logs: the session's scratchpad `pod_logs/`. Research before any
+    kernel work; each of (b) and (c) is a slice of its own.
