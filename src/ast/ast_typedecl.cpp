@@ -3476,6 +3476,8 @@ namespace das
     uint64_t TypeDecl::getCountOf64() const {
         uint64_t size = 1;
         for ( const TypeDecl * t = this; t && t->baseType==Type::tFixedArray; t = t->firstType ) {
+            // dimAuto (-1) and dimConst (-2) are valid unresolved dims, not counts; uint64_t wraps them
+            if ( t->fixedDim<=0 ) return 0;
             size *= uint64_t(t->fixedDim);
         }
         return size;

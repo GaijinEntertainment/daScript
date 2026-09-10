@@ -1109,6 +1109,10 @@ namespace das {
                 program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
                     fn->at, CompilationError::cant_function);
             }
+            if ( !fn->result->isAutoOrAlias() && fn->result->getSizeOf64()>0x7fffffff ) {
+                program->error("function result of '" + fn->name + "' is too big", "", "",
+                    fn->at, CompilationError::exceeds_type);
+            }
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             // Derived class ctor: every CFG path must call super(...) exactly once,

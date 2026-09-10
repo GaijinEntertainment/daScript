@@ -24,6 +24,13 @@ C++ half never opens the daslib checklist on its own.
 - **A diff that changes `KeyHash` (`runtime_table.h`) or `WrapsBuiltinValue` (`cast.h`) states
   in its own PR description which key types change hash value.**
 
+- **A `cvt_*` inline in `aot.h` takes and returns `vec4f`, and none of them is overloaded.**
+  `vec4f` is the SIMD register; the `vec2`/`vec3`/`vec4` types are structs of scalars, so a
+  concrete return spills the lanes through `v_extract_*` and the next conversion reloads them.
+  Overloading is what forced that once: every flavor converts from `vec4f`, so an overload set
+  fed a `vec4f` result is ambiguous - the emitter writes `cvt_pass(cvt_uint3(..))` for
+  `x |> uint3 |> int3`. One name per conversion, `vec4f` throughout, keeps both.
+
 - **A diff that makes the hot path cost more per evaluated expression in the build the repo
   ships is a defect.** The hot path is a `SimNode::eval*` method, any helper such a method
   calls on every evaluation, the dispatchers `Context::callOrFastcall` /

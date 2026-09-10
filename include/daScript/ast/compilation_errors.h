@@ -353,7 +353,7 @@ namespace das
     ,   exceeds_new_argument                                        =   30509    // 1 site(s)
     ,   exceeds_structure                                           =   30510    // 1 site(s)
     ,   exceeds_tuple_index                                         =   30511    // 1 site(s)
-    ,   exceeds_type                                                =   30512    // 2 site(s)
+    ,   exceeds_type                                                =   30512    // 3 site(s)
     ,   exceeds_type_alias                                          =   30513    // 1 site(s)
     ,   exceeds_typeinfo_sizeof                                     =   30514    // 1 site(s)
     ,   exceeds_constant_range                                      =   30515    // 1 site(s)
