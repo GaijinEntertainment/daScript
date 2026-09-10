@@ -86,9 +86,14 @@ between them.
 ## The log
 
 `logs/<name>-watchdog.log` (`--log`), one JSON object per line, `{"ts", "event", ...}`, rotated
-at 20 MB with five backups, and echoed to stdout. `health_heartbeat` and `watchdog_stopped`
+at 20 MB with five backups, and echoed to stdout, except under `--stdio`, where stdout is the
+client's. `health_heartbeat` and `watchdog_stopped`
 carry `heap_bytes` and `string_heap_bytes`, the supervisor's own live heaps: the host collects
-them between ticks, and a number that only grows across heartbeats is a leak. The events: `watchdog_started`,
+them between ticks, and a number that only grows across heartbeats is a leak. `child_started`
+carries `pid` from the supervisor and `command` from the front, whose pipe reports no pid;
+`child_exited` carries `code`, with `uptime_seconds` from the supervisor and `answered` from
+the front, whether the child answered a request before it died; `child_noise` and
+`client_noise` carry the `line` that was not a JSON message. The events: `watchdog_started`,
 `child_started`, `spawn_failed`, `child` (one per line the child wrote), `stage`, `tune`,
 `health`, `health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
 `tune_bootstrap_complete`, `tune_incomplete`, `config_restart_relaunch`, `crash`,
@@ -96,8 +101,9 @@ them between ticks, and a number that only grows across heartbeats is a leak. Th
 `terminate_requested`, `kill_requested`, `child_unkillable`, `watchdog_already_running`,
 `wer_ready` / `wer_not_ready` / `wer_installed` / `wer_install_failed`, `tray_started`,
 `tray_unavailable`, `tray_icon_unavailable`, `tray_open_requested`, `tray_open_failed`,
-`tray_shutdown_requested`, `watchdog_stopped`.
-In-tree readers: `smoke_test.cmake` and `tests/watchdog/test_watchdog.das`.
+`tray_shutdown_requested`, `child_noise`, `client_noise`, `watchdog_stopped`.
+In-tree readers: `smoke_test.cmake`, `tests/watchdog/test_watchdog.das` and
+`tests/watchdog/test_stdio_front.das`.
 
 ## Crash capture
 
@@ -153,10 +159,30 @@ a supervisor. In the bundle the watchdog discovers the baked exe beside it (the 
 the directory that is not the watchdog), so the same `watchdog.json` serves a `daspkg release`
 bundle and a `daslang -jit main.das` deployment.
 
+## Serving a stdio client
+
+`--stdio` turns the watchdog into the client's pipe: a newline-delimited JSON-RPC client (Claude
+Code, for the daslang MCP server) spawns the watchdog, and the watchdog spawns the program as the
+server. It answers `initialize` and `ping` itself, so the client connects before any child
+exists; the first `tools/*` request spawns the child, in `--cwd`, with the client's `initialize`
+replayed; requests are forwarded one at a time; a child that died before a request was delivered is
+respawned and the request re-sent once, while one that dies while answering gets an error reply
+and no re-send, since a tool call could otherwise run twice. Anything on the child's stdout that
+is not a JSON line is logged as `child_noise` and carried in that error text. Stdout is the
+protocol, so the log goes to its file only; no pid file, no health poll, no tray.
+
+```
+bin/watchdog --stdio --name daslang-mcp --cwd <tree> --program <tree>/bin/daslang -- -ignore-manifest utils/mcp/main.das
+```
+
+`utils/mcp/setup.das` writes that line into a tree's `.mcp.json`; `tests/watchdog/test_stdio_front.das`
+drives it through both hosts.
+
 ## Layout
 
 - `watchdog.das` - the library: configuration, discovery, the log, stages, crash capture, the
   tray, and `Supervisor`, a state machine the host ticks (`tick()` / `request_stop()` / `run()`).
+- `stdio_front.das` - `StdioFront`, the `--stdio` mode: one child lifetime per tick.
 - `main.das` - the entry for both hosts: `start` / `tick` / `request_stop` / `result` for the
   executable, `main` for the interpreter; it collects the heaps between ticks.
 - `main.cpp` - the executable's `main`: argv, the pid, the signals, the loop.

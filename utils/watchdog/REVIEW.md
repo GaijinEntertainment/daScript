@@ -5,8 +5,17 @@ doc: `README.md`.
 
 **A diff that adds an `event` value to the JSON-lines log adds it to the `The events:` list in
 `README.md`, and a diff that adds a field key to such a line describes it in the same `## The
-log` section, in the same change** - that section is the list the next rule sweeps when a name
-is renamed.
+log` section, in the same change** - that section is the list a rename sweep starts from.
+`REVIEW.das` (beside this file) checks the `event` half: every name the folder's sources emit
+is listed, and every listed name is emitted.
+
+**A diff that adds an `event` value or a field key to the log in `watchdog.das` or
+`stdio_front.das` uses the name the other file already writes for the same thing** - one
+meaning under two spellings matches a log reader on only one of the two, and the miss is
+silent.
+
+**Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a
+check walks, or rewriting a finding text so it no longer names what failed.**
 
 **A diff that renames or removes a name the supervisor writes or reads - an `event` value on
 the JSON-lines log, a field key on such a line, a startup stage name, or a `@tune` kind or key
@@ -24,15 +33,15 @@ tree in the same change, and names any out-of-tree `watchdog.json` in the PR des
 an unknown key refuses the start, so a stale key in a bundled config is a supervisor that never
 comes up.
 
-**A diff that adds a `require` to `watchdog.das` for an optional module - one a build can leave
-out, so `has_module` reports it absent - adds that module to the `watchdog` arm of
+**A diff that adds a `require` to a `.das` in this folder for an optional module - one a build
+can leave out, so `has_module` reports it absent - adds that module to the `watchdog` arm of
 `tests/.das_test` (repo root) in the same change** - without the entry the whole test suite
 fails to compile on a machine where that module is missing.
 
-**A diff that adds a `require` to `watchdog.das` for an optional module adds that module to the
-`if(TARGET ...)` guard and the link line of the `watchdog` target in `utils/CMakeLists.txt`
-(repo root), in the same change** - without the guard a configure that leaves the module out
-fails at the link instead of skipping the target.
+**A diff that adds a `require` to a `.das` in this folder for an optional module adds that
+module to the `if(TARGET ...)` guard and the link line of the `watchdog` target in
+`utils/CMakeLists.txt` (repo root), in the same change** - without the guard a configure that
+leaves the module out fails at the link instead of skipping the target.
 
 **A diff that makes the tray or a notification depend on something the host machine may not
 have - a call into `stddlg`, a spawned program that shows something on the desktop, or a file

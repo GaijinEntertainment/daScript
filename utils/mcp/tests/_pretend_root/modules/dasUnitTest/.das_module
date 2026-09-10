@@ -1,0 +1,12 @@
+options gen2
+require daslib/fio
+
+//! a project's own module folder: shadows the tree's dasUnitTest by basename, registers the tree's
+//! UnitTest C++ module, and adds a require path of its own (unit_probe/hello)
+[export]
+def initialize(project_path : string) {
+    if (das_is_dll_build()) {
+        register_dynamic_module("{get_das_root()}/modules/dasUnitTest/dasModuleUnitTest.shared_module", "Module_UnitTest")
+    }
+    register_native_path("unit_probe", "hello", "{project_path}/daslib/hello.das")
+}

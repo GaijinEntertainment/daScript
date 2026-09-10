@@ -25,7 +25,7 @@ subtool pattern, `utils/mcp/tools/common.das`):
   edited file sees stale macros. Fresh process = fresh state, by construction.
 - **Binary/DLL locks**: no resident daslang means `bin/daslang` and the
   `.shared_module` DLLs are never held between requests - builds never block, no
-  kill-before-rebuild guard, no respawn/replay machinery (cf. `utils/mcp/mcp_supervisor.py`,
+  kill-before-rebuild guard, no respawn/replay machinery (cf. the watchdog's `--stdio` front,
   which exists precisely because the MCP das child *is* resident).
 - **Crash isolation**: a compiler crash on a broken buffer costs one request, not the session.
 - **Cost**: every request pays a compile (~0.2-1 s) - the same profile as the MCP tools,
@@ -60,7 +60,7 @@ unlike `.mcp.json`). The vehicle is one checked-in manifest:
 ```
 
 Loads on workspace trust; `--plugin-dir` for development. The supervisor locates the
-daslang binary like `mcp_supervisor.py::_default_launcher` (bin/Release -> bin -> build).
+daslang binary like `utils/mcp/setup.das::locate_binary` (bin/Release -> bin -> build).
 
 Claude Code consumes: publish-diagnostics (auto-injected after edits), definition,
 references, hover, documentSymbol, workspaceSymbol, implementation, call hierarchy.
@@ -298,9 +298,12 @@ PR for the whole branch AFTER wave 4 (single preflight + CI round).
 
 ## Follow-ups
 
-- The watchdog does not supervise `lsp_supervisor.py` yet; wire it in. With that, an exe form
-  of the subtools becomes possible again - the same item as the MCP server's
-  (`utils/mcp/ROADMAP.md`, Follow-ups).
+- **Port `lsp_supervisor.py` to das and ship it the watchdog's way** - a `-ctx` static exe that
+  compiles nothing at run time, so it holds no lock a build replaces and needs no Python on the
+  box; the MCP side already runs so, as the watchdog's `--stdio` front. The endpoint is framing,
+  the initialize handshake, the document shadow, debounce and dispatch to the stateless subtools -
+  `lsp_supervisor.py` is the spec, `tests/lsp/test_lsp_protocol.das` drives it over a pipe end to
+  end and is the acceptance test. The plugin manifest then names the exe instead of `python3`.
 
 ## Non-goals
 

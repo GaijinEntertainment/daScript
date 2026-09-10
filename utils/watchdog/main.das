@@ -6,6 +6,7 @@ options stack = 65536
 require daslib/fio
 require daslib/clargs
 require watchdog
+require stdio_front
 
 //! Two hosts share this entry. The standalone exe (`bin/watchdog`, a `-ctx` context on the full
 //! runtime) calls `start` / `tick` / `request_stop` / `result` from its C++ main, which owns argv,
@@ -18,7 +19,17 @@ let private COLLECT_SECONDS = 60
 let private COLLECT_STRING_BYTES = 1024ul * 1024ul
 
 var private g_supervisor : Supervisor?
+var private g_front : StdioFront?
 var private g_exit_code = 0
+
+//! `--stdio` before the `--` picks the front over the supervisor
+def private wants_stdio(args : array<string>) : bool {
+    for (arg in args) {
+        if (arg == "--") break
+        if (arg == "--stdio") return true
+    }
+    return false
+}
 var private g_last_collect = 0l
 var private g_strings_after_collect = 0ul
 
@@ -51,13 +62,22 @@ def start(self_pid : int) : bool {
     let argv <- get_command_line_arguments()
     let args <- [for (i in range(1, length(argv))); argv[i]]
     let program_dir = !empty(argv) ? dir_name(get_full_file_name(argv[0])) : getcwd()
+    if (wants_stdio(args)) {
+        g_front = stdio_front_start(args, program_dir, g_exit_code)
+        return g_front != null
+    }
     g_supervisor = watchdog_start(args, program_dir, self_pid, g_exit_code)
     return g_supervisor != null
 }
 
 [export]
 def tick() : bool {
-    let done = g_supervisor == null ? true : g_supervisor->tick()
+    var done = true
+    if (g_front != null) {
+        done = g_front->tick()
+    } elif (g_supervisor != null) {
+        done = g_supervisor->tick()
+    }
     collect_if_due()
     return done
 }
@@ -71,6 +91,12 @@ def request_stop() {
 
 [export]
 def result() : int {
+    if (g_front != null) {
+        g_exit_code = g_front.result
+        unsafe {
+            delete g_front
+        }
+    }
     if (g_supervisor != null) {
         g_exit_code = g_supervisor.result
         unsafe {
@@ -85,6 +111,18 @@ def result() : int {
 def main() : int {
     let args <- get_cli_arguments()
     var code = 0
+    if (wants_stdio(args)) {
+        var front = stdio_front_start(args, program_dir_from(args), code)
+        if (front == null) return code
+        while (!front->tick()) {
+            collect_if_due()
+        }
+        code = front.result
+        unsafe {
+            delete front
+        }
+        return code
+    }
     var sup = watchdog_start(args, program_dir_from(args), 0, code)
     if (sup == null) return code
     while (!sup->tick()) {
