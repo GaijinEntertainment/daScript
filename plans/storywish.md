@@ -79,6 +79,10 @@ storyteller's `models.json`.
   vs 1.1447 at 9000 - the cosine floor, not the model's)
 - the formatter's single-file crash on a package file (the last "Found on the way" bullet): a tool
   fix in its own PR, the tree-wide `--verify` lane CI runs is unaffected
+- an `examples/dasLLAMA/REVIEW.das` gate for the two checklist rules decidable from tree state:
+  no `glfwSet*Callback` under a browser example, and every `models.json` entry carrying a
+  repository and a 64-hex sha256; and a repo-wide lint for a `string` in the `@capture` list of a
+  lambda handed to `new_thread`
 
 ## Found on the way
 
