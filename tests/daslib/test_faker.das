@@ -98,3 +98,29 @@ def test_faker_date_names_the_right_week_day(t : T?) {
         t |> success(empty(mismatch), "{mismatch}")
     }
 }
+
+[test]
+def test_faker_composite_draws_in_order(t : T?) {
+    t |> run("a vector or range draw takes its lanes in the order scalar draws would") @(t : T?) {
+        var composite <- Faker()
+        var scalar <- Faker()
+        let i2 = composite |> random_int2
+        let i2x = scalar |> random_int
+        let i2y = scalar |> random_int
+        t |> equal(i2, int2(i2x, i2y))
+        let f4 = composite |> random_float4
+        let f4x = scalar |> random_float
+        let f4y = scalar |> random_float
+        let f4z = scalar |> random_float
+        let f4w = scalar |> random_float
+        t |> equal(f4, float4(f4x, f4y, f4z, f4w))
+        let ur = composite |> random_urange64
+        let lo = scalar |> random_uint64
+        let hi = scalar |> random_uint64
+        t |> equal("{ur}", "{urange64(lo, hi)}")
+        let u64 = composite |> random_uint64
+        let low_half = scalar |> random_uint
+        let high_half = scalar |> random_uint
+        t |> equal(u64, uint64(low_half) | (uint64(high_half) << 32ul))
+    }
+}
