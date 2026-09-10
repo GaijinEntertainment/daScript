@@ -84,7 +84,10 @@ storyteller's `models.json`.
   module archives land in `<tree>/lib/` under the same names as the native ones; a native build
   there is newer than the sources, so ninja leaves the wasm targets alone and `daspkg build --wasm`
   stages native archives, and the link fails on every module symbol. `daspkg build --wasm` now
-  refuses a native archive by its magic and says what to delete.
+  walks each archive's members to its first object and refuses one that is not a wasm module,
+  saying what to delete. The first cut scanned a fixed 64 KB for the magic; the external review
+  round pointed out a symbol table can push the first object past any window, and the real
+  archives do - 9 MB into `liblibDaScript.a` - so that cut would have refused every one of them.
 - **A string captured into the speech thread's lambda is a pointer into the frame thread's heap.**
   The storyteller passed the TTS model path that way and survived on luck: the frame thread reuses
   the block before a slow browser worker reads it when it allocates more per frame (storywish's
