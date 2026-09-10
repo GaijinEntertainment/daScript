@@ -82,9 +82,9 @@ master's.** A KHR tile is the `<Fmt>KhrBatch` class stamped per weight format in
 instantiation (`<Fmt>KhrBatch`, the `kq_batch_<fmt>_khr_cls` dispatch) and its arm in each of
 `khr_cls_ensure`, `khr_cls_set` and `khr_cls_enc` (`dasllama/dasllama_vulkan_prefill.das`), in
 the same change; weakening the `REVIEW.das` check that requires that set for every `kq_sb`
-format's `<Fmt>Cm2T` template is a defect.** `pf_f16_feed` admits every `kq_sb` format, so a format with no KHR
-class panics in `khr_cls_ensure`, `khr_cls_set` or `khr_cls_enc` on a card whose
-cooperative-matrix mode is KHR.
+format's `<Fmt>Cm2T` template is a defect.** `pf_f16_feed` admits every `kq_sb` format, so a
+format with no KHR class panics in `khr_cls_ensure`, `khr_cls_set` or `khr_cls_enc` on a card
+whose cooperative-matrix mode is KHR.
 
 **A `kq_sb` format that ships a KHR instantiation runs its KHR arm in that format's kernel cell,
 in the same change.**
@@ -128,7 +128,8 @@ whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
 
-**Weakening the `REVIEW.das` check that compares `AR_MAX_DIM` (`dasllama/dasllama_vulkan_common.das`),
-the `row` `@workgroup` slab of `ArBase` (`dasllama/dasllama_vulkan_classes.das`) and the `c.dim`
-cap of `attn_dec_shape_ok` (`dasllama/dasllama_blocks.das`) is a defect.** The add+rms kernels
-stage a whole row in that slab, so a cap past the slab writes past its end.
+**Weakening the `REVIEW.das` check that compares `AR_MAX_DIM`
+(`dasllama/dasllama_vulkan_common.das`), the `row` `@workgroup` slab of `ArBase`
+(`dasllama/dasllama_vulkan_classes.das`) and the `c.dim` cap of `attn_dec_shape_ok`
+(`dasllama/dasllama_blocks.das`) is a defect.** The add+rms kernels stage a whole row in that
+slab, so a cap past the slab writes past its end.

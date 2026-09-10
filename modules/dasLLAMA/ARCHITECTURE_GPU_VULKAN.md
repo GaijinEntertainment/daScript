@@ -17,6 +17,21 @@ decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`
 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md`
 sec.1.5.
 
+The module gate's four Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
+reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses no names: its
+`khr_stage16` is declared abstract. `check_ar_max_dim_triple` reads `AR_MAX_DIM` in
+`dasllama_vulkan_common.das`, the `row` slab of `ArBase` in `dasllama_vulkan_classes.das` and the
+`c.dim` cap of `attn_dec_shape_ok` in `dasllama_blocks.das`, and licenses no names: the three
+numbers agree. `check_cm2_khr_set` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
+`dasllama_vulkan_classes.das` and requires `<Fmt>KhrBatch`, its `kq_batch_<fmt>_khr_cls` stamp and
+an arm in each of `khr_cls_ensure`, `khr_cls_set` and `khr_cls_enc` in
+`dasllama_vulkan_prefill.das`; its licensed set is `Q8Cm2T` alone - q8 is no `kq_sb` format, its
+cm2 tiles carry no KHR arm, and the KHR mode serves q8 through its own tile.
+`check_no_hand_pipelines` walks `dasllama/`, `harness/` and `tests/` for a
+`vkCreateComputePipelines(` call and licenses no names inside them; the two llama.cpp shader ports
+under `performance/` (`coopmat_mulmm_reference.das`, `coopmat_mulmm_port.das`) sit outside the
+walk as reference measurements of another engine's kernels.
+
 ### 2.2j The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
 **A prompt longer than `PF_WINDOW` rows runs as SEQUENTIAL windows over the same activation
