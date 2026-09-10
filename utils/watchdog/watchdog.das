@@ -95,6 +95,8 @@ struct public WatchdogConfig {
     tray_url : string
     @clarg_doc = "Image the tray icon shows - a .png, or an .ico with PNG frames - relative to --cwd; the plain disc when unset"
     tray_icon : string
+    @clarg_doc = "Serve a stdio JSON-RPC client: this process is the client's pipe and the child the server, respawned on death with the handshake replayed"
+    stdio : bool
     @clarg_skip
     server_args : array<string>
 }

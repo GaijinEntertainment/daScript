@@ -67,16 +67,19 @@ The server has two entry points over the same dispatch core (the provider-neutra
 - **`main.das`** - the full tool set (everything above).
 - **`cpp_main.das`** - only the cpp/agnostic subset: `grep_usage`, `outline`, the seven `cpp_*` tools, and `shutdown`. None of the daslang compiler-backed tools (compile / lint / AOT / introspection / live-reload) are registered, so a C++-only project gets a focused tool list without the daslang toolchain.
 
-Register one or both. On **Windows** the same launcher serves both - the server script is the launcher's first argument:
+Register one or both. `utils/mcp/setup.das` writes the `daslang` entry as the watchdog's stdio front over the tree's own binary - the front answers `initialize` itself, spawns the server on the first tool call, and respawns it after a kill or a rebuild, so a session never loses its tools (`utils/watchdog/README.md`, "Serving a stdio client"):
 
 ```json
 "mcpServers": {
-  "daslang":     { "command": "cmd", "args": ["/c", "utils\\mcp\\daslang-mcp-msvc.cmd"],                 "defer_loading": false },
-  "daslang-cpp": { "command": "cmd", "args": ["/c", "utils\\mcp\\daslang-mcp-msvc.cmd", "cpp_main.das"], "defer_loading": false }
+  "daslang": { "command": "<tree>/bin/watchdog",
+               "args": ["--stdio", "--name", "daslang-mcp", "--cwd", "<tree>",
+                        "--program", "<tree>/bin/daslang", "--", "-ignore-manifest", "utils/mcp/main.das"] }
 }
 ```
 
-On **Linux/macOS** point each entry at the binary directly (no launcher needed):
+On **Windows** the child is the vcvars launcher, so `cpp_compile_check` finds `cl.exe`: `"--program", "C:\\Windows\\System32\\cmd.exe", "--", "/c", "<tree>\\utils\\mcp\\daslang-mcp-msvc.cmd"`; the launcher's first argument selects the server script, so the C++-only server is the same line with `cpp_main.das` appended. A tree without the watchdog built runs the front through the interpreter: `"command"` is the binary and `"args"` start with `"utils/watchdog/main.das", "--"`.
+
+The bare form still works, minus the respawn - point the entry at the binary directly:
 
 ```json
 "mcpServers": {
@@ -85,9 +88,9 @@ On **Linux/macOS** point each entry at the binary directly (no launcher needed):
 }
 ```
 
-An existing `.mcp.json` needs `-ignore-manifest` added by hand (or a rerun of `utils/mcp/setup.das`): without it the server enumerates only the modules a compile loaded, so `list_modules` and the all-modules symbol scans come up short.
+Either way the server needs `-ignore-manifest`: without it the server enumerates only the modules a compile loaded, so `list_modules` and the all-modules symbol scans come up short.
 
-Tools are namespaced by server, so the cpp server's tools appear as `mcp__daslang-cpp__cpp_compile_check` etc. `cpp-mcp` - a standalone static AOT build of `cpp_main.das` for C++-only consumers - exists as a gated target (`DAS_BUILD_CPP_MCP`, OFF by default; bundled by `ci/make_cpp_mcp_bundle.sh`, released via `cpp_mcp_release.yml`, setup in `cpp-mcp-setup.md`); the interpreted form above is the same server. It is a separate product: the mcp server itself never ships as a `daslang -exe` binary - development runs it through the python keep-alive supervisor, so that exe form would never be dogfooded.
+Tools are namespaced by server, so the cpp server's tools appear as `mcp__daslang-cpp__cpp_compile_check` etc. `cpp-mcp` - a standalone static AOT build of `cpp_main.das` for C++-only consumers - exists as a gated target (`DAS_BUILD_CPP_MCP`, OFF by default; bundled by `ci/make_cpp_mcp_bundle.sh`, released via `cpp_mcp_release.yml`, setup in `cpp-mcp-setup.md`); the interpreted form above is the same server. It is a separate product: the mcp server itself never ships as a `daslang -exe` binary - development runs it interpreted under the watchdog front, so that exe form would never be dogfooded; `utils/REVIEW.das` refuses the target until the front's `--program` names the exe.
 
 ### Duplicate Detection
 

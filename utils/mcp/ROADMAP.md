@@ -337,10 +337,9 @@ Building the foundational tools well creates a platform for everything else.
 
 ## Follow-ups
 
-- **Back to an exe form.** `tests/_pretend_root` now carries a descriptor that registers a
-  C++ module and a require path, and `test_tools.das` proves `list_modules`, `find_symbol` and
-  `compile_check` see both under `project_root`, eager and plain. With that, the server can build and ship as an exe
-  again: the reason it runs interpreted - development through the python keep-alive supervisor,
-  so an exe would ship unrun - is met by the watchdog, which now covers what the supervisor
-  did. `utils/REVIEW.das` bans the exe today; lifting the ban is part of this item.
-- **The watchdog does not supervise this server or `lsp_supervisor.py` yet.** Wire both in.
+- **Back to an exe form.** `tests/_pretend_root` carries a descriptor that registers a C++
+  module and a require path, and `test_tools.das` proves `list_modules`, `find_symbol` and
+  `compile_check` see both under `project_root`, eager and plain; the watchdog's `--stdio` front
+  is what `.mcp.json` spawns, so an exe form of the server would be the front's child and run
+  every session. What remains is the build: the server as a `-exe` target beside the other
+  shipped utilities, and `setup.das` naming it as `--program` where it is built.

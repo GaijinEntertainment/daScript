@@ -296,12 +296,12 @@ fi
 # tutorial/scaffold invoking a tool the bundle does not carry (found live: the
 # AOT integration scaffolds). skills/ is excluded here: its own gate above owns
 # skills content, with repo-only marker semantics this raw grep cannot honor.
-# mcp_supervisor.py is excluded: it PROBES for the in-repo das-herd behind an
-# exists-check, so the literal is functional and inert in a bundle.
+# setup.das is excluded: it PROBES for the in-repo das-herd behind an exists-check, so
+# the literal is functional and inert in a bundle.
 # CHANGELIST.md is excluded: release history legitimately NAMES the utils/internal
 # split; prose there is documentation, not a reference that can dangle.
 printf '  %-30s ' "no utils/internal references"
-INTERNAL_REFS="$(grep -rIl 'utils/internal' "$BUNDLE" --exclude-dir=skills --exclude=mcp_supervisor.py --exclude=CHANGELIST.md 2>/dev/null || true)"
+INTERNAL_REFS="$(grep -rIl 'utils/internal' "$BUNDLE" --exclude-dir=skills --exclude=setup.das --exclude=CHANGELIST.md 2>/dev/null || true)"
 if [[ -z "$INTERNAL_REFS" ]]; then
     echo "OK"
     PASS=$((PASS + 1))

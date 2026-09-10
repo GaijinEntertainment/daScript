@@ -13,8 +13,9 @@ require dastest/review_gate
 // utils/ children that are not tool directories: the shared library hub
 var private LIBRARY_DIRS <- { "common" }
 
-// tools whose development runs through a python keep-alive supervisor: never built or
-// shipped as an exe, since that form would ship without anyone having run it
+// tools whose development runs interpreted under a supervisor - the watchdog front for mcp,
+// lsp_supervisor.py for lsp: never built or shipped as an exe, since that form would ship
+// without anyone having run it. An entry leaves when the supervisor's --program names the exe.
 var private SUPERVISED_TOOLS <- { "mcp", "lsp" }
 
 // Files licensed to name utils/internal outside internal/:
@@ -22,7 +23,8 @@ var private INTERNAL_REF_EXEMPT <- {
     "utils/REVIEW.md",              // states the rule
     "utils/REVIEW.das",             // carries the needle
     "utils/CMakeLists.txt",         // builds and CI-tests internal tools, never ships
-    "utils/mcp/mcp_supervisor.py"   // detects the internal das-herd entry to refuse it; same exclusion as ci/smoke_test_bundle.sh
+    "utils/mcp/setup.das",          // wires the internal das-herd shim behind an exists-check; same exclusion as ci/smoke_test_bundle.sh
+    "utils/mcp/test_setup.das"      // plants that shim in a scratch root to drive the exists-check; not installed
 }
 
 // Extensions that can carry a reference by require, include, or command line.
@@ -178,7 +180,7 @@ def private check_supervised_tools {
             hit ||= base_name(b) == s
         }
         if (hit) {
-            gate_finding("utils/CMakeLists.txt", "{s} is in DAS_UTILS or DAS_UTILS_SHIPPED_EXES — its development runs through the python keep-alive supervisor, so an exe form ships without anyone having run it; run it interpreted")
+            gate_finding("utils/CMakeLists.txt", "{s} is in DAS_UTILS or DAS_UTILS_SHIPPED_EXES — its development runs interpreted under a supervisor, so an exe form ships without anyone having run it; point the supervisor's --program at the exe first")
         }
     }
 }

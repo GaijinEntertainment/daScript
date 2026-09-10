@@ -1,11 +1,13 @@
 # Project-local Codex MCP setup.
 # Copy this file to .codex/config.toml from the repository root:
 #   cp .codex/config.toml.example .codex/config.toml
-# The MCP commands and working directory are relative to this checkout.
+# The MCP commands and working directory are relative to this checkout. bin/watchdog is built
+# by the default target; the same flags run through `bin/daslang utils/watchdog/main.das --`
+# where it is not.
 
 [mcp_servers.daslang]
-command = "python3"
-args = ["utils/mcp/mcp_supervisor.py", "--repo-root", "."]
+command = "bin/watchdog"
+args = ["--stdio", "--name", "daslang-mcp", "--cwd", ".", "--program", "bin/daslang", "--", "-ignore-manifest", "utils/mcp/main.das"]
 cwd = "."
 enabled = true
 required = true

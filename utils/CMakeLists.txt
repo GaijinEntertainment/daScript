@@ -94,8 +94,8 @@ elseif(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
 endif()
 
 # Entries are paths relative to utils/; the exe/target name is the basename.
-# mcp/lsp never build as exe: their python keep-alive dev setup means an exe
-# form would never be dogfooded.
+# mcp/lsp never build as exe: their development runs interpreted under a supervisor
+# (the watchdog front, lsp_supervisor.py), so an exe form would never be dogfooded.
 set(DAS_UTILS
     aot
     dascov
