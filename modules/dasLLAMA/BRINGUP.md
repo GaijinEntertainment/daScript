@@ -195,6 +195,13 @@ export LLAMA_BENCH_CLEAN=<...>/build-clean-cpu/bin/llama-bench
 export LLAMA_BENCH_STOCK=<...>/build-stock/bin/llama-bench
 ```
 
+A Vulkan reference (`-DGGML_VULKAN=ON`) is built with a glslc that knows
+`GL_NV_cooperative_matrix_decode_vector` - Vulkan SDK 1.4.357 or later - and its device banner
+reads `NV_coopmat2v` on a driver that lists the extension. Built with an older SDK the exe keeps
+its 64-deep expert-tile k step over a scalar decode and under-reads llama.cpp by about a quarter
+on a MoE model (the RTX 5060 Ti's Qwen3.6-35B-A3B UD-IQ2_XXS pp512 2080 against 2829); a banner
+reading `NV_coopmat2` on such a driver is not a board-grade reference (`followup_vulkan.md` item 45).
+
 ASR references + corpus (one tool, all legs):
 
 ```sh

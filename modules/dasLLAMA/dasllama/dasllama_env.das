@@ -95,7 +95,7 @@ struct public GpuTierEnv {
     gpu_moe_stream : Option<int64>
 
     @clarg_default_doc = "probed"
-    @clarg_doc = "Override the detected VRAM budget in MiB that sizes the resident expert stacks."
+    @clarg_doc = "Override the detected VRAM budget in MiB that sizes the resident expert stacks; a pinned cap takes no headroom and reads no OS room."
     gpu_vram_mb : Option<int64>
 
     @clarg_default_doc = "built-in floor"

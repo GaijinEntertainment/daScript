@@ -219,8 +219,11 @@ def test_plan_room(t : T?) {
     t |> run("the plan's room: the tier cap less headroom, capped by the OS's room when it answers") @(t : T?) {
         let gib = 1_073_741_824l
         let silent = (budget = 0l, usage = 0l, adapter_dedicated = 0l, adapter_shared = 0l)
+        t |> equal(16l * gib * 27l / 100l, plan_headroom(16l * gib, true), "no OS answer on WDDM: 27% of a 16 GiB cap, past the 2 GiB floor, is the headroom")
+        t |> equal(2l * gib, plan_headroom(4l * gib, true), "no OS answer on WDDM: the 2 GiB floor wins on a small cap")
+        t |> equal(2l * gib, plan_headroom(16l * gib, false), "no OS answer off WDDM: the 2 GiB floor alone - the driver refuses an over-commit out loud, nothing demotes")
         let no_os = plan_room(16l * gib, false, silent)
-        t |> equal(16l * gib * 27l / 100l, no_os.headroom, "no OS answer: 27% of a 16 GiB cap, past the 2 GiB floor, is the headroom")
+        t |> equal(plan_headroom(16l * gib, get_platform_name() == "windows"), no_os.headroom, "no OS answer: the plan takes this platform's headroom")
         t |> equal(16l * gib - no_os.headroom, no_os.usable, "no OS answer: the cap less the headroom")
         t |> equal(0l, no_os.others, "no OS answer: nobody else is counted")
         let os = (budget = 14l * gib, usage = 1l * gib, adapter_dedicated = 5l * gib, adapter_shared = 0l)

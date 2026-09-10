@@ -52,13 +52,17 @@ tg128 reading (`-jit --for-debug-purposes -r 5 -p 512 -n 128`, `DASLLAMA_IMAGE=0
 `DASLLAMA_GPU=1`, 16 threads) on the zen2 box's RTX 5060 Ti 16 GB, driver 616.56.
 
 **Where no OS answers, the auto arm's headroom is the larger of 2 GiB and 27% of the tier's
-cap.** That share keeps a 16 GB card's plan near 10.7 GB and leaves an 8 GB card's plan where
-the fixed term already put it; it declines every 27B file on a 16 GB card, and the ladder
-behind it (the 9B hybrid at 6.8, 3.4 and 49.8 tok/s across 12.5, 12 and 11 GB plans) was taken
-with every allocation tagged priority 1.0, the arm that made the planes pageable. Linux's Mesa
-drivers fill `heapBudget` from the kernel's system-wide accounting and the NVIDIA driver fails
-an allocation past the card out loud, so the share is a coarse stand-in there, not a measured
-knee.
+cap on Windows, and the 2 GiB floor alone elsewhere (`plan_headroom`).** On Windows that share
+keeps a 16 GB card's plan near 10.7 GB and leaves an 8 GB card's plan where the fixed term
+already put it; it declines every 27B file on a 16 GB card, and the ladder behind it (the 9B
+hybrid at 6.8, 3.4 and 49.8 tok/s across 12.5, 12 and 11 GB plans) was taken with every
+allocation tagged priority 1.0, the arm that made the planes pageable. The OS query is the
+Windows memory manager's, so on Linux no OS ever answers; its Mesa drivers fill `heapBudget`
+from the kernel's system-wide accounting and the NVIDIA driver fails an allocation past the
+card out loud, so there is no demotion knee for the share to guard, and the share alone would
+decline the 35B-A3B hybrid on a 16 GB card whose floor arms it at a reduced context. A decline
+taken with no OS answer names the headroom it stood on and `DASLLAMA_GPU_VRAM_MB` as the pin
+that reads no room.
 
 **Two guards stand whatever the plan decided.** The resident decode panics on an all-zero
 logits row (the first four tokens and every 256th are scanned) naming the over-commit, and at

@@ -147,7 +147,11 @@ hangs there too: when the device carries no `VK_NV_cooperative_matrix_decode_vec
 (`decvec_on` false) the served words go through `strip_decode_vector` (the capability, the
 extension and every load's `DecodeVectorFunc` operand removed, the scalar callback left to
 serve), after the override and before the shader module, so a dumped or overridden blob is
-always the emitted, unstripped one. The seat is also the in-process A/B: `vkd_pipes_rebuild`
+always the emitted, unstripped one. The scalar arm makes a MoE prefill window about half again as
+long (the 35B-A3B's 512-row window 160 ms with the twin against 237 without on the RTX 5060 Ti), and
+the tier warns at device init when the driver reports no such extension; which drivers list it,
+and the reference exe's own two arms measured beside ours, are `followup_vulkan.md` item 45. The
+seat is also the in-process A/B: `vkd_pipes_rebuild`
 marks every class slot stale, so the next ensure rebuilds it under whatever `decvec_on` says,
 which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
 

@@ -515,13 +515,18 @@ def private rdec_scratch_bytes(t : Model) : int64 {
         + 8l * hid + 4l * layer_head_size(c, 0l)) + c.vocab_size * 4l + RDEC_MISC_BYTES + moe
 }
 
+//! The auto arm's headroom where no OS answers: the WDDM share on Windows (the demotion collapse
+//! the constant's comment measures), the fixed floor elsewhere - a Linux driver refuses an
+//! allocation past the card out loud instead of demoting it.
+def plan_headroom(budget_bytes : int64; wddm : bool) : int64 => wddm ? max(RDEC_VRAM_HEADROOM, budget_bytes * RDEC_VRAM_HEADROOM_PCT / 100l) : RDEC_VRAM_HEADROOM
+
 //! The room a plan may fill: the tier's cap less its headroom, capped by the OS's room when the OS
 //! answers - its per-process budget less what the other processes hold on the adapter and the reserve.
 //! A pinned cap takes no headroom and reads no room.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def plan_room(budget_bytes : int64; pinned : bool; os : tuple<budget : int64; usage : int64; adapter_dedicated : int64; adapter_shared : int64>) : tuple<headroom : int64; usable : int64; others : int64> {
     let answered = !pinned && os.budget > 0l
-    let headroom = (pinned || answered) ? 0l : max(RDEC_VRAM_HEADROOM, budget_bytes * RDEC_VRAM_HEADROOM_PCT / 100l)
+    let headroom = (pinned || answered) ? 0l : plan_headroom(budget_bytes, get_platform_name() == "windows")
     var usable = budget_bytes - headroom
     var others = 0l
     if (answered) {
@@ -612,7 +617,12 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         // a shorter context is the remedy that actually works — weights are fixed, KV is not
         let kv_fit = max(usable - p.weight_bytes - p.scratch_bytes, 0l)
         let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow) : 0l
-        let room = p.others_bytes > 0l ? " - other processes hold {p.others_bytes >> 20l} MB of the card" : ""
+        var room = ""
+        if (p.others_bytes > 0l) {
+            room = " - other processes hold {p.others_bytes >> 20l} MB of the card"
+        } elif (p.headroom_bytes > 0l) {
+            room = " - the OS reported no room, so {p.headroom_bytes >> 20l} MB stands as headroom; DASLLAMA_GPU_VRAM_MB=<MiB> pins the cap and reads no room"
+        }
         p.reason = (cap_fit >= 512l
             ? "needs {total >> 20l} MB of {usable >> 20l} MB at ctx {seq_cap} - would fit at ctx {cap_fit}{room}"
             : "needs {total >> 20l} MB of {usable >> 20l} MB (weights alone {p.weight_bytes >> 20l} MB){room}")

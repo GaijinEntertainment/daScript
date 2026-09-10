@@ -969,3 +969,74 @@ module) is independent and can land any time - it is pure structure.
     probe twins (both ranked on before/after `DASLLAMA_GPU_PROF=1` profiles across processes,
     4.3 -> 2.4 ms per 30B window and 490 -> 440 us per twin token; ruled 2026-09-09 to ship as
     stated claims).
+
+44. **The whole-model driver admits K-quant planes only off a repacked load.** Every plane the
+    driver places - the attention quads, the deltanet planes, the expert stacks and the shared
+    expert's triple - passes `kq_servable`, and that predicate (`dasllama_common.das`) is the CPU
+    fused chains' rule: a superblock format serves only when `t.kq_repacked` is set, which
+    `select_matmul_backend_for_load_` sets for a repacking backend alone. On a box that selects
+    the portable backend a K-quant model never reaches the driver - the Qwen3.6-35B-A3B
+    UD-IQ2_XXS declines on "layer 0's shared expert carries a format (2/2/3) the dense rail does
+    not serve" (a reviewer's reading on Linux, 2026-09-10) - while the device gather
+    (`moe_gpu_gather_stack_kq`) takes the layout flag as an argument and reads the disk order
+    too. The driver wants a device-side servability predicate (a format the tier has kernels
+    for, in either layout) in place of the CPU chains' rule at its four sites; done when a
+    portable-backend load of a K-quant model arms the driver and its resident-vs-CPU parity
+    file holds, which needs a box whose backend does not repack (none here: this box's backend
+    is x64-gen).
+
+45. **The resident MoE chain does not scale with the card.** Measured 2026-09-10 on a rented Linux
+    RTX 5080 (driver 580.173, 8 vCPU, `-t 8`) against the RTX 5060 Ti (Windows, driver 616.56),
+    both on the Qwen3.6-35B-A3B UD-IQ2_XXS (sha256 2e8f5f70..., the model-set row's), the bench's
+    `-jit --for-debug-purposes -r 3 -p 512 -n 128`: llama.cpp b10660 5352.6 / 147.7 there against
+    2853.1 / 71.6 here (1.88x / 2.06x for a 2.14x bandwidth step, 36 -> 84 SMs), ours 3361.1 / 139.8
+    against 2995.8 / 107.7 (1.12x / 1.30x) - 0.63x / 0.95x of llama.cpp on the 5080 where the 5060 Ti
+    reads 1.05x / 1.50x (b10886 5461.2 / 148.1 on the same box: the version moves 2%). The per-role
+    profile (`DASLLAMA_GPU_PROF=1`, both boxes) splits it three ways.
+    (a) The four-wide decode twin is off on Linux: `cooperative_matrix2_decode_vector_supported`
+    reads `VK_NV_cooperative_matrix_decode_vector`, which the 580.173 driver does not list (it lists
+    `VK_NV_cooperative_matrix`, `_matrix2` and `_vector`; the Windows 616.56 driver lists it), so
+    every cm2 tile runs the scalar arm - and so do llama.cpp's there: its shaders carry the extension
+    and it strips them at pipeline creation when the driver lacks it (`ggml_vk_strip_decode_vector`),
+    running its expert tiles' k step at 32 on that arm and 64 with the four-wide one (`mmqid_bk`; its
+    PR 23991 raised the step together with the four-wide B loads, neither alone consistently faster).
+    Same box, same source (b10660), the 5060 Ti, the 35B pp512: llama.cpp four-wide 2828.9 (the
+    record's 2853.1); scalar at k step 32 2385-2393 (`GGML_VK_DISABLE_COOPMAT2_DECODE_VECTOR=1` on
+    either build below); scalar at k step 64 2080 - the DEFAULT of a build whose glslc does not know
+    the extension (Vulkan SDK 1.4.350's; 1.4.357's does): its device flag reads the driver's extension
+    list, not the shader build, so that build keeps the 64-deep step over a scalar decode, under-reads
+    the reference by 27% and says `NV_coopmat2` in its device banner where the four-wide build says
+    `NV_coopmat2v`. Ours: twin 2995.8, scalar (k step 64, `DASLLAMA_VK_DECVEC=0`) 2049, the window
+    160181 -> 236883 us. Per gate/up plane at the 30B's shape (its `GGML_VK_PERF_LOGGER=1`
+    `MUL_MAT_ID iq2_xxs` row against our `moe:iq2xxs` probe at uniform buckets): theirs 612 / 829 /
+    1014 us (four-wide / scalar k32 / scalar k64), ours 730 / 1330-1380 (twin / scalar k64); in the
+    window's real schedule our e_gate plane reads 695 twin and 1229 scalar. Arm- and k-step-matched
+    the two engines read the same whole model (2049 against 2080), so llama.cpp's whole Linux edge on
+    this axis is the 32-deep k step on its scalar arm (1.15x for it), while the tiles alone stay
+    1.2-1.3x behind at either matched arm (695 against 612, 1229 against 1014): its scalar decode
+    computes a pair's shared work once and selects the element last - the form the driver's own
+    two-wide commoning relies on (its PR 23541) - where ours reads its scale from the `ws` plane and
+    shifts per element. The expert-tile probe reads the same 0.71 ms per iq2xxs gate/up plane on the
+    5080 no-twin as the 5060 Ti twin-on (0.73; twin-off 1.33); arm-matched, the tiles scale 1.80-1.90x,
+    qkv 1.85, conv 1.94, gather 1.82 (SMs 2.33x). Levers, in order: a 32-deep k step for the scalar
+    arm (a template constant; the probe twin-off at 32 against 64, and twin-on at both to check the
+    twin still wants 64), then the decode body's pair form. The tier warns at device init.
+    (b) Three window roles stay flat on the wider card whatever the arm: the deltanet scan (13037 ->
+    12654 us, a serial recurrence over chunks - 8.7% of the 5080's window), the shared expert's
+    k5/k6 tiles (sh_gate 3518 -> 3379, sh_down 1582 -> 1452 - one dispatch per layer whose grid is a
+    single wave; the tile pick at 84 SMs is the first suspect) and the router (2276 -> 2371: 32 fixed
+    workgroups). And the routed tiles' real schedule (87 buckets, the largest 446 rows, 105 ladder
+    pieces per plane - one workgroup each over the expert's whole width) is one wave on either
+    card: splitting a piece across column groups and an LPT order over the pieces are the levers
+    the uniform probe (1536 workgroups) cannot show.
+    (c) Decode is the per-dispatch floor: the expert GEMV reads 3.3 MB per layer in 8.5 us on the
+    5080 (3.4 us of transfer at 960 GB/s, ~5 fixed) and 11.3 us on the 5060 Ti (7.4 + 3.9); some 600
+    dispatches per token carry it - about 3 ms of a 7.8 ms token - and every small kernel reads
+    SLOWER on the 5080 (sh_gate/sh_up/sh_down 0.87/0.84/0.92, ar2 0.87, topk 0.93, the deltanet step
+    0.76, attention 0.88), while the GEMV probe scales exactly with bandwidth (iq2xxs 410 -> 881 GB/s
+    at the expert shape). The lever is fewer dispatches per layer: gate and up in one, router and
+    top-k in one, the shared expert's three GEMVs as extra slots of the expert dispatch, the
+    activation folded into the down GEMV; the host is 176 us of the token on the pod (2%).
+    The pod's card ran 2910-2925 MHz at 250-263 W of its 307 W limit under the probe, so no clock
+    cap stands behind (b) or (c). Research before any kernel work; each of (b) and (c) is a slice
+    of its own.
