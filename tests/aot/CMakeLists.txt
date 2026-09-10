@@ -389,7 +389,7 @@ set(TEST_AOT_ALL_DAS "")   # test-body .das (not module libs); LLVM-AOT corpus e
 
 set(DAS_AOT_SUITES
     algorithm apply archive assert_once ast_match async bare_block base64 bitfields bool_array
-    class_boost daslib dasgltf daspeg data_walker debug debug_agent decs dynamic_cast_rtti fio
+    class_boost dasbind daslib dasgltf daspeg data_walker debug debug_agent decs dynamic_cast_rtti fio
     fixed_array flatten fs functional gc glsl handle_types hash_map interfaces jit
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests option promote quote

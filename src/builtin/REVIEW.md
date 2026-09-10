@@ -8,9 +8,9 @@
   `strings` and `jit`. What the scan enforces, and which shared generic helpers it exempts, is
   read from the scan itself.
 
-- **A diff that adds or changes a bind in a module the scan covers rebuilds the binary from
-  that diff before the folder's gate runs** - the scan reads the binds compiled into the running
-  binary, so a stale binary is a false green.
+- **A diff that adds or changes a bind - any `addExtern*` call - in a module the scan covers
+  rebuilds the binary from that diff before the folder's gate runs** - the scan reads the binds
+  compiled into the running binary, so a stale binary is a false green.
 
 - **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require` list in
   the same change - directly, or through the daslib wrapper that requires it.** A module the list
@@ -47,12 +47,17 @@
   in the same change.** A replayed start never runs the descriptor, so an effect the recorder
   does not see is an effect every warm start silently lacks.
 
-- **A diff that moves a bind between modules - an `addExtern` or `addExternInline` call whose
-  module changes, or a builtin whose `vector<T>` functions follow a type to another module -
-  bumps `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in
-  the same change.** The JIT's DLL cache key folds the codegen version and each function's AST
+- **A diff that moves a bind between modules - any `addExtern*` call whose module changes, or a
+  builtin whose `vector<T>` functions follow a type to another module - bumps
+  `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in the
+  same change.** The JIT's DLL cache key folds the codegen version and each function's AST
   hash, never the module an extern lives in, so a cached DLL binds the old name and crashes on
   the hit.
+
+- **A diff that changes the wrapper tables, the `systemV_extra` list, the arm64 layout or the
+  `das_arm64_call` trampoline updates section 3 of `ARCHITECTURE.md` in the same change.** Two
+  comments in `module_builtin_dasbind.cpp` cite that section instead of restating it, so a
+  stale section is what the next reader trusts.
 
 - **A diff that changes what `ModuleFileCache::defaultPath` folds into the module-cache key -
   the binary, the command line, the environment names, or which script arguments count - updates

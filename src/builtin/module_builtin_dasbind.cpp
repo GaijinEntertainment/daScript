@@ -12,7 +12,66 @@
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/env_cfg.h"
 
+#include <cstring>
+#include <memory>
 #include <mutex>
+
+#if DAS_BIND_EXTERNAL && defined(__aarch64__) && (defined(__APPLE__) || defined(__linux__))
+#define DAS_BIND_ARM64_LAYOUT 1
+#else
+#define DAS_BIND_ARM64_LAYOUT 0
+#endif
+#if DAS_BIND_ARM64_LAYOUT && defined(__APPLE__)
+#define DAS_BIND_ARM64_PACKED_STACK 1
+#else
+#define DAS_BIND_ARM64_PACKED_STACK 0
+#endif
+
+#if DAS_BIND_ARM64_LAYOUT
+#if defined(__APPLE__)
+#define DAS_ARM64_CALL_SYMBOL "_das_arm64_call"
+#else
+#define DAS_ARM64_CALL_SYMBOL "das_arm64_call"
+#endif
+// src/builtin/ARCHITECTURE.md sec.3
+__asm__(
+    ".text\n"
+    ".p2align 2\n"
+    ".globl " DAS_ARM64_CALL_SYMBOL "\n"
+    DAS_ARM64_CALL_SYMBOL ":\n"
+    "    stp x29, x30, [sp, #-32]!\n"
+    "    stp x19, x20, [sp, #16]\n"
+    "    mov x29, sp\n"
+    "    mov x19, x0\n"
+    "    mov x20, x5\n"
+    "    sub sp, sp, x4\n"
+    "    mov x9, #0\n"
+    "1:  cmp x9, x4\n"
+    "    b.hs 2f\n"
+    "    ldr x10, [x3, x9]\n"
+    "    str x10, [sp, x9]\n"
+    "    add x9, x9, #8\n"
+    "    b 1b\n"
+    "2:  ldp d0, d1, [x2]\n"
+    "    ldp d2, d3, [x2, #16]\n"
+    "    ldp d4, d5, [x2, #32]\n"
+    "    ldp d6, d7, [x2, #48]\n"
+    "    ldp x6, x7, [x1, #48]\n"
+    "    ldp x4, x5, [x1, #32]\n"
+    "    ldp x2, x3, [x1, #16]\n"
+    "    ldp x0, x1, [x1]\n"
+    "    blr x19\n"
+    "    str x0, [x20]\n"
+    "    str d0, [x20, #8]\n"
+    "    mov sp, x29\n"
+    "    ldp x19, x20, [sp, #16]\n"
+    "    ldp x29, x30, [sp], #32\n"
+    "    ret\n"
+);
+struct Arm64Result { uint64_t x0, d0; };
+extern "C" void das_arm64_call ( void * fn, const uint64_t * gpr, const uint64_t * fpr,
+    const uint8_t * stack, uint64_t stackBytes, Arm64Result * out );
+#endif
 
 namespace das {
 
@@ -85,6 +144,12 @@ namespace das {
         FastCallWrapper wrapper;
     };
 
+    enum { RES_INT = 0, RES_FLOAT = 1 };
+
+    static bool isFloatClass ( const TypeDeclPtr & type ) {
+        return !type->isRef() && (type->baseType==Type::tFloat || type->baseType==Type::tDouble);
+    }
+
     __forceinline vec4f   Rx ( int64_t x ) { return v_cast_vec4f(v_splatsi64(x)); }
 
     #define AX(i)   (*(uint64_t *)(args+(i)))
@@ -109,6 +174,68 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
     #undef  AX
     #undef  AD
+
+    // src/builtin/ARCHITECTURE.md sec.3
+    struct Arm64Layout {
+        struct Slot { uint8_t argIndex, bytes; uint16_t offset; };
+        uint8_t gprArg[8] = {}, fprArg[8] = {};
+        int ngpr = 0, nfpr = 0;
+        vector<Slot> stack;
+        uint32_t stackBytes = 0;
+        bool fpResult = false;
+    };
+
+#if DAS_BIND_ARM64_LAYOUT
+    static uint8_t arm64StackArgumentBytes ( const TypeDeclPtr & type ) {
+        if ( !DAS_BIND_ARM64_PACKED_STACK || type->isRef() ) return 8;
+        auto size = type->getBaseSizeOf();
+        return (size==1 || size==2 || size==4) ? uint8_t(size) : 8;
+    }
+
+    static const Arm64Layout * computeArm64Layout ( Function * fun ) {
+        if ( fun->arguments.size()<=6 ) return nullptr;
+        auto layout = make_unique<Arm64Layout>();
+        uint32_t offset = 0;
+        for ( int a=0, as=int(fun->arguments.size()); a<as; ++a ) {
+            const auto & type = fun->arguments[a]->type;
+            bool fp = isFloatClass(type);
+            int & count = fp ? layout->nfpr : layout->ngpr;
+            if ( count<8 ) {
+                (fp ? layout->fprArg : layout->gprArg)[count++] = uint8_t(a);
+            } else {
+                uint8_t bytes = arm64StackArgumentBytes(type);
+                offset = (offset + bytes - 1) & ~uint32_t(bytes - 1);
+                layout->stack.push_back({uint8_t(a), bytes, uint16_t(offset)});
+                offset += bytes;
+            }
+        }
+        layout->stackBytes = (offset + 15) & ~15u;
+        layout->fpResult = isFloatClass(fun->result);
+        static mutex layoutsMutex;
+        static vector<unique_ptr<Arm64Layout>> layouts;
+        lock_guard<mutex> guard(layoutsMutex);
+        layouts.push_back(das::move(layout));
+        return layouts.back().get();
+    }
+
+    static vec4f arm64Call ( void * fn, vec4f * args, const Arm64Layout * layout ) {
+        uint64_t gpr[8] = {}, fpr[8] = {};
+        Arm64Result out = {};
+        for ( int i=0; i!=layout->ngpr; ++i ) memcpy(gpr+i, args+layout->gprArg[i], 8);
+        for ( int i=0; i!=layout->nfpr; ++i ) memcpy(fpr+i, args+layout->fprArg[i], 8);
+        alignas(16) uint8_t stack[DAS_MAX_FUNCTION_ARGUMENTS*8 + 16] = {};
+        for ( const auto & slot : layout->stack ) memcpy(stack+slot.offset, args+slot.argIndex, slot.bytes);
+        das_arm64_call(fn, gpr, fpr, stack, layout->stackBytes, &out);
+        uint64_t raw = layout->fpResult ? out.d0 : out.x0;
+        int64_t bits;
+        memcpy(&bits, &raw, sizeof(bits));
+        return v_cast_vec4f(v_splatsi64(bits));
+    }
+#else
+    static const Arm64Layout * computeArm64Layout ( Function * ) {
+        return nullptr;
+    }
+#endif
 
     struct BoundFunction {
         void *  fun;
@@ -246,8 +373,9 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     }
 
     struct SimNode_DasBindCall : SimNode_ExtFuncCallBase {
-        SimNode_DasBindCall ( const LineInfo & a, const char * fnName, uint64_t hc, FastCallWrapper wrp, void * fun, ApiType api_ )
-            : SimNode_ExtFuncCallBase(a, fnName), code(hc), wrapper(wrp), fnptr(fun), api(api_) {
+        SimNode_DasBindCall ( const LineInfo & a, const char * fnName, uint64_t hc, FastCallWrapper wrp, void * fun, ApiType api_,
+                              const Arm64Layout * layout_ )
+            : SimNode_ExtFuncCallBase(a, fnName), code(hc), wrapper(wrp), fnptr(fun), api(api_), layout(layout_) {
         }
         void bind ( Context & context ) {
             string crash_and_burn;
@@ -270,20 +398,23 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             }
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
+#if DAS_BIND_ARM64_LAYOUT
+            if ( layout ) return arm64Call(fnptr, argValues, layout);
+#endif
             return wrapper(fnptr, argValues);
         }
         uint64_t code = 0;
         FastCallWrapper wrapper = nullptr;
         void * fnptr = nullptr;
         ApiType api = ApiType::api_unknown;
+        const Arm64Layout * layout = nullptr;
     };
 
     FastCallWrapper getWrapper ( Function * fun, int nReg ) {
-        int args = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? (1<<nReg) : 0;
+        int args = isFloatClass(fun->result) ? (1<<nReg) : 0;
         for ( int a=0, as=int(fun->arguments.size()); a<as; ++a ) {
-            if ( a==4 ) break;
-            auto tp = fun->arguments[a]->type->baseType;
-            if ( tp==Type::tFloat || tp==Type::tDouble ) {
+            if ( a==nReg ) break;
+            if ( isFloatClass(fun->arguments[a]->type) ) {
                 args |= (1<<a);
             }
         }
@@ -294,12 +425,14 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     struct DasBindFunction : BuiltInFunction {
         void * dllAddress;
         FastCallWrapper wrapper;
+        const Arm64Layout * layout;
         bool isLate;
         ApiType api;
         uint64_t hc;
-        DasBindFunction ( const string & dasName, uint64_t _hc, void * addr, ExternBindArgs params, FastCallWrapper wrp )
+        DasBindFunction ( const string & dasName, uint64_t _hc, void * addr, ExternBindArgs params, FastCallWrapper wrp,
+                          const Arm64Layout * layout_ )
             : BuiltInFunction(dasName.c_str(), dasName.c_str())
-            , dllAddress(addr), wrapper(wrp) {
+            , dllAddress(addr), wrapper(wrp), layout(layout_) {
             callBased = true;
             isLate = params.late;
             api = params.api;
@@ -310,7 +443,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
         SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             const char * fnName = context.code->allocateName(this->name);
-            return context.code->makeNode<SimNode_DasBindCall>(at, fnName, hc, wrapper, dllAddress, api);
+            return context.code->makeNode<SimNode_DasBindCall>(at, fnName, hc, wrapper, dllAddress, api, layout);
         }
     };
 
@@ -391,15 +524,14 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 #else
         if ( fun->arguments.size()>6 ) {
             int nargs = int(fun->arguments.size());
-            int res = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? 0 : 1;
+            int res = isFloatClass(fun->result) ? RES_FLOAT : RES_INT;
             int perm = 0;
             for ( size_t ai=0, ais=fun->arguments.size(); ai!=ais; ++ai ) {
-                const auto & a = fun->arguments[ai];
-                if ( a->type->isSimpleType(Type::tFloat) || a->type->isSimpleType(Type::tDouble) ) {
+                if ( isFloatClass(fun->arguments[ai]->type) ) {
                     perm |= (1<<int(ai));
                 }
             }
-            if ( perm>=(1<<7) ) {
+            if ( perm>=(1<<6) ) {
                 return getExtraWrapper(nargs, res, perm);
             }
         }
@@ -446,17 +578,16 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 return false;
             }
 #ifndef _MSC_VER
-            if ( fun->arguments.size()>6 ) {
+            if ( fun->arguments.size()>6 && !DAS_BIND_ARM64_LAYOUT ) {
                 int perm=0;
                 int nargs = int(fun->arguments.size());
-                int res = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? 0 : 1;
+                int res = isFloatClass(fun->result) ? RES_FLOAT : RES_INT;
                 for ( size_t ai=0, ais=fun->arguments.size(); ai!=ais; ++ai ) {
-                    const auto & arg = fun->arguments[ai];
-                    if ( arg->type->isSimpleType(Type::tFloat) || arg->type->isSimpleType(Type::tDouble) ) {
+                    if ( isFloatClass(fun->arguments[ai]->type) ) {
                         perm |= (1<<int(ai));
                     }
                 }
-                if ( perm>=(1<<7) ) {
+                if ( perm>=(1<<6) ) {
                     auto wrp = getExtraWrapper(nargs,res,perm);
                     if ( !wrp ) {
                         string argText;
@@ -496,7 +627,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             }
             auto wrp = computeWrapper(fun);
             uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
-            auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp);
+            auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp, computeArm64Layout(fun));
             bif->result = fun->result;
             for ( auto & a : fun->arguments ) {
                 auto newArg = new Variable();

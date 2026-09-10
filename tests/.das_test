@@ -5,6 +5,22 @@ require daslib/rtti
 
 [export, pinvoke]
 def can_visit_folder(folder_name : string; var result : bool?) {
+    // the probe suite runs on 64-bit hosts only - tests/dasbind/CMakeLists.txt builds its library nowhere
+    // else; a 64-bit tree missing that library fails the suite loudly. It skips the ser/deser sweep: a
+    // deserialized program never applies [extern], so the bound function it names is not in dasbind
+    if (folder_name == "dasbind") {
+        *result = typeinfo sizeof(type<void?>) == 8
+        if (*result) {
+            let args <- get_command_line_arguments()
+            for (arg in args) {
+                if (arg == "--ser" || arg == "--deser") {
+                    *result = false
+                    return
+                }
+            }
+        }
+        return
+    }
     if (folder_name == "clipboard") {
         *result = has_module("clipboard_core")
         return
