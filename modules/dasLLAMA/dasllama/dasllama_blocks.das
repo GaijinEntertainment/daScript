@@ -560,9 +560,7 @@ def private attn_dec_gpu_serves(t : Model; var s : Session; l, pos : int64) : bo
         let kvd = layer_kv_dim(c, l)
         unsafe {
             if (pos == 0l || kv_is_f16 || kv_is_f32) {
-                let kb = kv_layer_kbase(s, l, c.seq_len)
-                let vb = kv_layer_vbase(s, l, c.seq_len)
-                matmul_moe_gpu_attn_dec_hydrate(woq, kb, vb, pos, kvd, kv_is_f16)
+                matmul_moe_gpu_attn_dec_hydrate(woq, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos, kvd, kv_is_f16)
             } else {
                 attn_dec_hydrate_codec(s, l, pos, woq, kvd, c.seq_len)
             }

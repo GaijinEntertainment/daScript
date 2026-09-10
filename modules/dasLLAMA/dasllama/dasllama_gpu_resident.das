@@ -654,9 +654,7 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
     let c = t.config
     for (l in range64(c.n_layers)) {
         continue if (layer_is_recurrent(c, l))
-        var kb = kv_layer_kbase(s, l, c.seq_len)
-        var vb = kv_layer_vbase(s, l, c.seq_len)
-        rdec_read_kv_bulk(l, kb, vb, g_rdec_cnt)
+        rdec_read_kv_bulk(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), g_rdec_cnt)
     }
     s.rdec_host_current = true
     to_log(LOG_INFO, "dasLLAMA: resident KV hydrated to host ({g_rdec_cnt} positions x {c.n_layers} layers)\n")
@@ -1292,9 +1290,7 @@ def private rdec_take_mirror(t : Model; var s : Session; pos : int64) {
     let c = t.config
     for (l in range64(c.n_layers)) {
         continue if (layer_is_recurrent(c, l))
-        let kb = kv_layer_kbase(s, l, c.seq_len)
-        let vb = kv_layer_vbase(s, l, c.seq_len)
-        rdec_sync_kv(l, kb, vb, pos)
+        rdec_sync_kv(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos)
     }
     g_rdec_cnt = pos
     g_rdec_gen++
@@ -1489,9 +1485,7 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         // resync this session's KV history [0, pos) into the mirror (same codec — byte rows)
         for (l in range64(c.n_layers)) {
             continue if (layer_is_recurrent(c, l))
-            let kb = kv_layer_kbase(s, l, c.seq_len)
-            let vb = kv_layer_vbase(s, l, c.seq_len)
-            rdec_sync_kv(l, kb, vb, pos)
+            rdec_sync_kv(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos)
         }
         if (c.recr_mask != 0ul) {
             if (pos == 0l) {
@@ -1512,9 +1506,8 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         for (l in range64(c.n_layers)) {
             continue if (layer_is_recurrent(c, l))
             unsafe {
-                var kb = kv_layer_kbase(s, l, c.seq_len)
-                var vb = kv_layer_vbase(s, l, c.seq_len)
-                rdec_read_kv(l, pos, kb + pos * krowb, vb + pos * vrowb)
+                rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb,
+                    kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
             }
         }
         copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)

@@ -191,10 +191,9 @@ def private di_enumeration(dib : LLVMOpaqueDIBuilder?; file : LLVMMetadataRef; t
         }
     }
     let base = di_scalar_of(dib, t.baseSizeOf == 8 ? Type.tInt64 : (t.baseSizeOf == 2 ? Type.tInt16 : (t.baseSizeOf == 1 ? Type.tInt8 : Type.tInt)))
-    let n = uint(length(entries))
     return LLVMDIBuilderCreateEnumerationType(dib, file, ename, uint64(long_length(ename)),
         file, en != null ? en.at.line : 0u, uint64(t.sizeOf) * 8ul, uint(t.alignOf) * 8u,
-        array_data_ptr(entries), n, base)
+        array_data_ptr(entries), uint(length(entries)), base)
 }
 
 def private di_opaque(dib : LLVMOpaqueDIBuilder?; file : LLVMMetadataRef; name : string; bytes : int; align : int) : LLVMMetadataRef {
@@ -250,10 +249,9 @@ def private di_composite(dib : LLVMOpaqueDIBuilder?; file : LLVMMetadataRef; t :
     var members : array<LLVMMetadataRef>
     di_members_of(dib, file, t, members)
     g_di_composites_in_progress |> erase(mnh)
-    let n = uint(length(members))
     return llvm_di_create_struct_type(dib, file, name, uint64(long_length(name)), file, line,
         uint64(t.sizeOf) * 8ul, uint(t.alignOf) * 8u, LLVMDIFlags.LLVMDIFlagZero, null,
-        array_data_ptr(members), n, 0u, null, name, uint64(long_length(name)))
+        array_data_ptr(members), uint(length(members)), 0u, null, name, uint64(long_length(name)))
 }
 
 def private di_fixed_array(dib : LLVMOpaqueDIBuilder?; file : LLVMMetadataRef; t : TypeDeclPtr) : LLVMMetadataRef {
@@ -263,9 +261,8 @@ def private di_fixed_array(dib : LLVMOpaqueDIBuilder?; file : LLVMMetadataRef; t
         subs |> push <| LLVMDIBuilderGetOrCreateSubrange(dib, 0l, int64(leaf.fixedDim))
         leaf = leaf.firstType
     }
-    let n = uint(length(subs))
     return LLVMDIBuilderCreateArrayType(dib, uint64(t.sizeOf) * 8ul, uint(t.alignOf) * 8u,
-        di_type_of(dib, file, leaf), array_data_ptr(subs), n)
+        di_type_of(dib, file, leaf), array_data_ptr(subs), uint(length(subs)))
 }
 
 def private di_pointee_of(dib : LLVMOpaqueDIBuilder?; file : LLVMMetadataRef; pt : TypeDeclPtr) : LLVMMetadataRef {
@@ -327,8 +324,8 @@ def public di_subroutine_of(dib : LLVMOpaqueDIBuilder?; file : LLVMMetadataRef;
         }
         types |> push <| ty
     }
-    let n = uint(length(types))
-    return LLVMDIBuilderCreateSubroutineType(dib, file, array_data_ptr(types), n, LLVMDIFlags.LLVMDIFlagZero)
+    return LLVMDIBuilderCreateSubroutineType(dib, file, array_data_ptr(types),
+        uint(length(types)), LLVMDIFlags.LLVMDIFlagZero)
 }
 
 def public di_empty_expression(dib : LLVMOpaqueDIBuilder?) : LLVMMetadataRef {

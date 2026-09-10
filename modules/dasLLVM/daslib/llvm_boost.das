@@ -271,22 +271,19 @@ def LLVMBuildShuffleVector(builder : LLVMOpaqueBuilder?; var types : PrimitiveTy
             elem |> push(LLVMGetUndef(types.t_int32))
         }
     }
-    let n = uint(length(elem))
-    return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(array_data_ptr(elem), n), name)
+    return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(array_data_ptr(elem), uint(length(elem))), name)
 }
 
 def LLVMAddIncoming(phi : LLVMOpaqueValue?; var phi_vals : LLVMOpaqueValue? []; var phi_blocks : LLVMOpaqueBasicBlock? []) {
     static_if (typeinfo dim(phi_vals) != typeinfo dim(phi_blocks)) {
         concept_assert(false, "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
     }
-    let n = uint(length(phi_vals))
-    LLVMAddIncoming(phi, array_data_ptr(phi_vals), array_data_ptr(phi_blocks), n)
+    LLVMAddIncoming(phi, array_data_ptr(phi_vals), array_data_ptr(phi_blocks), uint(length(phi_vals)))
 }
 
 def LLVMAddIncoming(phi : LLVMOpaqueValue?; var phi_vals : array<LLVMOpaqueValue?>; var phi_blocks : array<LLVMOpaqueBasicBlock?>) {
     assert(length(phi_vals) == length(phi_blocks), "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
-    let n = uint(length(phi_vals))
-    LLVMAddIncoming(phi, array_data_ptr(phi_vals), array_data_ptr(phi_blocks), n)
+    LLVMAddIncoming(phi, array_data_ptr(phi_vals), array_data_ptr(phi_blocks), uint(length(phi_vals)))
 }
 
 [arch(at = "../ARCHITECTURE.md#gep-constant-fold")]
@@ -438,8 +435,7 @@ def public intrinsic_id(name : string) : uint {
 //! Panics on intrinsic id 0. LLVMLookupIntrinsicID answers 0 only for a name that is no intrinsic - an emitter that built the name wrongly, never a target LLVM lacks - and the C API dereferences the id.
 def LLVMGetIntrinsicDeclaration(mod : LLVMOpaqueModule?; id : uint; var argTypes : array<LLVMOpaqueType?>) : LLVMOpaqueValue? {
     panic("LLVM intrinsic id is 0 - the emitter asked for a name LLVM has no intrinsic for") if (id == 0u)
-    let n = uint64(long_length(argTypes))
-    return LLVMGetIntrinsicDeclaration(mod, id, array_data_ptr(argTypes), n)
+    return LLVMGetIntrinsicDeclaration(mod, id, array_data_ptr(argTypes), uint64(long_length(argTypes)))
 }
 
 def describe(typ : LLVMOpaqueType?) {

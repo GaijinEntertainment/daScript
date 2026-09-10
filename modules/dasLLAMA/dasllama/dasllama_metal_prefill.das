@@ -6680,9 +6680,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             tq4_rotate_batch(s.v_b, npos, kvd_l, hs_l, sgp)
                         }
                     }
-                    var kb = kv_layer_kbase(s, l, c.seq_len)
-                    var vb = kv_layer_vbase(s, l, c.seq_len)
-                    kv_store_batch(kb, vb, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b, runsp, store_nrun, start_pos, npos, kvd_l)
+                    kv_store_batch(kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len),
+                        s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b, runsp, store_nrun, start_pos, npos, kvd_l)
                 }
                 readback_us += int64(get_time_usec(ts_rb))
             }

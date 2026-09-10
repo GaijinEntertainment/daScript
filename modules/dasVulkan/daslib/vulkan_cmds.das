@@ -127,13 +127,12 @@ def enumerate_device_extension_properties(physicalDevice : PhysicalDevice; pLaye
 }
 
 def queue_submit(queue : Queue; var pSubmits : array<SubmitInfo>; fence : Fence; var result : VkResult? = null) {
-    let vkcount_pSubmits = uint(length(pSubmits))
     var vkraw_pSubmits : array<VkSubmitInfo>
     vkraw_pSubmits |> resize(length(pSubmits))
     for (vkv, vke in vkraw_pSubmits, pSubmits) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkQueueSubmit(boost_value_to_vk(queue), vkcount_pSubmits, array_addr(vkraw_pSubmits), boost_value_to_vk(fence)), result)
+    vk_check(vkQueueSubmit(boost_value_to_vk(queue), uint(length(pSubmits)), array_addr(vkraw_pSubmits), boost_value_to_vk(fence)), result)
     for (vkv in pSubmits) { vk_view_destroy(vkv) }
     delete vkraw_pSubmits
 }
@@ -151,25 +150,23 @@ def unmap_memory(device : Device; memory : DeviceMemory) {
 }
 
 def flush_mapped_memory_ranges(device : Device; pMemoryRanges : array<MappedMemoryRange>; var result : VkResult? = null) {
-    let vkcount_pMemoryRanges = uint(length(pMemoryRanges))
     var vkraw_pMemoryRanges : array<VkMappedMemoryRange>
     vkraw_pMemoryRanges |> resize(length(pMemoryRanges))
     for (vkv, vke in vkraw_pMemoryRanges, pMemoryRanges) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkFlushMappedMemoryRanges(boost_value_to_vk(device), vkcount_pMemoryRanges, array_addr(vkraw_pMemoryRanges)), result)
+    vk_check(vkFlushMappedMemoryRanges(boost_value_to_vk(device), uint(length(pMemoryRanges)), array_addr(vkraw_pMemoryRanges)), result)
     for (vkv in pMemoryRanges) { vk_view_destroy(vkv) }
     delete vkraw_pMemoryRanges
 }
 
 def invalidate_mapped_memory_ranges(device : Device; pMemoryRanges : array<MappedMemoryRange>; var result : VkResult? = null) {
-    let vkcount_pMemoryRanges = uint(length(pMemoryRanges))
     var vkraw_pMemoryRanges : array<VkMappedMemoryRange>
     vkraw_pMemoryRanges |> resize(length(pMemoryRanges))
     for (vkv, vke in vkraw_pMemoryRanges, pMemoryRanges) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkInvalidateMappedMemoryRanges(boost_value_to_vk(device), vkcount_pMemoryRanges, array_addr(vkraw_pMemoryRanges)), result)
+    vk_check(vkInvalidateMappedMemoryRanges(boost_value_to_vk(device), uint(length(pMemoryRanges)), array_addr(vkraw_pMemoryRanges)), result)
     for (vkv in pMemoryRanges) { vk_view_destroy(vkv) }
     delete vkraw_pMemoryRanges
 }
@@ -227,21 +224,19 @@ def get_physical_device_sparse_image_format_properties(physicalDevice : Physical
 }
 
 def queue_bind_sparse(queue : Queue; var pBindInfo : array<BindSparseInfo>; fence : Fence; var result : VkResult? = null) {
-    let vkcount_pBindInfo = uint(length(pBindInfo))
     var vkraw_pBindInfo : array<VkBindSparseInfo>
     vkraw_pBindInfo |> resize(length(pBindInfo))
     for (vkv, vke in vkraw_pBindInfo, pBindInfo) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkQueueBindSparse(boost_value_to_vk(queue), vkcount_pBindInfo, array_addr(vkraw_pBindInfo), boost_value_to_vk(fence)), result)
+    vk_check(vkQueueBindSparse(boost_value_to_vk(queue), uint(length(pBindInfo)), array_addr(vkraw_pBindInfo), boost_value_to_vk(fence)), result)
     for (vkv in pBindInfo) { vk_view_destroy(vkv) }
     delete vkraw_pBindInfo
 }
 
 def reset_fences(device : Device; pFences : array<Fence>; var result : VkResult? = null) {
-    let vkcount_pFences = uint(length(pFences))
     var vkraw_pFences <- [for (h in pFences); boost_value_to_vk(h)]
-    vk_check(vkResetFences(boost_value_to_vk(device), vkcount_pFences, array_addr(vkraw_pFences)), result)
+    vk_check(vkResetFences(boost_value_to_vk(device), uint(length(pFences)), array_addr(vkraw_pFences)), result)
     unsafe { delete vkraw_pFences }
 }
 
@@ -250,9 +245,8 @@ def get_fence_status(device : Device; fence : Fence; var result : VkResult? = nu
 }
 
 def wait_for_fences(device : Device; pFences : array<Fence>; waitAll : uint; timeout : uint64; var result : VkResult? = null) {
-    let vkcount_pFences = uint(length(pFences))
     var vkraw_pFences <- [for (h in pFences); boost_value_to_vk(h)]
-    vk_check(vkWaitForFences(boost_value_to_vk(device), vkcount_pFences, array_addr(vkraw_pFences), waitAll, timeout), result)
+    vk_check(vkWaitForFences(boost_value_to_vk(device), uint(length(pFences)), array_addr(vkraw_pFences), waitAll, timeout), result)
     unsafe { delete vkraw_pFences }
 }
 
@@ -294,9 +288,8 @@ def get_pipeline_cache_data(device : Device; pipelineCache : PipelineCache; var 
 }
 
 def merge_pipeline_caches(device : Device; dstCache : PipelineCache; pSrcCaches : array<PipelineCache>; var result : VkResult? = null) {
-    let vkcount_pSrcCaches = uint(length(pSrcCaches))
     var vkraw_pSrcCaches <- [for (h in pSrcCaches); boost_value_to_vk(h)]
-    vk_check(vkMergePipelineCaches(boost_value_to_vk(device), boost_value_to_vk(dstCache), vkcount_pSrcCaches, array_addr(vkraw_pSrcCaches)), result)
+    vk_check(vkMergePipelineCaches(boost_value_to_vk(device), boost_value_to_vk(dstCache), uint(length(pSrcCaches)), array_addr(vkraw_pSrcCaches)), result)
     unsafe { delete vkraw_pSrcCaches }
 }
 
@@ -305,19 +298,17 @@ def reset_descriptor_pool(device : Device; descriptorPool : DescriptorPool; flag
 }
 
 def update_descriptor_sets(device : Device; var pDescriptorWrites : array<WriteDescriptorSet>; pDescriptorCopies : array<CopyDescriptorSet>) {
-    let vkcount_pDescriptorWrites = uint(length(pDescriptorWrites))
     var vkraw_pDescriptorWrites : array<VkWriteDescriptorSet>
     vkraw_pDescriptorWrites |> resize(length(pDescriptorWrites))
     for (vkv, vke in vkraw_pDescriptorWrites, pDescriptorWrites) {
         vkv = vk_view_create_unsafe(vke)
     }
-    let vkcount_pDescriptorCopies = uint(length(pDescriptorCopies))
     var vkraw_pDescriptorCopies : array<VkCopyDescriptorSet>
     vkraw_pDescriptorCopies |> resize(length(pDescriptorCopies))
     for (vkv, vke in vkraw_pDescriptorCopies, pDescriptorCopies) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkUpdateDescriptorSets(boost_value_to_vk(device), vkcount_pDescriptorWrites, array_addr(vkraw_pDescriptorWrites), vkcount_pDescriptorCopies, array_addr(vkraw_pDescriptorCopies))
+    vkUpdateDescriptorSets(boost_value_to_vk(device), uint(length(pDescriptorWrites)), array_addr(vkraw_pDescriptorWrites), uint(length(pDescriptorCopies)), array_addr(vkraw_pDescriptorCopies))
     for (vkv in pDescriptorWrites) { vk_view_destroy(vkv) }
     delete vkraw_pDescriptorWrites
     for (vkv in pDescriptorCopies) { vk_view_destroy(vkv) }
@@ -365,25 +356,23 @@ def cmd_set_attachment_feedback_loop_enable_e_x_t(commandBuffer : CommandBuffer;
 }
 
 def cmd_set_viewport(commandBuffer : CommandBuffer; firstViewport : uint; pViewports : array<Viewport>) {
-    let vkcount_pViewports = uint(length(pViewports))
     var vkraw_pViewports : array<VkViewport>
     vkraw_pViewports |> resize(length(pViewports))
     for (vkv, vke in vkraw_pViewports, pViewports) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetViewport(boost_value_to_vk(commandBuffer), firstViewport, vkcount_pViewports, array_addr(vkraw_pViewports))
+    vkCmdSetViewport(boost_value_to_vk(commandBuffer), firstViewport, uint(length(pViewports)), array_addr(vkraw_pViewports))
     for (vkv in pViewports) { vk_view_destroy(vkv) }
     delete vkraw_pViewports
 }
 
 def cmd_set_scissor(commandBuffer : CommandBuffer; firstScissor : uint; pScissors : array<Rect2D>) {
-    let vkcount_pScissors = uint(length(pScissors))
     var vkraw_pScissors : array<VkRect2D>
     vkraw_pScissors |> resize(length(pScissors))
     for (vkv, vke in vkraw_pScissors, pScissors) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetScissor(boost_value_to_vk(commandBuffer), firstScissor, vkcount_pScissors, array_addr(vkraw_pScissors))
+    vkCmdSetScissor(boost_value_to_vk(commandBuffer), firstScissor, uint(length(pScissors)), array_addr(vkraw_pScissors))
     for (vkv in pScissors) { vk_view_destroy(vkv) }
     delete vkraw_pScissors
 }
@@ -413,10 +402,8 @@ def cmd_set_stencil_reference(commandBuffer : CommandBuffer; faceMask : VkStenci
 }
 
 def cmd_bind_descriptor_sets(commandBuffer : CommandBuffer; pipelineBindPoint : VkPipelineBindPoint; layout : PipelineLayout; firstSet : uint; pDescriptorSets : array<DescriptorSet>; var pDynamicOffsets : array<uint>) {
-    let vkcount_pDescriptorSets = uint(length(pDescriptorSets))
     var vkraw_pDescriptorSets <- [for (h in pDescriptorSets); boost_value_to_vk(h)]
-    let vkcount_pDynamicOffsets = uint(length(pDynamicOffsets))
-    vkCmdBindDescriptorSets(boost_value_to_vk(commandBuffer), pipelineBindPoint, boost_value_to_vk(layout), firstSet, vkcount_pDescriptorSets, array_addr(vkraw_pDescriptorSets), vkcount_pDynamicOffsets, array_addr(pDynamicOffsets))
+    vkCmdBindDescriptorSets(boost_value_to_vk(commandBuffer), pipelineBindPoint, boost_value_to_vk(layout), firstSet, uint(length(pDescriptorSets)), array_addr(vkraw_pDescriptorSets), uint(length(pDynamicOffsets)), array_addr(pDynamicOffsets))
     unsafe { delete vkraw_pDescriptorSets }
 }
 
@@ -425,9 +412,8 @@ def cmd_bind_index_buffer(commandBuffer : CommandBuffer; buffer : Buffer; offset
 }
 
 def cmd_bind_vertex_buffers(commandBuffer : CommandBuffer; firstBinding : uint; pBuffers : array<Buffer>; var pOffsets : array<uint64>) {
-    let vkcount_pOffsets = uint(length(pOffsets))
     var vkraw_pBuffers <- [for (h in pBuffers); boost_value_to_vk(h)]
-    vkCmdBindVertexBuffers(boost_value_to_vk(commandBuffer), firstBinding, vkcount_pOffsets, array_addr(vkraw_pBuffers), array_addr(pOffsets))
+    vkCmdBindVertexBuffers(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pOffsets)), array_addr(vkraw_pBuffers), array_addr(pOffsets))
     unsafe { delete vkraw_pBuffers }
 }
 
@@ -436,13 +422,12 @@ def cmd_draw_indexed(commandBuffer : CommandBuffer; indexCount : uint; instanceC
 }
 
 def cmd_draw_multi_e_x_t(commandBuffer : CommandBuffer; pVertexInfo : array<MultiDrawInfoEXT>; instanceCount : uint; firstInstance : uint; stride : uint) {
-    let vkcount_pVertexInfo = uint(length(pVertexInfo))
     var vkraw_pVertexInfo : array<VkMultiDrawInfoEXT>
     vkraw_pVertexInfo |> resize(length(pVertexInfo))
     for (vkv, vke in vkraw_pVertexInfo, pVertexInfo) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdDrawMultiEXT(boost_value_to_vk(commandBuffer), vkcount_pVertexInfo, array_addr(vkraw_pVertexInfo), instanceCount, firstInstance, stride)
+    vkCmdDrawMultiEXT(boost_value_to_vk(commandBuffer), uint(length(pVertexInfo)), array_addr(vkraw_pVertexInfo), instanceCount, firstInstance, stride)
     for (vkv in pVertexInfo) { vk_view_destroy(vkv) }
     delete vkraw_pVertexInfo
 }
@@ -480,61 +465,56 @@ def cmd_update_pipeline_indirect_buffer_n_v(commandBuffer : CommandBuffer; pipel
 }
 
 def cmd_copy_buffer(commandBuffer : CommandBuffer; srcBuffer : Buffer; dstBuffer : Buffer; pRegions : array<BufferCopy>) {
-    let vkcount_pRegions = uint(length(pRegions))
     var vkraw_pRegions : array<VkBufferCopy>
     vkraw_pRegions |> resize(length(pRegions))
     for (vkv, vke in vkraw_pRegions, pRegions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdCopyBuffer(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcBuffer), boost_value_to_vk(dstBuffer), vkcount_pRegions, array_addr(vkraw_pRegions))
+    vkCmdCopyBuffer(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcBuffer), boost_value_to_vk(dstBuffer), uint(length(pRegions)), array_addr(vkraw_pRegions))
     for (vkv in pRegions) { vk_view_destroy(vkv) }
     delete vkraw_pRegions
 }
 
 def cmd_copy_image(commandBuffer : CommandBuffer; srcImage : Image; srcImageLayout : VkImageLayout; dstImage : Image; dstImageLayout : VkImageLayout; pRegions : array<ImageCopy>) {
-    let vkcount_pRegions = uint(length(pRegions))
     var vkraw_pRegions : array<VkImageCopy>
     vkraw_pRegions |> resize(length(pRegions))
     for (vkv, vke in vkraw_pRegions, pRegions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdCopyImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcImage), srcImageLayout, boost_value_to_vk(dstImage), dstImageLayout, vkcount_pRegions, array_addr(vkraw_pRegions))
+    vkCmdCopyImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcImage), srcImageLayout, boost_value_to_vk(dstImage), dstImageLayout, uint(length(pRegions)), array_addr(vkraw_pRegions))
     for (vkv in pRegions) { vk_view_destroy(vkv) }
     delete vkraw_pRegions
 }
 
 def cmd_blit_image(commandBuffer : CommandBuffer; srcImage : Image; srcImageLayout : VkImageLayout; dstImage : Image; dstImageLayout : VkImageLayout; pRegions : array<ImageBlit>; filter : VkFilter) {
-    let vkcount_pRegions = uint(length(pRegions))
     var vkraw_pRegions : array<VkImageBlit>
     vkraw_pRegions |> resize(length(pRegions))
     for (vkv, vke in vkraw_pRegions, pRegions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdBlitImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcImage), srcImageLayout, boost_value_to_vk(dstImage), dstImageLayout, vkcount_pRegions, array_addr(vkraw_pRegions), filter)
+    vkCmdBlitImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcImage), srcImageLayout, boost_value_to_vk(dstImage), dstImageLayout, uint(length(pRegions)), array_addr(vkraw_pRegions), filter)
     for (vkv in pRegions) { vk_view_destroy(vkv) }
     delete vkraw_pRegions
 }
 
 def cmd_copy_buffer_to_image(commandBuffer : CommandBuffer; srcBuffer : Buffer; dstImage : Image; dstImageLayout : VkImageLayout; pRegions : array<BufferImageCopy>) {
-    let vkcount_pRegions = uint(length(pRegions))
     var vkraw_pRegions : array<VkBufferImageCopy>
     vkraw_pRegions |> resize(length(pRegions))
     for (vkv, vke in vkraw_pRegions, pRegions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdCopyBufferToImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcBuffer), boost_value_to_vk(dstImage), dstImageLayout, vkcount_pRegions, array_addr(vkraw_pRegions))
+    vkCmdCopyBufferToImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcBuffer), boost_value_to_vk(dstImage), dstImageLayout, uint(length(pRegions)), array_addr(vkraw_pRegions))
     for (vkv in pRegions) { vk_view_destroy(vkv) }
     delete vkraw_pRegions
 }
 
 def cmd_copy_image_to_buffer(commandBuffer : CommandBuffer; srcImage : Image; srcImageLayout : VkImageLayout; dstBuffer : Buffer; pRegions : array<BufferImageCopy>) {
-    let vkcount_pRegions = uint(length(pRegions))
     var vkraw_pRegions : array<VkBufferImageCopy>
     vkraw_pRegions |> resize(length(pRegions))
     for (vkv, vke in vkraw_pRegions, pRegions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdCopyImageToBuffer(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcImage), srcImageLayout, boost_value_to_vk(dstBuffer), vkcount_pRegions, array_addr(vkraw_pRegions))
+    vkCmdCopyImageToBuffer(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcImage), srcImageLayout, boost_value_to_vk(dstBuffer), uint(length(pRegions)), array_addr(vkraw_pRegions))
     for (vkv in pRegions) { vk_view_destroy(vkv) }
     delete vkraw_pRegions
 }
@@ -550,13 +530,12 @@ def cmd_copy_memory_indirect_k_h_r(commandBuffer : CommandBuffer; pCopyMemoryInd
 }
 
 def cmd_copy_memory_to_image_indirect_n_v(commandBuffer : CommandBuffer; copyBufferAddress : uint64; stride : uint; dstImage : Image; dstImageLayout : VkImageLayout; pImageSubresources : array<ImageSubresourceLayers>) {
-    let vkcount_pImageSubresources = uint(length(pImageSubresources))
     var vkraw_pImageSubresources : array<VkImageSubresourceLayers>
     vkraw_pImageSubresources |> resize(length(pImageSubresources))
     for (vkv, vke in vkraw_pImageSubresources, pImageSubresources) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdCopyMemoryToImageIndirectNV(boost_value_to_vk(commandBuffer), copyBufferAddress, vkcount_pImageSubresources, stride, boost_value_to_vk(dstImage), dstImageLayout, array_addr(vkraw_pImageSubresources))
+    vkCmdCopyMemoryToImageIndirectNV(boost_value_to_vk(commandBuffer), copyBufferAddress, uint(length(pImageSubresources)), stride, boost_value_to_vk(dstImage), dstImageLayout, array_addr(vkraw_pImageSubresources))
     for (vkv in pImageSubresources) { vk_view_destroy(vkv) }
     delete vkraw_pImageSubresources
 }
@@ -574,31 +553,28 @@ def cmd_fill_buffer(commandBuffer : CommandBuffer; dstBuffer : Buffer; dstOffset
 def cmd_clear_depth_stencil_image(commandBuffer : CommandBuffer; image : Image; imageLayout : VkImageLayout; pDepthStencil : ClearDepthStencilValue; pRanges : array<ImageSubresourceRange>) {
     let vkview_pDepthStencil = vk_view_create_unsafe(pDepthStencil)
     defer() { vk_view_destroy(pDepthStencil) }
-    let vkcount_pRanges = uint(length(pRanges))
     var vkraw_pRanges : array<VkImageSubresourceRange>
     vkraw_pRanges |> resize(length(pRanges))
     for (vkv, vke in vkraw_pRanges, pRanges) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdClearDepthStencilImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(image), imageLayout, vkview_pDepthStencil, vkcount_pRanges, array_addr(vkraw_pRanges))
+    vkCmdClearDepthStencilImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(image), imageLayout, vkview_pDepthStencil, uint(length(pRanges)), array_addr(vkraw_pRanges))
     for (vkv in pRanges) { vk_view_destroy(vkv) }
     delete vkraw_pRanges
 }
 
 def cmd_clear_attachments(commandBuffer : CommandBuffer; pAttachments : array<ClearAttachment>; pRects : array<ClearRect>) {
-    let vkcount_pAttachments = uint(length(pAttachments))
     var vkraw_pAttachments : array<VkClearAttachment>
     vkraw_pAttachments |> resize(length(pAttachments))
     for (vkv, vke in vkraw_pAttachments, pAttachments) {
         vkv = vk_view_create_unsafe(vke)
     }
-    let vkcount_pRects = uint(length(pRects))
     var vkraw_pRects : array<VkClearRect>
     vkraw_pRects |> resize(length(pRects))
     for (vkv, vke in vkraw_pRects, pRects) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdClearAttachments(boost_value_to_vk(commandBuffer), vkcount_pAttachments, array_addr(vkraw_pAttachments), vkcount_pRects, array_addr(vkraw_pRects))
+    vkCmdClearAttachments(boost_value_to_vk(commandBuffer), uint(length(pAttachments)), array_addr(vkraw_pAttachments), uint(length(pRects)), array_addr(vkraw_pRects))
     for (vkv in pAttachments) { vk_view_destroy(vkv) }
     delete vkraw_pAttachments
     for (vkv in pRects) { vk_view_destroy(vkv) }
@@ -606,13 +582,12 @@ def cmd_clear_attachments(commandBuffer : CommandBuffer; pAttachments : array<Cl
 }
 
 def cmd_resolve_image(commandBuffer : CommandBuffer; srcImage : Image; srcImageLayout : VkImageLayout; dstImage : Image; dstImageLayout : VkImageLayout; pRegions : array<ImageResolve>) {
-    let vkcount_pRegions = uint(length(pRegions))
     var vkraw_pRegions : array<VkImageResolve>
     vkraw_pRegions |> resize(length(pRegions))
     for (vkv, vke in vkraw_pRegions, pRegions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdResolveImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcImage), srcImageLayout, boost_value_to_vk(dstImage), dstImageLayout, vkcount_pRegions, array_addr(vkraw_pRegions))
+    vkCmdResolveImage(boost_value_to_vk(commandBuffer), boost_value_to_vk(srcImage), srcImageLayout, boost_value_to_vk(dstImage), dstImageLayout, uint(length(pRegions)), array_addr(vkraw_pRegions))
     for (vkv in pRegions) { vk_view_destroy(vkv) }
     delete vkraw_pRegions
 }
@@ -626,27 +601,23 @@ def cmd_reset_event(commandBuffer : CommandBuffer; event : Event; stageMask : Vk
 }
 
 def cmd_wait_events(commandBuffer : CommandBuffer; pEvents : array<Event>; srcStageMask : VkPipelineStageFlags; dstStageMask : VkPipelineStageFlags; pMemoryBarriers : array<MemoryBarrier>; pBufferMemoryBarriers : array<BufferMemoryBarrier>; pImageMemoryBarriers : array<ImageMemoryBarrier>) {
-    let vkcount_pEvents = uint(length(pEvents))
     var vkraw_pEvents <- [for (h in pEvents); boost_value_to_vk(h)]
-    let vkcount_pMemoryBarriers = uint(length(pMemoryBarriers))
     var vkraw_pMemoryBarriers : array<VkMemoryBarrier>
     vkraw_pMemoryBarriers |> resize(length(pMemoryBarriers))
     for (vkv, vke in vkraw_pMemoryBarriers, pMemoryBarriers) {
         vkv = vk_view_create_unsafe(vke)
     }
-    let vkcount_pBufferMemoryBarriers = uint(length(pBufferMemoryBarriers))
     var vkraw_pBufferMemoryBarriers : array<VkBufferMemoryBarrier>
     vkraw_pBufferMemoryBarriers |> resize(length(pBufferMemoryBarriers))
     for (vkv, vke in vkraw_pBufferMemoryBarriers, pBufferMemoryBarriers) {
         vkv = vk_view_create_unsafe(vke)
     }
-    let vkcount_pImageMemoryBarriers = uint(length(pImageMemoryBarriers))
     var vkraw_pImageMemoryBarriers : array<VkImageMemoryBarrier>
     vkraw_pImageMemoryBarriers |> resize(length(pImageMemoryBarriers))
     for (vkv, vke in vkraw_pImageMemoryBarriers, pImageMemoryBarriers) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdWaitEvents(boost_value_to_vk(commandBuffer), vkcount_pEvents, array_addr(vkraw_pEvents), srcStageMask, dstStageMask, vkcount_pMemoryBarriers, array_addr(vkraw_pMemoryBarriers), vkcount_pBufferMemoryBarriers, array_addr(vkraw_pBufferMemoryBarriers), vkcount_pImageMemoryBarriers, array_addr(vkraw_pImageMemoryBarriers))
+    vkCmdWaitEvents(boost_value_to_vk(commandBuffer), uint(length(pEvents)), array_addr(vkraw_pEvents), srcStageMask, dstStageMask, uint(length(pMemoryBarriers)), array_addr(vkraw_pMemoryBarriers), uint(length(pBufferMemoryBarriers)), array_addr(vkraw_pBufferMemoryBarriers), uint(length(pImageMemoryBarriers)), array_addr(vkraw_pImageMemoryBarriers))
     unsafe { delete vkraw_pEvents }
     for (vkv in pMemoryBarriers) { vk_view_destroy(vkv) }
     delete vkraw_pMemoryBarriers
@@ -657,25 +628,22 @@ def cmd_wait_events(commandBuffer : CommandBuffer; pEvents : array<Event>; srcSt
 }
 
 def cmd_pipeline_barrier(commandBuffer : CommandBuffer; srcStageMask : VkPipelineStageFlags; dstStageMask : VkPipelineStageFlags; dependencyFlags : VkDependencyFlags; pMemoryBarriers : array<MemoryBarrier>; pBufferMemoryBarriers : array<BufferMemoryBarrier>; pImageMemoryBarriers : array<ImageMemoryBarrier>) {
-    let vkcount_pMemoryBarriers = uint(length(pMemoryBarriers))
     var vkraw_pMemoryBarriers : array<VkMemoryBarrier>
     vkraw_pMemoryBarriers |> resize(length(pMemoryBarriers))
     for (vkv, vke in vkraw_pMemoryBarriers, pMemoryBarriers) {
         vkv = vk_view_create_unsafe(vke)
     }
-    let vkcount_pBufferMemoryBarriers = uint(length(pBufferMemoryBarriers))
     var vkraw_pBufferMemoryBarriers : array<VkBufferMemoryBarrier>
     vkraw_pBufferMemoryBarriers |> resize(length(pBufferMemoryBarriers))
     for (vkv, vke in vkraw_pBufferMemoryBarriers, pBufferMemoryBarriers) {
         vkv = vk_view_create_unsafe(vke)
     }
-    let vkcount_pImageMemoryBarriers = uint(length(pImageMemoryBarriers))
     var vkraw_pImageMemoryBarriers : array<VkImageMemoryBarrier>
     vkraw_pImageMemoryBarriers |> resize(length(pImageMemoryBarriers))
     for (vkv, vke in vkraw_pImageMemoryBarriers, pImageMemoryBarriers) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdPipelineBarrier(boost_value_to_vk(commandBuffer), srcStageMask, dstStageMask, dependencyFlags, vkcount_pMemoryBarriers, array_addr(vkraw_pMemoryBarriers), vkcount_pBufferMemoryBarriers, array_addr(vkraw_pBufferMemoryBarriers), vkcount_pImageMemoryBarriers, array_addr(vkraw_pImageMemoryBarriers))
+    vkCmdPipelineBarrier(boost_value_to_vk(commandBuffer), srcStageMask, dstStageMask, dependencyFlags, uint(length(pMemoryBarriers)), array_addr(vkraw_pMemoryBarriers), uint(length(pBufferMemoryBarriers)), array_addr(vkraw_pBufferMemoryBarriers), uint(length(pImageMemoryBarriers)), array_addr(vkraw_pImageMemoryBarriers))
     for (vkv in pMemoryBarriers) { vk_view_destroy(vkv) }
     delete vkraw_pMemoryBarriers
     for (vkv in pBufferMemoryBarriers) { vk_view_destroy(vkv) }
@@ -723,9 +691,8 @@ def cmd_end_render_pass(commandBuffer : CommandBuffer) {
 }
 
 def cmd_execute_commands(commandBuffer : CommandBuffer; pCommandBuffers : array<CommandBuffer>) {
-    let vkcount_pCommandBuffers = uint(length(pCommandBuffers))
     var vkraw_pCommandBuffers <- [for (h in pCommandBuffers); boost_value_to_vk(h)]
-    vkCmdExecuteCommands(boost_value_to_vk(commandBuffer), vkcount_pCommandBuffers, array_addr(vkraw_pCommandBuffers))
+    vkCmdExecuteCommands(boost_value_to_vk(commandBuffer), uint(length(pCommandBuffers)), array_addr(vkraw_pCommandBuffers))
     unsafe { delete vkraw_pCommandBuffers }
 }
 
@@ -933,25 +900,23 @@ def get_generated_commands_memory_requirements_e_x_t(device : Device; pInfo : Ge
 }
 
 def update_indirect_execution_set_pipeline_e_x_t(device : Device; indirectExecutionSet : IndirectExecutionSetEXT; pExecutionSetWrites : array<WriteIndirectExecutionSetPipelineEXT>) {
-    let vkcount_pExecutionSetWrites = uint(length(pExecutionSetWrites))
     var vkraw_pExecutionSetWrites : array<VkWriteIndirectExecutionSetPipelineEXT>
     vkraw_pExecutionSetWrites |> resize(length(pExecutionSetWrites))
     for (vkv, vke in vkraw_pExecutionSetWrites, pExecutionSetWrites) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkUpdateIndirectExecutionSetPipelineEXT(boost_value_to_vk(device), boost_value_to_vk(indirectExecutionSet), vkcount_pExecutionSetWrites, array_addr(vkraw_pExecutionSetWrites))
+    vkUpdateIndirectExecutionSetPipelineEXT(boost_value_to_vk(device), boost_value_to_vk(indirectExecutionSet), uint(length(pExecutionSetWrites)), array_addr(vkraw_pExecutionSetWrites))
     for (vkv in pExecutionSetWrites) { vk_view_destroy(vkv) }
     delete vkraw_pExecutionSetWrites
 }
 
 def update_indirect_execution_set_shader_e_x_t(device : Device; indirectExecutionSet : IndirectExecutionSetEXT; pExecutionSetWrites : array<WriteIndirectExecutionSetShaderEXT>) {
-    let vkcount_pExecutionSetWrites = uint(length(pExecutionSetWrites))
     var vkraw_pExecutionSetWrites : array<VkWriteIndirectExecutionSetShaderEXT>
     vkraw_pExecutionSetWrites |> resize(length(pExecutionSetWrites))
     for (vkv, vke in vkraw_pExecutionSetWrites, pExecutionSetWrites) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkUpdateIndirectExecutionSetShaderEXT(boost_value_to_vk(device), boost_value_to_vk(indirectExecutionSet), vkcount_pExecutionSetWrites, array_addr(vkraw_pExecutionSetWrites))
+    vkUpdateIndirectExecutionSetShaderEXT(boost_value_to_vk(device), boost_value_to_vk(indirectExecutionSet), uint(length(pExecutionSetWrites)), array_addr(vkraw_pExecutionSetWrites))
     for (vkv in pExecutionSetWrites) { vk_view_destroy(vkv) }
     delete vkraw_pExecutionSetWrites
 }
@@ -1023,13 +988,12 @@ def get_physical_device_sparse_image_format_properties2(physicalDevice : Physica
 }
 
 def cmd_push_descriptor_set(commandBuffer : CommandBuffer; pipelineBindPoint : VkPipelineBindPoint; layout : PipelineLayout; set : uint; var pDescriptorWrites : array<WriteDescriptorSet>) {
-    let vkcount_pDescriptorWrites = uint(length(pDescriptorWrites))
     var vkraw_pDescriptorWrites : array<VkWriteDescriptorSet>
     vkraw_pDescriptorWrites |> resize(length(pDescriptorWrites))
     for (vkv, vke in vkraw_pDescriptorWrites, pDescriptorWrites) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdPushDescriptorSet(boost_value_to_vk(commandBuffer), pipelineBindPoint, boost_value_to_vk(layout), set, vkcount_pDescriptorWrites, array_addr(vkraw_pDescriptorWrites))
+    vkCmdPushDescriptorSet(boost_value_to_vk(commandBuffer), pipelineBindPoint, boost_value_to_vk(layout), set, uint(length(pDescriptorWrites)), array_addr(vkraw_pDescriptorWrites))
     for (vkv in pDescriptorWrites) { vk_view_destroy(vkv) }
     delete vkraw_pDescriptorWrites
 }
@@ -1143,25 +1107,23 @@ def enumerate_physical_device_groups(instance : Instance; var result : VkResult?
 }
 
 def bind_buffer_memory2(device : Device; pBindInfos : array<BindBufferMemoryInfo>; var result : VkResult? = null) {
-    let vkcount_pBindInfos = uint(length(pBindInfos))
     var vkraw_pBindInfos : array<VkBindBufferMemoryInfo>
     vkraw_pBindInfos |> resize(length(pBindInfos))
     for (vkv, vke in vkraw_pBindInfos, pBindInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkBindBufferMemory2(boost_value_to_vk(device), vkcount_pBindInfos, array_addr(vkraw_pBindInfos)), result)
+    vk_check(vkBindBufferMemory2(boost_value_to_vk(device), uint(length(pBindInfos)), array_addr(vkraw_pBindInfos)), result)
     for (vkv in pBindInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindInfos
 }
 
 def bind_image_memory2(device : Device; pBindInfos : array<BindImageMemoryInfo>; var result : VkResult? = null) {
-    let vkcount_pBindInfos = uint(length(pBindInfos))
     var vkraw_pBindInfos : array<VkBindImageMemoryInfo>
     vkraw_pBindInfos |> resize(length(pBindInfos))
     for (vkv, vke in vkraw_pBindInfos, pBindInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkBindImageMemory2(boost_value_to_vk(device), vkcount_pBindInfos, array_addr(vkraw_pBindInfos)), result)
+    vk_check(vkBindImageMemory2(boost_value_to_vk(device), uint(length(pBindInfos)), array_addr(vkraw_pBindInfos)), result)
     for (vkv in pBindInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindInfos
 }
@@ -1202,14 +1164,13 @@ def get_physical_device_present_rectangles_k_h_r(physicalDevice : PhysicalDevice
 }
 
 def set_hdr_metadata_e_x_t(device : Device; pSwapchains : array<SwapchainKHR>; pMetadata : array<HdrMetadataEXT>) {
-    let vkcount_pMetadata = uint(length(pMetadata))
     var vkraw_pSwapchains <- [for (h in pSwapchains); boost_value_to_vk(h)]
     var vkraw_pMetadata : array<VkHdrMetadataEXT>
     vkraw_pMetadata |> resize(length(pMetadata))
     for (vkv, vke in vkraw_pMetadata, pMetadata) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkSetHdrMetadataEXT(boost_value_to_vk(device), vkcount_pMetadata, array_addr(vkraw_pSwapchains), array_addr(vkraw_pMetadata))
+    vkSetHdrMetadataEXT(boost_value_to_vk(device), uint(length(pMetadata)), array_addr(vkraw_pSwapchains), array_addr(vkraw_pMetadata))
     unsafe { delete vkraw_pSwapchains }
     for (vkv in pMetadata) { vk_view_destroy(vkv) }
     delete vkraw_pMetadata
@@ -1239,25 +1200,23 @@ def get_past_presentation_timing_g_o_o_g_l_e(device : Device; swapchain : Swapch
 }
 
 def cmd_set_viewport_w_scaling_n_v(commandBuffer : CommandBuffer; firstViewport : uint; pViewportWScalings : array<ViewportWScalingNV>) {
-    let vkcount_pViewportWScalings = uint(length(pViewportWScalings))
     var vkraw_pViewportWScalings : array<VkViewportWScalingNV>
     vkraw_pViewportWScalings |> resize(length(pViewportWScalings))
     for (vkv, vke in vkraw_pViewportWScalings, pViewportWScalings) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetViewportWScalingNV(boost_value_to_vk(commandBuffer), firstViewport, vkcount_pViewportWScalings, array_addr(vkraw_pViewportWScalings))
+    vkCmdSetViewportWScalingNV(boost_value_to_vk(commandBuffer), firstViewport, uint(length(pViewportWScalings)), array_addr(vkraw_pViewportWScalings))
     for (vkv in pViewportWScalings) { vk_view_destroy(vkv) }
     delete vkraw_pViewportWScalings
 }
 
 def cmd_set_discard_rectangle_e_x_t(commandBuffer : CommandBuffer; firstDiscardRectangle : uint; pDiscardRectangles : array<Rect2D>) {
-    let vkcount_pDiscardRectangles = uint(length(pDiscardRectangles))
     var vkraw_pDiscardRectangles : array<VkRect2D>
     vkraw_pDiscardRectangles |> resize(length(pDiscardRectangles))
     for (vkv, vke in vkraw_pDiscardRectangles, pDiscardRectangles) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetDiscardRectangleEXT(boost_value_to_vk(commandBuffer), firstDiscardRectangle, vkcount_pDiscardRectangles, array_addr(vkraw_pDiscardRectangles))
+    vkCmdSetDiscardRectangleEXT(boost_value_to_vk(commandBuffer), firstDiscardRectangle, uint(length(pDiscardRectangles)), array_addr(vkraw_pDiscardRectangles))
     for (vkv in pDiscardRectangles) { vk_view_destroy(vkv) }
     delete vkraw_pDiscardRectangles
 }
@@ -1454,9 +1413,8 @@ def get_validation_cache_data_e_x_t(device : Device; validationCache : Validatio
 }
 
 def merge_validation_caches_e_x_t(device : Device; dstCache : ValidationCacheEXT; pSrcCaches : array<ValidationCacheEXT>; var result : VkResult? = null) {
-    let vkcount_pSrcCaches = uint(length(pSrcCaches))
     var vkraw_pSrcCaches <- [for (h in pSrcCaches); boost_value_to_vk(h)]
-    vk_check(vkMergeValidationCachesEXT(boost_value_to_vk(device), boost_value_to_vk(dstCache), vkcount_pSrcCaches, array_addr(vkraw_pSrcCaches)), result)
+    vk_check(vkMergeValidationCachesEXT(boost_value_to_vk(device), boost_value_to_vk(dstCache), uint(length(pSrcCaches)), array_addr(vkraw_pSrcCaches)), result)
     unsafe { delete vkraw_pSrcCaches }
 }
 
@@ -1609,23 +1567,20 @@ def get_queue_checkpoint_data_n_v(queue : Queue) : array<VkCheckpointDataNV> {
 }
 
 def cmd_bind_transform_feedback_buffers_e_x_t(commandBuffer : CommandBuffer; firstBinding : uint; pBuffers : array<Buffer>; var pOffsets : array<uint64>; var pSizes : array<uint64>) {
-    let vkcount_pSizes = uint(length(pSizes))
     var vkraw_pBuffers <- [for (h in pBuffers); boost_value_to_vk(h)]
-    vkCmdBindTransformFeedbackBuffersEXT(boost_value_to_vk(commandBuffer), firstBinding, vkcount_pSizes, array_addr(vkraw_pBuffers), array_addr(pOffsets), array_addr(pSizes))
+    vkCmdBindTransformFeedbackBuffersEXT(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pSizes)), array_addr(vkraw_pBuffers), array_addr(pOffsets), array_addr(pSizes))
     unsafe { delete vkraw_pBuffers }
 }
 
 def cmd_begin_transform_feedback_e_x_t(commandBuffer : CommandBuffer; firstCounterBuffer : uint; pCounterBuffers : array<Buffer>; var pCounterBufferOffsets : array<uint64>) {
-    let vkcount_pCounterBufferOffsets = uint(length(pCounterBufferOffsets))
     var vkraw_pCounterBuffers <- [for (h in pCounterBuffers); boost_value_to_vk(h)]
-    vkCmdBeginTransformFeedbackEXT(boost_value_to_vk(commandBuffer), firstCounterBuffer, vkcount_pCounterBufferOffsets, array_addr(vkraw_pCounterBuffers), array_addr(pCounterBufferOffsets))
+    vkCmdBeginTransformFeedbackEXT(boost_value_to_vk(commandBuffer), firstCounterBuffer, uint(length(pCounterBufferOffsets)), array_addr(vkraw_pCounterBuffers), array_addr(pCounterBufferOffsets))
     unsafe { delete vkraw_pCounterBuffers }
 }
 
 def cmd_end_transform_feedback_e_x_t(commandBuffer : CommandBuffer; firstCounterBuffer : uint; pCounterBuffers : array<Buffer>; var pCounterBufferOffsets : array<uint64>) {
-    let vkcount_pCounterBufferOffsets = uint(length(pCounterBufferOffsets))
     var vkraw_pCounterBuffers <- [for (h in pCounterBuffers); boost_value_to_vk(h)]
-    vkCmdEndTransformFeedbackEXT(boost_value_to_vk(commandBuffer), firstCounterBuffer, vkcount_pCounterBufferOffsets, array_addr(vkraw_pCounterBuffers), array_addr(pCounterBufferOffsets))
+    vkCmdEndTransformFeedbackEXT(boost_value_to_vk(commandBuffer), firstCounterBuffer, uint(length(pCounterBufferOffsets)), array_addr(vkraw_pCounterBuffers), array_addr(pCounterBufferOffsets))
     unsafe { delete vkraw_pCounterBuffers }
 }
 
@@ -1642,20 +1597,18 @@ def cmd_draw_indirect_byte_count_e_x_t(commandBuffer : CommandBuffer; instanceCo
 }
 
 def cmd_set_exclusive_scissor_n_v(commandBuffer : CommandBuffer; firstExclusiveScissor : uint; pExclusiveScissors : array<Rect2D>) {
-    let vkcount_pExclusiveScissors = uint(length(pExclusiveScissors))
     var vkraw_pExclusiveScissors : array<VkRect2D>
     vkraw_pExclusiveScissors |> resize(length(pExclusiveScissors))
     for (vkv, vke in vkraw_pExclusiveScissors, pExclusiveScissors) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetExclusiveScissorNV(boost_value_to_vk(commandBuffer), firstExclusiveScissor, vkcount_pExclusiveScissors, array_addr(vkraw_pExclusiveScissors))
+    vkCmdSetExclusiveScissorNV(boost_value_to_vk(commandBuffer), firstExclusiveScissor, uint(length(pExclusiveScissors)), array_addr(vkraw_pExclusiveScissors))
     for (vkv in pExclusiveScissors) { vk_view_destroy(vkv) }
     delete vkraw_pExclusiveScissors
 }
 
 def cmd_set_exclusive_scissor_enable_n_v(commandBuffer : CommandBuffer; firstExclusiveScissor : uint; var pExclusiveScissorEnables : array<uint>) {
-    let vkcount_pExclusiveScissorEnables = uint(length(pExclusiveScissorEnables))
-    vkCmdSetExclusiveScissorEnableNV(boost_value_to_vk(commandBuffer), firstExclusiveScissor, vkcount_pExclusiveScissorEnables, array_addr(pExclusiveScissorEnables))
+    vkCmdSetExclusiveScissorEnableNV(boost_value_to_vk(commandBuffer), firstExclusiveScissor, uint(length(pExclusiveScissorEnables)), array_addr(pExclusiveScissorEnables))
 }
 
 def cmd_bind_shading_rate_image_n_v(commandBuffer : CommandBuffer; imageView : ImageView; imageLayout : VkImageLayout) {
@@ -1663,25 +1616,23 @@ def cmd_bind_shading_rate_image_n_v(commandBuffer : CommandBuffer; imageView : I
 }
 
 def cmd_set_viewport_shading_rate_palette_n_v(commandBuffer : CommandBuffer; firstViewport : uint; var pShadingRatePalettes : array<ShadingRatePaletteNV>) {
-    let vkcount_pShadingRatePalettes = uint(length(pShadingRatePalettes))
     var vkraw_pShadingRatePalettes : array<VkShadingRatePaletteNV>
     vkraw_pShadingRatePalettes |> resize(length(pShadingRatePalettes))
     for (vkv, vke in vkraw_pShadingRatePalettes, pShadingRatePalettes) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetViewportShadingRatePaletteNV(boost_value_to_vk(commandBuffer), firstViewport, vkcount_pShadingRatePalettes, array_addr(vkraw_pShadingRatePalettes))
+    vkCmdSetViewportShadingRatePaletteNV(boost_value_to_vk(commandBuffer), firstViewport, uint(length(pShadingRatePalettes)), array_addr(vkraw_pShadingRatePalettes))
     for (vkv in pShadingRatePalettes) { vk_view_destroy(vkv) }
     delete vkraw_pShadingRatePalettes
 }
 
 def cmd_set_coarse_sample_order_n_v(commandBuffer : CommandBuffer; sampleOrderType : VkCoarseSampleOrderTypeNV; var pCustomSampleOrders : array<CoarseSampleOrderCustomNV>) {
-    let vkcount_pCustomSampleOrders = uint(length(pCustomSampleOrders))
     var vkraw_pCustomSampleOrders : array<VkCoarseSampleOrderCustomNV>
     vkraw_pCustomSampleOrders |> resize(length(pCustomSampleOrders))
     for (vkv, vke in vkraw_pCustomSampleOrders, pCustomSampleOrders) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetCoarseSampleOrderNV(boost_value_to_vk(commandBuffer), sampleOrderType, vkcount_pCustomSampleOrders, array_addr(vkraw_pCustomSampleOrders))
+    vkCmdSetCoarseSampleOrderNV(boost_value_to_vk(commandBuffer), sampleOrderType, uint(length(pCustomSampleOrders)), array_addr(vkraw_pCustomSampleOrders))
     for (vkv in pCustomSampleOrders) { vk_view_destroy(vkv) }
     delete vkraw_pCustomSampleOrders
 }
@@ -1727,13 +1678,12 @@ def get_acceleration_structure_memory_requirements_n_v(device : Device; pInfo : 
 }
 
 def bind_acceleration_structure_memory_n_v(device : Device; var pBindInfos : array<BindAccelerationStructureMemoryInfoNV>; var result : VkResult? = null) {
-    let vkcount_pBindInfos = uint(length(pBindInfos))
     var vkraw_pBindInfos : array<VkBindAccelerationStructureMemoryInfoNV>
     vkraw_pBindInfos |> resize(length(pBindInfos))
     for (vkv, vke in vkraw_pBindInfos, pBindInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkBindAccelerationStructureMemoryNV(boost_value_to_vk(device), vkcount_pBindInfos, array_addr(vkraw_pBindInfos)), result)
+    vk_check(vkBindAccelerationStructureMemoryNV(boost_value_to_vk(device), uint(length(pBindInfos)), array_addr(vkraw_pBindInfos)), result)
     for (vkv in pBindInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindInfos
 }
@@ -1779,16 +1729,14 @@ def copy_memory_to_acceleration_structure_k_h_r(device : Device; deferredOperati
 }
 
 def cmd_write_acceleration_structures_properties_k_h_r(commandBuffer : CommandBuffer; pAccelerationStructures : array<AccelerationStructureKHR>; queryType : VkQueryType; queryPool : QueryPool; firstQuery : uint) {
-    let vkcount_pAccelerationStructures = uint(length(pAccelerationStructures))
     var vkraw_pAccelerationStructures <- [for (h in pAccelerationStructures); boost_value_to_vk(h)]
-    vkCmdWriteAccelerationStructuresPropertiesKHR(boost_value_to_vk(commandBuffer), vkcount_pAccelerationStructures, array_addr(vkraw_pAccelerationStructures), queryType, boost_value_to_vk(queryPool), firstQuery)
+    vkCmdWriteAccelerationStructuresPropertiesKHR(boost_value_to_vk(commandBuffer), uint(length(pAccelerationStructures)), array_addr(vkraw_pAccelerationStructures), queryType, boost_value_to_vk(queryPool), firstQuery)
     unsafe { delete vkraw_pAccelerationStructures }
 }
 
 def cmd_write_acceleration_structures_properties_n_v(commandBuffer : CommandBuffer; pAccelerationStructures : array<AccelerationStructureNV>; queryType : VkQueryType; queryPool : QueryPool; firstQuery : uint) {
-    let vkcount_pAccelerationStructures = uint(length(pAccelerationStructures))
     var vkraw_pAccelerationStructures <- [for (h in pAccelerationStructures); boost_value_to_vk(h)]
-    vkCmdWriteAccelerationStructuresPropertiesNV(boost_value_to_vk(commandBuffer), vkcount_pAccelerationStructures, array_addr(vkraw_pAccelerationStructures), queryType, boost_value_to_vk(queryPool), firstQuery)
+    vkCmdWriteAccelerationStructuresPropertiesNV(boost_value_to_vk(commandBuffer), uint(length(pAccelerationStructures)), array_addr(vkraw_pAccelerationStructures), queryType, boost_value_to_vk(queryPool), firstQuery)
     unsafe { delete vkraw_pAccelerationStructures }
 }
 
@@ -2052,7 +2000,6 @@ def get_physical_device_tool_properties(physicalDevice : PhysicalDevice; var res
 }
 
 def cmd_build_acceleration_structures_k_h_r(commandBuffer : CommandBuffer; var pInfos : array<AccelerationStructureBuildGeometryInfoKHR>; var ppBuildRangeInfos : array<array<AccelerationStructureBuildRangeInfoKHR>>) {
-    let vkcount_pInfos = uint(length(pInfos))
     var vkraw_pInfos : array<VkAccelerationStructureBuildGeometryInfoKHR>
     vkraw_pInfos |> resize(length(pInfos))
     for (vkv, vke in vkraw_pInfos, pInfos) {
@@ -2061,14 +2008,13 @@ def cmd_build_acceleration_structures_k_h_r(commandBuffer : CommandBuffer; var p
     var vkraw2_ppBuildRangeInfos : array<array<VkAccelerationStructureBuildRangeInfoKHR>>
     var vkptr_ppBuildRangeInfos : array<void?>
     vk_views2_create(ppBuildRangeInfos, vkraw2_ppBuildRangeInfos, vkptr_ppBuildRangeInfos)
-    vkCmdBuildAccelerationStructuresKHR(boost_value_to_vk(commandBuffer), vkcount_pInfos, array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR ??>(array_addr(vkptr_ppBuildRangeInfos))))
+    vkCmdBuildAccelerationStructuresKHR(boost_value_to_vk(commandBuffer), uint(length(pInfos)), array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR ??>(array_addr(vkptr_ppBuildRangeInfos))))
     for (vkv in pInfos) { vk_view_destroy(vkv) }
     delete vkraw_pInfos
     vk_views2_destroy(ppBuildRangeInfos, vkraw2_ppBuildRangeInfos, vkptr_ppBuildRangeInfos)
 }
 
 def build_acceleration_structures_k_h_r(device : Device; deferredOperation : DeferredOperationKHR; var pInfos : array<AccelerationStructureBuildGeometryInfoKHR>; var ppBuildRangeInfos : array<array<AccelerationStructureBuildRangeInfoKHR>>; var result : VkResult? = null) {
-    let vkcount_pInfos = uint(length(pInfos))
     var vkraw_pInfos : array<VkAccelerationStructureBuildGeometryInfoKHR>
     vkraw_pInfos |> resize(length(pInfos))
     for (vkv, vke in vkraw_pInfos, pInfos) {
@@ -2077,7 +2023,7 @@ def build_acceleration_structures_k_h_r(device : Device; deferredOperation : Def
     var vkraw2_ppBuildRangeInfos : array<array<VkAccelerationStructureBuildRangeInfoKHR>>
     var vkptr_ppBuildRangeInfos : array<void?>
     vk_views2_create(ppBuildRangeInfos, vkraw2_ppBuildRangeInfos, vkptr_ppBuildRangeInfos)
-    vk_check(vkBuildAccelerationStructuresKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), vkcount_pInfos, array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR ??>(array_addr(vkptr_ppBuildRangeInfos)))), result)
+    vk_check(vkBuildAccelerationStructuresKHR(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), uint(length(pInfos)), array_addr(vkraw_pInfos), unsafe(reinterpret<VkAccelerationStructureBuildRangeInfoKHR ??>(array_addr(vkptr_ppBuildRangeInfos)))), result)
     for (vkv in pInfos) { vk_view_destroy(vkv) }
     delete vkraw_pInfos
     vk_views2_destroy(ppBuildRangeInfos, vkraw2_ppBuildRangeInfos, vkptr_ppBuildRangeInfos)
@@ -2137,25 +2083,23 @@ def cmd_set_primitive_topology(commandBuffer : CommandBuffer; primitiveTopology 
 }
 
 def cmd_set_viewport_with_count(commandBuffer : CommandBuffer; pViewports : array<Viewport>) {
-    let vkcount_pViewports = uint(length(pViewports))
     var vkraw_pViewports : array<VkViewport>
     vkraw_pViewports |> resize(length(pViewports))
     for (vkv, vke in vkraw_pViewports, pViewports) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetViewportWithCount(boost_value_to_vk(commandBuffer), vkcount_pViewports, array_addr(vkraw_pViewports))
+    vkCmdSetViewportWithCount(boost_value_to_vk(commandBuffer), uint(length(pViewports)), array_addr(vkraw_pViewports))
     for (vkv in pViewports) { vk_view_destroy(vkv) }
     delete vkraw_pViewports
 }
 
 def cmd_set_scissor_with_count(commandBuffer : CommandBuffer; pScissors : array<Rect2D>) {
-    let vkcount_pScissors = uint(length(pScissors))
     var vkraw_pScissors : array<VkRect2D>
     vkraw_pScissors |> resize(length(pScissors))
     for (vkv, vke in vkraw_pScissors, pScissors) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetScissorWithCount(boost_value_to_vk(commandBuffer), vkcount_pScissors, array_addr(vkraw_pScissors))
+    vkCmdSetScissorWithCount(boost_value_to_vk(commandBuffer), uint(length(pScissors)), array_addr(vkraw_pScissors))
     for (vkv in pScissors) { vk_view_destroy(vkv) }
     delete vkraw_pScissors
 }
@@ -2165,9 +2109,8 @@ def cmd_bind_index_buffer2(commandBuffer : CommandBuffer; buffer : Buffer; offse
 }
 
 def cmd_bind_vertex_buffers2(commandBuffer : CommandBuffer; firstBinding : uint; pBuffers : array<Buffer>; var pOffsets : array<uint64>; var pSizes : array<uint64>; var pStrides : array<uint64>) {
-    let vkcount_pStrides = uint(length(pStrides))
     var vkraw_pBuffers <- [for (h in pBuffers); boost_value_to_vk(h)]
-    vkCmdBindVertexBuffers2(boost_value_to_vk(commandBuffer), firstBinding, vkcount_pStrides, array_addr(vkraw_pBuffers), array_addr(pOffsets), array_addr(pSizes), array_addr(pStrides))
+    vkCmdBindVertexBuffers2(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pStrides)), array_addr(vkraw_pBuffers), array_addr(pOffsets), array_addr(pSizes), array_addr(pStrides))
     unsafe { delete vkraw_pBuffers }
 }
 
@@ -2248,18 +2191,16 @@ def cmd_set_logic_op_enable_e_x_t(commandBuffer : CommandBuffer; logicOpEnable :
 }
 
 def cmd_set_color_blend_enable_e_x_t(commandBuffer : CommandBuffer; firstAttachment : uint; var pColorBlendEnables : array<uint>) {
-    let vkcount_pColorBlendEnables = uint(length(pColorBlendEnables))
-    vkCmdSetColorBlendEnableEXT(boost_value_to_vk(commandBuffer), firstAttachment, vkcount_pColorBlendEnables, array_addr(pColorBlendEnables))
+    vkCmdSetColorBlendEnableEXT(boost_value_to_vk(commandBuffer), firstAttachment, uint(length(pColorBlendEnables)), array_addr(pColorBlendEnables))
 }
 
 def cmd_set_color_blend_equation_e_x_t(commandBuffer : CommandBuffer; firstAttachment : uint; pColorBlendEquations : array<ColorBlendEquationEXT>) {
-    let vkcount_pColorBlendEquations = uint(length(pColorBlendEquations))
     var vkraw_pColorBlendEquations : array<VkColorBlendEquationEXT>
     vkraw_pColorBlendEquations |> resize(length(pColorBlendEquations))
     for (vkv, vke in vkraw_pColorBlendEquations, pColorBlendEquations) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetColorBlendEquationEXT(boost_value_to_vk(commandBuffer), firstAttachment, vkcount_pColorBlendEquations, array_addr(vkraw_pColorBlendEquations))
+    vkCmdSetColorBlendEquationEXT(boost_value_to_vk(commandBuffer), firstAttachment, uint(length(pColorBlendEquations)), array_addr(vkraw_pColorBlendEquations))
     for (vkv in pColorBlendEquations) { vk_view_destroy(vkv) }
     delete vkraw_pColorBlendEquations
 }
@@ -2285,13 +2226,12 @@ def cmd_set_sample_locations_enable_e_x_t(commandBuffer : CommandBuffer; sampleL
 }
 
 def cmd_set_color_blend_advanced_e_x_t(commandBuffer : CommandBuffer; firstAttachment : uint; pColorBlendAdvanced : array<ColorBlendAdvancedEXT>) {
-    let vkcount_pColorBlendAdvanced = uint(length(pColorBlendAdvanced))
     var vkraw_pColorBlendAdvanced : array<VkColorBlendAdvancedEXT>
     vkraw_pColorBlendAdvanced |> resize(length(pColorBlendAdvanced))
     for (vkv, vke in vkraw_pColorBlendAdvanced, pColorBlendAdvanced) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetColorBlendAdvancedEXT(boost_value_to_vk(commandBuffer), firstAttachment, vkcount_pColorBlendAdvanced, array_addr(vkraw_pColorBlendAdvanced))
+    vkCmdSetColorBlendAdvancedEXT(boost_value_to_vk(commandBuffer), firstAttachment, uint(length(pColorBlendAdvanced)), array_addr(vkraw_pColorBlendAdvanced))
     for (vkv in pColorBlendAdvanced) { vk_view_destroy(vkv) }
     delete vkraw_pColorBlendAdvanced
 }
@@ -2313,13 +2253,12 @@ def cmd_set_viewport_w_scaling_enable_n_v(commandBuffer : CommandBuffer; viewpor
 }
 
 def cmd_set_viewport_swizzle_n_v(commandBuffer : CommandBuffer; firstViewport : uint; pViewportSwizzles : array<ViewportSwizzleNV>) {
-    let vkcount_pViewportSwizzles = uint(length(pViewportSwizzles))
     var vkraw_pViewportSwizzles : array<VkViewportSwizzleNV>
     vkraw_pViewportSwizzles |> resize(length(pViewportSwizzles))
     for (vkv, vke in vkraw_pViewportSwizzles, pViewportSwizzles) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetViewportSwizzleNV(boost_value_to_vk(commandBuffer), firstViewport, vkcount_pViewportSwizzles, array_addr(vkraw_pViewportSwizzles))
+    vkCmdSetViewportSwizzleNV(boost_value_to_vk(commandBuffer), firstViewport, uint(length(pViewportSwizzles)), array_addr(vkraw_pViewportSwizzles))
     for (vkv in pViewportSwizzles) { vk_view_destroy(vkv) }
     delete vkraw_pViewportSwizzles
 }
@@ -2341,8 +2280,7 @@ def cmd_set_coverage_modulation_table_enable_n_v(commandBuffer : CommandBuffer; 
 }
 
 def cmd_set_coverage_modulation_table_n_v(commandBuffer : CommandBuffer; var pCoverageModulationTable : array<float>) {
-    let vkcount_pCoverageModulationTable = uint(length(pCoverageModulationTable))
-    vkCmdSetCoverageModulationTableNV(boost_value_to_vk(commandBuffer), vkcount_pCoverageModulationTable, array_addr(pCoverageModulationTable))
+    vkCmdSetCoverageModulationTableNV(boost_value_to_vk(commandBuffer), uint(length(pCoverageModulationTable)), array_addr(pCoverageModulationTable))
 }
 
 def cmd_set_shading_rate_image_enable_n_v(commandBuffer : CommandBuffer; shadingRateImageEnable : uint) {
@@ -2428,19 +2366,17 @@ def get_acceleration_structure_build_sizes_k_h_r(device : Device; buildType : Vk
 }
 
 def cmd_set_vertex_input_e_x_t(commandBuffer : CommandBuffer; pVertexBindingDescriptions : array<VertexInputBindingDescription2EXT>; pVertexAttributeDescriptions : array<VertexInputAttributeDescription2EXT>) {
-    let vkcount_pVertexBindingDescriptions = uint(length(pVertexBindingDescriptions))
     var vkraw_pVertexBindingDescriptions : array<VkVertexInputBindingDescription2EXT>
     vkraw_pVertexBindingDescriptions |> resize(length(pVertexBindingDescriptions))
     for (vkv, vke in vkraw_pVertexBindingDescriptions, pVertexBindingDescriptions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    let vkcount_pVertexAttributeDescriptions = uint(length(pVertexAttributeDescriptions))
     var vkraw_pVertexAttributeDescriptions : array<VkVertexInputAttributeDescription2EXT>
     vkraw_pVertexAttributeDescriptions |> resize(length(pVertexAttributeDescriptions))
     for (vkv, vke in vkraw_pVertexAttributeDescriptions, pVertexAttributeDescriptions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdSetVertexInputEXT(boost_value_to_vk(commandBuffer), vkcount_pVertexBindingDescriptions, array_addr(vkraw_pVertexBindingDescriptions), vkcount_pVertexAttributeDescriptions, array_addr(vkraw_pVertexAttributeDescriptions))
+    vkCmdSetVertexInputEXT(boost_value_to_vk(commandBuffer), uint(length(pVertexBindingDescriptions)), array_addr(vkraw_pVertexBindingDescriptions), uint(length(pVertexAttributeDescriptions)), array_addr(vkraw_pVertexAttributeDescriptions))
     for (vkv in pVertexBindingDescriptions) { vk_view_destroy(vkv) }
     delete vkraw_pVertexBindingDescriptions
     for (vkv in pVertexAttributeDescriptions) { vk_view_destroy(vkv) }
@@ -2448,8 +2384,7 @@ def cmd_set_vertex_input_e_x_t(commandBuffer : CommandBuffer; pVertexBindingDesc
 }
 
 def cmd_set_color_write_enable_e_x_t(commandBuffer : CommandBuffer; var pColorWriteEnables : array<uint>) {
-    let vkcount_pColorWriteEnables = uint(length(pColorWriteEnables))
-    vkCmdSetColorWriteEnableEXT(boost_value_to_vk(commandBuffer), vkcount_pColorWriteEnables, array_addr(pColorWriteEnables))
+    vkCmdSetColorWriteEnableEXT(boost_value_to_vk(commandBuffer), uint(length(pColorWriteEnables)), array_addr(pColorWriteEnables))
 }
 
 def cmd_set_event2(commandBuffer : CommandBuffer; event : Event; var pDependencyInfo : DependencyInfo) {
@@ -2463,14 +2398,13 @@ def cmd_reset_event2(commandBuffer : CommandBuffer; event : Event; stageMask : V
 }
 
 def cmd_wait_events2(commandBuffer : CommandBuffer; pEvents : array<Event>; var pDependencyInfos : array<DependencyInfo>) {
-    let vkcount_pDependencyInfos = uint(length(pDependencyInfos))
     var vkraw_pEvents <- [for (h in pEvents); boost_value_to_vk(h)]
     var vkraw_pDependencyInfos : array<VkDependencyInfo>
     vkraw_pDependencyInfos |> resize(length(pDependencyInfos))
     for (vkv, vke in vkraw_pDependencyInfos, pDependencyInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdWaitEvents2(boost_value_to_vk(commandBuffer), vkcount_pDependencyInfos, array_addr(vkraw_pEvents), array_addr(vkraw_pDependencyInfos))
+    vkCmdWaitEvents2(boost_value_to_vk(commandBuffer), uint(length(pDependencyInfos)), array_addr(vkraw_pEvents), array_addr(vkraw_pDependencyInfos))
     unsafe { delete vkraw_pEvents }
     for (vkv in pDependencyInfos) { vk_view_destroy(vkv) }
     delete vkraw_pDependencyInfos
@@ -2483,13 +2417,12 @@ def cmd_pipeline_barrier2(commandBuffer : CommandBuffer; var pDependencyInfo : D
 }
 
 def queue_submit2(queue : Queue; var pSubmits : array<SubmitInfo2>; fence : Fence; var result : VkResult? = null) {
-    let vkcount_pSubmits = uint(length(pSubmits))
     var vkraw_pSubmits : array<VkSubmitInfo2>
     vkraw_pSubmits |> resize(length(pSubmits))
     for (vkv, vke in vkraw_pSubmits, pSubmits) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkQueueSubmit2(boost_value_to_vk(queue), vkcount_pSubmits, array_addr(vkraw_pSubmits), boost_value_to_vk(fence)), result)
+    vk_check(vkQueueSubmit2(boost_value_to_vk(queue), uint(length(pSubmits)), array_addr(vkraw_pSubmits), boost_value_to_vk(fence)), result)
     for (vkv in pSubmits) { vk_view_destroy(vkv) }
     delete vkraw_pSubmits
 }
@@ -2525,13 +2458,12 @@ def copy_image_to_image(device : Device; var pCopyImageToImageInfo : CopyImageTo
 }
 
 def transition_image_layout(device : Device; pTransitions : array<HostImageLayoutTransitionInfo>; var result : VkResult? = null) {
-    let vkcount_pTransitions = uint(length(pTransitions))
     var vkraw_pTransitions : array<VkHostImageLayoutTransitionInfo>
     vkraw_pTransitions |> resize(length(pTransitions))
     for (vkv, vke in vkraw_pTransitions, pTransitions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkTransitionImageLayout(boost_value_to_vk(device), vkcount_pTransitions, array_addr(vkraw_pTransitions)), result)
+    vk_check(vkTransitionImageLayout(boost_value_to_vk(device), uint(length(pTransitions)), array_addr(vkraw_pTransitions)), result)
     for (vkv in pTransitions) { vk_view_destroy(vkv) }
     delete vkraw_pTransitions
 }
@@ -2593,13 +2525,12 @@ def get_video_session_memory_requirements_k_h_r(device : Device; videoSession : 
 }
 
 def bind_video_session_memory_k_h_r(device : Device; videoSession : VideoSessionKHR; pBindSessionMemoryInfos : array<BindVideoSessionMemoryInfoKHR>; var result : VkResult? = null) {
-    let vkcount_pBindSessionMemoryInfos = uint(length(pBindSessionMemoryInfos))
     var vkraw_pBindSessionMemoryInfos : array<VkBindVideoSessionMemoryInfoKHR>
     vkraw_pBindSessionMemoryInfos |> resize(length(pBindSessionMemoryInfos))
     for (vkv, vke in vkraw_pBindSessionMemoryInfos, pBindSessionMemoryInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkBindVideoSessionMemoryKHR(boost_value_to_vk(device), boost_value_to_vk(videoSession), vkcount_pBindSessionMemoryInfos, array_addr(vkraw_pBindSessionMemoryInfos)), result)
+    vk_check(vkBindVideoSessionMemoryKHR(boost_value_to_vk(device), boost_value_to_vk(videoSession), uint(length(pBindSessionMemoryInfos)), array_addr(vkraw_pBindSessionMemoryInfos)), result)
     for (vkv in pBindSessionMemoryInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindSessionMemoryInfos
 }
@@ -2635,13 +2566,12 @@ def cmd_encode_video_k_h_r(commandBuffer : CommandBuffer; var pEncodeInfo : Vide
 }
 
 def cmd_decompress_memory_n_v(commandBuffer : CommandBuffer; pDecompressMemoryRegions : array<DecompressMemoryRegionNV>) {
-    let vkcount_pDecompressMemoryRegions = uint(length(pDecompressMemoryRegions))
     var vkraw_pDecompressMemoryRegions : array<VkDecompressMemoryRegionNV>
     vkraw_pDecompressMemoryRegions |> resize(length(pDecompressMemoryRegions))
     for (vkv, vke in vkraw_pDecompressMemoryRegions, pDecompressMemoryRegions) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdDecompressMemoryNV(boost_value_to_vk(commandBuffer), vkcount_pDecompressMemoryRegions, array_addr(vkraw_pDecompressMemoryRegions))
+    vkCmdDecompressMemoryNV(boost_value_to_vk(commandBuffer), uint(length(pDecompressMemoryRegions)), array_addr(vkraw_pDecompressMemoryRegions))
     for (vkv in pDecompressMemoryRegions) { vk_view_destroy(vkv) }
     delete vkraw_pDecompressMemoryRegions
 }
@@ -2687,20 +2617,18 @@ def get_descriptor_set_layout_binding_offset_e_x_t(device : Device; layout : Des
 }
 
 def cmd_bind_descriptor_buffers_e_x_t(commandBuffer : CommandBuffer; pBindingInfos : array<DescriptorBufferBindingInfoEXT>) {
-    let vkcount_pBindingInfos = uint(length(pBindingInfos))
     var vkraw_pBindingInfos : array<VkDescriptorBufferBindingInfoEXT>
     vkraw_pBindingInfos |> resize(length(pBindingInfos))
     for (vkv, vke in vkraw_pBindingInfos, pBindingInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdBindDescriptorBuffersEXT(boost_value_to_vk(commandBuffer), vkcount_pBindingInfos, array_addr(vkraw_pBindingInfos))
+    vkCmdBindDescriptorBuffersEXT(boost_value_to_vk(commandBuffer), uint(length(pBindingInfos)), array_addr(vkraw_pBindingInfos))
     for (vkv in pBindingInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindingInfos
 }
 
 def cmd_set_descriptor_buffer_offsets_e_x_t(commandBuffer : CommandBuffer; pipelineBindPoint : VkPipelineBindPoint; layout : PipelineLayout; firstSet : uint; var pBufferIndices : array<uint>; var pOffsets : array<uint64>) {
-    let vkcount_pOffsets = uint(length(pOffsets))
-    vkCmdSetDescriptorBufferOffsetsEXT(boost_value_to_vk(commandBuffer), pipelineBindPoint, boost_value_to_vk(layout), firstSet, vkcount_pOffsets, array_addr(pBufferIndices), array_addr(pOffsets))
+    vkCmdSetDescriptorBufferOffsetsEXT(boost_value_to_vk(commandBuffer), pipelineBindPoint, boost_value_to_vk(layout), firstSet, uint(length(pOffsets)), array_addr(pBufferIndices), array_addr(pOffsets))
 }
 
 def cmd_bind_descriptor_buffer_embedded_samplers_e_x_t(commandBuffer : CommandBuffer; pipelineBindPoint : VkPipelineBindPoint; layout : PipelineLayout; set : uint) {
@@ -2750,25 +2678,23 @@ def get_descriptor_set_layout_host_mapping_info_v_a_l_v_e(device : Device; pBind
 }
 
 def cmd_build_micromaps_e_x_t(commandBuffer : CommandBuffer; var pInfos : array<MicromapBuildInfoEXT>) {
-    let vkcount_pInfos = uint(length(pInfos))
     var vkraw_pInfos : array<VkMicromapBuildInfoEXT>
     vkraw_pInfos |> resize(length(pInfos))
     for (vkv, vke in vkraw_pInfos, pInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdBuildMicromapsEXT(boost_value_to_vk(commandBuffer), vkcount_pInfos, array_addr(vkraw_pInfos))
+    vkCmdBuildMicromapsEXT(boost_value_to_vk(commandBuffer), uint(length(pInfos)), array_addr(vkraw_pInfos))
     for (vkv in pInfos) { vk_view_destroy(vkv) }
     delete vkraw_pInfos
 }
 
 def build_micromaps_e_x_t(device : Device; deferredOperation : DeferredOperationKHR; var pInfos : array<MicromapBuildInfoEXT>; var result : VkResult? = null) {
-    let vkcount_pInfos = uint(length(pInfos))
     var vkraw_pInfos : array<VkMicromapBuildInfoEXT>
     vkraw_pInfos |> resize(length(pInfos))
     for (vkv, vke in vkraw_pInfos, pInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkBuildMicromapsEXT(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), vkcount_pInfos, array_addr(vkraw_pInfos)), result)
+    vk_check(vkBuildMicromapsEXT(boost_value_to_vk(device), boost_value_to_vk(deferredOperation), uint(length(pInfos)), array_addr(vkraw_pInfos)), result)
     for (vkv in pInfos) { vk_view_destroy(vkv) }
     delete vkraw_pInfos
 }
@@ -2810,9 +2736,8 @@ def copy_memory_to_micromap_e_x_t(device : Device; deferredOperation : DeferredO
 }
 
 def cmd_write_micromaps_properties_e_x_t(commandBuffer : CommandBuffer; pMicromaps : array<MicromapEXT>; queryType : VkQueryType; queryPool : QueryPool; firstQuery : uint) {
-    let vkcount_pMicromaps = uint(length(pMicromaps))
     var vkraw_pMicromaps <- [for (h in pMicromaps); boost_value_to_vk(h)]
-    vkCmdWriteMicromapsPropertiesEXT(boost_value_to_vk(commandBuffer), vkcount_pMicromaps, array_addr(vkraw_pMicromaps), queryType, boost_value_to_vk(queryPool), firstQuery)
+    vkCmdWriteMicromapsPropertiesEXT(boost_value_to_vk(commandBuffer), uint(length(pMicromaps)), array_addr(vkraw_pMicromaps), queryType, boost_value_to_vk(queryPool), firstQuery)
     unsafe { delete vkraw_pMicromaps }
 }
 
@@ -3229,13 +3154,12 @@ def get_tensor_memory_requirements_a_r_m(device : Device; pInfo : TensorMemoryRe
 }
 
 def bind_tensor_memory_a_r_m(device : Device; pBindInfos : array<BindTensorMemoryInfoARM>; var result : VkResult? = null) {
-    let vkcount_pBindInfos = uint(length(pBindInfos))
     var vkraw_pBindInfos : array<VkBindTensorMemoryInfoARM>
     vkraw_pBindInfos |> resize(length(pBindInfos))
     for (vkv, vke in vkraw_pBindInfos, pBindInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkBindTensorMemoryARM(boost_value_to_vk(device), vkcount_pBindInfos, array_addr(vkraw_pBindInfos)), result)
+    vk_check(vkBindTensorMemoryARM(boost_value_to_vk(device), uint(length(pBindInfos)), array_addr(vkraw_pBindInfos)), result)
     for (vkv in pBindInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindInfos
 }
@@ -3289,13 +3213,12 @@ def get_data_graph_pipeline_session_memory_requirements_a_r_m(device : Device; p
 }
 
 def bind_data_graph_pipeline_session_memory_a_r_m(device : Device; pBindInfos : array<BindDataGraphPipelineSessionMemoryInfoARM>; var result : VkResult? = null) {
-    let vkcount_pBindInfos = uint(length(pBindInfos))
     var vkraw_pBindInfos : array<VkBindDataGraphPipelineSessionMemoryInfoARM>
     vkraw_pBindInfos |> resize(length(pBindInfos))
     for (vkv, vke in vkraw_pBindInfos, pBindInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vk_check(vkBindDataGraphPipelineSessionMemoryARM(boost_value_to_vk(device), vkcount_pBindInfos, array_addr(vkraw_pBindInfos)), result)
+    vk_check(vkBindDataGraphPipelineSessionMemoryARM(boost_value_to_vk(device), uint(length(pBindInfos)), array_addr(vkraw_pBindInfos)), result)
     for (vkv in pBindInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindInfos
 }
@@ -3393,37 +3316,34 @@ def cmd_begin_conditional_rendering2_e_x_t(commandBuffer : CommandBuffer; pCondi
 }
 
 def cmd_bind_transform_feedback_buffers2_e_x_t(commandBuffer : CommandBuffer; firstBinding : uint; pBindingInfos : array<BindTransformFeedbackBuffer2InfoEXT>) {
-    let vkcount_pBindingInfos = uint(length(pBindingInfos))
     var vkraw_pBindingInfos : array<VkBindTransformFeedbackBuffer2InfoEXT>
     vkraw_pBindingInfos |> resize(length(pBindingInfos))
     for (vkv, vke in vkraw_pBindingInfos, pBindingInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdBindTransformFeedbackBuffers2EXT(boost_value_to_vk(commandBuffer), firstBinding, vkcount_pBindingInfos, array_addr(vkraw_pBindingInfos))
+    vkCmdBindTransformFeedbackBuffers2EXT(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pBindingInfos)), array_addr(vkraw_pBindingInfos))
     for (vkv in pBindingInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindingInfos
 }
 
 def cmd_begin_transform_feedback2_e_x_t(commandBuffer : CommandBuffer; firstCounterRange : uint; pCounterInfos : array<BindTransformFeedbackBuffer2InfoEXT>) {
-    let vkcount_pCounterInfos = uint(length(pCounterInfos))
     var vkraw_pCounterInfos : array<VkBindTransformFeedbackBuffer2InfoEXT>
     vkraw_pCounterInfos |> resize(length(pCounterInfos))
     for (vkv, vke in vkraw_pCounterInfos, pCounterInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdBeginTransformFeedback2EXT(boost_value_to_vk(commandBuffer), firstCounterRange, vkcount_pCounterInfos, array_addr(vkraw_pCounterInfos))
+    vkCmdBeginTransformFeedback2EXT(boost_value_to_vk(commandBuffer), firstCounterRange, uint(length(pCounterInfos)), array_addr(vkraw_pCounterInfos))
     for (vkv in pCounterInfos) { vk_view_destroy(vkv) }
     delete vkraw_pCounterInfos
 }
 
 def cmd_end_transform_feedback2_e_x_t(commandBuffer : CommandBuffer; firstCounterRange : uint; pCounterInfos : array<BindTransformFeedbackBuffer2InfoEXT>) {
-    let vkcount_pCounterInfos = uint(length(pCounterInfos))
     var vkraw_pCounterInfos : array<VkBindTransformFeedbackBuffer2InfoEXT>
     vkraw_pCounterInfos |> resize(length(pCounterInfos))
     for (vkv, vke in vkraw_pCounterInfos, pCounterInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdEndTransformFeedback2EXT(boost_value_to_vk(commandBuffer), firstCounterRange, vkcount_pCounterInfos, array_addr(vkraw_pCounterInfos))
+    vkCmdEndTransformFeedback2EXT(boost_value_to_vk(commandBuffer), firstCounterRange, uint(length(pCounterInfos)), array_addr(vkraw_pCounterInfos))
     for (vkv in pCounterInfos) { vk_view_destroy(vkv) }
     delete vkraw_pCounterInfos
 }
@@ -3447,13 +3367,12 @@ def cmd_bind_index_buffer3_k_h_r(commandBuffer : CommandBuffer; pInfo : BindInde
 }
 
 def cmd_bind_vertex_buffers3_k_h_r(commandBuffer : CommandBuffer; firstBinding : uint; pBindingInfos : array<BindVertexBuffer3InfoKHR>) {
-    let vkcount_pBindingInfos = uint(length(pBindingInfos))
     var vkraw_pBindingInfos : array<VkBindVertexBuffer3InfoKHR>
     vkraw_pBindingInfos |> resize(length(pBindingInfos))
     for (vkv, vke in vkraw_pBindingInfos, pBindingInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdBindVertexBuffers3KHR(boost_value_to_vk(commandBuffer), firstBinding, vkcount_pBindingInfos, array_addr(vkraw_pBindingInfos))
+    vkCmdBindVertexBuffers3KHR(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pBindingInfos)), array_addr(vkraw_pBindingInfos))
     for (vkv in pBindingInfos) { vk_view_destroy(vkv) }
     delete vkraw_pBindingInfos
 }
