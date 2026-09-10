@@ -20,6 +20,8 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	execute_process(COMMAND ${CMAKE_COMMAND}
 		-DMINIAUDIO_H=${miniaudio_SOURCE_DIR}/miniaudio.h
 		-P ${DAS_AUDIO_DIR}/patches/miniaudio_memory64.cmake)
+	# a change to the patch script reconfigures, so an already-fetched header receives it
+	SET_PROPERTY(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${DAS_AUDIO_DIR}/patches/miniaudio_memory64.cmake)
 
 	SET(AUDIO_INCLUDE_DIR ${DAS_AUDIO_DIR}/src ${miniaudio_SOURCE_DIR})
 	SET(CIPIC_HRTF_INCLUDE_DIR ${DAS_AUDIO_DIR}/cipic-hrtf/include)

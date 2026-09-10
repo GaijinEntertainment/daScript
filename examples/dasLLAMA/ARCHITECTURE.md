@@ -14,6 +14,11 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   voice from a file without the codec encoder (text in, no packs, no cloning). Same four files;
   `wish.das` holds the request side pure (typed line -> words -> prompt, the field-line stop) so a
   test reaches it without a window.
+- `parrot/` - a browser example: you press record and talk, Silero VAD ends the take when you go
+  quiet, Pocket TTS clones the voice from the take (a file with its codec encoder and no baked
+  roster), and the text in the box is read aloud in it on the say button; recording again
+  replaces the voice. Same four files. Nothing leaves the program: the take is cloned in memory
+  and never written.
 - `wasm/dlim_config/` - a wasm-only program: prints the running build's DlimConfiguration JSON.
   `wasm/mint_models.py` - the deploy's staging step for a browser example's model set.
   `wasm/run_node.js` - runs the wasm64 engine host under node.
@@ -26,8 +31,8 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   wasm` builds it to wasm64 for dasllama.io from the same `main.das` the desktop run uses. The
   checklist's rules about the browser build bind browser examples and nothing else.
 - **A witness line** is a line a browser example logs under its own name (`storyteller: ...`,
-  `storywish: ...`); a smoke test under `modules/dasLLAMA/tests/` matches such lines as
-  substrings, so their words and order are an interface.
+  `storywish: ...`, `parrot: ...`); a smoke test under `modules/dasLLAMA/tests/` matches such
+  lines as substrings, so their words and order are an interface.
 
 ## 3. Mechanisms
 
@@ -46,14 +51,17 @@ shell reloads such a page (`pageshow` with `persisted`), so it starts from the g
 ### 3.2 The speech thread and its stream {#speech-thread-stream}
 
 Speech runs on its own thread so the frame loop never blocks on synthesis. The frame thread
-pushes sentences into a stream as archived `Line` records and pops finished clips from a second
-stream; a `SeqBox` carries the number of the story being told, so a queued sentence of a story
-the user replaced is skipped instead of synthesized. The thread's own setup - the TTS model path
-and the voice - rides the same sentence stream ahead of the first sentence. A string captured by
-the thread's lambda would be a pointer into the frame thread's heap, which that thread reuses on
-its own schedule; a browser worker starts slowly enough to read story text where the path was.
-An archived message is copied out of the stream into the reader's heap, so the stream is the one
-channel that is safe for a string.
+pushes its requests into a stream as archived records (storywish's `Line` is a sentence; parrot's
+`Ask` is a text to say or a take to clone, the PCM riding in the record) and pops finished clips
+from a second stream; a `SeqBox` carries the number of the story (parrot: the say) being told, so
+a queued sentence of one the user replaced is skipped instead of synthesized. The thread's own
+setup - the TTS model path and the voice - rides the same request stream ahead of the first
+request. Parrot's thread answers a say with its chunk count before the first clip, so the frame
+thread can tell the last clip from a pause. A string captured by the thread's lambda would be a
+pointer into the frame thread's heap, which that thread reuses on its own schedule; a browser
+worker starts slowly enough to read story text where the path was. An archived message is copied
+out of the stream into the reader's heap, so the stream is the one channel that is safe for a
+string.
 
 ### 3.3 Input is polled {#polled-keys}
 
@@ -61,16 +69,21 @@ A browser example reads the keyboard with `glfwGetKey` each frame, edge-detected
 never through a GLFW callback. In the browser build a callback lambda fires from a JavaScript
 event outside any frame of the program, where the example's state is not live, and the program
 traps. A printable GLFW key code is its upper-case ASCII, so the key range doubles as the
-character range for a typed line, and repeats come from a hold timer.
+character range for a typed line, and repeats come from a hold timer. The mouse is read the same
+way: parrot's buttons are text, and a click is `glfwGetMouseButton` edge-detected against their
+rectangles in design pixels.
 
 ### 3.4 The model set is minted for the build that ships it
 
 Each browser example's `models.json` names its source files by Hugging Face repository, file
 and sha256, in three lists: `images` (a GGUF the build bakes into a `.dlim`), `packs` (a
-front-end pack) and `files` (a GGUF that is its own served form - a Pocket TTS file). `wasm/mint_models.py`
-fetches them (cached by sha256), bakes each image against the wasm64 build's own
-DlimConfiguration, copies the packs and files as they are, writes
-`models/manifest.json` (the file list, their sizes, the IMAGE_VERSION the images carry) and
+front-end pack) and `files` (a GGUF that is its own served form - a Pocket TTS file); a fourth
+list, `tree`, names a file the repository itself carries by its repo-relative path and sha256
+(the voice-activity weights). `wasm/mint_models.py`
+fetches the published ones (cached by sha256), bakes each image against the wasm64 build's own
+DlimConfiguration, copies the packs, files and tree files as they are, writes
+`models/manifest.json` (the file list, their sizes, the IMAGE_VERSION the images carry - a set
+with no image carries the version the deploy expects) and
 stamps that version into the page's `/* @image-version */ 0` slot. The shell reads the manifest,
 refuses a set minted for another version before fetching it, and shows a program abort's last
 engine lines on the page. The configuration the mint bakes against comes from the wasm build
@@ -82,6 +95,17 @@ is keyed by the build's identity and a set minted for a previous build is declin
 `wasm/dlim_config/main.das` prints `dlim_config_json(dlim_config_current())` and nothing else.
 Its `.das_package` disables the GPU tiers exactly as the browser examples' do, so the
 configuration it prints is the one their programs run with.
+
+### 3.6 Parrot's take {#the-take}
+
+The microphone is opened at the speech model's own rate, 24 kHz mono, and drained on the frame
+thread every frame into the take; a copy of each drain, resampled to 16 kHz by linear
+interpolation, feeds the Silero iterator, which is the only reader of that rate. The take ends on
+the stop button, two seconds after the iterator's last speech end, or at the model's 60 s clip
+cap; it is trimmed to the speech plus a quarter second at each end and sent to the speech thread
+as a clone request, so the clone runs off the frame thread like a synthesis. A take with no
+speech in it is dropped. The audio device is the capture's own, separate from playback, so a
+recording can start while a clip is still playing.
 
 ## 4. Exception ledger
 

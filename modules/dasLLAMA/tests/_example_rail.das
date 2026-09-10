@@ -6,7 +6,7 @@ require dasllama/dasllama_env
 require daslib/fio
 require strings
 
-// Shared by the browser examples' smoke tests (test_storyteller_restart.das, test_storywish.das):
+// Shared by the browser examples' smoke tests (test_storyteller_restart.das, test_storywish.das, test_parrot.das):
 // each spawns its example as a child of this binary, and the example opens a GLFW window.
 
 //! this binary, as the child's argv[0]

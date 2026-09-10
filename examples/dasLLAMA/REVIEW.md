@@ -16,6 +16,7 @@ smoke tests match witness lines as substrings, so the words and their order are 
 (`ARCHITECTURE.md` sec. 2).
 
 **A diff that adds a model file to a browser example's `models.json` names it by the repository
-it is published in and its sha256, never by a local path or a branch name.** The deploy fetches
-the file by that name and refuses one whose hash moved; a local path stages nothing on the
-runner (`ARCHITECTURE.md` sec. 3.4).
+it is published in and its sha256 - or, for a file the repository itself carries, by its
+repo-relative path under `tree` and its sha256 - never by a machine-local path or a branch
+name.** The deploy fetches or copies the file by that name and refuses one whose hash moved; a
+machine-local path stages nothing on the runner (`ARCHITECTURE.md` sec. 3.4).

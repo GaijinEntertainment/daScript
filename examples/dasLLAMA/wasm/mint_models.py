@@ -2,8 +2,10 @@
 """Stage a browser example's model set: fetch the files its models.json names from Hugging Face,
 mint each GGUF under `images` into a .dlim against the wasm64 build's DlimConfiguration, copy the
 `packs` and `files` as they are (a front-end pack; a Pocket TTS GGUF, which is its own served
-form), and write models/manifest.json - the list the example's web shell reads, stamped with the
-IMAGE_VERSION the images carry.
+form), copy each `tree` file from the repository itself (a checked-in model such as the
+voice-activity weights, named by its repo-relative path), and write models/manifest.json - the
+list the example's web shell reads, stamped with the IMAGE_VERSION the images carry (a set with no
+image carries the version the deploy expects).
 
     mint_models.py --example examples/dasLLAMA/storywish --config wasm64.json \
                    --daslang bin/daslang --out _site/examples/storywish/models \
@@ -100,9 +102,19 @@ def main():
         shutil.copyfile(src, dst)
         files.append({"name": entry["file"], "bytes": os.path.getsize(dst), "sha256": entry["sha256"], "source": f"{entry['repo']}/{entry['file']}"})
 
-    if len(versions) != 1:
+    # a file the tree itself carries: copied from the checkout, its hash held like a fetched file's
+    for entry in spec.get("tree", []):
+        src = os.path.join(repo_root, entry["path"])
+        got = sha256_of(src)
+        if got != entry["sha256"]:
+            raise SystemExit(f"{entry['file']}: sha256 {got}, models.json says {entry['sha256']} - the tree file changed; update models.json")
+        dst = os.path.join(a.out, entry["file"])
+        shutil.copyfile(src, dst)
+        files.append({"name": entry["file"], "bytes": os.path.getsize(dst), "sha256": entry["sha256"], "source": entry["path"]})
+
+    if len(versions) > 1:
         raise SystemExit(f"the minted images disagree on IMAGE_VERSION: {sorted(versions)}")
-    version = versions.pop()
+    version = versions.pop() if versions else a.expect_image_version
     if a.expect_image_version and version != a.expect_image_version:
         sys.stderr.write(f"minted images carry IMAGE_VERSION {version}, the tree says {a.expect_image_version} - the converter that minted them is not this tree's\n")
         sys.exit(3)   # the deploy tells this exit apart: a version mismatch reds the run, every other failure stages a placeholder

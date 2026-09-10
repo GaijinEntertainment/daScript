@@ -20,13 +20,13 @@ endif()
 
 file(READ "${MINIAUDIO_H}" _ma)
 
-# Idempotency guard: key on the LAST-added patch marker (the worklet non-blocking
-# patch), not the first (toPtr). Otherwise a tree already patched by an older
-# version of this script (toPtr only) would early-return and never receive a
-# newly-added block. With this marker, a toPtr-only tree still runs the script;
-# the toPtr string(REPLACE)s are no-ops (targets already gone) and only the new
-# worklet block applies.
-string(FIND "${_ma}" "daslang non-blocking patch (see miniaudio_memory64.cmake)" _already)
+# Idempotency guard: key on the LAST-added patch marker (the capture-rate patch),
+# not the first (toPtr). Otherwise a tree already patched by an older version of
+# this script would early-return and never receive a newly-added block. With this
+# marker, an older-patched tree still runs the script; the earlier string(REPLACE)s
+# are no-ops (targets already gone) and only the new block applies (block 6b is
+# the form of block 6 that targets a tree carrying the previous non-blocking text).
+string(FIND "${_ma}" "daslang capture-rate patch" _already)
 if(_already GREATER -1)
     message(STATUS "miniaudio_memory64.cmake: already patched, skipping ${MINIAUDIO_H}")
     return()
@@ -78,6 +78,14 @@ string(REPLACE
 # Only compiled when MA_USE_AUDIO_WORKLETS (the threaded web build); inert
 # otherwise. Verified end-to-end: a 440Hz worklet tone plays in Chrome on
 # memory64+pthread+wasm-EH with no asyncify.
+#
+# The descriptors' sample rate is the context's own (the capture-rate patch): the
+# generic ma_device_init reads the native rate back from the descriptor and sets up
+# resampling between it and the requested one, and a capture context is created at
+# the browser's rate (48 kHz in Chrome), not the requested one - left at the
+# requested value, a 24 kHz capture arrives as 48 kHz frames counted as 24 kHz,
+# an octave down and twice as long. A playback context is created at the
+# requested rate, so its descriptor reads back the same value as before.
 string(REPLACE
 [==[        while (pDevice->webaudio.initResult == MA_BUSY) { emscripten_sleep(1); }    /* We must wait for initialization to complete. We're just spinning here. The emscripten_sleep() call is why we need to build with `-sASYNCIFY`. */
 
@@ -89,12 +97,16 @@ string(REPLACE
         }]==]
 [==[        /* daslang non-blocking patch (see miniaudio_memory64.cmake): drop the
            emscripten_sleep busy-wait that forces -sASYNCIFY. Pre-fill descriptors
-           from config; the worklet connects asynchronously. */
+           from config; the worklet connects asynchronously. The rate is the
+           context's own (daslang capture-rate patch): a capture context is created
+           at the browser's rate, and the device layer resamples to the requested one. */
         {
+            ma_uint32 awRate = (ma_uint32)EM_ASM_INT({ return emscriptenGetAudioObject($0).sampleRate; }, pDevice->webaudio.audioContext);
             ma_uint32 awCh = (pDescriptorPlayback != NULL && pDescriptorPlayback->channels > 0) ? pDescriptorPlayback->channels : MA_DEFAULT_CHANNELS;
             if (pDescriptorPlayback != NULL) {
                 pDescriptorPlayback->format             = ma_format_f32;
                 pDescriptorPlayback->channels           = awCh;
+                if (awRate != 0) { pDescriptorPlayback->sampleRate = awRate; }
                 ma_channel_map_init_standard(ma_standard_channel_map_webaudio, pDescriptorPlayback->channelMap, ma_countof(pDescriptorPlayback->channelMap), pDescriptorPlayback->channels);
                 pDescriptorPlayback->periodSizeInFrames = 128;
                 pDescriptorPlayback->periodCount        = 1;
@@ -103,6 +115,7 @@ string(REPLACE
                 ma_uint32 awCapCh = (pDescriptorCapture->channels > 0) ? pDescriptorCapture->channels : MA_DEFAULT_CHANNELS;
                 pDescriptorCapture->format              = ma_format_f32;
                 pDescriptorCapture->channels            = awCapCh;
+                if (awRate != 0) { pDescriptorCapture->sampleRate = awRate; }
                 ma_channel_map_init_standard(ma_standard_channel_map_webaudio, pDescriptorCapture->channelMap, ma_countof(pDescriptorCapture->channelMap), pDescriptorCapture->channels);
                 pDescriptorCapture->periodSizeInFrames  = 128;
                 pDescriptorCapture->periodCount         = 1;
@@ -115,6 +128,35 @@ string(REPLACE
             pInitParameters->pDescriptorPlayback = NULL;
             pInitParameters->pDescriptorCapture  = NULL;
         }]==]
+    _ma "${_ma}")
+
+# 6b) The capture-rate patch on a tree the previous version of this script already
+# patched (its block 6 text is present, without the rate): the same result as block 6.
+# On a fresh tree block 6 has already written the rate lines, so none of these match.
+string(REPLACE
+[==[           from config; the worklet connects asynchronously. */
+        {
+            ma_uint32 awCh = (pDescriptorPlayback != NULL && pDescriptorPlayback->channels > 0) ? pDescriptorPlayback->channels : MA_DEFAULT_CHANNELS;]==]
+[==[           from config; the worklet connects asynchronously. The rate is the
+           context's own (daslang capture-rate patch): a capture context is created
+           at the browser's rate, and the device layer resamples to the requested one. */
+        {
+            ma_uint32 awRate = (ma_uint32)EM_ASM_INT({ return emscriptenGetAudioObject($0).sampleRate; }, pDevice->webaudio.audioContext);
+            ma_uint32 awCh = (pDescriptorPlayback != NULL && pDescriptorPlayback->channels > 0) ? pDescriptorPlayback->channels : MA_DEFAULT_CHANNELS;]==]
+    _ma "${_ma}")
+string(REPLACE
+[==[                pDescriptorPlayback->channels           = awCh;
+                ma_channel_map_init_standard(]==]
+[==[                pDescriptorPlayback->channels           = awCh;
+                if (awRate != 0) { pDescriptorPlayback->sampleRate = awRate; }
+                ma_channel_map_init_standard(]==]
+    _ma "${_ma}")
+string(REPLACE
+[==[                pDescriptorCapture->channels            = awCapCh;
+                ma_channel_map_init_standard(]==]
+[==[                pDescriptorCapture->channels            = awCapCh;
+                if (awRate != 0) { pDescriptorCapture->sampleRate = awRate; }
+                ma_channel_map_init_standard(]==]
     _ma "${_ma}")
 
 # 7) AudioWorklet dangling-config fix. The processor-created callback runs long

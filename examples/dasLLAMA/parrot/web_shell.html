@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>parrot — dasllama.io</title>
+<meta name="description" content="Talk for a few seconds and Pocket TTS clones your voice, then reads the text you type in it - dasLLAMA compiled to WebAssembly, running in your browser; the recording never leaves the tab.">
+<link rel="icon" href="/files/dasllama-favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/files/fonts/fonts.css">
+<link rel="stylesheet" href="/files/forge.css">
+<link rel="stylesheet" href="/files/dasllama-io.css">
+<script src="/files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #12101a; overflow: hidden; }
+  body {
+    display: flex; flex-direction: column;
+    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; color: #d6cfbf;
+  }
+  /* the site's nav sits above the stage; the stage takes the rest of the viewport */
+  .dio-nav { flex: none; }
+  #stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  #canvas { width: 100%; height: 100%; object-fit: contain; border: 0; outline: none; display: block; }
+  #gate {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; background: #12101a; cursor: default;
+  }
+  #gate[hidden] { display: none; }
+  #gate h1 { font-weight: 500; font-size: 26px; margin: 0; color: #f4e9d2; letter-spacing: 0.02em; }
+  #gate p { margin: 0; color: #8d8577; }
+  #bar { width: 320px; height: 6px; border-radius: 3px; background: #2a2636; overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: #f2b955; transition: width 0.15s; }
+  #start {
+    display: none; padding: 10px 28px; border-radius: 22px; border: 1px solid #f2b955;
+    background: transparent; color: #f2b955; font: inherit; font-size: 16px; cursor: pointer;
+  }
+  #start:hover { background: #f2b955; color: #12101a; }
+  #note { max-width: 560px; text-align: center; line-height: 1.6; }
+  #mic { max-width: 520px; text-align: center; line-height: 1.6; font-size: 14px; }
+  #note b { color: #f4e9d2; font-weight: 500; }
+  #note a { color: #f2b955; }
+  #note code { color: #d6cfbf; font-size: 13px; }
+</style>
+</head>
+<body>
+<!-- The parrot shell: the dasllama.io nav on top (its css and script come from the site
+     root, /files/), then the stage. The shell checks the browser first - the build is wasm64
+     (memory64) with real Web Workers, so it needs an engine with memory64 (Chrome or Edge 133+,
+     Firefox 134+; Safari has none yet, and every iPhone and iPad browser is Safari's engine) on a
+     cross-origin-isolated page; a browser without either gets the note below and never fetches a
+     byte. Then it reads models/manifest.json - the list the deploy minted, stamped with the
+     IMAGE_VERSION it minted at - and refuses a set minted for another version before fetching a
+     megabyte of it: the program would decline the images anyway, this way the reason is on the
+     page. Otherwise it fetches the speech model and the voice-activity model into MEMFS,
+     then waits for a click - browsers only let audio start from a gesture. Models come from
+     ./models/ beside the page, or ?models=<base url>. ?force=unsupported shows the browser note on
+     a supporting browser, for checking the page. A program that aborts after the click puts its
+     last engine lines back on the page instead of a black canvas. -->
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 24 Q25 20 27 17 L30 12 Q32 8 36 8 L40 8 Q44 8 46 12 L47 17 Q48 20 47 24 L46 40 L48 61 Z M40 8 L42 4 L44 8 Z M36 8 L34 4 L36 8 Z"/></svg><span class="dio-mark__text">dasllama</span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="/examples.html">examples</a><a class="dio-tab" href="/stories.html">stories</a><a class="dio-tab" href="/ladder.html">ladder</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io">daslang.io →</a></div>
+</div></div></nav>
+<div id="stage">
+<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<div id="gate">
+  <h1>parrot</h1>
+  <p id="status">reading the model list...</p>
+  <div id="bar"><i id="fill"></i></div>
+  <button id="start">start</button>
+  <p id="mic">The page asks for the microphone when you press record. Your recording stays in this tab: nothing is uploaded, and the voice is gone when you close it.</p>
+  <p id="note" hidden></p>
+</div>
+</div>
+<!-- emcc's script tag lands inside a template, where it is inert; the guard below appends a live
+     copy only on a browser that can run the build, so an unsupported one loads no program -->
+<template id="loader">{{{ SCRIPT }}}</template>
+<script>
+  var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1, Tab:1 };
+  window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key]) e.preventDefault(); }, { passive: false });
+
+  // the IMAGE_VERSION this page's program was built with - the deploy stamps it (pages.yml, from
+  // modules/dasLLAMA/dasllama/dasllama_image.das); 0 means "not stamped" (a local rig), no check
+  var PAGE_IMAGE_VERSION = /* @image-version */ 0;
+
+  // wasm64 (memory64): validate a minimal module whose memory section carries the memory64
+  // flag (0x04) - true only where the engine parses it, unlike a Memory descriptor probe an
+  // engine can silently downgrade. Same probe as daslang.io's examples page.
+  var HAS_WASM64 = (function () {
+    try { return WebAssembly.validate(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 5, 3, 1, 4, 1])); }
+    catch (e) { return false; }
+  })();
+  // the -pthread build runs its workers on SharedArrayBuffer, which a page gets only when the
+  // server sent the cross-origin isolation headers
+  var HAS_ISOLATION = !!(self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
+  var FORCE = new URLSearchParams(location.search).get('force');
+  var SUPPORTED = FORCE === 'unsupported' ? false : (HAS_WASM64 && HAS_ISOLATION);
+
+  function setStatus(text) { document.getElementById('status').textContent = text; }
+  function showNote(status, html) {
+    var gate = document.getElementById('gate'), note = document.getElementById('note');
+    gate.hidden = false;
+    note.innerHTML = html + '<br><a href="/examples.html">back to the examples</a>';
+    note.hidden = false;
+    setStatus(status);
+    document.getElementById('bar').hidden = true;
+    document.getElementById('start').style.display = 'none';
+  }
+  function escapeHtml(text) {
+    var span = document.createElement('span');
+    span.textContent = text;
+    return span.innerHTML;
+  }
+
+  // a page the browser brings back from its back-forward cache returns with the program's
+  // workers and the audio output frozen mid-frame and out of step with each other, and the
+  // first thing heard is whatever sat in the output ring: such a page starts over instead
+  window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+
+  if (!SUPPORTED) {
+    if (FORCE === 'unsupported' || !HAS_WASM64) {
+      showNote('needs a memory64 browser',
+        '<b>This browser cannot run parrot.</b><br>The example is dasLLAMA compiled to ' +
+        'WebAssembly memory64, which needs Chrome or Edge 133+ or Firefox 134+ on a desktop. Safari ' +
+        'does not support memory64 yet, and on iPhone and iPad every browser runs on Safari\'s engine.');
+    } else {
+      showNote('needs SharedArrayBuffer',
+        '<b>SharedArrayBuffer is not available on this page.</b><br>The build runs on Web Workers ' +
+        'over it, and a browser grants it only to a cross-origin-isolated page - one the server ' +
+        'sends the Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers for.');
+    }
+  } else {
+    // the probes passed but the program refuses the browser anyway (emcc's own user-agent check
+    // throws "compiled without support for <browser>" at the top of its script): the error
+    // becomes the note while the gate is still up, never a download line that stays forever
+    window.addEventListener('error', function (e) {
+      if (!e.message) return;
+      showNote('this browser cannot run the build', '<b>This browser cannot run parrot.</b><br>' + escapeHtml(e.message));
+    });
+    runParrot();
+  }
+
+  function runParrot() {
+
+  var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
+  if (!modelsBase.endsWith('/')) modelsBase += '/';
+
+  function setProgress(done, total) {
+    document.getElementById('fill').style.width = total ? (100 * done / total) + '%' : '0';
+  }
+
+  // the deploy's manifest: the files it minted or copied beside the page, with their sizes, and
+  // the IMAGE_VERSION the images were minted at
+  async function fetchManifest() {
+    var r = await fetch(modelsBase + 'manifest.json', { cache: 'no-cache' });
+    if (!r.ok) throw new Error('manifest.json: HTTP ' + r.status);
+    var m = await r.json();
+    if (!m || !Array.isArray(m.files) || !m.files.length) throw new Error('manifest.json lists no files');
+    if (PAGE_IMAGE_VERSION && m.image_version !== PAGE_IMAGE_VERSION) {
+      throw new Error('the model set was minted at IMAGE_VERSION ' + m.image_version +
+        ', this build needs ' + PAGE_IMAGE_VERSION + ' - the deploy did not re-mint it');
+    }
+    return m;
+  }
+
+  // fetch every file with one shared progress bar, sizes from the manifest
+  async function fetchModels(manifest, onFile) {
+    var total = manifest.files.reduce(function (a, f) { return a + (f.bytes || 0); }, 0), done = 0;
+    for (var i = 0; i < manifest.files.length; i++) {
+      var name = manifest.files[i].name;
+      var r = await fetch(modelsBase + name);
+      if (!r.ok) throw new Error(name + ': HTTP ' + r.status);
+      var chunks = [], reader = r.body.getReader();
+      for (;;) {
+        var step = await reader.read();
+        if (step.done) break;
+        chunks.push(step.value);
+        done += step.value.length;
+        setProgress(done, total);
+        setStatus('fetching ' + name + '  ' + (done / 1048576).toFixed(0) + ' / ' + (total / 1048576).toFixed(0) + ' MB');
+      }
+      var bytes = new Uint8Array(chunks.reduce(function (a, c) { return a + c.length; }, 0)), off = 0;
+      chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
+      onFile(name, bytes);
+    }
+  }
+
+  // the engine's last lines: an abort after the click shows them, so a declined image or a
+  // missing pack reads as text on the page instead of a black canvas
+  var lastLines = [];
+  function remember(text) {
+    text = String(text);
+    if (/dasLLAMA|parrot|panic|error/i.test(text)) {
+      lastLines.push(text);
+      if (lastLines.length > 6) lastLines.shift();
+    }
+  }
+  function showFailure(what) {
+    var lines = lastLines.map(function (l) { return '<code>' + escapeHtml(l) + '</code>'; }).join('<br>');
+    showNote('the program stopped', '<b>parrot stopped: ' + escapeHtml(what) + '</b>' + (lines ? '<br>' + lines : ''));
+  }
+
+  window.Module = {
+    canvas: (function () {
+      var c = document.getElementById('canvas');
+      c.addEventListener('click', function () { c.focus(); });
+      var origGetContext = c.getContext.bind(c);
+      c.getContext = function (type) {
+        if (/webgl/i.test(String(type))) {
+          try { parent.postMessage({ type: 'canvas-visible', width: c.width, height: c.height }, '*'); } catch (e) { /* no embedder */ }
+        }
+        return origGetContext.apply(c, arguments);
+      };
+      return c;
+    })(),
+    arguments: ['--models', '/models', '--tts-model', 'pocket-tts-en-kq.gguf', '--vad-model', 'silero_vad.bin'],
+    print: function (text) { console.log(text); remember(text); },
+    printErr: function (text) { console.error(text); remember(text); },
+    onAbort: function (what) { showFailure(what || 'abort'); },
+    onExit: function (code) { if (code) showFailure('exit code ' + code); },
+    preRun: [function () {
+      // the C environment is built from Module.ENV at startup: knobs set later never reach getenv
+      Module.ENV.DASLLAMA_IMAGE = '0';          // never mint a sidecar into MEMFS: the images arrive prepared
+      Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';  // the portable kernels, no tune sidecar
+      Module.FS.mkdir('/models');
+      Module.addRunDependency('parrot-models');
+      fetchManifest()
+        .then(function (manifest) {
+          return fetchModels(manifest, function (name, bytes) { Module.FS.writeFile('/models/' + name, bytes); });
+        })
+        .then(function () {
+          setStatus('the models are here');
+          setProgress(1, 1);
+          var start = document.getElementById('start');
+          start.style.display = 'block';
+          start.addEventListener('click', function () {
+            document.getElementById('gate').hidden = true;
+            document.getElementById('canvas').focus();
+            Module.removeRunDependency('parrot-models');
+          });
+        })
+        .catch(function (err) {
+          showNote('could not load the model set', '<b>' + escapeHtml(err.message) + '</b>');
+        });
+    }],
+  };
+  // the program: a live copy of the tag emcc put in the template (a cloned template script stays inert)
+  var loader = document.getElementById('loader').content.querySelector('script');
+  var live = document.createElement('script');
+  live.async = true;
+  // a script that never arrives (a partial deploy, a proxy) fires error on the element itself,
+  // with no message and no bubbling - the window listener above never sees it
+  live.onerror = function () {
+    showNote('the program did not load', '<b>The program script did not load.</b><br>' +
+      'Reload the page; if it keeps failing, the deploy is incomplete.');
+  };
+  if (loader.getAttribute('src')) live.src = loader.getAttribute('src');
+  else live.textContent = loader.textContent;
+  document.body.appendChild(live);
+  }
+</script>
+</body>
+</html>

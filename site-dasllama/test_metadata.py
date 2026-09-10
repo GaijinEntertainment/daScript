@@ -110,6 +110,7 @@ class SiteMetadataTest(unittest.TestCase):
 EXAMPLE_SHELLS = {
     "storyteller": (REPO_ROOT / "examples" / "dasLLAMA" / "storyteller" / "web_shell.html", "runStoryteller"),
     "storywish": (REPO_ROOT / "examples" / "dasLLAMA" / "storywish" / "web_shell.html", "runStorywish"),
+    "parrot": (REPO_ROOT / "examples" / "dasLLAMA" / "parrot" / "web_shell.html", "runParrot"),
 }
 
 

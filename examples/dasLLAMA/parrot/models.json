@@ -1,0 +1,8 @@
+{
+  "files": [
+    { "file": "pocket-tts-en-kq.gguf", "repo": "borisbat/dasllama-tts", "sha256": "2475a1ed8d49eb72c9d9b8c38f10f91ef5b03c7cd6e9fe43fdf7ab00ae1a0a25" }
+  ],
+  "tree": [
+    { "file": "silero_vad.bin", "path": "modules/dasLLAMA/models/silero_vad.bin", "sha256": "33d2121d08c033eeb08f73ce5b6130c02d2e84c34547f8e9f97aeb408fc5a82a" }
+  ]
+}
