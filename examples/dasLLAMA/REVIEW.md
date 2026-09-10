@@ -10,11 +10,6 @@ rules below bind browser examples.
 with `glfwGetKey` every frame and edge-detect it.** In the browser build a callback fires outside
 any frame of the program and the program traps (`ARCHITECTURE.md` sec. 3.3).
 
-**A string a browser example hands to a thread it starts with `new_thread` crosses as an archived
-record on a `Stream?` (`push_archive` / `pop_archive`), never in the lambda's `@capture` list.** A
-captured string is a pointer into the starting thread's heap, which that thread reuses before a
-slow browser worker reads it (`ARCHITECTURE.md` sec. 3.2).
-
 **A diff that changes or drops a witness line - a line a browser example logs under its own name -
 updates every test under `modules/dasLLAMA/tests/` that matches it, in the same change.** The
 smoke tests match witness lines as substrings, so the words and their order are an interface

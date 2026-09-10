@@ -22,6 +22,7 @@ require dasllama/dasllama_styletts2  // stage_styletts2/load_styletts2/mint_styl
 require dasllama/dasllama_tts        // load_tts_model/caps/synthesize — the kitten arm's facade leg
 require dasllama/dasllama_tts_blocks // TtsSpan — the staged blob's span table
 require daslib/defer
+require daslib/rtti   // this_context().last_exception: the facade's decline is read as text
 require dasllama/dasllama_math   // pin_kernel_backend — the metal-flavor arm's donor contract
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower/metal_tower_stats — the gemma4uv-metal arm
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown — the mtower re-arm leg
@@ -223,6 +224,18 @@ def private patch_u32(t : T?; path : string; at : int64; v : uint) {
     fclose(f)
 }
 
+//! the text of the panic the facade raises declining `path` (empty when it loads)
+def private facade_decline_of(path : string) : string {
+    var why = ""
+    try {
+        var m <- load_model_cached(path, QuantMode.q8)
+        delete m
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
+}
+
 [test]
 def test_image_mechanics(t : T?) {
     t |> run("synthetic carrier: round trip, nested planes, declines, unmap-remap") @(t : T?) {
@@ -326,6 +339,25 @@ def test_image_mechanics(t : T?) {
         }
         t |> success(caught, "forget on an owned locked array is a loud error")
         delete owned
+    }
+    t |> run("synthetic carrier: the facade's decline names the minted version when that is the reason") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var terr : string
+        let tmp = temp_directory(terr)
+        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_stale_{ref_time_ticks()}.dlim")
+        var p <- make_probe()
+        t |> success(save_image(p, path, "img-probe"), "save")
+        delete p
+        let foreign = facade_decline_of(path)
+        t |> success(find(foreign, "is not a prepared image for this box/knobs") >= 0, "an image of this version under a foreign identity declines as a wrong-box image:\n{foreign}")
+        t |> success(find(foreign, "was minted at IMAGE_VERSION") < 0, "and says nothing about a version that matches:\n{foreign}")
+        patch_u32(t, path, 4l, 0xDEADu)
+        let stale = facade_decline_of(path)
+        t |> success(find(stale, "was minted at IMAGE_VERSION {int(0xDEADu)}") >= 0, "a stale image's decline names the version it was minted at:\n{stale}")
+        t |> success(find(stale, "this build reads {IMAGE_VERSION}") >= 0, "and the version this build reads:\n{stale}")
+        t |> success(remove(path), "stale image removed")
     }
     t |> run("synthetic carrier: the cold rail builds in memory, tees to disk, serves the chunk") @(t : T?) {
         if (!arm_on(t, "mechanics")) {

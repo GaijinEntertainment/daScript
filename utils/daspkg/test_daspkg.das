@@ -2672,6 +2672,23 @@ def private write_archive(path : string; magic : array<uint8>; index_bytes : int
     }
 }
 
+//! the BSD shape macOS's ar writes: a `__.SYMDEF SORTED` table, then a member whose `#1/NN` name leads its body
+def private write_bsd_archive(path : string; magic : array<uint8>) {
+    var bytes : array<uint8>
+    bytes |> reserve(256)
+    push_text(bytes, "!<arch>\n")
+    push_ar_header(bytes, "__.SYMDEF SORTED", 16)
+    push_text(bytes, "0000000000000000")
+    let name = "a_long_member_name.o"
+    push_ar_header(bytes, "#1/{length(name)}", length(name) + 64)
+    push_text(bytes, name)
+    bytes |> push_from(magic)
+    push_text(bytes, "padding past the magic so the member has a body")
+    fopen(path, "wb") $(f) {
+        fwrite(f, bytes)
+    }
+}
+
 [test]
 def test_wasm_archive_detection(t : T?) {
     t |> run("build --wasm stages an archive only when a member carries the wasm magic; a native archive under the same name is refused") @(t : T?) {
@@ -2689,11 +2706,25 @@ def test_wasm_archive_detection(t : T?) {
         write_archive(indexed_path, wasm_magic, 200000)   // a symbol table far past any fixed scan window
         let long_named_path = path_join(root, "liblibDasModuleLongName.a")
         write_archive(long_named_path, wasm_magic, 1024, true)   // llvm-ar's shape: `/` table, `//` names, the object as `/0`
+        let odd_path = path_join(root, "liblibDasModuleOdd.a")
+        write_archive(odd_path, wasm_magic, 1023)   // an odd-sized table: the next header sits past its padding byte
+        let bsd_path = path_join(root, "liblibDasModuleBsd.a")
+        write_bsd_archive(bsd_path, wasm_magic)
+        let bsd_native_path = path_join(root, "liblibDasModuleBsdNative.a")
+        write_bsd_archive(bsd_native_path, [0xcfu8, 0xfau8, 0xedu8, 0xfeu8, 0x0cu8, 0x00u8, 0x00u8, 0x01u8])
         write_archive(native_path, [0xcfu8, 0xfau8, 0xedu8, 0xfeu8, 0x0cu8, 0x00u8, 0x00u8, 0x01u8])   // a 64-bit Mach-O member
+        let text_path = path_join(root, "liblibDasModuleText.a")
+        fopen(text_path, "wb") $(f) {
+            fwrite(f, "not an archive at all, whatever the name says; long enough to read a header from\n")
+        }
         t |> success(looks_like_wasm_archive(wasm_path), "an archive whose first object opens with the wasm magic is a wasm archive")
         t |> success(looks_like_wasm_archive(indexed_path), "a 200 KB symbol table ahead of that object changes nothing: members are walked, not scanned")
         t |> success(looks_like_wasm_archive(long_named_path), "an object named through the long-name table is an object, not a table")
+        t |> success(looks_like_wasm_archive(odd_path), "an odd-sized table's padding byte is stepped over")
+        t |> success(looks_like_wasm_archive(bsd_path), "BSD ar: the __.SYMDEF table is skipped and the #1/NN name is stepped over")
+        t |> success(!looks_like_wasm_archive(bsd_native_path), "BSD ar around a Mach-O member is native")
         t |> success(!looks_like_wasm_archive(native_path), "an archive of native objects is not, whatever its name")
+        t |> success(!looks_like_wasm_archive(text_path), "a file without the !<arch> header is not an archive")
         t |> success(!looks_like_wasm_archive(path_join(root, "missing.a")), "a file that is not there is not a wasm archive")
         force_rmdir(root)
     }

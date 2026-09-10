@@ -166,7 +166,8 @@ class ExampleShellTest(unittest.TestCase):
                 self.assertEqual(text.count("/* @image-version */ 0"), 1, "exactly one version slot for the deploy to stamp")
                 self.assertIn("manifest.json", text, "the file list comes from the deploy's manifest, never a list in the page")
                 self.assertIn("m.image_version !== PAGE_IMAGE_VERSION", text, "a set minted for another version is refused before the fetch")
-                self.assertIn("onAbort", text, "a program abort lands on the page")
+                self.assertIn("onAbort: function (what) { showFailure(", text, "a program abort lands on the page")
+                self.assertIn("m.image_version !== PAGE_IMAGE_VERSION) {\n      throw new Error(", text, "the version check throws, it does not log")
                 self.assertNotIn("MODEL_FILES", text, "no hard-coded model list survives beside the manifest")
 
 
