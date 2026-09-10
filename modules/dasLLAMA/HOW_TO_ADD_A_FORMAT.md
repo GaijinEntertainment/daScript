@@ -180,7 +180,14 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    `xscl * ws * idot` (q40's without the `- 8 * bsum`).
 4. Ladders: `kq_batch_cls_ensure` / `kq_batch_cls_enc_for` / `gemv_cls_ensure` /
    `gemv_cls_enc` gain an arm; `gemv_cls_set`'s four-way `||` became `kq_sb(fmt)`.
-5. Tests: `tests/_vkd_oracles.das` `kq_cls_ref` arm (the class-on-CPU oracle), the two family
+5. The decode GEMV's lanes per row (`dasllama/dasllama_vulkan_classes.das`): join
+   `gemv_grid_fmt` where the format's decode gathers from a codebook or a grid, and take the
+   lanes from `gemv_lanes_per_row`, which every decode site reaches through `gemv_enc`. Which
+   side of that rule the format sits on - grid or k-lattice - is decided by the
+   `harness/vk_gemv_probe.das <n> <d>` sweep, its three lane splits per format (0 = the whole
+   subgroup, 16, 8) over the row lengths the families serve; the rule itself is
+   `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ah (`kq-gemv-lanes`).
+6. Tests: `tests/_vkd_oracles.das` `kq_cls_ref` arm (the class-on-CPU oracle), the two family
    cells in `tests/test_vulkan_kernels.das` go to five formats, and - because the codebook pack
    is new bit-math that a class-vs-device compare cannot see (both sides run the same
    `iq4_word`) - `iq4xs_gemv_float_oracle`, a float dequant straight off the plane bytes that

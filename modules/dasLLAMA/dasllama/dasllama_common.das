@@ -1048,6 +1048,12 @@ struct Model {
     wsh1_off : int64        // ffn_gate_shexp: layers x (dim x n_ff_shexp)
     wsh2_off : int64        // ffn_down_shexp: layers x (n_ff_shexp x dim)
     wsh3_off : int64        // ffn_up_shexp:   layers x (dim x n_ff_shexp)
+    wsh1_fmt : array<KqFmt>     //! the shared expert's gate plane format per layer, beside its q8 transcode (q8 where the file's is not a K-quant the dense rail serves; an empty table = q8 alone)
+    wsh2_fmt : array<KqFmt>     //! ... its down plane's
+    wsh3_fmt : array<KqFmt>     //! ... its up plane's
+    wshk1_offs : array<int64>   //! the shared expert's K-quant gate plane offset per layer (-1 = none)
+    wshk2_offs : array<int64>   //! ... its down plane's
+    wshk3_offs : array<int64>   //! ... its up plane's
     wcls_off : int64
     // Tied-classifier Q8: the classifier lives in qblob at wcls_off (repacked); set only by
     // load_gguf for shared_weights + QuantMode.q8 + Q8_0 token_embd on disk.
@@ -2152,6 +2158,9 @@ struct Session {
     @scratch moe_w_cpu : array<float>      // ... and with the GPU slots zeroed (the CPU reduce's)
     @scratch moe_exp_gpu : array<int8>   // per expert: 1 = this layer's GPU share (n_expert)
     @scratch @exact_size moe_gpu_out : array<float>  // the GPU half's combined rows (npos x dim), joined after the CPU half
+    @scratch @exact_size moe_shout : array<float>    //! the shared expert's rows off the device chain (npos x dim)
+    @scratch moe_sh_inv : array<uint>      //! the device shared expert's identity slot map (npos; the f16-fed arm)
+    @scratch moe_sh_w : array<float>       //! the device shared expert's unit combine weights (npos; the f16-fed arm)
     ffn_offs : array<int64>     // dense/shexp gate+up fuse: 2 region (weight, activation) offset pairs
     ffn_gu : array<float>       // dense/shexp gate+up fuse output — gate half then up half (2 x max_ffn_width)
     mx4_wq : array<int8>        // grouped-prefill expansion of ONE native-MXFP4 expert to exact Q8 (dim x n_ff_exp)
@@ -4556,6 +4565,16 @@ def set_mtp_spec(on : bool) {
 //! Current state of the [[set_mtp_spec]] gate.
 def get_mtp_spec() : bool => g_mtp_spec
 
+var private g_mtp_force_reject_every = 0l
+
+//! The reject arm's test seam: every n-th draft the depth-1 step's greedy walk verifies is rejected
+//! whatever the verify said (0 = off), so a fixture that accepts every draft still walks the arm.
+def set_mtp_force_reject_every(n : int64) {
+    g_mtp_force_reject_every = n
+}
+
+def private mtp_reject_forced(s : Session) : bool => g_mtp_force_reject_every > 0l && s.mtp_drafted % g_mtp_force_reject_every == 0l
+
 var private g_mtp_batch_cls = true
 
 //! the verify's row cap: depth k runs k+1 rows, so the deepest round drafts MTP_MAX_ROWS-1
@@ -4902,7 +4921,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         copy_floats(s.logits, 0l, s.mtp_logits_b, c.vocab_size, c.vocab_size)
         hit = mtp_walk_sampled(s, 1l, c.vocab_size) == 1l
     } else {
-        hit = parallel_argmax(s.mtp_logits, c.vocab_size) == d
+        hit = parallel_argmax(s.mtp_logits, c.vocab_size) == d && !mtp_reject_forced(s)
     }
     prof_add("mtp.walk", ts_walk)
     if (hit) {

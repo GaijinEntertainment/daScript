@@ -300,7 +300,8 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    the killer was ONE byte4 DYNAMIC select in the sub-scale extract (unpack8(word)[i&3]),
    the same death shape the Q8 chase found; byte2 [i&1] selects are fine. Respelled as
    shift + arithmetic-shift sign extension: 12.8 -> 32.9 TF/s. RULE for every future
-   decode: NEVER index unpack8 of a 32-bit word dynamically - shift+mask, or byte2 [i&1].
+   decode: NEVER index unpack8 of a 32-bit word dynamically - shift+mask, or byte2 [i&1]
+   (and the byte2 select costs against the lane shift too: item 36's 2026-09-09 status).
    k6 UNPINNED: Qwen3-4B Q4_K_M pp 1626 (mode 3) -> 2669 (k4) -> 3188 (k4+k6) = +96%.
    NEXT: k5/q40 stamps (mechanical now the trap is named), then (d) driver-blocked.
    (ngfx GPU Trace, our gate loop vs their GEMM loop; counters now read UNELEVATED):
@@ -664,6 +665,19 @@ module) is independent and can land any time - it is pure structure.
     twins do one grid lookup per four elements and beat the scalar arm by 30-65% at the tile
     (iq3s 43-48 vs 29-30 TF/s at the gate shape, iq2s 49-50 vs 30-32, iq2xxs 44-46 vs 34-35);
     the `DECVEC` opt-outs are gone.
+    2026-09-09 (the MoE arc): the byte selects of those decodes respelled as lane shifts. A
+    `unpack8(lane)[i & 1]` byte2 select reads the same 16-bit lane as `(lane >> ((i & 1) * 8))
+    & 0xFF` but costs against it, and the IQ2_XXS / IQ3_XXS sign index was built from two
+    selected bytes where the aux32 word assembled from its two lanes and shifted serves.
+    `harness/vk_gemm_probe.das -- moe:<fmt>` (the 30B expert schedule: 128 buckets of 32
+    rows, gate/up d 768 K 2048, per plane, two alternating output planes under fresh hazards,
+    RTX 5060 Ti): the shift form iq2xxs 724 us, iq3xxs 569, iq3s 766, iq2s 736, against
+    llama.cpp's cm2 `mul_mat_id` tile at 754 / 788 / 870 / 797 on the same uniform buckets (its
+    `test-backend-ops perf`), the select form 1.28x / 1.24x / 1.49x / 1.08x of those times;
+    iq2xs 651, iq4xs 632, k4 746 and q8 885 already sat under its 744 / 959 / 1009 / 998. The rule in
+    `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k. The selects left: k5's qh byte in its twin,
+    the k3 and K-quant scalar decodes (the edge path and the scalar-callback arm) - the same
+    lever, unmeasured.
 
 37. **Device embed gather over a kq tied plane.** `vulkan_embed_gpu_gate` admits a model only
     when `rdec_set_emb` placed a q8 tied plane or the f32 table fit under `RDEC_EMB_F32_CAP`;
@@ -896,4 +910,62 @@ module) is independent and can land any time - it is pure structure.
     construction, and the per-op tier reads 0.14x prefill / 0.75x decode against the reference
     engine on the one such row measured (the arc board's row 20, both engines fully resident).
     Done = every family and tower row on the board with a Vulkan column at parity, and the
-    serving census (`coverage-vk`) with no carrier the tier declines.
+    serving census (`coverage-vk`) with no carrier the tier declines. The fully-resident MoE
+    chain landed 2026-09-09: the whole-model driver admits a MoE whose expert stacks fit the arena
+    (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n), the window chain's routed block
+    (`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af) and the token command's (same document,
+    sec.2.2ag); the per-op tier keeps the files that stream. The 30B and 35B rows ride the driver
+    whole (the plan forgoes the per-op reserves for a fitting file), the hybrid MoE registers its
+    routed block after the deltanet head, and the expert tiles took two levers: the grid decodes'
+    lane shifts (item 36's 2026-09-09 status) and the schedule's tile ladder (a bucket past the s
+    column takes m columns, the last partial: `ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af; the real
+    window's skew put 4096 rows in 175 s tiles where the ladder runs 85). Every pp512 / tg128
+    rate under this item is a `benchmarks/lcpp_bench.das` reading on the RTX 5060 Ti box
+    (`bin/Release/daslang.exe -jit benchmarks/lcpp_bench.das -- -m <file> -o md
+    --for-debug-purposes -r 3 -p 512 -n 128 -t 16` under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0
+    DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048 DAS_JOBQUE_THREADS=16`), debug-jit, and
+    every reference rate beside one is `llama-bench -ngl 99 -fa 1 -t 16 -r 3` at b10660
+    (build-vulkan-357) on that box; every window and token millisecond under this item is the
+    same bench's `DASLLAMA_GPU_PROF=1 ... -n 32 --prof --jobque-profiling` profile - its
+    `vk_rdpf` window lines and its `vk_rdec gpu avg/token` / `vk_rdec moe avg/token` lines. The
+    rows, pp512 / tg128: Qwen3-30B-A3B UD-IQ2_XXS 3242.0 / 123.6
+    (3520.0 / 116.6: 0.92x / 1.06x; the window 153.9 ms against 142.3, the expert tiles 97.7),
+    Qwen3.6-35B-A3B UD-IQ2_XXS 2837.7 / 95.9 (2853.1 / 71.6: 0.99x / 1.34x), the Qwen1.5-MoE
+    twin 5152.9 / 142.5 (5099.8 / 173.8; its window 94.5 ms, the first measured rep after the
+    warmup reads 101 on every row here, a driver warm-up the bench's one warmup does not absorb).
+    One more pass the same day: the shared expert's K-quant planes ride beside its q8 transcode
+    on a load with a GPU tier armed (a CPU-only load keeps the transcode alone) and the
+    whole-model driver places those (the twin's token 7.06 -> 6.12 ms, tg128 162.7 =
+    0.94x), the schedule's slot walks are an atomic tally and cursor (8.1 -> 0.46 ms on the 30B
+    window), the router tile prefetches its stage as a 64 x 32 tile (6.6 -> 4.3 ms): the 30B
+    3448.9 / 124.6 (0.98x / 1.07x, the window 144.9 ms against 142.3), the 35B 2946.0 / 95.2
+    (1.03x / 1.33x), the twin 5348.3 / 163.4 (1.05x / 0.94x). The remainder pass's first
+    lever: the routed combine rides the residual step in both chains (`ClsArComb`, sec.2.2af /
+    sec.2.2ag), one dispatch per layer fewer, in the two kernels' sum order so the MoE files'
+    bars keep their calibration; then the router tile's float4 stage (its scalar stage was
+    bank-conflict bound: 4.3 -> 2.4 ms per 30B window), the residual step's slot groups (eight
+    rows in flight, then four: the twin's one-row step 360 -> 290 us per token) and the
+    FFN-norm requant skipped on a layer with no shared expert (540 us per 30B window that
+    nothing read); then the decode GEMV family's lanes per row (`ARCHITECTURE_GPU_VULKAN_GEMM.md`
+    sec.2.2ah: a subgroup over one, two or four rows by the row length, the expert rows of a MoE
+    being the short ones - iq2s at K 768 148 -> 337 GB/s on the probe). The rows on the final
+    kernels, pp512 / tg128: the 30B 3482.6 / 132.0 (0.99x / 1.13x, the window 143.4 ms against
+    142.3, the token 6.79 ms), the 35B 2962.8 / 107.1 (1.04x / 1.50x), the twin 5395.3 / 166.8
+    (1.06x / 0.96x), the dense 4B Q4_K_M unchanged at 115-117 (its token a wash on either
+    form). Still open under this item: the 30B prefill's last 1% (the expert tiles ~99 ms
+    against the reference's ~88 - a 64-wide column for the 33-64-row buckets - the router's 2.4
+    ms against 1.2 on 32 workgroups over 36 SMs, the act 2.8 and the gather 1.6; the profile
+    stamp after the down tiles absorbs their tail, so the residual step's own cost does not read
+    there), the twin's decode 4% (a token's expert dispatch is 3-4 MB, where launch and ramp cost
+    what the transfer does: the 30B's e_down reads 806 us over 48 layers = 240 GB/s effective
+    against the probe's 337 steady - fewer, larger dispatches, or the gate and up planes in one,
+    are the next form), the fused add+rms twin that also stores the normed row
+    (the router's feed, so a MoE could take the fused rail; ar1 reads 1.8-2.0 ms of the 30B
+    window), the CPU chain's shared expert on the same K-quant planes (it reads the q8
+    transcode, so the resident-vs-CPU bar carries the two forms' rounding), an LPT order for
+    the device schedule's pieces (the m dispatch already leads the s one), and the two probe
+    arms the checklist's race rule asks for - the router tile's float4 stage against its scalar
+    stage and the residual step's slot groups against the plain loop, the old bodies kept as
+    probe twins (both ranked on before/after `DASLLAMA_GPU_PROF=1` profiles across processes,
+    4.3 -> 2.4 ms per 30B window and 490 -> 440 us per twin token; ruled 2026-09-09 to ship as
+    stated claims).

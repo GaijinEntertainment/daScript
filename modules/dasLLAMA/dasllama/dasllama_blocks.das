@@ -663,6 +663,8 @@ def private attn_dec_store_kv(t : Model; var s : Session; l, pos : int64) {
 var private g_span_args : MoeSpanDec   // reused per token: the per-layer arrays keep their capacity
 var private g_span_k : array<float>
 var private g_span_v : array<float>
+var private g_span_tokens = 0l   //! tokens the span served - the tests' engage witness (read on the main context only)
+def public span_tokens() : int64 => g_span_tokens
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
 def private span_first_layer(t : Model; var s : Session; pos : int64) : int64 {
@@ -671,7 +673,7 @@ def private span_first_layer(t : Model; var s : Session; pos : int64) : int64 {
     while (l0 > 0l) {
         let l = l0 - 1l
         if (l < c.n_layer_dense_lead || !moe_gpu_layer_on_gpu(l) || kq_sb(fmt_at(t.we1_fmt, l)) != kq_sb(fmt_at(t.we3_fmt, l))
-                || !attn_dec_gpu_serves(t, s, l, pos)) {
+                || (c.n_ff_shexp > 0l && !moe_gpu_shexp_on_gpu(l)) || !attn_dec_gpu_serves(t, s, l, pos)) {
             break
         }
         l0 = l
@@ -685,7 +687,7 @@ def private span_model_ok(t : Model) : bool {
     if (!g_env_gpu.gpu_dec_span || !moe_gpu_span_ok() || t.quant != QuantMode.q8 || c.n_expert == 0l
             || c.n_expert_used > 64l || c.n_expert > 256l || c.moe_gate != MoeGate.softmax || c.moe_router_bias || c.moe_exp_probs
             || c.n_layers * c.n_expert * c.dim * 4l > moe_gpu_binding_cap() || !t.blocks.std_chain
-            || c.n_ff_shexp > 0l || c.pre_post_norm || c.layer_out_scale || c.moe_exps_bias || t.experts_mx4) {
+            || (c.n_ff_shexp > 0l && c.moe_dense_shexp) || c.pre_post_norm || c.layer_out_scale || c.moe_exps_bias || t.experts_mx4) {
         return false
     }
     return c.ffn_act != FfnAct.swiglu_oai && !has_ple(c) && c.n_layer_nextn == 0l
@@ -709,6 +711,12 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
     a.f1 |> resize(nl)
     a.f3 |> resize(nl)
     a.f2 |> resize(nl)
+    a.wsh1 |> reserve(nl)
+    a.wsh1 |> resize(nl)
+    a.wsh3 |> reserve(nl)
+    a.wsh3 |> resize(nl)
+    a.wsh2 |> reserve(nl)
+    a.wsh2 |> resize(nl)
     a.rmsq |> resize(nl)
     a.rmsk |> resize(nl)
     a.bq |> reserve(nl)
@@ -734,6 +742,10 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
             a.f1[li] = int(fmt_at(t.we1_fmt, l))
             a.f3[li] = int(fmt_at(t.we3_fmt, l))
             a.f2[li] = int(fmt_at(t.we2_fmt, l))
+            let she = dim * c.n_ff_shexp
+            a.wsh1[li] = c.n_ff_shexp > 0l ? t.wsh1_off + l * she : -1l
+            a.wsh3[li] = c.n_ff_shexp > 0l ? t.wsh3_off + l * she : -1l
+            a.wsh2[li] = c.n_ff_shexp > 0l ? t.wsh2_off + l * she : -1l
             a.rmsq[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null
             a.rmsk[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null
             a.bq[li] = c.attn_qkv_bias ? addr<float const?>(t.bq[l * a.qd]) : null
@@ -741,6 +753,7 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
             a.bv[li] = c.attn_qkv_bias ? addr<float const?>(t.bv[l * a.kvd]) : null
         }
         a.router = addr<float const?>(t.fblob[t.router_off + l0 * c.n_expert * dim])
+        a.shgate = c.n_ff_shexp > 0l && c.moe_shexp_gated ? addr<float const?>(t.fblob[t.shexp_gate_off + l0 * dim]) : null
         a.att_norm = addr<float const?>(t.fblob[t.rms_att_off + l0 * dim])
         a.ffn_norm = addr<float const?>(t.fblob[t.rms_ffn_off + l0 * dim])
         a.blob = addr<float const?>(t.fblob[0])
@@ -787,6 +800,8 @@ def private span_run(t : Model; var s : Session; pos, l0 : int64) {
     a.qk_norm = c.qk_norm
     a.norm_topk = c.norm_topk_prob
     a.is_gelu = c.ffn_act == FfnAct.gelu
+    a.nsh = c.n_ff_shexp
+    a.sh_gated = c.moe_shexp_gated
     if (!span_args_current(a, t, l0, nl)) {
         span_fill_layers(t, a, l0, nl)
     }
@@ -841,6 +856,7 @@ def private moe_span_decode(t : Model; var s : Session; _token, pos : int64) : b
         prof_add("blk_ffn", ts_blk_ffn)
     }
     span_run(t, s, pos, l0)
+    g_span_tokens++
     return true
 }
 
@@ -1461,6 +1477,17 @@ def set_moe_gpu_prefill_route(on : bool) {
 
 def gpu_prefill_route_on() : bool => g_gpu_prefill_route
 
+var private g_shexp_gpu_layers = 0l   //! layers whose shared expert the device chain served in a prefill - the arm's engage witness (read on the main context only)
+def public shexp_gpu_prefill_layers() : int64 => g_shexp_gpu_layers
+
+//! why this prefill's shared expert stays on the CPU rail: the model's shape, the tier's marks, or the call's size and route
+def private shexp_gpu_decline_reason(c : Config; l, npos : int64) : string {
+    if (c.moe_dense_shexp) return "the model's shared expert is a dense FFN, not the device chain's call shape"
+    if (!moe_gpu_shexp_on_gpu(l)) return "the shared expert's planes are not resident on the tier"
+    if (npos < 32l) return "a prefill under 32 positions"
+    return "the prefill route lever is off"
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
@@ -1588,6 +1615,46 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         }
     } else {
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
+    }
+
+    // 2b. the shared expert on the device
+    let sh_gpu = (nsh > 0l && !c.moe_dense_shexp && moe_gpu_shexp_on_gpu(l) && npos >= 32l && gpu_prefill_route_on())
+    if (nsh > 0l && !sh_gpu) {
+        moe_gpu_shexp_declined(shexp_gpu_decline_reason(c, l, npos))
+    }
+    if (sh_gpu) {
+        trace_tag(TRACE_TAG_SHEXP)
+        let ts_shg = prof_ticks()
+        let she = dim * nsh
+        let q8 = int(KqFmt.q8)
+        s.moe_shout |> zeroed_resize(npos * dim)
+        s.moe_offs1 |> clear()
+        s.moe_offs1 |> push(t.wsh1_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs1 |> push(0l)
+        s.moe_offs1 |> push(npos)
+        s.moe_offs3 |> clear()
+        s.moe_offs3 |> push(t.wsh3_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs3 |> push(0l)
+        s.moe_offs3 |> push(npos)
+        s.moe_offs2 |> clear()
+        s.moe_offs2 |> push(t.wsh2_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs2 |> push(0l)
+        s.moe_offs2 |> push(npos)
+        if (gpu_combine_on() && moe_gpu_ffn_xf_ok(npos, dim, q8, q8, q8)) {
+            s.moe_sh_inv |> resize(npos)
+            s.moe_sh_w |> resize(npos)
+            for (p in range64(npos)) {
+                s.moe_sh_inv[p] = uint(p)
+                s.moe_sh_w[p] = 1.0
+            }
+            matmul_moe_gpu_ffn_combined_xf(s.moe_shout, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l,
+                s.xb_b, s.moe_sh_w, s.moe_sh_inv, dim, nsh, npos, npos, q8, q8, q8, c.ffn_act == FfnAct.gelu)
+        } else {
+            matmul_moe_gpu_ffn(s.moe_shout, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l,
+                s.xqb, s.xsb, dim, nsh, npos, q8, q8, q8, c.ffn_act == FfnAct.gelu)
+        }
+        prof_add("shexp_gpu", ts_shg)
+        g_shexp_gpu_layers++
     }
 
     // 3F. fused: gate/up/down each run as ONE region-list dispatch (3 fork/joins/layer, not 3/expert)
@@ -1896,7 +1963,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     }
 
     // 4. shared expert for ALL positions — a plain dense batched FFN off the whole-batch image
-    if (nsh > 0l) {
+    if (nsh > 0l && !sh_gpu) {
         trace_tag(TRACE_TAG_SHEXP)
         let she = dim * nsh
         mm_b_q8_pre(s.moe_ghb, t, t.wsh1_off + l * she, s.xqb, s.xsb, dim, nsh, npos)
@@ -1916,7 +1983,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         let ep = addr<float const?>(s.moe_eout[0])
         let wp = split_gpu_regions > 0l ? addr<float const?>(s.moe_w_cpu[0]) : addr<float const?>(s.moe_w_b[0])
         let split_gpu_rows = split_gpu_regions > 0l ? addr<float const?>(s.moe_gpu_out[0]) : null
-        let sp = nsh > 0l ? addr<float const?>(s.moe_gout[0]) : null
+        let sp = nsh > 0l ? (sh_gpu ? addr<float const?>(s.moe_shout[0]) : addr<float const?>(s.moe_gout[0])) : null
         let gp = nsh > 0l && c.moe_shexp_gated ? addr<float const?>(s.moe_gl_b[0]) : null
         maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
             unsafe {

@@ -394,6 +394,13 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             cur.wo += layers * she
             t.wsh3_off = cur.wo
             cur.wo += layers * she
+            //! the K-quant plane offsets beside the transcode's, where the tags kept the file's format
+            t.wshk1_offs |> clear(); t.wshk1_offs |> reserve(layers)
+            for (l in range64(layers)) { t.wshk1_offs |> push(fmt_at(t.wsh1_fmt, l) == KqFmt.q8 ? -1l : kq_take(cur, fmt_at(t.wsh1_fmt, l), she)) }
+            t.wshk2_offs |> clear(); t.wshk2_offs |> reserve(layers)
+            for (l in range64(layers)) { t.wshk2_offs |> push(fmt_at(t.wsh2_fmt, l) == KqFmt.q8 ? -1l : kq_take(cur, fmt_at(t.wsh2_fmt, l), she)) }
+            t.wshk3_offs |> clear(); t.wshk3_offs |> reserve(layers)
+            for (l in range64(layers)) { t.wshk3_offs |> push(fmt_at(t.wsh3_fmt, l) == KqFmt.q8 ? -1l : kq_take(cur, fmt_at(t.wsh3_fmt, l), she)) }
         }
         if (c.moe_dense_shexp) {  // gemma4: the DENSE parallel shared expert (plain ffn gate/up/down)
             fill_dense_ffn_offsets(t, cur, layers, dim, hidden)
@@ -1549,6 +1556,22 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
             any ||= t.we1_fmt[l] != KqFmt.q8 || t.we2_fmt[l] != KqFmt.q8 || t.we3_fmt[l] != KqFmt.q8
         }
     }
+    //! the shared expert's tags: its K-quant planes ride beside the q8 transcode on a load with a GPU tier armed (the resident driver reads them; a CPU-only load keeps the transcode alone)
+    if (moe_gpu_tier_installed() && t.config.n_expert > 0l && t.config.n_ff_shexp > 0l && (t.config.dim * t.config.n_ff_shexp) % 256l == 0l) {
+        t.wsh1_fmt |> reserve(layers)
+        t.wsh1_fmt |> resize(layers)
+        t.wsh2_fmt |> reserve(layers)
+        t.wsh2_fmt |> resize(layers)
+        t.wsh3_fmt |> reserve(layers)
+        t.wsh3_fmt |> resize(layers)
+        for (l in range64(layers)) {
+            let has = l >= t.config.n_layer_dense_lead && l < t.config.n_layers
+            t.wsh1_fmt[l] = has ? kq_tag(m, "blk.{l}.ffn_gate_shexp.weight", t.config.dim) : KqFmt.q8
+            t.wsh3_fmt[l] = has ? kq_tag(m, "blk.{l}.ffn_up_shexp.weight", t.config.dim) : KqFmt.q8
+            t.wsh2_fmt[l] = has ? kq_tag(m, "blk.{l}.ffn_down_shexp.weight", t.config.n_ff_shexp) : KqFmt.q8
+            any ||= t.wsh1_fmt[l] != KqFmt.q8 || t.wsh2_fmt[l] != KqFmt.q8 || t.wsh3_fmt[l] != KqFmt.q8
+        }
+    }
     if (t.config.shared_weights) {
         t.emb_fmt = kq_tag(m, "token_embd.weight", t.config.dim)
         any ||= t.emb_fmt != KqFmt.q8
@@ -2650,6 +2673,17 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch)
                     load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch)
                     load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch)
+                    if (l < long_length(t.wshk1_offs)) {   //! the same planes again in the file's K-quant form, beside the transcode above
+                        if (t.wshk1_offs[l] >= 0l) {
+                            load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wshk1_offs[l], she, scratch, 0l, fmt_at(t.wsh1_fmt, l))
+                        }
+                        if (t.wshk2_offs[l] >= 0l) {
+                            load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wshk2_offs[l], she, scratch, 0l, fmt_at(t.wsh2_fmt, l))
+                        }
+                        if (t.wshk3_offs[l] >= 0l) {
+                            load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wshk3_offs[l], she, scratch, 0l, fmt_at(t.wsh3_fmt, l))
+                        }
+                    }
                 }
                 if (t.config.moe_dense_shexp) {  // gemma4: the DENSE parallel shared expert (plain ffn gate/up/down)
                     load_big(m, bytes, "blk.{l}.ffn_gate.weight", t, t.w1_offs[l], dim * hidden, scratch, 0l, fmt_at(t.w1_fmt, l))

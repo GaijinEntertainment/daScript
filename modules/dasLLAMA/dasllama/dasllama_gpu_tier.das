@@ -219,6 +219,58 @@ def public install_moe_gpu_resident_bias(upload_bias : RdecUploadBiasFn) {
 def public rdec_bias_installed() : bool => g_rdec_bias_installed
 def public rdec_upload_bias(rows : array<float>) { invoke(g_rdec_upload_bias, rows) }
 
+// ===== the resident driver's MoE seats =====
+//! Does the resident MoE block admit an expert triple of these formats - the tile family it
+//! rides is the device's (the f16-fed cm2 tiles today).
+typedef RdecMoeOkFn = function<(f1 : int; f3 : int; f2 : int) : bool>
+//! The MoE geometry and the router plane (every MoE layer's [ne x dim] rows, then its gate row when the shared expert is gated) after the prepare; false = the class rails declined.
+typedef RdecPrepareMoeFn = function<(ne : int64; k : int64; nfe : int64; nsh : int64; n_moe : int64; sh_gated : bool; norm_topk : bool; is_gelu : bool; wscale : float; router : array<float>) : bool>
+//! Register an MoE attention layer: the attention quad, the dense triple (the shared expert's, or -1 blocks for none) and the expert triple.
+typedef RdecSetMoeLayerFn = function<(l : int64; mir_idx : int64; router_slot : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; be1 : int64; be3 : int64; be2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; fe1 : int; fe3 : int; fe2 : int) : void>
+//! Register the routed block on a layer already registered by its own seat (a recurrent MoE layer after its deltanet registration): the expert triple and the layer's router-plane slot.
+typedef RdecSetMoeExpertsFn = function<(l : int64; router_slot : int64; be1 : int64; be3 : int64; be2 : int64; fe1 : int; fe3 : int; fe2 : int) : void>
+
+[unused_argument(f1, f3, f2)]
+def private rdec_unset_moe_ok(f1, f3, f2 : int) : bool => false
+[unused_argument(ne, k, nfe, nsh, n_moe, sh_gated, norm_topk, is_gelu, wscale, router)]
+def private rdec_unset_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>) : bool => false
+[unused_argument(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2)]
+def private rdec_unset_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int) {}
+[unused_argument(l, router_slot, be1, be3, be2, fe1, fe3, fe2)]
+def private rdec_unset_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2 : int) {}
+
+var g_rdec_moe_ok = @@rdec_unset_moe_ok
+var g_rdec_prepare_moe = @@rdec_unset_prepare_moe
+var g_rdec_set_moe_layer = @@rdec_unset_set_moe_layer
+var g_rdec_set_moe_experts = @@rdec_unset_set_moe_experts
+var g_rdec_moe_installed = false
+
+//! Install the resident driver's MoE seats - separately, so a tier without them declines a MoE by name.
+def public install_moe_gpu_resident_moe(moe_ok : RdecMoeOkFn; prepare_moe : RdecPrepareMoeFn; set_moe_layer : RdecSetMoeLayerFn; set_moe_experts : RdecSetMoeExpertsFn) {
+    g_rdec_moe_ok = moe_ok
+    g_rdec_prepare_moe = prepare_moe
+    g_rdec_set_moe_layer = set_moe_layer
+    g_rdec_set_moe_experts = set_moe_experts
+    g_rdec_moe_installed = true
+}
+
+def public rdec_moe_installed() : bool => g_rdec_moe_installed
+def public rdec_moe_ok(f1, f3, f2 : int) : bool => invoke(g_rdec_moe_ok, f1, f3, f2)
+def public rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>) : bool => invoke(g_rdec_prepare_moe, ne, k, nfe, nsh, n_moe, sh_gated, norm_topk, is_gelu, wscale, router)
+def public rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int) { invoke(g_rdec_set_moe_layer, l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2) }
+def public rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2 : int) { invoke(g_rdec_set_moe_experts, l, router_slot, be1, be3, be2, fe1, fe3, fe2) }
+
+var private g_gpu_resident_route = true
+
+//! The in-process twin of DASLLAMA_GPU_RESIDENT: a test pins the whole-model driver off before a
+//! load to hold the per-op rails' claims on a model the driver would take.
+def public set_gpu_resident_route(on : bool) {
+    g_gpu_resident_route = on
+}
+
+//! The whole-model driver is wanted on this load: the knob and the in-process lever both on.
+def public gpu_want_resident : bool => g_env_gpu.gpu_resident && g_gpu_resident_route
+
 //! Install the resident driver's hybrid (deltanet) seats - separately, so a tier without them
 //! declines recurrent layers by name instead of serving a model it cannot step.
 def public install_moe_gpu_resident_dn(set_dn_layer : RdecSetDnLayerFn; upload_dn_ba : RdecUploadDnBaFn; dn_own : RdecDnOwnFn; dn_prefill_own : RdecDnPrefillOwnFn) {
@@ -264,6 +316,10 @@ typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab 
 
 //! The raw f32 embd table rides the residency plan's headroom only up to this size; past it the CPU embed serves.
 let public RDEC_EMB_F32_CAP = 512l * 1024l * 1024l
+
+//! Rows of read slack past a cm2 region's last row: the m column loads a partial column unclamped, so
+//! every plane a tile reads (the residency plan's scratch, the prefill's gathered rows, a probe's) carries them.
+let public TILE_READ_SLACK = 128l
 
 //! The device bytes the f32 embed-gather arm would upload for a (vocab x dim) table - 0 past its cap.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
@@ -643,6 +699,7 @@ def public vk_rdec_rerecord_on : bool => g_vk_rdec_rerecord
 
 var g_moe_gpu_shexp_layers : table<int64>   // layers whose shexp gate/up/down triple is resident
 var g_moe_gpu_shexp_route = true
+var private g_moe_gpu_shexp_said : table<string>   // the prefill's shared-expert decline reasons said for this model
 
 //! Loader contract: mark one layer's shared-expert triple resident on the tier. Reset per load.
 def public set_moe_gpu_shexp_layer(l : int64) {
@@ -651,10 +708,21 @@ def public set_moe_gpu_shexp_layer(l : int64) {
 
 def public reset_moe_gpu_shexp_layers {
     g_moe_gpu_shexp_layers |> clear()
+    g_moe_gpu_shexp_said |> clear()
 }
 
 def public moe_gpu_shexp_on_gpu(l : int64) : bool {
     return g_moe_gpu_installed && g_moe_gpu_shexp_route && key_exists(g_moe_gpu_shexp_layers, l)
+}
+
+//! The prefill's shared expert stays on the CPU for `why`: said once per reason per model while the tier is armed.
+[cold_path]
+def public moe_gpu_shexp_declined(why : string) {
+    if (!g_moe_gpu_installed || key_exists(g_moe_gpu_shexp_said, why)) {
+        return
+    }
+    g_moe_gpu_shexp_said |> insert(why)
+    to_log(LOG_INFO, "dasLLAMA: the prefill's shared expert takes the CPU rail - {why} (said once per reason)\n")
 }
 
 //! Runtime routing gate over the shared-expert marks (the --shexp-ab in-process lever).
@@ -1273,6 +1341,12 @@ struct MoeSpanDec {
     f1 : array<int>
     f3 : array<int>
     f2 : array<int>
+    nsh : int64                  //! the shared expert's width (0 = the model has none)
+    sh_gated : bool              //! the shared expert's row scales by sigmoid(gate . xb)
+    wsh1 : array<int64>          //! the shared expert's q8 gate plane offset per layer
+    wsh3 : array<int64>          //! ... its up plane
+    wsh2 : array<int64>          //! ... its down plane
+    shgate : float const?        //! [nl x dim] f32 gate rows, layer-major (null when ungated or absent)
     rmsq : array<float const?>   // the qk-norm rows (null when off)
     rmsk : array<float const?>
     bq : array<float const?>     // the q/k/v projection bias rows (null when the model has none)
@@ -1690,6 +1764,18 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_upload_bias == null) {
         g_rdec_upload_bias = @@rdec_unset_upload_bias
+    }
+    if (g_rdec_moe_ok == null) {
+        g_rdec_moe_ok = @@rdec_unset_moe_ok
+    }
+    if (g_rdec_prepare_moe == null) {
+        g_rdec_prepare_moe = @@rdec_unset_prepare_moe
+    }
+    if (g_rdec_set_moe_layer == null) {
+        g_rdec_set_moe_layer = @@rdec_unset_set_moe_layer
+    }
+    if (g_rdec_set_moe_experts == null) {
+        g_rdec_set_moe_experts = @@rdec_unset_set_moe_experts
     }
     if (g_moe_gpu_binding_cap == null) {
         g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap

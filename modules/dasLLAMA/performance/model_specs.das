@@ -433,6 +433,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // weights + a sigmoid-gated shared expert; QKV bias, NEOX rope); the fixture runs
             // BOTH MoE prefill paths off one load — bit-identical by construction
             parity <- ev_qwen_count([moe_reference = true])),
+        // the small twin of the routed-experts arch for the resident MoE chain's cells
+        // (tests/test_gpu_moe_shexp.das): 9.5 GB, whole on a 16 GB card with room to spare
+        ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf",
+            recipe = "llama-quantize --allow-requantize Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf Q4_K_M"),
         // the qwen vision pairs (the qwen3vl arc): parity-less provenance carriers —
         // test_vision_chat's deepstack/qwen25o legs and the qwen tier-1 suites are their coverage
         ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B", official = true,
@@ -543,6 +547,14 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // the MoE arm of the native-kq gate: the grouped prefill gathers per-expert token
             // batches off the K-form batch image (the seam the dense arms never touch)
             parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
+        // the resident MoE chain's fixtures on a 16 GB card (tests/test_gpu_resident_moe.das): the 30B with no
+        // shared expert, and the 35B deltanet hybrid with a gated one - the whole-model fits the UD-Q4_K_M cannot make
+        ModelSpec(file = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf",
+            url = "{HF}/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/eea7b2be5805a5f151f8847ede8e5f9a9284bf77/Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf",
+            bytes = 10341814688l, sha256 = "aa0b04ac05f71aa94b542b074500b3de956608365e74f0e1d97ae0d6a6380269"),
+        ModelSpec(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf",
+            url = "{HF}/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/a483e9e6cbd595906af30beda3187c2663a1118c/Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf",
+            bytes = 10756586464l, sha256 = "2e8f5f705355c56311432d0a8a5d14a696dbb7e4b197d05c75ba805fc1857bef"),
         ModelSpec(file = "Qwen3.8-27B-Q4_K_M.gguf", display = "Qwen3.8-27B", quant_label = "q4_k_m", official = true,
             url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-Q4_K_M.gguf",
             bytes = 18973870432l, sha256 = "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",

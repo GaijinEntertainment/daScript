@@ -259,7 +259,10 @@ def test_mtp_invariance_27b(t : T?) {
 // GLM-4.5-Air Q4_K_M — the only NON-RECURRENT MTP model we have, so this is the sole arm covering
 // mtp_spec_eval's `recr_mask == 0` reject branch (a rejected draft consumes the verify's own row-0
 // logits + h0 instead of paying a second full forward; every qwen35 MTP file is a deltanet hybrid
-// and takes the restore-and-re-advance branch instead). It is also the first arch combining
+// and takes the restore-and-re-advance branch instead). The code fixture's own reject count rides
+// the kernels' summation order (it has read zero), so the arm reaches the branch through the
+// engine's seam - every third draft rejected whatever the verify said - and holds the stream to
+// plain decode there too. It is also the first arch combining
 // attn_qkv_bias with a NextN block — the shape where the qkv/out bias arrays were sized by the
 // TRUNK layer count, so blk.<n_layers>.attn_{q,k,v}.bias never loaded and the draft read past the
 // end of t.bq. And glm4moe ships nextn.embed_tokens/shared_head_head as copies of the trunk's own
@@ -302,10 +305,16 @@ def test_mtp_invariance_glm(t : T?) {
             let ref_ids <- gen_plain(tr, code, total)
             let spec_ids <- gen_spec(tr, code, total, nd, na)
             t |> success(same(ref_ids, spec_ids), "code-glm: spec decode token-for-token vs plain")
-            t |> success(nd > 0l, "code-glm: the draft head actually drafted ({nd} drafts)")
-            // a 100%-accept run would leave the reject branch untouched and the arm would prove
-            // nothing about it — so require that at least one draft was actually rejected
-            t |> success(na < nd, "code-glm: {nd - na} of {nd} drafts rejected - reject branch covered")
+            t |> success(nd > 0l, "code-glm: the draft head actually drafted ({nd} drafts, {nd - na} rejected on its own)")
+            // the reject branch on demand: every third draft rejected, the stream still plain decode's
+            set_mtp_force_reject_every(3l)
+            var nd_forced = 0l
+            var na_forced = 0l
+            let forced_ids <- gen_spec(tr, code, total, nd_forced, na_forced)
+            set_mtp_force_reject_every(0l)
+            t |> success(same(ref_ids, forced_ids), "code-glm forced: spec decode through the reject branch token-for-token vs plain")
+            t |> success(nd_forced >= 3l && nd_forced - na_forced >= nd_forced / 3l,
+                         "code-glm forced: {nd_forced - na_forced} of {nd_forced} drafts rejected - reject branch covered")
         }
         delete tr
     }

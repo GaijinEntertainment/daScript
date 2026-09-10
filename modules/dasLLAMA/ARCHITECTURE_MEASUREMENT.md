@@ -80,7 +80,17 @@ reads bit-exact where the lever leaves the arithmetic alone. The shipped class i
 against the k4 CPU oracle on six corners of the output, at the kernel cell's bar:
 `|gpu - cpu| <= 2e-2 |cpu| + 4e-3 max|y|`. The probe's exit code is non-zero on a compared arm
 over its bound, a CPU-oracle miss, an unknown `khrprof` arm, or a run that produced no result
-row.
+row. The `moe:<fmt>` and `moesk:<fmt>` arms are the first axis over the expert schedule: the
+format's cm2 s and m tiles over the Qwen3-30B-A3B window's routed buckets (512 tokens, 8 routed
+of 128 experts, 4096 bucket rows) at the gate/up shape (d 768, K 2048) and the down shape (d
+2048, K 768), dispatched to the bound the device schedule sizes with its sentinel tail, both
+decode arms interleaved as `cm2:<fmt>` runs them. `moe:` gives every expert 32 rows - the
+reference harness's uniform profile - and `moesk:` takes the 30B window's own skew (69 experts
+route, nine holding the large buckets, eight at 96 rows, four at 48, the rest at 18). Each
+profile runs two schedule forms: the whole buckets at the s column, and the ladder, where a
+bucket past 32 rows takes whole m columns with the last one partial and a remainder of at most
+32 rows past them takes the s column. The reference row is `test-backend-ops perf MUL_MAT_ID`
+at `n_mats=128,n_used=8,m=768,n=512,k=2048`.
 
 **A measured number proves its kernel provenance through `tune_gate()`
 (`performance/profile_common.das`), one arm per world it can run in.** Four worlds, because

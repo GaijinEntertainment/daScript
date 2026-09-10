@@ -1,8 +1,8 @@
 # modules/dasLLAMA/tests - testing discipline
 
-The Metal suites here are wall-time-expensive (model loads dominate; a full pass holds 40GB
-GGUFs), so the rules below are enforcement, not advice - an ad-hoc full-suite run turns a
-one-arm fix into an afternoon.
+The Metal suites here are wall-time-expensive (model loads dominate; a full pass holds the
+largest GGUFs the box stocks), so the rules below are enforcement, not advice - an ad-hoc
+full-suite run turns a one-arm fix into an afternoon.
 
 ## Run suites ONLY through the runner
 
@@ -262,10 +262,15 @@ two lists together are the census.
 `test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
 era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
 pairings, a q8 pair carrying the q/k/v projection bias, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
-device router + top-k against `moe_select_core`, plus the `vulkan_moe_span` override reached
+device router + top-k against `moe_select_core`, the span with a shared expert in both its arms -
+gated (the shared q8 triple beside the routed pair, its gate logit past the router's, one combine)
+and ungated (the same at unit gate, a second span record after a reset; the reference without the
+shared expert must miss the device row in both) - plus the `vulkan_moe_span` override reached
 through its registry.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
-device-side f16 gather, the streamed-group slot hand-off, and the streamed split's async head.
+device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
+the shared expert's call shape - one region over every position, the identity slot map at unit
+weight.
 `test_vulkan_kernels.das` - model-free (a Vulkan device, else skips): the per-class CPU-oracle
 units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
@@ -273,11 +278,26 @@ oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format 
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch`, which carry no KHR arm,
 and q51 carries no tile cell) run four arms: the cm2 l/m/s tiles in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
-32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm;
+32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; the
+k4 cell dispatches two workgroups past its schedule over sentinel map words (`SCHED_NONE`), the
+device-written schedules' upper-bound shape, and every arm's rows still match;
 `test_vkd_direct_decode`
 proves a `[spirv_decode]` method called from a kernel body on the plane element (the KHR arm's
 staging form: the index travels, the callee chains through the plane) is an ordinary call on
-the device, against the same method run on the CPU.
+the device, against the same method run on the CPU. `test_vkd_moe_routing` holds the resident MoE
+block's routing kernels to CPU oracles: the batched router GEMM at a second layer's offset (at 21
+rows, and at 9 - fewer than the tile's half, so every invocation's second row is guarded off),
+the per-row top-k against `moe_select_core` (renormalized, and scaled), the device bucket schedule
+against its CPU twin - the records and maps word for word over the whole planes (the tile
+ladder's two piece lists over a whole m column with an s remainder, partial m columns and
+s-column buckets, the ladder spelled out in the oracle rather than called; empty experts; the
+four sentinel tails), the slot-to-bucket-row map as a permutation of each bucket's rows (its
+atomic cursor fixes no order within a bucket) - and the combine-folded residual step (the shared
+row at its gate, ungated, and no shared expert; the in-place residual moved off its input; the
+f32 normed row and the f16 twin against one oracle) - every output under a sentinel fill before
+its dispatch, every bar with its own poison. `test_vkd_gemv_lane_rule` pins the decode GEMV
+family's lanes-per-row rule (`gemv_lanes_per_row`) per format class and row length, the grid
+formats against the k-lattice ones and q8 at the whole subgroup.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -308,6 +328,16 @@ with no escape compiles; an internal require does not) via spawned compiles,
 `load_audio_16k_mono`'s empty-on-failure contract, `decode_audio_16k_mono`'s frame cap (a
 synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call still works), and
 `gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
+`test_mtp.das` - stocked suite, `-jit` only: the NextN loader on the Qwen3.5-0.8B-MTP Q8_0 file
+(the extras load; spec off continues the plain file's fixture), the self-speculative greedy decode
+token-for-token against plain decode on the counting and prose fixtures, the poisoned-verify
+rollback, the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
+non-recurrent MTP model, so the only reach of the depth-1 step's shortcut reject (row 0's logits
+and hidden stand, no re-forward): its code fixture runs plain, then again with
+`set_mtp_force_reject_every(3)` rejecting every third draft, both token-for-token against plain
+decode, the forced run's reject count asserted at a third of its drafts or more (the fixture's own
+reject count rides the kernels' summation order and has read zero). The 27B and GLM arms are
+large-tier (`DASLLAMA_PARITY_FULL=1`).
 `test_mtp_snapshot.das` - model-free: the speculative round's deltanet rollback sizes its two
 snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the
 `max_unreserved_size` guard) and restores the state from them.
@@ -330,9 +360,12 @@ deltanet decode step, and skips otherwise.
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
-shape is named in the text a user reads, a served one yields ""; plus the KV mirror's binding cap
-(`resident_binding_ctx`) on a hybrid shell whose layer 0 is recurrent, its dense twin, and a
-shell with no attention layer.
+shape is named in the text a user reads, a served one yields ""; the MoE names among them (the
+router shapes the routed block's kernels do not serve, the expert and slot counts past their
+reach) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a layer routes only
+past the dense lead with all three expert planes, and its dense width is the shared expert's);
+plus the KV mirror's binding cap (`resident_binding_ctx`) on a hybrid shell whose layer 0 is
+recurrent, its dense twin, and a shell with no attention layer.
 
 `test_gpu_resident_hybrid.das` - stocked suite, `-jit` only; the whole-model resident driver on a
 deltanet hybrid under `DASLLAMA_GPU=1`. Each fixture is a row in `../performance/model_specs.das`:
@@ -380,11 +413,43 @@ applies there.
 One cell is model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 
-`test_gpu_resident_qwen2.das` - stocked suite; the whole-model resident driver on a qwen2
+`test_gpu_resident_qwen2.das` - stocked suite, `-jit` only; the whole-model resident driver on a qwen2
 (Qwen2.5-0.5B-Instruct-Q8_0, `DASLLAMA_GPU=1`): the q/k/v projection bias folded into the rope
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
+`test_gpu_resident_moe.das` - stocked suite, `-jit` only; the whole-model resident driver on a MoE
+(Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, `DASLLAMA_GPU=1`): the expert stacks in the arena, the window
+chain's routed block and the token command's routed block - the hybrid file's forced-feed
+logits-tolerance form at the routed chain's 20% bar (the arms part on the router's near-ties from
+layer 1 on; a flipped near-tie on the 35B at two windows reads 0.155-0.16 of the step's max logit
+under either of two summation orders, the one-step-off controls 0.42 and above; the bar's `//!`
+carries the reading) with the one-step-off control, at one window and
+two windows, plus the census witnesses: the device bucket schedule and the per-row select ran once
+per MoE layer per window, the token command's top-k count a whole multiple of the MoE layer count
+(the command records once and resubmits); the second
+fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
+after the deltanet head, at the same two lengths; the third is the Qwen3-30B-A3B UD-IQ2_XXS,
+the MoE with no shared expert (the residual step with its add partner off, the FFN-norm requant
+skipped), at the same two lengths; all three are large-tier (`DASLLAMA_PARITY_FULL=1`), and the
+cells skip without the file, the armed tier, or a device with no cm2 tile family (the driver
+declines a MoE there by design); on a cm2 device the driver's admission of the fixture is
+asserted, a decline is a red that sends the reader to the load log. Every cell pins the resident
+route on for its load (`set_gpu_resident_route`) and restores the lever after.
+`test_gpu_moe_shexp.das` - stocked suite, `-jit` only; the shared expert's prefill on the device
+(Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
+shexp triple as one region over every position of the routed experts' chain, gated by the tier's
+in-process route lever - the same prompt and fed tokens with the route on (the device arm) and off
+(the CPU form), the logits within the 12% bar at the prefill and every step (the arms part on the
+router's near-ties from layer 1 on, not on the shared expert's rows - the bar's `//!` carries the
+reading), the one-step-off control, and the engage witness in two halves - the device prefill's
+shexp layer count (`shexp_gpu_prefill_layers`) grows by the model's layers on the device arm and
+not at all on the CPU arm, while `span_tokens()` grows by the fed step count on BOTH arms (the
+decode span serves every step either way, the shared expert inside it only on the device arm) -
+at 64 and 600 tokens; the twin is large-tier, so the cells run under
+`DASLLAMA_PARITY_FULL=1`, and skip without the twin, the armed tier, or a shexp mark on every layer.
+The whole-model driver is pinned off for the load (`set_gpu_resident_route`): it would take the
+twin whole, and its arm is the resident MoE file's.
 `test_gpu_model_swap.das` - stocked suite; two models through one process on the armed tier
 (Qwen3-0.6B, SmolLM2-135M, `DASLLAMA_GPU=1`): a model reloaded behind the other decodes its own
 weights, the pin on the upload rail dropping a still-installed model's device state first; skips
@@ -926,6 +991,8 @@ stale-cache red class does not exist for it.
 Every `[test]` file requiring a `dasllama/*` module outside this folder, each with its reason:
 - `utils/dasllama-server/test_openai_server*.das` - require the server by bare same-dir name
   (the hyphenated directory is unreachable by path require).
+- `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
+  bare same-dir name, like the server suites beside it.
 - `utils/dasllama-server/test_exchange_client.das` - requires `dasllama/dasllama_exchange` by
   registered name (nothing pins it to that directory); it stays beside the server suites
   because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).

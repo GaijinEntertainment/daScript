@@ -102,6 +102,9 @@ struct public GpuTierEnv {
     @clarg_doc = "Lower the context floor for arming the resident decode driver, for a short-context session on a small card."
     gpu_min_ctx : int64 = 0l
 
+    @clarg_doc = "The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever)."
+    gpu_resident : bool = true
+
     @clarg_default_doc = "follows DASLLAMA_GPU"
     @clarg_doc = "DeltaNet rail on the GPU."
     gpu_dn : Option<bool>

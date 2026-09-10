@@ -78,7 +78,8 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     delete h16
 }
 
-def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_only : bool = false) {
+//! one_region = the shared expert's call shape: one region over every row, the identity slot map at unit weight
+def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_only : bool = false; one_region : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var wq1 : array<uint8>
         var ws1 : array<uint8>
@@ -121,13 +122,14 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         w |> resize(nk)
         expert_of_row |> resize(nk)
         for (j in range64(nk)) {
-            let b = (j * 7l) % nk
+            let b = one_region ? j : (j * 7l) % nk
             inv[j] = uint(b)
-            w[j] = 0.25 + 0.5 * float((j * 7l) % 5l) / 4.0
+            w[j] = one_region ? 1.0 : 0.25 + 0.5 * float((j * 7l) % 5l) / 4.0
             expert_of_row[b] = b < cnt_a ? 1 : 0
         }
         let ege1 = nfe * n
         let ege2 = n * nfe
+        let nreg = cnt_a == nk ? 1l : 2l   //! every row in region A: one region, as the shared expert calls it
         var offs1 <- [woff1 + ege1, 0l, cnt_a, woff1, cnt_a, nk - cnt_a]
         var offs3 <- [woff3 + ege1, 0l, cnt_a, woff3, cnt_a, nk - cnt_a]
         var offs2 <- [woff2 + ege2, 0l, cnt_a, woff2, cnt_a, nk - cnt_a]
@@ -148,7 +150,7 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
                 matmul_moe_gpu_ffn_combined_xf_join(gout)
                 ref_chain(w1, w3, w2, x, inv, wg, expert_of_row, n, nfe, npos, k, refv)
             } else {
-                matmul_moe_gpu_ffn_combined_xf(gout, offs1, offs3, offs2, 2l, x, w, inv, n, nfe, nk, npos, 1, 1, 3, false)
+                matmul_moe_gpu_ffn_combined_xf(gout, offs1, offs3, offs2, nreg, x, w, inv, n, nfe, nk, npos, 1, 1, 3, false)
                 ref_chain(w1, w3, w2, x, inv, w, expert_of_row, n, nfe, npos, k, refv)
             }
             let mr = max_abs(refv)
@@ -202,6 +204,22 @@ def test_vulkan_moe_cm2_chain(t : T?) {
             // big regions (400 + 200 rows) over a 2048-wide model dim: multi-row-tile regions, the
             // 8-superblock k4 decode, and the down GEMM's l-tile pick at d = 2048
             chain_cell(t, "big", 2048l, 512l, 300l, 2l, 400l, 31000000l, 4000000l, false)
+        } else {
+            t |> skip("dasVulkan not installed; the cm2 expert chain is untestable here")
+        }
+    }
+}
+
+[test]
+def test_vulkan_moe_cm2_one_region(t : T?) {
+    t |> run("cm2 expert chain as the shared expert calls it: one region over every position, the identity slot map at unit weight == the CPU reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
+            //! k = 1 and every row in region A (cnt_a == nk): the one-region form; 40 rows = one s-tile column plus a partial
+            chain_cell(t, "one-region", 512l, 512l, 40l, 1l, 40l, 71000000l, 1000000l, false, false, true)
+            //! the same over a 2048-wide dim at 300 rows: the multi-row-tile region and the down GEMM's l-tile pick
+            chain_cell(t, "one-region-big", 2048l, 512l, 300l, 1l, 300l, 81000000l, 4000000l, false, false, true)
         } else {
             t |> skip("dasVulkan not installed; the cm2 expert chain is untestable here")
         }

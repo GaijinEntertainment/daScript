@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // the test file is the program root under dastest; the gpt-oss forward (mx4 experts, sinks, biases) overflows the default budget
 options persistent_heap   // + explicit deletes below: each arm frees its model/session before the next loads, so multi-GB weights never accumulate in the process
 options _dasllama_internal = true
 

@@ -4,16 +4,33 @@ Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. Thi
 carries sections 2.2j, 2.2p, 2.2ab, 2.2ac and 2.2ad - the Vulkan resident driver's prefill
 chain, its byte stores, and the tile probe's set layout: the prefill window chain, the Q8
 requant byte store, the decode GEMV family's grid codebook buffer, the tile probe's shared
-descriptor set layout, and the recurrent block of the prefill window. The cooperative-matrix
+descriptor set layout, and the recurrent block of the prefill window. The MoE block of that
+window and the token command's routed twin are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s sections
+2.2af and 2.2ag. The cooperative-matrix
 tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and the coopmat mode
 ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and the KHR arm's
 hand-staged kq tile - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and
-2.2ae. What a model has to fit on
+2.2ae, and the decode GEMV family's lane split by row length its section 2.2ah. What a model has to fit on
 the card before any of this runs - the residency plan, and the marks swap that lets one GPU
 slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The
 decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections
 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md`
 sec.1.5.
+
+The module gate's four Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
+reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses no names: its
+`khr_stage16` is declared abstract. `check_ar_max_dim_triple` reads `AR_MAX_DIM` in
+`dasllama_vulkan_common.das`, the `row` slab of `ArBase` in `dasllama_vulkan_classes.das` and the
+`c.dim` cap of `attn_dec_shape_ok` in `dasllama_blocks.das`, and licenses no names: the three
+numbers agree. `check_cm2_khr_set` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
+`dasllama_vulkan_classes.das` and requires `<Fmt>KhrBatch`, its `kq_batch_<fmt>_khr_cls` stamp and
+an arm in each of `khr_cls_ensure`, `khr_cls_set` and `khr_cls_enc` in
+`dasllama_vulkan_prefill.das`; its licensed set is `Q8Cm2T` alone - q8 is no `kq_sb` format, its
+cm2 tiles carry no KHR arm, and the KHR mode serves q8 through its own tile.
+`check_no_hand_pipelines` walks `dasllama/`, `harness/` and `tests/` for a
+`vkCreateComputePipelines(` call and licenses no names inside them; the two llama.cpp shader ports
+under `performance/` (`coopmat_mulmm_reference.das`, `coopmat_mulmm_port.das`) sit outside the
+walk as reference measurements of another engine's kernels.
 
 ### 2.2j The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
@@ -30,8 +47,9 @@ starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `Act
 `ArArgs.row0`). Thirty-two, not one, because the s tile - the cm2 tile with 32-row columns
 (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l) - loads a whole 32-row column unclamped on its
 fast path, and the resident prefill's activation planes (`pf_xf`, `pf_hf`) carry no read slack
-past the window - unlike the MoE chain's gathered image and hidden plane, which sec.2.2l sizes
-with 32 rows of slack past their last region. Rows below the slice keep stale gate, up,
+past the window - unlike the MoE chain's gathered image and hidden plane, which
+`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l sizes with 128 rows of slack past their last region
+(`TILE_READ_SLACK`). Rows below the slice keep stale gate, up,
 hidden and residual values that nothing reads. The sliced GEMMs do not split k: the split-k
 reduce sums partial planes from row 0, so a region starting below the window's end would reduce
 the wrong rows. The slice takes the f16-fed cm2 route only (`gu6 && dn6`); the other feeds run

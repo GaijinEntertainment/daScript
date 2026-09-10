@@ -1,8 +1,8 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md` (the other
-companions belong to the routed checklists). Planned work: `followup_general.md`,
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`, `ARCHITECTURE_MEASUREMENT.md`
+(the other companions belong to the routed checklists). Planned work: `followup_general.md`,
 `followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU work measured on macOS),
 `PERF_LEDGER.md` (performance goes to the perf ledger, everything else to the followup ledgers).
 
@@ -291,10 +291,10 @@ root) - is a `def` returning it, never a module global with a declaration initia
 or `var`).** A team lane never runs global initializers, so the global reads zero there while
 every single-threaded run reads the right value.
 
-**A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension is
-preceded by a `reserve` of the same count - a `dasllama/dasllama_common.das` sizing helper that
-reserves before it grows (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`,
-`zeroed_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled
-out - whatever the size looks like at today's shapes.** A model dimension makes
-the count unbounded, and a bare grow past the heap's unreserved-size cap (64 MB) panics the
-load on the first big model rather than at the call site.
+**A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension (a
+count the model file sets: layers, dim, experts, vocab, positions) is preceded by a `reserve` of
+the same count - a `dasllama/dasllama_common.das` sizing helper that reserves before it grows
+(`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`, `zeroed_resize`), the
+builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled out - whatever the size
+looks like at today's shapes.** Such a count is unbounded, and a bare grow past the heap's
+unreserved-size cap (64 MB) panics the load on the first big model rather than at the call site.

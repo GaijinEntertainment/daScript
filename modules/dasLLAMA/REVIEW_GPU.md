@@ -153,11 +153,11 @@ is read, and its unread arm binds a placeholder the kernel never touches.
 differ on the compile-time choice the template carried, and names that choice in the
 surviving template's comment.**
 
-**A `[metal_dispatch]` / `[vk_dispatch]` binding whose memory is load-once - a model plane, or
-an `upload_region` upload never written after arming - is a defect unless a field at that
-binding carries `@role = "weight"`, even when the kernel compiles and passes parity.** A field
-the kernel reads under a run-time flag takes the role of its read arm; the placeholder its
-unread arm binds is never read, so its lifetime does not decide the role.
+**A `[metal_dispatch]` / `[vk_dispatch]` binding whose memory is never written after arming at
+every site that binds it - a model plane, an `upload_region` upload - is a defect unless a field
+at that binding carries `@role = "weight"`, even when the kernel compiles and passes parity.**
+A field the kernel reads under a run-time flag takes the role of its read arm; the placeholder
+its unread arm binds is never read, so its lifetime does not decide the role.
 
 **`@role = "weight"` on per-encode data the kernel reads - a pooled buffer the host refills
 each encode - is a defect; a per-encode field either omits `@role` or names the access its body
@@ -169,11 +169,10 @@ instance of a template carrying one - either adds a census row to
 `CENSUS_NEVER_DISPATCHED` with the reason no row can reach it.**
 
 **A diff that adds a Vulkan kernel class under `dasllama/` - a `[vk_dispatch]` declaration, or a
-new instance of a template carrying one - adds a row to the Vulkan serving census in
-`tests/test_kernel_coverage.das` that dispatches it: a census model that reaches the class, or
-an arm that forces the device mode the class is gated on; a class no census model reaches gets
-a census model that does.** A Vulkan class never joins `CENSUS_NEVER_DISPATCHED`, which takes
-Metal classes only.
+new instance of a template carrying one - shows a Vulkan serving-census row in
+`tests/test_kernel_coverage.das` that dispatches it, adding the row or the census model when
+none does.** A Vulkan class never joins `CENSUS_NEVER_DISPATCHED`, which takes Metal classes
+only.
 
 **Weakening the `[metal_dispatch]` / `[vk_dispatch]` lens's refusal to compile an `@ssbo` field
 with no `@binding`, or an `@ssbo` field the kernel body never accesses that declares no `@role`,
@@ -201,8 +200,9 @@ host-side never reaches the device, so it does not count.
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.
 
-**Never key a cache on a host address alone - carry the span and the form, the element type and
-layout the upload produces, in the key too.** A hit must cover the request.
+**A cache key covers every input the cached result depends on: a host address, an offset, or a
+handle alone is not a key - carry the span and the form, the element type and layout the upload
+produces, in the key too.** A hit must cover the request.
 
 **A diff that lands a kernel class, driver arm, or backend capability in a `dasllama/` file
 whose `ARCHITECTURE_GPU.md` sec.1.5 role row does not sanction it extends that row's ledger in
@@ -226,7 +226,8 @@ backend-only capability - a hook in sec.1.5's per-driver registered-hook or borr
 lists included - lands its own entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list
 in the same change, even when that list already carries an asymmetry of the same class.** One
 backend serving the same path faster or slower is not such a change; a seat of the
-`dasllama_gpu_tier` cooperation SPI is sec.1.5's tier role row's, not this list's.
+`dasllama_gpu_tier` cooperation SPI lands its entry in sec.1.5's tier role row instead, in the
+same change.
 
 **A change to code that a served GPU decode or prefill path executes ships GPU-vs-CPU parity
 on one q8 and one kq (K-quant) model the changed path serves.** That code is anything a

@@ -104,7 +104,24 @@ let DASLLAMA_META_GREEN = "options gen2\n\nstruct Thing \{\n    a : int\n    b :
 // which the pipe-form-only count missed
 let DASLLAMA_META_RED = "options gen2\n\nstruct Thing \{\n    a : int\n    b : array<int>\n\}\n\ndef private serialize_meta(var arch : Archive; var t : Thing) \{\n    serialize(arch, t.a)\n    serialize_pod_array(arch, t.b)\n\}\n"
 
+// The Vulkan surface the gate's four Vulkan checks read: the abstract KHR stage on the cm2 template,
+// the add+rms row slab, one superblock format template with its KHR class and dispatch stamp, and
+// the q8 template the KHR set licenses.
+let VK_CLASSES_GREEN = "options gen2\n\nclass ArBase : RmsWgBase \{\n    @workgroup row : float[8192]\n\}\n\nclass template KqCm2BatchT : MoeCmBase \{\n    def abstract khr_stage16(blk, e0, sbase : uint) : void\n\}\n\nclass template K4Cm2T : KqCm2BatchT \{\n\}\n\nclass template Q8Cm2T : KqCm2BatchT \{\n\}\n\n[vk_dispatch(name = \"kq_batch_k4_khr_cls\", kernel = \"run\")]\nclass K4KhrBatch : K4Cm2T \{\n\}\n"
+
+// the same surface with the stage given a body and a second superblock template that ships no KHR class
+let VK_CLASSES_RED = "options gen2\n\nclass ArBase : RmsWgBase \{\n    @workgroup row : float[8192]\n\}\n\nclass template KqCm2BatchT : MoeCmBase \{\n    def khr_stage16(blk, e0, sbase : uint) : void \{\n    \}\n\}\n\nclass template K4Cm2T : KqCm2BatchT \{\n\}\n\nclass template K5Cm2T : KqCm2BatchT \{\n\}\n\nclass template Q8Cm2T : KqCm2BatchT \{\n\}\n\n[vk_dispatch(name = \"kq_batch_k4_khr_cls\", kernel = \"run\")]\nclass K4KhrBatch : K4Cm2T \{\n\}\n"
+
+// the prefill's three KHR ladders, each with the one format's arm
+let VK_PREFILL_TEXT = "options gen2\n\ndef khr_cls_ensure(fmt : int) : bool \{\n    return ensure_kq_batch_k4_khr_cls()\n\}\n\ndef khr_cls_set(fmt : int) : int \{\n    return set_kq_batch_k4_khr_cls()\n\}\n\ndef khr_cls_enc(fmt : int) \{\n    enc_kq_batch_k4_khr_cls()\n\}\n"
+
+let DASLLAMA_MODULE_LIST = "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_toyvis\", \"dasllama_image\", \"dasllama_meta\", \"dasllama_vulkan_common\", \"dasllama_vulkan_classes\", \"dasllama_vulkan_prefill\", \"dasllama_blocks\"\n"
+
 def make_dasllama_fixture(t : T?; tree, root : string) {
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das", "options gen2\n\nlet AR_MAX_DIM = 8_192l\n")
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das", VK_CLASSES_GREEN)
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das", VK_PREFILL_TEXT)
+    write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_blocks.das", "options gen2\n\ndef private attn_dec_shape_ok(c : Config) : bool \{\n    return !(c.dim > 8192l)\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama.das", "options gen2\n\ndef covered_fn() \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das", "enum AudioKind \{\n    none\n    toyfam\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das", "enum VisionKind \{\n    none\n    toyvis\n\}\n")
@@ -112,8 +129,7 @@ def make_dasllama_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_toyvis.das", "struct ToyvisTower \{\n\}\n")
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_image.das", dasllama_image_text("64l", "cur", "1"))
     write_at(t, root, "modules/dasLLAMA/dasllama/dasllama_meta.das", DASLLAMA_META_GREEN)
-    write_at(t, root, "modules/dasLLAMA/.das_module",
-        "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_toyvis\", \"dasllama_image\", \"dasllama_meta\"\n")
+    write_at(t, root, "modules/dasLLAMA/.das_module", DASLLAMA_MODULE_LIST)
     write_at(t, root, "modules/dasLLAMA/REVIEW.md", "rules\n")
     write_at(t, root, "tutorials/dasLLAMA/01_demo.das", "covered_fn()\n// prose beside the call stays harmless\n")
     write_at(t, root, "doc/source/reference/tutorials/dasLLAMA_01_demo.rst", "``covered_fn`` narrated\n")
@@ -180,14 +196,27 @@ def test_dasllama_gate_fixtures(t : T?) {
     write_at(t, fixture, "tutorials/dasLLAMA/03_vis.das", "var tw : ToyvisTower\n")
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_unlisted.das", "options gen2\n")
     write_at(t, fixture, "modules/dasLLAMA/.das_module",
-        "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_gone\", \"dasllama_image\", \"dasllama_meta\"\n// \"dasllama_toyvis\" commented out must not count\n")
+        "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_gone\", \"dasllama_image\", \"dasllama_meta\", \"dasllama_vulkan_common\", \"dasllama_vulkan_classes\", \"dasllama_vulkan_prefill\", \"dasllama_blocks\"\n// \"dasllama_toyvis\" commented out must not count\n")
     // a moved layout constant and a changed layout helper, with the stamp left where it was
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_image.das", dasllama_image_text("128l", "cur + 1ul", "2"))
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_meta.das", DASLLAMA_META_RED)
+    // the KHR stage with a body and a superblock template with no KHR class, the slab constant off
+    // its slab, and a hand-built pipeline in the harness folder
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das", VK_CLASSES_RED)
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das", "options gen2\n\nlet AR_MAX_DIM = 4_096l\n")
+    write_at(t, fixture, "modules/dasLLAMA/harness/hand_probe.das", "options gen2\n\nlet p = vkCreateComputePipelines(dev, null, 1u, addr(cp), null, addr(h))\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
     for (needle in ["dasllama_image.das: the image layout closure changed",
+                    "dasllama_vulkan_classes.das: khr_stage16 on KqCm2BatchT has a body",
+                    "the add+rms row slab triple disagrees: AR_MAX_DIM 4096 (dasllama_vulkan_common.das), ArBase.row[8192], attn_dec_shape_ok's c.dim cap 8192",
+                    "K5Cm2T has no `class K5KhrBatch : K5Cm2T`",
+                    "K5Cm2T has no `[vk_dispatch(name = \"kq_batch_k5_khr_cls\"` stamp",
+                    "khr_cls_ensure has no arm for K5Cm2T (ensure_kq_batch_k5_khr_cls(",
+                    "khr_cls_set has no arm for K5Cm2T (set_kq_batch_k5_khr_cls(",
+                    "khr_cls_enc has no arm for K5Cm2T (enc_kq_batch_k5_khr_cls(",
+                    "hand_probe.das:3: hand-built Vulkan pipeline",
                     "dasllama_meta.das:8: hand-listed Archive serializer with 2 field writes",
                     "facade def hidden_fn appears in no tutorials/dasLLAMA/*.das",
                     "facade def hidden_fn appears in no doc/source/reference/tutorials/dasLLAMA_*.rst",

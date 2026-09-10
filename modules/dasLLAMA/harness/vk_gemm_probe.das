@@ -7,9 +7,9 @@ options _dasllama_internal = true
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
-// k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m tiles; cm2x|k6x|ref the bisect and
-// reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the integer tile
-// prototypes.
+// k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m tiles; moe:<fmt> its s tile over the
+// MoE expert schedule; cm2x|k6x|ref the bisect and reference arms; khrx the KHR kq tile's
+// weight-stage and structural bisect; mmqx the integer tile prototypes.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
@@ -19,6 +19,7 @@ require vulkan
 require vulkan/vulkan_boost
 require spirv/spirv_shader
 require dasllama/dasllama_vulkan_common
+require dasllama/dasllama_gpu_tier   // TILE_READ_SLACK: the rows the moe: arm's gathered plane carries past its last region
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_prefill
@@ -460,6 +461,198 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
     delete xfh
     delete xqh
     delete axsh
+}
+
+// ===== the expert schedule (args "moe:<fmt>", "moesk:<fmt>") =====
+let private MOE_NE = 128
+let private S_ROWS = int(SCHED_S_ROWS)   //! the engine's s column: rows per expert region on the uniform profile
+let private M_ROWS = int(SCHED_M_ROWS)   //! the engine's m column
+let private READ_SLACK = int(TILE_READ_SLACK)
+
+//! a schedule form over the buckets: the whole buckets at the s column, or the ladder's m and s halves
+enum private MoeSchedForm {
+    whole
+    ladder_m
+    ladder_s
+}
+
+//! the bucket rows per expert: the s column's count each, or the 30B window's profile
+def private moe_bucket_counts(skew : bool) : array<int> {
+    var cnt : array<int>
+    cnt |> resize(MOE_NE)
+    if (!skew) {
+        for (c in cnt) {
+            c = S_ROWS
+        }
+        return <- cnt
+    }
+    for (e in range(MOE_NE)) {
+        cnt[e] = e < 9 ? 250 : (e < 17 ? 96 : (e < 21 ? 48 : (e < 69 ? 18 : 0)))
+    }
+    var placed = 0
+    for (c in cnt) {
+        placed += c
+    }
+    cnt[0] += MOE_NE * S_ROWS - placed   //! the rows left onto the biggest bucket
+    return <- cnt
+}
+
+//! the device schedule's words for one form: a record per bucket piece [block base, row base, rows,
+//! first wg], the per-wg map after the records, SCHED_NONE from the live workgroups to `bound`
+def private moe_sched_words(cnt : array<int>; plane_blk, wtiles, tc, bound : int; form : MoeSchedForm; var live : int&) : array<uint> {
+    let map_off = MOE_NE * 4
+    var sched : array<uint>
+    sched |> resize(map_off + bound)
+    var ri = 0
+    var wg = 0
+    var row0 = 0
+    for (e in range(MOE_NE)) {
+        let mrows = int(sched_ladder_m_rows(uint(cnt[e])))
+        let rows = form == MoeSchedForm.whole ? cnt[e] : (form == MoeSchedForm.ladder_m ? mrows : cnt[e] - mrows)
+        let r0 = row0 + (form == MoeSchedForm.ladder_s ? mrows : 0)
+        row0 += cnt[e]
+        continue if (rows == 0)
+        let tiles = ((rows + tc - 1) / tc) * wtiles
+        sched[ri * 4] = uint(e * plane_blk)
+        sched[ri * 4 + 1] = uint(r0)
+        sched[ri * 4 + 2] = uint(rows)
+        sched[ri * 4 + 3] = uint(wg)
+        for (g in range(tiles)) {
+            sched[map_off + wg + g] = uint(ri)
+        }
+        wg += tiles
+        ri++
+    }
+    verify(wg <= bound, "the schedule's live workgroups pass the dispatch bound")
+    for (g in range(wg, bound)) {
+        sched[map_off + g] = SCHED_NONE
+    }
+    live = wg
+    return <- sched
+}
+
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool) {   // nolint:STYLE038 — one linear measurement sweep
+    let unit = fmt == 0 ? 32 : 256
+    let plane_blk = d * (n / unit)   //! one expert's plane, in blocks
+    let totblk = MOE_NE * plane_blk
+    let bb = arena_block_bytes(fmt)
+    let wq_words = int(bb.wq / 4l)
+    let nk = MOE_NE * S_ROWS
+    let xrows = nk + READ_SLACK
+    var wqh : array<uint>
+    var wsuh : array<uint>
+    var xfh : array<uint>
+    wqh |> reserve(totblk * wq_words)   //! the planes pass the unreserved-growth cap (128 expert planes)
+    wqh |> resize(totblk * wq_words)
+    for (i in range(totblk * wq_words)) {
+        wqh[i] = hash_word(uint(i) + 29u)
+    }
+    if (fmt == 0) {
+        wsuh |> reserve(totblk / 2 + 1)
+        wsuh |> resize(totblk / 2 + 1)
+        for (i in range(totblk / 2 + 1)) {
+            wsuh[i] = cool_f16_pair(uint(i) + 7u)
+        }
+    } else {
+        let ws_words = int(bb.ws / 4l)
+        wsuh |> reserve(totblk * ws_words)
+        wsuh |> resize(totblk * ws_words)
+        for (sb in range(totblk)) {
+            wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
+            for (wi in range(1, ws_words)) {
+                wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
+            }
+        }
+    }
+    xfh |> reserve(xrows * n / 2)
+    xfh |> resize(xrows * n / 2)
+    for (i in range(xrows * n / 2)) {
+        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
+    }
+    let wtiles = (d + 127) / 128
+    let map_off = MOE_NE * 4
+    var cnt <- moe_bucket_counts(skew)
+    let bound_whole = (nk / S_ROWS + MOE_NE) * wtiles   //! every bucket may straddle a column
+    let bound_ladder_m = (nk / M_ROWS + MOE_NE) * wtiles   //! every bucket may own a partial m column
+    let bound_ladder_s = MOE_NE * wtiles   //! at most one s tile per bucket
+    var live_whole = 0
+    var live_ladder_m = 0
+    var live_ladder_s = 0
+    var words_whole <- moe_sched_words(cnt, plane_blk, wtiles, S_ROWS, bound_whole, MoeSchedForm.whole, live_whole)
+    var words_ladder_m <- moe_sched_words(cnt, plane_blk, wtiles, M_ROWS, bound_ladder_m, MoeSchedForm.ladder_m, live_ladder_m)
+    var words_ladder_s <- moe_sched_words(cnt, plane_blk, wtiles, S_ROWS, bound_ladder_s, MoeSchedForm.ladder_s, live_ladder_s)
+    let wq_bytes = int64(totblk) * bb.wq
+    let ws_bytes = long_length(wsuh) * 4l
+    let xf_bytes = int64(xrows * n) * 2l
+    let whole_bytes = long_length(words_whole) * 4l
+    let ladder_m_bytes = long_length(words_ladder_m) * 4l
+    let ladder_s_bytes = long_length(words_ladder_s) * 4l
+    let y_bytes = int64(nk * d) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xfd = make_device_buf(xf_bytes)
+    let whole_d = make_device_buf(whole_bytes)
+    let ladder_m_d = make_device_buf(ladder_m_bytes)
+    let ladder_s_d = make_device_buf(ladder_s_bytes)
+    //! two output planes alternate across the dispatches, each under a fresh hazard rail: no barrier between
+    //! consecutive dispatches, the served graph's shape (one plane would serialize them on its write-after-write)
+    let yd_a = make_device_buf(y_bytes)
+    let yd_b = make_device_buf(y_bytes)
+    let flop = 2.0lf * double(nk) * double(d) * double(n)
+    let profile = skew ? "skewed " : "uniform"
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
+        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
+        upload_region_at(whole_d, 0l, addr<uint8 const?>(words_whole[0]), whole_bytes)
+        upload_region_at(ladder_m_d, 0l, addr<uint8 const?>(words_ladder_m[0]), ladder_m_bytes)
+        upload_region_at(ladder_s_d, 0l, addr<uint8 const?>(words_ladder_s[0]), ladder_s_bytes)
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(map_off))
+        let begin = VkCommandBufferBeginInfo()
+        var raw = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+        var s_whole_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, whole_d, xfd, yd_a),
+            fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
+        var s_whole_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, whole_d, xfd, yd_b),
+            fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
+        for (k in range(DISPATCHES)) {
+            var hz : VkHaz
+            cm2_cls_enc(fmt, 32l, raw, hz, k % 2 == 0 ? s_whole_a : s_whole_b, pc, int64(bound_whole))
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        let tf = flop / (us * 1000000.0lf)
+        print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
+        var raw2 = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+        var s_ladder_m_a = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
+            fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
+        var s_ladder_m_b = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
+            fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
+        var s_ladder_s_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, ladder_s_d, xfd, yd_a),
+            fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
+        var s_ladder_s_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, ladder_s_d, xfd, yd_b),
+            fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
+        for (k in range(DISPATCHES)) {
+            var hz_m : VkHaz
+            var hz_s : VkHaz
+            cm2_cls_enc(fmt, 128l, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
+            cm2_cls_enc(fmt, 32l, raw2, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+        }
+        vk_check(vkEndCommandBuffer(raw2), null)
+        let us2 = usec_per_dispatch(raw2)
+        let tf2 = flop / (us2 * 1000000.0lf)
+        print("{name} {profile} ladder m+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
+    }
+    delete wqh
+    delete wsuh
+    delete xfh
+    delete cnt
+    delete words_whole
+    delete words_ladder_m
+    delete words_ladder_s
 }
 
 // k4 (Q4_K) cm2 decode-in-load vs the serving kq tile - per-shape rate on the qwen role shapes
@@ -2714,6 +2907,14 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             only = "cm2:"
             var pf : KqFmt
             cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
+        } elif (a |> starts_with("moe:")) {
+            only = "moe:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
+        } elif (a |> starts_with("moesk:")) {
+            only = "moesk:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 6), pf) ? int(pf) : -1
         } elif (a |> starts_with("khrprof:")) {
             only = "khrprof"
             g_prof_arm = slice(a, 8)
@@ -2753,6 +2954,31 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
+            }
+        }
+        g_gpu.decvec_on = twin_device
+        return
+    }
+    if (only == "moe:" || only == "moesk:") {
+        if (!g_gpu.has_coopmat2) {
+            print("no coopmat2 on this device\n")
+            return
+        }
+        if (cm2_fmt < 0 || !(cm2_fmt == int(KqFmt.q8) || kq_sb(cm2_fmt))) {
+            print("{only}<fmt> needs q8 or a kq superblock format name ({cm2_fmt_names()})\n")
+            return
+        }
+        let skew = only == "moesk:"
+        let twin_device = g_gpu.decvec_on
+        let arms = twin_device ? 2 : 1
+        for (round in range(2)) {
+            for (arm in range(arms)) {
+                g_gpu.decvec_on = twin_device && arm == 0
+                vkd_pipes_rebuild()
+                verify(cm2_cls_ensure(cm2_fmt, 32l) && cm2_cls_ensure(cm2_fmt, 128l), "moe:<fmt> probe pipelines must engage")
+                let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
+                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} gate/up", 768, 2048, skew)
+                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} down   ", 2048, 768, skew)
             }
         }
         g_gpu.decvec_on = twin_device
