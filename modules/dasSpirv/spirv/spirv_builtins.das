@@ -432,10 +432,13 @@ struct coopmatWgAcc_f32_128x256 {}
 struct coopmatWgB_f16_64x128 {}
 struct coopmatWgAcc_f16_128x128 {}
 struct coopmatWgAcc_f32_128x128 {}
-// the s-tile siblings (BN=32, same A / BK): the MoE expert-bucket shape, ~32 rows per region
+// the s-tile accumulators (BN=32): the MoE expert-bucket shape, ~32 rows per region; the 64-deep B is the
+// probe's twin of the s stamp (`harness/vk_gemm_probe.das`), the s stamp itself runs 32-deep
 struct coopmatWgB_f16_64x32 {}
 struct coopmatWgAcc_f16_128x32 {}
 struct coopmatWgAcc_f32_128x32 {}
+// the 32-deep A: the s and e stamps' k step (their B markers are the 32-row ones under the flash-attention banner)
+struct coopmatWgA_f16_128x32 {}
 
 // flash-attention tiles (Br=64, head sizes 64 / 128): Q & O accumulators, Qf16/P as A, K^T/V/One
 // as B. h64 runs Bc=64; h128 runs Bc=32 (llama.cpp's big-head cut — the 64-wide KV tile set
@@ -490,6 +493,10 @@ def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c
 def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x32; c : coopmatWgAcc_f16_128x32) : coopmatWgAcc_f16_128x32 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x32; c : coopmatWgAcc_f32_128x32) : coopmatWgAcc_f32_128x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f16_128x128) : coopmatWgAcc_f16_128x128 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_128x32; b : coopmatWgB_f16_32x32; c : coopmatWgAcc_f16_128x32) : coopmatWgAcc_f16_128x32 { return c }
 // flash-attention shapes: S = Qf16 @ K^T (hsk 64 / 128), O += P @ V (hsv 64 / 128), rowsum = P @ One
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }

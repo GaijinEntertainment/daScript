@@ -69,6 +69,22 @@ what it costs today and what the fix would change.
   which `followup_vulkan 43` owns in its still-open list (the CPU chain's shared expert on the
   same K-quant planes; today the resident-vs-CPU bar carries the two forms' rounding).
 
+- **LANDED (2026-09-10) - the expert stamps of the grid-codebook formats run a 32-deep k step;
+  every other stamp keeps 64.** The cm2 tile template's k step (`BK`) is a stamp constant: the s
+  and e stamps (the expert schedule's 32-row and 128-row columns, `CM2_TC_E` in the class ladders)
+  of iq2xxs, iq2xs, iq2s, iq3xxs and iq3s run 32-deep, every other stamp 64
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l carries the tile readings behind the split). On the
+  RTX 5060 Ti (`benchmarks/lcpp_bench.das -jit --for-debug-purposes -r 3 -p 512 -n 128 -t 16`
+  under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048`, the
+  x64-gen backend, untuned-stamped; the arms' rates sit in `followup_vulkan.md` item 45):
+  Qwen3.6-35B-A3B UD-IQ2_XXS pp512 1.08x with the four-wide decode twin and 1.17x without it
+  (`DASLLAMA_VK_DECVEC=0`, the arm a driver without `VK_NV_cooperative_matrix_decode_vector`
+  runs), tg128 1.00x on both arms; the Qwen1.5-MoE-A2.7B-Chat Q4_K_M twin (k4 expert planes)
+  1.07x on the four-wide arm, where the same stamps at 32 had read 0.85x - the reason the
+  K-quants keep 64; against llama.cpp b10660 on the same box (`external`, its rates and both builds
+  in item 45) the 35B's twin arm moves from 1.06x to 1.14x of its four-wide arm and the scalar arm
+  from 0.86x to 1.00x of its scalar arm [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

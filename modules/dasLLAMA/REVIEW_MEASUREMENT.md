@@ -10,22 +10,23 @@ the figure's own sentence, in a table heading that covers the table's rows, in a
 provenance line that covers the paragraphs under it, or in a citation of the passage whose
 provenance line covers it.
 
-**A `PERF_LEDGER.md` entry never states a tok/s figure or a turn wall that the `-jit` script
-produced - a `-jit` A/B pair enters as its ratio, with the arms' absolute rates left in the
-run's report.** A served turn is one whole request the engine serves - a prefill-plus-decode
-run, or one synthesis; a turn wall is its wall.
+**A `PERF_LEDGER.md` entry states a served-turn figure of the engine this repository builds - a
+tok/s rate or a turn wall - only when the released `lcpp_bench` exe (`benchmarks/lcpp_bench.das`
+built by `daspkg release`) or a board cell produced it; a `-jit` A/B pair enters as its ratio,
+with the arms' absolute rates left in the run's report.** A served turn is one whole request an
+engine serves - a prefill-plus-decode run, or one synthesis; a turn wall is its wall. The `-jit`
+script is `benchmarks/lcpp_bench.das` run as a script under `-jit` rather than as the released
+exe.
 
-**A `PERF_LEDGER.md` entry states a served-turn figure only when the released `lcpp_bench` exe
-(`benchmarks/lcpp_bench.das` built by `daspkg release`) or a board cell produced it.**
-
-**Only a reference cell of `performance/gen_bench_records.das` - a cell that times, over a board
-workload, a binary this repository does not build - writes that binary's wall into
-`PERF_LEDGER.md`.** A wall taken any other way stays in the report where it was taken.
+**A `PERF_LEDGER.md` entry tags a figure `external` when no cell, script, or exe of this
+repository spawned the run that produced it - and never when one did, whatever binary that run
+timed.**
 
 **A difference, ratio, or percentage of two measured walls, neither produced by the `-jit`
 script, written into `PERF_LEDGER.md` carries both raw walls in the entry.**
 
-**A `-jit` ratio written into `PERF_LEDGER.md` names the arm it is measured against.**
+**A `-jit` ratio written into `PERF_LEDGER.md` names the arm it is measured against.** An arm is
+one side of a pair held against the other - a knob value, a kernel form, a build.
 
 **A diff that adds a `PERF_LEDGER.md` entry whose reading no board cell produced names the
 instrument that produced it - the script or exe whose output is that wall or rate.** A board
@@ -46,11 +47,10 @@ benchmark process.**
 committed board row covers cites that row and marks the reading debug-jit.** A
 `--for-debug-purposes` row is the `-jit` script's own output.
 
-**A `PERF_LEDGER.md` entry carrying a figure this repository did not measure names the source
-and the report it came from and tags it `external`.**
+**A figure tagged `external` in `PERF_LEDGER.md` names the source and the report it came from.**
 
 **A diff never rests an adoption decision about what the engine serves on a figure from
-another project - that decision rests on a self-measured board cell.**
+another project - it rests on a measurement a cell or instrument of this repository took.**
 
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
 that picks a winner between candidate kernel forms.** That timing settles its adoption
@@ -62,9 +62,10 @@ board cell exercises mints that cell in the same change.** A route is anything t
 which code runs a whole prefill-plus-decode pass end to end, including the path a run with no
 flags and no environment overrides takes.
 
-**A change that owes a board cell for a route no leg of `performance/gen_bench_records.das`
-mints a row for names instead, in the same change, the record or gate output that proves the
-route ran end to end.**
+**A change that owes a board cell for a route `performance/gen_bench_records.das` cannot mint a
+row for - no leg of it drives that route, or the author's box refuses or skips the leg that
+would - names instead, in the same change, the record or gate output that proves the route ran
+end to end.**
 
 **A diff that makes the fat exe - a shipped exe carrying its tune profile
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - run end to end names `tune_gate`'s fat-world report
@@ -74,9 +75,9 @@ route ran end to end.**
 that path, re-mints a board row (`performance/records/<box>.json`) that exercises that path, in
 the same change, and names that row in the PR body.** A box mints a path when
 `performance/gen_bench_records.das` mints a row for it on that box - a leg its `stored_row_leg`
-(`performance/profile_common.das`) admits - rather than refusing or skipping it. Where no row
-exercises the path, the diff mints one. The board is the module's committed record of what
-serving costs; a kernel win that never lands there is invisible to the next regression check.
+(`performance/profile_common.das`) admits - rather than refusing or skipping it. The board is
+the module's committed record of what serving costs; a kernel win that never lands there is
+invisible to the next regression check.
 
 **A timing figure of a served turn as a whole - tok/s, latency, a whole-turn model or engine
 comparison, the 512-token prefill (pp512) and 128-token decode (tg128) rates, a synthesis's

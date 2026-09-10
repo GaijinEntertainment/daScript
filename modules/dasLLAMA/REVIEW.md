@@ -192,10 +192,10 @@ depend on - what it calls, types, requires, or parses (facade functions, CLI fla
 knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
 rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
 
-**A diff that falsifies a statement in an `ARCHITECTURE_*.md` companion, a module-root
-document, a `//!` docstring, or a document outside this folder whose own checklist routed this
-diff here, updates it in the same change** - no lint checks a section no `[arch]` cites; only
-the reviewer does.
+**A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
+`//` comments, or string data, any language - or in a document outside this folder whose own
+checklist routed this diff here, updates that text in the same change** - no lint checks a section
+no `[arch]` cites; only the reviewer does.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's

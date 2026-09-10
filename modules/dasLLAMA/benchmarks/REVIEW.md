@@ -19,10 +19,11 @@ against.** An instrument is a file that times a run and reports a wall-clock tim
 its result, printed or returned to a caller that prints it. Without the gate or the stamp the
 instrument measures fallback kernels silently.
 
-**A diff that adds or changes a race alternates its arms within one process - one timed round
-per arm, best-of across rounds.** A race times two implementations of the same computation in
-one process and compares them; an arm is one implementation's timed run. An instrument is
-reviewed arm by arm.
+**A diff that adds or changes a race alternates its arms - one timed round per arm, best-of
+across rounds, each round printing its own row.** A race is a run that times two
+implementations of the same computation in one process; an arm is one implementation's timed
+run; a compared arm is one whose output the run reads back and measures against another arm's
+output or a CPU reference. An instrument is reviewed arm by arm.
 
 **A diff that adds or changes a race arm that computes a comparable output proves that output
 on its report line:** an arm whose result is bit-identical to the baseline's prints the
@@ -31,17 +32,20 @@ the report's "bit-exact vs ..." line; every other arm prints a bounded-differenc
 (against the baseline arm or the CPU reference) plus the bound it passed. How the arm orders
 its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared precision.
 
-**A diff that adds or changes a race also checks the race's baseline arm against a CPU
-reference.** The baseline arm is the arm running the implementation already in use. The
+**A diff that adds or changes a race with a compared arm also checks the race's baseline arm
+against a CPU reference.** The baseline arm is the arm running the implementation already in use. The
 reference check runs in the same process, on the same output elements the arms are judged on.
 Two arms can agree and both be wrong; only the reference makes the winner right.
 
-**An arm that compares no output carries the literal token `timing-only` on its report line.**
+**A diff that adds or changes an arm whose output no other arm and no CPU reference computes -
+one that stages constants or reads its own fixture - makes that arm carry the literal token
+`timing-only` on its report line.**
 
-**A mode of an instrument that runs no race arm carries the literal text `ATTRIBUTION SWEEP` on
-its own line of the file's header comment, naming the mode and what its arms attribute.** A
-mode is one selectable run of the file, chosen by its own flag or argument. Without the line a
-reader takes a sweep's arms for an adoption decision it never made.
+**A diff that adds or changes a mode that times its arms without reading their outputs back and
+comparing them makes that mode carry the literal text `ATTRIBUTION SWEEP` on its own line of the
+file's header comment, naming the mode and what its arms attribute.** A mode is one selectable
+run of the file, chosen by its own flag or argument. Without the line a reader takes the mode's
+arms for an adoption decision it never made.
 
 **A new instrument that puts its own clock around a served turn is a defect: add a board cell
 instead.** A served turn is a whole prefill-plus-decode run; a board cell is a timed cell of

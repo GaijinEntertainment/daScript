@@ -65,6 +65,86 @@ def private fill_fixture(var b : ShapeBufs; totblk, rows, nbb : int) {
     }
 }
 
+// ===== the s stamp's other-depth twins: the in-process alternate of the k-step race - the shipped stamp at
+// the depth the engine does not run for that format (64 where the engine's s stamp runs 32, 32 where it
+// runs 64) for the formats the race is read on =====
+
+[vk_dispatch(name = "probe_iq2xxs_cm2s64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xxsCm2S64Probe : Iq2xxsCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
+[vk_dispatch(name = "probe_iq3s_cm2s64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3sCm2S64Probe : Iq3sCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
+[vk_dispatch(name = "probe_iq3xxs_cm2s64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3xxsCm2S64Probe : Iq3xxsCm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
+[vk_dispatch(name = "probe_k4_cm2s32_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4Cm2S32Probe : K4Cm2T {
+    override BN = 32u
+    override STILE = true
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
+//! the twin's k step for a format - 0 where the format has no twin
+def private probe_stwin_depth(fmt : int) : int {
+    if (fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq3s)) return 64
+    if (fmt == int(KqFmt.k4)) return 32
+    return 0
+}
+
+def private probe_stwin_has(fmt : int) : bool => probe_stwin_depth(fmt) != 0
+
+def private probe_stwin_ensure(fmt : int) : bool {
+    if (fmt == int(KqFmt.iq2xxs)) return ensure_probe_iq2xxs_cm2s64_cls()
+    if (fmt == int(KqFmt.iq3xxs)) return ensure_probe_iq3xxs_cm2s64_cls()
+    if (fmt == int(KqFmt.iq3s)) return ensure_probe_iq3s_cm2s64_cls()
+    return ensure_probe_k4_cm2s32_cls()
+}
+
+def private probe_stwin_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.iq2xxs)) return set_probe_iq2xxs_cm2s64_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq3xxs)) return set_probe_iq3xxs_cm2s64_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq3s)) return set_probe_iq3s_cm2s64_cls(bufs, sizes, gbits)
+    return set_probe_k4_cm2s32_cls(bufs, sizes, gbits)
+}
+
+def private probe_stwin_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    if (fmt == int(KqFmt.iq2xxs)) {
+        enc_probe_iq2xxs_cm2s64_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        enc_probe_iq3xxs_cm2s64_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq3s)) {
+        enc_probe_iq3s_cm2s64_cls(raw, h, s, pc, groups)
+    } else {
+        enc_probe_k4_cm2s32_cls(raw, h, s, pc, groups)
+    }
+}
+
 // ===== cm2 decode-cost bisect (arg "cm2x") - the shipped l-tile body with the decode method
 // varied: nil = constant A (zero decode cost ceiling), flat = quant only (no scale-plane read),
 // lit = full decode minus the wg_blk0 shared-memory read. Fast-path no-split arm only =====
@@ -416,10 +496,13 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
         upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
         upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
         upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let vnames = fixed_array("cm2l", "cm2m", "kq  ")
-        for (v in range(3)) {
+        //! the l/m/s stamps, the s stamp's other-depth twin where the format has one, and the kq batch tile
+        let vnames = fixed_array("cm2l", "cm2m", "cm2s", "s{probe_stwin_depth(fmt)} ", "kq  ")
+        for (v in range(5)) {
+            if (v == 3 && !probe_stwin_has(fmt)) continue
             let ttile = v == 0 ? 256 : (v == 1 ? 128 : 32)
-            let wtile = v == 2 ? 32 : 128
+            if (cnt < ttile) continue   //! a column wider than the region: the pick never takes it, and the m stamp's unclamped load would read past the plane
+            let wtile = v == 4 ? 32 : 128
             let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
             var sched : array<uint>
             sched |> resize(4 + wgs)
@@ -433,7 +516,7 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var hz : VkHaz
             var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            if (v == 2) {
+            if (v == 4) {
                 var s = kq_batch_cls_set_for(fmt, false,
                     fixed_array(wqd, wsd, scd, xqd, axsd, yd),
                     fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
@@ -441,6 +524,13 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {   // 
                 for (_k in range(DISPATCHES)) {
                     var hz2 : VkHaz
                     kq_batch_cls_enc_for(fmt, false, raw, hz2, s, pc, int64(wgs))
+                }
+            } elif (v == 3) {
+                var s = probe_stwin_set(fmt, fixed_array(wqd, wsd, scd, xfd, yd),
+                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 16u))
+                for (_k in range(DISPATCHES)) {
+                    probe_stwin_enc(fmt, raw, hz, s, pc, int64(wgs))
                 }
             } else {
                 var s = cm2_cls_set(fmt, int64(ttile), fixed_array(wqd, wsd, scd, xfd, yd),
@@ -627,9 +717,9 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         var raw2 = alloc_cmd()
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
-        var s_ladder_m_a = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
+        var s_ladder_m_a = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
-        var s_ladder_m_b = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
+        var s_ladder_m_b = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
         var s_ladder_s_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, ladder_s_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
@@ -638,13 +728,47 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         for (k in range(DISPATCHES)) {
             var hz_m : VkHaz
             var hz_s : VkHaz
-            cm2_cls_enc(fmt, 128l, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
+            cm2_cls_enc(fmt, CM2_TC_E, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
             cm2_cls_enc(fmt, 32l, raw2, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
         }
         vk_check(vkEndCommandBuffer(raw2), null)
         let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
-        print("{name} {profile} ladder m+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
+        print("{name} {profile} ladder e+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
+        //! the alternates the two rows above are ranked against, in the same process: the ladder over the dense
+        //! 64-deep m stamp (the e column's predecessor), and the whole-s-tile form on the s stamp's other-depth twin
+        var raw3 = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(raw3, begin), null)
+        var s_ladder_dm_a = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
+            fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
+        var s_ladder_dm_b = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
+            fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
+        for (k in range(DISPATCHES)) {
+            var hz_m : VkHaz
+            var hz_s : VkHaz
+            cm2_cls_enc(fmt, 128l, raw3, hz_m, k % 2 == 0 ? s_ladder_dm_a : s_ladder_dm_b, pc, int64(bound_ladder_m))
+            cm2_cls_enc(fmt, 32l, raw3, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+        }
+        vk_check(vkEndCommandBuffer(raw3), null)
+        let us3 = usec_per_dispatch(raw3)
+        let tf3 = flop / (us3 * 1000000.0lf)
+        print("{name} {profile} ladder m+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us3 / 1000.0lf} ms/dispatch  {tf3} TFLOP/s  timing-only  (the dense 64-deep m stamp)\n")
+        if (probe_stwin_has(fmt)) {
+            var raw4 = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(raw4, begin), null)
+            var s_whole_tw_a = probe_stwin_set(fmt, fixed_array(wqd, wsd, whole_d, xfd, yd_a),
+                fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
+            var s_whole_tw_b = probe_stwin_set(fmt, fixed_array(wqd, wsd, whole_d, xfd, yd_b),
+                fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                probe_stwin_enc(fmt, raw4, hz, k % 2 == 0 ? s_whole_tw_a : s_whole_tw_b, pc, int64(bound_whole))
+            }
+            vk_check(vkEndCommandBuffer(raw4), null)
+            let us4 = usec_per_dispatch(raw4)
+            let tf4 = flop / (us4 * 1000000.0lf)
+            print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us4 / 1000.0lf} ms/dispatch  {tf4} TFLOP/s  timing-only  (the {probe_stwin_depth(fmt)}-deep twin)\n")
+        }
     }
     delete wqh
     delete wsuh
@@ -2940,6 +3064,11 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             print("cm2:<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
             return
         }
+        if (g_gpu.coopmat_mode != COOPMAT_CM2) {
+            print("cm2:<fmt> reads the cm2 stamps; off cm2 mode the class ladders route to the KHR tile - run with DASLLAMA_COOPMAT=cm2\n")
+            return
+        }
+        print("ATTRIBUTION SWEEP cm2:{cm2_fmt_names()}: timing-only rows, no output compared\n")
         // the four-wide decode's A/B, both arms in ONE process, interleaved: the class pipelines
         // rebuild under each arm (the twin served, then stripped), two rounds so drift shows
         let twin_device = g_gpu.decvec_on
@@ -2948,12 +3077,15 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             for (arm in range(arms)) {
                 g_gpu.decvec_on = twin_device && arm == 0
                 vkd_pipes_rebuild()
-                verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l)
+                verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l)
+                    && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
                     && kq_batch_cls_ensure(cm2_fmt, false), "cm2:<fmt> probe pipelines must engage")
                 let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
+                //! the s stamp's dense half: a 64-row window (the pick's s column) on the gate shape
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@64", 9728, 2560, 64)
             }
         }
         g_gpu.decvec_on = twin_device
@@ -2968,6 +3100,11 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             print("{only}<fmt> needs q8 or a kq superblock format name ({cm2_fmt_names()})\n")
             return
         }
+        if (g_gpu.coopmat_mode != COOPMAT_CM2) {
+            print("{only}<fmt> reads the cm2 stamps; off cm2 mode the class ladders route to the KHR tile - run with DASLLAMA_COOPMAT=cm2\n")
+            return
+        }
+        print("ATTRIBUTION SWEEP {only}{cm2_fmt_names()}: timing-only rows, no output compared\n")
         let skew = only == "moesk:"
         let twin_device = g_gpu.decvec_on
         let arms = twin_device ? 2 : 1
@@ -2975,7 +3112,8 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             for (arm in range(arms)) {
                 g_gpu.decvec_on = twin_device && arm == 0
                 vkd_pipes_rebuild()
-                verify(cm2_cls_ensure(cm2_fmt, 32l) && cm2_cls_ensure(cm2_fmt, 128l), "moe:<fmt> probe pipelines must engage")
+                verify(cm2_cls_ensure(cm2_fmt, 32l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, CM2_TC_E)
+                    && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)), "moe:<fmt> probe pipelines must engage")
                 let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
                 run_moe_fmt_shape(cm2_fmt, "r{round} {tag} gate/up", 768, 2048, skew)
                 run_moe_fmt_shape(cm2_fmt, "r{round} {tag} down   ", 2048, 768, skew)

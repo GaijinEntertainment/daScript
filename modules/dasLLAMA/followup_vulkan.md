@@ -1018,17 +1018,40 @@ module) is independent and can land any time - it is pure structure.
     two-wide commoning relies on (its PR 23541) - where ours reads its scale from the `ws` plane and
     shifts per element. The expert-tile probe reads the same 0.71 ms per iq2xxs gate/up plane on the
     5080 no-twin as the 5060 Ti twin-on (0.73; twin-off 1.33); arm-matched, the tiles scale 1.80-1.90x,
-    qkv 1.85, conv 1.94, gather 1.82 (SMs 2.33x). Levers, in order: a 32-deep k step for the scalar
-    arm (a template constant; the probe twin-off at 32 against 64, and twin-on at both to check the
-    twin still wants 64), then the decode body's pair form. The tier warns at device init.
+    qkv 1.85, conv 1.94, gather 1.82 (SMs 2.33x). The k step landed per format on the expert tiles -
+    the s stamp and the e stamp (`CM2_TC_E`, the expert schedule's m column) of the five grid-codebook
+    formats run 32-deep, every other stamp keeps 64: the k4 twin (Qwen1.5-MoE Q4_K_M) read 4330 pp512
+    at 32 against 5074 at 64 on the 5060 Ti (its ~34-row buckets are all s pieces, and a light decode
+    is step-bound), the 35B 3236 / 2391 on its two arms with the five formats at 32 against 3101 /
+    2277 with only iq2xxs and iq3s there (the uniform `moe:` probe put iq3xxs at 64; the real schedule
+    disagrees, so a whole-model row settles a step); the dense l and m stamps keep 64, which the
+    deltanet projections want (0.86-0.93x at 32), and so does the per-op tier's expert chain
+    (`record_ffn_cm2_cmd` keys the l/m/s columns by its batch tile): pp512 2049 -> 2391 on the scalar
+    arm (1.00x of the reference's scalar arm) and 2996 -> 3236 with the twin (1.14x of its four-wide
+    arm); on a Linux RTX 5080 (driver 580.173, the real scalar arm, `-t 8`, 16 vCPU) the merged code
+    read 3304.5 / 130.7 and the slice 3835.5 / 131.2 with every expert stamp at 32 against the
+    reference exe's 5217.0 / 146.2 on that host (0.63x -> 0.74x pp), the GEMM companion's sec.2.2l and
+    `PERF_LEDGER.md` carry it. The reference build's k step is one number for every quant type -
+    `mmqid_bk` follows `coopmat2_decode_vector` alone; its mul_mat_id tiles are BM 128 with BN 128 past
+    64 routed rows and 64 below, never split-k; its expert k loop is `[[dont_unroll]]`, so a halved
+    step doubles the loads and MMAs; its scalar decoders are pair-form (compute two, `ret[idx & 1]`)
+    for q4_0, q8_0, q2_K, q5_K, q6_K and the grid formats, single-element for q3_K, q4_K and iq4_*, with
+    a shared-scale cache (`shAscales`, refreshed per 256 k) for q4_K and q5_K alone - so a k step per
+    format is new ground, and on its scalar arm its q4_K experts run 32-deep too. Left on this axis:
+    the decode body's pair form (the tiles alone still read 1.2x behind at the matched scalar arm: our
+    uniform gate/up plane 0.99 ms against the 0.83 ms of the same `MUL_MAT_ID iq2_xxs` row above), a
+    shared-scale cache for the K-quants (we read the scale row per element on every format), and the
+    k step by arm - on the 5080's scalar arm the k4 s tile reads 0.471 ms at 32 against 0.499 at 64
+    (`moe:k4` there), the opposite of the four-wide arm, so a stamp per (format, arm) is the follow-on.
+    The tier warns at device init and prints its extension roster.
     (b) Three window roles stay flat on the wider card whatever the arm: the deltanet scan (13037 ->
     12654 us, a serial recurrence over chunks - 8.7% of the 5080's window), the shared expert's
     k5/k6 tiles (sh_gate 3518 -> 3379, sh_down 1582 -> 1452 - one dispatch per layer whose grid is a
     single wave; the tile pick at 84 SMs is the first suspect) and the router (2276 -> 2371: 32 fixed
-    workgroups). And the routed tiles' real schedule (87 buckets, the largest 446 rows, 105 ladder
-    pieces per plane - one workgroup each over the expert's whole width) is one wave on either
-    card: splitting a piece across column groups and an LPT order over the pieces are the levers
-    the uniform probe (1536 workgroups) cannot show.
+    workgroups). The routed tiles' real schedule (87 buckets, the largest 448 rows, 106 column
+    tiles over the ladder, one workgroup per column tile per 128-row weight tile - about 640
+    workgroups on a gate plane, 1700 on a down plane) scales 1.80-1.90x arm-matched against the
+    2.33x in SMs; an LPT order over the pieces is the lever left there.
     (c) Decode is the per-dispatch floor: the expert GEMV reads 3.3 MB per layer in 8.5 us on the
     5080 (3.4 us of transfer at 960 GB/s, ~5 fixed) and 11.3 us on the 5060 Ti (7.4 + 3.9); some 600
     dispatches per token carry it - about 3 ms of a 7.8 ms token - and every small kernel reads

@@ -5,11 +5,13 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 `../followup_metal.md`.
 
 **A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
-output - or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it, and
-a diff that changes a `[metal_dispatch]` or `[vk_dispatch]` class's dispatch geometry, its
-kernel-argument struct (`kargs`), that struct's fields, or which branch the class takes on a
-value in a buffer it binds, apply `REVIEW_KERNEL_CELLS.md` (beside this file) together with
-this list.**
+output - or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it,
+applies `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
+
+**A diff that changes a `[metal_dispatch]` or `[vk_dispatch]` class's dispatch geometry, its
+kernel-argument struct (`kargs`), that struct's fields, which branch the class takes on a kargs
+value or on a value in a buffer it binds, or the precision of any step it computes at -
+wherever the class lives - applies `REVIEW_KERNEL_CELLS.md` together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -56,13 +58,13 @@ carries nothing to correct; a file with no census entry owes none, a file with o
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
 
-**A diff that adds, changes, or drops a gate's skip condition - the model, fixture, device or
-arm it needs - updates the test file's own header - the top comment block carrying every fact a
-`t |> skip` in the file keys on (model, tier, device, arm, knob) - in the same change, and adds
-or corrects the skip clause in that file's `CLAUDE.md` entry where `CLAUDE.md` carries one.**
+**A diff that adds, changes, or drops a cell's skip condition updates the test file's own
+header - the top comment block carrying every fact a skip condition in the file keys on (model,
+tier, fixture, device, arm, knob) - in the same change, and adds or corrects the skip clause in
+that file's `CLAUDE.md` entry where `CLAUDE.md` carries one.**
 
-**A diff that adds, moves, or removes a `[test]` file outside `modules/dasLLAMA/` that carries
-a `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
+**A diff that adds, moves, or removes a `[test]` file outside this folder that carries a
+`require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
 lives there, in `CLAUDE.md`'s "Out-of-folder test files" ledger in the same change.** A file
 reaching an engine module through another module's public require is not a row.
 
@@ -254,8 +256,9 @@ not exact-value: it is not float-portable.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A cell that adds or loosens a tolerance bar ships, in the same change, a control that lands
-outside the new bar.** A bar nothing has ever exceeded is not known to discriminate.
+**A diff that adds a tolerance bar, or loosens an existing one, ships in the same change a
+control that lands outside the bar.** A bar nothing has ever exceeded is not known to
+discriminate.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

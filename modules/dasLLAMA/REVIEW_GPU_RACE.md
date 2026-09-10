@@ -15,6 +15,13 @@ calls, a probe class redeclaring `@binding` slots), instead of naming the class'
 mis-bound arm dispatches, reads the wrong buffer, and its timing selects the wrong kernel
 silently.
 
+**An ordered argument list into a generated setter (`set_...(bufs, sizes, gbits)`, the
+`[vk_dispatch]` lens's set builder) whose entries are not the distinct `@binding` numbers the
+class and its base declare, one per number, in ascending numeric order - fields sharing a
+binding share one entry, a number nothing declares gets none - is a defect.** The setter checks
+the argument count against the class's layout, never which field each position carries; such a
+list restates no binding number, so it is not a hand-binding arm.
+
 **A hand-binding arm outside `dasllama/`, or one whose pipeline source or threadgroup-memory
 size arrives as a function parameter rather than a literal global, states in the PR that its
 binding order and push-constant layout were verified by hand against the class declaration.**
@@ -24,9 +31,10 @@ checked is where a mis-numbered bind reaches the board.
 **A diff that changes a kernel's binding numbers, kargs (kernel-argument struct) layout,
 threadgroup memory, staging shape (the operand tile a kernel copies into threadgroup memory
 before it computes), or grid or threadgroup geometry resyncs or deletes, in the same change,
-every arm that mirrors that kernel's binding order by hand and every arm ledgered as a
-retained reference in `ARCHITECTURE_GPU.md` sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT.md`
-sec.2.5 (Vulkan).** An arm left dispatching stale geometry measures the wrong kernel silently.
+every arm that mirrors that kernel's binding order by hand or by an ordered setter list and
+every arm ledgered as a retained reference in `ARCHITECTURE_GPU.md` sec.2.2b (Metal) or
+`ARCHITECTURE_MEASUREMENT.md` sec.2.5 (Vulkan).** An arm left dispatching stale geometry
+measures the wrong kernel silently.
 
 **Race and knockout code inside the engine (`dasllama/`) sits in the file that owns the kernel
 family it races, or - for a knockout - the file that owns the stage whose cost it removes.**
@@ -48,18 +56,19 @@ spans on a power-of-two batch grid.** A ranking timed at one width alone is appl
 was never ranked at.
 
 **A timing arm for a prefill tile over a variable region, whose ranking a checked-in document,
-box profile or sidecar records as decided, times its kernel at one region whose row count is a
-whole multiple of the tile's row count and at one where it is not.** A region that is not a
-whole multiple is what makes the tile take its partial-tile store path.
+box profile or sidecar records as decided, times its kernel at one region whose token count is a
+whole multiple of that tile's token column - the token extent one tile covers - and at one where
+it is not.** A token count that is not a whole multiple is what makes the tile take its
+partial-tile store path.
 
 **An `ARCHITECTURE_GPU.md` sec.2.2b entry for a kernel ranked on a power-of-two batch grid names
 that grid.**
 
 **A kernel A/B race arm whose ranking a checked-in document, box profile or sidecar records as
 decided binds a different output buffer for consecutive dispatches of its chain, never one
-shared output.** One shared output serializes the chain on its write-after-read hazard while the
-served graph overlaps consecutive dispatches, so the race ranks the arms on a shape production
-never runs.
+shared output.** One shared output serializes the chain on its write-after-write hazard while
+the served graph overlaps consecutive dispatches, so the race ranks the arms on a shape
+production never runs.
 
 **Every arm of a kernel A/B race whose ranking a checked-in document, box profile or sidecar
 records as decided handles the hazard between its dispatches the same way.** An arm serialized
@@ -89,5 +98,7 @@ Vulkan GEMM probe's axes).** A decided arm that outlives its decision degrades i
 unmaintained duplicate of the kernel it seeded.
 
 **A diff that leaves an A/B lab - a timing script that picks between spellings of one compute -
-with no undecided arm - every arm's ranking recorded as decided by a checked-in document, box
-profile or sidecar - deletes the lab's driver and its remaining arm in the same change.**
+holding neither an undecided arm nor an arm ledgered as a retained reference in the
+architecture doc that owns the kernel's tier deletes the lab's driver and its remaining arm in
+the same change.** An arm's ranking is decided when a checked-in document, box profile or
+sidecar records it.

@@ -131,11 +131,86 @@ def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescr
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2e_cls_ensure(fmt : int) : bool {
+    if (fmt == int(KqFmt.k4)) return ensure_kq_batch_k4_cm2e_cls()
+    if (fmt == int(KqFmt.k5)) return ensure_kq_batch_k5_cm2e_cls()
+    if (fmt == int(KqFmt.k6)) return ensure_kq_batch_k6_cm2e_cls()
+    if (fmt == int(KqFmt.q40)) return ensure_kq_batch_q40_cm2e_cls()
+    if (fmt == int(KqFmt.iq4xs)) return ensure_kq_batch_iq4xs_cm2e_cls()
+    if (fmt == int(KqFmt.k3)) return ensure_kq_batch_k3_cm2e_cls()
+    if (fmt == int(KqFmt.iq3s)) return ensure_kq_batch_iq3s_cm2e_cls()
+    if (fmt == int(KqFmt.iq3xxs)) return ensure_kq_batch_iq3xxs_cm2e_cls()
+    if (fmt == int(KqFmt.iq4nl)) return ensure_kq_batch_iq4nl_cm2e_cls()
+    if (fmt == int(KqFmt.k2)) return ensure_kq_batch_k2_cm2e_cls()
+    if (fmt == int(KqFmt.iq2s)) return ensure_kq_batch_iq2s_cm2e_cls()
+    if (fmt == int(KqFmt.iq2xs)) return ensure_kq_batch_iq2xs_cm2e_cls()
+    if (fmt == int(KqFmt.iq2xxs)) return ensure_kq_batch_iq2xxs_cm2e_cls()
+    verify(fmt == int(KqFmt.q8), "vk prefill: the e-column ensure fell through for a kq format - a format the feed admits must own a tile arm")
+    return ensure_q8_batch_cm2e_cls()
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.k4)) return set_kq_batch_k4_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.k5)) return set_kq_batch_k5_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.k6)) return set_kq_batch_k6_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.q40)) return set_kq_batch_q40_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq4xs)) return set_kq_batch_iq4xs_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.k3)) return set_kq_batch_k3_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq3s)) return set_kq_batch_iq3s_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq3xxs)) return set_kq_batch_iq3xxs_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq4nl)) return set_kq_batch_iq4nl_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.k2)) return set_kq_batch_k2_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq2s)) return set_kq_batch_iq2s_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq2xs)) return set_kq_batch_iq2xs_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.iq2xxs)) return set_kq_batch_iq2xxs_cm2e_cls(bufs, sizes, gbits)
+    verify(fmt == int(KqFmt.q8), "vk prefill: the e-column set fell through for a kq format - a format the feed admits must own a tile arm")
+    return set_q8_batch_cm2e_cls(bufs, sizes, gbits)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    if (fmt == int(KqFmt.k4)) {
+        enc_kq_batch_k4_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k5)) {
+        enc_kq_batch_k5_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k6)) {
+        enc_kq_batch_k6_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.q40)) {
+        enc_kq_batch_q40_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq4xs)) {
+        enc_kq_batch_iq4xs_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k3)) {
+        enc_kq_batch_k3_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq3s)) {
+        enc_kq_batch_iq3s_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq3xxs)) {
+        enc_kq_batch_iq3xxs_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq4nl)) {
+        enc_kq_batch_iq4nl_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k2)) {
+        enc_kq_batch_k2_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq2s)) {
+        enc_kq_batch_iq2s_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq2xs)) {
+        enc_kq_batch_iq2xs_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.iq2xxs)) {
+        enc_kq_batch_iq2xxs_cm2e_cls(raw, h, s, pc, groups)
+    } else {
+        verify(fmt == int(KqFmt.q8), "vk prefill: the e-column enc fell through for a kq format - a format the feed admits must own a tile arm")
+        enc_q8_batch_cm2e_cls(raw, h, s, pc, groups)
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     verify(fmt == int(KqFmt.q8) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
-    verify(tc == 256l || tc == 128l || tc == 32l, "vk prefill: a cm2 tile column the pick never returns")
+    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
         return khr_cls_ensure(fmt)
+    }
+    if (tc == CM2_TC_E) {
+        return cm2e_cls_ensure(fmt)
     }
     if (fmt == int(KqFmt.k4)) {
         return tc == 256l ? ensure_kq_batch_k4_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k4_cm2m_cls() : ensure_kq_batch_k4_cm2s_cls())
@@ -182,8 +257,12 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
         return khr_cls_set(fmt, bufs, sizes, gbits)
+    }
+    if (tc == CM2_TC_E) {
+        return cm2e_cls_set(fmt, bufs, sizes, gbits)
     }
     if (fmt == int(KqFmt.k4)) {
         if (tc == 256l) {
@@ -272,8 +351,11 @@ def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 con
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
         khr_cls_enc(fmt, raw, h, s, pc, groups)
+    } elif (tc == CM2_TC_E) {
+        cm2e_cls_enc(fmt, raw, h, s, pc, groups)
     } elif (fmt == int(KqFmt.k4)) {
         if (tc == 256l) {
             enc_kq_batch_k4_cm2l_cls(raw, h, s, pc, groups)
@@ -716,7 +798,7 @@ def private pf_moe_layer_sets(l : int64) {
     let nk = g_rd.pf_nk
     let ner = g_rd.ner
     let tcs = int64(SCHED_S_ROWS)
-    let tcm = int64(SCHED_M_ROWS)
+    let tce = CM2_TC_E
     let xg_bytes = (nk + TILE_READ_SLACK) * dim * 2l
     let y_bytes = nk * nfe * 4l
     let hf_bytes = (nk + TILE_READ_SLACK) * nfe * 2l
@@ -725,7 +807,7 @@ def private pf_moe_layer_sets(l : int64) {
     let pe3 = arena_planes(L.fe3, L.be3)
     let pe2 = arena_planes(L.fe2, L.be2)
     verify(cm2_cls_ensure(L.fe1, tcs) && cm2_cls_ensure(L.fe3, tcs) && cm2_cls_ensure(L.fe2, tcs)
-        && cm2_cls_ensure(L.fe1, tcm) && cm2_cls_ensure(L.fe3, tcm) && cm2_cls_ensure(L.fe2, tcm), "vk prefill: the expert tile class rails must engage")
+        && cm2_cls_ensure(L.fe1, tce) && cm2_cls_ensure(L.fe3, tce) && cm2_cls_ensure(L.fe2, tce), "vk prefill: the expert tile class rails must engage")
     L.pf_router_set = set_router_gemm_cls(fixed_array(g_rd.router_dev, g_rd.pf_xb, g_rd.pf_mlog),
         fixed_array(g_rd.router_bytes, np * dim * 4l, np * ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
     L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw),
@@ -737,17 +819,17 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(np * dim * 4l, nk * 4l, xg_bytes), fixed_array(VHZ_XB, VHZ_MRT, VHZ_MXG))
     L.pf_e1_set = cm2_cls_set(L.fe1, tcs, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
         fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE))
-    L.pf_e1m_set = cm2_cls_set(L.fe1, tcm, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
+    L.pf_e1m_set = cm2_cls_set(L.fe1, tce, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
         fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE_M))
     L.pf_e3_set = cm2_cls_set(L.fe3, tcs, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
         fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP))
-    L.pf_e3m_set = cm2_cls_set(L.fe3, tcm, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
+    L.pf_e3m_set = cm2_cls_set(L.fe3, tce, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
         fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP_M))
     L.pf_eact_set = set_actf16_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf),
         fixed_array(y_bytes, y_bytes, hf_bytes), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ))
     L.pf_e2_set = cm2_cls_set(L.fe2, tcs, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
         fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
-    L.pf_e2m_set = cm2_cls_set(L.fe2, tcm, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
+    L.pf_e2m_set = cm2_cls_set(L.fe2, tce, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
         fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN_M))
     L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
         fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
@@ -774,7 +856,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     pfq_ts(raw)
     let bounds = pf_moe_bounds(nk)
     let tcs = int64(SCHED_S_ROWS)
-    let tcm = int64(SCHED_M_ROWS)
+    let tce = CM2_TC_E
     let map_m_gu = uint(PF_MOE_MAP_OFF + bounds.gu)   //! the m dispatch's maps follow the s dispatch's
     let map_m_dn = uint(PF_MOE_MAP_OFF + bounds.dn)
     var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint((nfe + 127l) / 128l), wt_dn = uint((dim + 127l) / 128l),
@@ -790,10 +872,10 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     pfq_ts(raw)
     var pc1 = BatchArgs(n = uint(dim), d = uint(nfe), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
     var pc1m = BatchArgs(n = uint(dim), d = uint(nfe), map_off = map_m_gu, ksplit = 0u)
-    cm2_cls_enc(L.fe1, tcm, raw, h, L.pf_e1m_set, pc1m, bounds.mgu)
+    cm2_cls_enc(L.fe1, tce, raw, h, L.pf_e1m_set, pc1m, bounds.mgu)
     cm2_cls_enc(L.fe1, tcs, raw, h, L.pf_e1_set, pc1, bounds.gu)
     pfq_ts(raw)
-    cm2_cls_enc(L.fe3, tcm, raw, h, L.pf_e3m_set, pc1m, bounds.mgu)
+    cm2_cls_enc(L.fe3, tce, raw, h, L.pf_e3m_set, pc1m, bounds.mgu)
     cm2_cls_enc(L.fe3, tcs, raw, h, L.pf_e3_set, pc1, bounds.gu)
     pfq_ts(raw)
     var pca = ActArgs(nelem = uint(nk * nfe), gelu = g_rd.is_gelu ? 1u : 0u, nblk = uint(nk * nfe / 32l), elem0 = 0u)
@@ -801,7 +883,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     pfq_ts(raw)
     var pc2 = BatchArgs(n = uint(nfe), d = uint(dim), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
     var pc2m = BatchArgs(n = uint(nfe), d = uint(dim), map_off = map_m_dn, ksplit = 0u)
-    cm2_cls_enc(L.fe2, tcm, raw, h, L.pf_e2m_set, pc2m, bounds.mdn)
+    cm2_cls_enc(L.fe2, tce, raw, h, L.pf_e2m_set, pc2m, bounds.mdn)
     cm2_cls_enc(L.fe2, tcs, raw, h, L.pf_e2_set, pc2, bounds.dn)
     pfq_ts(raw)
 }

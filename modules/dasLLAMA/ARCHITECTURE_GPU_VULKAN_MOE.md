@@ -54,7 +54,11 @@ except where a probe arm is named.
   bucket is cut into at most two pieces by the tile ladder: a bucket within the s column (32
   rows) is one s piece; a bigger bucket takes whole m columns (128 rows) with the last one
   partial, unless the remainder past the whole columns fits the s column, which then takes it
-  (`sched_ladder_m_rows`). The s pieces' records sit at `[0, ne)`, the m pieces' at `[ne, 2 ne)`,
+  (`sched_ladder_m_rows`). The s pieces run the s stamp and the m pieces the e stamp - the m
+  tile's column at the format's own k step, keyed `CM2_TC_E` in the class ladders
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l) - and every piece dispatches one workgroup per
+  column tile per 128-row weight tile of the plane. The s pieces' records sit at `[0, ne)`,
+  the m pieces' at `[ne, 2 ne)`,
   and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 2048 words for up
   to 256 experts twice), the two tile counts scanned as one packed word (its halves stay under
   65536 for any admitted shape: 512 tokens by 64 slots over 256 experts). Every dispatch is sized

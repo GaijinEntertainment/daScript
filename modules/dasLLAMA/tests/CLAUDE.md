@@ -209,12 +209,15 @@ GPU-less boxes), and the flavor image round-trips the plan verbatim.
 
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
-under `DASLLAMA_PARITY_FULL=1`; every prefill tile family is reached through the qwen3 Q8_0 and
-Q4_K_M and the 1B llama requants, machine-local like the other fixtures - the `-local` ones are
+under `DASLLAMA_PARITY_FULL=1` - the Qwen1.5-MoE Q8_0 and its `-local` Q4_K_M mint, the Qwen3-30B
+Q4_K_M and UD-IQ2_XXS: the resident MoE block's s and e stamps on the expert planes those files
+carry; an e stamp no stocked carrier reaches is a `VK_CENSUS_NEVER_DISPATCHED` entry naming its
+kernel-unit cell, and the list drains itself; every prefill tile family is reached through the
+qwen3 Q8_0 and Q4_K_M and the 1B llama requants, machine-local like the other fixtures - the `-local` ones are
 minted from the bartowski Q8_0 with `llama-quantize --allow-requantize <q8> <out> <type>` - each
 swept under the coopmat modes its planes have twins in: all five for q8 and q40, the box's mode,
 mm and sdot4 for the other kq formats) is the KERNEL COVERAGE census (the census-row obligation is
-`REVIEW.md`'s): the small-model zoo swept across format/graph/batch/KV axes, then a
+`../REVIEW_GPU.md`'s): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels - never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",
 never "unreachable". A kernel's dispatch predicate can be satisfiable by a servable model,
@@ -275,13 +278,17 @@ weight.
 units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
-`test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch`, which carry no KHR arm,
-and q51 carries no tile cell) run four arms: the cm2 l/m/s tiles in mode 4 on an
+`test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
+which carry no KHR arm, and q51 carries no tile cell) run five arms: the cm2 l/m/s tiles and the
+expert schedule's e column (the m tile's 128-row column at the format's k step - 32 on the five
+grid-codebook formats, 64 elsewhere) in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
 32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; the
 k4 cell dispatches two workgroups past its schedule over sentinel map words (`SCHED_NONE`), the
 device-written schedules' upper-bound shape, and every arm's rows still match;
-`test_vkd_direct_decode`
+`test_vkd_ext_roster` holds the device-init roster (`vk_ext_roster`: every Vulkan capability the tier
+keys a route on, what rides on it) to the arming's own fields - a probe the arming reads and the
+roster does not shows as a disagreement. `test_vkd_direct_decode`
 proves a `[spirv_decode]` method called from a kernel body on the plane element (the KHR arm's
 staging form: the index travels, the callee chains through the plane) is an ordinary call on
 the device, against the same method run on the CPU. `test_vkd_moe_routing` holds the resident MoE

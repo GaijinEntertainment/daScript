@@ -169,6 +169,12 @@ than a second GPU. Cross-GPU parity of one source is secondary. Current entries:
   SPV_NV_cooperative_matrix2 tensor loads. Metal-4 tensors have no decode-callback analogue, so
   the Metal quant GEMMs stage dequant through threadgroup memory instead. Deliberate,
   target-specific - not a pending port.
+- **The workgroup-scope cooperative-matrix tile family is Vulkan-only by hardware.** The
+  `coopmatWg{A|B|Acc}_*` marker structs, their `coopmatMulAdd` / `coopmatConvert` overloads and
+  the tensor-layout loads and stores lower SPV_NV_cooperative_matrix2 workgroup tiles; Metal-4
+  tensors carry no workgroup-scope tile of that form, so the Metal GEMMs stage through
+  threadgroup memory. Deliberate, target-specific - a new tile shape (a marker struct and the
+  overload that types its call) is a member of this family, not a new asymmetry.
 - **A kernel body calling a `[spirv_decode]` method directly is Vulkan-only; pending, not
   deliberate.** dasSpirv emits the call as an ordinary function - on a plane element the
   callee takes the element's index and chains through the plane, on a copy the struct

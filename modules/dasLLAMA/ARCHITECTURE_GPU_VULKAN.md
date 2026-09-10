@@ -1,10 +1,11 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j, 2.2p, 2.2ab, 2.2ac and 2.2ad - the Vulkan resident driver's prefill
-chain, its byte stores, and the tile probe's set layout: the prefill window chain, the Q8
-requant byte store, the decode GEMV family's grid codebook buffer, the tile probe's shared
-descriptor set layout, and the recurrent block of the prefill window. The MoE block of that
+carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad and 2.2ai - the Vulkan resident driver's prefill
+chain, its byte stores, the tile probe's set layout and the device-init roster: the prefill
+window chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer, the tile
+probe's shared descriptor set layout, the recurrent block of the prefill window, and the roster of
+Vulkan capabilities the tier keys its routes on. The MoE block of that
 window and the token command's routed twin are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s sections
 2.2af and 2.2ag. The cooperative-matrix
 tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and the coopmat mode
@@ -17,16 +18,23 @@ decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`
 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md`
 sec.1.5.
 
-The module gate's four Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
+The module gate's six Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
 reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses no names: its
 `khr_stage16` is declared abstract. `check_ar_max_dim_triple` reads `AR_MAX_DIM` in
 `dasllama_vulkan_common.das`, the `row` slab of `ArBase` in `dasllama_vulkan_classes.das` and the
 `c.dim` cap of `attn_dec_shape_ok` in `dasllama_blocks.das`, and licenses no names: the three
-numbers agree. `check_cm2_khr_set` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
-`dasllama_vulkan_classes.das` and requires `<Fmt>KhrBatch`, its `kq_batch_<fmt>_khr_cls` stamp and
-an arm in each of `khr_cls_ensure`, `khr_cls_set` and `khr_cls_enc` in
-`dasllama_vulkan_prefill.das`; its licensed set is `Q8Cm2T` alone - q8 is no `kq_sb` format, its
-cm2 tiles carry no KHR arm, and the KHR mode serves q8 through its own tile.
+numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
+`dasllama_vulkan_classes.das` twice: for the KHR trio it requires `<Fmt>KhrBatch`, its
+`kq_batch_<fmt>_khr_cls` stamp and an arm in each of `khr_cls_ensure`, `khr_cls_set` and
+`khr_cls_enc` in `dasllama_vulkan_prefill.das`, licensing `Q8Cm2T` alone - q8 is no `kq_sb`
+format, its cm2 tiles carry no KHR arm, and the KHR mode serves q8 through its own tile; for the
+e trio it requires `<Fmt>Cm2EBatch`, its `kq_batch_<fmt>_cm2e_cls` stamp (`q8_batch_cm2e_cls` for
+q8) and an arm in each of `cm2e_cls_ensure`, `cm2e_cls_set` and `cm2e_cls_enc`, licensing none.
+`check_cm2_stamp_tiles` reads every `[vk_dispatch]` stamp of those templates and requires its
+`AT`, `BT`, `ACC` and `ACCW` typedefs to follow its `BK` and `BN`, and an e or s stamp's `BN` to
+equal `SCHED_M_ROWS` or `SCHED_S_ROWS`. `check_vk_extension_roster` walks `dasllama/` for every
+`"VK_*"` extension name and every `*_supported` probe `modules/dasVulkan/daslib/vulkan_boost.das`
+declares, and requires each inside `vk_ext_roster` in `dasllama_vulkan_common.das`.
 `check_no_hand_pipelines` walks `dasllama/`, `harness/` and `tests/` for a
 `vkCreateComputePipelines(` call and licenses no names inside them; the two llama.cpp shader ports
 under `performance/` (`coopmat_mulmm_reference.das`, `coopmat_mulmm_port.das`) sit outside the
@@ -210,3 +218,19 @@ many rows as the conv has taps: when a full window would leave the last window f
 that, the earlier window takes fewer rows instead, so the last one still holds the taps. Only a
 lone first window can be shorter - its history is zero, so the tail writes the ring's leading
 rows as zero (`DnTailArgs.zero_rows`).
+
+### 2.2ai The device-init log names every Vulkan capability the tier keys a route on {#vk-extension-roster}
+
+`vk_ext_roster` (`dasllama_vulkan_common.das`) is the one list of the Vulkan extensions, core
+feature sets and device limits the tier reads: for each, the probe the tier's arming reads
+(`modules/dasVulkan/daslib/vulkan_boost.das`'s `*_supported` probes, `device_extension_available`
+by name, or a limit), the env knob that holds the route off, and what the tier does with it and
+what serves without it. Device init prints one `ext <name>: <state> - <what rides on it>` line
+per entry after the `device ready` line, so a box's log says which route each capability decided
+- the reading a box-to-box gap starts from (a Linux driver that lists no
+`VK_NV_cooperative_matrix_decode_vector` runs the scalar decode arm, a device with no
+`VK_NV_shader_sm_builtins` never splits k). The roster re-queries the device rather than reading
+the arming's fields, so the two cannot disagree by construction only where the arming reads the
+same probe - the kernel file's roster cell holds the arming's fields to the roster's entries. The
+module gate keeps the roster complete: every extension name and every such probe the tier calls
+appears in it.

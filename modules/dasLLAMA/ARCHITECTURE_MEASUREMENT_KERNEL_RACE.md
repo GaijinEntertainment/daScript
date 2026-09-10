@@ -18,7 +18,7 @@ crown:
 
 - **Overlap.** The served graph's consecutive GEMVs write DIFFERENT output buffers, so the
   scheduler overlaps them. A race chaining every dispatch through one output buffer serializes
-  on the write-after-read hazard; on the iq2xxs f4-slab twin that one difference reads +9% for
+  on the write-after-write hazard; on the iq2xxs f4-slab twin that one difference reads +9% for
   an arm the served graph rejects at -8.6%.
 - **A warmed clock.** An Apple GPU's clock governor ramps under load, and `race_pair_ms` runs
   base-then-twin per round, so the first side pays the ramp the second rides. About 150 ms of

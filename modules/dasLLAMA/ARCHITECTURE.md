@@ -49,10 +49,11 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_PREFILL.md` - sec.2.2c-2.2i, 2.2u-2.2v, 2.2aa: the Metal prefill driver's
   GEMM form ladder, dev-W knee map, attention slab, MoE bucket rail, chunked submission, the
   f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm scaffold.
-- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad: the Vulkan resident
+- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai: the Vulkan resident
   driver's prefill chain and byte stores - the prefill window chain, the Q8 requant byte store,
   the decode GEMV family's grid codebook buffer, the tile probe's shared descriptor set layout,
-  and the recurrent block of the prefill window.
+  the recurrent block of the prefill window, and the device-init roster of the Vulkan
+  capabilities the tier keys its routes on.
 - `ARCHITECTURE_GPU_VULKAN_GEMM.md` - sec.2.2k-2.2m, 2.2q, 2.2ae, 2.2ah: the cooperative-matrix
   tiles the Vulkan tier's GEMMs run on - the cm2 decode lanes, the tile pick and the coopmat mode
   ladder, the class-pipeline build seat, the MoE expert chain on those tiles, the KHR arm's

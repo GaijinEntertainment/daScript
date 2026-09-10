@@ -7,11 +7,16 @@ docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITEC
 body or fixture either emitter compiles, applies this list together with its own folder's.**
 
 **Never put anything that cannot run on the CPU into a kernel body or into a function a kernel
-calls - keep both in ordinary das.** The tests compare the kernel against a CPU run.
+calls - keep both in ordinary das.** The tests compare the kernel against a CPU run. A marker
+struct - an empty struct with no storage that stands for a device-side value: a tile or tensor
+shape, a tensor layout or view, a sampler, an image - and the builtins over it compile and run
+on the CPU, so they pass this rule.
 
-**A diff that adds or changes an emitter builtin - a declaration in
-`daslib/shader_lingua_franca.das` or an emitter's builtin table - ships a CPU body that returns
-what the emitted form returns, argument for argument.**
+**A diff that adds or changes an emitter builtin whose operands are all ordinary CPU values - a
+declaration in `daslib/shader_lingua_franca.das` or an emitter's builtin table - ships a CPU
+body that returns what the emitted form returns, argument for argument.** An operand that
+stands for a device-side value - a marker struct, or a resource struct carrying a device
+handle - is not an ordinary CPU value, so a builtin taking one is outside this trigger.
 
 **Never let a construct the emitter cannot lower produce a kernel or a crash - the emitter
 reports a compile error that names the construct.**
@@ -20,12 +25,13 @@ reports a compile error that names the construct.**
 constant.** A shape constant is any value that fixes the kernel's tiling: a tile row count, a
 tile column count, a cooperating-simdgroup count, a staged chunk depth.
 
-**A kernel that loads its operands with the emitter's tensor-load ops (`coopmatLoadTensor*`,
-`coopmatLoadTensorDecode`) receives a run-time-only matmul reduction width through the
-emitter's runtime-extent descriptor and no other way - `dynamic_extent` on Metal, a
-`tensorLayout2D` or `tensorLayout2DPad` whose dimension `tensorLayoutSetDimension` sets on
-SPIR-V.** The reduction width is the K dimension - the length of the loop the kernel
-accumulates over; it does not fix tiling, so it is not a shape constant.
+**A kernel that loads its operands with an emitter's tensor ops - `coopmatLoadTensor*` on
+SPIR-V, the `tmm2d_*` family on Metal - receives a run-time-only matmul reduction width through
+that emitter's runtime-extent descriptor and no other way: on SPIR-V a `tensorLayout2D` or
+`tensorLayout2DPad` whose dimension `tensorLayoutSetDimension` sets, on Metal a
+`matmul2d_descriptor` whose K extent is `dynamic_extent` (`dasMetal/metal/msl_emit.das` stamps
+it).** The reduction width is the K dimension - the length of the loop the kernel accumulates
+over; it does not fix tiling, so it is not a shape constant.
 
 **A diff that makes a kernel need a shape constant known only at run time ships a
 specialization path, or records in an `ARCHITECTURE*.md` at the root of the module the kernel
@@ -37,11 +43,12 @@ words or text.** Emitted shape is the structure of the emitted kernel - its sign
 parameter attributes, its statement forms - and its stamped shape values (tile, grid,
 threadgroup sizes).
 
-**A diff that adds a kernel-model capability to one emitter adds it to the other, or records
-the asymmetry in the shared ledger (`dasMetal/ARCHITECTURE.md`).** A kernel-model capability
-is present on an emitter when a kernel source that uses it compiles there; a diff that leaves
-every kernel source compiling exactly as it did before changed lowering alone, and answers to
-that emitter folder's own checklist.
+**A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
+shared ledger (`dasMetal/ARCHITECTURE.md`) naming that capability - covered by the row that
+names its family, or by a row the diff adds.** A kernel-model capability is present on an
+emitter when a kernel source that uses it compiles there, and a family is the set of constructs
+one ledger row names. A diff that leaves every kernel source compiling exactly as it did before
+changed lowering alone, and answers to that emitter folder's own checklist.
 
 **A diff that puts a `daslib/shader_lingua_franca` declaration into a kernel body or fixture an
 emitter compiles, where that emitter does not handle it, ships, in the same change, either

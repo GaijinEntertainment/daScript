@@ -33,7 +33,7 @@ require _model_tier
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
 // The KERNEL COVERAGE census (REVIEW_GPU.md: a Metal kernel class is dispatched by a census row here or named in
-// CENSUS_NEVER_DISPATCHED; a Vulkan kernel class is dispatched by a census row): drive the small-model zoo across the
+// CENSUS_NEVER_DISPATCHED; a Vulkan kernel class by a census row or VK_CENSUS_NEVER_DISPATCHED): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
 // dispatched — LOUD WARNINGS, never an auto-dead verdict. A zero means "nothing this zoo runs
 // dispatched it", never "unreachable" — deleting a kernel additionally needs a reachability
@@ -606,6 +606,18 @@ def test_metal_kernel_coverage(tst : T?) {
     }
 }
 
+// The Vulkan census's DECLARED blind spots, by census name (`<vk_dispatch name>_spv`): kernel
+// classes no zoo row below can dispatch, each with the reason and the kernel-unit cell that does.
+// A new [vk_dispatch] class belongs in a census row, not here; the list drains itself - an entry a
+// row dispatches is a red - and the report's NEVER DISPATCHED warnings name the gaps still owed a row.
+let private VK_CENSUS_NEVER_DISPATCHED <- [
+    // the expert schedule's e stamps of the formats no stocked MoE carrier holds a routed expert
+    // plane in: the zoo's resident MoE carriers put q8 and k4 planes (the Qwen1.5-MoE files) and
+    // the UD-IQ2_XXS 30B's iq2xxs / iq2xs / iq2s / iq3xxs / iq3s / iq4xs mix on the schedule. Their
+    // coverage is the e arm of each format's cell in test_vulkan_kernels.das
+    "kq_batch_k5_cm2e_cls_spv", "kq_batch_k6_cm2e_cls_spv", "kq_batch_q40_cm2e_cls_spv",
+    "kq_batch_k3_cm2e_cls_spv", "kq_batch_iq4nl_cm2e_cls_spv", "kq_batch_k2_cm2e_cls_spv"]
+
 [unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty
 def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
     // one model's vulkan coverage sweep: GPU prefill (the counting prompt clears the npos gate),
@@ -733,6 +745,9 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             // the Q4_K_M twin fits a 16 GB card whole: the whole-model driver's MoE block (the router GEMM, the
             // per-row select, the bucket schedule, the combine-folded residual step, the token command's routed block)
             vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"), "qwen2moe", none)
+            // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over the published dynamic
+            // quant's iq2xxs expert planes, the whole-model fit of a 16 GB card
+            vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "qwen3moe", none)
             vk_kernel_coverage_report()
             var cov <- vk_kernel_coverage()
             var served = 0
@@ -745,6 +760,13 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             if (served == 0) {
                 feint("no vulkan dispatches - arm DASLLAMA_GPU=1 on a device box (the census needs the serving tier)\n")
                 return
+            }
+            // the blind-spot list self-drains: a declared entry a stocked carrier dispatched is a STALE entry
+            // (a name nothing seeded panics in the accessor, so a misspelt entry cannot read as a zero count)
+            for (blind in VK_CENSUS_NEVER_DISPATCHED) {
+                let hits = vk_kernel_coverage_of(blind)
+                t |> success(hits == 0l,
+                    "{blind} is a DECLARED blind spot - a stocked carrier now dispatches it ({hits}): drop the entry, its census row exists")
             }
             let famfilter = g_env_test.test_family
             if (empty(famfilter)) {

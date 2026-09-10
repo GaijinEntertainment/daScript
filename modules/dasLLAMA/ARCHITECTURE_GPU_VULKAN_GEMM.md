@@ -71,9 +71,10 @@ and `DASLLAMA_CM2_TILE` - so the class the pipeline binds and the tile rule the 
 can never disagree; `cnt` is the AVERAGE rows per active region of the dispatch, so one tile
 serves every region of a per-op MoE schedule. The resident MoE block makes no pick: its device
 schedule cuts every bucket into s and m pieces by size and dispatches both classes per plane
-(`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af), which is what a real window's skew needs - one tile
-per bucket costs the same whatever its fill, and a 467-row bucket is 15 s tiles or 4 m
-columns. A region below the s tile's row count goes to the decode GEMV family, not to a tile.
+(`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af) - the s stamp and the e stamp, the m column at the
+format's k step, keyed `CM2_TC_E` in the class ladders - which is what a real window's skew
+needs: one tile per bucket costs the same whatever its fill, and a 467-row bucket is 15 s tiles
+or 4 m columns. A region below the s tile's row count goes to the decode GEMV family, not to a tile.
 The s and m tiles' fast path loads a partial column UNCLAMPED (the layout's row dimension
 rounded up to the column) and clamps only the store, so every f16 plane the chain feeds them -
 the gathered activation image and the hidden plane - is sized with 128 rows of slack past its
@@ -82,6 +83,19 @@ partial column, since only a window's last column is ever partial there. The den
 planes carry no slack: they hold the whole window's rows whatever the last window's length, so
 a partial m column's unclamped load stays inside them. The store-layout constant the m and s
 tiles read (`STILE`) is inert on the KHR classes, whose tile never reads it.
+
+**The k step follows the column and the decode.** The template's k step (`BK`) is 64 on the dense
+l and m tiles and on the expert stamps of the K-quants, q4_0, q8 and the 4-bit LUT formats, and
+32 on the s and e stamps of the five grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s;
+the e stamp is `<Fmt>Cm2EBatch`, the `cm2e_cls_*` ladder beside the KHR one); a stamp's `AT`/`BT`
+carry its depth. A grid decode is occupancy-bound - a 64-deep column holds twice the A tile, and
+with the codebook lookup's live range a workgroup fewer fits an SM: at 32 the iq2xxs gate/up
+plane reads 0.611 against 0.730 ms with the four-wide twin and 0.99 against 1.33 without, iq3s
+0.652 against 0.764 (`moe:<fmt>`, RTX 5060 Ti). A light decode is step-bound: the k4 s tile reads
+0.744 against 0.679 at 32 on the skewed schedule (`moesk:k4`), the Qwen1.5-MoE Q4_K_M twin 4330
+against 5443 pp512, and the dense k4 l and m tiles 44.2 against 48.8 and 38.5 against 48.6 TFLOP/s
+(`cm2:k4`). Whole model the 35B's pp512 reads 2996 -> 3236 (twin) and 2049 -> 2391 (scalar), the
+reference exe 2829 and 2385-2393 on its arms (`PERF_LEDGER.md`); a whole-model row settles a step.
 
 **The split-k pick counts the dispatch group, not the GEMM.** With long K (2048 and up), a grid
 that fills at most half the SMs splits its reduction across f32 partial planes that

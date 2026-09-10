@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require math
+require strings   // starts_with: the roster cell finds an entry by its name's head
 require dasllama/dasllama_math
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
@@ -23,10 +24,43 @@ require dasllama/dasllama_moe   // moe_select_core: the host select the window's
 
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: the s and m tiles load a partial column unclamped
 
+//! a format cell's arms: the cm2 l, m and s tiles through their own builders, the KHR tile and the expert schedule's e column through the ladders
+let private ARM_CM2_L = 0
+let private ARM_CM2_M = 1
+let private ARM_CM2_S = 2
+let private ARM_KHR = 3
+let private ARM_CM2_E = 4
+let private ARM_COUNT = 5
+
+def private cell_arm_name(arm : int) : string {
+    return arm == ARM_CM2_L ? "l" : (arm == ARM_CM2_M ? "m" : (arm == ARM_CM2_S ? "s" : (arm == ARM_KHR ? "khr" : "e")))
+}
+
+//! the two ladder arms; generic on purpose - a build without the vulkan module must never infer these bodies
+def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
+    verify(arm == ARM_KHR || arm == ARM_CM2_E, "the cell arm helpers serve the KHR and e arms only")
+    if (arm == ARM_KHR) return khr_cls_set(fmt, bufs, sizes, gbits)
+    verify(cm2_cls_ensure(fmt, CM2_TC_E), "the e column's class rail must engage in cm2 mode")
+    return cm2_cls_set(fmt, CM2_TC_E, bufs, sizes, gbits)
+}
+
+def private cell_arm_enc(arm, fmt : int; raw; var h; var s; var pc; groups : int64) {
+    verify(arm == ARM_KHR || arm == ARM_CM2_E, "the cell arm helpers serve the KHR and e arms only")
+    if (arm == ARM_KHR) {
+        khr_cls_enc(fmt, raw, h, s, pc, groups)
+    } else {
+        cm2_cls_enc(fmt, CM2_TC_E, raw, h, s, pc, groups)
+    }
+}
+
 // The model-less Vulkan kernel-unit suite ([vk_dispatch] bring-up): a class kernel dispatched
 // through the GENERATED surface (ensure/set/enc — per-class layout, push constants, hazard rail)
 // against the CPU run of the SAME method (the class body is ordinary daslang; the driver loop
-// feeds gl_GlobalInvocationID). Without dasVulkan (or with no device) every check feints cleanly.
+// feeds gl_GlobalInvocationID). The facts the cells' gates key on: a Vulkan device (a class's
+// ensure engages it); an NV_coopmat2 device in cm2 mode (DASLLAMA_COOPMAT=cm2) for the cm2
+// l/m/s/e arms; KHR cooperative matrix at subgroup 32 for the KHR arm; DASLLAMA_CM2_TILE and
+// DASLLAMA_CM2_SPLITK for the tile-pick cell. Without dasVulkan (or with no device) every check
+// skips or feints cleanly.
 
 [test]
 def test_vkd_class_dispatch(t0 : T?) {
@@ -92,7 +126,54 @@ def test_vkd_class_dispatch(t0 : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+//! the roster entry whose name starts with `prefix`, read as the route it decides: present and not held off
+def private roster_on(roster : array<VkExtEntry>; prefix : string) : bool {
+    for (e in roster) {
+        if (e.name |> starts_with(prefix)) {
+            return e.present && !e.off
+        }
+    }
+    panic("no device-init roster entry starts with '{prefix}'")
+    return false
+}
+
+[test, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-extension-roster")]
+def test_vkd_ext_roster(t0 : T?) {
+    t0 |> run("the device-init roster: one entry per capability, each saying what rides on it, agreeing with the arming") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            var inscope roster <- vk_ext_roster(g_gpu.phys)
+            t |> success(length(roster) >= 12, "the roster names the tier's capabilities ({length(roster)} entries)")
+            var seen : table<string>
+            for (e in roster) {
+                t |> success(!key_exists(seen, e.name), "a roster entry is named once: {e.name}")
+                seen |> insert(e.name)
+                t |> success(!empty(e.rides), "a roster entry says what rides on it: {e.name}")
+                t |> success(empty(e.knob) || (e.knob |> starts_with("DASLLAMA_VK_")), "a roster knob is a Vulkan-tier env knob: {e.name} -> '{e.knob}'")
+                t |> success(!e.off || !empty(e.knob), "a route is held off only by a named knob: {e.name}")
+            }
+            // the arming's fields against the roster's entries - the roster re-queries the device, so a
+            // probe the arming reads and the roster does not would show here as a disagreement
+            t |> equal(g_gpu.has_coopmat, roster_on(roster, "VK_KHR_cooperative_matrix"), "has_coopmat follows the VK_KHR_cooperative_matrix entry")
+            t |> equal(g_gpu.has_coopmat2, roster_on(roster, "VK_NV_cooperative_matrix2 (workgroup"), "has_coopmat2 follows the VK_NV_cooperative_matrix2 entry")
+            t |> equal(g_gpu.has_coopmat2_fa, roster_on(roster, "VK_NV_cooperative_matrix2 reductions"), "has_coopmat2_fa follows the cm2 flash-attention entry")
+            t |> equal(g_gpu.decvec_on, roster_on(roster, "VK_NV_cooperative_matrix_decode_vector"), "decvec_on follows the decode-vector entry and its knob")
+            t |> equal(g_gpu.sm_count > 0, roster_on(roster, "VK_NV_shader_sm_builtins"), "the SM count follows the VK_NV_shader_sm_builtins entry")
+            t |> equal(g_gpu.full_sg_on, roster_on(roster, "computeFullSubgroups"), "full_sg_on follows the computeFullSubgroups entry and its knob")
+            t |> equal(g_gpu.has_memprio, g_gpu.has_coopmat && roster_on(roster, "VK_EXT_memory_priority"), "has_memprio follows the VK_EXT_memory_priority entry and its knob on a coopmat device")
+            t |> equal(g_gpu.rebar_type >= 0, roster_on(roster, "a ReBAR memory type"), "the ReBAR type follows the ReBAR entry and its knob")
+            t |> equal(g_gpu.dn_shared_ok, roster_on(roster, "maxComputeSharedMemorySize"), "dn_shared_ok follows the shared-memory limit entry")
+            t |> success(g_gpu.xfer_fam < 0 || roster_on(roster, "timelineSemaphore"), "an armed transfer queue rides the timelineSemaphore entry")
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+[test, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
 def test_vkd_direct_decode(t0 : T?) {
     t0 |> run("a [spirv_decode] method called directly from the kernel body == the same method on the CPU") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -2043,7 +2124,7 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
 
 [test]
 def test_vkd_k4_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q4_K l/m/s tiles and the KHR tile == the CPU oracle (decode-in-load over the repacked planes; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 Q4_K l/m/s/e tiles and the KHR tile == the CPU oracle (decode-in-load over the repacked planes; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -2061,7 +2142,7 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k4_khr_cls(), "the k4 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2101,12 +2182,12 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -2141,23 +2222,23 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_k4_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_k4_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_k4_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.k4), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_k4_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_k4_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_k4_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.k4), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_k4_cm2l_cls(raw2, h2, sc, pc, int64(wgs + tail))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_k4_cm2m_cls(raw2, h2, sc, pc, int64(wgs + tail))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_k4_cm2s_cls(raw2, h2, sc, pc, int64(wgs + tail))
                     } else {
-                        khr_cls_enc(int(KqFmt.k4), raw2, h2, sc, pc, int64(wgs + tail))
+                        cell_arm_enc(arm, int(KqFmt.k4), raw2, h2, sc, pc, int64(wgs + tail))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -2188,7 +2269,7 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_k5_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q5_K l/m/s tiles and the KHR tile == the CPU oracle (5th-bit compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 Q5_K l/m/s/e tiles and the KHR tile == the CPU oracle (5th-bit compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -2206,7 +2287,7 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k5_khr_cls(), "the k5 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2246,12 +2327,12 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -2280,23 +2361,23 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_k5_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_k5_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_k5_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.k5), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_k5_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_k5_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_k5_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.k5), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_k5_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_k5_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_k5_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.k5), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.k5), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -2327,7 +2408,7 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_q40_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q4_0 l/m/s tiles and the KHR tile == the CPU oracle (per-block f16 d decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 Q4_0 l/m/s/e tiles and the KHR tile == the CPU oracle (per-block f16 d decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -2345,7 +2426,7 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_q40_khr_cls(), "the q40 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2384,12 +2465,12 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -2418,23 +2499,23 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_q40_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_q40_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_q40_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.q40), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_q40_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_q40_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_q40_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.q40), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_q40_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_q40_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_q40_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.q40), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.q40), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -2465,7 +2546,7 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_k2_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q2_K l/m/s tiles and the KHR tile == the CPU oracle (pair-byte nibble scales decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 Q2_K l/m/s/e tiles and the KHR tile == the CPU oracle (pair-byte nibble scales decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -2483,7 +2564,7 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k2_khr_cls(), "the k2 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2521,12 +2602,12 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -2555,23 +2636,23 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_k2_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_k2_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_k2_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.k2), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_k2_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_k2_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_k2_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.k2), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_k2_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_k2_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_k2_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.k2), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.k2), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -2602,7 +2683,7 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_iq4nl_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ4_NL l/m/s tiles and the KHR tile == the CPU oracle (codebook + per-block f16 d decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 IQ4_NL l/m/s/e tiles and the KHR tile == the CPU oracle (codebook + per-block f16 d decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -2620,7 +2701,7 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq4nl_khr_cls(), "the iq4nl KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2659,12 +2740,12 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -2693,23 +2774,23 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_iq4nl_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_iq4nl_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_iq4nl_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.iq4nl), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_iq4nl_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_iq4nl_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_iq4nl_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.iq4nl), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_iq4nl_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_iq4nl_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_iq4nl_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.iq4nl), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.iq4nl), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -2740,7 +2821,7 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_iq4xs_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ4_XS l/m/s tiles and the KHR tile == the CPU oracle (workgroup-staged codebook decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 IQ4_XS l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged codebook decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -2758,7 +2839,7 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq4xs_khr_cls(), "the iq4xs KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2794,12 +2875,12 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -2828,23 +2909,23 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_iq4xs_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_iq4xs_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_iq4xs_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.iq4xs), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_iq4xs_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_iq4xs_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_iq4xs_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.iq4xs), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_iq4xs_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_iq4xs_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_iq4xs_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.iq4xs), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.iq4xs), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -2875,7 +2956,7 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_k3_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q3_K l/m/s tiles and the KHR tile == the CPU oracle (2-bit + hmask compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 Q3_K l/m/s/e tiles and the KHR tile == the CPU oracle (2-bit + hmask compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -2893,7 +2974,7 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k3_khr_cls(), "the k3 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2931,12 +3012,12 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -2965,23 +3046,23 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_k3_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_k3_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_k3_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.k3), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_k3_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_k3_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_k3_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.k3), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_k3_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_k3_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_k3_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.k3), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.k3), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -3012,7 +3093,7 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_iq3s_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ3_S l/m/s tiles and the KHR tile == the CPU oracle (workgroup-staged grid decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 IQ3_S l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged grid decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -3030,7 +3111,7 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq3s_khr_cls(), "the iq3s KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3066,12 +3147,12 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -3100,23 +3181,23 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_iq3s_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_iq3s_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_iq3s_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.iq3s), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_iq3s_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_iq3s_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_iq3s_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.iq3s), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_iq3s_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_iq3s_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_iq3s_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.iq3s), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.iq3s), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -3147,7 +3228,7 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_iq2s_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ2_S l/m/s tiles and the KHR tile == the CPU oracle (workgroup-staged u64 grid decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 IQ2_S l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged u64 grid decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -3165,7 +3246,7 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq2s_khr_cls(), "the iq2s KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3204,12 +3285,12 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -3238,23 +3319,23 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_iq2s_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_iq2s_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_iq2s_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.iq2s), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_iq2s_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_iq2s_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_iq2s_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.iq2s), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_iq2s_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_iq2s_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_iq2s_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.iq2s), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.iq2s), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -3285,7 +3366,7 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_iq2xs_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ2_XS l/m/s tiles and the KHR tile == the CPU oracle (u64 grid + ksigns-by-parity decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 IQ2_XS l/m/s/e tiles and the KHR tile == the CPU oracle (u64 grid + ksigns-by-parity decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -3303,7 +3384,7 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq2xs_khr_cls(), "the iq2xs KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3342,12 +3423,12 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -3376,23 +3457,23 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_iq2xs_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_iq2xs_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_iq2xs_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.iq2xs), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_iq2xs_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_iq2xs_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_iq2xs_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.iq2xs), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_iq2xs_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_iq2xs_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_iq2xs_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.iq2xs), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.iq2xs), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -3423,7 +3504,7 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ2_XXS l/m/s tiles and the KHR tile == the CPU oracle (byte-grid + aux32 ksigns decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 IQ2_XXS l/m/s/e tiles and the KHR tile == the CPU oracle (byte-grid + aux32 ksigns decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -3441,7 +3522,7 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq2xxs_khr_cls(), "the iq2xxs KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3477,12 +3558,12 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -3511,23 +3592,23 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_iq2xxs_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_iq2xxs_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_iq2xxs_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.iq2xxs), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_iq2xxs_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_iq2xxs_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_iq2xxs_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.iq2xxs), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_iq2xxs_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_iq2xxs_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_iq2xxs_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.iq2xxs), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.iq2xxs), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -3558,7 +3639,7 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ3_XXS l/m/s tiles and the KHR tile == the CPU oracle (halved grid + parity signs decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 IQ3_XXS l/m/s/e tiles and the KHR tile == the CPU oracle (halved grid + parity signs decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -3576,7 +3657,7 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq3xxs_khr_cls(), "the iq3xxs KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3612,12 +3693,12 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -3646,23 +3727,23 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_iq3xxs_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_iq3xxs_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_iq3xxs_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.iq3xxs), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_iq3xxs_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_iq3xxs_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_iq3xxs_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.iq3xxs), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_iq3xxs_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_iq3xxs_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_iq3xxs_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.iq3xxs), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.iq3xxs), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -3693,7 +3774,7 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
 
 [test]
 def test_vkd_k6_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q6_K l/m/s tiles and the KHR tile == the CPU oracle (6-bit compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
+    t0 |> run("cm2 Q6_K l/m/s/e tiles and the KHR tile == the CPU oracle (6-bit compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -3711,7 +3792,7 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k6_khr_cls(), "the k6 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // one 512-unrolled pass + 4 tail steps crossing superblock bounds
+            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3749,12 +3830,12 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
             y_cls |> resize(rows * d)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
-            for (ml in range(4)) {
-                if ((ml < 3 && !cm2_on) || (ml == 3 && !khr_on)) {
+            for (arm in range(ARM_COUNT)) {
+                if ((arm != ARM_KHR && !cm2_on) || (arm == ARM_KHR && !khr_on)) {
                     continue
                 }
-                let tname = ml == 0 ? "l" : (ml == 1 ? "m" : (ml == 2 ? "s" : "khr"))
-                let ttile = ml == 0 ? 256 : (ml == 2 ? 32 : 128)
+                let tname = cell_arm_name(arm)
+                let ttile = arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
                 let wtiles = (d + 127) / 128
                 let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
                 let wgs1 = ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -3783,23 +3864,23 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
                     let bufs = fixed_array(wqd, wsd, scd, xfd, yd2)
                     let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
                     let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                    var sc = (ml == 0 ? set_kq_batch_k6_cm2l_cls(bufs, sizes, gbits)
-                        : (ml == 1 ? set_kq_batch_k6_cm2m_cls(bufs, sizes, gbits)
-                            : (ml == 2 ? set_kq_batch_k6_cm2s_cls(bufs, sizes, gbits)
-                                : khr_cls_set(int(KqFmt.k6), bufs, sizes, gbits))))
+                    var sc = (arm == ARM_CM2_L ? set_kq_batch_k6_cm2l_cls(bufs, sizes, gbits)
+                        : (arm == ARM_CM2_M ? set_kq_batch_k6_cm2m_cls(bufs, sizes, gbits)
+                            : (arm == ARM_CM2_S ? set_kq_batch_k6_cm2s_cls(bufs, sizes, gbits)
+                                : cell_arm_set(arm, int(KqFmt.k6), bufs, sizes, gbits))))
                     var raw2 = alloc_cmd()
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    if (ml == 0) {
+                    if (arm == ARM_CM2_L) {
                         enc_kq_batch_k6_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 1) {
+                    } elif (arm == ARM_CM2_M) {
                         enc_kq_batch_k6_cm2m_cls(raw2, h2, sc, pc, int64(wgs))
-                    } elif (ml == 2) {
+                    } elif (arm == ARM_CM2_S) {
                         enc_kq_batch_k6_cm2s_cls(raw2, h2, sc, pc, int64(wgs))
                     } else {
-                        khr_cls_enc(int(KqFmt.k6), raw2, h2, sc, pc, int64(wgs))
+                        cell_arm_enc(arm, int(KqFmt.k6), raw2, h2, sc, pc, int64(wgs))
                     }
                     vhz_dep(raw2, h2, 16u, 0u, true)
                     cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
@@ -3837,7 +3918,7 @@ def test_vkd_cm2m_batch(t0 : T?) {
                 return
             }
             if (!(g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)) {
-                feint("the cm2 m-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2) - skipping\n")
+                t |> skip("the cm2 m-tile serves only in cm2 mode on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
                 return
             }
             verify(ensure_q8_batch_cm2m_cls(), "class rail must engage in cm2 mode")
@@ -3933,6 +4014,115 @@ def test_vkd_cm2m_batch(t0 : T?) {
 }
 
 [test]
+def test_vkd_cm2e_batch(t0 : T?) {
+    t0 |> run("cm2 e-column fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!(g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)) {
+                t |> skip("the cm2 e-column serves only in cm2 mode on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
+                return
+            }
+            verify(cm2_cls_ensure(int(KqFmt.q8), CM2_TC_E), "the q8 e-column class rail must engage in cm2 mode")
+            let n = 544                // 544 = 512 + 32: a width off the q8 stamp's 64-deep grid, so its tail step runs
+            let nbb = n / 32
+            let d = 160                // one full 128-tile + a 32 edge
+            let cnt0 = 300             // 128-token columns: two full + a 44-row edge
+            let cnt1 = 260             // two full + a 4-row edge
+            let rows = cnt0 + cnt1
+            let wtiles = (d + 127) / 128
+            let wgs0 = ((cnt0 + 127) / 128) * wtiles
+            let wgs1 = ((cnt1 + 127) / 128) * wtiles
+            let wgs = wgs0 + wgs1
+            let totblk = 2 * d * nbb
+            var wqh : array<uint>
+            var wsh : array<uint>
+            var xfh : array<uint>
+            wqh |> resize(totblk * 8)
+            wsh |> resize((totblk + 1) / 2)
+            xfh |> resize((rows + TILE_SLACK_ROWS) * n / 2)
+            for (i in range(totblk * 8)) {
+                wqh[i] = hash_word(uint(i) + 31u)
+            }
+            for (i in range((totblk + 1) / 2)) {
+                wsh[i] = ws_word(uint(i) + 739u)
+            }
+            for (i in range((rows + TILE_SLACK_ROWS) * n / 2)) {
+                xfh[i] = ws_word(uint(i) * 5u + 13u)
+            }
+            let wq_bytes = int64(totblk) * 32l
+            let ws_bytes = int64(length(wsh)) * 4l
+            let xf_bytes = int64((rows + TILE_SLACK_ROWS) * n) * 2l
+            let y_bytes = int64(rows * d) * 4l
+            let wqd = make_device_buf(wq_bytes)
+            let wsd = make_device_buf(ws_bytes)
+            let xfd = make_device_buf(xf_bytes)
+            let yd2 = make_device_buf(y_bytes)
+            var host = make_host_buf(y_bytes, true, [cached = true])
+            var y_cls : array<float>
+            y_cls |> resize(rows * d)
+            var sched : array<uint>
+            sched |> resize(2 * 4 + wgs)
+            sched[0] = 0u
+            sched[1] = 0u
+            sched[2] = uint(cnt0)
+            sched[3] = 0u
+            sched[4] = uint(d * nbb)
+            sched[5] = uint(cnt0)
+            sched[6] = uint(cnt1)
+            sched[7] = uint(wgs0)
+            for (w in range(wgs)) {
+                sched[8 + w] = w < wgs0 ? 0u : 1u
+            }
+            unsafe {
+                upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+                upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+                upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
+                let sc_bytes = int64(2 * 4 + wgs) * 4l
+                let scd = make_device_buf(sc_bytes)
+                upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+                nan_sentinel_upload(yd2, y_bytes)
+                // the class kernel through the ladders' e key: sparse bindings 0/1/2/3/5
+                var sc = cell_arm_set(ARM_CM2_E, int(KqFmt.q8), fixed_array(wqd, wsd, scd, xfd, yd2),
+                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 16u))
+                var raw2 = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                var h2 : VkHaz
+                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
+                cell_arm_enc(ARM_CM2_E, int(KqFmt.q8), raw2, h2, sc, pc, int64(wgs))
+                vhz_dep(raw2, h2, 16u, 0u, true)
+                cmd_copy_whole(raw2, yd2, host.buf, y_bytes)
+                vk_check(vkEndCommandBuffer(raw2), null)
+                submit_wait(raw2)
+                memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+            }
+            var y_ref : array<float>
+            y_ref |> resize(rows * d)
+            q8f16_gemm_oracle(wqh, wsh, xfh, sched, 2, n, d, y_ref)
+            let bad = mismatch_bars(y_cls, y_ref, 2e-2, 4e-3 * max_abs(y_ref))
+            to_log(LOG_INFO, "cm2 e-column batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
+            t |> success(bad == 0, "cm2 e-column batch matches the CPU oracle ({bad} of {rows * d} off)")
+            var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
+            y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
+            t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the e-column bar reds a poisoned element")
+            delete y_poison
+            delete sched
+            delete y_ref
+            delete wqh
+            delete wsh
+            delete xfh
+            delete y_cls
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
 def test_vkd_cm2s_batch(t0 : T?) {
     t0 |> run("cm2 s-tile fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -3945,7 +4135,7 @@ def test_vkd_cm2s_batch(t0 : T?) {
                 return
             }
             verify(ensure_q8_batch_cm2s_cls(), "class rail must engage in cm2 mode")
-            let n = 576                // 512 through the 8x-unrolled main loop + a 64 tail step
+            let n = 544                // 544 = 512 + 32: a width off the q8 stamp's 64-deep grid, so its tail step runs
             let nbb = n / 32
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300             // 32-token tiles: nine full + a 12-row edge

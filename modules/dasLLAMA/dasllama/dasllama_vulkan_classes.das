@@ -1154,6 +1154,7 @@ struct SchedArgs {
 
 let SCHED_S_ROWS = 32u    //! the s column: the ladder's small-bucket and remainder tile
 let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the last one partial
+let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column - a sentinel no column width can be, not a width like 256/128/32 (the dense m stamp keys by its 128 rows)
 
 //! the ladder's m rows of a bucket of `c` rows: none up to the s column, else whole m columns plus a
 //! partial one when the remainder passes the s column (a remainder within it takes the s column)
@@ -3093,7 +3094,7 @@ def private k5_dep(hb : uint) : uint {
 // iq3s_grid, one word per call - the staging loops copy it into workgroup memory once
 // per kernel (a few indexed reads per thread), so the local-array storage class (QUIRK 20's
 // slow path) never sits on a hot path; a shader function cannot return a fixed array.
-def private iq3s_grid_word(i : int) : uint {
+def iq3s_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x01010101u, 0x01010103u, 0x01010105u, 0x0101010bu, 0x0101010fu, 0x01010301u, 0x01010303u, 0x01010305u,
         0x01010309u, 0x0101030du, 0x01010501u, 0x01010503u, 0x0101050bu, 0x01010707u, 0x01010901u, 0x01010905u,
@@ -3164,7 +3165,7 @@ def private iq3s_grid_word(i : int) : uint {
 
 // iq2xxs_grid as low/high word pairs - 256 u64 entries, one uint word per call (word
 // 2i = magnitudes 0..3 of entry i, word 2i+1 = 4..7); staged into workgroup memory per kernel.
-def private iq2xxs_grid_word(i : int) : uint {
+def iq2xxs_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x08080808, 0x08080808, 0x0808082b, 0x08080808, 0x08081919, 0x08080808, 0x08082b08, 0x08080808,
         0x08082b2b, 0x08080808, 0x08190819, 0x08080808, 0x08191908, 0x08080808, 0x082b0808, 0x08080808,
@@ -3635,7 +3636,7 @@ def private iq2s_grid_word(i : int) : uint {   // nolint:STYLE038 - a 2048-word 
 // the HALVED iq3xxs grid (iq3xxs_grid with every byte / 2 - the plane convention that
 // absorbs the format's 0.25 into the stored d), one word per call; staging loops copy it into
 // workgroup memory (QUIRK 20's slow path stays off the hot loop).
-def private iq3xxs_grid_word(i : int) : uint {
+def iq3xxs_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x02020202u, 0x0202020au, 0x02020212u, 0x02020606u, 0x0202060eu, 0x0202061fu, 0x02020a02u, 0x02020a0au,
         0x02020e06u, 0x0202120au, 0x02021f0eu, 0x02021f16u, 0x02060206u, 0x0206020eu, 0x02060602u, 0x0206060au,
@@ -5163,10 +5164,10 @@ struct VkIq2xxsBlk {
     qs : int16[32]   // one IQ2_XXS superblock's 64B qs as 16-bit lanes: per block 4 grid byte indices + its aux32 (4 x 7-bit ksigns + per-32 ls nibble); scales (f16 d8 + 8 unsigned (1 + 2s) strips) live in ws
 }
 
-// The cm2 tile: one class template over the two stamp axes. The token column BN - l 256, m 128,
-// s 32 (the expert-bucket geometry) - and the weight format: BLK
+// The cm2 tile: one class template over three stamp axes - the token column BN, the k step BK
+// and the weight format: BLK
 // the 16-bit-lane block struct, ST the scale plane's element, BLKW the block's element width, and
-// the format template's decode. 256 threads, one 128-weight x BN-token tile per wg, BK=64 per
+// the format template's decode. 256 threads, one 128-weight x BN-token tile per wg, BK per
 // step, an 8x-unrolled k loop; the decode METHOD reads the separate scale plane by block index -
 // the reason the class-method decode form exists. Binding 4 unused (sparse)
 [ |> template_struct_instance]
@@ -5182,6 +5183,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant BN : uint = 256u                   // the token column
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
+    @template_constant BK : uint = 64u                    //!< the k step of the tile loop; a stamp whose decode is occupancy-bound runs 32 (its AT/BT carry the depth)
     @template_constant DECVEC : bool = true               //!< when DECV4 is off: the synthesized four-wide twin rides the loads; false serves the scalar callback only
     @template_constant DECV4 : bool = false               //!< the format's hand-laid `decode_v4` is the twin instead of the synthesized one
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
@@ -5274,12 +5276,12 @@ class template KqCm2BatchT : MoeCmBase {
     def cm2_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         var tv : tensorView2Dt
         tensorViewCreate(tv)
-        var a : coopmatWgA_f16_128x64
+        var a : AT
         var b : BT
         var acc : ACC
         let t0 = row0 + xt * BN
         let m0 = wt * 128u
-        if (m0 + 128u <= pa.d && (STILE || xt * BN + BN <= cnt) && (pa.n & 63u) == 0u) {
+        if (m0 + 128u <= pa.d && (STILE || xt * BN + BN <= cnt) && (pa.n & (BK - 1u)) == 0u) {
             var fla : tensorLayout2D
             tensorLayoutCreate(fla)
             tensorLayoutSetBlockSize(fla, 1u, BLKW)
@@ -5300,27 +5302,27 @@ class template KqCm2BatchT : MoeCmBase {
             tensorLayoutSetStride(flp, pa.d & ~7u, 1u)
             if (pa.ksplit == 0u) {
                 var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
+                for (_i in range(int(pa.n / (BK * 8u)))) {
                     for [unroll] (_j in range(8)) {
                         static_if (DECV4) {
-                            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, self.decode_v4)
+                            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                         } else {
-                            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
+                            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, DECVEC)
                         }
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, BK, tv)
                         acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
+                        k += BK
                     }
                 }
                 while (k < pa.n) {
                     static_if (DECV4) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, self.decode_v4)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                     } else {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, DECVEC)
                     }
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, BK, tv)
                     acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
+                    k += BK
                 }
                 coopmatClamp(acc, -65504.0, 65504.0)
                 var accw : ACCW
@@ -5333,27 +5335,27 @@ class template KqCm2BatchT : MoeCmBase {
                 return
             }
             var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
+            for (_i in range(int((k1 - k0) / (BK * 8u)))) {
                 for [unroll] (_j in range(8)) {
                     static_if (DECV4) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, self.decode_v4)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                     } else {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, DECVEC)
                     }
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, BK, tv)
                     acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
+                    k += BK
                 }
             }
             while (k < k1) {
                 static_if (DECV4) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, self.decode_v4)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                 } else {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, DECVEC)
                 }
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, BK, tv)
                 acc = coopmatMulAdd(a, b, acc)
-                k += 64u
+                k += BK
             }
             coopmatClamp(acc, -65504.0, 65504.0)
             var accw : ACCW
@@ -5381,19 +5383,19 @@ class template KqCm2BatchT : MoeCmBase {
         tensorLayoutSetStride(tlo, pa.d, 1u)
         if (pa.ksplit == 0u) {
             var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
+            for (_i in range(int(pa.n / (BK * 8u)))) {
                 for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                     acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
+                    k += BK
                 }
             }
             while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                 acc = coopmatMulAdd(a, b, acc)
-                k += 64u
+                k += BK
             }
             coopmatClamp(acc, -65504.0, 65504.0)
             var accw : ACCW
@@ -5402,19 +5404,19 @@ class template KqCm2BatchT : MoeCmBase {
             return
         }
         var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
+        for (_i in range(int((k1 - k0) / (BK * 8u)))) {
             for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                 acc = coopmatMulAdd(a, b, acc)
-                k += 64u
+                k += BK
             }
         }
         while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
             acc = coopmatMulAdd(a, b, acc)
-            k += 64u
+            k += BK
         }
         coopmatClamp(acc, -65504.0, 65504.0)
         var accw : ACCW
@@ -6434,9 +6436,12 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     }
 }
 
-// the stamps: the three width columns of each format (the dispatcher keys on (fmt, tc))
+// the stamps of each format, keyed (fmt, tc): the l/m/s width columns and the expert schedule's e column; the s
+// and e stamps run 32-deep on the five grid-codebook formats, whose decode is occupancy-bound (iq2xxs, iq2xs,
+// iq2s, iq3xxs, iq3s), and 64 on the K-quants, q4_0, q8 and the 4-bit LUT formats
 [vk_dispatch(name = "q8_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : Q8Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6446,6 +6451,7 @@ class Q8Cm2LBatch : Q8Cm2T {
 class Q8Cm2MBatch : Q8Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6455,6 +6461,7 @@ class Q8Cm2MBatch : Q8Cm2T {
 class Q8Cm2SBatch : Q8Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6462,6 +6469,7 @@ class Q8Cm2SBatch : Q8Cm2T {
 
 [vk_dispatch(name = "kq_batch_k4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K4Cm2LBatch : K4Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6471,6 +6479,7 @@ class K4Cm2LBatch : K4Cm2T {
 class K4Cm2MBatch : K4Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6480,6 +6489,7 @@ class K4Cm2MBatch : K4Cm2T {
 class K4Cm2SBatch : K4Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6487,6 +6497,7 @@ class K4Cm2SBatch : K4Cm2T {
 
 [vk_dispatch(name = "kq_batch_k6_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K6Cm2LBatch : K6Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6496,6 +6507,7 @@ class K6Cm2LBatch : K6Cm2T {
 class K6Cm2MBatch : K6Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6505,6 +6517,7 @@ class K6Cm2MBatch : K6Cm2T {
 class K6Cm2SBatch : K6Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6512,6 +6525,7 @@ class K6Cm2SBatch : K6Cm2T {
 
 [vk_dispatch(name = "kq_batch_k5_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K5Cm2LBatch : K5Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6521,6 +6535,7 @@ class K5Cm2LBatch : K5Cm2T {
 class K5Cm2MBatch : K5Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6530,6 +6545,7 @@ class K5Cm2MBatch : K5Cm2T {
 class K5Cm2SBatch : K5Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6537,6 +6553,7 @@ class K5Cm2SBatch : K5Cm2T {
 
 [vk_dispatch(name = "kq_batch_q40_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q40Cm2LBatch : Q40Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6546,6 +6563,7 @@ class Q40Cm2LBatch : Q40Cm2T {
 class Q40Cm2MBatch : Q40Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6555,6 +6573,7 @@ class Q40Cm2MBatch : Q40Cm2T {
 class Q40Cm2SBatch : Q40Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6562,6 +6581,7 @@ class Q40Cm2SBatch : Q40Cm2T {
 
 [vk_dispatch(name = "kq_batch_iq4xs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4xsCm2LBatch : Iq4xsCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6571,6 +6591,7 @@ class Iq4xsCm2LBatch : Iq4xsCm2T {
 class Iq4xsCm2MBatch : Iq4xsCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6580,6 +6601,7 @@ class Iq4xsCm2MBatch : Iq4xsCm2T {
 class Iq4xsCm2SBatch : Iq4xsCm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6587,6 +6609,7 @@ class Iq4xsCm2SBatch : Iq4xsCm2T {
 
 [vk_dispatch(name = "kq_batch_k3_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K3Cm2LBatch : K3Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6596,6 +6619,7 @@ class K3Cm2LBatch : K3Cm2T {
 class K3Cm2MBatch : K3Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6605,6 +6629,7 @@ class K3Cm2MBatch : K3Cm2T {
 class K3Cm2SBatch : K3Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6612,6 +6637,7 @@ class K3Cm2SBatch : K3Cm2T {
 
 [vk_dispatch(name = "kq_batch_iq3s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3sCm2LBatch : Iq3sCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6621,6 +6647,7 @@ class Iq3sCm2LBatch : Iq3sCm2T {
 class Iq3sCm2MBatch : Iq3sCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6630,13 +6657,16 @@ class Iq3sCm2MBatch : Iq3sCm2T {
 class Iq3sCm2SBatch : Iq3sCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
 [vk_dispatch(name = "kq_batch_iq3xxs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3xxsCm2LBatch : Iq3xxsCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6646,6 +6676,7 @@ class Iq3xxsCm2LBatch : Iq3xxsCm2T {
 class Iq3xxsCm2MBatch : Iq3xxsCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6655,13 +6686,16 @@ class Iq3xxsCm2MBatch : Iq3xxsCm2T {
 class Iq3xxsCm2SBatch : Iq3xxsCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
 [vk_dispatch(name = "kq_batch_iq4nl_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nlCm2LBatch : Iq4nlCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6671,6 +6705,7 @@ class Iq4nlCm2LBatch : Iq4nlCm2T {
 class Iq4nlCm2MBatch : Iq4nlCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6680,6 +6715,7 @@ class Iq4nlCm2MBatch : Iq4nlCm2T {
 class Iq4nlCm2SBatch : Iq4nlCm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6687,6 +6723,7 @@ class Iq4nlCm2SBatch : Iq4nlCm2T {
 
 [vk_dispatch(name = "kq_batch_k2_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K2Cm2LBatch : K2Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6696,6 +6733,7 @@ class K2Cm2LBatch : K2Cm2T {
 class K2Cm2MBatch : K2Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6705,6 +6743,7 @@ class K2Cm2MBatch : K2Cm2T {
 class K2Cm2SBatch : K2Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6712,6 +6751,7 @@ class K2Cm2SBatch : K2Cm2T {
 
 [vk_dispatch(name = "kq_batch_iq2s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2sCm2LBatch : Iq2sCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6721,6 +6761,7 @@ class Iq2sCm2LBatch : Iq2sCm2T {
 class Iq2sCm2MBatch : Iq2sCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6730,13 +6771,16 @@ class Iq2sCm2MBatch : Iq2sCm2T {
 class Iq2sCm2SBatch : Iq2sCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
 [vk_dispatch(name = "kq_batch_iq2xs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xsCm2LBatch : Iq2xsCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6746,6 +6790,7 @@ class Iq2xsCm2LBatch : Iq2xsCm2T {
 class Iq2xsCm2MBatch : Iq2xsCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6755,13 +6800,16 @@ class Iq2xsCm2MBatch : Iq2xsCm2T {
 class Iq2xsCm2SBatch : Iq2xsCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
 [vk_dispatch(name = "kq_batch_iq2xxs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xxsCm2LBatch : Iq2xxsCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6771,6 +6819,7 @@ class Iq2xxsCm2LBatch : Iq2xxsCm2T {
 class Iq2xxsCm2MBatch : Iq2xxsCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6780,9 +6829,156 @@ class Iq2xxsCm2MBatch : Iq2xxsCm2T {
 class Iq2xxsCm2SBatch : Iq2xxsCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
+[vk_dispatch(name = "q8_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2EBatch : Q8Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k4_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4Cm2EBatch : K4Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k6_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K6Cm2EBatch : K6Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k5_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K5Cm2EBatch : K5Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_q40_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q40Cm2EBatch : Q40Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq4xs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4xsCm2EBatch : Iq4xsCm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k3_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K3Cm2EBatch : K3Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq3s_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3sCm2EBatch : Iq3sCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq3xxs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3xxsCm2EBatch : Iq3xxsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq4nl_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4nlCm2EBatch : Iq4nlCm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k2_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K2Cm2EBatch : K2Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq2s_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2sCm2EBatch : Iq2sCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq2xs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xsCm2EBatch : Iq2xsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq2xxs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xxsCm2EBatch : Iq2xxsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
 }
 
 // the KHR arm of every kq format (KHR, BN 128); the cm2 typedefs belong to the template's uncalled
@@ -6792,6 +6988,7 @@ class K4KhrBatch : K4Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6802,6 +6999,7 @@ class K5KhrBatch : K5Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6812,6 +7010,7 @@ class K6KhrBatch : K6Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6822,6 +7021,7 @@ class Q40KhrBatch : Q40Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6832,6 +7032,7 @@ class Iq4xsKhrBatch : Iq4xsCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6842,6 +7043,7 @@ class K3KhrBatch : K3Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6852,6 +7054,7 @@ class Iq3sKhrBatch : Iq3sCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6862,6 +7065,7 @@ class Iq3xxsKhrBatch : Iq3xxsCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6872,6 +7076,7 @@ class Iq4nlKhrBatch : Iq4nlCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6882,6 +7087,7 @@ class K2KhrBatch : K2Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6892,6 +7098,7 @@ class Iq2sKhrBatch : Iq2sCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6902,6 +7109,7 @@ class Iq2xsKhrBatch : Iq2xsCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6912,6 +7120,7 @@ class Iq2xxsKhrBatch : Iq2xxsCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128

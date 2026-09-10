@@ -166,7 +166,10 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
 }
 
 //! workgroups a (d, cnt) GEMM takes at the token column `tc`
-def cm2_tiles_at(d, cnt, tc : int64) : int64 => ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
+def cm2_tiles_at(d, cnt, tc : int64) : int64 {
+    verify(tc >= 32l, "vk prefill: a tile count over a class key that is no column width")   //! the ladders' e key (`CM2_TC_E`) never reaches a tile count
+    return ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
+}
 
 //! workgroups a (d, cnt) GEMM takes at its own tile pick
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
@@ -1081,6 +1084,97 @@ def vk_arm_moltenvk_env {
     }
 }
 
+//! the ReBAR memory type - device-local, host-visible and host-coherent on a heap past the 256 MiB
+//! legacy window - or -1 where the device exposes none
+def private rebar_memory_type(phys : VkPhysicalDevice) : int {
+    var rmp : VkPhysicalDeviceMemoryProperties
+    vkGetPhysicalDeviceMemoryProperties(phys, rmp)
+    for (i in range(int(rmp.memoryTypeCount))) {
+        let fl = rmp.memoryTypes[i].propertyFlags
+        if (fl.device_local && fl.host_visible && fl.host_coherent
+                && int64(rmp.memoryHeaps[int(rmp.memoryTypes[i].heapIndex)].size) > 1_073_741_824l) {
+            return i
+        }
+    }
+    return -1
+}
+
+//! one Vulkan extension, feature set or device limit the tier keys a route on: whether this device
+//! carries it (the probe the tier's arming reads), the knob that holds the route off, and what rides on it
+struct public VkExtEntry {
+    name : string       //! the extension, or the core feature set or limit in the spec's words
+    present : bool      //! the device carries it - the extension with its feature bits, or the limit clears
+    knob : string       //! the env knob that turns the route off, "" when none
+    off : bool          //! the knob holds the route off on this run
+    rides : string      //! what the tier does with it, and what serves without it
+}
+
+//! the roster of every Vulkan capability the tier reads - the device-init log prints one line per entry,
+//! so a box's log says which route each capability decided (`REVIEW_GPU_VULKAN.md` keeps it complete)
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-extension-roster")]
+def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
+    let sp = subgroup_properties(phys)
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    let has_cm = cooperative_matrix_supported(phys)
+    let has_cm2 = has_cm && cooperative_matrix2_supported(phys)
+    let sm = query_sm_count(phys)
+    return <- [
+        VkExtEntry(name = "the 8/16-bit storage set (storageBuffer16BitAccess, storageBuffer8BitAccess, shaderFloat16, shaderInt8, shaderInt16)",
+            present = storage_8_16_supported(phys),
+            rides = "the f16 and int8 SSBO members every kernel reads; the tier is disabled without it"),
+        VkExtEntry(name = "compute subgroup ops (basic, arithmetic, shuffle, ballot) at subgroupSize 32 or more",
+            present = subgroup_compute_ops_supported(phys) && sp.subgroupSize >= 32u,
+            rides = "the lane reductions of every quant kernel ({int(sp.subgroupSize)} on this device); the tier is disabled without it"),
+        VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
+            rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
+        VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
+            rides = "the KHR f16 and int8 tiles (the mm mode) and the flash-attention twin; without it the sdot4 tiles serve"),
+        VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
+            present = has_cm2,
+            rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
+        VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
+            present = has_cm2 && cooperative_matrix2_fa_supported(phys),
+            rides = "the cm2 flash-attention stamps; without them the KHR flash twin serves the attention"),
+        VkExtEntry(name = "VK_NV_cooperative_matrix_decode_vector", present = has_cm2 && cooperative_matrix2_decode_vector_supported(phys),
+            knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec,
+            rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
+        VkExtEntry(name = "VK_NV_shader_sm_builtins", present = device_extension_available(phys, "VK_NV_shader_sm_builtins") && sm > 0,
+            rides = "the SM count the dense tile pick and split-k read ({sm} here); without it the l tile serves every dense GEMM and nothing splits k"),
+        VkExtEntry(name = "timelineSemaphore (Vulkan 1.2)", present = timeline_semaphore_supported(phys),
+            knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
+            rides = "the transfer queue that overlaps streamed weight copies with compute; without it the copies ride the compute queue"),
+        VkExtEntry(name = "computeFullSubgroups (subgroupSizeControl, Vulkan 1.3)", present = compute_full_subgroups_supported(phys),
+            knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
+            rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
+        VkExtEntry(name = "VK_EXT_memory_budget", present = device_extension_available(phys, "VK_EXT_memory_budget"),
+            rides = "the live heap budget and usage the resident plan sizes against; without it the plan reads the heap size"),
+        VkExtEntry(name = "VK_EXT_external_memory_host", present = external_memory_host_supported(phys),
+            knob = "DASLLAMA_VK_IMPORT", off = !g_env_vulkan.vk_import,
+            rides = "the stream mirrors import the mapped image instead of pinned copies; without it the copy path serves"),
+        VkExtEntry(name = "VK_EXT_memory_priority (with VK_EXT_pageable_device_local_memory)", present = memory_priority_supported(phys),
+            knob = "DASLLAMA_VK_MEMPRIO", off = !g_env_vulkan.vk_memprio,
+            rides = "priority tags on every device allocation, an A/B arm off by default - on the WDDM driver the tagged weights become the pageable set"),
+        VkExtEntry(name = "a ReBAR memory type (device-local, host-visible, host-coherent past the 256 MiB window)", present = rebar_memory_type(phys) >= 0,
+            knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
+            rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
+        VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
+            rides = "the deltanet and prefill-attention chains' row tile ({int(props.limits.maxComputeSharedMemorySize)} B here); without it those layers stay on the CPU rail"),
+        VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
+            rides = "enabled on the device; no kernel reads it yet - the decode GEMV's cooperative-vector arm is planned work in followup_vulkan.md"),
+        VkExtEntry(name = "VK_KHR_portability_enumeration (instance)", present = instance_extension_available("VK_KHR_portability_enumeration"),
+            rides = "the MoltenVK instance opt-in; a native driver needs none")]
+}
+
+//! one log line per roster entry: `ext <name>: present | absent | present, off (knob X) - <what rides on it>`
+def private vk_log_ext_roster {
+    var inscope roster <- vk_ext_roster(g_gpu.phys)
+    for (e in roster) {
+        let state = !e.present ? "absent" : (empty(e.knob) ? "present" : (e.off ? "present, off (knob {e.knob})" : "present, on (knob {e.knob})"))
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: ext {e.name}: {state} - {e.rides}\n")
+    }
+}
+
 // SM count via VK_NV_shader_sm_builtins (NVIDIA-only, like cm2 itself) — the occupancy input
 // the cm2 tile/split heuristics divide by; 0 keeps both off (l-tile always, no split-k)
 def private query_sm_count(phys : VkPhysicalDevice) : int {
@@ -1224,18 +1318,8 @@ def vk_moe_init : bool {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {heap.budget / 1000000l} MB (used {heap.used / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
     }
 
-    // ReBAR: DL|HV|HC on the full-VRAM heap (the >1GB check excludes the 256MiB legacy window)
     if (g_env_vulkan.vk_rebar) {
-        var rmp : VkPhysicalDeviceMemoryProperties
-        vkGetPhysicalDeviceMemoryProperties(g_gpu.phys, rmp)
-        for (i in range(int(rmp.memoryTypeCount))) {
-            let fl = rmp.memoryTypes[i].propertyFlags
-            if (fl.device_local && fl.host_visible && fl.host_coherent
-                    && int64(rmp.memoryHeaps[int(rmp.memoryTypes[i].heapIndex)].size) > 1_073_741_824l) {
-                g_gpu.rebar_type = i
-                break
-            }
-        }
+        g_gpu.rebar_type = rebar_memory_type(g_gpu.phys)
         if (g_gpu.rebar_type >= 0) {
             to_log(LOG_INFO, "dasLLAMA vulkan tier: ReBAR active - uploads write direct to VRAM (DASLLAMA_VK_REBAR=0 restores staging)\n")
         }
@@ -1268,6 +1352,7 @@ def vk_moe_init : bool {
     g_init_failed = false
     g_gpu.full_sg_on = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
     to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""}{g_gpu.decvec_on ? ", four-wide decode (DASLLAMA_VK_DECVEC)" : ""})\n")
+    vk_log_ext_roster()
     if (g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && !g_gpu.decvec_on) {
         to_log(LOG_WARNING, "dasLLAMA vulkan tier: the driver reports no VK_NV_cooperative_matrix_decode_vector, so the cm2 tiles run the scalar decode arm - a MoE prefill window runs about half again as long as on a driver with the four-wide arm\n")
     }

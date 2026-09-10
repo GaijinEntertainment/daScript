@@ -7,10 +7,11 @@ for Metal, `followup_vulkan.md` for Vulkan.
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 it.**
 
-**A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it
-rather than to serve a call - or changing a kernel class such an arm mirrors (binding
-numbers, kernel-argument (kargs) layout, threadgroup memory, staging shape, grid or
-threadgroup geometry) - wherever the diff puts it - applies `REVIEW_GPU_RACE.md` too.**
+**A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
+than to serve a call - or changing a property of a kernel class such an arm restates rather than
+reads (a binding number, the kargs layout, threadgroup memory, a staging shape, the grid or
+threadgroup geometry) - wherever the diff puts it - applies `REVIEW_GPU_RACE.md` too, and
+`tests/REVIEW_KERNEL_CELLS.md` for the gates that hand-dispatch or hand-bind the class.**
 
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
 builder the tower dispatches, the `[metal_dispatch]` emission those builders are generated
@@ -163,16 +164,12 @@ its unread arm binds is never read, so its lifetime does not decide the role.
 each encode - is a defect; a per-encode field either omits `@role` or names the access its body
 performs.** `weight` tells the generated builder the buffer needs no per-encode hazard tracking.
 
-**A diff that adds a Metal kernel class under `dasllama/` - a `[metal_kernel]` def, or a new
-instance of a template carrying one - either adds a census row to
-`tests/test_kernel_coverage.das` that dispatches it, or names it in that file's
-`CENSUS_NEVER_DISPATCHED` with the reason no row can reach it.**
-
-**A diff that adds a Vulkan kernel class under `dasllama/` - a `[vk_dispatch]` declaration, or a
-new instance of a template carrying one - shows a Vulkan serving-census row in
-`tests/test_kernel_coverage.das` that dispatches it, adding the row or the census model when
-none does.** A Vulkan class never joins `CENSUS_NEVER_DISPATCHED`, which takes Metal classes
-only.
+**A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - either adds a census
+row to `tests/test_kernel_coverage.das` that dispatches it, adding the census model too when no
+stocked model can, or names it in that file's blind-spot list for its backend -
+`CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
+stocked model reaches it and the model-less test cell that dispatches it.**
 
 **Weakening the `[metal_dispatch]` / `[vk_dispatch]` lens's refusal to compile an `@ssbo` field
 with no `@binding`, or an `@ssbo` field the kernel body never accesses that declares no `@role`,

@@ -7,10 +7,11 @@ list with this one. A SPIR-V fixture - a file that compiles a shader and asserts
 words - answers to `tests/spirv/REVIEW.md` (repo root), wherever the diff puts it.
 
 **A diff that changes what the emitter emits for any das program - a program it used to reject
-now compiles, or a program's emitted words change - also adds, in the same change, a fixture
-under `tests/spirv/` (repo root) that exercises the change and asserts on the emitted words.**
-Emitted words no fixture asserts are produced by nothing the suite runs. The fixture forms are
-`ARCHITECTURE.md` section 4.
+now compiles, a program's emitted words change, or the diff declares a marker struct (an empty
+struct naming a device-side type - a tile shape, a sampler, an image) or a builtin overload -
+also adds, in the same change, a fixture under `tests/spirv/` (repo root) for each such change
+that exercises it and asserts on the emitted words.** Emitted words no fixture asserts are
+produced by nothing the suite runs. The fixture forms are `ARCHITECTURE.md` section 4.
 
 **A diff that adds emitter code refusing a construct a `.das` program can compile to also adds
 its fixture under `tests/spirv/_fail_closed/` (repo root) and asserts that fixture's error text
@@ -24,9 +25,10 @@ the capability on a device, in `modules/dasVulkan/tests/integration/` or
 `modules/dasLLAMA/tests/test_vulkan_kernels.das`. A fixture asserts words; only a device run
 shows the words compute.
 
-**A diff under this folder that adds or changes a device cell judges that cell's result against
-a CPU result computed independently of the emitter - the kernel body run on the CPU, a CPU body that returns what the
-builtin's emitted form returns, or a plain CPU reference of the same arithmetic - never an
+**A diff under this folder that adds or changes a device cell for a capability of this emitter -
+wherever the diff puts that cell - judges the cell's result against a CPU result computed
+independently of the emitter: the kernel body run on the CPU, a CPU body that returns what the
+builtin's emitted form returns, or a plain CPU reference of the same arithmetic, never an
 expectation re-spelled inline in the test.** An inline expectation is read off the emitter's own
 output, so it passes whatever the emitter does.
 
@@ -39,8 +41,7 @@ goes after the block's last `OpVariable`.** SPIR-V requires every `OpVariable` o
 lead the block (`ARCHITECTURE_COOPMAT.md` section 3.5), and CI runs no `spirv-val` to catch an
 invalid module (`ARCHITECTURE.md` section 4).
 
-**A diff under `modules/dasSpirv`, or to a fixture under `tests/spirv` (repo root), runs
-`tests/spirv` locally on a box that resolves `spirv-val` and names the run in the PR.** CI
-resolves no `spirv-val`, so a module the validator rejects reds nowhere but on that box. The
-run's command and what green means: `skills/internal/tests_in_repo.md`, the emitter suite
-section.
+**A diff under `modules/dasSpirv` runs `tests/spirv` locally on a box that resolves `spirv-val`
+and names the run in the PR.** CI resolves no `spirv-val`, so a module the validator rejects
+reds nowhere but on that box. The run's command and what green means:
+`skills/internal/tests_in_repo.md`, the emitter suite section.

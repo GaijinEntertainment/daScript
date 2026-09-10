@@ -209,8 +209,12 @@ three more hand-stamped bodies. IQ4_XS prefill rides the kq batch tile like q40 
 On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile template
 (`KqCm2BatchT`): a new format is a format template authoring `[spirv_decode] def decode` over
 the DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3
-verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) plus three eight-line width stamps, arms in the
-`cm2_cls_ensure/set/enc` ladders, and `pf_f16_feed` admits it via `kq_sb` automatically. A
+verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) plus four width stamps (the l, m and s
+columns and the expert schedule's e column - the m column at the format's k step; each names its
+`BN`, `STILE`, the k step `BK` where it is not the template's 64, and the `AT`/`BT`/`ACC`/`ACCW`
+tile types of that depth - copy k4's for a K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a
+grid-codebook decode, and settle the k step on a whole-model MoE row, not the uniform probe alone), arms in the `cm2_cls_ensure/set/enc` and `cm2e_cls_*`
+ladders, and `pf_f16_feed` admits it via `kq_sb` automatically. A
 codebook format raises the `IQLUT` axis - a gated `@workgroup` f16 table staged ahead of the
 tile loop (llama.cpp's `init_iq_shmem` form); never select codes out of a register vector per
 element inside a decode callback. The four-wide decode twin is the format's own: a second
@@ -224,7 +228,7 @@ the scalar body four times and lost to the scalar callback on the grid formats. 
 four-wide row loses to its scalar row ships a twin that wins or turns both axes off. Gate: a
 device-form CPU oracle
 (`<fmt>f16_gemm_oracle`) and
-an l/m/s cell in `tests/test_vulkan_kernels.das`. Payoff on the 1B: iq4xs pp512 5161 -> 15334,
+an l/m/s/e cell in `tests/test_vulkan_kernels.das`. Payoff on the 1B: iq4xs pp512 5161 -> 15334,
 k3 5174 -> 14031 (0.90x / 0.80x llama.cpp's Vulkan, from 0.30x).
 
 The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ae, its first
@@ -236,11 +240,11 @@ one or two loads where the run's bytes are 16-byte aligned: the nibble and byte 
 it `abstract`, so a stamp without one fails to compile. The k4 override is the pattern; the
 decode methods' index math is the same, only read sixteen at a time. Then `<Fmt>KhrBatch :
 <Fmt>Cm2T` with `override KHR = true`, `override BN = 128u`, the four cm2 typedefs the uncalled
-tensor body still names (`BT`, `ACC`, `ACCW`, `FLO` - copy k4's), a
+tensor body still names (`AT`, `BT`, `ACC`, `ACCW` - copy k4's), a
 `[vk_dispatch(name = "kq_batch_<fmt>_khr_cls", ...)]`, an arm in each of `khr_cls_ensure/set/enc`
-(`dasllama_vulkan_prefill.das`), and the format's kernel cell runs its fourth arm (`ml == 3`, tile
+(`dasllama_vulkan_prefill.das`), and the format's kernel cell runs its KHR arm (`ARM_KHR`, tile
 128) wherever the device has KHR coopmat at subgroup 32 - on the 5060 Ti the same run covers the
-cm2 l/m/s tiles and the KHR tile. No new oracle: the `<fmt>f16_gemm_oracle` already holds the KHR
+cm2 l/m/s/e tiles and the KHR tile. No new oracle: the `<fmt>f16_gemm_oracle` already holds the KHR
 arm, whose f16 accumulation sits inside the cell's 2e-2 relative bar.
 
 ## 7. Metal - `dasllama_metal_kernels.das`, `_common`, `_prefill`, `_shapes`, `dasllama_layout.das`

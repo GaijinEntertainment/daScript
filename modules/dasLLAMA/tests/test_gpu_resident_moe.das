@@ -85,6 +85,15 @@ def private census(kernel : string) : int64 {
     }
 }
 
+//! the census over every format's stamp of one cm2 column (the expert planes carry whichever format the file holds)
+def private column_census(col : string) : int64 {
+    var n = census("q8_batch_cm2{col}_cls_spv")
+    for (f in ["k4", "k5", "k6", "q40", "iq4xs", "k3", "iq3s", "iq3xxs", "iq4nl", "k2", "iq2s", "iq2xs", "iq2xxs"]) {
+        n += census("kq_batch_{f}_cm2{col}_cls_spv")
+    }
+    return n
+}
+
 //! the device carries the cm2 tile family the routed block's expert tiles need (the driver declines a MoE without it)
 def private device_has_cm2() : bool {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -110,7 +119,7 @@ def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks
 //! prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it, the routed
 //! block's census growing by the MoE layer count per window and per step
-def private moe_forced_feed(t : T?; n : int64; fx : Fixture) {
+def private moe_forced_feed(t : T?; n : int64; fx : Fixture) {   // nolint:STYLE038 — one linear forced-feed rig: the window feed, the census witnesses, the CPU control, the per-step bars
     if (!jit_enabled()) {
         t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
         return
@@ -153,6 +162,7 @@ def private moe_forced_feed(t : T?; n : int64; fx : Fixture) {
         let sched0 = census("moe_sched_cls_spv")
         let rows0 = census("topk_rows_cls_spv")
         let topk0 = census("topk_cls_spv")
+        let e0 = column_census("e")
         var gpu <- feed_logits(tr, sg, prompt, toks)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt ({nrec} recurrent layers of {layers})")
@@ -162,6 +172,8 @@ def private moe_forced_feed(t : T?; n : int64; fx : Fixture) {
             //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer
             let topk = census("topk_cls_spv") - topk0
             t |> success(topk >= layers && topk % layers == 0l, "the token command recorded a top-k per MoE layer ({topk} over {layers} layers)")
+            //! the schedule's m pieces run the e column: the three expert planes dispatch it once per MoE layer per window (an all-sentinel map still dispatches)
+            t |> equal(column_census("e") - e0, 3l * layers * windows, "the expert schedule's m pieces dispatched the e column on the three expert planes, once per MoE layer per window")
         }
         delete sg
         moe_gpu_drop_model()   //! every later step is the CPU chain

@@ -1,8 +1,9 @@
 # dasLLAMA Code Review Checklist - placement
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE.md`, the index of the `ARCHITECTURE_*.md` set beside this file - sec.1 in each
-companion is the per-file charters. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE.md` - its sec.1 routing block names the companion that holds each file's
+charter line - `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`. Planned work:
+`followup_general.md`.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 it.**
@@ -92,7 +93,7 @@ module it needs directly.
 
 **A `dasllama/` module whose `[init]` registers a hook the engine dispatches through gets its
 side-effect require in the same change that adds it** - a registration no engine file reaches
-never fires for a consumer of the `dasllama.das` facade; where it lands is the rule above's.
+never fires for a consumer of the `dasllama.das` facade.
 
 **An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
 family name on a shared path, is a defect - it carries declarative registration only.**
