@@ -6,7 +6,7 @@ options _lint = "LINT030"   // the rule ships default-off; the fixture arms it
 // interpreter and the JIT go left to right, the AOT C++ goes whichever way the compiler
 // does - so the read sees the value before or after the write by the tier's choice.
 
-expect 50503:6
+expect 50503:7
 
 require daslib/lint
 
@@ -31,6 +31,19 @@ def pair(a, b : int) : int {
 
 def report(rc : int; text : string) : bool {
     return rc == 0 && !empty(text)
+}
+
+def take_ref(s : string&; rc : int) : int {
+    return rc + length(s)
+}
+
+def bump_copy(var x : int) : int {
+    x++
+    return x
+}
+
+def call_block(blk : block<(q : int) : int>) : int {
+    return invoke(blk, 1)
 }
 
 // === Positives - a sibling argument reads what the nested call writes ===
@@ -61,6 +74,12 @@ def bad_writer_in_expression(var x : int) : int {
     return pair(1 + bump(x), x)   // LINT030
 }
 
+// a block handed to a nested call runs while that argument is evaluated - its reads are the
+// argument's, unlike a block the outer call itself takes (below), which runs after every argument
+def bad_block_invoked_by_sibling(var x : int) : int {
+    return pair(bump(x), call_block($(q : int) : int { return x + q }))   // LINT030
+}
+
 // === Negatives ===
 
 // the write is a statement of its own, the read comes after it
@@ -79,10 +98,27 @@ def good_other_variable(var x : int; y : int) : int {
     return pair(bump(x), y)
 }
 
+// the outer call takes the written variable by reference - the callee sees its final state
+// whatever the order
+def good_outer_takes_by_ref() : int {
+    var out : string
+    return take_ref(out, fill(out))
+}
+
+// the nested call writes its own copy - a by-value parameter reaches nothing of the caller's
+def good_by_value_parameter(var x : int) : int {
+    return pair(bump_copy(x), x)
+}
+
 // a lambda argument runs later, not while the arguments are evaluated
 def good_lambda_reads_later(var x : int) : int {
     let read = @(y : int) : int { return y }
     return pair(bump(x), invoke(read, 0))
+}
+
+// a marked site is the author's call
+def good_marked(var x : int) : int {
+    return pair(bump(x), x)   // nolint:LINT030
 }
 
 // a call inside a block argument's body runs later too - its reads stay inside the block

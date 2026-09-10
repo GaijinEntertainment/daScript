@@ -187,6 +187,11 @@ def test_dasllama_gate_fixtures(t : T?) {
     let after_tail = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(0, after_tail.rc, "a line the one-liner's window must not absorb left the stamp alone: {after_tail.out}")
 
+    // the same closure checked out with CRLF line ends stamps as the LF one does
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_image.das", replace(dasllama_image_text("64l", "cur", "2"), "\n", "\r\n"))
+    let crlf = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
+    t |> equal(0, crlf.rc, "a CRLF checkout of the closure keeps the stamp: {crlf.out}")
+
     // one violation per miss class - the needle list is the census
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama.das",
         "options gen2\n\ndef covered_fn() \{\n\}\n\ndef hidden_fn() \{\n\}\n\ndef bound_fn() \{\n\}\n")
