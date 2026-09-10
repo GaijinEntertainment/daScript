@@ -129,8 +129,8 @@ the string's storage is swapped away, and the throw runs with nothing owning hea
 The pinvoke family - `pinvoke_named`, `pinvoke_impl2_core` and `pinvoke_impl3` in
 `module_builtin_debugger.cpp` - does it through `throw_pinvoke_error`; the `[extern]` binder's
 refusal (`crash_and_burn` in `module_builtin_dasbind.cpp`, thrown at the first call) does it
-inline. The same discipline is the `FMT_THROW` stash in `das_config.h`, where the temporary dies
-when the stash statement ends.
+inline. The same discipline is the `FMT_THROW` stash in `include/daScript/das_config.h`, where
+the temporary dies when the stash statement ends.
 
 ## 5. A spawned child's stdout pipe
 
@@ -140,6 +140,6 @@ when to come back - the watchdog every 250 ms. The pipe's capacity is therefore 
 write budget between two drains, and a child that fills it blocks until the next one; it is also
 the most a single drain hands the caller, which is what the caller's heap sees between two
 collects. A POSIX pipe carries 64 KB by default, and Windows sizes an anonymous pipe at 4 KB
-when asked for the default - a chatty child under the watchdog's tick moved 16 KB a second
-there - so the Windows pipe is created at the POSIX capacity, and every platform drains the
-same bursts.
+when asked for the default - a chatty child under the watchdog's tick writes 16 KB a second
+into one of those, four pipes' worth between two drains - so the Windows pipe is created at the
+POSIX capacity, and every platform drains the same bursts.

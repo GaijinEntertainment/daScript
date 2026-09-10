@@ -251,7 +251,8 @@ diagnostic in any tier.
 - **The order a call's arguments are evaluated in is not defined.** The interpreter and the JIT
   go left to right; the AOT C++ goes the C++ compiler's way, and MSVC and clang-cl go right to
   left - `f(g(x), x)` with `g` writing `x` by reference reads the old `x` on Windows AOT and the
-  new one everywhere else. Run the writing call as a statement of its own (LINT030).
+  new one everywhere else. Run the writing call as a statement of its own: `let r = g(x); f(r, x)`.
+  LINT030 finds the shape and ships OFF - arm it with `options _lint = "LINT030"`.
 
 ### Code style - prefer idiomatic forms
 

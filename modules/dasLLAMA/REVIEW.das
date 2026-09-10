@@ -585,8 +585,6 @@ def private is_layout_function(header : string) : bool {
     return name == "build_image" || name == "parse_image" || find(name, "_prepare") >= 0
 }
 
-// the file's text with CRLF folded to LF: the stamp hashes source text, and a checkout under
-// autocrlf reads every line one byte longer
 def private read_lf(path : string) : string {
     return replace(fread(path), "\r\n", "\n")
 }
