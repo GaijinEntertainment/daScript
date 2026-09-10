@@ -41,6 +41,9 @@
   #start:hover { background: #f2b955; color: #12101a; }
   #note { max-width: 560px; text-align: center; line-height: 1.6; }
   #mic { max-width: 520px; text-align: center; line-height: 1.6; font-size: 14px; }
+  /* the microphone's state in words, over the picture's top-right corner */
+  #micnote { position: absolute; right: 14px; top: 8px; font-size: 13px; color: #8d8577; pointer-events: none; }
+  #micnote[hidden] { display: none; }
   #note b { color: #f4e9d2; font-weight: 500; }
   #note a { color: #f2b955; }
   #note code { color: #d6cfbf; font-size: 13px; }
@@ -70,6 +73,7 @@
 </div></div></nav>
 <div id="stage">
 <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<p id="micnote" hidden></p>
 <div id="gate">
   <h1>parrot</h1>
   <p id="status">reading the model list...</p>
@@ -148,6 +152,32 @@
   }
 
   function runParrot() {
+
+  // the microphone's state in words: the device the browser handed the program, or why it
+  // refused - the program itself hears silence either way. A browser gives a plain-http page
+  // the microphone only on localhost; opened by address it has no microphone API at all, so a
+  // stand-in refuses with that reason instead of the program's request throwing in a callback.
+  var micNote = document.getElementById('micnote');
+  function setMicNote(text) { micNote.textContent = text; micNote.hidden = !text; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+      getUserMedia: function () {
+        return Promise.reject(new DOMException('the browser allows the microphone only on localhost or https - this page was opened as ' + location.host, 'NotAllowedError'));
+      }
+    } });
+  }
+  var askMicrophone = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = function (constraints) {
+    setMicNote('asking for the microphone...');
+    return askMicrophone(constraints).then(function (stream) {
+      var track = stream.getAudioTracks()[0];
+      setMicNote('microphone: ' + ((track && track.label) || 'an unnamed device'));
+      return stream;
+    }, function (err) {
+      setMicNote('no microphone: ' + ((err && (err.message || err.name)) || err));
+      throw err;
+    });
+  };
 
   var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
   if (!modelsBase.endsWith('/')) modelsBase += '/';

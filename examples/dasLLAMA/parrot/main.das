@@ -317,8 +317,11 @@ def stop_take() {
     drain_rest()
     if (!g_speech_seen) {
         g_phase = Phase.idle
-        g_status = "nothing heard - press record and talk"
-        to_log(LOG_INFO, "parrot: nothing heard\n")
+        let seconds = float(length(g_take)) / float(MIC_RATE)
+        g_status = (g_level_peak < 0.001
+            ? "nothing heard - the microphone gave silence for {seconds} s: is it allowed for this page, and on?"
+            : "nothing heard - the microphone peaked at {g_level_peak} over {seconds} s, too quiet for speech: come closer and talk")
+        to_log(LOG_INFO, "parrot: nothing heard - peak {g_level_peak} over {seconds} s\n")
         return
     }
     let pad = int64(TAKE_PAD_S * float(MIC_RATE))
