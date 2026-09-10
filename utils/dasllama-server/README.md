@@ -177,11 +177,7 @@ front-end pack, so the file is its whole set; `/v1/audio/phonemes` answers its c
 empty phoneme string; `speed` other than `1.0` is refused with a `400` (the model has no speed
 control); the `tts` block reads `cloning: true` and names the one language the file speaks. Its
 voices are the file's bundled clips plus every clip under `--tts-voices-dir` (`tts_voices_dir`
-in the TOML), each under its file's stem. **Kyutai's acceptable-use terms bind the model and
-every voice it clones**, the same terms the weights' download required accepting: no voice
-impersonation or cloning without the speaker's explicit and lawful consent, no misinformation,
-no unlawful or harmful content. The control page repeats them beside the voice picker while a
-cloning model is served.
+in the TOML), each under its file's stem.
 
 Catalog entries carry their **towers**: a vision-capable row offers its pinned mmproj
 (download -> **enable vision** -> restart wires `image_mmproj`), and a **dictation** strip

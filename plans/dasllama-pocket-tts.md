@@ -147,8 +147,8 @@ home; the rest is assembly.
 
 Registration: `.das_module` + `CMakeLists.txt` rows, ARCHITECTURE_TTS 1.7d, REVIEW_TTS
 additions (the trim rule, the one-step bake rule), `THIRD_PARTY_NOTICES.md` (Kyutai: code
-MIT, weights CC BY 4.0, `LICENSE.CC-BY-4.0` vendored, the gate's acceptable-use text quoted
-on the model card), `tests/CLAUDE.md` rows, `model_specs.das` rows + `serve_tts_set`, the HF
+MIT, weights CC BY 4.0, `LICENSE.CC-BY-4.0` vendored), `tests/CLAUDE.md` rows,
+`model_specs.das` rows + `serve_tts_set`, the HF
 repo `borisbat/dasllama-tts` gains the Pocket files with the card's licence table extended.
 
 ## Receipts (2026-09-09, M1 Max, f32 lane, `tests/test_tts_pocket.das`)
@@ -221,8 +221,8 @@ activations' variance is 1e-4: at 1e-6 every latent was off by one percent.
    decides the file set), the `tts` block of `/v1/stats` gains `cloning`, `speed` and `lang`,
    `/v1/audio/phonemes` answers a Pocket model's chunks with empty phoneme strings, a speed on
    it is a 400, `--tts-voices-dir` / `tts_voices_dir` clones every clip of a directory at boot
-   under its stem (`test_pocket_voices_dir`), the control page shows the acceptable-use terms
-   beside the voice picker of a cloning model and drops the speed knob where `speed` is false,
+   under its stem (`test_pocket_voices_dir`), the control page says on its offer card that the
+   model clones a voice and drops the speed knob where `speed` is false,
    `caps().speed` is the facade's own word for it, the tutorial gains `--clone` and the
    sections that read the new caps, and `load_audio_mono(path, rate)` is the clip decode rail.
    The upload route is followup_general.md row 125. The review round (same day) added: the
@@ -265,9 +265,10 @@ Kokoro sits at 0.069-0.075 on the same box (`harness/tts_rig.py --models kokoro-
    files in the `kyutai/pocket-tts` repo itself (Common Voice clips, CC0) and one
    unmute-prod-website clip; each is checked at conversion.
 5. Server cloning by NAMED voices only in this arc: the GGUF roster plus a `tts_voices_dir`
-   config key whose WAVs join `caps().voices` at boot; an upload route is a ledger row. The
-   gate's acceptable-use text goes on the model card, the server README and the control
-   page's tts card beside the voice picker.
+   config key whose WAVs join `caps().voices` at boot; an upload route is a ledger row.
+   REVISED the same day: no restatement of the download gate's acceptable-use terms anywhere -
+   the licence's attribution is the whole duty the repository takes on, and the card, the
+   notices, the sidecars, the server README, the page and the tutorial carry attribution alone.
 6. `TtsTimings` keeps its fields (the server stats and the studio read them) and gains four:
    `prompt_us`, `backbone_us`, `head_us`, `codec_us`; a family leaves the stages it lacks at
    zero and `timings_line` prints the non-zero ones.
@@ -283,8 +284,9 @@ Kokoro sits at 0.069-0.075 on the same box (`harness/tts_rig.py --models kokoro-
 ## Licensing (verified 2026-09-09)
 
 Code MIT (`LICENSE`, Resemble-style plain MIT, Kyutai). Weights CC BY 4.0 on the HF card,
-behind a click-through acceptable-use agreement (quoted in `THIRD_PARTY_NOTICES.md` when it
-lands). Default voices `voice-zero/` CC0; the wider `kyutai/tts-voices` bank mixes CC BY 4.0,
+behind a click-through acceptable-use agreement - a condition of the download, not a term of
+the licence, and nothing in the repository restates it (ruling 5, revised). Default voices
+`voice-zero/` CC0; the wider `kyutai/tts-voices` bank mixes CC BY 4.0,
 CC0 and CC BY-NC 4.0 (`expresso/`, `ears/`) - never take a roster from the mixed folders.
 Training data includes Emilia (original release CC BY-NC 4.0); Kyutai declared CC BY 4.0
 regardless, which is their call and the field's norm - noted, not actionable. SentencePiece

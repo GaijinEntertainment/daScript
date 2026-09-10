@@ -252,11 +252,6 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         // tts_register_voice adds the samples under the name you give. From then on the name
         // works like any bundled voice. A model that cannot clone panics here rather than
         // pretend.
-        //
-        // The voice is the speaker's and the words are yours: Kyutai's acceptable-use terms
-        // bind the Pocket weights and every voice they clone — no impersonation or cloning
-        // without the speaker's explicit and lawful consent, no misinformation, no unlawful or
-        // harmful content.
         if (!empty(clip_path)) {
             if (!c.cloning) {
                 print("\n--clone: {model_path} cannot clone a voice\n")

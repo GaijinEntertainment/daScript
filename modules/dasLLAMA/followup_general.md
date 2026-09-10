@@ -1440,9 +1440,9 @@
     `POST /v1/audio/voices` taking a clip and a name would let the control page's studio clone
     without a restart: the worker's job kinds gain a `register` arm (the clip decoded at the
     model's rate on the worker, `tts_register_voice`, the ready event re-emitted so the `tts`
-    block's roster moves), the page's tts card gains a file picker beside the voice select, and
-    the acceptable-use terms already beside that select are the consent the upload asks for.
-    The cap on the clip's decoded length is the ASR upload's (`max_audio_frames`); the name is
+    block's roster moves), and the page's tts card gains a file picker beside the voice select;
+    how the upload establishes the speaker's consent is that follow-up's own question, not ruled
+    here. The cap on the clip's decoded length is the ASR upload's (`max_audio_frames`); the name is
     the file's stem or the field's; a name the roster carries replaces it, as the boot path does.
 126. **A Pocket chunker of our own, as a quality rung.** The port follows the released
     driver's chunker (pocket-tts 3.1.0: a token budget of 50 per chunk, sentence marks first,

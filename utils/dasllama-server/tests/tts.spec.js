@@ -183,14 +183,6 @@ function withTts(field, value) {
     return s;
 }
 
-test('a cloning model shows its acceptable-use terms beside the voice picker; a phoneme model shows none', async ({ page }) => {
-    await openControl(page, { stats: withTts('cloning', false) });
-    await expect(page.locator('#s-terms')).toBeHidden();
-    await openControl(page, { stats: withTts('cloning', true) });
-    await expect(page.locator('#s-terms')).toBeVisible();
-    await expect(page.locator('#s-terms')).toContainText('consent');
-});
-
 test('a model with no speed control loses the speed knob, and the request still carries 1.0', async ({ page }) => {
     await openControl(page, { stats: withTts('speed', true) });
     await expect(page.locator('#s-speed-knob')).toBeVisible();

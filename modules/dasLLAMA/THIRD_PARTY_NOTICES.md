@@ -73,9 +73,7 @@ sources; nothing under this repository redistributes the data itself.
   The `kyutai/pocket-tts` weights, per language, and their unigram SentencePiece tokenizers are
   Creative Commons Attribution 4.0 International - see `LICENSE.CC-BY-4.0` - converted into
   `pocket-tts-<language>.gguf` by `harness/convert_pocket.py` at the revisions the package's
-  configs pin; downloading them required accepting Kyutai's acceptable-use terms (no voice
-  impersonation or cloning without explicit and lawful consent), which the model card of every
-  converted file repeats. The bundled voice clips come from `kyutai/tts-voices`: the `voice-zero`
+  configs pin. The bundled voice clips come from `kyutai/tts-voices`: the `voice-zero`
   and `voice-donations` folders are CC0, the `vctk` clips (VCTK, CSTR, University of Edinburgh)
   and the `alba-mackenna` clip CC BY 4.0; the package's two clips from CC BY-NC folders are
   not shipped. Each `.LICENSE` sidecar lists its file's clips and their sources.

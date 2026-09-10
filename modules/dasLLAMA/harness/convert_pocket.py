@@ -296,8 +296,7 @@ def main():
         f.write(f"{stem}.gguf - Kyutai Pocket TTS ({lang}) weights{' (the served GEMMs as Q8_0)' if a.q8 else ''}, CC BY 4.0 (Kyutai), converted from kyutai/pocket-tts "
                 f"languages/{lang}/model.safetensors @ {weights_rev} and the unigram SentencePiece tokenizer @ {tok_rev} by "
                 "modules/dasLLAMA/harness/convert_pocket.py; the reference implementation is MIT (github.com/kyutai-labs/pocket-tts). "
-                "Downloading the weights required accepting Kyutai's acceptable-use terms (no voice impersonation or cloning "
-                "without explicit and lawful consent). Bundled voice clips:\n")
+                "Bundled voice clips:\n")
         for vname, (rel, licence, n) in sources.items():
             f.write(f"  voice.{vname}: {rel} ({n / SAMPLE_RATE:.1f} s) - {licence}\n")
         for vname, why in EXCLUDED_VOICES.items():

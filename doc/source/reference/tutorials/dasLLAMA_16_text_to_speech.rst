@@ -262,11 +262,6 @@ voice to take.
        let mine <- synthesize(m, "daslang speaks in my voice.", "me")
    }
 
-The voice is the speaker's and the words are yours. Kyutai's acceptable-use
-terms bind the Pocket weights and every voice they clone: no impersonation or
-cloning without the speaker's explicit and lawful consent, no misinformation,
-no unlawful or harmful content.
-
 The two weight lanes
 ====================
 

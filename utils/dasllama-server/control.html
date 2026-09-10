@@ -395,7 +395,6 @@ button:disabled { opacity: 0.45; cursor: default; }
             <div class="controls" style="margin-top:10px">
                 <button id="s-run" type="button" disabled>speak</button>
                 <label class="knob">voice <select id="s-voice"></select></label>
-                <span class="ctl-note" id="s-terms" style="display:none">this model clones voices — Kyutai's acceptable-use terms bind it: no voice impersonation or cloning without the speaker's explicit and lawful consent, no misinformation, no unlawful or harmful content</span>
                 <label class="knob" id="s-speed-knob">speed <input type="range" id="s-speed" min="0.3" max="1.5" step="0.05" value="1"><span id="s-speed-v">1.00×</span></label>
                 <span class="ctl-note" id="s-count">0 / 4096 characters</span>
                 <span class="ctl-note" id="s-note">type a line and press speak — the waveform plays once, click it to replay</span>
@@ -1807,9 +1806,6 @@ function applySpeech(tts) {
     $("tts-section").style.display = on ? "block" : "none";
     syncSpeakButtons();
     if (!on) return;
-    // a cloning model carries its acceptable-use terms beside the voice picker: a cloned voice
-    // is what the terms are about
-    $("s-terms").style.display = tts.cloning ? "inline" : "none";
     // a model with no speed control refuses any speed but 1.0, so the knob goes away with it
     // (the slider keeps its 1.0, which is what the request then carries)
     $("s-speed-knob").style.display = tts.speed ? "" : "none";
