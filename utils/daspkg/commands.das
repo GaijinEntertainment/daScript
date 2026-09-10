@@ -1049,6 +1049,7 @@ def cmd_build(root : string; is_global : bool = false) {
 // that `daspkg release wasm` links against, and consolidate them into <lib_dir>
 // (default <das_root>/web/output64/lib). Requires an activated emscripten SDK
 // (emcc + cmake on PATH); CI activates emsdk_env before invoking.
+[arch(at="README.md#wasm-archive-staging")]
 def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:STYLE038 — the wasm build recipe: flat tool-invocation steps, one per stage
     let das_root = get_das_root()
     let lib_dir = empty(lib_dir_override) ? "{das_root}/web/output64/lib" : lib_dir_override
@@ -1088,9 +1089,7 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
     // Consolidate every produced archive into one canonical lib_dir so
     // `release wasm` resolves them in one place. The web build splits outputs:
     // the runtime lands in web/output64/lib (DAS_WEB_OUTPUT_DIR), the module
-    // archives in <das_root>/lib. Copying both into lib_dir also insulates the
-    // release inputs from a later desktop build that overwrites <das_root>/lib
-    // with native-ABI archives.
+    // archives in <das_root>/lib.
     mkdir_rec(lib_dir)
     var copied = 0
     var copy_failed = false
@@ -1117,6 +1116,11 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
         let base = base_name(rel_path)
         let src = path_join("{das_root}/lib", rel_path)
         let dst = path_join(lib_dir, base)
+        if (!looks_like_wasm_archive(src)) {
+            to_log(LOG_ERROR, "build --wasm: {src} is not a wasm archive - this tree also has a desktop build; delete lib/liblibDasModule*.a and rerun\n")
+            copy_failed = true
+            return
+        }
         if (get_full_file_name(src) == get_full_file_name(dst)) {
             copied ++
             return
@@ -1137,6 +1141,59 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
     }
     log("build --wasm: {copied} archive(s) -> {lib_dir}\n")
     return 0
+}
+
+//! the 8-byte wasm module magic ("\0asm" + version 1) at `at`
+def private wasm_magic_at(data : array<uint8>#; at : int) : bool {
+    return (at + 8 <= length(data) && data[at] == 0x00u8 && data[at + 1] == 0x61u8 && data[at + 2] == 0x73u8 && data[at + 3] == 0x6du8
+        && data[at + 4] == 0x01u8 && data[at + 5] == 0x00u8 && data[at + 6] == 0x00u8 && data[at + 7] == 0x00u8)
+}
+
+//! the decimal field of an ar member header at `at`, `width` bytes, space-padded
+def private ar_field(data : array<uint8>#; at, width : int) : int {
+    var value = 0
+    for (i in range(at, at + width)) {
+        let c = int(data[i])
+        return value if (!is_number(c))
+        value = value * 10 + (c - '0')
+    }
+    return value
+}
+
+//! an archive whose first object member is a wasm module. The members are walked by their headers
+//! (`!<arch>`, then 60-byte headers: name[16] ... size[10] `\n, bodies 2-byte aligned), the symbol
+//! table and long-name table members (`/`, `//`, `/SYM64/`, `__.SYMDEF...`) skipped, a GNU `/<digits>`
+//! name read as the object it is and a BSD `#1/NN` name stepped over, so an index of any size cannot
+//! hide the first object; a native archive's first object carries Mach-O or ELF magic instead
+def looks_like_wasm_archive(path : string) : bool {
+    var found = false
+    let f = fopen(path, "rb")
+    return false if (f == null)
+    fmap(f) $(var data : array<uint8>#) {
+        let n = length(data)
+        return if (n < 68 || int(data[0]) != '!' || int(data[1]) != '<' || int(data[7]) != '\n')
+        var off = 8
+        while (off + 60 <= n) {
+            let size = ar_field(data, off + 48, 10)
+            var body = off + 60
+            let c0 = int(data[off])
+            let c1 = int(data[off + 1])
+            // GNU `/`, `//`, `/SYM64/` and BSD `__.SYMDEF` are tables; a GNU `/<digits>` is an object whose name lives in `//`
+            var is_index = (c0 == '/' && (c1 == ' ' || c1 == '/' || c1 == 'S')) || (c0 == '_' && c1 == '_')
+            if (c0 == '#' && c1 == '1' && int(data[off + 2]) == '/') {   // BSD long name: the name leads the body
+                let name_len = ar_field(data, off + 3, 13)
+                is_index = body + 9 <= n && int(data[body]) == '_' && int(data[body + 1]) == '_'
+                body += name_len
+            }
+            if (!is_index) {
+                found = wasm_magic_at(data, body)
+                return
+            }
+            off = off + 60 + size + (size & 1)
+        }
+    }
+    fclose(f)
+    return found
 }
 
 def check_tool(name, cmd : string) : bool {

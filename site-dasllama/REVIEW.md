@@ -49,9 +49,10 @@ now. `README.md`'s copy rules say how a claim is checked.
 **A diff that falsifies standing page copy - a masthead, section prose, a meta tag - fixes it
 in the same change.**
 
-**A PR whose copy describes what a linked download contains refreshes that download's release
-before the PR merges, or holds the copy until it does.** The rolling release republishes on its
-own trigger, never on a page's merge.
+**A PR whose copy describes what a linked download contains refreshes that artifact at its
+published location - a GitHub release, a Hugging Face repository - before the PR merges, or
+holds the copy until it does.** An artifact republishes on its own trigger, never on a page's
+merge.
 
 **A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.** Shipped
 means a reader can have it at publish time: the code the entry describes is merged to this

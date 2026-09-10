@@ -635,6 +635,14 @@ jobs:
         test -z "$(git status --porcelain -- site-dasllama/stories)"   # a story page the generator wrote but nobody committed
         python3 site-dasllama/test_metadata.py
 
+    - name: "Test browser model-set mint (python)"
+      # the script pages.yml runs to mint each browser example's .dlim set: its hash refusals, the
+      # exit-3 version gate, the manifest and the page stamp - with a stand-in converter, no network
+      if: matrix.role != 'modules'
+      run: |
+        set -eux
+        PYTHONDONTWRITEBYTECODE=1 python3 examples/dasLLAMA/wasm/test_mint_models.py
+
     - name: "Test pr-babysit verdict core"
       if: matrix.role != 'modules'
       run: |

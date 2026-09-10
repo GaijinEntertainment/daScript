@@ -201,6 +201,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_sampling.das",
                     "modules/dasLLAMA/tests/test_scheduler.das",
                     "modules/dasLLAMA/tests/test_storyteller_restart.das",
+                    "modules/dasLLAMA/tests/test_storywish.das",
                     "modules/dasLLAMA/tests/test_tokenizer.das",
                     "modules/dasLLAMA/tests/test_tts_postag.das",
                     "modules/dasLLAMA/tests/test_tts_g2p.das",
@@ -244,9 +245,9 @@ def area_tests(area : string) : array<string> {
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
                     "test_vision_embedder.das" ]
     } elif (area == "tts") {
-        return <- [ "test_storyteller_restart.das", "test_tts_blocks.das", "test_tts_facade.das", "test_tts_g2p.das",
-                    "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das", "test_tts_postag.das",
-                    "test_tts_textnorm.das" ]
+        return <- [ "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
+                    "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
+                    "test_tts_postag.das", "test_tts_textnorm.das" ]
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das",
                     "test_box_ident.das", "test_box_profile.das", "test_dasllama_lint_contracts.das",
@@ -269,7 +270,7 @@ def area_tests(area : string) : array<string> {
                     "test_q8q8_family.das", "test_quant.das",
                     "test_repack.das", "test_repack_lane_context.das", "test_rmsnorm.das", "test_rope.das", "test_rope_apply.das",
                     "test_sampling.das",
-                    "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_storyteller_restart.das", "test_think_split.das", "test_tokenizer.das",
+                    "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_storyteller_restart.das", "test_storywish.das", "test_think_split.das", "test_tokenizer.das",
                     "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_kernels.das",
                     "test_vulkan_moe_cm2.das", "test_vulkan_tier.das" ]
     }
