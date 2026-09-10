@@ -85,7 +85,7 @@ namespace das {
     // CALLING (main) thread now executes queued chunks itself (jobque_try_run_one), so it IS a
     // compute thread and occupies a core; cores-1 workers + main == cores avoids the oversubscription
     // that otherwise makes the surplus thread "trickle in" over the first ~37% of every matmul.
-    // DAS_MAX_HW_JOBS (4 on wasm so a web build doesn't spawn one Web Worker per logical core;
+    // DAS_MAX_HW_JOBS (8 on wasm so a web build doesn't spawn one Web Worker per logical core;
     // effectively uncapped elsewhere). On heterogeneous Apple Silicon the same -1 applies to the
     // PERFORMANCE-core count: P-1 workers + the computing main == P. Landing any compute thread on a
     // slow E-core stalls every parallel_for on its straggler chunk (measured ~1.6x slower on an

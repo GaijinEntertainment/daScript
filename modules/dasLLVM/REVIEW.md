@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
 `ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`,
-`ARCHITECTURE_JIT_ENTRY.md`. Planned work: `DEBUGGING.md` (sec. Roadmap), `fat_mode_plan.md`.
+`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`. Planned work: `DEBUGGING.md` (sec. Roadmap), `fat_mode_plan.md`.
 
 **A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
@@ -174,11 +174,11 @@ there.
   widening an exemption list without naming the exempted input's reason beside it, or a finding
   text that no longer names what failed. What the gate enforces is read from the gate itself.
 
-- **An emitter walk over the program's modules under `daslib/` that leaves a module out by
+- **A walk over the program's modules in this module's `daslib/` that leaves a module out by
   `moduleFlags.builtIn` alone is a defect - a promoted das module (`module X shared`) is
   builtIn too; a walk that means the C++ modules tests `builtIn && !promoted`**
-  (`ARCHITECTURE.md` sec.12). A promoted module's global initializers are program code, and a
-  walk that skips them leaves the address globals they need null in the exe.
+  (`ARCHITECTURE_EXE.md` sec.2). A promoted module's global initializers are program
+  code, and a walk that skips them leaves the address globals they need null in the exe.
 
 - **A diff that builds an x64 or aarch64 machine's feature string appends the forced ones
   (`x64_forced_plus_features` / `arm64_forced_plus_features`, `daslib/llvm_jit_common.das`) AFTER

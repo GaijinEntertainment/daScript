@@ -175,7 +175,7 @@ def private run_parrot(var out : string&) : int {
     set_env_variable("DASLLAMA_IMAGE", "0")   //! never mint a sidecar beside the stocked models
     let root = get_das_root()
     let argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/parrot/main.das", "--",
-                 "--models", models_dir(), "--smoke", "--clip", path_join(root, CLIP), "--text", SMOKE_TEXT, "--null-audio"]
+                 "--models", models_dir(), "--smoke", "--clip", path_join(root, CLIP), "--text", SMOKE_TEXT]
     let rc = run_and_capture(argv, out, 300.0)
     set_env_variable("DASLLAMA_IMAGE", prev_image)
     return rc
@@ -190,6 +190,20 @@ def private tail_of(out : string) : string {
     return slice(out, max(0, length(out) - 600))
 }
 
+//! the read-out line's two figures: "... is read out - S s of speech over P s of playback"
+def private read_out_figures(out : string) : tuple<speech : float; playback : float> {
+    var inscope lines <- split(out, "\n")
+    for (line in lines) {
+        continue if (find(line, READ_LINE) < 0)
+        var inscope words <- split(line, " ")
+        var inscope got <- [for (i in range(length(words) - 1)); to_float(words[i]); where words[i + 1] == "s" && (i + 2 >= length(words) || words[i + 2] == "of")]
+        if (length(got) >= 2) {
+            return (speech = got[0], playback = got[1])
+        }
+    }
+    return (speech = 0.0, playback = 0.0)
+}
+
 [test]
 def test_smoke_clones_and_says(t : T?) {
     t |> run("the smoke rail clones the voice from the clip, says the text in it and reads it out to the end") @(t : T?) {
@@ -201,6 +215,9 @@ def test_smoke_clones_and_says(t : T?) {
         t |> success(find(out, CLONED_LINE) >= 0, "the voice was cloned from the clip:\n{witness(out)}")
         t |> success(find(out, SAY_LINE) >= 0, "the text was said in the cloned voice:\n{witness(out)}")
         t |> success(find(out, READ_LINE) >= 0, "the say was read out:\n{witness(out)}")
+        let figures = read_out_figures(out)
+        t |> success(figures.speech > 2.0, "the say carries speech ({figures.speech} s):\n{witness(out)}")
+        t |> success(figures.playback >= figures.speech * 0.8, "the say played to its end ({figures.playback} s of playback for {figures.speech} s of speech): a clip read as stopped before its end cuts the say short\n{witness(out)}")
         t |> success(find(out, DONE_LINE) >= 0, "the rail ended on the read-out, not the frame cap:\n{witness(out)}")
     }
     t |> run("a --clip that is not audio is refused by name, before any window opens") @(t : T?) {
@@ -208,7 +225,7 @@ def test_smoke_clones_and_says(t : T?) {
         var out = ""
         let root = get_das_root()
         let argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/parrot/main.das", "--",
-                     "--models", models_dir(), "--smoke", "--clip", "{root}/examples/dasLLAMA/parrot/models.json", "--null-audio"]
+                     "--models", models_dir(), "--smoke", "--clip", "{root}/examples/dasLLAMA/parrot/models.json"]
         let rc = run_and_capture(argv, out, 60.0)
         t |> success(rc != 0, "a clip that does not decode is a refusal, not a run")
         t |> success(find(out, "did not decode") >= 0, "and it says so by name:\n{tail_of(out)}")

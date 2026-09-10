@@ -145,6 +145,7 @@ var g_playing_chunk = -1
 var g_play_status : SeqBox?
 var g_play_start = 0l                //! the playing chunk's first sample in g_out_pcm
 var g_playhead = 0l
+var g_first_play_s = -1.0   //! when the say's first clip started playing: the read-out line reports the playback wall against the speech
 var g_elapsed_s = 0.0
 var g_speaking_until = 0.0
 var g_audio_initialized = false
@@ -318,7 +319,9 @@ def on_read_out() {
     if (g_phase == Phase.idle) {
         g_status = READ_OUT_STATUS
     }
-    to_log(LOG_INFO, "parrot: say {g_says} is read out\n")
+    let speech_s = float(length(g_out_pcm)) / float(max(g_mic_rate, 1))
+    let playback_s = g_first_play_s < 0.0 ? 0.0 : g_elapsed_s - g_first_play_s
+    to_log(LOG_INFO, "parrot: say {g_says} is read out - {s1(speech_s)} s of speech over {s1(playback_s)} s of playback\n")
 }
 
 def poll_answers() {
@@ -372,6 +375,9 @@ def poll_playback() {
         g_play_start = g_chunks[g_playing_chunk].start
         g_chunks[g_playing_chunk].state = ChunkState.speaking
         g_playing_sid = play_sound_from_pcm(g_clips[0].rate, 1, pcm)
+        if (g_first_play_s < 0.0) {
+            g_first_play_s = g_elapsed_s
+        }
         g_play_status = seq_box_create()   //! one box per clip: a box shared across clips reads the last clip's stop as this one's
         set_status_update(g_playing_sid, g_play_status)
         g_clips |> erase(0)
@@ -541,6 +547,7 @@ def cancel_say() {
     g_out_pcm |> clear()
     g_out_peaks |> clear()
     g_playhead = 0l
+    g_first_play_s = -1.0
     g_speaking_until = g_elapsed_s
     g_measure_left = 0
 }

@@ -21,8 +21,13 @@ what it costs today and what the fix would change.
   ms). One worker instead of eight, parked or spinning, reads 0.7x (prompt 1370 / backbone 3080
   / codec 5800), so the pool does pay - 2.2x from one to eight - once nothing spins. The
   emscripten default is now 0 (`dasllama_jobque_spin_default`); the desktop keeps its window.
-  Untuned kernels (`DASLLAMA_ALLOW_UNTUNED=1`), so the absolute figures are the fallback
-  bodies'; the desktop says the same text at 18x on 7 workers.
+  Provenance, direction-grade: the m1 box (10 cores, the `m1.tune.json` profile); the browser
+  figures are the engine's own per-synthesis timing line (`dasLLAMA tts: ... rtf`) read from the
+  page's console, the wasm64 release of `examples/dasLLAMA/parrot` served locally to Chrome under
+  `DASLLAMA_ALLOW_UNTUNED=1` (the reference kernel bodies, no tune sidecar, so the absolute
+  figures are the fallback bodies'), the lab's own toggles flipping the arms between measures,
+  the CPU readings `top` over the renderer process; the desktop figure (18x on 7 workers) is the
+  same timing line under `-jit` with the box's profile, the same text through the lab's measure.
 
 - **OWED ROWS - the Vulkan cm2 prefill's board cells.** `performance/records/zen2.json` carries
   one das/vulkan cell (Qwen3-4B Q8_0 under `DASLLAMA_COOPMAT=mm`, 2026-07-25) and no cm2 cell,

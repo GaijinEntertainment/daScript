@@ -629,7 +629,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             for (fn in funcs) {
                 visit(fn, adapter_resolve)
             }
-            // The used global initializers too (#2582), promoted das modules included - only the C++ modules have none to walk (ARCHITECTURE.md sec.12).
+            // The used global initializers too (#2582), promoted das modules included - only the C++ modules have none to walk (ARCHITECTURE_EXE.md sec.2).
             prog |> for_each_module() $(m) {
                 if (m.moduleFlags.builtIn && !m.moduleFlags.promoted) return ;
                 m |> for_each_global() $(var glob) {
@@ -1302,7 +1302,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         needs_whole_lib = true
     }
 
-    // the rows feed the compile-time require resolver, which only a whole-lib exe links (ARCHITECTURE.md sec.10)
+    // the rows feed the compile-time require resolver, which only a whole-lib exe links (ARCHITECTURE_EXE.md sec.1)
     if (needs_whole_lib) {
         let reg_native_path_type = LLVMFunctionType(types.t_void,
             fixed_array<LLVMTypeRef>(

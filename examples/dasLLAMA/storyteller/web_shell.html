@@ -167,10 +167,21 @@
     return m;
   }
 
+  // the fetched bytes' digest, so a wrong body under an HTTP 200 (a proxy's error page) is refused
+  // instead of cached under the manifest's hash; '' where the page cannot hash (no secure context)
+  async function sha256Hex(bytes) {
+    if (!(window.crypto && crypto.subtle)) return '';
+    var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    var s = '';
+    for (var i = 0; i < d.length; i++) s += (d[i] < 16 ? '0' : '') + d[i].toString(16);
+    return s;
+  }
+
   // fetch every file with one shared progress bar, sizes from the manifest. A file this origin
   // already holds in its Cache Storage under its sha256 is read from there instead, so a
-  // revisit fetches nothing and a re-minted set (a new hash) fetches only what changed; a
-  // browser without the store, or one that refuses the bytes, simply fetches every time
+  // revisit fetches nothing and a re-minted set (a new hash) fetches only what changed; a fetched
+  // file is cached only once its bytes hash to the manifest's sha256; a browser without the
+  // store, or one that refuses the bytes, simply fetches every time
   async function fetchModels(manifest, onFile) {
     var total = manifest.files.reduce(function (a, f) { return a + (f.bytes || 0); }, 0), done = 0;
     var store = null;
@@ -193,10 +204,28 @@
       }
       var bytes = new Uint8Array(chunks.reduce(function (a, c) { return a + c.length; }, 0)), off = 0;
       chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
-      if (store && !cached) {
-        try { await store.put(key, new Response(bytes, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (e) { /* no room: fetched again next time */ }
+      if (!cached) {
+        var digest = await sha256Hex(bytes);
+        if (digest && f.sha256 && digest !== f.sha256) {
+          throw new Error(name + ': the fetched bytes do not match the manifest (sha256 ' + digest.slice(0, 12) + ', expected ' + f.sha256.slice(0, 12) + ') - reload the page; nothing was cached');
+        }
+        if (store && digest && digest === f.sha256) {
+          try { await store.put(key, new Response(bytes, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (e) { /* no room: fetched again next time */ }
+        }
       }
       onFile(name, bytes);
+    }
+    // this page's files the manifest no longer names leave the store (a sibling page's keys sit
+    // under another path and stay), so a re-mint does not wait on the browser's quota eviction
+    if (store) {
+      try {
+        var base = new URL(modelsBase, location.href).href, keep = {};
+        manifest.files.forEach(function (g) { keep[new URL(modelsBase + g.name, location.href).href + '?sha256=' + (g.sha256 || '')] = true; });
+        var held = await store.keys();
+        for (var k = 0; k < held.length; k++) {
+          if (held[k].url.indexOf(base) === 0 && !keep[held[k].url]) await store.delete(held[k]);
+        }
+      } catch (e) { /* the store refused the sweep: the next visit tries again */ }
     }
   }
 

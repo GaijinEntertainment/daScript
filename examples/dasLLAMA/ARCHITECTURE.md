@@ -101,8 +101,12 @@ with no image carries the version the deploy expects) and
 stamps that version into the page's `/* @image-version */ 0` slot. The shell reads the manifest,
 refuses a set minted for another version before fetching it, and shows a program abort's last
 engine lines on the page. A fetched file is put in the origin's Cache Storage under its URL and
-sha256, and a later visit reads it from there, so a set fetches once per browser and a
-re-minted file (a new hash) fetches alone; a browser without the store fetches every time. The configuration the mint bakes against comes from the wasm build
+sha256 once its bytes hash to that sha256 - a wrong body under an HTTP 200, a proxy's error
+page, is refused and never cached, since the store would serve it on every later visit - and a
+later visit reads it from there, so a set fetches once per browser and a re-minted file (a new
+hash) fetches alone; the page's files the manifest no longer names leave the store after the
+set is read (the three pages share one store, so each sweeps only the keys under its own
+models path); a browser without the store fetches every time. The configuration the mint bakes against comes from the wasm build
 itself: `wasm/dlim_config/` is cross-compiled and run under node in the deploy, because an image
 is keyed by the build's identity and a set minted for a previous build is declined by the next.
 
