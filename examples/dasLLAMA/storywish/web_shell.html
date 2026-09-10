@@ -114,6 +114,11 @@
     return span.innerHTML;
   }
 
+  // a page the browser brings back from its back-forward cache returns with the program's
+  // workers and the audio output frozen mid-frame and out of step with each other, and the
+  // first thing heard is whatever sat in the output ring: such a page starts over instead
+  window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+
   if (!SUPPORTED) {
     if (FORCE === 'unsupported' || !HAS_WASM64) {
       showNote('needs a memory64 browser',

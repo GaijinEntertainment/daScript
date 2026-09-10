@@ -38,7 +38,10 @@ the desktop and `requestAnimationFrame` in the browser. The `.das_package` disab
 for the wasm build, so the host needs no Metal or Vulkan, and names the shell that fetches the
 models and starts the program on a click (audio needs the gesture). The desktop run and the page
 therefore exercise the same code, which is why a browser-only failure is a language-runtime fact
-worth a rule rather than an app bug.
+worth a rule rather than an app bug. A page the browser restores from its back-forward cache
+(Back to another page, then Forward) comes back with the program's workers and the audio output
+frozen mid-frame and out of step, and the first sound is whatever the output ring held; the
+shell reloads such a page (`pageshow` with `persisted`), so it starts from the gate again.
 
 ### 3.2 The speech thread and its stream {#speech-thread-stream}
 
