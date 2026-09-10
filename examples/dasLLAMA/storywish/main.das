@@ -83,7 +83,6 @@ let TOKENS_PER_FRAME = 2          // ~120 tokens a second at 60 Hz: readable typ
 let BOS_TOKEN = 1l                //! the corpus separates its examples with BOS ... EOS; either one ends the story
 let EOS_TOKEN = 2l
 let WRAP_CHARS = 74               // droidsansmono is monospace: characters are the wrap unit
-let VISIBLE_LINES = 13            // what fits between the wish line and the status line at the reference size
 let MAX_WISH_CHARS = 60
 let TEXT_SIZE = 0.72
 let SMALL_SIZE = 0.52
@@ -132,9 +131,11 @@ var g_audio_initialized = false
 var g_asch : AudioSystemChannels
 var g_font : Font?
 var g_frames = 0
-var g_enter_pressed = false       //! set by the key callback, consumed by the frame
-var g_backspace_pressed = false
-var g_tab_pressed = false
+//! keys are POLLED, as the storyteller polls space: a GLFW callback lambda traps in the browser build, where it
+//! fires from a JavaScript event outside any frame of the program. Edge detection per key code, plus a hold
+//! timer so a held backspace repeats
+var g_key_was : bool[512]   // GLFW key codes end at GLFW_KEY_LAST = 348
+var g_backspace_held_s = 0.0
 var display_w = 0
 var display_h = 0
 
@@ -331,9 +332,16 @@ def finish_story() {
     g_phase = Phase.told
 }
 
-//! the text layer's coordinates are design pixels against a 1280x720 reference
+//! the text layer's coordinates are design pixels against a 1280x720 reference; the smaller of the two ratios
+//! governs, so a window narrower than 16:9 shrinks the text instead of cutting the lines on the right
 def hud_scale() : float {
-    return max(float(display_h) / 720.0, 0.5)
+    let fit = min(float(display_w) / 1280.0, float(display_h) / 720.0)
+    return max(fit, 0.5)
+}
+
+//! the design height the window offers at that scale - 720 at 16:9, more in a taller window
+def design_height() : float {
+    return float(display_h) / hud_scale()
 }
 
 def text_mvp(x, y, scale : float) : float4x4 {
@@ -360,7 +368,9 @@ def draw_story() {
     draw_text(g_dialogue ? "[with dialogue - Tab turns it off]" : "[Tab asks for dialogue]", 60.0, 146.0, SMALL_SIZE, dim)
     var y = 200.0
     let step = 34.0 * TEXT_SIZE / 0.72
-    let first = max(0, length(g_wrapped_lines) - VISIBLE_LINES)   // a long story scrolls: the newest lines stay on screen
+    let status_y = design_height() - 60.0
+    let visible = max(1, int((status_y - 24.0 - y) / step))   // what fits between the wish line and the status line
+    let first = max(0, length(g_wrapped_lines) - visible)   // a long story scrolls: the newest lines stay on screen
     for (i in range(first, length(g_wrapped_lines))) {
         draw_text(g_wrapped_lines[i], 60.0, y, TEXT_SIZE, ink)
         y += step
@@ -369,23 +379,55 @@ def draw_story() {
         : g_phase == Phase.writing ? "writing a story about {g_told_wish}..."
         : g_unplayed_sentences > 0 || g_elapsed_s < g_speaking_until ? "reading aloud..."
         : "the end - change the words, Enter for another")
-    draw_text(status, 60.0, 660.0, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
+    draw_text(status, 60.0, status_y, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
 }
 
-//! a typed character lands in the wish line: letters, digits, spaces and the list's punctuation, nothing else
-def type_char(codepoint : uint) {
-    return if (codepoint >= 128u)
-    let c = int(codepoint)
+//! a typed key lands in the wish line as its lower-case character: letters, digits, spaces and the list's punctuation, nothing else
+def type_char(key : uint) {
+    return if (key >= 128u)
+    let c = int(key)
     let ok = is_alpha(c) || is_number(c) || c == ' ' || c == ',' || c == '\'' || c == '-'
     return if (!ok || length(g_wish) >= MAX_WISH_CHARS)
-    g_wish = "{g_wish}{to_char(c)}"
+    g_wish = to_lower("{g_wish}{to_char(c)}")
+}
+
+//! down this frame and not the last
+def key_pressed_now(key : int) : bool {
+    let down = glfwGetKey(live_window, key) == GLFW_PRESS
+    let was = g_key_was[key]
+    g_key_was[key] = down
+    return down && !was
+}
+
+//! a printable GLFW key code is its upper-case ASCII, so the key range IS the character range
+def poll_typing() {
+    for (key in range(GLFW_KEY_SPACE, GLFW_KEY_GRAVE_ACCENT + 1)) {
+        if (key_pressed_now(key)) {
+            type_char(uint(key))
+        }
+    }
+    if (key_pressed_now(GLFW_KEY_BACKSPACE)) {
+        erase_char()
+        g_backspace_held_s = 0.0
+    } elif (glfwGetKey(live_window, GLFW_KEY_BACKSPACE) == GLFW_PRESS) {
+        g_backspace_held_s += get_dt()
+        if (g_backspace_held_s > 0.4) {   // held: a repeat every 60 ms after the first 400
+            erase_char()
+            g_backspace_held_s = 0.34
+        }
+    }
+    if (key_pressed_now(GLFW_KEY_TAB)) {
+        g_dialogue = !g_dialogue
+    }
+    if (key_pressed_now(GLFW_KEY_ENTER) || key_pressed_now(GLFW_KEY_KP_ENTER)) {
+        start_story()
+    }
 }
 
 def erase_char() {
-    return if (empty(g_wish))
-    peek_data(g_wish) $(d) {
-        g_wish = clone_string(slice(d, 0, length(d) - 1))
-    }
+    let n = length(g_wish)
+    return if (n == 0)
+    g_wish = n == 1 ? "" : clone_string(slice(g_wish, 0, n - 1))   // never a zero-length view of the string being replaced
 }
 
 [export]
@@ -398,19 +440,6 @@ def init() {
     g_wish = g_args.words
     g_dialogue = g_args.dialogue
     live_create_window("Storywish", 1280, 720)
-    glfwSetCharCallback(live_window) <| @(w, codepoint) {
-        type_char(codepoint)
-    }
-    glfwSetKeyCallback(live_window) <| @(w, key, scancode, action, mods) {
-        return if (action != GLFW_PRESS && action != GLFW_REPEAT)
-        if (key == GLFW_KEY_BACKSPACE) {
-            g_backspace_pressed = true
-        } elif (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER) {
-            g_enter_pressed = true
-        } elif (key == GLFW_KEY_TAB) {
-            g_tab_pressed = true
-        }
-    }
     cache_ttf_objects()
     g_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
     if (!g_audio_initialized) {
@@ -457,18 +486,7 @@ def update() {
     if (glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(live_window, 1)
     }
-    if (g_backspace_pressed) {
-        g_backspace_pressed = false
-        erase_char()
-    }
-    if (g_tab_pressed) {
-        g_tab_pressed = false
-        g_dialogue = !g_dialogue
-    }
-    if (g_enter_pressed) {
-        g_enter_pressed = false
-        start_story()
-    }
+    poll_typing()
     if (g_phase == Phase.writing) {
         write_step()
     }

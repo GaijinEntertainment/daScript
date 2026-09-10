@@ -87,6 +87,12 @@ storyteller's `models.json`.
   wish line and status are interpolated every frame), and the thread then looked for the phoneme
   packs beside a story sentence. Both examples now send the path and the voice through the
   sentence stream ahead of the sentences; an archived line is copied into the thread's own heap.
+- **In the browser build a GLFW callback lambda fires from a JavaScript event, outside any frame
+  of the program.** The character callback trapped with `memory access out of bounds` on every
+  keystroke even when it only stored the code point; the key callback storing into a global
+  survives. storywish types from key codes through the key callback (a printable GLFW key code is
+  its upper-case ASCII, repeats come free) into a fixed queue the frame drains; nothing builds a
+  string inside a callback.
 - **A declined image panicked as "not a prepared image for this box/knobs"** whatever the reason.
   The version mismatch - the one decline a reader can act on - now names both versions.
 - `dasfmt --path <file>.das_package` ends with `[daslang atexit] FATAL: g_envTotal=1` on every

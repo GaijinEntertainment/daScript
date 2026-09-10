@@ -78,7 +78,6 @@ let TOKENS_PER_FRAME = 2          // ~120 tokens a second at 60 Hz: readable typ
 let BOS_TOKEN = 1l                // llama2 vocabulary; the TinyStories corpus separates stories with BOS, so it is the stop word too
 let EOS_TOKEN = 2l
 let WRAP_CHARS = 74               // droidsansmono is monospace: characters are the wrap unit
-let VISIBLE_LINES = 15            // what fits between the title and the status line at the reference size
 let TEXT_SIZE = 0.72
 let SMALL_SIZE = 0.52
 
@@ -298,9 +297,16 @@ def finish_story() {
     g_phase = Phase.told
 }
 
-//! the text layer's coordinates are design pixels against a 1280x720 reference
+//! the text layer's coordinates are design pixels against a 1280x720 reference; the smaller of the two ratios
+//! governs, so a window narrower than 16:9 shrinks the text instead of cutting the lines on the right
 def hud_scale() : float {
-    return max(float(display_h) / 720.0, 0.5)
+    let fit = min(float(display_w) / 1280.0, float(display_h) / 720.0)
+    return max(fit, 0.5)
+}
+
+//! the design height the window offers at that scale - 720 at 16:9, more in a taller window
+def design_height() : float {
+    return float(display_h) / hud_scale()
 }
 
 def text_mvp(x, y, scale : float) : float4x4 {
@@ -324,7 +330,9 @@ def draw_story() {
     draw_text("storyteller", 60.0, 60.0, 0.6, dim)
     var y = 130.0
     let step = 34.0 * TEXT_SIZE / 0.72
-    let first = max(0, length(g_wrapped_lines) - VISIBLE_LINES)   // a long story scrolls: the newest lines stay on screen
+    let status_y = design_height() - 60.0
+    let visible = max(1, int((status_y - 24.0 - y) / step))   // what fits between the title and the status line
+    let first = max(0, length(g_wrapped_lines) - visible)   // a long story scrolls: the newest lines stay on screen
     for (i in range(first, length(g_wrapped_lines))) {
         draw_text(g_wrapped_lines[i], 60.0, y, TEXT_SIZE, ink)
         y += step
@@ -333,7 +341,7 @@ def draw_story() {
         : g_phase == Phase.writing ? "writing..."
         : g_unplayed_sentences > 0 || g_elapsed_s < g_speaking_until ? "reading aloud..."
         : "the end - press SPACE for another")
-    draw_text(status, 60.0, 660.0, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
+    draw_text(status, 60.0, status_y, SMALL_SIZE, g_phase == Phase.idle ? accent : dim)
 }
 
 [export]
