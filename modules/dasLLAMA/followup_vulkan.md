@@ -1018,5 +1018,5 @@ module) is independent and can land any time - it is pure structure.
     top-k in one, the shared expert's three GEMVs as extra slots of the expert dispatch, the
     activation folded into the down GEMV; the host is 176 us of the token on the pod (2%).
     The pod's card ran 2910-2925 MHz at 250-263 W of its 307 W limit under the probe, so no clock
-    cap stands behind (b) or (c). Logs: the session's scratchpad `pod_logs/`. Research before any
-    kernel work; each of (b) and (c) is a slice of its own.
+    cap stands behind (b) or (c). Research before any kernel work; each of (b) and (c) is a slice
+    of its own.
