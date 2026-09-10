@@ -2,9 +2,9 @@ options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _lint = "LINT030"   // the rule ships default-off; the fixture arms it
 // LINT030: a call whose argument list reads a variable that a nested call in another
-// argument writes by reference. The order arguments are evaluated in is not defined - the
-// interpreter and the JIT go left to right, the AOT C++ goes whichever way the compiler
-// does - so the read sees the value before or after the write by the tier's choice.
+// argument writes by reference. The order arguments are evaluated in is not defined and
+// differs between tiers, so the read sees the value before or after the write by the tier's
+// choice.
 
 expect 50503:7
 

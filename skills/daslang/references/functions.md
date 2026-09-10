@@ -106,8 +106,7 @@ argument, `take(type<int>, 1, 2)`, against a parameter declared `t : type<auto(T
 `[unused_argument(t)]` - a `type<>` parameter occupies no stack and cannot be read); take
 `default<T>` when the body needs a value.
 
-**The order arguments are evaluated in is not defined.** The interpreter and the JIT go left
-to right; AOT follows the C++ compiler, which on MSVC and clang-cl is right to left. So
+**The order arguments are evaluated in is not defined**, and it differs between tiers. So
 `f(g(x), x)` with `g` writing `x` by reference reads the old `x` on one tier and the new on
 another. Run the writing call as a statement of its own and pass its result.
 

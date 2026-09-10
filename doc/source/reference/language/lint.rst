@@ -1198,15 +1198,13 @@ names and ``[unused_argument]`` are skipped.
 LINT030 — an argument reads what a sibling call writes
 ======================================================
 
-The order a call's arguments are evaluated in is not defined. The interpreter
-and the JIT go left to right; the AOT C++ goes whichever way the C++ compiler
-does, and MSVC and clang-cl go right to left. A call whose argument list nests
-a call that writes a variable by reference — a ``var`` parameter on a ``&``, an
-array, a table or a struct — beside another argument that reads the same
-variable therefore answers differently per tier: ``pair(bump(x), x)`` is
-``1,1`` interpreted and ``1,0`` under AOT on Windows. The rule fires on the
-outer call. The fix is to run the writing call as a statement of its own and
-pass its result.
+The order a call's arguments are evaluated in is not defined, and it differs
+between tiers. A call whose argument list nests a call that writes a variable
+by reference — a ``var`` parameter on a ``&``, an array, a table or a struct —
+beside another argument that reads the same variable therefore answers
+differently per tier: ``pair(bump(x), x)`` is ``1,1`` on one and ``1,0`` on
+another. The rule fires on the outer call. The fix is to run the writing call
+as a statement of its own and pass its result.
 
 The rule ships **off**, like LINT029: the tree carries the shape in library
 code whose callees take ``var`` to hand out a pointer or advance a builder,

@@ -248,10 +248,9 @@ diagnostic in any tier.
 - **`exit(N)` does not set the process exit code under the daslang CLI.** It unwinds as an
   abnormal termination and the process reports 1, whatever `N` was - a supervisor or shell sees a
   crash. A code the parent must read comes from `def main() : int { return N }`.
-- **The order a call's arguments are evaluated in is not defined.** The interpreter and the JIT
-  go left to right; the AOT C++ goes the C++ compiler's way, and MSVC and clang-cl go right to
-  left - `f(g(x), x)` with `g` writing `x` by reference reads the old `x` on Windows AOT and the
-  new one everywhere else. Run the writing call as a statement of its own: `let r = g(x); f(r, x)`.
+- **The order a call's arguments are evaluated in is not defined**, and it differs between
+  tiers - `f(g(x), x)` with `g` writing `x` by reference reads the old `x` on one tier and the
+  new one on another. Run the writing call as a statement of its own: `let r = g(x); f(r, x)`.
   LINT030 finds the shape and ships OFF - arm it with `options _lint = "LINT030"`.
 
 ### Code style - prefer idiomatic forms
