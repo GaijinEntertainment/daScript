@@ -406,6 +406,14 @@ jobs:
         # false stales. The nightly whole-tree -j 1 pass owns staleness.
         $BIN/daslang ./utils/lint/main.das -- "${CHANGED[@]}" --quiet --disable LINT019
 
+    - name: "Run the lint rule fixtures"
+      if: matrix.role != 'modules'
+      # every rule's fixture under utils/lint/tests compiles with its `expect` count enforced
+      # both ways - the linter itself skips the folder, so this is the only run of them
+      run: |
+        set -eux
+        $BIN/daslang ./dastest/dastest.das -- --test ./utils/lint/tests
+
     - name: "Run ast-verify on changed .das files"
       if: matrix.role != 'modules'
       # a bare exit 143 with no finding is the runner killing the step (memory: each item is a

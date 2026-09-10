@@ -2449,7 +2449,8 @@ def intrinsic_dot4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : arra
     }
     let one16 = ctx.types.ConstI16(int16(1))
     var oneElems <- [one16, one16, one16, one16, one16, one16, one16, one16]
-    var ones = LLVMConstVector(array_data_ptr(oneElems), uint(length(oneElems)))
+    let n = uint(length(oneElems))
+    var ones = LLVMConstVector(array_data_ptr(oneElems), n)
     var w2Types <- [v8i16, v8i16]
     var maddwdTy = LLVMFunctionType(v4i32, w2Types)
     var maddwdArgs <- [pairs, ones]
@@ -2698,7 +2699,8 @@ def emit_dot32_quads_v(var ctx : JitCtx; _expr : ExprCallFunc?; wvec, xvec : LLV
     let one16 = ctx.types.ConstI16(int16(1))
     var oneElems <- [one16, one16, one16, one16, one16, one16, one16, one16,
                      one16, one16, one16, one16, one16, one16, one16, one16]
-    var ones = LLVMConstVector(array_data_ptr(oneElems), uint(length(oneElems)))
+    let n = uint(length(oneElems))
+    var ones = LLVMConstVector(array_data_ptr(oneElems), n)
     var w2Types <- [v16i16, v16i16]
     var maddwdTy = LLVMFunctionType(v8i32, w2Types)
     var maddwdArgs <- [pairs, ones]
@@ -2775,7 +2777,8 @@ def emit_dot64_acc16(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<
             return null
         }
         var oneElems <- [for (_j in range(32)); ctx.types.ConstI16(int16(1))]
-        var ones = LLVMConstVector(array_data_ptr(oneElems), uint(length(oneElems)))
+        let n = uint(length(oneElems))
+        var ones = LLVMConstVector(array_data_ptr(oneElems), n)
         var w2Types <- [v32i16, v32i16]
         var maddwdTy = LLVMFunctionType(v16i32, w2Types)
         var maddwdArgs <- [pairs, ones]

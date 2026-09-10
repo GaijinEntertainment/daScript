@@ -270,16 +270,26 @@ def private plan_drafter(var dr : GemmaDrafter; m : GGUFMeta; var plans : array<
     for (l in range64(dr.n_layers)) {
         let hs = dr.hs[l]
         let qd = dr.n_heads * hs
-        dr.wq_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.attn_q.weight", dr.dim * qd, true))
-        dr.wo_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.attn_output.weight", qd * dr.dim, true))
-        dr.w1_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.ffn_gate.weight", dr.dim * dr.hidden, true))
-        dr.w3_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.ffn_up.weight", dr.dim * dr.hidden, true))
-        dr.w2_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.ffn_down.weight", dr.hidden * dr.dim, true))
-        dr.attn_norm_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.attn_norm.weight", dr.dim, false))
-        dr.post_attn_norm_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.post_attention_norm.weight", dr.dim, false))
-        dr.ffn_norm_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.ffn_norm.weight", dr.dim, false))
-        dr.post_ffn_norm_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.post_ffw_norm.weight", dr.dim, false))
-        dr.q_norm_offs |> push(plan_tensor(dr, m, plans, b, f, "blk.{l}.attn_q_norm.weight", hs, false))
+        let wq = plan_tensor(dr, m, plans, b, f, "blk.{l}.attn_q.weight", dr.dim * qd, true)
+        dr.wq_offs |> push(wq)
+        let wo = plan_tensor(dr, m, plans, b, f, "blk.{l}.attn_output.weight", qd * dr.dim, true)
+        dr.wo_offs |> push(wo)
+        let w1 = plan_tensor(dr, m, plans, b, f, "blk.{l}.ffn_gate.weight", dr.dim * dr.hidden, true)
+        dr.w1_offs |> push(w1)
+        let w3 = plan_tensor(dr, m, plans, b, f, "blk.{l}.ffn_up.weight", dr.dim * dr.hidden, true)
+        dr.w3_offs |> push(w3)
+        let w2 = plan_tensor(dr, m, plans, b, f, "blk.{l}.ffn_down.weight", dr.hidden * dr.dim, true)
+        dr.w2_offs |> push(w2)
+        let attn_norm = plan_tensor(dr, m, plans, b, f, "blk.{l}.attn_norm.weight", dr.dim, false)
+        dr.attn_norm_offs |> push(attn_norm)
+        let post_attn_norm = plan_tensor(dr, m, plans, b, f, "blk.{l}.post_attention_norm.weight", dr.dim, false)
+        dr.post_attn_norm_offs |> push(post_attn_norm)
+        let ffn_norm = plan_tensor(dr, m, plans, b, f, "blk.{l}.ffn_norm.weight", dr.dim, false)
+        dr.ffn_norm_offs |> push(ffn_norm)
+        let post_ffn_norm = plan_tensor(dr, m, plans, b, f, "blk.{l}.post_ffw_norm.weight", dr.dim, false)
+        dr.post_ffn_norm_offs |> push(post_ffn_norm)
+        let q_norm = plan_tensor(dr, m, plans, b, f, "blk.{l}.attn_q_norm.weight", hs, false)
+        dr.q_norm_offs |> push(q_norm)
         if (!empty(dr.why)) {
             return false
         }

@@ -19,6 +19,6 @@
 
 - **A test in this folder runs a child as a statement of its own - `run_child_reported`,
   `run_driver_reported`, or the run's result bound to a local before the compare - never as an
-  argument beside the `out` it writes, and carries `options _lint = "LINT030"`.** The order a
-  call's arguments are evaluated in is not defined, so a nested run reads its output empty on a
-  Windows AOT host and full everywhere else.
+  argument beside the `out` it writes.** The order a call's arguments are evaluated in is not
+  defined, so a nested run reads its output empty on a Windows AOT host and full everywhere
+  else; LINT030, on for the tree, reports the shape.

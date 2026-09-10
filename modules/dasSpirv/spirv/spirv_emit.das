@@ -2781,47 +2781,83 @@ def private emit_const_node(var m : SpirvModule; e : ExpressionPtr; var errors :
     let cf2 = e ?as ExprConstFloat2
     if (cf2 != null) {
         let v = cf2.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_float(m, v.x), const_float(m, v.y)]))
+        let ty = emit_type(m, e._type)
+        let x = const_float(m, v.x)
+        let y = const_float(m, v.y)
+        return (ok = true, id = const_composite(m, ty, [x, y]))
     }
     let cf3 = e ?as ExprConstFloat3
     if (cf3 != null) {
         let v = cf3.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_float(m, v.x), const_float(m, v.y), const_float(m, v.z)]))
+        let ty = emit_type(m, e._type)
+        let x = const_float(m, v.x)
+        let y = const_float(m, v.y)
+        let z = const_float(m, v.z)
+        return (ok = true, id = const_composite(m, ty, [x, y, z]))
     }
     let cf4 = e ?as ExprConstFloat4
     if (cf4 != null) {
         let v = cf4.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_float(m, v.x), const_float(m, v.y), const_float(m, v.z), const_float(m, v.w)]))
+        let ty = emit_type(m, e._type)
+        let x = const_float(m, v.x)
+        let y = const_float(m, v.y)
+        let z = const_float(m, v.z)
+        let w = const_float(m, v.w)
+        return (ok = true, id = const_composite(m, ty, [x, y, z, w]))
     }
     let ci2 = e ?as ExprConstInt2
     if (ci2 != null) {
         let v = ci2.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_int(m, v.x), const_int(m, v.y)]))
+        let ty = emit_type(m, e._type)
+        let x = const_int(m, v.x)
+        let y = const_int(m, v.y)
+        return (ok = true, id = const_composite(m, ty, [x, y]))
     }
     let ci3 = e ?as ExprConstInt3
     if (ci3 != null) {
         let v = ci3.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_int(m, v.x), const_int(m, v.y), const_int(m, v.z)]))
+        let ty = emit_type(m, e._type)
+        let x = const_int(m, v.x)
+        let y = const_int(m, v.y)
+        let z = const_int(m, v.z)
+        return (ok = true, id = const_composite(m, ty, [x, y, z]))
     }
     let ci4 = e ?as ExprConstInt4
     if (ci4 != null) {
         let v = ci4.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_int(m, v.x), const_int(m, v.y), const_int(m, v.z), const_int(m, v.w)]))
+        let ty = emit_type(m, e._type)
+        let x = const_int(m, v.x)
+        let y = const_int(m, v.y)
+        let z = const_int(m, v.z)
+        let w = const_int(m, v.w)
+        return (ok = true, id = const_composite(m, ty, [x, y, z, w]))
     }
     let cu2 = e ?as ExprConstUInt2
     if (cu2 != null) {
         let v = cu2.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_uint(m, v.x), const_uint(m, v.y)]))
+        let ty = emit_type(m, e._type)
+        let x = const_uint(m, v.x)
+        let y = const_uint(m, v.y)
+        return (ok = true, id = const_composite(m, ty, [x, y]))
     }
     let cu3 = e ?as ExprConstUInt3
     if (cu3 != null) {
         let v = cu3.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_uint(m, v.x), const_uint(m, v.y), const_uint(m, v.z)]))
+        let ty = emit_type(m, e._type)
+        let x = const_uint(m, v.x)
+        let y = const_uint(m, v.y)
+        let z = const_uint(m, v.z)
+        return (ok = true, id = const_composite(m, ty, [x, y, z]))
     }
     let cu4 = e ?as ExprConstUInt4
     if (cu4 != null) {
         let v = cu4.value
-        return (ok = true, id = const_composite(m, emit_type(m, e._type), [const_uint(m, v.x), const_uint(m, v.y), const_uint(m, v.z), const_uint(m, v.w)]))
+        let ty = emit_type(m, e._type)
+        let x = const_uint(m, v.x)
+        let y = const_uint(m, v.y)
+        let z = const_uint(m, v.z)
+        let w = const_uint(m, v.w)
+        return (ok = true, id = const_composite(m, ty, [x, y, z, w]))
     }
     // all-constant vector / matrix constructor -> OpConstantComposite
     let call = e ?as ExprCall

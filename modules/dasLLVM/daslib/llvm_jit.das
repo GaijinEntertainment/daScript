@@ -888,7 +888,8 @@ class public LlvmJitVisitor : AstVisitor {
             types.ConstI32(at.last_column |> uint64()),
             types.ConstI32(at.last_line |> uint64())
         )
-        let line_info_init = LLVMConstStructInContext(g_ctx, array_data_ptr(init_values), init_values |> length() |> uint(), 0)
+        let n = init_values |> length() |> uint()
+        let line_info_init = LLVMConstStructInContext(g_ctx, array_data_ptr(init_values), n, 0)
         LLVMSetInitializer(line_info_global, line_info_init)
         return line_info_global
     }
@@ -5172,7 +5173,8 @@ class public LlvmJitVisitor : AstVisitor {
         init_values |> push <| types.ConstI32(vi.offset       |> uint64())
         init_values |> push <| types.ConstI32(vi.nextGcField  |> uint64())
         let ty = get_llvm_type_for_varinfo()
-        return LLVMConstNamedStruct(ty, array_data_ptr(init_values), init_values |> length |> uint())
+        let n = init_values |> length |> uint()
+        return LLVMConstNamedStruct(ty, array_data_ptr(init_values), n)
     }
 
     def create_struct_fields_global_array(ei : VarInfo ??; len : uint) {
@@ -7531,7 +7533,8 @@ class public LlvmJitVisitor : AstVisitor {
                 append_loop_hint_operand(operands, a)
             }
         }
-        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(operands), uint64(long_length(operands)))
+        let n = uint64(long_length(operands))
+        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(operands), n)
         LLVMMetadataReplaceAllUsesWith(temp, loop_md)
         let loop_md_val = LLVMMetadataAsValue(g_ctx, loop_md)
         let kind_id = LLVMGetMDKindIDInContext(g_ctx, "llvm.loop", 9u)

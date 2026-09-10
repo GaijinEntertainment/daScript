@@ -595,8 +595,8 @@ def private discover_user_fn(var ctx : MslCtx; fn : FunctionPtr; at : LineInfo) 
     }
     let idx = length(ctx.ufns)
     ctx.user_fns[key] = idx
-    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(fn)),
-        msl_name = ufn_msl_name(ctx, bn))
+    let name_in_msl = ufn_msl_name(ctx, bn)
+    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(fn)), msl_name = name_in_msl)
     ctx.scan_stack |> push(key)
     let prev = ctx.cur_ufn
     ctx.cur_ufn = idx
@@ -653,8 +653,8 @@ def private discover_method(var ctx : MslCtx; mfn : FunctionPtr; mname : string;
     }
     let idx = length(ctx.ufns)
     ctx.user_fns[key] = idx
-    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(mfn)),
-        msl_name = ufn_msl_name(ctx, mname), is_method = true)
+    let name_in_msl = ufn_msl_name(ctx, mname)
+    ctx.ufns |> emplace <| UserFn(fn = unsafe(reinterpret<FunctionPtr>(mfn)), msl_name = name_in_msl, is_method = true)
     ctx.scan_stack |> push(key)
     let prev = ctx.cur_ufn
     let prev_self = ctx.self_name

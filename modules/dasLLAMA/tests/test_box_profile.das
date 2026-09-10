@@ -259,7 +259,8 @@ def test_stale_binary_sidecar_keeps_runtime(t : T?) {
     let js = "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"{tune_box_identity()}\"\}\}"
     t |> success(fwrite(path, js), "profile written")
     var err : string
-    t |> success(set_mtime(path, mktime(2020, 1, 1, 0, 0, 0), err), "mtime set into the past ({err})")
+    let mtime_set = set_mtime(path, mktime(2020, 1, 1, 0, 0, 0), err)
+    t |> success(mtime_set, "mtime set into the past ({err})")
     t |> equal(box_profile_verdict_at(path), "stale_binary", "reads as binary-stale")
     apply_box_profile_runtime_checked(path)
     t |> equal(get_q8_token_block(), 320l, "runtime knob applied off a binary-stale sidecar")

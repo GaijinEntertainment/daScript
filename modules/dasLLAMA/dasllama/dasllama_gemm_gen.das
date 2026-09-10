@@ -1455,7 +1455,8 @@ def private iq2_idx2(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l : in
         var hb = LLVMBuildAnd(b, LLVMBuildShl(b, qh, LLVMConstInt(te.types.t_int32, uint64(8 - 2 * l), 0), ""), LLVMConstInt(te.types.t_int32, 0x300ul, 0), "")
         idx = LLVMBuildOr(b, wg_byte(te, base, wg_col(mr, blk * 4 + l)), hb, "")
     } elif (te.kq == 24) {
-        idx = LLVMBuildAnd(b, iq2xs_word16(te, base, blk, l), LLVMConstInt(te.types.t_int32, 511ul, 0), "")
+        var word = iq2xs_word16(te, base, blk, l)
+        idx = LLVMBuildAnd(b, word, LLVMConstInt(te.types.t_int32, 511ul, 0), "")
     } else {
         idx = wg_byte(te, base, 2 * blk * te.interleave * 4 + l)
     }
@@ -1465,7 +1466,10 @@ def private iq2_idx2(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l : in
 //! row `base`'s 7-bit ksigns code for (blk, l) - iq2xs the u16 word's top bits, iq2xxs/iq3xxs the aux32's 7-bit fields
 def private kq_row_sign_code(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l : int) : LLVMOpaqueValue? {
     let b = te.builder
-    if (te.kq == 24) return LLVMBuildLShr(b, iq2xs_word16(te, base, blk, l), LLVMConstInt(te.types.t_int32, 9ul, 0), "")
+    if (te.kq == 24) {
+        var word = iq2xs_word16(te, base, blk, l)
+        return LLVMBuildLShr(b, word, LLVMConstInt(te.types.t_int32, 9ul, 0), "")
+    }
     var aux = wg_i32(te, base, (te.kq == 34 ? 16 + blk : 2 * blk + 1) * te.interleave * 4)
     var sh = l == 0 ? aux : LLVMBuildLShr(b, aux, LLVMConstInt(te.types.t_int32, uint64(7 * l), 0), "")
     return LLVMBuildAnd(b, sh, LLVMConstInt(te.types.t_int32, 127ul, 0), "")
@@ -1892,8 +1896,9 @@ def private vbmi_tag(kq : int) : string => kq == 25 ? "iq2xxs" : (kq == 24 ? "iq
 def private vbmi_entries(kq : int) : int => (kq == 25 || kq == 34) ? 256 : (kq == 23 ? 1024 : 512)
 
 def private vbmi_const_bytes(te : TileEmit; mod : LLVMOpaqueModule?; name : string; var elems : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    var g = LLVMAddGlobal(mod, LLVMArrayType(te.types.t_int8, uint(length(elems))), name)
-    LLVMSetInitializer(g, LLVMConstArray(te.types.t_int8, array_data_ptr(elems), uint(length(elems))))
+    let n = uint(length(elems))
+    var g = LLVMAddGlobal(mod, LLVMArrayType(te.types.t_int8, n), name)
+    LLVMSetInitializer(g, LLVMConstArray(te.types.t_int8, array_data_ptr(elems), n))
     LLVMSetGlobalConstant(g, 1)
     LLVMSetLinkage(g, LLVMLinkage.LLVMPrivateLinkage)
     LLVMSetAlignment(g, 64u)
@@ -1923,12 +1928,19 @@ def private vbmi_mshift(var te : TileEmit; var v : LLVMOpaqueValue?; ctrl : arra
     return LLVMBuildCall2(te.builder, te.mshift_ty, te.mshift_decl, args, name)
 }
 
+//! one 128-entry level of the lookup: the pair's two table registers loaded in order, then blended by the index
+def private vbmi_lookup_level(var te : TileEmit; var tbl : LLVMOpaqueValue?; k : int; var idx : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+    var lo = vbmi_table_part(te, tbl, 2 * k, "{name}.t{2 * k}")
+    var hi = vbmi_table_part(te, tbl, 2 * k + 1, "{name}.t{2 * k + 1}")
+    return vbmi_permi2b(te, lo, idx, hi, "{name}.l{k}")
+}
+
 //! 64 indices through a byte table of `entries` (256 / 512 / 1024): VPERMI2B covers 128 entries per pair of
 //! table registers, index bit 7 blends the pairs, and the caller's masks (the index's 9th and 10th bits, per
 //! lane) blend the 256-entry halves above that
 def private vbmi_lookup(var te : TileEmit; var tbl : LLVMOpaqueValue?; entries : int; var idx : LLVMOpaqueValue?; var masks : array<LLVMOpaqueValue?>; name : string) : LLVMOpaqueValue? { // nolint:LINT014 — var for non-const value handles: a const element cannot feed LLVMBuildSelect
     let b = te.builder
-    var level <- [for (k in range(entries / 128)); vbmi_permi2b(te, vbmi_table_part(te, tbl, 2 * k, "{name}.t{2 * k}"), idx, vbmi_table_part(te, tbl, 2 * k + 1, "{name}.t{2 * k + 1}"), "{name}.l{k}")]
+    var level <- [for (k in range(entries / 128)); vbmi_lookup_level(te, tbl, k, idx, name)]
     var high = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, idx, LLVMConstNull(te.vwi8), "{name}.b7")
     var depth = 0
     while (length(level) > 1) {
@@ -2041,19 +2053,22 @@ def private emit_grid_rows_blk_vbmi(var te : TileEmit; var wbP, xb : LLVMOpaqueV
                 if (!iq3) {   // qword i <- row r0+i's low-plane byte, high-plane byte (the rest don't care)
                     let sel <- [for (k in range(w8)); (k % 8 == 1 ? w8 : 0) + (r0 + k / 8) * 4 + l]
                     q = LLVMBuildShuffleVector(b, te.types, plo[0], phi[0], sel, "wq{blk}_{l}_{g}")
-                    q = LLVMBuildAnd(b, vbmi_mshift(te, q, [0, 2, 4, 6, 8, 10, 12, 14], "ws{blk}_{l}_{g}"), splat_i8w(te, 3), "")
+                    var shifted = vbmi_mshift(te, q, [0, 2, 4, 6, 8, 10, 12, 14], "ws{blk}_{l}_{g}")
+                    q = LLVMBuildAnd(b, shifted, splat_i8w(te, 3), "")
                 } else {      // qword i <- the two entries (h = 0, 1) of row r0+i, low then high plane each
                     let c = l / 2
                     let p0 = (2 * l) % 4
                     let sel <- [for (k in range(w8)); (k % 8 == 1 || k % 8 == 3 ? w8 : 0) + (r0 + k / 8) * 4 + p0 + (k % 8 == 2 || k % 8 == 3 ? 1 : 0)]
                     q = LLVMBuildShuffleVector(b, te.types, plo[c], phi[c], sel, "wq{blk}_{l}_{g}")
-                    q = LLVMBuildAnd(b, vbmi_mshift(te, q, [0, 3, 8, 11, 16, 19, 24, 27], "ws{blk}_{l}_{g}"), splat_i8w(te, 7), "")
+                    var shifted = vbmi_mshift(te, q, [0, 3, 8, 11, 16, 19, 24, 27], "ws{blk}_{l}_{g}")
+                    q = LLVMBuildAnd(b, shifted, splat_i8w(te, 7), "")
                 }
                 var sargs <- [alpha, q]
                 var w = LLVMBuildCall2(b, te.shufb_ty, te.shufb_decl, sargs, "w{blk}_{l}_{g}")
                 let ssel <- [for (k in range(w8)); (r0 + k / 8) * 4 + l]
                 var sq = LLVMBuildShuffleVector(b, te.types, sgn, sgn, ssel, "sq{blk}_{l}_{g}")
-                sq = LLVMBuildAnd(b, vbmi_mshift(te, sq, [0, 1, 2, 3, 4, 5, 6, 7], "sb{blk}_{l}_{g}"), splat_i8w(te, 1), "")
+                var sq_shifted = vbmi_mshift(te, sq, [0, 1, 2, 3, 4, 5, 6, 7], "sb{blk}_{l}_{g}")
+                sq = LLVMBuildAnd(b, sq_shifted, splat_i8w(te, 1), "")
                 var m = LLVMBuildSub(b, LLVMConstNull(te.vwi8), sq, "sm{blk}_{l}_{g}")
                 let hi = iq2 && l >= 2
                 var d = rows_dot_masked(te, hi ? acc1[g] : acc[g], w, m, xv)

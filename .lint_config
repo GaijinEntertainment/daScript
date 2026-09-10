@@ -17,3 +17,6 @@ exclude = ["tests/interfaces/test_interfaces.das"]
 # the byte-view sweep rewrote the tree onto peek_data views; only external checkouts
 # living inside the tree (sfx_lab's dasImgui copies, das-claude) still hit.
 PERF031 = true
+# LINT030 (an argument reads what a sibling call writes by reference) ships OFF in the SDK and
+# is ON here: the tree is swept, so a new site is a defect the per-PR lane and the nightly see.
+LINT030 = true

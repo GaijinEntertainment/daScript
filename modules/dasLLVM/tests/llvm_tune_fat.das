@@ -132,7 +132,8 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     // 1. the fat build: one clone per class with a profile, the baseline's from its own profile;
     //    the IR dump shows each clone a noinline function lowered for its own class
     var lb : array<string>
-    t |> equal(spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -exe -output \"{exe}\" \"{client}\" -- --jit-dump", lb), 0, "case 1: the fat exe builds\n{join(lb, "\n")}")
+    let build_rc = spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -exe -output \"{exe}\" \"{client}\" -- --jit-dump", lb)
+    t |> equal(build_rc, 0, "case 1: the fat exe builds\n{join(lb, "\n")}")
     t |> success(lb |> has("fat clones {top}=k2/profile, {low}=k0/profile"), "case 1: the build names every class clone and its source")
     t |> success(lb |> has("DAS_JIT_BASELINE={low}"), "case 1: the build targets the baseline class")
     t |> success(!(lb |> has("targeting the current box")), "case 1: a fat exe never targets the box")
@@ -148,7 +149,8 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     if (can_run && fexist("{exe}.exe")) {
         // 2. the exe dispatches from cpuid: the top clone when this box is in the class, else the baseline's
         var lr : array<string>
-        t |> equal(spawn_child("{tune_env_prefix("", "", "")}\"{exe}.exe\"", lr), 0, "case 2: the fat exe runs\n{join(lr, "\n")}")
+        let run_rc = spawn_child("{tune_env_prefix("", "", "")}\"{exe}.exe\"", lr)
+        t |> equal(run_rc, 0, "case 2: the fat exe runs\n{join(lr, "\n")}")
         t |> success(lr |> has(boxInTop ? "RESULT 6 KV 2 VOID 2 FORK 6" : "RESULT 4 KV 0 VOID 2 FORK 4"), "case 2: the {boxInTop ? top : low} clone and its companion ran, the void kernel's arm dispatched, and a pooled fork whose init never ran dispatched to the same clone (box in {top}: {boxInTop})\n{join(lr, "\n")}")
         t |> success(lr |> has("STATUS fat_add|{low}|k0|profile|active"), "case 2: the baseline clone is always active")
         t |> success(lr |> has("STATUS fat_add|{top}|k2|profile|{boxInTop ? "active" : "idle"}"), "case 2: the top clone's row says whether this box runs it")

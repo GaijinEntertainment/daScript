@@ -1037,7 +1037,7 @@ enum CmdArgKind {
     in_array2_struct //! count+const T* const* mappable struct -> array<array<BoostStruct>> (jagged)
     in_scalar       //! by-value scalar / enum / flags
     in_string       //! const char*
-    erasevkcount     //! input count member named by an input array's len -> uint(length(arr))
+    erasevkcount     //! input count member named by an input array's len -> a `let vkcount_<arr> = uint(length(arr))` before the call
     out_value       //! single non-const ptr (by-ref) -> returned
     out_array       //! enumerate array out -> array<elem>, addr() pointer
     count_query     //! the uint32* count in a two-call enumerate (by-ref)
@@ -1346,7 +1346,7 @@ def private call_arg(a : CmdArg) : string {
     } elif (a.kind == CmdArgKind.in_array2_struct) {
         return "unsafe(reinterpret<{a.elem_vktype} ??>(array_addr(vkptr_{a.pname})))"   // the formatter's spelling of a pointer-to-pointer, so the emitted file verifies clean
     } elif (a.kind == CmdArgKind.erasevkcount) {
-        return "uint(length({a.count_for}))"
+        return "vkcount_{a.count_for}"   // the length read before the call: array_addr takes the array as var
     } elif (a.kind == CmdArgKind.count_query) {
         return "vkcount"
     } elif (a.kind == CmdArgKind.out_value) {
@@ -1400,8 +1400,13 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
             }
             fprint(f, " {OB}\n")
             // --- view prep ---
+            var counted : table<string>
             for (a in plan.args) {
-                if (a.kind == CmdArgKind.in_view) {
+                if (a.kind == CmdArgKind.erasevkcount) {
+                    continue if (key_exists(counted, a.count_for))
+                    counted |> insert(a.count_for)
+                    fprint(f, "    let vkcount_{a.count_for} = uint(length({a.count_for}))\n")
+                } elif (a.kind == CmdArgKind.in_view) {
                     fprint(f, "    let vkview_{a.pname} = vk_view_create_unsafe({a.pname})\n")
                     fprint(f, "    defer() {OB} vk_view_destroy({a.pname}) {CB}\n")
                 } elif (a.kind == CmdArgKind.in_array_handle) {
