@@ -100,7 +100,9 @@ DlimConfiguration, copies the packs, files and tree files as they are, writes
 with no image carries the version the deploy expects) and
 stamps that version into the page's `/* @image-version */ 0` slot. The shell reads the manifest,
 refuses a set minted for another version before fetching it, and shows a program abort's last
-engine lines on the page. The configuration the mint bakes against comes from the wasm build
+engine lines on the page. A fetched file is put in the origin's Cache Storage under its URL and
+sha256, and a later visit reads it from there, so a set fetches once per browser and a
+re-minted file (a new hash) fetches alone; a browser without the store fetches every time. The configuration the mint bakes against comes from the wasm build
 itself: `wasm/dlim_config/` is cross-compiled and run under node in the deploy, because an image
 is keyed by the build's identity and a set minted for a previous build is declined by the next.
 
@@ -132,14 +134,17 @@ program's reach.
 ### 3.7 Parrot's panels {#parrot-panels}
 
 Parrot draws with Dear ImGui through `imgui_harness`, the same lifecycle the graphics labs run
-in the browser: one full-viewport window, the promise that the recording stays in the window
-as its first line, a status chip that pulses with a spinner beside it while anything is going
-on and the status line, then three
-children - the voice (the record disc with the silence countdown drawn around it, the level, the
-gain, the take's waveform with its kept window shaded, the voice picker), the text (the editor,
-say, the say's chunks in their state's colour) with the output below it (the say's waveform
-growing chunk by chunk with a tick at each chunk's start and the playhead, the per-chunk table
-of stage times), and the lab (the model's facts, the job queue's knobs, the measure button).
+in the browser: a dockspace over the viewport with five dock windows the user can split and
+tab at will, laid out once on the first frame - `parrot` across the top (the promise that the
+recording stays in the window as its first line, a status chip that pulses with a spinner
+beside it while anything is going on, the status line), the voice on the left (the record disc
+with the silence countdown drawn around it, the level, the gain, the take's waveform with its
+kept window shaded, the voice picker), the text in the middle (the editor, the play and stop
+icon buttons naming the voice, the say's chunks in their state's colour) with the output below
+it (the say's waveform growing chunk by chunk with a tick at each chunk's start and the
+playhead, the per-chunk table of stage times), and the lab on the right (the model's facts, the
+job queue's knobs, the measure button). The shell keeps the space bar's keydown for the editor:
+a prevented keydown swallows the keypress the editor reads, and the page cannot scroll anyway.
 The say is a ledger of chunks (`ChunkRow` in `take.das`): the speech thread answers a say with
 its chunk count, then each chunk's text before its synthesis and its clip with the stage times
 after, so a chunk reads pending, generating, generated, speaking and spoken in turn, and the

@@ -103,6 +103,7 @@ var g_clone_ms = 0.0lf
 var g_says = 0
 var g_say_silent = false
 var g_measure_left = 0
+var g_measure_no = 0                 //! measures pressed so far: the rows name theirs, so a second press reads as a second run
 var g_measure_rtf : array<double>
 var g_chunks : array<ChunkRow>       //! the say in flight
 var g_chunks_known = false           //! the count answer arrived
@@ -311,7 +312,7 @@ def on_read_out() {
         for (r in g_measure_rtf) {
             sum += r
         }
-        g_status = "measured: {s1(sum / double(length(g_measure_rtf)))}x real time over {length(g_measure_rtf)} runs at {JOBS.value} jobs"
+        g_status = "measure {g_measure_no}: {s1(sum / double(length(g_measure_rtf)))}x real time over {length(g_measure_rtf)} runs at {JOBS.value} jobs"
         return
     }
     if (g_phase == Phase.idle) {
@@ -578,13 +579,14 @@ def say_silent() {
     g_say_silent = true
     var a = Ask(kind = 2, text = text, voice = chosen_voice(), gen = g_says, silent = true)
     g_ask |> push_archive(a)
-    g_status = "measuring - run {length(g_measure_rtf) + 1} of {MEASURE_RUNS} at {JOBS.value} jobs..."
+    g_status = "measure {g_measure_no} - run {length(g_measure_rtf) + 1} of {MEASURE_RUNS} at {JOBS.value} jobs..."
 }
 
 def start_measure() {
     return if (g_phase != Phase.idle || !g_ready)
     cancel_say()
     delete g_measure_rtf
+    g_measure_no++
     g_measure_left = MEASURE_RUNS - 1
     say_silent()
 }
@@ -664,6 +666,10 @@ def draw_status_bar() {
     let on = busy()
     let pulse = on ? 0.62 + 0.38 * (0.5 + 0.5 * sin(g_elapsed_s * 4.0)) : 1.0
     let chip_w = 14.0 + CalcTextSize(chip.text).x + 14.0
+    let spinner_w = on ? 36.0 : 0.0
+    // the whole row is reserved first, so the chip and the spinner sit inside the layout and
+    // nothing drawn after (the separator) lands on them
+    dummy(CHIP_BOX, (size = float2(chip_w + spinner_w, h)))
     with_window_drawlist() $(var dl) {
         dl |> add_rect_filled(origin, float2(origin.x + chip_w, origin.y + h), with_alpha(chip.color, pulse), 6.0)
         if (on) {
@@ -674,13 +680,10 @@ def draw_status_bar() {
             dl |> path_arc_to(c, 7.0, a0, a0 + 4.4, 16)
             dl |> path_stroke(chip.color, ImDrawFlags.None, 2.5)
         }
+        dl |> add_text(float2(origin.x + 14.0, origin.y + 6.0), rgba(20, 18, 24, 255), chip.text)
     }
-    dummy(CHIP_GAP, (size = float2(8.0, 6.0)))
-    same_line((spacing = 6.0))
-    with_style((ImGuiCol.Text, rgba(20, 18, 24, 255))) {
-        text(CHIP_TEXT, (text = chip.text))
-    }
-    same_line((spacing = on ? 40.0 : 18.0))
+    same_line((spacing = 14.0))
+    SetCursorScreenPos(float2(origin.x + chip_w + spinner_w + 14.0, origin.y + 6.0))
     with_style((ImGuiCol.Text, g_phase == Phase.idle ? ACCENT : DIM)) {
         text_wrapped(STATUS_LINE, (text = g_status))
     }
@@ -766,8 +769,6 @@ def draw_record_button() {
 }
 
 def draw_voice_panel() {
-    text("voice")
-    separator()
     draw_record_button()
     same_line((spacing = 16.0))
     group(REC_SIDE) {
@@ -808,24 +809,28 @@ def chunk_color(state : ChunkState) : uint {
     return DIM
 }
 
-//! the middle column: the editor takes two fifths of it, the say's chunks a quarter, the output the rest
+//! the text window: the editor takes three fifths of it, the say's chunks the rest
 def draw_text_panel() {
-    text("text")
-    separator()
     let avail = GetContentRegionAvail()
-    let editor_h = max(120.0, avail.y * 0.38)
-    let view_h = max(80.0, avail.y * 0.22)
+    let editor_h = max(100.0, avail.y * 0.6)
     input_text_multiline(SCRIPT, (text = "##script", size = float2(avail.x, editor_h)))
     let who = chosen_voice()
-    if (button(SAY_BTN, (text = empty(who) ? "say" : "say as {who}", size = float2(0.0, 36.0)))) {
+    if (icon_button(SAY_BTN, (glyph = "play", tip = empty(who) ? "say" : "say as {who}", size = 26.0))) {
         say_text()
     }
+    same_line((spacing = 6.0))
+    if (icon_button(STOP_BTN, (glyph = "stop", tip = "stop the say", size = 26.0))) {
+        cancel_say()
+        g_status = "stopped"
+    }
     same_line((spacing = 12.0))
+    text(SAY_LABEL, (text = empty(who) ? "say" : "say as {who}"))
+    same_line((spacing = 18.0))
     with_style((ImGuiCol.Text, DIM)) {
         text("Ctrl+Enter says   Ctrl+R records and stops")
     }
     text(VIEW_LABEL, (text = empty(g_chunks) ? "the say, chunk by chunk - nothing said yet" : "the say, chunk by chunk"))
-    child(SCRIPT_VIEW, (text = "script", size = float2(0.0, view_h), child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
+    child(SCRIPT_VIEW, (text = "script", size = float2(0.0, 0.0), child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
         for (i in range(length(g_chunks))) {
             with_style((ImGuiCol.Text, chunk_color(g_chunks[i].state))) {
                 text_wrapped(CHUNK_LINE[i], (text = empty(g_chunks[i].text) ? "..." : g_chunks[i].text))
@@ -848,8 +853,6 @@ def s1(x : double) : string {
 }
 
 def draw_output_panel() {
-    text("output")
-    separator()
     let ticks <- [for (row in g_chunks); row.start; where row.start > 0l]
     draw_wave(g_out_peaks, float2(GetContentRegionAvail().x, 72.0), 30l * int64(g_mic_rate), 0l, 0l, g_playhead, ticks)
     let seconds = double(long_length(g_out_pcm)) / double(max(g_mic_rate, 1))
@@ -893,8 +896,6 @@ def draw_output_panel() {
 }
 
 def draw_lab_panel() {
-    text("lab")
-    separator()
     text("model  {g_args.tts_model}")
     text("rate  {g_mic_rate} Hz   voices  {length(g_roster)}   clones  {g_can_clone ? "yes" : "no"}")
     text("platform  {get_running_platform_name()}   cores  {get_total_hw_cores()}")
@@ -914,33 +915,56 @@ def draw_lab_panel() {
         text_wrapped(MEASURE_HINT, (text = "says the text {MEASURE_RUNS} times without playing it, and reports how many times faster than real time each run generated"))
     }
     for (i in range(length(g_measure_rtf))) {
-        text(MEASURE_ROW[i], (text = "run {i + 1}  {s1(g_measure_rtf[i])}x real time"))
+        text(MEASURE_ROW[i], (text = "measure {g_measure_no}, run {i + 1}  {s1(g_measure_rtf[i])}x real time"))
     }
 }
 
+//! the first layout of the dock: the status strip across the top, the voice left, the lab right,
+//! the text over the output in the middle; the user drags the splits and the tabs from there
+def setup_dock_layout(dock_id : uint) {
+    DockBuilderRemoveNode(dock_id)
+    DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
+    let vp = GetMainViewport()
+    DockBuilderSetNodeSize(dock_id, ImVec2(vp.Size.x, vp.Size.y))
+    var status_id : uint = 0u
+    var rest_id : uint = 0u
+    DockBuilderSplitNode(dock_id, ImGuiDir.Up, 0.12, status_id, rest_id)
+    var voice_id : uint = 0u
+    var mid_id : uint = 0u
+    DockBuilderSplitNode(rest_id, ImGuiDir.Left, 0.26, voice_id, mid_id)
+    var lab_id : uint = 0u
+    var center_id : uint = 0u
+    DockBuilderSplitNode(mid_id, ImGuiDir.Right, 0.32, lab_id, center_id)
+    var text_id : uint = 0u
+    var output_id : uint = 0u
+    DockBuilderSplitNode(center_id, ImGuiDir.Up, 0.56, text_id, output_id)
+    DockBuilderDockWindow("parrot", status_id)
+    DockBuilderDockWindow("voice", voice_id)
+    DockBuilderDockWindow("text", text_id)
+    DockBuilderDockWindow("output", output_id)
+    DockBuilderDockWindow("lab", lab_id)
+    DockBuilderFinish(dock_id)
+}
+
 def draw_screen() {
-    let io & = unsafe(GetIO())
-    SetNextWindowPos(ImVec2(0.0, 0.0), ImGuiCond.Always)
-    SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y), ImGuiCond.Always)
-    let flags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoScrollbar
-    window(MAIN_WIN, (text = "parrot", closable = false, flags = flags)) {
-        draw_status_bar()
-        separator()
-        let avail = GetContentRegionAvail()
-        let left_w = clamp(avail.x * 0.28, 260.0, 380.0)
-        let right_w = clamp(avail.x * 0.26, 260.0, 360.0)
-        let mid_w = avail.x - left_w - right_w - 16.0
-        child(VOICE_PANEL, (text = "voice", size = float2(left_w, 0.0), child_flags = ImGuiChildFlags.None, window_flags = ImGuiWindowFlags.None)) {
+    dockspace(DOCK_ROOT, (flags = ImGuiDockNodeFlags.None)) {
+        if (!DOCK_ROOT.has_initial_layout && DOCK_ROOT.dock_id != 0u) {
+            setup_dock_layout(DOCK_ROOT.dock_id)
+            DOCK_ROOT.has_initial_layout = true
+        }
+        dock_window(STATUS_WIN, (text = "parrot", closable = false, flags = ImGuiWindowFlags.NoScrollbar)) {
+            draw_status_bar()
+        }
+        dock_window(VOICE_WIN, (text = "voice", closable = false, flags = ImGuiWindowFlags.None)) {
             draw_voice_panel()
         }
-        same_line((spacing = 8.0))
-        child(TEXT_PANEL, (text = "text", size = float2(mid_w, 0.0), child_flags = ImGuiChildFlags.None, window_flags = ImGuiWindowFlags.None)) {
+        dock_window(TEXT_WIN, (text = "text", closable = false, flags = ImGuiWindowFlags.None)) {
             draw_text_panel()
-            spacing()
+        }
+        dock_window(OUTPUT_WIN, (text = "output", closable = false, flags = ImGuiWindowFlags.None)) {
             draw_output_panel()
         }
-        same_line((spacing = 8.0))
-        child(LAB_PANEL, (text = "lab", size = float2(right_w, 0.0), child_flags = ImGuiChildFlags.None, window_flags = ImGuiWindowFlags.None)) {
+        dock_window(LAB_WIN, (text = "lab", closable = false, flags = ImGuiWindowFlags.None)) {
             draw_lab_panel()
         }
     }
@@ -989,6 +1013,8 @@ def init() {
         g_take_window = (from = 0l, to = long_length(g_pending_clip))
     }
     harness_init("parrot", 1280, 760)
+    var io & = unsafe(GetIO())
+    io.ConfigFlags |= ImGuiConfigFlags.DockingEnable   // the panels are dock windows: drag a split or a tab to lay them out
     if (!g_audio_initialized) {
         g_asch = audio_system_create()
         g_audio_initialized = true
