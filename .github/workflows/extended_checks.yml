@@ -642,7 +642,9 @@ jobs:
       run: |
         set -eux
         PYTHONDONTWRITEBYTECODE=1 python3 examples/dasLLAMA/wasm/test_mint_models.py
-        # the Pocket converter's pure predicates (which tensor lands in which form) - numpy only, no torch
+        # the Pocket converter's pure predicates (which tensor lands in which form) - numpy only, no
+        # torch; the runner's python carries no numpy, installed the way the news step installs markdown
+        python3 -m pip install numpy || python3 -m pip install --user numpy || python3 -m pip install --break-system-packages numpy
         PYTHONDONTWRITEBYTECODE=1 python3 modules/dasLLAMA/harness/test_convert_pocket.py
 
     - name: "Test pr-babysit verdict core"
