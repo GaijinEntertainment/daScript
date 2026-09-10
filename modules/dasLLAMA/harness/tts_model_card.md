@@ -51,6 +51,8 @@ No espeak-ng, no phonemizer: the front end is data, and the data is in the two p
 | `pocket-tts-it-q8.gguf` | Pocket TTS Italian (6 layers), one voice (`giovanni`) | 134415072 | `3c5739d544b1b7c8284fd3df9d7122557cf700c91895d3dc45b3fdc5ef6e2670` |
 | `pocket-tts-pt-q8.gguf` | Pocket TTS Portuguese (6 layers), one voice (`rafael`) | 134667488 | `3375c31e742c8783c6dddbbd3bd152e8dff9d188fdaceb1cbb4d187514291c57` |
 | `pocket-tts-fr-q8.gguf` | Pocket TTS French (24 layers, the only French model Kyutai ships), one voice (`estelle`) | 375793696 | `f06ffac80b96a34d2e51ca40c41111469d8b44e0269b27a64e707a7a9be1ec20` |
+| `pocket-tts-en-kq.gguf` | Pocket TTS English in the small form: the backbone and the codec transformers as Q4_K, the flow head and the codec convolutions as Q8_0, the embedding table Q4_K; its tokenizer, the codec encoder (so it clones) and the 19 voices as latent frames | 74970016 | `2475a1ed8d49eb72c9d9b8c38f10f91ef5b03c7cd6e9fe43fdf7ab00ae1a0a25` |
+| `pocket-tts-en-stuart-kq.gguf` | the same small form with one voice (`stuart_bell`) as latent frames and no codec encoder: reads text in that voice, cannot clone | 65107520 | `bc9604b527066134354dc480e20c960f63f5c3538c1dd757ba409bd782cddac9` |
 
 The packs sit beside whichever GGUF you load; the loader reads them from the model's
 directory - `tts_g2p.bin` when it is there, else `tts_g2p_en_us.bin`. The GGUFs carry f32 weights: dasLLAMA quantizes the served layouts to Q8_0 at first
@@ -76,6 +78,12 @@ only voice (German `juergen`, Spanish `lola`, Italian `giovanni`, Portuguese `ra
 `estelle`); the German, Spanish, Italian and Portuguese files are the six-layer models, French
 exists only as the 24-layer one. A voice cloned from any clip speaks the file's language with
 the clip's accent. Text in those languages is read as it is, since the normalizer is English.
+`pocket-tts-en-kq.gguf` is the English model in the small form, 75 MB: the backbone and the
+codec transformers as Q4_K, the flow head and the codec convolutions as Q8_0, the embedding
+table Q4_K, the encoder and the 19 voices inside (on the rig at `alba`: WER 3.86 / UTMOS 4.295
+at a real-time factor of 0.049 on the same box); it is the file the browser examples on
+dasllama.io fetch. `pocket-tts-en-stuart-kq.gguf` is that form with one voice, `stuart_bell`,
+and no codec encoder, 65 MB: it reads text in that voice and cannot clone.
 
 Kitten nano is the phoneme families' served default: 59 MB, eight voices, a real-time factor of 0.03 on an Apple
 M1 Max (measured 2026-09-02 with the same rig). Its voices are `expr-voice-2-m` through
@@ -109,6 +117,10 @@ voices.
   `kyutai/pocket-tts-without-voice-cloning` at `d29db7978e464fb90cb3359ee0c69a273b9142cc`; the
   voice clips from `kyutai/tts-voices` at `323332d33f997de8394f24a193e1a76df720e01a`
   (`voice-zero/`, `voice-donations/`, `vctk/`, `alba-mackenna/casual.wav`).
+- `pocket-tts-en-kq.gguf` / `pocket-tts-en-stuart-kq.gguf`: the same sources through
+  `modules/dasLLAMA/harness/convert_pocket.py --kq` (the second with `--voices stuart_bell
+  --no-cloning`); the K-quant blocks are ggml's own quantizer, and each voice is stored as the
+  latent frames of its clip through the model's codec encoder.
 
 The whole set is rebuilt by `modules/dasLLAMA/performance/build_tts_data.das`. Parity against
 the reference implementations (block by block, and the front end sentence by sentence on a
@@ -122,7 +134,7 @@ the reference implementations (block by block, and the front end sentence by sen
 | `kokoro-82m.gguf` | Apache-2.0 | hexgrad's weights and voices, converted; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
 | `tts_g2p.bin` | Apache-2.0 and BSD-2-Clause | misaki and g2p_en (Apache-2.0), CMUdict (`LICENSE.CMUDICT`, Carnegie Mellon University) |
 | `tts_postag.bin` | CC BY-SA 4.0 | the tagger weights are trained on UD English-EWT (`LICENSE.UD_EWT`); the exception table and the silver tags come from spaCy (MIT, `LICENSE.SPACY`); Gutenberg prose is public domain |
-| `pocket-tts-en-q8.gguf` | CC BY 4.0 | Kyutai's weights and tokenizer, converted (`LICENSE.CC-BY-4.0`); the reference implementation is MIT (`LICENSE.POCKET_TTS`) and not included; the voice clips: `voice-zero` and `voice-donations` CC0, VCTK (CSTR, University of Edinburgh) and Alba Mackenna CC BY 4.0 - the sidecar lists each |
+| `pocket-tts-*.gguf` (every Pocket file, the two `-kq` ones included) | CC BY 4.0 | Kyutai's weights and tokenizer, converted (`LICENSE.CC-BY-4.0`); the reference implementation is MIT (`LICENSE.POCKET_TTS`) and not included; the voice clips: `voice-zero` and `voice-donations` CC0, VCTK (CSTR, University of Edinburgh) and Alba Mackenna CC BY 4.0 - the sidecar lists each |
 
 Each `.LICENSE` sidecar beside a file names its sources; the full texts are in this repository.
 The engine that reads these files is under the daslang licence in its own repository.

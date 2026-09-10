@@ -1420,20 +1420,26 @@
     itself shows `reinterpret<void?>(13)`, an `int` widened to a pointer - a const node's whole
     vec4f is zero so it happens to work; that example wants a same-size spelling once the rule
     lands.
-124. **Pocket TTS at 4 bits - part 2 of the Pocket arc (ruled 2026-09-09).** The q8 lane held
-    the reference's quality on the rig (alba, 200 sentences: WER 3.91 / UTMOS 4.328 on the
-    published Q8_0 file against the package's 5.00 / 4.393, the f32 lane at 4.32 / 4.366), and
-    that margin is the reason to expect a 4-bit lane to hold too. Try the engine's 4-bit weight
-    formats on the same GEMMs the q8 lane quantizes - the backbone's four matrices per layer,
-    the codec transformers, the 32-wide codec convs - through the kq plane machinery the LLM
-    prefill already runs (`matmul_kq_batch` over a Q8_K-requantized activation row block;
-    `dasllama_kqformat.das` names the formats: Q4_0, Q4_K, IQ4_NL, IQ4_XS and the rest): a
-    `wkq` plane beside `wq` on `TtsLinear` / `TtsConv1d`, `linear_rows_kq` and a
-    `conv1d_rows_dense_kq` over the same stacked tap rows, the decode step on the kq GEMV, the
-    published file as the winning format. One format at a time, each a rig row on both
-    lanes, the flow head left f32 throughout (it is the graph's sensitive part - a 1e-5
-    epsilon in its timestep norm moved every latent one percent). The prize: the English file
-    from 152 MB to about 80, and the backbone's per-frame read from 75 MB to 38.
+124. **Pocket TTS below Q4_K - what the small-format ladder left open.** The K-quant lane
+    is built (`TtsLinear` kq/ks planes, `linear_rows_kq` over `matmul_kq_batch`, the decode
+    step on `matmul_kq`; `convert_pocket.py --kq` writes the recipe as real tensors, `--fake`
+    scores any format through the existing lanes with no kernel behind it). The ladder that
+    settled the recipe, on the rig (alba, 200 sentences, the q8 file's WER 3.91 / UTMOS 4.328):
+    backbone Q6_K 4.09 / 4.327, Q4_K 3.91 / 4.295, Q4_0 3.73 / 4.284, IQ4_XS 4.36 / 4.326 with
+    seven percent more audio, Q3_K 4.50 / 4.205 (the cliff); on the Q4_K backbone the head at
+    Q8_0 4.09 / 4.281 and at Q4_K 3.91 / 4.259; the codec transformers at Q4_K 3.68 / 4.309;
+    the embedding table at Q4_K 4.00 / 4.262; the strided codec convolutions at Q8_0 3.86 /
+    4.257 and at Q4_0 3.73 / 4.127 - the one rung the waveform side refuses. The recipe:
+    backbone Q4_K, flow head Q8_0, codec transformers Q4_K, strided codec convolutions Q8_0,
+    embedding Q4_K (the real file 3.86 / 4.295 on the native lane; a listen test of three
+    sentences in two voices against the q8 file heard no difference). The English file went
+    from 152 MB to 75 with the encoder and 19 voices, 65 with one voice and no encoder. Left
+    open, for a build that must be smaller still (the game embedding): the backbone at Q4_0 or
+    IQ4_XS costs 0.2 WER for the same bytes as Q4_K, so it only pays with a kernel that is
+    faster on the target; the head at Q4_K sits at the edge of the bar and wants the ear, not
+    the rig; the served 32-wide codec convolutions carry no K-quant block (width 32) and stay
+    Q8_0; the f16 projections and norms are untested at 8 bits. The rig row per rung and the
+    listen test are the gate, as before.
 125. **A voice-clip upload route on dasllama-server (ruled 2026-09-09 as a ledger row).** The
     Pocket arc clones by NAMED voices only: the GGUF roster plus the clips of `tts_voices_dir`,
     read once at boot (`register_voice_clips` in `utils/dasllama-server/openai_server.das`). A
@@ -1457,3 +1463,10 @@
     whisper-large-v3-turbo, the language forced) is the scorer with no new tooling - a
     `--asr whisper` arm on the rig and one native sentence set per language
     (`tests/_tts_fixtures/pocket_sentences.json` has three each; the rig wants 50-200).
+128. **Ogg Opus in `load_audio_mono`.** The clip loader (`dasllama/dasllama_audio_io.das`)
+    decodes through miniaudio, whose Ogg arm is Vorbis (stb_vorbis); an Ogg Opus file - what a
+    phone or a browser records as `.ogg` today - decodes to nothing, and the server's
+    `--tts-voices-dir` help and README say "ogg" without the distinction. Either an Opus decoder
+    behind the same call (libopus + the Ogg framing, a build dependency the module does not
+    carry yet) or the help text naming Vorbis; a clip that decodes to nothing is logged and
+    skipped either way.

@@ -1601,9 +1601,6 @@ def gguf_transcode_q5_0_to_q8(m : GGUFMeta; srcbytes : array<uint8> | #; name : 
     if (src_off % 32l != 0l || expect_n % 32l != 0l) {
         panic("gguf: tensor '{name}' Q5_0 slice [{src_off}, +{expect_n}) is not block-aligned")
     }
-    if (expect_n % 32l != 0l) {
-        panic("gguf: tensor '{name}' asks for {expect_n} Q8_0 elements, not a whole number of 32-blocks")
-    }
     let nb = expect_n / 32l
     if (nb <= 0l) {
         return
