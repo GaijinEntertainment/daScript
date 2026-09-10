@@ -14,8 +14,10 @@ example. Two things came out of building a second one:
    (want 35)` and the visitor saw a black canvas. No gate, no message, no re-mint.
 2. **A steerable story model in an arch dasLLAMA runs.** The official TinyStories-Instruct models
    are GPT-Neo; `tinystories-instruct-27M` is our llama-arch training on the same corpus (4K
-   SentencePiece vocab, 27M parameters, 15 min on one H100, val loss 1.144), and it follows a
-   `Words: a, b, c` request as well as the official 33M does.
+   SentencePiece vocab, 27M parameters; llama2.c's PyTorch trainer on a rented H100, 15 min,
+   val loss 1.144 - a training run, not a dasLLAMA measurement). Asked for three words over five
+   word triples, 24 sampled stories each, it puts all three in 61 of 120 stories; the official
+   33M puts them in 60 (the same PyTorch harness, `hits.py`, on both models).
 
 ## What lands
 
@@ -71,10 +73,10 @@ storyteller's `models.json`.
 ## Not in this PR
 
 - the new TTS engine (separate PR when it lands; storywish swaps the file)
-- a smaller `s` shape (7M, 7 MB) - trainable in 2.5 h on the M5, worth it only if the 31 MB
-  download turns out to matter
-- retraining longer: loss was still falling at 9500 iterations (1.1443 vs 1.1447 at 9000 - the
-  cosine floor, not the model's)
+- a smaller `s` shape (7M, 7 MB) - the same PyTorch trainer takes 2.5 h for it on the M5's GPU,
+  worth it only if the 32 MB download turns out to matter
+- retraining longer: the trainer's validation loss was still falling at 9500 iterations (1.1443
+  vs 1.1447 at 9000 - the cosine floor, not the model's)
 - the formatter's single-file crash on a package file (the last "Found on the way" bullet): a tool
   fix in its own PR, the tree-wide `--verify` lane CI runs is unaffected
 
