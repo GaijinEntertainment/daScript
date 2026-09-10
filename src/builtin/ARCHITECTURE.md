@@ -117,3 +117,29 @@ shared library at test time - not wasm, Android or iOS, none of which walks `tes
 dastest's `--ser`/`--deser` sweep, because a deserialized program never applies `[extern]` and
 so never manufactures the `__dasbind__` function it names in the `dasbind` module; a 64-bit
 desktop tree without the library fails the suite instead of skipping it.
+
+## 4. A message that crosses the panic jump
+
+`Context::throw_error_at` formats into a stack buffer and jumps; without C++ exceptions the
+jump is a `longjmp`, which unwinds nothing, so a heap-owning local alive at the call - a
+`string` a builtin built its message in - leaks the allocation on every panic a `try`/`recover`
+catches, and the ASan lane reports it. A builtin that composes its message in a `string` before
+the throw releases it first: the text moves to a stack buffer of `throw_error_at`'s own size,
+the string's storage is swapped away, and the throw runs with nothing owning heap on the frame.
+The pinvoke family - `pinvoke_named`, `pinvoke_impl2_core` and `pinvoke_impl3` in
+`module_builtin_debugger.cpp` - does it through `throw_pinvoke_error`; the `[extern]` binder's
+refusal (`crash_and_burn` in `module_builtin_dasbind.cpp`, thrown at the first call) does it
+inline. The same discipline is the `FMT_THROW` stash in `include/daScript/das_config.h`, where
+the temporary dies when the stash statement ends.
+
+## 5. A spawned child's stdout pipe
+
+`spawn_process` (`module_builtin_fio.cpp`) hands the child one pipe for stdout and stderr and
+never blocks on it: `process_drain` takes what the pipe holds and returns, and the caller decides
+when to come back - the watchdog every 250 ms. The pipe's capacity is therefore the child's
+write budget between two drains, and a child that fills it blocks until the next one; it is also
+the most a single drain hands the caller, which is what the caller's heap sees between two
+collects. A POSIX pipe carries 64 KB by default, and Windows sizes an anonymous pipe at 4 KB
+when asked for the default - a chatty child under the watchdog's tick moves at most 16 KB a
+second through one of those, the pipe's 4 KB four drains a second - so the Windows pipe is
+created at the POSIX capacity, and every platform drains the same bursts.

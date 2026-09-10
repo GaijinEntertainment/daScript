@@ -39,3 +39,11 @@ def report_child(t : T?; phase : string; rc : int; out : string; marker : string
     }
     return ok
 }
+
+//! runs `cmd` and reports it as report_child does; `out` keeps the child's output for the
+//! caller's own reads. The run is a statement of its own, since the order a call's arguments
+//! are evaluated in is not defined (LINT030).
+def run_child_reported(t : T?; phase : string; cmd : string; var out : string&; marker : string) : bool {
+    let rc = run_child(cmd, out)
+    return report_child(t, phase, rc, out, marker)
+}

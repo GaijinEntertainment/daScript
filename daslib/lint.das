@@ -14,6 +14,7 @@ require daslib/strings_boost
 require daslib/ast_boost
 require daslib/strings_boost
 require daslib/lint_config
+require math
 
 [lint_macro]
 class LintEverything : AstPassMacro {
@@ -154,7 +155,33 @@ struct private Lint023Candidate {
     disqualified : bool
 }
 
+//! a variable read somewhere inside argument `slot` of the call a frame tracks
+struct private Lint030Mention {
+    slot : int
+    @do_not_delete v : Variable const?
+}
+
+//! a variable a call somewhere inside argument `slot` writes through a mutable by-reference
+//! parameter; `callee` names that call for the finding
+struct private Lint030Write {
+    slot : int
+    @do_not_delete v : Variable const?
+    callee : string
+}
+
+//! one call whose argument list the walk is inside: `slot` is the argument being walked,
+//! `closure_depth` the depth the call sits at, so a read inside a lambda argument - run later,
+//! not at the call - is not a mention
+struct private Lint030Frame {
+    @do_not_delete call : ExprCall const?
+    slot : int
+    closure_depth : int
+    mentions : array<Lint030Mention>
+    writes : array<Lint030Write>
+}
+
 class LintVisitor : AstVisitor {
+    lint030_frames : array<Lint030Frame>
     @do_not_delete lint014_candidates : array<Variable const?>
     lint023_candidates : array<Lint023Candidate>
     lint023_store_nodes : table<uint64>
@@ -346,6 +373,7 @@ class LintVisitor : AstVisitor {
         lint021_poison_depth = 0
         lint021_closure_depth = 0
         lint023_deferred_depth = 0
+        lint030_frames |> clear()
         flow_jumps = false
         if (fun.moreFlags.isTemplate) {
             noLint = true
@@ -823,7 +851,55 @@ class LintVisitor : AstVisitor {
         return fname == "max" || fname == "abs"
     }
 
+    def private lint030_bare_var(e : Expression?) : Variable const? {
+        return e is ExprVar ? (e as ExprVar).variable : null
+    }
+
+    //! the variables `call` writes through a mutable by-reference parameter - a bare variable
+    //! in a slot the callee declares `var` on a `&` or a type the compiler passes by reference
+    //! (`isRefType`) - recorded into `slot` of the frame that holds `call` as an argument
+    def private lint030_note_writes(call : ExprCall const?; slot : int; var into : array<Lint030Write>) : void {
+        return if (call.func == null)
+        for (k in range(min(length(call.arguments), length(call.func.arguments)))) {
+            let p = call.func.arguments[k]
+            continue if (p._type == null || p._type.flags.constant || !(p._type.flags.ref || p._type.isRefType))
+            let v = lint030_bare_var(call.arguments[k])
+            if (v != null) {
+                into |> push(Lint030Write(slot = slot, v = v, callee = "{call.name}"))
+            }
+        }
+    }
+
+    //! whether argument `slot` of `call` is `v` itself handed over by reference: the callee then
+    //! sees the variable's final state whatever the order, so that read is not a dependency
+    def private lint030_passed_by_ref(call : ExprCall const?; slot : int; v : Variable const?) : bool {
+        return false if (call.func == null || slot >= length(call.func.arguments))
+        let p = call.func.arguments[slot]
+        return p._type != null && (p._type.flags.ref || p._type.isRefType) && lint030_bare_var(call.arguments[slot]) == v
+    }
+
+    def private lint030_check(frame : Lint030Frame) : void {
+        return if (noLint || genericDepth > 0 || frame.call == null)
+        var reported : table<int>
+        for (w in frame.writes) {
+            continue if (key_exists(reported, w.slot))
+            for (m in frame.mentions) {
+                continue if (m.slot == w.slot || m.v != w.v || lint030_passed_by_ref(frame.call, m.slot, m.v))
+                lint_error("LINT030: argument {m.slot + 1} reads `{m.v.name}` while the call `{w.callee}(...)` in argument {w.slot + 1} writes it by reference - the order arguments are evaluated in is not defined, so the read sees the value before or after the write by the compiler's choice; run the writing call as a statement of its own first", frame.call.at)
+                reported |> insert(w.slot)
+                break
+            }
+        }
+    }
+
+    def override preVisitExprCallArgument(_expr : ExprCall?; _arg : ExpressionPtr; _last : bool) : void {
+        if (!empty(lint030_frames)) {
+            lint030_frames[length(lint030_frames) - 1].slot++
+        }
+    }
+
     def override preVisitExprCall(expr : ExprCall?) : void {
+        lint030_frames |> emplace(Lint030Frame(call = expr, slot = -1, closure_depth = lint021_closure_depth))
         var kind = Lint021CallKind.plain
         if (!noLint && genericDepth == 0) {
             if (lint021_is_narrow_cast(expr)) {
@@ -844,6 +920,24 @@ class LintVisitor : AstVisitor {
     }
 
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        if (!empty(lint030_frames)) {
+            var frame <- lint030_frames[length(lint030_frames) - 1]
+            lint030_frames |> pop()
+            lint030_check(frame)
+            if (!empty(lint030_frames)) {
+                let parent = length(lint030_frames) - 1
+                let slot = lint030_frames[parent].slot
+                if (slot >= 0 && frame.closure_depth == lint030_frames[parent].closure_depth) {
+                    for (m in frame.mentions) {
+                        lint030_frames[parent].mentions |> push(Lint030Mention(slot = slot, v = m.v))
+                    }
+                    for (w in frame.writes) {
+                        lint030_frames[parent].writes |> push(Lint030Write(slot = slot, v = w.v, callee = w.callee))
+                    }
+                    lint030_note_writes(expr, slot, lint030_frames[parent].writes)
+                }
+            }
+        }
         if (!empty(lint021_call_kind)) {
             let kind = lint021_call_kind |> back()
             lint021_call_kind |> pop()
@@ -1149,6 +1243,12 @@ class LintVisitor : AstVisitor {
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (lint022_generic_sweep) {
             lint022_refs.names |> insert("{expr.name}")
+        }
+        if (!empty(lint030_frames)) {
+            let top = length(lint030_frames) - 1
+            if (lint030_frames[top].slot >= 0 && lint030_frames[top].closure_depth == lint021_closure_depth) {
+                lint030_frames[top].mentions |> push(Lint030Mention(slot = lint030_frames[top].slot, v = expr.variable))
+            }
         }
         if (noLint || genericDepth > 0) return
         if (key_exists(lint023_store_nodes, intptr(expr))) {

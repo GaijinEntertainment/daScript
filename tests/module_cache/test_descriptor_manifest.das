@@ -1,4 +1,5 @@
 options gen2
+options _lint = "LINT030"   // a child run is never an argument beside the out it writes
 options indenting = 4
 
 require dastest/testing_boost public
@@ -94,7 +95,7 @@ def with_line_inserted(lines : array<string>; idx : int; text : string) : string
 def expect_rewrite(t : T?; cmd : string; manifest : string; text : string; why : string) {
     fwrite(manifest, text)
     var out : string
-    t |> success(report_child(t, why, run_child(cmd, out), out, "PROBE 42"), "'{why}': the require resolves without the manifest")
+    t |> success(run_child_reported(t, why, cmd, out, "PROBE 42"), "'{why}': the require resolves without the manifest")
     t |> equal("compiled ({why}), manifest written (1 row(s))", probe_line(out), "'{why}' recompiles and rewrites:\n{out}")
 }
 
@@ -148,7 +149,7 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
     let manifest = fx.manifest
     t |> run("the first start compiles the descriptor and writes its manifest") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "cold", run_child(cmd, out), out, "PROBE 42"), "the require resolves through the compiled descriptor")
+        t |> success(run_child_reported(t, "cold", cmd, out, "PROBE 42"), "the require resolves through the compiled descriptor")
         t |> equal("compiled (no manifest), manifest written (1 row(s))", probe_line(out), "the trace says compiled and written:\n{out}")
         t |> success(stat(manifest).is_valid, "the manifest sits beside the descriptor")
         let text = fread(manifest)
@@ -165,13 +166,13 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
     }
     t |> run("a descriptor that does not compile gets no manifest, and the run goes on") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "broken", run_child(cmd, out), out, "PROBE 42"), "the other module's require still resolves")
+        t |> success(run_child_reported(t, "broken", cmd, out, "PROBE 42"), "the other module's require still resolves")
         t |> equal("compiled with errors, no manifest", probe_line(out, "broken_probe"), "the trace names the failure:\n{out}")
         t |> success(!stat(path_join(fx.brokenDir, ".das_module.manifest")).is_valid, "nothing was written for it")
     }
     t |> run("the second start replays the manifest and never compiles the descriptor") @(t : T?) {
         var out : string
-        t |> success(report_child(t, "warm", run_child(cmd, out), out, "PROBE 42"), "the require resolves through the replayed rows")
+        t |> success(run_child_reported(t, "warm", cmd, out, "PROBE 42"), "the require resolves through the replayed rows")
         t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out), "the trace says replayed:\n{out}")
         t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out, "dm_probe"), "the dm row replays too:\n{out}")
         t |> success(count_of(out, "Module_Absent <- ") >= 1, "the replayed dm row retries its dlopen:\n{out}")
@@ -179,10 +180,10 @@ def arms_record_and_replay(t : T?; fx : Fixture) {
     t |> run("an edited descriptor recompiles once and is replayed again after") @(t : T?) {
         fwrite(fx.descriptor, "{DESCRIPTOR}// edited\n")
         var out : string
-        t |> success(report_child(t, "edited", run_child(cmd, out), out, "PROBE 42"), "the edited descriptor still resolves the require")
+        t |> success(run_child_reported(t, "edited", cmd, out, "PROBE 42"), "the edited descriptor still resolves the require")
         t |> equal("compiled (descriptor changed), manifest written (1 row(s))", probe_line(out), "the stamp mismatch recompiles and rewrites:\n{out}")
         var again : string
-        t |> success(report_child(t, "edited warm", run_child(cmd, again), again, "PROBE 42"), "the rewritten manifest resolves the require")
+        t |> success(run_child_reported(t, "edited warm", cmd, again, "PROBE 42"), "the rewritten manifest resolves the require")
         t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the rewritten manifest replays:\n{again}")
     }
 }
@@ -195,7 +196,7 @@ def arms_rejections(t : T?; fx : Fixture) {
         let endAt = find(text, "\nend\t")
         fwrite(manifest, slice(text, 0, endAt + 1))   //! drop the end line - a write that died before its rename
         var out : string
-        t |> success(report_child(t, "damaged", run_child(cmd, out), out, "PROBE 42"), "the damaged manifest is not replayed")
+        t |> success(run_child_reported(t, "damaged", cmd, out, "PROBE 42"), "the damaged manifest is not replayed")
         t |> equal("compiled (no end line), manifest written (1 row(s))", probe_line(out), "the trace names the damage:\n{out}")
     }
     t |> run("every other rejection: no row of a manifest the reader cannot vouch for is replayed") @(t : T?) {
@@ -235,28 +236,28 @@ def arms_rejections(t : T?; fx : Fixture) {
         fwrite(helper, HELPER)
         fwrite(fx.descriptor, DESCRIPTOR_DEP)
         var out : string
-        t |> success(report_child(t, "dep", run_child(cmd, out), out, "PROBE 42"), "the require resolves through the helper's answer")
+        t |> success(run_child_reported(t, "dep", cmd, out, "PROBE 42"), "the require resolves through the helper's answer")
         t |> equal("compiled (descriptor changed), manifest written (1 row(s))", probe_line(out), "the dep descriptor compiles once:\n{out}")
         t |> success(find(fread(manifest), "/helper.das\t") >= 0, "the helper is stamped in the manifest, by the path the require resolved: {fread(manifest)}")
         var warm : string
-        t |> success(report_child(t, "dep warm", run_child(cmd, warm), warm, "PROBE 42"), "the dep descriptor replays")
+        t |> success(run_child_reported(t, "dep warm", cmd, warm, "PROBE 42"), "the dep descriptor replays")
         t |> equal("replayed 1 row(s) (deferred 0)", probe_line(warm), "an unchanged helper replays:\n{warm}")
         fwrite(helper, "{HELPER}// edited\n")
         var edited : string
-        t |> success(report_child(t, "dep edited", run_child(cmd, edited), edited, "PROBE 42"), "the require resolves after the helper edit")
+        t |> success(run_child_reported(t, "dep edited", cmd, edited, "PROBE 42"), "the require resolves after the helper edit")
         t |> equal("compiled (dependency changed), manifest written (1 row(s))", probe_line(edited), "the helper's stamp mismatch recompiles the descriptor:\n{edited}")
         var again : string
-        t |> success(report_child(t, "dep edited warm", run_child(cmd, again), again, "PROBE 42"), "the rewritten manifest resolves the require")
+        t |> success(run_child_reported(t, "dep edited warm", cmd, again, "PROBE 42"), "the rewritten manifest resolves the require")
         t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the rewritten manifest replays:\n{again}")
     }
     t |> run("a cross-compile target is part of the key: a --jit-target run never replays a native manifest") @(t : T?) {
         //! dasOpenGL's descriptor registers its module only when get_cross_platform_name() says emscripten -
         //! an argv input, so a native manifest must not serve a --jit-target run, nor the other way round
         var out : string
-        t |> success(report_child(t, "target", run_child("{cmd} -- --jit-target=wasm32-unknown-emscripten", out), out, "PROBE 42"), "the require resolves under the target")
+        t |> success(run_child_reported(t, "target", "{cmd} -- --jit-target=wasm32-unknown-emscripten", out, "PROBE 42"), "the require resolves under the target")
         t |> equal("compiled (compile target), manifest written (1 row(s))", probe_line(out), "the target keys the manifest apart:\n{out}")
         var back : string
-        t |> success(report_child(t, "native again", run_child(cmd, back), back, "PROBE 42"), "the native run resolves the require")
+        t |> success(run_child_reported(t, "native again", cmd, back, "PROBE 42"), "the native run resolves the require")
         t |> equal("compiled (compile target), manifest written (1 row(s))", probe_line(back), "the native run keys apart from the target's manifest:\n{back}")
     }
 }
@@ -267,19 +268,19 @@ def arms_opt_out_and_write_failures(t : T?; fx : Fixture) {
     t |> run("no_manifest() inside the descriptor makes it run on every start") @(t : T?) {
         fwrite(fx.descriptor, DESCRIPTOR_OPT_OUT)
         var out : string
-        t |> success(report_child(t, "opt-out", run_child(cmd, out), out, "PROBE 42"), "the opted-out descriptor resolves the require")
+        t |> success(run_child_reported(t, "opt-out", cmd, out, "PROBE 42"), "the opted-out descriptor resolves the require")
         t |> equal("compiled (descriptor changed), no_manifest recorded", probe_line(out), "the first run records the opt-out:\n{out}")
         let text = fread(manifest)
         t |> success(find(text, "\nno_manifest\n") >= 0 && find(text, "\nnp\t") < 0, "the manifest carries the flag and no rows: {text}")
         var again : string
-        t |> success(report_child(t, "opt-out warm", run_child(cmd, again), again, "PROBE 42"), "the opted-out descriptor resolves the require again")
+        t |> success(run_child_reported(t, "opt-out warm", cmd, again, "PROBE 42"), "the opted-out descriptor resolves the require again")
         t |> equal("compiled (no_manifest)", probe_line(again), "every later start compiles it:\n{again}")
     }
     t |> run("a recorded argument the format cannot carry leaves the manifest unwritten") @(t : T?) {
         fwrite(fx.descriptor, DESCRIPTOR_TABBED)
         let before = fread(manifest)
         var out : string
-        t |> success(report_child(t, "tabbed", run_child(cmd, out), out, "PROBE 42"), "the descriptor still resolves the require")
+        t |> success(run_child_reported(t, "tabbed", cmd, out, "PROBE 42"), "the descriptor still resolves the require")
         t |> equal("compiled (descriptor changed), manifest not written: a recorded argument contains a tab or newline", probe_line(out), "the trace names the field:\n{out}")
         t |> equal(before, fread(manifest), "the stale manifest is left as it was")
     }
@@ -288,12 +289,12 @@ def arms_opt_out_and_write_failures(t : T?; fx : Fixture) {
         remove_result(manifest)
         mkdir_result(fx.manifestTmp)   //! a directory where the .tmp goes: the create fails on every platform, root or not
         var out : string
-        t |> success(report_child(t, "no tmp", run_child(cmd, out), out, "PROBE 42"), "the require resolves without a manifest")
+        t |> success(run_child_reported(t, "no tmp", cmd, out, "PROBE 42"), "the require resolves without a manifest")
         t |> success(probe_line(out) |> starts_with("compiled (no manifest), manifest not written: cannot create "), "the trace names the create failure:\n{out}")
         rmdir_result(fx.manifestTmp)
         mkdir_result(manifest)   //! a directory where the manifest goes: the rename fails
         var again : string
-        t |> success(report_child(t, "no rename", run_child(cmd, again), again, "PROBE 42"), "the require resolves without a manifest")
+        t |> success(run_child_reported(t, "no rename", cmd, again, "PROBE 42"), "the require resolves without a manifest")
         t |> success(find(probe_line(again), ", manifest not written: cannot rename ") >= 0, "the trace names the rename failure:\n{again}")
         t |> success(!stat(fx.manifestTmp).is_valid, "the failed rename left no .tmp behind")
         rmdir_result(manifest)

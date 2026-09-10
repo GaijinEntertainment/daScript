@@ -1140,6 +1140,15 @@ namespace debugger {
 
     // pinvoke(context,"function",....)
 
+    // src/builtin/ARCHITECTURE.md sec.4
+    DAS_NORETURN_PREFIX static void throw_pinvoke_error ( Context & context, const LineInfo & at, string & text ) DAS_NORETURN_SUFFIX;
+    static void throw_pinvoke_error ( Context & context, const LineInfo & at, string & text ) {
+        char message[8192];
+        snprintf(message, sizeof(message), "%s", text.c_str());
+        string().swap(text);
+        context.throw_error_at(at, "%s", message);
+    }
+
     static bool pinvoke_named ( Context & context, SimNode_CallBase * call, vec4f * args, vec4f & res, bool tryLock ) {
         auto invCtx = cast<Context *>::to(args[0]);
         if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
@@ -1193,7 +1202,7 @@ namespace debugger {
         } else {
             invCtx->threadlock_context(body);
         }
-        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
+        if ( !exText.empty() ) throw_pinvoke_error(context, exAt, exText);
         return true;
     }
 
@@ -1239,7 +1248,7 @@ namespace debugger {
                 exText = invCtx->exception;
             }
         });
-        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
+        if ( !exText.empty() ) throw_pinvoke_error(context, exAt, exText);
         return res;
     }
 
@@ -1279,7 +1288,7 @@ namespace debugger {
                 exText = invCtx->exception;
             }
         });
-        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
+        if ( !exText.empty() ) throw_pinvoke_error(context, exAt, exText);
         return res;
     }
 

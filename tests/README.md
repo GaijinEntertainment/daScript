@@ -16,6 +16,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_lifecycle.das | Lifecycle functions - get_dt, get_uptime, get_fps, is_paused/set_paused, exit_requested, is_reload, is_live_mode | |
 | test_commands.das | Live command dispatch - [live_command] registration, JSON dispatch, args passing, null return, error handling | |
 | test_live_vars.das | `@live` variable viewer - annotation, archive round-trip, type coverage (int, float, string, bool) | |
+| test_host_ready.das | daslang-live spawned beside the running daslang on `_fixture_host_ready.das` serves `/status` and ends on `/shutdown` - the LiveHost module loads before the host reads its exports | |
 
 ## algorithm/
 

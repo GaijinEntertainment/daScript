@@ -3,7 +3,7 @@ options gen2
 require strings
 require daslib/strings_boost
 require daslib/fio
-require ./review_nttp // nolint:STYLE030 — compile-time gate, no runtime symbol to reference
+require ./review_nttp // compile-time gate, no runtime symbol to reference
 require dastest/review_gate
 
 // The mechanical half of src/builtin/REVIEW.md (contract: REVIEW_COMMON.md at the

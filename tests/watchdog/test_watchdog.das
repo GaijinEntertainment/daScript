@@ -2,6 +2,7 @@ options gen2
 options no_aot
 
 require dastest/testing_boost public
+require math
 require daslib/fio
 require daslib/json_boost
 require daslib/strings_boost
@@ -19,6 +20,13 @@ def das_exe() : string {
 
 def fixture_path() : string {
     return path_join(get_das_root(), "tests/watchdog/_fixture_watchdog_child.das")
+}
+
+//! a deadline on a child's startup or exit, never a claim about speed: a Debug host compiles
+//! what the child requires several times slower, so the deadline stretches threefold there,
+//! never past five minutes
+def guard(seconds : float) : float {
+    return shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
 }
 
 def make_temp(t : T?; prefix : string) : string {
@@ -94,7 +102,7 @@ def run_bounded(t : T?; var sup : Supervisor?; seconds : float) : int {
             t |> failure("supervision did not end within {seconds} s: {event_names(read_events(sup.cfg.log))}")
             sup->request_stop()
             let grace = ref_time_ticks()
-            while (!sup->tick() && get_time_usec(grace) < 30000000) {
+            while (!sup->tick() && float(get_time_usec(grace)) < guard(30.0) * 1000000.0) {
                 sleep(50u)
             }
             break
@@ -113,7 +121,7 @@ def jit_runs() : bool {
     var code : int
     unsafe {
         var p = spawn_process(argv, "", no_env)
-        code = process_wait(p, 60.0)
+        code = process_wait(p, guard(60.0))
         close_process(p)
     }
     return code == 2
@@ -281,10 +289,10 @@ def spawn_tray_watchdog(root, url, mode : string; env : array<string>) : process
     return unsafe(spawn_process(argv, root, env))
 }
 
-//! `unavailable`, `ready` (the child runs under a live icon), or empty after 30 s.
+//! `unavailable`, `ready` (the child runs under a live icon), or empty after the 30 s guard.
 def wait_for_tray(var wd : process; log_path : string) : string {
     let started = ref_time_ticks()
-    while (get_time_usec(started) < 30000000) {
+    while (float(get_time_usec(started)) < guard(30.0) * 1000000.0) {
         unsafe(process_drain(wd) $(_line) {
         })
         let events <- read_events(log_path)
@@ -340,7 +348,7 @@ def with_tray_watchdog(t : T?; url, mode : string; env : array<string>; blk : bl
 //! Ends a parked run the way an operator's Shutdown would on a platform the test cannot click.
 def stop_parked_run(t : T?; var wd : process; root : string) {
     fwrite(tray_stop_file(root), "stop\n")
-    t |> equal(wait_exit_draining(wd, 30.0), 0, "supervision ended with 0 once the child left on the stop file")
+    t |> equal(wait_exit_draining(wd, guard(30.0)), 0, "supervision ended with 0 once the child left on the stop file")
     let events <- read_events(tray_log_path(root))
     t |> equal(count_event(events, "intentional_shutdown"), 1)
     t |> equal(count_event(events, "watchdog_stopped"), 1)
@@ -381,7 +389,7 @@ def test_tray_shutdown_over_private_bus(t : T?) {
                 let tooltip = dbus_send_to(address, dest, true, "/StatusNotifierItem", "org.freedesktop.DBus.Properties.Get", ["string:org.kde.StatusNotifierItem", "string:ToolTip"])
                 dump_has(t, tooltip, "wdtray - running", "the tooltip carries the same line")
                 dbus_send_to(address, dest, false, "/MenuBar", "com.canonical.dbusmenu.Event", ["int32:{TRAY_SHUTDOWN_ID}", "string:clicked", "variant:int32:0", "uint32:0"])
-                t |> equal(wait_exit_draining(wd, 30.0), 0, "supervision ended with 0 after the tray's Shutdown")
+                t |> equal(wait_exit_draining(wd, guard(30.0)), 0, "supervision ended with 0 after the tray's Shutdown")
                 let events <- read_events(tray_log_path(root))
                 t |> equal(count_event(events, "tray_started"), 1)
                 t |> equal(count_event(events, "tray_shutdown_requested"), 1)
@@ -461,7 +469,7 @@ def test_tray_supervision_completes(t : T?) {
     t |> run("crash-then-ok under --tray ends with 0 with or without an icon") @(t : T?) {
         let no_env : array<string>
         with_tray_watchdog(t, "", "crash-then-ok", no_env) $(var wd; root; verdict) {
-            t |> equal(wait_exit_draining(wd, 60.0), 0, "supervision ended with 0 (tray {verdict})")
+            t |> equal(wait_exit_draining(wd, guard(60.0)), 0, "supervision ended with 0 (tray {verdict})")
             let events <- read_events(tray_log_path(root))
             t |> equal(count_event(events, "child_started"), 2)
             t |> equal(count_event(events, "crash"), 1)
@@ -493,7 +501,7 @@ def test_heaps_stay_bounded_under_a_chatty_child(t : T?) {
         argv |> push_from(child_args(state_dir, "chatty"))
         let no_env : array<string>
         var wd = unsafe(spawn_process(argv, root, no_env))
-        t |> equal(wait_exit_draining(wd, 120.0), 0, "supervision ended with 0")
+        t |> equal(wait_exit_draining(wd, guard(120.0)), 0, "supervision ended with 0")
         unsafe {
             close_process(wd)
         }
@@ -895,7 +903,7 @@ def test_supervise_crash_then_clean_exit(t : T?) {
         var sup = watchdog_start(program_mode_args(root, state_dir, "crash-then-ok"), root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(run_bounded(t, sup, 60.0), 0, "supervision ends with 0 after the child's clean exit")
+        t |> equal(run_bounded(t, sup, guard(60.0)), 0, "supervision ends with 0 after the child's clean exit")
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "child_started"), 2, "the child ran twice: {event_names(events)}")
         t |> equal(event_int(events, "crash", "code"), 9, "the first exit was reported as a crash")
@@ -936,7 +944,7 @@ def test_supervise_config_restart(t : T?) {
         var sup = watchdog_start(program_mode_args(root, state_dir, "config-restart"), root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(run_bounded(t, sup, 60.0), 0)
+        t |> equal(run_bounded(t, sup, guard(60.0)), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "config_restart_relaunch"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "crash"), 0, "no crash was reported")
@@ -964,7 +972,7 @@ def test_supervise_tune_bootstrap(t : T?) {
         var sup = watchdog_start(args, root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(run_bounded(t, sup, 60.0), 0)
+        t |> equal(run_bounded(t, sup, guard(60.0)), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "tune_bootstrap_complete"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "crash"), 0)
@@ -992,7 +1000,7 @@ def test_supervise_tune_abort_backs_off(t : T?) {
         var sup = watchdog_start(args, root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
-        t |> equal(run_bounded(t, sup, 60.0), 0)
+        t |> equal(run_bounded(t, sup, guard(60.0)), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "tune_incomplete"), 1, "{event_names(events)}")
         t |> equal(count_event(events, "tune_bootstrap_complete"), 0, "no marker, no bootstrap")
@@ -1022,7 +1030,7 @@ def test_request_stop_terminates_with_no_shutdown(t : T?) {
         if (sup == null) return
         var parked = false
         let started = ref_time_ticks()
-        while (!parked && get_time_usec(started) < 15000000) {
+        while (!parked && float(get_time_usec(started)) < guard(15.0) * 1000000.0) {
             sup->tick()
             for (ev in read_events(sup.cfg.log)) {
                 if ((ev?["event"] ?? "") == "child" && (ev?["message"] ?? "") == "parked") {
@@ -1034,7 +1042,7 @@ def test_request_stop_terminates_with_no_shutdown(t : T?) {
         sup->request_stop()
         var done = false
         let stop_started = ref_time_ticks()
-        while (!done && get_time_usec(stop_started) < 15000000) {
+        while (!done && float(get_time_usec(stop_started)) < guard(15.0) * 1000000.0) {
             done = sup->tick()
         }
         t |> success(done, "supervision ended after the stop request")
@@ -1068,7 +1076,7 @@ def test_request_stop_uses_the_stop_file(t : T?) {
         if (sup == null) return
         var parked = false
         let started = ref_time_ticks()
-        while (!parked && get_time_usec(started) < 15000000) {
+        while (!parked && float(get_time_usec(started)) < guard(15.0) * 1000000.0) {
             sup->tick()
             for (ev in read_events(sup.cfg.log)) {
                 if ((ev?["event"] ?? "") == "child" && (ev?["message"] ?? "") == "parked") {
@@ -1080,7 +1088,7 @@ def test_request_stop_uses_the_stop_file(t : T?) {
         sup->request_stop()
         var done = false
         let stop_started = ref_time_ticks()
-        while (!done && get_time_usec(stop_started) < 15000000) {
+        while (!done && float(get_time_usec(stop_started)) < guard(15.0) * 1000000.0) {
             done = sup->tick()
         }
         t |> success(done, "supervision ended after the stop request")

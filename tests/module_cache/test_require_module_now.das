@@ -1,4 +1,5 @@
 options gen2
+options _lint = "LINT030"   // a child run is never an argument beside the out it writes
 options indenting = 4
 
 require dastest/testing_boost public
@@ -147,15 +148,15 @@ def test_require_module_now_children(t : T?) {
         let cacheFile = path_join(tmp, "late.dascache")
         let cached = "{das_exe()} -dasroot {get_das_root()} -module-cache \"{cacheFile}\" \"{script}\""
         var out : string
-        t |> success(report_child(t, "cold", run_child(cached, out), out, "LATE 42"), "the cold run answers through the late module")
+        t |> success(run_child_reported(t, "cold", cached, out, "LATE 42"), "the cold run answers through the late module")
         t |> success(find(out, "compiler took") >= 0 && find(out, "mc_late_mod") >= 0, "the cold run compiles the fixture:\n{out}")
         t |> equal(count_prefix(tmp, "late~"), 0, "no cache of the late walk's own sits beside the host's")
         let coldSize = long_length(fread(cacheFile))
-        t |> success(report_child(t, "warm", run_child(cached, out), out, "LATE 42"), "the warm run answers through the late module")
+        t |> success(run_child_reported(t, "warm", cached, out, "LATE 42"), "the warm run answers through the late module")
         t |> success(find(out, "cache read took") >= 0 && find(out, "mc_late_mod") >= 0 && find(out, "compiler took") < 0, "the warm run serves the fixture from the host's cache:\n{out}")
         t |> equal(long_length(fread(cacheFile)), coldSize, "the warm run rewrites nothing")
         let uncached = "{das_exe()} -dasroot {get_das_root()} -no-module-cache \"{script}\""
-        t |> success(report_child(t, "no cache", run_child(uncached, out), out, "LATE 42"), "the run with no module cache answers too")
+        t |> success(run_child_reported(t, "no cache", uncached, out, "LATE 42"), "the run with no module cache answers too")
         t |> success(find(out, "compiler took") >= 0 && find(out, "cache read took") < 0, "with no module cache the late walk compiles:\n{out}")
         let running = path_join(tmp, "use_running.das")
         fwrite(running, running_driver())
@@ -180,12 +181,12 @@ def test_require_module_now_children(t : T?) {
         let cacheFile = path_join(tmp, "nested.dascache")
         let cached = "{das_exe()} -dasroot {get_das_root()} -module-cache \"{cacheFile}\" \"{script}\""
         var out : string
-        t |> success(report_child(t, "cold", run_child(cached, out), out, "LATE 42"), "the macro's late require answers on the cold run")
+        t |> success(run_child_reported(t, "cold", cached, out, "LATE 42"), "the macro's late require answers on the cold run")
         let coldSize = long_length(fread(cacheFile))
-        t |> success(report_child(t, "warm", run_child(cached, out), out, "LATE 42"), "the warm run answers")
+        t |> success(run_child_reported(t, "warm", cached, out, "LATE 42"), "the warm run answers")
         t |> success(find(out, "FALLBACK") < 0 && find(out, "module order changed") < 0, "the warm read is not cut by the nested walk's modules:\n{out}")
         t |> equal(long_length(fread(cacheFile)), coldSize, "the warm run rewrites nothing")
-        t |> success(report_child(t, "warm again", run_child(cached, out), out, "LATE 42"), "the second warm run answers")
+        t |> success(run_child_reported(t, "warm again", cached, out, "LATE 42"), "the second warm run answers")
         t |> success(find(out, "FALLBACK") < 0, "the second warm read is clean too:\n{out}")
         fwrite(script, macro_driver("    let y : int = \"not an int\"\n"))
         let rc = run_child(cached, out)

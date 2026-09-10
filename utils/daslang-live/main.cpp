@@ -1018,6 +1018,8 @@ int main(int argc, char * argv[]) {
 #endif
     Module::Initialize();
 
+    if (auto loader = getDeferredModuleLoader()) loader("live_host");
+
     // Load live_host DLL functions
     if (!load_live_host_functions()) {
         tout << "WARNING: live_host module not found — lifecycle functions will use defaults\n";

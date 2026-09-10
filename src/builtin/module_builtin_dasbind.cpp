@@ -389,7 +389,12 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                     crash_and_burn = "internal error. missing BoundFunction";
                 }
             });
-            if ( !crash_and_burn.empty() ) context.throw_error_at(debugInfo, "%s",crash_and_burn.c_str());
+            if ( !crash_and_burn.empty() ) {
+                char message[8192];   // src/builtin/ARCHITECTURE.md sec.4
+                snprintf(message, sizeof(message), "%s", crash_and_burn.c_str());
+                string().swap(crash_and_burn);
+                context.throw_error_at(debugInfo, "%s", message);
+            }
         }
         DAS_EVAL_ABI vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE

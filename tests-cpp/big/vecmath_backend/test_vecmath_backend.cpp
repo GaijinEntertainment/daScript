@@ -5,6 +5,10 @@
 // to match (NaN/tie ordering, sign-bit select, out-of-range converts, shift
 // counts past the lane width) - NEON diverges there by its own contract.
 
+#if defined(__FAST_MATH__) || defined(_M_FP_FAST)
+#error "the rows pin IEEE answers a fast-math build may fold; both arms are pinned to precise math in CMakeLists.txt"
+#endif
+
 #ifndef _MSC_VER
 #ifndef __forceinline
 #define __forceinline inline

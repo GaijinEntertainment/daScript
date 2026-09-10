@@ -100,10 +100,12 @@ this document states what the folder is and why its tests take the shape they do
 - `_mc_common.das` - the spawn helpers every test here shares (the name is the folder's, since
   a sweep worker holds every shared module it met under one name and `tests/linq` has a
   `_common` already): the binary to spawn (`das_exe`),
-  the scan-trace command prefix (`trace_prefix`), the stderr-joining child run (`run_child`)
-  and the failure report that echoes the child's output (`report_child`). A test whose child
-  needs a different spawn shape - an argv spawn, an environment variable - keeps that one
-  helper local.
+  the scan-trace command prefix (`trace_prefix`), the stderr-joining child run (`run_child`),
+  the failure report that echoes the child's output (`report_child`), and the two joined
+  (`run_child_reported`): the order a call's arguments are evaluated in is not defined
+  (LINT030), and a `run_child(cmd, out)` nested beside `out` in one argument list reads an
+  empty output on a Windows AOT host. A test whose child needs a different spawn shape - an
+  argv spawn, an environment variable - keeps that one helper local.
 
 ## 2. Why every case is a spawned process
 

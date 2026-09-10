@@ -21,7 +21,7 @@ require dasllama/dasllama_qwen3a public
 require dasllama/dasllama_parakeet public
 require dasllama/dasllama_canary public
 require dasllama/dasllama_gemma4a public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — the qwen3a decoder is a full LLM; umbrella fires arch [init]s
+require dasllama/dasllama_transformer   // the qwen3a decoder is a full LLM; umbrella fires arch [init]s
 
 // The uniform ASR surface: one loader that sniffs the file format, one verb set that
 // dispatches — NO family names in the public API. Every verb arm is a one-call forward

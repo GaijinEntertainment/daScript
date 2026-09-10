@@ -77,8 +77,9 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("minfft")
         return
     }
+    // test_host_ready.das polls the spawned host over dasHV's client
     if (folder_name == "live_host") {
-        *result = has_module("live_host")
+        *result = has_module("live_host") && has_module("dashv")
         return
     }
     if (folder_name == "strudel") {

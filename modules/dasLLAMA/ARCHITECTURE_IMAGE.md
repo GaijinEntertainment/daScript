@@ -200,10 +200,11 @@ The closure, per file in sorted name order: every `Archive` serializer body (a t
 layout helpers `pad_to_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
 `w_header`, `store_u32` and `store_u64`, and the declaration lines of the layout constants
 `IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND` and
-`METAL_BAND_BLOCKS`. Comments are stripped first, so re-wording one moves nothing. A body runs
-from its `def` line to the column-0 `}` that closes it, or, for a `def ... => expr` one-liner, to
-the end of that one line. Each piece folds into one FNV-1a hash keyed by its file name, so moving
-a serializer between files changes the stamp.
+`METAL_BAND_BLOCKS`. Comments are stripped first, so re-wording one moves nothing, and CRLF
+line ends fold to LF before anything is hashed, so a checkout under `autocrlf` stamps as the
+LF tree does. A body runs from its `def` line to the column-0 `}` that closes it, or, for a
+`def ... => expr` one-liner, to the end of that one line. Each piece folds into one FNV-1a hash
+keyed by its file name, so moving a serializer between files changes the stamp.
 
 The closure is wider than the byte-moving set on purpose. The two staging bands only decide how
 many bytes a writer stages per pass, and `store_u32` writes header scalars rather than plane

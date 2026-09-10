@@ -585,11 +585,15 @@ def private is_layout_function(header : string) : bool {
     return name == "build_image" || name == "parse_image" || find(name, "_prepare") >= 0
 }
 
+def private read_lf(path : string) : string {
+    return replace(fread(path), "\r\n", "\n")
+}
+
 // the declaration lines of the layout constants a file declares, in file order
 def private layout_constant_lines(path : string) : array<tuple<line : int; body : string>> {
     var out : array<tuple<line : int; body : string>>
     var line_no = 0
-    for (raw in split(strip_line_comments(fread(path)), "\n")) {
+    for (raw in split(strip_line_comments(read_lf(path)), "\n")) {
         line_no++
         var rest = ""
         if (raw |> starts_with("let private ")) {
@@ -613,7 +617,7 @@ def private function_bodies(path : string; pick : block<(header : string) : bool
     var inscope lines : array<string>
     var header_line = 0
     var line_no = 0
-    for (raw in split(strip_line_comments(fread(path)), "\n")) {
+    for (raw in split(strip_line_comments(read_lf(path)), "\n")) {
         line_no++
         if (raw |> starts_with("def ")) {
             if (header_line > 0) {
@@ -697,7 +701,7 @@ def private check_meta_tripwires {
 [arch(at = "ARCHITECTURE_IMAGE.md#image-layout-stamp")]
 def private check_image_layout_stamp {
     var version = -1
-    for (line in split(fread(IMAGE_FILE), "\n")) {
+    for (line in split(read_lf(IMAGE_FILE), "\n")) {
         if (line |> starts_with("let IMAGE_VERSION = ")) {
             version = try_to_int(ident_prefix(slice(line, length("let IMAGE_VERSION = ")))) ?? -1
         }

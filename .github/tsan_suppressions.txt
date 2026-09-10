@@ -25,3 +25,9 @@ race:hv::WebSocketClient::close
 # thread may parse the next pipelined message while the tick thread still fills the
 # previous response object (#3428).
 race:HttpHandler::onMessageComplete
+
+# libdbus's own global locks, taken in one order by dbus_bus_get_private (the Linux tray's
+# create) and the reverse by dbus_connection_close / unref (its destroy), both on the main
+# thread: a lock-order report on the library's internals, which the tray neither holds nor
+# can reorder. libdbus is dlopened, not instrumented, so the module name is the frame.
+deadlock:libdbus-1.so
