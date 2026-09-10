@@ -251,8 +251,7 @@ diagnostic in any tier.
 - **The order a call's arguments are evaluated in is not defined**, and it differs between
   tiers - `f(g(x), x)` with `g` writing `x` by reference reads the old `x` on one tier and the
   new one on another. Run the writing call as a statement of its own: `let r = g(x); f(r, x)`.
-  LINT030 finds the shape: on in this tree (`.lint_config`), off in the SDK - arm it there with
-  `options _lint = "LINT030"`.
+  LINT030 finds the shape and is on in this tree (`.lint_config`).
 
 ### Code style - prefer idiomatic forms
 

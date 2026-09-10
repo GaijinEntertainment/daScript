@@ -142,10 +142,9 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   buried in a deeper call still counts for the outer argument list. A mention that is the
   outer call's own by-reference argument is not a read - the callee sees the final state
   whatever the order. The rule fires once per writing argument, on the outer call. It ships
-  default-off in the SDK beside LINT029 (`seed_default_disabled`) and is on in this tree
-  (`.lint_config`): a `var` parameter is read as a write contract, so a callee that takes
-  `var` to hand out a pointer or advance a builder is a finding wherever a sibling argument
-  reads the same variable - the tree is swept to that reading.
+  default-off in the SDK beside LINT029 (`seed_default_disabled`), since a `var` parameter is
+  read as a write contract and library callees that take `var` to hand out a pointer or
+  advance a builder carry the shape; `.lint_config` turns it on here.
 - **Closure bodies are per-rule, not global.** LINT010 counts a closure body as a branch
   (it may run later or never - writes inside must not kill outside stores, reads inside
   must not keep an outside init live); LINT021 counts the same body as an escape - a

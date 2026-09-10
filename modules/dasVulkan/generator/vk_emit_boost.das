@@ -1288,7 +1288,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
         plan.skip = "{c.name}: out param {plan.out_value_pname} beside an enumerated array"
         return <- plan
     }
-    // link each erasevkcount to the array param it counts (-> uint(length(arr)))
+    // link each erasevkcount to the array param it counts (-> vkcount_<arr>, the let before the call)
     for (i in range(length(plan.args))) {
         let ak = plan.args[i].kind
         if (ak == CmdArgKind.in_array_scalar || ak == CmdArgKind.in_array_handle || ak == CmdArgKind.in_array_struct) {
