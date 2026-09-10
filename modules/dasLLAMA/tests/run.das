@@ -196,6 +196,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_parity.das",
                     "modules/dasLLAMA/tests/test_parity_pregate.das",
+                    "modules/dasLLAMA/tests/test_parrot.das",
                     "modules/dasLLAMA/tests/test_ple_modes.das",
                     "modules/dasLLAMA/tests/test_prefill.das",
                     "modules/dasLLAMA/tests/test_qwen3v.das",
@@ -241,13 +242,13 @@ let TESTS_DIR = "modules/dasLLAMA/tests"
 def area_tests(area : string) : array<string> {
     if (area == "audio") {
         return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das",
-                    "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_whisper.das" ]
+                    "test_parrot.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_whisper.das" ]
     } elif (area == "vision") {
         return <- [ "test_attn_span.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
                     "test_vision_embedder.das" ]
     } elif (area == "tts") {
-        return <- [ "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
+        return <- [ "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
                     "test_tts_postag.das", "test_tts_textnorm.das" ]
     } elif (area == "infra") {

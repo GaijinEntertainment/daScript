@@ -14,9 +14,11 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   assembly. The weight map of the converted GGUF (`harness/convert_pocket.py`: the canonical
   tensor names `backbone.N.*`, `head.*`, `mimi.enc_tf.N.*` / `mimi.dec_tf.N.*`, the rest as the
   bundle names them; the `pocket.*` scalars from the package's per-language config; the
-  unigram tokenizer under `tokenizer.ggml.model = "t5"`; the roster's clips as `voice.<name>`
-  PCM tensors), the model (`PocketModel`: the causal backbone, the one-step flow head, the
-  Mimi-derived codec, the roster and its encoded voice states), the activation carrier
+  unigram tokenizer under `tokenizer.ggml.model = "t5"`; the roster as `voice_latents.<name>`
+  latent frames - an older file carries `voice.<name>` PCM instead, encoded on first use;
+  `pocket.cloning` says whether the codec encoder is inside), the model (`PocketModel`: the
+  causal backbone, the one-step flow head, the Mimi-derived codec with or without its encoder,
+  the roster and its voice states built from the stored frames), the activation carrier
   (`PocketScratch`), and the assembly - the voice prompt (sec.2.47), the text prompt, the frame
   loop (sec.2.48), the codec decoder over a chunk's latents (sec.2.46) - plus the reference
   driver's text preparation and chunker (sec.2.49). `pocket_speak` is the facade's entry; the
@@ -55,8 +57,13 @@ The caches are sized for the clip plus 1024 rows and grow, the voice's rows kept
 text plus every frame its cap allows needs more - one unsplittable run of two hundred tokens is
 such a chunk. A clip is at most 60 s (`POCKET_MAX_VOICE_SECONDS`): the state is the clip's frames
 per layer, and the codec encoder's attention is a query block by the 250-key window it sees.
-The roster's clips ride the GGUF and encode on first use; a cloned voice is the same path over a
-caller's clip (`tts_register_voice`). The package's precomputed states differ from the clip path
+The roster rides the GGUF as each clip's latent frames (`voice_latents.<name>`, the package's
+own codec encoder over the clip at conversion), and a voice's state is built from them on first
+use - the second half of the clip path, no encoder needed; a file of the older form carries the
+clips themselves (`voice.<name>`) and encodes them on first use. A cloned voice is the whole clip
+path over a caller's clip (`tts_register_voice`), so it needs the encoder: a file converted
+`--no-cloning` leaves the encoder out, says so in `pocket.cloning`, reports `cloning = false` in
+`caps()` and refuses a clip by name. The package's precomputed states differ from the clip path
 by 1.5e-2 (they come from another checkpoint revision; `harness/pocket_oracle.py` dumps both and
 `test_pocket_parity`'s voice cell compares the clip path); the clip path is the reference.
 
@@ -91,8 +98,21 @@ another language takes the text as it is, since the normalizer reads English.
 
 ### 2.50 The published file carries the served quants {#pocket-q8-file}
 
-Two lanes, as the StyleTTS2 families have: f32, the parity rail's reference, and q8, the
-served default - the transformer layers' four matrices, the frame input projection and every
+A file has three lanes and its formats decide which it can take. A K-quant dense layer
+(`convert_pocket.py --kq`: the backbone's and the codec transformers' matrices as Q4_K, the flow
+head as Q8_0, the rest as the q8 form writes it) serves as its own planes unless a lane is
+pinned - `TtsLinear` holds the plane pair the GGUF transcoder wrote, repacked where the backend
+the load selected carries kq kernels (the load line says which arm), and the frame loop's GEMV
+and the prompt's GEMM take the engine's own K-quant entries (`linear_rows_decode`,
+`linear_rows_kq`), the rows requantized to the Q8_K form the way the engine's own decode does.
+The text embedding table is Q4_K on disk only: it is a lookup, and dequantizes at load on every
+lane. Pinned q8 or f32, a K-quant tensor dequantizes into that lane, so one file serves every
+lane and the rig compares them on the same sentences. A vector layer the file stores Q8_0 (the
+head) runs its GEMV on the q8 lane.
+
+The two lanes every Pocket file has, as the StyleTTS2 families have them: f32, the parity
+rail's reference, and q8, the served default - the transformer layers' four matrices, the frame
+input projection and every
 dense stride-1 codec conv on 32-wide channels as Q8_0 rows (`linear_prepare`,
 `conv1d_q8_eligible`), the decode step on the q8 GEMV entry. The published GGUF
 (`convert_pocket.py --q8`) stores exactly those tensors as Q8_0 in the layout the kernels read

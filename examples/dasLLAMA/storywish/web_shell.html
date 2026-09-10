@@ -51,7 +51,7 @@
      byte. Then it reads models/manifest.json - the list the deploy minted, stamped with the
      IMAGE_VERSION it minted at - and refuses a set minted for another version before fetching a
      megabyte of it: the program would decline the images anyway, this way the reason is on the
-     page. Otherwise it fetches the story model, the TTS model and its phoneme packs into MEMFS,
+     page. Otherwise it fetches the story model and the speech model into MEMFS,
      then waits for a click - browsers only let audio start from a gesture. Models come from
      ./models/ beside the page, or ?models=<base url>. ?force=unsupported shows the browser note on
      a supporting browser, for checking the page. A program that aborts after the click puts its
@@ -113,6 +113,11 @@
     span.textContent = text;
     return span.innerHTML;
   }
+
+  // a page the browser brings back from its back-forward cache returns with the program's
+  // workers and the audio output frozen mid-frame and out of step with each other, and the
+  // first thing heard is whatever sat in the output ring: such a page starts over instead
+  window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
 
   if (!SUPPORTED) {
     if (FORCE === 'unsupported' || !HAS_WASM64) {
@@ -210,7 +215,7 @@
       };
       return c;
     })(),
-    arguments: ['--models', '/models', '--story-model', 'tinystories-instruct-27M.dlim', '--tts-model', 'kitten-nano.dlim', '--autoplay'],
+    arguments: ['--models', '/models', '--story-model', 'tinystories-instruct-27M.dlim', '--tts-model', 'pocket-tts-en-stuart-kq.gguf', '--autoplay'],
     print: function (text) { console.log(text); remember(text); },
     printErr: function (text) { console.error(text); remember(text); },
     onAbort: function (what) { showFailure(what || 'abort'); },

@@ -623,6 +623,135 @@ def test_pocket_q8_file(t : T?) {
 }
 
 let Q8_FILE_BAR = 5.0e-2lf
+let KQ_EXACT_BAR = 5.0e-2lf   //! the kq lane against the exact lane of the same file (measured 3.4e-2): the head's Q8_0 route and the activation quants
+let KQ_HEAD_BAR = 2.0e-2lf    //! the flow head on its Q8_0 route against the f32 oracle's frames (measured 9.8e-3), the oracle's own conditioning and noise in
+
+def private kq_gguf_path() : string {
+    return path_join(models_dir(), "pocket-tts-en-kq.gguf")
+}
+
+[test]
+def test_pocket_kq_file(t : T?) {
+    //! The small form (`convert_pocket.py --kq`): the backbone's and the codec transformers'
+    //! matrices and the text embedding as Q4_K, the flow head as Q8_0. Unpinned, the K-quant
+    //! tensors serve as their own planes (the kq lane); pinned q8 or f32 they dequantize into
+    //! that lane. The three lanes of one file against each other and against the f16 reference.
+    let path = gguf_path()
+    let kqpath = kq_gguf_path()
+    if (!model_available(t, path) || !model_available(t, kqpath)) {
+        return
+    }
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var inscope sc = PocketScratch()
+        defer() {
+            reset_pocket_q8()
+        }
+        reset_pocket_q8()
+        t |> success(pocket_serves_native(), "unpinned, a K-quant tensor serves as its own planes")
+        var inscope mk <- load_pocket(kqpath)
+        var kq_layers = 0
+        for (l in mk.backbone.layers) {
+            kq_layers += (l.in_proj.kq_fmt == 4 && l.out_proj.kq_fmt == 4 && l.ffn1.kq_fmt == 4 && l.ffn2.kq_fmt == 4) ? 1 : 0
+        }
+        t |> equal(kq_layers, length(mk.backbone.layers), "every backbone layer's four GEMMs came in as Q4_K planes")
+        t |> success(mk.mimi.dec_tf.layers[0].ffn1.kq_fmt == 4 && mk.mimi.enc_tf.layers[0].in_proj.kq_fmt == 4, "the codec transformers' matrices too")
+        t |> success(mk.head.blocks[0].mlp1.q8 && mk.head.final_linear.q8 && mk.head.cond_embed.q8 && mk.head.input_proj.q8, "the flow head's matrices came in as Q8_0 blocks, its 32-wide input projection included")
+        t |> success(!mk.speaker_proj.q8 && mk.speaker_proj.kq_fmt == 0, "the speaker projection stays f32")
+        t |> equal(long_length(mk.text_emb.a), 4001l * mk.backbone.d, "the Q4_K embedding table dequantized into its f32 form")
+        // the same file on the q8 lane: every Q4_K tensor dequantized and requantized to Q8_0 (a
+        // re-encode of the same values), so the two lanes differ by that re-encode and their
+        // activation quants; the head is the same Q8_0 blocks on both
+        set_pocket_q8(true)
+        var inscope mq <- load_pocket(kqpath)
+        t |> success(mq.backbone.layers[0].in_proj.q8 && mq.backbone.layers[0].in_proj.kq_fmt == 0, "pinned q8, the K-quant tensor is Q8_0 blocks")
+        // the exact lane over the K-quant file: dequantized f32 planes, the head dequantized too -
+        // the one load whose head is not the Q8_0 route, so it is what pins that route
+        set_pocket_q8(false)
+        var inscope m32 <- load_pocket(kqpath)
+        t |> success(!m32.q8 && m32.backbone.layers[0].in_proj.kq_fmt == 0 && !m32.backbone.layers[0].in_proj.q8, "pinned f32, the K-quant tensor is an f32 plane")
+        t |> success(!m32.head.blocks[0].mlp1.q8, "pinned f32, the head is f32 too")
+        // the f16 file on its f32 lane: the reference the whole small form is measured against
+        var inscope mf <- load_pocket(path)
+        t |> success(!mf.q8 && !mf.backbone.layers[0].in_proj.q8, "the f16 reference serves its f32 lane")
+        reset_pocket_q8()
+        var compared = 0
+        for (c in man.cases) {
+            continue if (!c.stages || c.voice != "alba")
+            compared++
+            kq_lanes_case(t, c, man, mk, mq, m32, mf, sc)
+            break
+        }
+        t |> success(compared > 0, "the oracle manifest carries a stages case in alba - the lanes were compared")
+        kq_clone_over_roster(t, kqpath)
+    }
+}
+
+// the three lanes of the small file on one oracle case: kq against q8 at the q8 bar (with the
+// poisoned control), kq against the exact lane (the head's Q8_0 route), the f16 reference logged;
+// then the stored roster against the reference encoder (the f16 file on its f32 lane)
+def private kq_lanes_case(t : T?; c : PocketCase; man : PocketManifest; var mk, mq, m32, mf : PocketModel; var sc : PocketScratch) {
+    var inscope a <- forced_latents(mk, c, man, sc)
+    var inscope b <- forced_latents(mq, c, man, sc)
+    let rel = rms_relative(a, b)
+    to_log(LOG_INFO, "pocket {c.id} kq lane vs the q8 lane of the same file: rms relative {rel}\n")
+    t |> success(rel < Q8_FILE_BAR, "{c.id}: the kq lane and the q8 lane of one file agree (rms relative {rel})")
+    var inscope poisoned := b
+    for (v in poisoned) {
+        v += 2.0
+    }
+    t |> success(rms_relative(a, poisoned) >= Q8_FILE_BAR, "{c.id}: the bar discriminates a poisoned expectation")
+    var inscope e <- forced_latents(m32, c, man, sc)
+    let rel32 = rms_relative(a, e)
+    to_log(LOG_INFO, "pocket {c.id} kq lane vs the exact lane of the same file: rms relative {rel32} (the head's Q8_0 route and the activation quants)\n")
+    t |> success(rel32 < KQ_EXACT_BAR, "{c.id}: the kq lane and the exact lane of one file agree (rms relative {rel32})")
+    var inscope f <- forced_latents(mf, c, man, sc)
+    to_log(LOG_INFO, "pocket {c.id} kq lane vs the f16 reference: rms relative {rms_relative(a, f)} (the format's loss; the rig is its gate)\n")
+    var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
+    // the head alone on its Q8_0 route - Q8_0 blocks and a Q8_0-quantized activation vector per
+    // GEMV - fed the oracle's own conditioning and noise, against the oracle's frames
+    var inscope x0 := dump["x0"].f
+    var inscope hk <- head_over_frames(mk, sc, dump["cond"].f, x0, int64(c.n_frames))
+    let rel_head = rms_relative(hk, dump["x1"].f)
+    to_log(LOG_INFO, "pocket {c.id} the flow head on Q8_0 blocks vs the oracle: rms relative {rel_head}\n")
+    t |> success(rel_head < KQ_HEAD_BAR, "{c.id}: the head's Q8_0 route holds the oracle's frames (rms relative {rel_head})")
+    var inscope head_poisoned := dump["x1"].f
+    for (v in head_poisoned) {
+        v += 2.0
+    }
+    t |> success(rms_relative(hk, head_poisoned) >= KQ_HEAD_BAR, "{c.id}: the head bar discriminates a poisoned expectation")
+    var inscope lat : array<float>
+    let frames = pocket_encode_latents(mf, dump["voice_pcm"].f, sc, lat)   // the f16 file's encoder, f32 weights: the parity rail's own; the kq file's carries Q4_K and Q8_0
+    var inscope stored : array<float>
+    mk.voice_latents |> get("alba") $(s) {
+        stored := s
+    }
+    t |> equal(long_length(stored), frames * mk.latent_dim, "alba's stored frames are the clip's frame count")
+    rel_diff(t, "{c.id} stored roster vs the reference encoder", stored, lat, ENCODER_BAR)
+}
+
+// a clone over a roster name: alba re-registered from a clip keeps the roster at 19 and speaks
+def private kq_clone_over_roster(t : T?; kqpath : string) {
+    var inscope mkf <- load_tts_model(kqpath)
+    var inscope clip : array<float>
+    clip |> resize(24000 * 3)
+    var r = TtsRng()
+    rng_seed(r, 7ul)
+    for (i in range(length(clip))) {
+        clip[i] = 0.3 * sin(float(i) * 0.05) * (0.5 + 0.5 * rng_normal(r))
+    }
+    tts_register_voice(mkf, "alba", clip, 24000)
+    var inscope ck <- caps(mkf)
+    t |> equal(length(ck.voices), 19, "a clone under a roster name replaces the voice, the roster count stays")
+    var inscope spoken <- synthesize(mkf, "The quick brown fox jumps over the lazy dog.", "alba")
+    let st = speech_stats(spoken.pcm)
+    t |> success(st.finite && st.rms > 0.01, "the replaced roster voice speaks (rms {st.rms})")
+}
 
 // ===== the other five languages: one Q8_0 file each, its own tokenizer, one default voice =====
 
@@ -781,6 +910,7 @@ def test_pocket_facade(t : T?) {
         m.pocket.voices |> get("caro_davy") $(pcm) {
             clip := pcm
         }
+        t |> success(!empty(clip), "the parity file stores its roster as clips (the older form) - caro_davy's is the clone's source")
         tts_register_voice(m, "cloned", clip, 24000)
         var inscope c2 <- caps(m)
         t |> equal(length(c2.voices), 20, "the cloned voice joined the roster")
@@ -826,6 +956,41 @@ def private pocket_refusals(t : T?; var m : TtsModel; clip : array<float>) {
     t |> success(why |> find("{POCKET_MAX_VOICE_SECONDS} s") >= 0, "a clip past the cap is refused by the cap: {why}")
     var inscope c3 <- caps(m)
     t |> equal(find_index(c3.voices, "endless"), -1, "and left no half voice in the roster")
+}
+
+// the file shape a demo ships: one voice stored as its latent frames, the codec encoder left out
+// (`convert_pocket.py --voices stuart_bell --no-cloning --kq`) - it speaks its roster from the
+// stored frames, says it cannot clone, and refuses a clip by name
+[test]
+def test_pocket_no_encoder(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-stuart-kq.gguf")
+    if (!model_available(t, path)) {
+        return
+    }
+    with_job_que() {
+        setup_dasllama_jobque_()
+        t |> success(!tts_needs_packs(path), "a Pocket file needs no packs")
+        var inscope m <- load_tts_model(path)
+        var inscope c <- caps(m)
+        t |> success(!c.cloning, "a file without the encoder does not clone")
+        t |> success(!c.speed, "and has no speed to honour")
+        t |> equal(length(c.voices), 1, "one voice in the roster")
+        t |> equal(c.voices[0], "stuart_bell")
+        t |> equal(length(c.langs), 1)
+        t |> equal(c.langs[0], "en")
+        var inscope a <- synthesize(m, "Whose woods these are I think I know.", "stuart_bell")
+        let st = speech_stats(a.pcm)
+        t |> success(st.finite && st.rms > 0.01, "the stored voice speaks (rms {st.rms})")
+        t |> success(length(a.pcm) >= 24000 && length(a.pcm) <= 24000 * 8, "speech length {length(a.pcm)} samples")
+        var inscope clip : array<float>
+        clip |> resize(24000)
+        let why = panic_text_of() {
+            tts_register_voice(m, "x", clip, 24000)
+        }
+        t |> success(why |> find("no codec encoder") >= 0, "a clip is refused by the missing encoder: {why}")
+        var inscope c2 <- caps(m)
+        t |> equal(length(c2.voices), 1, "and the roster is unchanged")
+    }
 }
 
 // a text the chunker cannot split - no sentence mark, no comma - is one chunk past the token

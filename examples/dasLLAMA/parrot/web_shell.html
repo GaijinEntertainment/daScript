@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>storyteller — dasllama.io</title>
-<meta name="description" content="A small story model writes a children's tale while KittenTTS reads it aloud - dasLLAMA compiled to WebAssembly, running in your browser.">
+<title>parrot — dasllama.io</title>
+<meta name="description" content="Talk for a few seconds and Pocket TTS clones your voice, then reads the text you type in it - dasLLAMA compiled to WebAssembly, running in your browser; the recording never leaves the tab.">
 <link rel="icon" href="/files/dasllama-favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/files/fonts/fonts.css">
 <link rel="stylesheet" href="/files/forge.css">
@@ -21,7 +21,10 @@
   /* the site's nav sits above the stage; the stage takes the rest of the viewport */
   .dio-nav { flex: none; }
   #stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-  #canvas { width: 100%; height: 100%; object-fit: contain; border: 0; outline: none; display: block; }
+  /* the canvas element takes the letterboxed box itself (a replaced element keeps its ratio under
+     both max constraints), not the whole stage with object-fit: the program maps a click through
+     the element's box with one ratio per axis, so the box must be the picture */
+  #canvas { width: auto; height: auto; max-width: 100%; max-height: 100%; border: 0; outline: none; display: block; }
   #gate {
     position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 14px; background: #12101a; cursor: default;
@@ -36,42 +39,47 @@
     background: transparent; color: #f2b955; font: inherit; font-size: 16px; cursor: pointer;
   }
   #start:hover { background: #f2b955; color: #12101a; }
-  #note { max-width: 520px; text-align: center; line-height: 1.6; }
+  #note { max-width: 560px; text-align: center; line-height: 1.6; }
+  #mic { max-width: 520px; text-align: center; line-height: 1.6; font-size: 14px; }
+  /* the microphone's state in words, over the picture's top-right corner */
+  #micnote { position: absolute; right: 14px; top: 8px; font-size: 13px; color: #8d8577; pointer-events: none; }
+  #micnote[hidden] { display: none; }
   #note b { color: #f4e9d2; font-weight: 500; }
   #note a { color: #f2b955; }
   #note code { color: #d6cfbf; font-size: 13px; }
 </style>
 </head>
 <body>
-<!-- The storyteller's shell: the dasllama.io nav on top (its css and script come from the
-     site root, /files/), then the stage. The shell checks the browser first - the build is
-     wasm64 (memory64) with real Web Workers, so it needs an engine with memory64 (Chrome or
-     Edge 133+, Firefox 134+; Safari has none yet, and every iPhone and iPad browser is Safari's
-     engine) on a cross-origin-isolated page; a browser
-     without either gets the note below and never fetches a byte. Then it reads
-     models/manifest.json - the list the deploy minted, stamped with the IMAGE_VERSION it minted
-     at - and refuses a set minted for another version before fetching a megabyte of it: the
-     program would decline the images anyway, this way the reason is on the page. Otherwise it
-     fetches the story model, the TTS model and its phoneme packs into MEMFS before the program
-     starts, then waits for a click - browsers only let audio start from a gesture. Models come
-     from ./models/ beside the page, or ?models=<base url>. ?force=unsupported shows the note on a
-     supporting browser, for checking the page. A program that aborts after the click puts its
+<!-- The parrot shell: the dasllama.io nav on top (its css and script come from the site
+     root, /files/), then the stage. The shell checks the browser first - the build is wasm64
+     (memory64) with real Web Workers, so it needs an engine with memory64 (Chrome or Edge 133+,
+     Firefox 134+; Safari has none yet, and every iPhone and iPad browser is Safari's engine) on a
+     cross-origin-isolated page; a browser without either gets the note below and never fetches a
+     byte. Then it reads models/manifest.json - the list the deploy minted, stamped with the
+     IMAGE_VERSION it minted at - and refuses a set minted for another version before fetching a
+     megabyte of it: the program would decline the images anyway, this way the reason is on the
+     page. Otherwise it fetches the speech model and the voice-activity model into MEMFS,
+     then waits for a click - browsers only let audio start from a gesture. Models come from
+     ./models/ beside the page, or ?models=<base url>. ?force=unsupported shows the browser note on
+     a supporting browser, for checking the page. A program that aborts after the click puts its
      last engine lines back on the page instead of a black canvas. -->
 <nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
-<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 24 Q25 20 27 17 L30 12 Q32 8 36 8 L40 8 Q44 8 46 12 L47 17 Q48 20 47 24 L46 40 L48 61 Z M40 8 L42 4 L44 8 Z M36 8 L34 4 L36 8 Z"/></svg><span class="dio-mark__text">dasllama</span></a>
 <div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="/examples.html">examples</a><a class="dio-tab" href="/stories.html">stories</a><a class="dio-tab" href="/ladder.html">ladder</a></div>
 </div>
-<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.4</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io">daslang.io →</a></div>
 </div></div></nav>
 <div id="stage">
 <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<p id="micnote" hidden></p>
 <div id="gate">
-  <h1>storyteller</h1>
+  <h1>parrot</h1>
   <p id="status">reading the model list...</p>
   <div id="bar"><i id="fill"></i></div>
   <button id="start">start</button>
+  <p id="mic">The page asks for the microphone when you press record. Your recording stays in this tab: nothing is uploaded, and the voice is gone when you close it.</p>
   <p id="note" hidden></p>
 </div>
 </div>
@@ -79,7 +87,7 @@
      copy only on a browser that can run the build, so an unsupported one loads no program -->
 <template id="loader">{{{ SCRIPT }}}</template>
 <script>
-  var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1 };
+  var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1, Tab:1 };
   window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key]) e.preventDefault(); }, { passive: false });
 
   // the IMAGE_VERSION this page's program was built with - the deploy stamps it (pages.yml, from
@@ -123,7 +131,7 @@
   if (!SUPPORTED) {
     if (FORCE === 'unsupported' || !HAS_WASM64) {
       showNote('needs a memory64 browser',
-        '<b>This browser cannot run the storyteller.</b><br>The example is dasLLAMA compiled to ' +
+        '<b>This browser cannot run parrot.</b><br>The example is dasLLAMA compiled to ' +
         'WebAssembly memory64, which needs Chrome or Edge 133+ or Firefox 134+ on a desktop. Safari ' +
         'does not support memory64 yet, and on iPhone and iPad every browser runs on Safari\'s engine.');
     } else {
@@ -138,12 +146,38 @@
     // becomes the note while the gate is still up, never a download line that stays forever
     window.addEventListener('error', function (e) {
       if (!e.message) return;
-      showNote('this browser cannot run the build', '<b>This browser cannot run the storyteller.</b><br>' + escapeHtml(e.message));
+      showNote('this browser cannot run the build', '<b>This browser cannot run parrot.</b><br>' + escapeHtml(e.message));
     });
-    runStoryteller();
+    runParrot();
   }
 
-  function runStoryteller() {
+  function runParrot() {
+
+  // the microphone's state in words: the device the browser handed the program, or why it
+  // refused - the program itself hears silence either way. A browser gives a plain-http page
+  // the microphone only on localhost; opened by address it has no microphone API at all, so a
+  // stand-in refuses with that reason instead of the program's request throwing in a callback.
+  var micNote = document.getElementById('micnote');
+  function setMicNote(text) { micNote.textContent = text; micNote.hidden = !text; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+      getUserMedia: function () {
+        return Promise.reject(new DOMException('the browser allows the microphone only on localhost or https - this page was opened as ' + location.host, 'NotAllowedError'));
+      }
+    } });
+  }
+  var askMicrophone = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = function (constraints) {
+    setMicNote('asking for the microphone...');
+    return askMicrophone(constraints).then(function (stream) {
+      var track = stream.getAudioTracks()[0];
+      setMicNote('microphone: ' + ((track && track.label) || 'an unnamed device'));
+      return stream;
+    }, function (err) {
+      setMicNote('no microphone: ' + ((err && (err.message || err.name)) || err));
+      throw err;
+    });
+  };
 
   var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
   if (!modelsBase.endsWith('/')) modelsBase += '/';
@@ -152,9 +186,8 @@
     document.getElementById('fill').style.width = total ? (100 * done / total) + '%' : '0';
   }
 
-  // the deploy's manifest: the two prepared images (baked for the build's identity by
-  // dasllama-convert --config) and the two English front-end packs - no gguf crosses the wire -
-  // with their sizes, and the IMAGE_VERSION the images were minted at
+  // the deploy's manifest: the files it minted or copied beside the page, with their sizes, and
+  // the IMAGE_VERSION the images were minted at
   async function fetchManifest() {
     var r = await fetch(modelsBase + 'manifest.json', { cache: 'no-cache' });
     if (!r.ok) throw new Error('manifest.json: HTTP ' + r.status);
@@ -194,14 +227,14 @@
   var lastLines = [];
   function remember(text) {
     text = String(text);
-    if (/dasLLAMA|storyteller|panic|error/i.test(text)) {
+    if (/dasLLAMA|parrot|panic|error/i.test(text)) {
       lastLines.push(text);
       if (lastLines.length > 6) lastLines.shift();
     }
   }
   function showFailure(what) {
     var lines = lastLines.map(function (l) { return '<code>' + escapeHtml(l) + '</code>'; }).join('<br>');
-    showNote('the program stopped', '<b>the storyteller stopped: ' + escapeHtml(what) + '</b>' + (lines ? '<br>' + lines : ''));
+    showNote('the program stopped', '<b>parrot stopped: ' + escapeHtml(what) + '</b>' + (lines ? '<br>' + lines : ''));
   }
 
   window.Module = {
@@ -217,7 +250,7 @@
       };
       return c;
     })(),
-    arguments: ['--models', '/models', '--story-model', 'stories15M.dlim', '--tts-model', 'kitten-nano.dlim', '--autoplay'],
+    arguments: ['--models', '/models', '--tts-model', 'pocket-tts-en-kq.gguf', '--vad-model', 'silero_vad.bin'],
     print: function (text) { console.log(text); remember(text); },
     printErr: function (text) { console.error(text); remember(text); },
     onAbort: function (what) { showFailure(what || 'abort'); },
@@ -227,7 +260,7 @@
       Module.ENV.DASLLAMA_IMAGE = '0';          // never mint a sidecar into MEMFS: the images arrive prepared
       Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';  // the portable kernels, no tune sidecar
       Module.FS.mkdir('/models');
-      Module.addRunDependency('storyteller-models');
+      Module.addRunDependency('parrot-models');
       fetchManifest()
         .then(function (manifest) {
           return fetchModels(manifest, function (name, bytes) { Module.FS.writeFile('/models/' + name, bytes); });
@@ -240,7 +273,7 @@
           start.addEventListener('click', function () {
             document.getElementById('gate').hidden = true;
             document.getElementById('canvas').focus();
-            Module.removeRunDependency('storyteller-models');
+            Module.removeRunDependency('parrot-models');
           });
         })
         .catch(function (err) {

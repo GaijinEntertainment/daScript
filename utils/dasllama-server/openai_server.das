@@ -179,7 +179,6 @@ let TTS_LANE_DEFAULT = "q8"
 var g_tts_lane = TTS_LANE_DEFAULT   // the weight lane the worker is ASKED for; its ready event echoes the pin it took
 var g_tts_voices_dir = ""   // clips a cloning model adds to its voices at boot, each under its file's stem
 let TTS_VOICE_CLIP_EXTENSIONS : array<string> <- [".wav", ".flac", ".mp3", ".ogg"]   // what the decode rail reads
-let TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin"]   // load_tts_model reads both from the GGUF's directory
 var g_shutdown_requested = false
 var g_gc_requested = false
 var g_req_counter = 0l
@@ -5285,7 +5284,7 @@ class OpenAiServer : HvWebServer {
             return handle_bake_start(req, resp)
         }
         GET("/catalog") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, gpu_weight_budget_bytes() / (1024l * 1024l)))
+            return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, gpu_weight_budget_bytes() / (1024l * 1024l), @@tts_needs_packs))
         }
         POST("/catalog/download") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             if (!is_loopback_req(req)) return deny_operator(resp)

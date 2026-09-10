@@ -70,11 +70,22 @@ GPT-Neo, which no GGUF engine runs, so we trained our own: <code>tinystories-ins
 27M-parameter llama on the TinyStoriesInstruct corpus with a 4K vocabulary, 15 minutes on one
 H100. Asked for three words over five word triples, 24 sampled stories each, it puts all three in
 61 of the 120 stories; the official 33M puts them in 60. It
-ships as a 32 MB <code>.dlim</code> beside KittenTTS nano; you type the words, Enter tells the story, Tab
-asks for dialogue. The model, the training recipe and the hit-rate numbers are on
+ships as a 32 MB <code>.dlim</code> beside a 65 MB Pocket TTS file with one voice inside and no phoneme
+packs; you type the words, Enter tells the story, Tab asks for dialogue. The model, the training recipe and the hit-rate numbers are on
 <a href="https://huggingface.co/borisbat/dasllama-stories">Hugging Face</a>. The model sets of both
 examples are now minted by the deploy for the build it ships, so a format bump can no longer
 leave a page silently declining its images. <a href="examples.html">Try it</a>.</p></div>
+</article>
+<article class="dio-item" id="n-2026-09-10-parrot" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-10</span><span class="dio-item__tag">examples</span><h2 class="dio-item__title">Parrot - talk for a few seconds, and the browser reads the poem in your voice.</h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>A third dasLLAMA example on the examples page. Press record and talk; Silero VAD ends the take
+when you go quiet, Pocket TTS clones the voice from it, and the text in the box - Frost's
+"Stopping by Woods on a Snowy Evening" to begin with, or whatever you type - is read in that
+voice. The recording stays in the tab. Behind it the English Pocket file shrank from 152 MB to
+75: the backbone and the codec transformers as Q4_K, the flow head Q8_0, the codec encoder
+still inside; on our 200-sentence rig it reads 3.86 WER / 4.295 UTMOS against the q8 file's
+3.91 / 4.328, and we could not hear the difference. Storywish now reads through the same form
+with one voice and no encoder, 65 MB. <a href="examples.html">Try it</a>.</p></div>
 </article>
 <article class="dio-item" id="n-2026-09-07-download-dasllama-server" onclick="this.classList.toggle('is-open')">
 <div class="dio-item__head"><span class="dio-item__date">2026-09-07</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama-server is a download now - one archive per platform.</h2><span class="dio-item__chev">▾</span></div>

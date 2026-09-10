@@ -4,8 +4,8 @@ require daslib/daspkg
 
 [export]
 def package() {
-    package_name("storywish")
-    package_description("Storywish: type the words, a story model trained to take requests writes a tale that uses them while Pocket TTS reads it aloud - dasGlfw + dasOpenGL + dasAudio over dasLLAMA")
+    package_name("parrot")
+    package_description("Parrot: talk for a few seconds, Pocket TTS clones the voice, and the text you type is read aloud in it - dasGlfw + dasOpenGL + dasAudio over dasLLAMA")
 }
 
 [export]

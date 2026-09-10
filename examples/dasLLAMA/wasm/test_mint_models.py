@@ -169,5 +169,90 @@ class MintTest(unittest.TestCase):
             self.assertIn("boom", err)
 
 
+class ServedAsIsTest(unittest.TestCase):
+    """the lists beside `images`: `files` (a GGUF that is its own served form) and `tree` (a file
+    the repository carries, named by its repo-relative path) - copied as they are, hash-held"""
+
+    def with_repo(self, fx, spec, tree_bytes=None):
+        """the spec written, and a stand-in repository root four levels above a fake script path,
+        the way the script finds the checkout; `tree_bytes` lands at models/vad.bin under it"""
+        fx.spec = spec
+        (fx.example / "models.json").write_text(json.dumps(spec))
+        repo = fx.root / "repo"
+        (repo / "models").mkdir(parents=True)
+        if tree_bytes is not None:
+            (repo / "models" / "vad.bin").write_bytes(tree_bytes)
+        return str(repo / "examples" / "dasLLAMA" / "wasm" / "mint_models.py")
+
+    def run_with_file(self, fake_file, argv):
+        saved = mint_models.__file__
+        mint_models.__file__ = fake_file
+        try:
+            return run_main(argv)
+        finally:
+            mint_models.__file__ = saved
+
+    def test_a_files_entry_is_copied_as_it_is_beside_the_image(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=35)
+            served = b"a Pocket file, served as it is"
+            (fx.cache / f"{sha(served)}-pocket.gguf").write_bytes(served)
+            spec = dict(fx.spec, files=[{"file": "pocket.gguf", "repo": "someone/tts", "sha256": sha(served)}])
+            fake_file = self.with_repo(fx, spec)
+            code, out, err = self.run_with_file(fake_file, fx.argv("--expect-image-version", "35"))
+            self.assertIsNone(code, err)
+            manifest = json.loads((fx.out / "manifest.json").read_text())
+            self.assertEqual([f["name"] for f in manifest["files"]], ["story.dlim", "pack.bin", "pocket.gguf"])
+            self.assertEqual((fx.out / "pocket.gguf").read_bytes(), served)
+            self.assertEqual(manifest["files"][2]["source"], "someone/tts/pocket.gguf")
+
+    def test_a_tree_entry_is_copied_from_the_checkout_and_named_by_its_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=35)
+            vad = b"voice activity weights"
+            spec = dict(fx.spec, tree=[{"file": "vad.bin", "path": "models/vad.bin", "sha256": sha(vad)}])
+            fake_file = self.with_repo(fx, spec, vad)
+            code, out, err = self.run_with_file(fake_file, fx.argv("--expect-image-version", "35"))
+            self.assertIsNone(code, err)
+            manifest = json.loads((fx.out / "manifest.json").read_text())
+            self.assertEqual((fx.out / "vad.bin").read_bytes(), vad)
+            self.assertEqual(manifest["files"][-1], {"name": "vad.bin", "bytes": len(vad), "sha256": sha(vad), "source": "models/vad.bin"})
+
+    def test_a_tree_file_whose_hash_moved_stops_the_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=35)
+            spec = dict(fx.spec, tree=[{"file": "vad.bin", "path": "models/vad.bin", "sha256": sha(b"the weights the page was built for")}])
+            fake_file = self.with_repo(fx, spec, b"other weights checked in since")
+            code, out, err = self.run_with_file(fake_file, fx.argv())
+            self.assertIsInstance(code, str)
+            self.assertIn("vad.bin: sha256", code)
+            self.assertIn("the tree file changed", code)
+            self.assertFalse((fx.out / "manifest.json").exists())
+
+    def test_a_set_with_no_image_carries_the_version_the_deploy_expects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            served = b"a Pocket file"
+            (fx.cache / f"{sha(served)}-pocket.gguf").write_bytes(served)
+            spec = {"files": [{"file": "pocket.gguf", "repo": "someone/tts", "sha256": sha(served)}]}
+            fake_file = self.with_repo(fx, spec)
+            code, out, err = self.run_with_file(fake_file, fx.argv("--expect-image-version", "41", "--stamp-page", str(fx.page)))
+            self.assertIsNone(code, err)
+            self.assertEqual(json.loads((fx.out / "manifest.json").read_text())["image_version"], 41)
+            self.assertIn("/* @image-version */ 41", fx.page.read_text())
+            self.assertFalse((fx.out / "story.dlim").exists(), "nothing was minted")
+
+    def test_a_set_with_no_image_and_no_expected_version_is_unstamped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            served = b"a Pocket file"
+            (fx.cache / f"{sha(served)}-pocket.gguf").write_bytes(served)
+            fake_file = self.with_repo(fx, {"files": [{"file": "pocket.gguf", "repo": "someone/tts", "sha256": sha(served)}]})
+            code, out, err = self.run_with_file(fake_file, fx.argv("--stamp-page", str(fx.page)))
+            self.assertIsNone(code, err)
+            self.assertEqual(json.loads((fx.out / "manifest.json").read_text())["image_version"], 0)
+            self.assertIn("/* @image-version */ 0", fx.page.read_text(), "0 is the unstamped slot the page reads as no check")
+
+
 if __name__ == "__main__":
     unittest.main()

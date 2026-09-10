@@ -3238,10 +3238,12 @@ function ttsEnableArm(strip, label, present, kept) {
     strip.append(b, label);
 }
 
-// the download ladder over /catalog's `tts` list: the two front-end packs first (every speech
-// model loads them), then the models, then the enable. The rail runs one download at a time,
-// so an absent pack pair is one button and the card re-offers what is still missing.
-// False back = the catalog has no tts list to offer from, and the caller says so instead.
+// the download ladder over /catalog's `tts` list: a model on disk that can speak - a Pocket file
+// stands alone, a phoneme family reads the two front-end packs beside it - goes straight to the
+// enable; otherwise the packs first (every phoneme family loads them), then the models. The rail
+// runs one download at a time, so an absent pack pair is one button and the card re-offers what
+// is still missing. False back = the catalog has no tts list to offer from, and the caller says
+// so instead.
 function ttsOfferArm(strip, dl, kept) {
     const items = (catState && catState.tts) || [];
     if (!items.length) return false;
@@ -3253,30 +3255,31 @@ function ttsOfferArm(strip, dl, kept) {
         return true;
     }
     const missingPacks = items.filter(i => i.pack && !i.present);
+    const models = items.filter(i => !i.pack);
+    const present = models.filter(m => m.present && (!m.needs_packs || !missingPacks.length))
+        .sort((a, b) => a.bytes - b.bytes);
+    if (present.length) {
+        ttsEnableArm(strip, label, present, kept);
+        return true;
+    }
     if (missingPacks.length) {
         const bytes = missingPacks.reduce((a, p) => a + p.bytes, 0);
         const b = miniButton("download the front-end packs (" + fmtSize(bytes) + ")",
             () => startTtsDownload(missingPacks[0].file));
-        b.title = "the text normalizer and grapheme-to-phoneme tables every speech model loads";
+        b.title = "the text normalizer and grapheme-to-phoneme tables every phoneme family loads";
         b.disabled = dlBusy(dl);
         label.textContent = "add speech synthesis — /v1/audio/speech and the speech studio above";
         strip.append(b, label);
         return true;
     }
-    const models = items.filter(i => !i.pack);
-    const present = models.filter(m => m.present).sort((a, b) => a.bytes - b.bytes);
-    if (!present.length) {
-        label.textContent = "the front-end packs are here — pick a speech model";
-        for (const m of models) {
-            const b = miniButton("download " + ttsName(m.file) + " (" + fmtSize(m.bytes) + ")",
-                () => startTtsDownload(m.file));
-            b.disabled = dlBusy(dl);
-            strip.append(b);
-        }
-        strip.append(label);
-        return true;
+    label.textContent = "the front-end packs are here — pick a speech model";
+    for (const m of models) {
+        const b = miniButton("download " + ttsName(m.file) + " (" + fmtSize(m.bytes) + ")",
+            () => startTtsDownload(m.file));
+        b.disabled = dlBusy(dl);
+        strip.append(b);
     }
-    ttsEnableArm(strip, label, present, kept);
+    strip.append(label);
     return true;
 }
 

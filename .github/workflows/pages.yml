@@ -334,7 +334,8 @@ jobs:
 
         # 7. dasllama.io/examples — dasLLAMA itself compiled to wasm64, one app per example
         #    (storyteller: stories15M writes, KittenTTS reads; storywish: you type the words,
-        #    tinystories-instruct-27M writes). Each .das_package turns the GPU modules off, so the
+        #    tinystories-instruct-27M writes, Pocket TTS reads; parrot: you talk, Pocket TTS clones the
+        #    voice and reads the text you type in it). Each .das_package turns the GPU modules off, so the
         #    host needs no Metal/Vulkan. Non-fatal like the games; the dasllama.io stage step
         #    stages a card's page only when all three outputs exist. The models are prepared .dlim
         #    images the stage step MINTS for this very build: examples/dasLLAMA/wasm/dlim_config is
@@ -342,7 +343,7 @@ jobs:
         #    bakes against the identity the browser build actually wants (a set minted for another
         #    IMAGE_VERSION is declined by the program - the failure that put a black canvas on the
         #    storyteller page for a day).
-        for ex in storyteller storywish; do
+        for ex in storyteller storywish parrot; do
             if ./bin/daslang utils/daspkg/main.das -- \
                     release wasm --root "examples/dasLLAMA/$ex" --out "$REPO/web/output64/examples"; then
                 echo "$ex wasm build OK"
@@ -639,7 +640,7 @@ jobs:
             rm -rf "_site_dasllama/examples/$1/models"
             printf '%s' "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>$1 - building</title><style>html,body{margin:0;height:100%}body{background:#12101a;color:#d6cfbf;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>" > "_site_dasllama/examples/$1/$1.html"
         }
-        for ex in storyteller storywish; do
+        for ex in storyteller storywish parrot; do
             mkdir -p "_site_dasllama/examples/$ex"
             if [ -f "web/output64/examples/$ex/$ex.html" ] \
                && [ -f "web/output64/examples/$ex/$ex.js" ] \

@@ -698,7 +698,7 @@ struct public TestEnv {
     whisper_dir : string = ""
 
     @clarg_env = "DISPLAY"
-    @clarg_doc = "Ambient platform variable; read only by the browser examples' smoke tests (storyteller, storywish) to tell whether a Linux box has a window server for the example's window."
+    @clarg_doc = "Ambient platform variable; read only by the browser examples' smoke tests (storyteller, storywish, parrot) to tell whether a Linux box has a window server for the example's window."
     display : string = ""
 
     @clarg_env = "WAYLAND_DISPLAY"

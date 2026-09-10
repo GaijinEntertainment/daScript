@@ -1351,3 +1351,24 @@ commits: direction-grade.
   grows `mtp_cat` to 2 x 9 x dim floats (Qwen3.8-27B: 370 KB) and `mtp_logits_b` to 9 x vocab
   floats once (about 5 MB). Decision: taken - the round's gain rides on the drafter's presence, and
   the sidecar is a fraction of a percent of the target it drafts for.
+
+### From the Pocket small form (2026-09-10)
+
+Instruments: `harness/tts_synth.das` (`-jit -module-cache`, alba, the first 60 sentences of the
+rig corpus, M1 Max, the box's tune profile, JIT cache warm) with the process's resident set read
+through `ps -o rss` every half second, two reps per file; `harness/tts_rig.py` (alba, the 200
+sentences, parakeet WER + UTMOS) per weight lane. Every pair here is two processes on one box:
+direction-grade.
+
+- **The English file, the q8 form against the small form (`pocket-tts-en-q8.gguf` 152 MB,
+  `pocket-tts-en-kq.gguf` 75 MB; the one-voice `pocket-tts-en-stuart-kq.gguf` 65 MB):** the
+  compiled program before the load reads 1.87 GB on both; the load adds 0.66 GB on the q8 file
+  and 0.50 on the kq file; over the synthesis the q8 process holds 2.54 GB and the kq process
+  2.70 - the kq lane steps up 0.33 GB at its first synthesis and stays there, the q8 lane does not
+  (reps within 2 MB). RTF over the 60 sentences: q8 0.0510 / 0.0507, kq 0.0435 / 0.0434 - the
+  small file decodes 15% faster and its process is 6% larger. The step is followup 129's.
+- **The kq file's three lanes on the rig (the q8 file 3.91 / 4.328, its f32 lane through the f16
+  file 4.32 / 4.366):** native 3.86 / 4.295, the q8 pin 3.73 / 4.295, the f32 pin 3.86 / 4.330.
+  The lanes agree within the rig's own spread; the small form loses nothing the rig can hear.
+  Decision: taken - the browser pages read the small forms (storywish the one-voice file, parrot
+  the 19-voice one), the q8 file stays the desktop default of the served set.

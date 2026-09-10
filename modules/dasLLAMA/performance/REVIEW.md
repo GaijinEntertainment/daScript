@@ -109,8 +109,13 @@ or an unnamed table lookup.
 
 **A diff that adds a companion artifact - a file fetched or verified with a model and consumed
 beside it: a projector, a draft head, an assistant sidecar, an image fixture - puts it in the
-`companions` of the row that pins its carrier, and names it from every other row that
-consumes it.**
+`companions` of the row that pins its carrier.**
+
+**A diff that adds a row whose test cell consumes a companion pinned on another row - a fixture,
+an oracle, a twin file that cell reads beside it - names that companion in the new row's
+`companions`, in the same change; a diff that adds a companion an existing row's cell consumes
+names it from that row too.** A box that fetches the row alone gets its companions with it, and
+the cell runs instead of skipping.
 
 **A diff that changes what any `serve_*` function in `model_specs.das` returns - a `serve_*`
 field on a row, the function's body, or a `companions` entry with a `url` on a row a `serve_*`

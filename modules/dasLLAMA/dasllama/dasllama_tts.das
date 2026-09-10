@@ -163,7 +163,7 @@ def caps(m : TtsModel) : TtsCaps {
     //! What the loaded model offers: the canonical voice names the front end can drive, each with
     //! its language (a voice whose language it does not phonemize is left out; aliases resolve at
     //! synthesis), the PCM rate, the languages, whether it clones a voice, whether a speed applies.
-    var c = TtsCaps(sample_rate = sample_rate_of(m), cloning = m.kind == TtsKind.pocket, speed = m.kind != TtsKind.pocket)
+    var c = TtsCaps(sample_rate = sample_rate_of(m), cloning = m.kind == TtsKind.pocket && m.pocket.cloning, speed = m.kind != TtsKind.pocket)
     c.langs <- front_end_langs(m)
     let names & = unsafe(m.kind == TtsKind.pocket ? m.pocket.voice_names : m.model.voice_names)
     for (v in names) {
@@ -440,7 +440,7 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; sp
 def private resolve_voice(m : TtsModel; voice : string) : string {
     var vname = ""
     if (m.kind == TtsKind.pocket) {
-        vname = key_exists(m.pocket.voices, voice) ? voice : ""
+        vname = pocket_has_voice(m.pocket, voice) ? voice : ""
     } elif (m.kind == TtsKind.kitten) {
         vname = kitten_voice(m.model.kitten, m.model, voice)
     } elif (styletts2_has_voice(m.model, voice)) {

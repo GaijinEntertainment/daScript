@@ -114,8 +114,10 @@ struct PocketModel {
     bos_before_voice : bool
     default_voice : string
     voice_names : array<string>
-    voices : table<string; array<float>>   // the roster's clips, 24 kHz mono
+    voices : table<string; array<float>>          // a voice as a clip, 24 kHz mono: a cloned one, or a roster of the older file form
+    voice_latents : table<string; array<float>>   // a voice as its clip's latent frames [frames][latent_dim]: the roster's stored form
     voice_states : table<string; PocketVoiceState>
+    cloning : bool           // the file carries the codec encoder, so a clip can become a voice
     text_emb : TtsWeight = TtsWeight()     // [n_bins + 1][d]
     bos_emb : TtsWeight = TtsWeight()      // [latent_dim]: the first frame's input
     bos_voice : TtsWeight = TtsWeight()    // [d]: the row before the voice prompt
@@ -136,7 +138,8 @@ struct PocketModel {
 }
 
 // ===== the serving lane: f32 planes (the parity rail's form) or Q8_0 quants on the GEMMs, the
-// same pin and policy as the StyleTTS2 families' =====
+// same pin and policy as the StyleTTS2 families'; unpinned, a K-quant tensor of the file serves
+// as its own planes (the kq lane), so a file's formats are the lanes it can take =====
 
 enum private PocketLane {
     unset
@@ -152,9 +155,9 @@ def private pocket_serve_q8_() : bool {
     return true
 }
 
-//! Pin the GEMM weights' format for subsequent loads: Q8_0 quants or the file's own f32.
-//! ``reset_pocket_q8`` returns to the policy default. The facade spells these ``set_tts_q8`` /
-//! ``reset_tts_q8`` for every family at once.
+//! Pin the GEMM weights' format for subsequent loads: Q8_0 quants or the file's own f32 (a
+//! K-quant tensor dequantizes into either); ``reset_pocket_q8`` returns to the policy default,
+//! which serves a K-quant tensor as its own planes. The facade: ``set_tts_q8`` / ``reset_tts_q8``.
 def set_pocket_q8(on : bool) {
     g_pocket_q8_pin = on ? PocketLane.q8 : PocketLane.exact
 }
@@ -166,13 +169,18 @@ def reset_pocket_q8() {
 //! Would the next load serve its GEMMs as q8 - the pin when set, the policy otherwise.
 def pocket_serves_q8() : bool => pocket_serve_q8_()
 
+//! Would the next load serve a K-quant tensor as its own planes - true unless a lane is pinned.
+def pocket_serves_native() : bool => g_pocket_q8_pin == PocketLane.unset
+
 // what the readers mint while a load runs: the lane's quant choice and the backend's repack
 var private g_stage_q8 = false
 var private g_stage_repack = false
+var private g_stage_native = false
 
 def finalize(var m : PocketModel) {
     delete m.voice_names
     delete m.voices
+    delete m.voice_latents
     delete m.voice_states
     delete m.text_emb
     delete m.bos_emb
@@ -287,8 +295,8 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 var private g_stage_file_q8 = false   // the file's `pocket.weights` says q8: its Q8_0 tensors are in the kernels' layout
 
 // a Q8_0 tensor is read as the kernels' own blocks only where the converter wrote it that way:
-// `pocket.weights = "q8"` names the layout, and the block-home rule (32-wide on both dims, a
-// dense stride-1 conv) is what the converter's q8_linear / q8_conv wrote a second time
+// `pocket.weights = "q8"` names the layout, and the block-home rule (32-wide on both dims, a dense
+// stride-1 conv) is what q8_linear / q8_conv / head_q8_linear wrote a second time; Q4_K's disk form is ggml's own and needs no gate
 def private is_q8_tensor(m : GGUFMeta; name : string) : bool {
     if (gguf_tensor_type(m, name) != GGML_TYPE_Q8_0) {
         return false
@@ -299,6 +307,7 @@ def private is_q8_tensor(m : GGUFMeta; name : string) : bool {
     return true
 }
 
+[arch(at = "../ARCHITECTURE_POCKET.md#pocket-q8-file")]
 def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; vec_only : bool = false) : TtsLinear {
     var l = TtsLinear()
     let wname = "{prefix}.weight"
@@ -308,10 +317,22 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    if (is_q8_tensor(m, wname) && (vec_only || l.nin % 32l != 0l || l.nout % 32l != 0l)) {
-        panic("dasLLAMA pocket: '{wname}' [{l.nout}][{l.nin}] is Q8_0, a shape the q8 lane does not serve ({vec_only ? "a vector-only layer" : "not 32-wide on both dims"})")
+    if (is_q8_tensor(m, wname) && (l.nin % 32l != 0l || l.nout % 32l != 0l)) {
+        panic("dasLLAMA pocket: '{wname}' [{l.nout}][{l.nin}] is Q8_0, a shape the q8 lane does not serve (not 32-wide on both dims)")
     }
-    if (g_stage_q8 && !vec_only && is_q8_tensor(m, wname)) {
+    if (g_stage_native && gguf_tensor_type(m, wname) == GGML_TYPE_Q4_K) {
+        // the kq lane: the file's own K-quant planes, straight into the layer (the width rule is the layer's own)
+        let n = l.nout * l.nin
+        var inscope kq : array<uint8>
+        var inscope ks : array<uint8>
+        kq |> reserve_resize(n / 256l * kq_qsb(KqFmt.k4))
+        ks |> reserve_resize(n / 256l * kq_ssb(KqFmt.k4))
+        gguf_transcode_q4k(m, bytes, wname, kq, ks, 0l, n)
+        linear_take_kq(l, 4, kq, ks, true)   // repacked wherever the backend the load selected carries kq kernels
+        return <- l
+    }
+    if (g_stage_q8 && is_q8_tensor(m, wname)) {
+        // a vector-only layer the file stores Q8_0 (the flow head) takes the blocks too: its GEMV runs on the q8 lane
         let n = l.nout * l.nin
         l.wq |> reserve_resize(n)
         l.wqs |> reserve_resize(n / 32l)
@@ -322,8 +343,8 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
         l.q8 = true
         return <- l
     }
-    l.w <- read_arr(m, bytes, wname)   // a Q8_0 tensor dequantizes here: the f32 lane of a published file
-    linear_prepare(l, true, g_stage_q8 && !vec_only, g_stage_repack, vec_only)
+    l.w <- read_arr(m, bytes, wname)   // a Q8_0 or K-quant tensor dequantizes here: the f32 lane of a published file, or the q8 lane pinned over a K-quant one
+    linear_prepare(l, true, g_stage_q8, g_stage_repack, vec_only)   // a vector layer mints nothing and keeps w
     return <- l
 }
 
@@ -495,30 +516,36 @@ def private read_head(m : GGUFMeta; bytes : array<uint8> | #; var hd : PocketHea
     }
 }
 
-def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMimi; n_layers, d, heads, ffn, context : int64; period : float) {
+def private read_mimi(m : GGUFMeta; bytes : array<uint8> | #; var mm : PocketMimi; n_layers, d, heads, ffn, context : int64; period : float; encoder : bool) {
     mm.ratios <- gguf_int_array(m, bytes, "pocket.mimi.ratios")
     let nr = long_length(mm.ratios)
     mm.hop = 1l
     for (r in mm.ratios) {
         mm.hop *= r
     }
-    // the encoder's stages read the ratios reversed: 1 -> 64 channels first, doubling per stage
-    mm.enc_in <- read_conv(m, bytes, "mimi.encoder.model.0.conv", 1l, 1l, false)
-    mm.enc_res |> resize(int(nr))
-    mm.enc_down |> resize(int(nr))
-    for (i in range64(nr)) {
-        let ratio = mm.ratios[nr - 1l - i]
-        mm.enc_res[i] <- read_res_conv(m, bytes, "mimi.encoder.model.{1l + 3l * i}")
-        mm.enc_down[i] <- read_conv(m, bytes, "mimi.encoder.model.{3l + 3l * i}.conv", ratio, 1l, false)
-    }
-    mm.enc_out <- read_conv(m, bytes, "mimi.encoder.model.{2l + 3l * nr}.conv", 1l, 1l, false)
-    mm.enc_tf <- read_transformer(m, bytes, "mimi.enc_tf", n_layers, d, heads, ffn, context, period, true)
-    mm.downsample <- read_conv(m, bytes, "mimi.downsample.conv.conv", 0l, 1l, false)
-    mm.frame_steps = mm.downsample.k / 2l
-    mm.downsample.stride = mm.frame_steps
-    mm.downsample.pad_l = 0l   // replicate-padded by the caller, `frame_steps` rows
     mm.quant_proj <- read_conv(m, bytes, "mimi.quantizer.output_proj", 1l, 1l, false)
+    // the two resamplers are kernel 2 x stride and mirror each other; the upsampler is always in the file
+    mm.frame_steps = m.tensors[need_tensor(m, "mimi.upsample.convtr.convtr.weight")].dims[0] / 2l
     mm.upsample <- read_conv(m, bytes, "mimi.upsample.convtr.convtr", mm.frame_steps, d, true)
+    if (encoder) {
+        // the encoder's stages read the ratios reversed: 1 -> 64 channels first, doubling per stage
+        mm.enc_in <- read_conv(m, bytes, "mimi.encoder.model.0.conv", 1l, 1l, false)
+        mm.enc_res |> resize(int(nr))
+        mm.enc_down |> resize(int(nr))
+        for (i in range64(nr)) {
+            let ratio = mm.ratios[nr - 1l - i]
+            mm.enc_res[i] <- read_res_conv(m, bytes, "mimi.encoder.model.{1l + 3l * i}")
+            mm.enc_down[i] <- read_conv(m, bytes, "mimi.encoder.model.{3l + 3l * i}.conv", ratio, 1l, false)
+        }
+        mm.enc_out <- read_conv(m, bytes, "mimi.encoder.model.{2l + 3l * nr}.conv", 1l, 1l, false)
+        mm.enc_tf <- read_transformer(m, bytes, "mimi.enc_tf", n_layers, d, heads, ffn, context, period, true)
+        mm.downsample <- read_conv(m, bytes, "mimi.downsample.conv.conv", 0l, 1l, false)
+        if (mm.downsample.k / 2l != mm.frame_steps) {
+            panic("dasLLAMA pocket: the downsampler's kernel {mm.downsample.k} and the upsampler's {2l * mm.frame_steps} disagree on the frame stride")
+        }
+        mm.downsample.stride = mm.frame_steps
+        mm.downsample.pad_l = 0l   // replicate-padded by the caller, `frame_steps` rows
+    }
     mm.dec_tf <- read_transformer(m, bytes, "mimi.dec_tf", n_layers, d, heads, ffn, context, period, true)
     mm.dec_in <- read_conv(m, bytes, "mimi.decoder.model.0.conv", 1l, 1l, false)
     mm.dec_up |> resize(int(nr))
@@ -537,14 +564,44 @@ def private lang_code_of(language : string) : string {
     return language
 }
 
+// the roster: each voice as its stored latent frames, or as a clip in the older file form (which
+// needs the encoder to hear it)
+def private read_roster(g : GGUFMeta; bytes : array<uint8> | #; var m : PocketModel; path : string) {
+    m.voice_names <- gguf_str_array(g, bytes, "pocket.voices")
+    for (v in m.voice_names) {
+        let ti = gguf_find_tensor(g, "voice_latents.{v}")
+        if (ti >= 0) {
+            if (g.tensors[ti].dims[0] != m.latent_dim) {
+                panic("dasLLAMA pocket: '{path}' stores voice '{v}' as frames of {g.tensors[ti].dims[0]}, the codec's latent width is {m.latent_dim}")
+            }
+            m.voice_latents[v] <- read_arr(g, bytes, "voice_latents.{v}")
+        } elif (m.cloning) {
+            m.voices[v] <- read_arr(g, bytes, "voice.{v}")
+        } else {
+            panic("dasLLAMA pocket: '{path}' stores voice '{v}' as a clip but carries no codec encoder to hear it with")
+        }
+    }
+}
+
+//! Whether `name` is a voice this model speaks: a roster voice (stored as latent frames, or as
+//! a clip in the older file form) or a cloned one.
+def pocket_has_voice(m : PocketModel; name : string) : bool {
+    return key_exists(m.voice_latents, name) || key_exists(m.voices, name)
+}
+
 //! Load a converted Pocket TTS GGUF: the scalars from its `pocket.*` metadata, the weights
-//! prepared for the rows kernels, the tokenizer, and the roster's clips (encoded on first use).
+//! prepared for the rows kernels, the tokenizer, and the roster (its states built on first use).
 def load_pocket(path : string) : PocketModel {
     var inscope m = PocketModel()
     m.q8 = pocket_serve_q8_()
     g_stage_q8 = m.q8
-    g_stage_repack = m.q8 && select_matmul_backend_for_load_()
-    to_log(LOG_INFO, "dasLLAMA pocket: GEMM lane {m.q8 ? "q8" : "f32"} - {g_pocket_q8_pin != PocketLane.unset ? "pinned via set_tts_q8" : "the policy default"}\n")
+    g_stage_native = pocket_serves_native()
+    // the backend is selected for any quantized lane; its q8 layout may want a repack (g_stage_repack), and the
+    // K-quant planes repack wherever it carries kq kernels - linear_take_kq asks that itself
+    let selected = (m.q8 || g_stage_native) ? select_matmul_backend_for_load_() : false
+    g_stage_repack = m.q8 && selected
+    let kq_arm = !g_stage_native ? "" : (kernel_backend_has_kq() ? ", its K-quant planes repacked for {active_kernel_backend()}" : ", its K-quant planes in disk order (the portable GEMV)")
+    to_log(LOG_INFO, "dasLLAMA pocket: GEMM lane {m.q8 ? "q8" : "f32"}{g_stage_native ? ", a K-quant tensor as its own planes" : ""}{kq_arm} - {g_pocket_q8_pin != PocketLane.unset ? "pinned via set_tts_q8" : "the policy default"}\n")
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA pocket: cannot open model '{path}'")
@@ -572,10 +629,8 @@ def load_pocket(path : string) : PocketModel {
         if (g_stage_file_q8 && !m.q8) {
             to_log(LOG_INFO, "dasLLAMA pocket: '{path}' carries Q8_0 GEMM weights; the f32 lane serves them dequantized\n")
         }
-        m.voice_names <- gguf_str_array(g, bytes, "pocket.voices")
-        for (v in m.voice_names) {
-            m.voices[v] <- read_arr(g, bytes, "voice.{v}")
-        }
+        m.cloning = !gguf_has(g, "pocket.cloning") || gguf_int(g, bytes, "pocket.cloning") != 0l
+        read_roster(g, bytes, m, path)
         let d = gguf_int(g, bytes, "pocket.backbone.d_model")
         let heads = gguf_int(g, bytes, "pocket.backbone.heads")
         let layers = gguf_int(g, bytes, "pocket.backbone.layers")
@@ -597,7 +652,7 @@ def load_pocket(path : string) : PocketModel {
         read_head(g, bytes, m.head, gguf_int(g, bytes, "pocket.head.depth"))
         read_mimi(g, bytes, m.mimi, gguf_int(g, bytes, "pocket.mimi.layers"), gguf_int(g, bytes, "pocket.mimi.d_model"),
             gguf_int(g, bytes, "pocket.mimi.heads"), gguf_int(g, bytes, "pocket.mimi.dim_feedforward"),
-            gguf_int(g, bytes, "pocket.mimi.context"), gguf_f32(g, bytes, "pocket.mimi.rope_max_period"))
+            gguf_int(g, bytes, "pocket.mimi.context"), gguf_f32(g, bytes, "pocket.mimi.rope_max_period"), m.cloning)
         m.frame_samples = m.mimi.hop * m.mimi.frame_steps
         m.unk_id = gguf_int(g, bytes, "tokenizer.ggml.unknown_token_id")
         m.byte_fallback = gguf_int(g, bytes, "tokenizer.ggml.byte_fallback") != 0l
@@ -610,6 +665,7 @@ def load_pocket(path : string) : PocketModel {
     }
     fclose(f)
     g_stage_file_q8 = false
+    g_stage_native = false
     m.tok <- load_tokenizer_gguf(path)
     return <- m
 }
@@ -705,6 +761,9 @@ def private res_conv_rows(b : PocketResConv; x : array<float>; t : int64; var sc
 //! The clip's latent frames [frames][latent_dim] through the codec encoder - the voice prompt's
 //! source. `pcm` is 24 kHz mono; its tail pads to a whole frame with zeros as the reference does.
 def pocket_encode_latents(m : PocketModel; pcm : array<float>; var sc : PocketScratch; @scratch @exact_size var latents : array<float>) : int64 {
+    if (!m.cloning) {
+        panic("dasLLAMA pocket: this file carries no codec encoder, so it cannot encode a clip")
+    }
     let mm & = unsafe(m.mimi)
     let n = long_length(pcm)
     let frames = (n + m.frame_samples - 1l) / m.frame_samples
@@ -766,9 +825,15 @@ let POCKET_MAX_VOICE_SECONDS = 60l   // the longest clip a voice is cloned from:
 //! front, run through the backbone at positions 0..; the state a synthesis continues from.
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-voice-state")]
 def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScratch) : PocketVoiceState {
-    var inscope vs = PocketVoiceState()
     var inscope lat : array<float>
     let frames = pocket_encode_latents(m, pcm, sc, lat)
+    return <- voice_state_from_latents(m, lat, frames, sc)
+}
+
+//! The voice state from a clip's latent frames [frames][latent_dim] - the stored roster form,
+//! and the second half of the clip path: the speaker projection, the BOS row, the backbone.
+def voice_state_from_latents(m : PocketModel; lat : array<float>; frames : int64; var sc : PocketScratch) : PocketVoiceState {
+    var inscope vs = PocketVoiceState()
     let d = m.backbone.d
     let bos = m.bos_before_voice ? 1l : 0l
     var inscope rows : array<float>
@@ -791,6 +856,9 @@ def pocket_voice_state(m : PocketModel; pcm : array<float>; var sc : PocketScrat
 //! `name` once its state is built (a clip the encoder refuses leaves no half voice behind), and a
 //! replaced voice's state is freed rather than left in the table's slot.
 def pocket_register_voice(var m : PocketModel; name : string; pcm : array<float>; var sc : PocketScratch) {
+    if (!m.cloning) {
+        panic("dasLLAMA pocket: voice '{name}': this file carries no codec encoder, so it cannot clone a voice")
+    }
     if (empty(pcm)) {
         panic("dasLLAMA pocket: voice '{name}' has no samples")
     }
@@ -804,16 +872,33 @@ def pocket_register_voice(var m : PocketModel; name : string; pcm : array<float>
         }
         m.voice_states |> erase(name)
     }
-    if (!key_exists(m.voices, name)) {
+    if (!key_exists(m.voices, name) && !key_exists(m.voice_latents, name)) {
         m.voice_names |> push(name)
+    }
+    if (key_exists(m.voice_latents, name)) {
+        m.voice_latents |> get(name) $(var old) {
+            delete old   // erase frees the slot, never the frames
+        }
+        m.voice_latents |> erase(name)
     }
     m.voices[name] := pcm
     m.voice_states[name] <- vs
 }
 
-// a roster voice's state, encoded on first use
+// a roster voice's state, built on first use: from its stored latent frames, or from its clip
 def private ensure_voice_state(var m : PocketModel; name : string; var sc : PocketScratch) {
     return if (key_exists(m.voice_states, name))
+    if (key_exists(m.voice_latents, name)) {
+        var inscope lat : array<float>
+        m.voice_latents |> get(name) $(stored) {
+            lat := stored
+        }
+        if (long_length(lat) % m.latent_dim != 0l) {
+            panic("dasLLAMA pocket: voice '{name}' stores {long_length(lat)} latent values, not whole frames of {m.latent_dim}")
+        }
+        m.voice_states[name] <- voice_state_from_latents(m, lat, long_length(lat) / m.latent_dim, sc)
+        return
+    }
     if (!key_exists(m.voices, name)) {
         panic("dasLLAMA pocket: unknown voice '{name}'")
     }

@@ -7,17 +7,19 @@ docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work: `followup_g
 `REVIEW.md`.**
 
 **A family's synthesis entry point (`styletts2_synthesize`, `pocket_synthesize`) carries
-`[hot_path]`, and every model stage it drives - a rows kernel in
-`dasllama/dasllama_tts_blocks.das`, the assembly in a family file (`dasllama/dasllama_styletts2.das`,
-`dasllama/dasllama_pocket.das`), never the text front end - sizes every buffer through a
-`@scratch` carrier so the annotation holds through it.**
+`[hot_path]`.**
 
-**A buffer reused across syntheses in a file this checklist routes that is not `@scratch` -
-on its declaration, or on the callee parameter it grows through - is a defect.** A `nolint`
-where the annotation fits is a defect.
+**A text front-end stage (`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`,
+`dasllama/dasllama_g2p.das`) called below a family's synthesis entry point is a defect -
+phonemize before the entry point.**
+
+**A buffer reused across syntheses, or filled at load for syntheses to reuse, in a file this
+checklist routes that is not `@scratch` - on its declaration, or on the callee parameter it
+grows through - is a defect.** The annotation is what lets `[hot_path]` hold through every stage
+the entry point drives.
 
 **A function that exists for debugging or profiling, in a file this checklist routes, that is
-not `[cold_path]` is a defect.** A `nolint` where `[cold_path]` fits is a defect.
+not `[cold_path]` is a defect.**
 
 **A GEMM in `dasllama/dasllama_styletts2.das` or a TTS family file that does not go through
 a kernel `dasllama/dasllama_tts_blocks.das` exports is a defect, hand-written dot-product
@@ -33,25 +35,25 @@ checked against.
 is a defect.** How a rows kernel stays split-invariant is the "Two layouts, one oracle" section
 of `ARCHITECTURE_TTS.md`.
 
-**A new rows kernel that dispatches its rows (`maybe_parallel_for` / `lanes_for_work`) ships
-its `tests/test_tts_blocks.das` bit-equality cell on both axes that move the split - the batch
-lane cap and the jobque worker limit - in the same change.**
-
-**A new serial rows kernel ships a `tests/test_tts_blocks.das` value cell in the same change,
-against the leaf it applies per row or a double-precision form of its arithmetic.**
+**A new arithmetic path in `dasllama/dasllama_tts_blocks.das` - a kernel, a weight lane of one,
+a layout - ships a `tests/test_tts_blocks.das` numeric cell in the same change, against the leaf
+it applies per row or a double-precision form of its arithmetic; a path whose rows split across
+workers, wherever the split happens - its own `maybe_parallel_for` / `lanes_for_work`, or a
+backend kernel it hands a row block to - also ships the bit-equality cell on both axes that move
+the split, the batch lane cap and the jobque worker limit.**
 
 **A `read_*` call in `dasllama/dasllama_styletts2.das` that leaves a conv or linear on the
 channel-major default while the forward assembly runs it through a rows kernel is a defect -
 pass the consumer (`rows`, `rows_only`) so `conv1d_prepare` / `linear_prepare` drop the
 layout nobody reads.**
 
-**A caller that pins the TTS weight lane (`set_tts_q8` / `set_styletts2_q8`) around a load
-resets it (`reset_tts_q8` / `reset_styletts2_q8`) before returning, on every path out, panics
-included - pin through `defer()` - and pins in the context that loads: a `new_thread` context
-starts every module global at its declared default, so a worker that wants a lane pins where
-it loads, never through the context that spawned it.** A pin that outlives its load silently
-changes the lane of the next model loaded in the process; a pin set in another context never
-arrives.
+**A caller that pins a TTS weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`)
+around a load resets it (`reset_tts_q8` / `reset_styletts2_q8` / `reset_pocket_q8`) before
+returning, on every path out, panics included - pin through `defer()` - and pins in the context
+that loads: a `new_thread` context starts every module global at its declared default, so a
+worker that wants a lane pins where it loads, never through the context that spawned it.** A pin
+that outlives its load silently changes the lane of the next model loaded in the process; a pin
+set in another context never arrives.
 
 **A diff that reorders the float operations of `sine_source` or `source_resize`
 (`dasllama/dasllama_tts_blocks.das`), or changes the rounding of any step in the phase they
@@ -76,8 +78,9 @@ field reads back zero from a mapped image.
 moves a phoneme of the rig corpus (the corpus-identity cell in `tests/test_tts_g2p.das`
 decides; an unmoved corpus pins the audio bit for bit), ships the WER and UTMOS of
 `harness/tts_rig.py`, before and after, on every model the change reaches, on every weight
-lane that model serves (`--q8`, `--f32`), at the rig's voice, in the PR body.** A lane's
-per-frame figures against the f32 oracle say nothing about the speech; only the rig does.
+lane that model can take - the unpinned default and each pin - at the rig's voice, in the PR
+body.** A lane's per-frame figures against the f32 oracle say nothing about the speech; only
+the rig does.
 
 **A text normalization or grapheme-to-phoneme error `harness/tts_rig.py`'s transcripts
 expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
@@ -94,8 +97,9 @@ them conv state, a symmetric pad, or a trim of the output by hand is a defect.**
 a chunk in one shot (`ARCHITECTURE_POCKET.md`, "The codec runs a chunk in one shot");
 `harness/pocket_oracle.py` checks the one-shot decode against the package's frame-by-frame output.
 
-**A change to which Pocket tensors the published file stores as Q8_0, or to their layout
-(`q8_linear` / `q8_conv` in `harness/convert_pocket.py`, `read_linear` / `read_conv_q8` in
-`dasllama/dasllama_pocket.das`), ships both sides in the same diff, and weakening
-`test_pocket_q8_file` in `tests/test_tts_pocket.das` is a defect** - the reader's eligibility
-rule and the converter's are the same rule written twice.
+**A change to which quant format a published file stores a Pocket tensor in, or to its layout
+(`q8_linear` / `q8_conv` / `kq_tensor` / `head_q8_linear` in `harness/convert_pocket.py`,
+`read_linear` / `read_conv_q8` and the K-quant branch in `dasllama/dasllama_pocket.das`), ships
+both sides in the same diff, and weakening `test_pocket_q8_file` or `test_pocket_kq_file` in
+`tests/test_tts_pocket.das` is a defect** - the reader's eligibility rule and the converter's are
+the same rule written twice.

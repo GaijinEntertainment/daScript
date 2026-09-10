@@ -16,6 +16,12 @@ require daslib/jobque_boost
 require daslib/strings_boost
 require strings
 
+//! The front-end packs the speech route loads beside a phoneme family's GGUF - the pack rows the
+//! /catalog document's `tts` list carries. A companion of the served set outside this list (the
+//! browser's American-only phoneme pack) is fetchable through `catalog_download_start_tts` and
+//! rides no ladder.
+let public TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin"]
+
 //! One curated model: a commit-pinned, ungated HF file this engine serves today.
 //! `vram_hint_gb` is the advertised working-set hint, not a fit check. The `vision_*`
 //! fields carry the row's pinned vision tower (mmproj) when it has one — "" = text only.
@@ -341,9 +347,11 @@ def public catalog_download_tick() {
 }
 
 //! The GET /catalog document: entries with local presence (model AND vision tower), the ASR
-//! tower, the box's memory facts (`ram_gb` in GiB, `vram_mb` in MiB, 0 = unknown — the page's fit badges),
-//! plus the download state machine.
-def public catalog_state_json(dir : string; ram_gb : int = 0; vram_mb : int64 = 0l) : string {
+//! tower, the `tts` list (the two front-end packs, then every served speech model; a model row's
+//! `needs_packs` is `needs_packs(path)` on the file once it is here - the server passes the
+//! engine's family test - and true until then), the box's memory facts (`ram_gb` in GiB,
+//! `vram_mb` in MiB, 0 = unknown — the page's fit badges), plus the download state machine.
+def public catalog_state_json(dir : string; ram_gb : int; vram_mb : int64; needs_packs : function<(path : string) : bool>) : string {
     var cat <- model_catalog()
     var entries : array<JsonValue?>
     entries |> reserve(length(cat))
@@ -367,10 +375,12 @@ def public catalog_state_json(dir : string; ram_gb : int = 0; vram_mb : int64 = 
     var tts_items : array<JsonValue?>
     tts_items |> reserve(length(tts_set))
     for (item in tts_set) {
+        continue if (item.pack && !has_value(TTS_FRONT_END_PACKS, item.entry.name))
         let p = path_join(dir, item.entry.name)
         let present = stat(p).is_valid
+        let packs = !item.pack && (!present || invoke(needs_packs, p))
         tts_items |> push(JV((file = item.entry.name, bytes = item.entry.bytes, pack = item.pack,
-            present = present, path = present ? p : "")))
+            present = present, path = present ? p : "", needs_packs = packs)))
     }
     var got = 0l
     if (g_dl_state == "downloading") {

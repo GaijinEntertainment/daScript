@@ -730,7 +730,13 @@ languages (`pocket-tts-{de,es,it,pt,fr}-q8.gguf`, oracle dirs `tts_oracle/pocket
 minted over `_tts_fixtures/pocket_sentences.json`, token fixtures `pocket_tokens_<config>.json`):
 the language code and the one default voice, the tokenizer on the language's own sentences
 and the probes, the teacher-forced frames of every oracle case, one sentence through the
-facade.
+facade. Two more carriers gate their own cells: the small form `pocket-tts-en-kq.gguf` (the
+K-quant file: its Q4_K tensors arrive as kq planes on the unpinned lane, the head as Q8_0; the
+teacher-forced latents of the kq lane held to the q8 lane of the same file at the q8 bar with a
+poisoned-expectation control, the f16 twin's distance logged, the exact lane speaking) and the
+one-voice `pocket-tts-en-stuart-kq.gguf` (no codec encoder: `caps()` reports one voice and
+`cloning = false`, the stored voice speaks from its latent frames, `tts_register_voice` refuses
+by name).
 `test_tts_facade.das` - stocked suite; model-free cells: the sentence chunker (the reference
 driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
 the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the

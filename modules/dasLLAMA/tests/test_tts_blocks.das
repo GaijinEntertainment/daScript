@@ -6,8 +6,14 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math_default   // dot_k4q8, the K-quant leaf per row
+require dasllama/dasllama_convert   // transcode_q4k_superblock, quantize_q8_k_into_ptr
+require dasllama/dasllama_gemm_schema   // kq_qsb / kq_ssb by format id
+require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/defer
+require daslib/rtti   // this_context().last_exception: a refusal read as text
+require strings
 require math
 
 // The TTS block home's two layouts against each other: every rows-form kernel (token-major
@@ -21,6 +27,7 @@ let REL = 1.0e-4
 let FLOOR = 1.0e-6
 let T_ROWS = 2048l
 let STYLE = 32l
+let KQ_REL = 2.0e-4   //! the K-quant lane against its own leaf: the repacked tile sums the superblocks' scale products in its own order (the disk-order arm is bit-exact)
 
 struct BlockCase {
     name : string
@@ -527,6 +534,133 @@ def private linear_case_q8(nin, nout : int64) : BlockCase {
     return res
 }
 
+// ===== the K-quant lane against the leaf per row =====
+
+def private put_f16(var b : array<uint8>; off : int64; v : float) {
+    let bits = f32_to_f16(v)
+    b[off] = uint8(bits & 0xFFu)
+    b[off + 1l] = uint8(bits >> 8u)
+}
+
+//! one Q4_K superblock in the GGUF's disk layout: two f16 scales, 12 bytes of 6-bit sub-scales, 128 bytes of nibbles
+def private q4k_disk_superblock() : array<uint8> {
+    var b : array<uint8>
+    b |> resize(144l)
+    put_f16(b, 0l, 0.375)
+    put_f16(b, 2l, 0.125)
+    for (i in range64(12l)) {
+        b[4l + i] = uint8((i * 37l + 13l) % 256l)
+    }
+    for (i in range64(128l)) {
+        b[16l + i] = uint8((i * 29l + 7l) % 256l)
+    }
+    return <- b
+}
+
+//! [rows][n] of Q4_K planes as the GGUF transcoder writes them: the one superblock everywhere, its nibbles salted per row
+def private build_q4k_planes(var kq : array<uint8>; var ks : array<uint8>; rows, n : int64; seed : uint) {
+    let nsb = n / 256l
+    let qsb = kq_qsb(4)
+    let ssb = kq_ssb(4)
+    var inscope blk <- q4k_disk_superblock()
+    kq |> resize(rows * nsb * qsb)
+    ks |> resize(rows * nsb * ssb)
+    for (r in range64(rows)) {
+        for (s in range64(nsb)) {
+            transcode_q4k_superblock(blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+        }
+        var st = seed + uint(r) * 0x85EBCA6Bu
+        for (i in range64(nsb * qsb)) {
+            st = st * 1664525u + 1013904223u
+            kq[r * nsb * qsb + i] = uint8(uint(kq[r * nsb * qsb + i]) ^ (st >> 16u))
+        }
+    }
+}
+
+//! the leaf the lane applies per row: the row requantized to the Q8_K form, dot_k4q8 over the disk-order planes, then the bias
+def private kq_leaf_rows(kq, ks : array<uint8>; x : array<float>; t, nin, nout : int64; b : array<float>; var want : array<float>) {
+    let nsb = nin / 256l
+    let qsb = kq_qsb(4)
+    let ssb = kq_ssb(4)
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    xq |> resize(nin)
+    xs |> resize(nsb)
+    xbs |> resize(nin / 16l)
+    want |> resize(t * nout)
+    unsafe {
+        for (p in range64(t)) {
+            quantize_q8_k_into_ptr(addr<float const?>(x[p * nin]), nin, addr(xq[0]), addr(xs[0]), addr(xbs[0]), 0l, 0l, 0l)
+            for (o in range64(nout)) {
+                let d = dot_k4q8(addr<uint8 const?>(kq[o * nsb * qsb]), addr<uint8 const?>(ks[o * nsb * ssb]),
+                    addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), nin)
+                want[p * nout + o] = d + b[o]
+            }
+        }
+    }
+}
+
+// linear_rows (the batched kq GEMM where the backend carries the tile, the GEMV per row otherwise)
+// and linear_rows_decode (the GEMV) on the K-quant lane against the leaf per row; `repack` false
+// holds the planes in disk order - the portable arm every tier without kq kernels runs; `poison`
+// adds a fixed value to one expected element, which the bar must see
+def private linear_case_kq(nin, nout : int64; decode, repack : bool; poison : bool = false) : BlockCase {
+    var r = TtsRng()
+    rng_seed(r, 0xebcul + uint64(nin))
+    let t = decode ? 1l : T_ROWS
+    var l = TtsLinear(nin = nin, nout = nout)
+    rand_fill(r, l.b, nout, 0.5)
+    var kq : array<uint8>
+    var ks : array<uint8>
+    build_q4k_planes(kq, ks, nout, nin, 0x51ED270Bu)
+    var inscope x : array<float>
+    rand_fill(r, x, t * nin, 2.0)
+    var inscope want : array<float>
+    kq_leaf_rows(kq, ks, x, t, nin, nout, l.b, want)
+    if (poison) {
+        want[length(want) / 2] += 4.0   // a fixed value: the outputs run to a few thousand, so a quarter would hide inside the relative bar
+    }
+    linear_take_kq(l, 4, kq, ks, repack)   // the planes move into the layer
+    var inscope got : array<float>
+    if (decode) {
+        linear_rows_decode(l, x, got)
+    } else {
+        linear_rows(l, x, t, got)
+    }
+    var inscope env : array<float>
+    env |> resize(t * nout)
+    for (i in range64(t * nout)) {
+        env[i] = abs(want[i]) + 1.0
+    }
+    let name = "linear kq {nin}x{nout} {decode ? "decode" : "rows"}{repack ? "" : " disk-order"}{poison ? " poisoned" : ""}"
+    var res = score_at(name, got, want, env, 0.0, KQ_REL)
+    if (l.kq_fmt != 4 || !empty(l.w) || (repack && kernel_backend_has_kq() != l.kq_repacked)) {
+        res.bad += 1000000   // the kq lane never engaged, or the repack did not follow the backend
+    }
+    return res
+}
+
+// a width the 256-superblock does not divide is refused by name: a case with one bad element
+// when the panic text is not the layer's, none when it is
+def private kq_width_refusal() : BlockCase {
+    var res = BlockCase(name = "linear kq width refusal")
+    var why = "no panic"
+    try {
+        var l = TtsLinear(nin = 100l, nout = 8l)
+        var kq : array<uint8>
+        var ks : array<uint8>
+        linear_take_kq(l, 4, kq, ks, false)
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    if (why |> find("needs nin on 256") < 0) {
+        res.bad = 1
+        res.name = "linear kq width refusal - got '{why}'"
+    }
+    return res
+}
+
 // 66 input channels padded to 96 quantize per 32, so the padded conv reaches the q8 lane: the
 // padded rows form against the unpadded channel-major reference at the q8 bar.
 def private pad_case_q8() : BlockCase {
@@ -925,6 +1059,15 @@ def test_rows_convs(t : T?) {
             report(t, conv_case_q8("conv q8 k7 d3", 128l, 128l, 7l, 9l, 3l))
             report(t, conv_case_q8("conv q8 k11 d5", 256l, 256l, 11l, 25l, 5l))
             report(t, linear_case_q8(768l, 768l))
+        }
+        t |> run("the K-quant lane against the leaf per row - both arms, and a width off the float4 bias") @(t : T?) {
+            report(t, linear_case_kq(512l, 96l, false, true))
+            report(t, linear_case_kq(768l, 64l, true, true))
+            report(t, linear_case_kq(512l, 96l, false, false))
+            report(t, linear_case_kq(768l, 64l, true, false))
+            report(t, linear_case_kq(256l, 6l, true, true))   // nout off 4: the bias tail past the last float4
+            report_poison(t, linear_case_kq(512l, 96l, false, true, true))
+            report(t, kq_width_refusal())
         }
         t |> run("snake, adain, pad, polar") @(t : T?) {
             report(t, snake_case())

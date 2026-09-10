@@ -92,10 +92,10 @@ def test_catalog_table(t : T?) {
                 packs++
             }
         }
-        t |> equal(length(set), 12, "the set is nine models (three phoneme families, six Pocket languages) and three packs")
+        t |> equal(length(set), 14, "the set is eleven models (three phoneme families, six Pocket languages, the two small English Pocket forms) and three packs")
         t |> equal(packs, 3, "three front-end packs: the full phoneme pack, its American-only twin, the tagger")
         for (want in ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin",
-                      "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf", "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf"]) {
+                      "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf", "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf", "pocket-tts-en-kq.gguf", "pocket-tts-en-stuart-kq.gguf"]) {
             t |> success(key_exists(names, want), "the set carries {want}")
         }
     }
@@ -183,12 +183,18 @@ def test_download_refusals(t : T?) {
     }
 }
 
+// the family test the document is handed in place of the engine's: a file named as a Pocket
+// form reads text and needs no pack, everything else is a phoneme family
+def private needs_packs_by_name(path : string) : bool {
+    return find(base_name(path), "pocket-tts-") < 0
+}
+
 [test]
 def test_state_json(t : T?) {
     t |> run("the /catalog document carries every entry with presence and an idle machine") @(t : T?) {
         let dir = tmp_models_dir("doc")
         var jerr = ""
-        var doc = read_json(catalog_state_json(dir, 64, 8192l), jerr)
+        var doc = read_json(catalog_state_json(dir, 64, 8192l, @@needs_packs_by_name), jerr)
         t |> success(doc != null, "state json parses: {jerr}")
         if (doc != null) {
             t |> equal(doc?["models_dir"] ?? "", dir)
@@ -228,7 +234,7 @@ def test_state_json(t : T?) {
             }
         }
         var jerr = ""
-        var doc = read_json(catalog_state_json(dir), jerr)
+        var doc = read_json(catalog_state_json(dir, 0, 0l, @@needs_packs_by_name), jerr)
         t |> success(doc != null, "state json parses: {jerr}")
         let entries = doc?["entries"]
         if (entries != null && (entries.value is _array)) {
@@ -241,6 +247,51 @@ def test_state_json(t : T?) {
                 }
             }
             t |> success(seen, "the tower-carrying entry is in the document")
+        }
+        unsafe {
+            delete doc
+        }
+        remove(planted)
+        rmdir(dir)
+    }
+}
+
+[test]
+def test_state_json_tts(t : T?) {
+    t |> run("the tts list: the front-end packs the route loads, then the models, each saying whether it reads them") @(t : T?) {
+        let dir = tmp_models_dir("ttsdoc")
+        let planted = path_join(dir, "pocket-tts-en-stuart-kq.gguf")
+        fopen(planted, "wb") $(f) {
+            if (f != null) {
+                f |> fwrite("GGUF")
+            }
+        }
+        var jerr = ""
+        var doc = read_json(catalog_state_json(dir, 0, 0l, @@needs_packs_by_name), jerr)
+        t |> success(doc != null, "state json parses: {jerr}")
+        let items = doc?["tts"]
+        t |> success(items != null && (items.value is _array), "tts is an array")
+        if (items != null && (items.value is _array)) {
+            var packs : array<string>
+            var models = 0
+            for (item in items.value as _array) {
+                let file = "{item?["file"] ?? ""}"
+                if (item?["pack"] ?? false) {
+                    packs |> push(file)
+                    t |> equal(item?["needs_packs"] ?? true, false, "{file}: a pack reads no pack")
+                } else {
+                    models++
+                    let present = item?["present"] ?? false
+                    t |> equal(present, file == "pocket-tts-en-stuart-kq.gguf", "{file}: presence follows the dir")
+                    t |> equal(item?["needs_packs"] ?? false, !present, "{file}: an absent model reads as needing the packs, the planted Pocket file as not")
+                }
+            }
+            t |> equal(packs, TTS_FRONT_END_PACKS, "the pack rows are the route's own list, in its order - the browser's American twin rides no ladder")
+            var served = 0
+            for (item in serve_tts_set()) {
+                served += item.pack ? 0 : 1
+            }
+            t |> equal(models, served, "every served model is a row")
         }
         unsafe {
             delete doc

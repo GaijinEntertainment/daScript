@@ -1,10 +1,11 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`, `ARCHITECTURE_MEASUREMENT.md`
-(the other companions belong to the routed checklists). Planned work: `followup_general.md`,
-`followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU work measured on macOS),
-`PERF_LEDGER.md` (performance goes to the perf ledger, everything else to the followup ledgers).
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`,
+`ARCHITECTURE_MEASUREMENT.md` (the other companions belong to the routed checklists). Planned
+work: `followup_general.md`, `followup_vulkan.md`, `followup_metal.md` (the Metal tier, and CPU
+work measured on macOS), `PERF_LEDGER.md` (performance goes to the perf ledger, everything else
+to the followup ledgers).
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, answers to this module's
 `tests/REVIEW.md`.**
@@ -78,8 +79,9 @@ function does not thereby pick up the other modality's checklist.
 file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
 `dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - the front-end packs' mint
 (`harness/build_g2p_data.py`, `harness/train_postag.py`, `harness/mint_postag_silver.py`,
-`performance/build_tts_data.das`), or a call that pins the TTS weight lane (`set_tts_q8` /
-`set_styletts2_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
+`performance/build_tts_data.das`), the Pocket converter and its card (`harness/convert_pocket.py`,
+`harness/tts_model_card.md`), or a call that pins a TTS weight lane (`set_tts_q8` /
+`set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
 **A diff that adds a file under `dasllama/`, or adds or moves a def, a `require`, or a module
 global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
@@ -230,8 +232,7 @@ check licenses no names, the line says so.
 **Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language -
 that describes a mechanism of the reference build, or names that build, its binaries or its
 symbols, wherever the diff puts it, applies `REVIEW_UPSTREAM.md`.** The reference build is the
-third-party engine this module measures itself against - the checkout
-`benchmarks/setup_lcpp_ref.das` pins.
+third-party engine this module measures itself against - `benchmarks/setup_lcpp_ref.das` pins it.
 
 **A diff that changes what authoring a new weight format entails - a step added or dropped, a
 file the author must touch, a fixture or probe entry the format must supply, or a gate it must
@@ -239,10 +240,9 @@ pass - updates `HOW_TO_ADD_A_FORMAT.md` in the same change.** The how-to is the 
 author's whole brief: a step dropped there is a step the next format silently skips.
 
 **Legal attribution - a third party's copyright line, licence name, or licence text - lives in
-`THIRD_PARTY_NOTICES.md`, in the `LICENSE.*` files, in a model card - the provenance-and-licence
-page published beside a released model or pack - or in a ledger row naming a licence as a
-reason to adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a
-defect.**
+`THIRD_PARTY_NOTICES.md`, the `LICENSE.*` files, a model card (the provenance-and-licence page
+published beside a released model or pack), or a ledger row naming a licence as a reason to
+adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a defect.**
 
 **A def of a facade file - one whose defs reach a consumer through `require dasllama/dasllama`;
 `REVIEW.das`'s `FACADE_FILES` is the list - and a new OVERLOAD of one, is TAUGHT: demonstrated
@@ -262,12 +262,12 @@ the renderer emits but the registry does not is caught by `tests/test_env_regist
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff that adds a file under `dasllama/`, moves a def, a `require`, or a module global
-between files there, or changes what a file owns, lands the sec.1 edit that keeps the
-charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same
-change.** A diff that adds a file to any folder where another file has its own
-sec.1 charter line lands the new file's charter line too. A module-root doc file - a ledger, a
-plan - has no charter line and needs no charter edit.
+**A diff that adds a file under `dasllama/`, adds or moves a def, a `require`, or a module
+global in a file there, or gives a file a weight format, a serving lane (the quant form a
+tensor serves from) or a data structure its charter does not name, lands the sec.1 edit that
+keeps the charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the
+same change.** A diff that adds a file to any folder where another file has its own sec.1
+charter line lands the new file's charter line too; a module-root ledger has no charter line.
 
 **A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds
 or removes a companion, lands `ARCHITECTURE.md`'s index line and section range, the

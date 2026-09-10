@@ -23,16 +23,17 @@ require wish                // the request side: typed line -> words -> prompt, 
 // Storywish. You type the words you wish for - "dragon, cake, moon" - and Enter asks a story
 // model trained to take requests (tinystories-instruct-27M, a llama trained on the
 // TinyStoriesInstruct corpus) for a children's story that uses them; it writes on screen a few
-// tokens per frame while KittenTTS reads each finished sentence aloud. Tab asks for dialogue in
+// tokens per frame while Pocket TTS reads each finished sentence aloud. Tab asks for dialogue in
 // the story. Enter while a story is being told stops it and tells the next one; the sentences of
 // the old story still queued for speech are skipped. Escape quits.
 //
 //   bin/daslang -jit examples/dasLLAMA/storywish/main.das -- --models <dir> [--words "dragon, cake, moon"]
 //
-// <dir> holds the two models and the front-end packs - tts_g2p.bin (or its American-only twin
-// tts_g2p_en_us.bin, which the web set ships) and tts_postag.bin. A model is its gguf (the
-// default names) or a prepared .dlim image baked for the running build's identity
-// (dasllama-convert --config) - the web build ships images only, the shell names them.
+// <dir> holds the two models. The story model is its gguf (the default name) or a prepared
+// .dlim image baked for the running build's identity (dasllama-convert --config) - the web
+// build ships the image, the shell names it. The speech model is a Pocket TTS file with one
+// voice and no codec encoder (the shipped form: it reads text, needs no packs, cannot clone);
+// any TTS file the facade loads works here, a Kitten or Kokoro one with its packs beside it.
 // The language model runs on the frame thread in per-frame token budgets, so the loop never
 // blocks; speech synthesis runs on its own thread, fed sentences through one stream and
 // answering with PCM through another, and the frame thread plays the clips back to back.
@@ -40,14 +41,14 @@ require wish                // the request side: typed line -> words -> prompt, 
 [CommandLineArgs]
 struct WishArgs {
     @clarg_short = "m"
-    @clarg_doc = "Directory holding the story model, the TTS model and its phoneme packs (default: the current directory)"
+    @clarg_doc = "Directory holding the story model and the TTS model (default: the current directory)"
     models : string = "."
 
     @clarg_doc = "The story model file inside --models"
     story_model : string = "tinystories-instruct-27M-Q8_0.gguf"
 
     @clarg_doc = "The TTS model file inside --models"
-    tts_model : string = "kitten-nano.gguf"
+    tts_model : string = "pocket-tts-en-stuart-kq.gguf"
 
     @clarg_doc = "Voice name or alias (default: the model's last voice)"
     voice : string
