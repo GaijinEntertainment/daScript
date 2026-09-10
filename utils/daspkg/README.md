@@ -59,6 +59,8 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--json` | Machine-readable JSON output (`search`, `list`, `check`) |
 | `--branch <name>`, `-b <name>` | Install from a git branch (e.g. `master`) instead of a tag |
 | `--out <path>` | Output directory for `release` (default: current directory) |
+| `--wasm` | Target wasm64 (memory64): `build --wasm` builds the wasm64 runtime and module archives, `release wasm` ships compiled `.wasm` artifacts |
+| `--wasm-lib-dir <path>` | Directory holding the wasm64 archives `release wasm` links (default `<das_root>/web/output64/lib`) |
 | `--paranoid` | Accepted for compatibility; the tuner runs one margin-decided protocol and this flag no longer changes the budget |
 | `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints - an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
 | `--fat <class>` | During `release`, build a fat exe for a CPU class (`x86-avx2`, `x86-vnni512`, `x86-amx`, `arm-neon`, `arm-i8mm`, ...): the plain code targets the class, every `[tune]` kernel ships one clone per class the library has a profile for, and the exe picks the clone from cpuid at startup. No mint and no shipped sidecar; a kernel with no profile entry for the class refuses the release. `skills/tune.md`, *The fat exe* |
@@ -208,6 +210,16 @@ The global lock file (`{das_root}/modules/.daspkg_global.lock`) uses the same fo
 | `daslib/daspkg.das` | API module that `.das_package` scripts `require` |
 
 The **package runner** compiles `.das_package` scripts in-process using `compile_file` + `simulate` + `invoke_in_context`. It calls exported functions and reads state from `daslib/daspkg` module globals via `get_context_global_variable`.
+
+### Wasm archive staging {#wasm-archive-staging}
+
+The wasm build and a desktop build of the same tree write their module archives to the same
+`<das_root>/lib` names, and `build --wasm` stages them from there. Once a desktop build has
+written those names the wasm build stops replacing them - its build directory finds the outputs
+already up to date and skips the targets - so a plain stage copies native archives and
+`release wasm` then fails to link on every module symbol. Staging therefore identifies each
+archive by content rather than by name and refuses a native one, naming the desktop build in the
+error.
 
 ## Tests
 

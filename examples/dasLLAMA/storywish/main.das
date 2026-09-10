@@ -134,7 +134,7 @@ var g_frames = 0
 //! keys are POLLED, as the storyteller polls space: a GLFW callback lambda traps in the browser build, where it
 //! fires from a JavaScript event outside any frame of the program. Edge detection per key code, plus a hold
 //! timer so a held backspace repeats
-var g_key_was : bool[512]   // GLFW key codes end at GLFW_KEY_LAST = 348
+var g_key_was : bool[512]   // GLFW key codes end at GLFW_KEY_MENU = 348
 var g_backspace_held_s = 0.0
 var display_w = 0
 var display_h = 0
@@ -213,7 +213,7 @@ def start_story() {
     let words = wish_words(g_wish)
     return if (empty(words))
     if (g_playing_sid != INVALID_SID) {
-        //! the smoke rail's witness lines, here and below: modules/dasLLAMA/tests/test_storywish_smoke.das reads them word for word
+        //! the smoke rail's witness lines, here and below: modules/dasLLAMA/tests/test_storywish.das reads them word for word
         to_log(LOG_INFO, "storywish: the clip of story {g_stories} stops, {g_unplayed_sentences} sentences of it go unheard\n")
         stop(g_playing_sid, 0.05)
         g_playing_sid = INVALID_SID

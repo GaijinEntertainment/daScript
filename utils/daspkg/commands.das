@@ -1049,6 +1049,7 @@ def cmd_build(root : string; is_global : bool = false) {
 // that `daspkg release wasm` links against, and consolidate them into <lib_dir>
 // (default <das_root>/web/output64/lib). Requires an activated emscripten SDK
 // (emcc + cmake on PATH); CI activates emsdk_env before invoking.
+[arch(at="README.md#wasm-archive-staging")]
 def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:STYLE038 — the wasm build recipe: flat tool-invocation steps, one per stage
     let das_root = get_das_root()
     let lib_dir = empty(lib_dir_override) ? "{das_root}/web/output64/lib" : lib_dir_override
@@ -1088,9 +1089,7 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
     // Consolidate every produced archive into one canonical lib_dir so
     // `release wasm` resolves them in one place. The web build splits outputs:
     // the runtime lands in web/output64/lib (DAS_WEB_OUTPUT_DIR), the module
-    // archives in <das_root>/lib. Copying both into lib_dir also insulates the
-    // release inputs from a later desktop build that overwrites <das_root>/lib
-    // with native-ABI archives.
+    // archives in <das_root>/lib.
     mkdir_rec(lib_dir)
     var copied = 0
     var copy_failed = false
@@ -1118,8 +1117,6 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
         let src = path_join("{das_root}/lib", rel_path)
         let dst = path_join(lib_dir, base)
         if (!looks_like_wasm_archive(src)) {
-            // a desktop build of the same tree writes native archives under the same names, and ninja then
-            // leaves the wasm targets alone because their outputs "exist" - the link fails on every module symbol
             to_log(LOG_ERROR, "build --wasm: {src} is not a wasm archive - this tree also has a desktop build; delete lib/liblibDasModule*.a and rerun\n")
             copy_failed = true
             return
@@ -1148,7 +1145,7 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
 
 //! an archive whose first object member is a wasm module: the 8-byte wasm magic within the first
 //! 64 KB (past the `!<arch>` header and a symbol table); a native archive's members carry Mach-O or ELF magic
-def private looks_like_wasm_archive(path : string) : bool {
+def looks_like_wasm_archive(path : string) : bool {
     var found = false
     let f = fopen(path, "rb")
     return false if (f == null)

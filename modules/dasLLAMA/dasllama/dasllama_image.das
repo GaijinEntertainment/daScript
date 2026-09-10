@@ -1553,7 +1553,7 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
 //! The image-cached model load — ``load_model``'s engine half, public for callers bypassing the facade. ``.dlim`` maps directly (wrong identity panics); q8-mode gguf maps/saves a prepared image (``DASLLAMA_IMAGE=0`` disables); an fp32-mode gguf joins the rail only with ``image_fp32`` (planar flavor — the parity-pinned decoders, e.g. canary's).
 //! Under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise; ``planar_only`` pins the planar CPU flavor regardless of armed GPU tiers (the ASR surface — its decode path reads CPU planes).
 //! Call inside ``with_job_que()``.
-[arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order"), arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head")]
 def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                       planar_only : bool = false; image_fp32 : bool = false) : Model {
     // under Metal the GPU serves through the override registries, so "no backend registered" would be a false alarm
@@ -1588,7 +1588,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         }
         if (!loaded) {
             let pk = image_peek(path)
-            if (pk.valid && pk.version != IMAGE_VERSION) {   // the one decline a reader can act on without the log: the image is from another build
+            if (pk.valid && pk.version != IMAGE_VERSION) {
                 panic("dasLLAMA: '{path}' was minted at IMAGE_VERSION {pk.version}, this build reads {IMAGE_VERSION} - re-mint it from the source gguf (dasllama-convert --config for the target build)")
             }
             let vk_ident = vk_tag != "" ? " / {image_identity(vk_tag)}" : ""

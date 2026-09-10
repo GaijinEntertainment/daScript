@@ -2634,3 +2634,43 @@ def test_cmd_release_portable_on_macos(t : T?) { // nolint:STYLE038
     }
 }
 
+
+def private push_text(var bytes : array<uint8>; text : string) {
+    bytes |> reserve(length(bytes) + length(text))
+    for (c in text) {
+        bytes |> push(uint8(c))
+    }
+}
+
+//! a fake `!<arch>` file: the member header, then a member that opens with the given magic
+def private write_archive(path : string; magic : array<uint8>) {
+    var bytes : array<uint8>
+    bytes |> reserve(128)
+    push_text(bytes, "!<arch>\n")
+    push_text(bytes, "member.o/       0           0     0     644     4096      `\n")
+    bytes |> push_from(magic)
+    push_text(bytes, "padding past the magic so the member has a body")
+    fopen(path, "wb") $(f) {
+        fwrite(f, bytes)
+    }
+}
+
+[test]
+def test_wasm_archive_detection(t : T?) {
+    t |> run("build --wasm stages an archive only when a member carries the wasm magic; a native archive under the same name is refused") @(t : T?) {
+        let tmp = create_temp_directory_result("daspkg archives ")
+        if (!(tmp is value)) {
+            t |> failure("could not create temp directory: {tmp as error}")
+            return
+        }
+        let root = tmp as value
+        let wasm_path = path_join(root, "liblibDasModuleWasm.a")
+        let native_path = path_join(root, "liblibDasModuleNative.a")
+        write_archive(wasm_path, [0x00u8, 0x61u8, 0x73u8, 0x6du8, 0x01u8, 0x00u8, 0x00u8, 0x00u8])   // "\0asm" + version 1
+        write_archive(native_path, [0xcfu8, 0xfau8, 0xedu8, 0xfeu8, 0x0cu8, 0x00u8, 0x00u8, 0x01u8])   // a 64-bit Mach-O member
+        t |> success(looks_like_wasm_archive(wasm_path), "an archive whose member opens with the wasm magic is a wasm archive")
+        t |> success(!looks_like_wasm_archive(native_path), "an archive of native objects is not, whatever its name")
+        t |> success(!looks_like_wasm_archive(path_join(root, "missing.a")), "a file that is not there is not a wasm archive")
+        force_rmdir(root)
+    }
+}

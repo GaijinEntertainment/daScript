@@ -64,6 +64,11 @@ registered its carrier's `layout_fingerprint` alongside its tag gets the `STALE 
 for an image `parse_image` would refuse; without the registration a peek calls such an image
 CURRENT and the GC keeps it.
 
+A `.dlim` load that matched no lane peeks the file before it panics. An image whose version
+differs from `IMAGE_VERSION` declines in its own message, naming both numbers and the re-mint
+command - the one decline a reader can act on without reading the load log. Every other
+mismatch declines on the identity strings this build would accept.
+
 ### 2.1c Array payloads reach the archive in bulk {#image-bulk-serialize}
 
 Array payloads reach the archive in bulk - one stream call per array (`serialize_pod_array`),
