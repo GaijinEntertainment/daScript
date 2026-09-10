@@ -39,6 +39,14 @@ jobs:
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
 
+    # The wasm64 (MEMORY64) modules emscripten emits refuse to load under a node older than 23
+    # ("This emscripten-generated code requires node v23.0.0"); ubuntu-latest ships 22, and the
+    # DlimConfiguration probe below runs one of those modules under the runner's node.
+    - name: "Install node 24 (the wasm64 probe runs under it)"
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+
     # The host daslang now builds with dasGlfw/dasOpenGL ON so it can drive the
     # /examples game cross-compile (daspkg release wasm). dasGlfw's
     # find_package(OpenGL REQUIRED) needs the GL + X11 dev headers.
@@ -349,8 +357,12 @@ jobs:
            && grep -q '"backend"' web/output64/examples/dlim_config/wasm64.json; then
             echo "wasm64 DlimConfiguration probe OK: $(tr -d ' \n' < web/output64/examples/dlim_config/wasm64.json | cut -c1-120)..."
         else
+            # fatal, unlike an example's own build: without the probe no set can be minted, so a
+            # deploy that went on would replace two working pages with placeholders; a red job
+            # leaves the previous deploy live
             rm -f web/output64/examples/dlim_config/wasm64.json
-            echo "WARNING: the wasm64 DlimConfiguration probe failed — no model set can be minted, both dasllama.io example pages will be placeholders this deploy."
+            echo "::error::the wasm64 DlimConfiguration probe failed - no model set can be minted for either dasllama.io example; the deploy stops here so the previous pages stay up"
+            exit 1
         fi
 
     - name: "Compile-gate the curated playground samples"
