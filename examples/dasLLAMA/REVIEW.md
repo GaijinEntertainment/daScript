@@ -20,6 +20,11 @@ stretched box mis-maps every click (`ARCHITECTURE.md` sec. 3.3).
 back-forward cache - a `pageshow` handler that reloads when `persisted` is set.** Such a page
 comes back with its workers and audio output frozen out of step (`ARCHITECTURE.md` sec. 3.1).
 
+**A status box a browser example attaches to a sound (`set_status_update`) serves that one sound:
+a diff that attaches a box a sound already reported into to another sound is a defect - create
+one per sound and release it when the sound ends.** The mixer's last report for the first sound
+lands after the second attaches, and reads as the second's stop (`ARCHITECTURE.md` sec. 3.7).
+
 **A diff that changes or drops a witness line - a line a browser example logs under its own name -
 updates every test under `modules/dasLLAMA/tests/` that matches it, in the same change.** The
 smoke tests match witness lines as substrings, so the words and their order are an interface

@@ -13,8 +13,8 @@ require _example_rail
 require ../../../examples/dasLLAMA/parrot/take.das
 
 // Parrot (examples/dasLLAMA/parrot): the take's pure side (take.das) is tested directly - the
-// resampler Silero hears through, the rule that ends a take, the clip's window, the text box's
-// editing rules and a button's box. The smoke cell spawns the example under --smoke with the
+// resampler Silero hears through, the rule that ends a take, the clip's window, the silence
+// countdown, the waveform's columns and the chunk ledger. The smoke cell spawns the example under --smoke with the
 // tree's own clip in place of the microphone and reads the witness lines it logs: the voice is
 // cloned from the clip, the text is said in it, and the say is read out to the end. Model-gated
 // on pocket-tts-en-kq.gguf (the Pocket file with its codec encoder, the one the page ships) under
@@ -100,53 +100,56 @@ def test_take_rules(t : T?) {
 }
 
 [test]
-def test_text_box(t : T?) {
-    t |> run("a key lands as its character: letters follow shift, the punctuation the poem needs, nothing else") @(t : T?) {
-        t |> equal(typed_char('A', false), 'a')
-        t |> equal(typed_char('A', true), 'A')
-        t |> equal(typed_char('1', false), '1')
-        t |> equal(typed_char('1', true), '!')
-        t |> equal(typed_char('/', true), '?')
-        t |> equal(typed_char(';', true), ':')
-        t |> equal(typed_char('\'', true), '"')
-        t |> equal(typed_char('-', true), '_')
-        t |> equal(typed_char(',', false), ',')
-        t |> equal(typed_char(' ', false), ' ')
-        t |> equal(typed_char('[', false), -1, "a bracket is not taken")
-        t |> equal(typed_char('=', false), -1, "nor an equals sign")
-        t |> equal(typed_char(300, false), -1, "nor a key past ASCII")
+def test_panels(t : T?) {
+    t |> run("the silence countdown: nothing before speech or during it, the seconds left after") @(t : T?) {
+        t |> equal(countdown_left(false, false, 0.5), 0.0, "no speech yet")
+        t |> equal(countdown_left(true, true, 0.5), 0.0, "speech still going")
+        t |> equal(countdown_left(true, false, 0.5), SILENCE_ENDS_TAKE_S - 0.5, "quiet for half a second")
+        t |> equal(countdown_left(true, false, 9.0), 0.0, "never below zero")
     }
-    t |> run("the box: a line fills to its width, the box to its height, backspace walks back over lines") @(t : T?) {
-        var lines <- lines_of("ab\ncd")
-        t |> equal(length(lines), 2)
-        t |> equal(lines[1], "cd")
-        append_char(lines, 'e')
-        t |> equal(lines[1], "cde")
-        for (_i in range(WRAP_CHARS)) {
-            append_char(lines, 'x')
+    t |> run("the waveform's columns: min and max per column, grown in drains, the open column redone") @(t : T?) {
+        var samples : array<float>
+        samples |> resize(1000)
+        for (i in range(1000)) {
+            samples[i] = float(i % 100) / 100.0 - 0.5
         }
-        t |> equal(length(lines[1]), WRAP_CHARS, "a full line takes no more")
-        erase_last(lines)
-        t |> equal(length(lines[1]), WRAP_CHARS - 1)
-        for (_i in range(MAX_LINES + 5)) {
-            new_line(lines)
+        var at_once : array<float2>
+        peaks_append(at_once, samples, 0l, 100)
+        t |> equal(length(at_once), 10, "ten full columns of a hundred")
+        t |> equal(at_once[0].x, -0.5, "the column's lowest sample")
+        t |> equal(at_once[0].y, 0.49, "and its highest")
+        var grown : array<float2>
+        var partial : array<float>
+        var fed = 0
+        var step = 37
+        while (fed < 1000) {
+            let n = min(step, 1000 - fed)
+            partial |> resize(fed + n)
+            for (i in range(fed, fed + n)) {
+                partial[i] = samples[i]
+            }
+            let from = int64(fed)
+            fed += n
+            step = (step * 7 + 11) % 260 + 1
+            peaks_append(grown, partial, from, 100)
         }
-        t |> equal(length(lines), MAX_LINES, "a full box takes no more lines")
-        for (_i in range(MAX_LINES)) {
-            erase_last(lines)
+        t |> equal(length(grown), length(at_once), "the same count")
+        var diffs = 0
+        for (a, b in grown, at_once) {
+            diffs += (a.x != b.x || a.y != b.y) ? 1 : 0
         }
-        t |> equal(length(lines), 2, "backspace on an empty line drops it, down to the line above")
-        var one <- lines_of("")
-        t |> equal(length(one), 1, "an empty text is one empty line")
-        erase_last(one)
-        t |> equal(length(one), 1, "the only line stays")
+        t |> equal(diffs, 0, "column for column the same picture - a column open at a drain's end is redone by the next")
+        var tail : array<float2>
+        peaks_append(tail, samples, 950l, 100)
+        t |> equal(length(tail), 10, "a start inside the last column redoes that column alone")
     }
-    t |> run("a button answers inside its label's box with a margin") @(t : T?) {
-        let box = float4(0.0, -20.0, 120.0, 4.0)   // left, top, right, bottom relative to the pen
-        t |> success(inside_box(box, 60.0, 600.0, 100.0, 590.0, 8.0), "on the glyphs above the pen")
-        t |> success(inside_box(box, 60.0, 600.0, 55.0, 605.0, 8.0), "inside the margin")
-        t |> success(!inside_box(box, 60.0, 600.0, 100.0, 640.0, 8.0), "below the label")
-        t |> success(!inside_box(box, 60.0, 600.0, 200.0, 590.0, 8.0), "past its right edge")
+    t |> run("a say is read out when every chunk played, and never before it has any") @(t : T?) {
+        let none : array<ChunkRow>
+        t |> success(!all_spoken(none), "no chunks yet")
+        var rows <- [ChunkRow(state = ChunkState.spoken), ChunkRow(state = ChunkState.speaking)]
+        t |> success(!all_spoken(rows), "one still speaking")
+        rows[1].state = ChunkState.spoken
+        t |> success(all_spoken(rows), "all played")
     }
 }
 

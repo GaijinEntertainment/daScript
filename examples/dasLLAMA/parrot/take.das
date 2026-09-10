@@ -1,13 +1,11 @@
 options gen2
 
 require math
-require strings
-require daslib/strings_boost
 
 // The pure side of parrot: what the take does with the numbers the microphone and the voice
-// detector hand it, the text box's editing rules, and a button's hit box - none of it touches
+// detector hand it, the waveform's columns, and the chunk ledger of a say - none of it touches
 // a device, a thread or the screen, so modules/dasLLAMA/tests/test_parrot.das holds it
-// without a window or a model. main.das drives the devices and the speech thread.
+// without a window or a model. main.das drives the devices, the speech thread and the panels.
 
 let MIC_RATE = 24000               //! the model's own rate: the take is cloned as recorded
 let VAD_RATE = 16000               //! Silero listens at 16 kHz; the take is resampled for it alone
@@ -15,8 +13,6 @@ let SILENCE_ENDS_TAKE_S = 2.0      //! quiet this long after speech ends the tak
 let TAKE_CAP_S = 60.0              //! the model's clip cap: the take ends here, and the clip never exceeds it
 let TAKE_PAD_S = 0.25              //! kept around the speech at both ends
 let NO_FRAMES_ENDS_TAKE_S = 6.0    //! a device that delivers nothing this long ends the take: the microphone was refused, or is not there
-let WRAP_CHARS = 74                //! droidsansmono is monospace: characters are the wrap unit
-let MAX_LINES = 24
 
 //! 24 kHz to 16 kHz by linear interpolation over the whole take: the next position to sample
 //! carries across drains, so the stream Silero hears has no seam where the drains met
@@ -59,58 +55,61 @@ def clip_window(start24, end24, total : int64; in_speech : bool) : tuple<from : 
     return (from = from, to = to)
 }
 
-//! the character a key lands in the box as: letters follow shift, the list's punctuation and the
-//! shifted digits that spell it, spaces; -1 for a key the box does not take
-def typed_char(key : int; shift : bool) : int {
-    return -1 if (key < 0 || key >= 128)
-    var c = key
-    if (is_alpha(c)) {
-        c = shift ? c : c + 32   // GLFW hands the upper-case code
-    } elif (shift) {
-        c = c == '1' ? '!' : c == '/' ? '?' : c == ';' ? ':' : c == '\'' ? '"' : c == '9' ? '(' : c == '0' ? ')' : c == '-' ? '_' : c
-    }
-    let ok = is_alpha(c) || is_number(c) || c == ' ' || c == ',' || c == '.' || c == '\'' || c == '"' || c == '-' || c == ';' || c == ':' || c == '!' || c == '?' || c == '(' || c == ')' || c == '_'
-    return ok ? c : -1
+//! the seconds of quiet left before the take ends on its own; 0 while speech runs or before any
+def countdown_left(speech_seen, in_speech : bool; quiet_for_s : float) : float {
+    return 0.0 if (!speech_seen || in_speech)
+    return max(SILENCE_ENDS_TAKE_S - quiet_for_s, 0.0)
 }
 
-//! a character onto the last line, unless that line is full
-def append_char(var lines : array<string>; c : int) {
-    return if (empty(lines))
-    let li = length(lines) - 1
-    return if (length(lines[li]) >= WRAP_CHARS)
-    lines[li] = "{lines[li]}{to_char(c)}"
-}
-
-//! a new line after the last, unless the box is full
-def new_line(var lines : array<string>) {
-    return if (length(lines) >= MAX_LINES)
-    lines |> push("")
-}
-
-//! the last character off the last line; an empty last line goes away unless it is the only one
-def erase_last(var lines : array<string>) {
-    return if (empty(lines))
-    let li = length(lines) - 1
-    let n = length(lines[li])
-    if (n == 0) {
-        if (li > 0) {
-            lines |> pop()
+//! the waveform's columns: the lowest and highest sample of each `per_column` samples, grown from
+//! `from` to the end of `samples` - a column that was open is redone, so a take drained mid-column
+//! and the say's chunks appended one by one both draw the same picture
+def peaks_append(var peaks : array<float2>; samples : array<float>; from : int64; per_column : int) {
+    let first = from / int64(per_column)
+    peaks |> resize(first)
+    let n = long_length(samples)
+    var c = first
+    while (c * int64(per_column) < n) {
+        let lo_i = c * int64(per_column)
+        let hi_i = min(lo_i + int64(per_column), n)
+        var lo = 1.0
+        var hi = -1.0
+        for (i in range64(lo_i, hi_i)) {
+            lo = min(lo, samples[i])
+            hi = max(hi, samples[i])
         }
-        return
+        peaks |> push(float2(lo, hi))
+        c++
     }
-    lines[li] = n == 1 ? "" : clone_string(slice(lines[li], 0, n - 1))   // never a zero-length view of the string being replaced
 }
 
-//! the box's lines from a text, one per line break, never empty
-def lines_of(text : string) : array<string> {
-    var lines <- split(text, "\n")
-    if (empty(lines)) {
-        lines |> push("")
-    }
-    return <- lines
+//! one chunk of a say, as the panels show it: waiting for its turn, its frames being generated,
+//! generated and queued to play, playing, played
+enum ChunkState {
+    pending
+    generating
+    generated
+    speaking
+    spoken
 }
 
-//! inside a label's box (left, top, right, bottom relative to the pen at x, y), with a margin around it
-def inside_box(box : float4; x, y, px, py, pad : float) : bool {
-    return px >= x + box.x - pad && px <= x + box.z + pad && py >= y + box.y - pad && py <= y + box.w + pad
+struct ChunkRow {
+    text : string
+    state : ChunkState
+    samples : int64
+    start : int64      //! its first sample in the say's output waveform
+    us_prompt : int64
+    us_backbone : int64
+    us_head : int64
+    us_codec : int64
+    us_total : int64
+}
+
+//! every chunk of the say played out (a say with no chunks yet is not read out)
+def all_spoken(chunks : array<ChunkRow>) : bool {
+    return false if (empty(chunks))
+    for (row in chunks) {
+        return false if (row.state != ChunkState.spoken)
+    }
+    return true
 }
