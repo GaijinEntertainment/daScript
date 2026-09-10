@@ -8,8 +8,7 @@ require daslib/decs
 require daslib/decs_boost
 require dastest/testing_boost public
 
-// Theme 7 (audit `history/linq_fold/linq_fold_chain_audit.md` "Theme 7" section):
-// chained `_select(f) |> _select(g)` collapse. Symmetric to how chained `_where`
+// Theme 7: chained `_select(f) |> _select(g)` collapse. Symmetric to how chained `_where`
 // already compose via `&&`. `collapse_chained_selects` mutates the call chain
 // in place — N consecutive `_select` calls become a single composed `_select(g(f(_)))`.
 // Gated on PURITY of the inner projection (`!has_sideeffects(innerBody)`) — for

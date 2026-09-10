@@ -3,8 +3,7 @@
 **Read `ARCHITECTURE_COMMON.md` (repo root) first - its contract binds this document.** The
 checklist that binds a diff here is `REVIEW.md` (this folder); `generator/` and `tutorials/`
 carry their own. Planned work: `ROADMAP.md`. Agent instructions - build, run, test, where
-things live: `CLAUDE.md`. The original boost-layer design plan is archived at
-`history/dasVulkan/ORIGINAL_PLAN.md`.
+things live: `CLAUDE.md`.
 
 ## 1. The two layers
 

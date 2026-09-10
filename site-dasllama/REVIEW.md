@@ -1,7 +1,7 @@
 # site-dasllama Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`. Planned work: `plans/dasllama_io_site.md`.
+`README.md`.
 
 In this checklist "a page" means a served `.html` file under this directory, the generated news
 region inside index.html, `feed.xml`, and `sitemap.xml`. Publish time is the deploy that

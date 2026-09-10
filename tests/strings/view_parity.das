@@ -2,7 +2,7 @@ options gen2
 require dastest/testing_boost
 require strings
 
-// Parity property harness for the byte-view string surface (plans/byte-view-strings.md).
+// Parity property harness for the byte-view string surface.
 // Every view extern that has a string counterpart is checked as
 //     twin(d, args) == counterpart(string(d), args)
 // over NUL-free buffers x an index / needle / offset / cmpLen lattice.

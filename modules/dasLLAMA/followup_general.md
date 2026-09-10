@@ -98,7 +98,7 @@
 
 8. **MoE mul_mm family: COMPLETE - all six formats ride MetalMoeMulMmBase.** K6 joined
    2026-08-08 (021fffd87, stateless stage_a, -2.0%). Q8 and Mx4 joined the same day via
-   msl_emit's flatten/scope-splice arc (plans/msl-flatten.md): Q8 keeps the carried-pointer
+   msl_emit's flatten/scope-splice arc: Q8 keeps the carried-pointer
    walk (plain `scur`/`qp` members bound in `stage_init`, advanced in stage_a - the
    stateless index form measured OUT +3.4-3.6%), -0.5..-0.9% vs its deleted standalone;
    Mx4 rides `stage_init` (vtab staging) + `stage_acc` (per-expert bias seed into the
@@ -343,8 +343,8 @@
       `stream=true` transcription events; `/v1/audio/translations` for the whisper family
       (native decoder mode; other families decline); accept-and-ignore `image_url.detail`.
     - CAPABILITY DECISIONS (Boris's call, each a new model class): TTS `/v1/audio/speech` -
-      DONE (the StyleTTS2 lineage: KittenTTS nano/mini and Kokoro-82M, `--tts`, wav/pcm;
-      `plans/dasllama-tts.md`). Still open: chat `modalities:["text","audio"]` - no served
+      DONE (the StyleTTS2 lineage: KittenTTS nano/mini and Kokoro-82M, `--tts`, wav/pcm).
+      Still open: chat `modalities:["text","audio"]` - no served
       LLM artifact can speak; the two Omni families have Talkers upstream but the GGUF
       ecosystem carries only thinker + audio encoder, and a talker conditions on thinker
       HIDDEN STATES (not a bolt-on). Realtime API (WebSocket voice, barge-in) is the end-state
@@ -357,7 +357,7 @@
       standard image-API prefix; rename ours or accept the squat deliberately.
 
 26. **ASR perf follow-ups after the Metal tower - MOSTLY RESOLVED by metal-media chunk 3
-    (2026-08-16, `history/dasLLAMA/metal_media_plan.md` slices M-R).** The decoder half SHIPPED (cross-KV +
+    (2026-08-16, the arc's slices M-R).** The decoder half SHIPPED (cross-KV +
     the q8-native decode step on Metal, part/comb attention, f16 KV - decode beats the
     q8-CPU rail 1.6x and serves by default above the `n_text_state >= 1024` floor); J-qwen3a
     SHIPPED (the conv2d frontend pads into the tile GEMM - encode 6.3x on the stage probe
@@ -760,13 +760,13 @@
     (0.46x) - all five at 48-51 ns per superblock against k4/k2's 8.6-8.8, a flat cost independent
     of the format. Every one of the five gathers ends each decoded dword with a 4-byte store into the
     alloca panel and the dot reloads 32 bytes spanning eight such stores - a wide load over narrow
-    stores, which x86 does not forward; llama.cpp composes grid words into registers on both arches
-    (`plans/kernel_parity_research_cpu.md`). Signs-on-activation does NOT port to our 8-rows-per-vector
+    stores, which x86 does not forward; llama.cpp composes grid words into registers on both
+    arches. Signs-on-activation does NOT port to our 8-rows-per-vector
     layout (llama.cpp's own arm64 arms sign the weights for the same reason). The spellings, in
     order: `gather="reg"` (group-major compose, insertelement per row, no panel), `psign="mask"` (a
     vector sign mask replacing GPR sign math + abs), a `vpdpbssd` seat for AVX-VNNI-INT8 hosts, a
     repack-baked parity sign byte. Done = each of the five at or past the reference row at one thread,
-    crowned by the probe; plan and fact base: `plans/kernel_parity_pass.md`.
+    crowned by the probe.
     2026-09-01: `gather="reg"` measured 1.85x SLOWER (insertelement chains, 5x the code) and was
     dropped; `sign="vec"` landed for iq3s (7732 us = 1.34x the reference) and iq2s (7076 us =
     0.72x). Then all five: the sign column synthesized from the 7-bit codes (parity = the 8th bit,
@@ -779,10 +779,10 @@
     table row per 7-bit code, iq3s/iq2s by the mask off the plane's sign column) - M1 one thread:
     iq2xs 1.24x, iq2xxs 1.20x, iq3xxs 1.36x, iq2s 1.51x, iq3s 1.15x, all five ahead. x86 is untouched
     (zen2 v3: iq3s 1.36x, iq2xs 1.13x, iq2xxs 1.04x, iq2s 1.01x, iq3xxs 1.00x) - its residue stays
-    the qs byte loads; the M1 lesson (3 loads against 4 NEON ops per cycle, count both) is in the plan.
+    the qs byte loads; the M1 lesson: 3 loads against 4 NEON ops per cycle - count both.
     2026-09-01, x86: the same row-group form measured 1.2-1.5x SLOWER than the panel on zen2 (iq2xs
     4646 -> 6785 us; llama.cpp's AVX2 insert form does 5320 there) - killed for x86, kept for the sdot
-    lattice; zen4's 0.77-0.88x waits on a port profile (`plans/kernel_parity_pass.md`, queue).
+    lattice; zen4's 0.77-0.88x waits on a port profile.
 
 62. **IQ3_S Metal decode: the ~140 GB/s compose ceiling (tg 0.95x).** Eight GEMV forms raced
     at n=2048 d=8192 - gather placement x3, gather deleted, signs deleted, llama.cpp's exact
@@ -806,7 +806,7 @@
     counter, so the rewind is "n_past back k, drop k cache rows" plus a phrase table and a ban list in
     the sampler; expose it as a server/CLI knob. Done = the knob, a test that a forced ", but wait"
     stream rewinds and continues, and a before/after token count on a 27B reasoning prompt.
-    2026-09-01 research (`plans/qwen38_thinking_control.md`): the phrase-level rollback is what
+    2026-09-01 research: the phrase-level rollback is what
     Antislop does and costs 69-96% of throughput; the cheap form that the two 2026 papers measure is a
     SINGLE-TOKEN logit penalty on the reconsideration tokens ("wait", "but", "alternatively") at
     12-51% shorter traces with equal or better accuracy - build that first, the rollback only if the
@@ -817,7 +817,7 @@
     `medium`, `low` - which the chat template turns into one system-prompt sentence (`medium` injects
     nothing; anything else, OpenAI's usual `high` included, raises in the template). No budget exists in
     the model; `<think>` and `</think>` are single vocab tokens (248068 / 248069), so an early stop is a
-    one-token force. What our stack lacks (`plans/qwen38_thinking_control.md`): a `dasllama_arch_qwen38.das`
+    one-token force. What our stack lacks: a `dasllama_arch_qwen38.das`
     (the GGUF spec exists), the template's `<think>` prefill in `chatml_chat`, and the server drops
     `reasoning_effort`. The three levers, in order: (1) map quick/normal/high -> low/medium/xhigh in the
     template's effort sentence and accept `reasoning_effort` in the server (translate `high` to `xhigh`
@@ -971,7 +971,7 @@
 
 77. **The TTS board cell (Boris, 2026-09-02: "ledger").** `REVIEW_MEASUREMENT.md` asks a new
     servable capability for its cell in the same change; the speech route landed with the rig's
-    RTF receipts in `plans/dasllama-tts.md` and no board row. Owed: a TTS leg of
+    RTF receipts and no board row. Owed: a TTS leg of
     `performance/gen_bench_records.das` (or a `benchmarks/lcpp_bench.das` cell with its
     `PROFILE.md` section) reporting RTF per model on the q8 lane, minted with row 72's one
     timing rail.
@@ -991,7 +991,7 @@
     clause, then comma) and a hard break as the fallback - so ordinary punctuation-dense text
     never reaches the encoder's truncation. Owed: the chunker moves behind the front end and
     packs token ids with the waterfall; the encoder's truncate-and-log stays the last resort.
-    Both references measured: `plans/dasllama-tts.md`, the review round.
+    Both references measured in the review round.
 
 80. **`das_get_architecture_name` on MSVC ARM64 (Boris, 2026-09-02: "no", ledger).**
     `src/builtin/module_builtin_runtime.cpp` tests `__aarch64__` alone, so a Windows-on-ARM
@@ -1051,8 +1051,8 @@
    BUFFER (`bk` on the mul_mm) is invisible to a scalar check - a `requires=` on a bound-buffer
    value needs a readback the dispatch must never pay, so that contract stays with the caller.
 84. **gemma-26B: small-M prefill and decode attention past ~1k keys.** The context sweep
-   (`history/dasLLAMA/mtp_plan.md`, its "context sweep" section) dissolved the prefill half of the
-   original item - the halving was the untuned dev rail serving no `runtime.metal_tensor` crowns,
+   dissolved the prefill half of the original item - the halving was the untuned dev rail
+   serving no `runtime.metal_tensor` crowns,
    and on tuned kernels ours leads llama.cpp 3124/3965/4551 vs 2809/3037/3175 tok/s at
    256/700/2048 tokens (`lcpp_bench` -jit vs `llama-bench`, M5 Max, the tuned m5 mint;
    direction-grade). Two residuals, same instrument: pp35 reads 611 vs their 721 (the one-tile
@@ -1420,3 +1420,40 @@
     itself shows `reinterpret<void?>(13)`, an `int` widened to a pointer - a const node's whole
     vec4f is zero so it happens to work; that example wants a same-size spelling once the rule
     lands.
+124. **Pocket TTS at 4 bits - part 2 of the Pocket arc (ruled 2026-09-09).** The q8 lane held
+    the reference's quality on the rig (alba, 200 sentences: WER 3.91 / UTMOS 4.328 on the
+    published Q8_0 file against the package's 5.00 / 4.393, the f32 lane at 4.32 / 4.366), and
+    that margin is the reason to expect a 4-bit lane to hold too. Try the engine's 4-bit weight
+    formats on the same GEMMs the q8 lane quantizes - the backbone's four matrices per layer,
+    the codec transformers, the 32-wide codec convs - through the kq plane machinery the LLM
+    prefill already runs (`matmul_kq_batch` over a Q8_K-requantized activation row block;
+    `dasllama_kqformat.das` names the formats: Q4_0, Q4_K, IQ4_NL, IQ4_XS and the rest): a
+    `wkq` plane beside `wq` on `TtsLinear` / `TtsConv1d`, `linear_rows_kq` and a
+    `conv1d_rows_dense_kq` over the same stacked tap rows, the decode step on the kq GEMV, the
+    published file as the winning format. One format at a time, each a rig row on both
+    lanes, the flow head left f32 throughout (it is the graph's sensitive part - a 1e-5
+    epsilon in its timestep norm moved every latent one percent). The prize: the English file
+    from 152 MB to about 80, and the backbone's per-frame read from 75 MB to 38.
+125. **A voice-clip upload route on dasllama-server (ruled 2026-09-09 as a ledger row).** The
+    Pocket arc clones by NAMED voices only: the GGUF roster plus the clips of `tts_voices_dir`,
+    read once at boot (`register_voice_clips` in `utils/dasllama-server/openai_server.das`). A
+    `POST /v1/audio/voices` taking a clip and a name would let the control page's studio clone
+    without a restart: the worker's job kinds gain a `register` arm (the clip decoded at the
+    model's rate on the worker, `tts_register_voice`, the ready event re-emitted so the `tts`
+    block's roster moves), and the page's tts card gains a file picker beside the voice select.
+    The cap on the clip's decoded length is the ASR upload's (`max_audio_frames`); the name is
+    the file's stem or the field's; a name the roster carries replaces it, as the boot path does.
+126. **A Pocket chunker of our own, as a quality rung.** The port follows the released
+    driver's chunker (pocket-tts 3.1.0: a token budget of 50 per chunk, sentence marks first,
+    then commas, then whitespace; "." appended only after a letter or digit) so the frame
+    counts match the oracle's. The reference's short-chunk early EOS (it002 stops at frame 2,
+    pt003 at frame 1 - the package's own behaviour on short accented sentences) is a chunker
+    artefact: a chunker that keeps a short trailing sentence with its predecessor, or pads it
+    the way the driver pads a four-word input, would read those sentences whole. A rig row per
+    language decides it; the oracle-parity cells keep the 3.1.0 rule as their reference.
+127. **A per-language WER arm for the rig.** `harness/tts_rig.py` scores English through
+    parakeet; the five other Pocket languages have an RTF row and a waveform check against the
+    reference but no WER. The engine's own multilingual Whisper (`load_asr_model` on
+    whisper-large-v3-turbo, the language forced) is the scorer with no new tooling - a
+    `--asr whisper` arm on the rig and one native sentence set per language
+    (`tests/_tts_fixtures/pocket_sentences.json` has three each; the rig wants 50-200).

@@ -23,9 +23,10 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
 - **`dasllama_audio.das`** - the audio encoder tower: the mel front-ends (mtmd and whisper.cpp
   flavors), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`, and the
   whisper-class encode + block loop with its GPU hooks. Composes `dasllama_tower.das`.
-- **`dasllama_audio_io.das`** - decode-any-format -> 16 kHz mono f32 PCM, and the reverse leg the TTS
-  facade hands out: f32 samples -> 16-bit PCM bytes / a RIFF WAV file. The only file that talks to
-  miniaudio.
+- **`dasllama_audio_io.das`** - decode-any-format -> mono f32 PCM at the asked rate (`load_audio_mono`;
+  `load_audio_16k_mono` is the ASR rate, a voice clip goes in at a TTS model's own), and the reverse
+  leg the TTS facade hands out: f32 samples -> 16-bit PCM bytes / a RIFF WAV file. The only file
+  that talks to miniaudio.
 - **`dasllama_asr.das`** - the ASR facade: capability declaration, timestamp granularity, the
   backend-neutral entry points.
 - **`dasllama_whisper.das`** / **`dasllama_parakeet.das`** / **`dasllama_canary.das`** /

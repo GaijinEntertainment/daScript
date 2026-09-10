@@ -1,7 +1,7 @@
 # Metal / mac-session follow-up - the M5 catch-up ledger
 
 **Status: OPEN (2026-08-31, unquirk pass).** The ledger for the parallel mac session that
-forks after PR-1 of `plans/unquirk_pass.md`. Metal-tier perf items move here from the
+forks after the unquirk pass's PR-1. Metal-tier perf items move here from the
 per-format notes during the Phase E doc split; the CPU items below are mac-session work too -
 the M-series CPU tiers are minted and raced from that box.
 
@@ -53,8 +53,8 @@ every format: `harness/parity.das -- -m <gguf> -n 40 --ids 128000,12805,5304,264
 ## 3. Metal tier perf items
 
 Placeholder - the per-format Metal notes (tg 0.78-0.93x tails, the IQ4_XS lane-map gap of
-followup_general #58, the Q22 dispatch-loop probe method) consolidate here in Phase E of
-`plans/unquirk_pass.md`; until then they live in `HOW_TO_ADD_A_FORMAT.md`'s per-format notes.
+followup_general #58, the Q22 dispatch-loop probe method) consolidate here in the unquirk
+pass's Phase E; until then they live in `HOW_TO_ADD_A_FORMAT.md`'s per-format notes.
 
 ## 4. The elementwise / activation-precision lane (the last M5 pp residual)
 
@@ -93,8 +93,8 @@ Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt
 
 ## 6. The Metal kernel twins - the census for the Mac session (Boris, 2026-09-07)
 
-The full census is `plans/kernel_twins_census.md` section 2 (every `[metal_dispatch]` class read,
-suspected twins compared line by line); this entry is the map so the research is not done twice.
+Every `[metal_dispatch]` class has been read and the suspected twins compared line by line;
+this entry is the map so the research is not done twice.
 Boris: the Mac kernels are a follow-up done on the Mac, together with the Metal side of the Qwen
 zoo. Facts that decide the order:
 

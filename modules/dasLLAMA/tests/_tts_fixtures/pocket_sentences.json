@@ -1,0 +1,27 @@
+{
+  "german": [
+    {"id": "de001", "text": "Der schnelle braune Fuchs springt über den faulen Hund."},
+    {"id": "de002", "text": "Guten Morgen, wie geht es Ihnen heute?"},
+    {"id": "de003", "text": "Die Bibliothek öffnet um neun Uhr und schließt um sechs."}
+  ],
+  "spanish": [
+    {"id": "es001", "text": "El rápido zorro marrón salta sobre el perro perezoso."},
+    {"id": "es002", "text": "Buenos días, ¿cómo está usted hoy?"},
+    {"id": "es003", "text": "La biblioteca abre a las nueve y cierra a las seis."}
+  ],
+  "italian": [
+    {"id": "it001", "text": "La volpe marrone salta sopra il cane pigro."},
+    {"id": "it002", "text": "Buongiorno, come sta oggi?"},
+    {"id": "it003", "text": "La biblioteca apre alle nove e chiude alle sei."}
+  ],
+  "portuguese": [
+    {"id": "pt001", "text": "A rápida raposa marrom salta sobre o cão preguiçoso."},
+    {"id": "pt002", "text": "Bom dia, como o senhor está hoje?"},
+    {"id": "pt003", "text": "A biblioteca abre às nove e fecha às seis."}
+  ],
+  "french_24l": [
+    {"id": "fr001", "text": "Le rapide renard brun saute par-dessus le chien paresseux."},
+    {"id": "fr002", "text": "Bonjour, comment allez-vous aujourd'hui ?"},
+    {"id": "fr003", "text": "La bibliothèque ouvre à neuf heures et ferme à six heures."}
+  ]
+}

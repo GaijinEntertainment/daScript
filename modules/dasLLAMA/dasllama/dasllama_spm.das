@@ -10,6 +10,7 @@ require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYL
 require dasllama/dasllama_gguf
 require dasllama/dasllama_bpe
 require strings
+require math
 
 // SentencePiece-BPE tokenizer over the llama2.c tokenizer.bin format:
 //   int32 max_token_length, then per token { float32 score, int32 len, len bytes of text }.
@@ -117,6 +118,9 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
             tk.lookup |> insert(piece, int64(i))
         }
         tk.max_token_length = 0
+        for (piece in tk.vocab) {
+            tk.max_token_length = max(tk.max_token_length, length(piece))   // bytes: the unigram lattice's longest probe
+        }
         if (gguf_has(m, "tokenizer.ggml.add_space_prefix")) {
             tk.add_space_prefix = gguf_int(m, bytes, "tokenizer.ggml.add_space_prefix") != 0l
         }
@@ -300,4 +304,148 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
 //! SPM special tokens live in the vocab, so this is a plain lookup — same contract as the BPE overload.
 def special_id(tk : SpmTokenizer; name : string) : int64 {
     return tk.lookup?[name] ?? -1l
+}
+
+// ===== the unigram arm: a SentencePiece model of type UNIGRAM (GGUF `tokenizer.ggml.model =
+// "t5"`) over the same vocabulary and scores - a Viterbi lattice instead of the merge heap =====
+
+let private UNIGRAM_UNK_PENALTY = 10.0   // sentencepiece's kUnkPenalty: an unknown character scores the floor less this
+
+//! The unknown character's score in a unigram lattice: the vocabulary's lowest piece score less
+//! the penalty (the byte and control pieces score zero and never set the floor).
+def unigram_unk_score(tk : SpmTokenizer) : float {
+    var lo = 0.0
+    for (s in tk.scores) {
+        lo = min(lo, s)
+    }
+    return lo - UNIGRAM_UNK_PENALTY
+}
+
+def private spm_piece_of(d : array<uint8> const#; i, n : int) : string {
+    unsafe {
+        return string(temp_array(addr<uint8?>(d[i]), n, type<uint8>))
+    }
+}
+
+def private hex_char(v : int) : int => v < 10 ? '0' + v : 'A' + v - 10
+
+// the byte piece's name, "<0xXX>", built without a string walk
+def private byte_piece_name(bv : int) : string {
+    return string([uint8('<'), uint8('0'), uint8('x'), uint8(hex_char(bv >> 4)), uint8(hex_char(bv & 15)), uint8('>')])
+}
+
+// the next codepoint boundary after byte position i
+def private cpt_end(d : array<uint8> const#; i, n : int) : int {
+    var j = i + 1
+    while (j < n && (int(d[j]) & 0xC0) == 0x80) {
+        j++
+    }
+    return j
+}
+
+// the Viterbi lattice over byte positions: best[j] the highest score reaching j, back_len /
+// back_id the piece that got there; ties go to the earliest candidate (the reference's strict >);
+// a byte piece or a reserved control piece never matches text, as in the reference's trie
+def private unigram_lattice(tk : SpmTokenizer; d : array<uint8> const#; unk_id : int64; reserved : array<int64>;
+                            var best : array<float>; var back_len : array<int>; var back_id : array<int64>) {
+    let n = length(d)
+    let unk_score = unigram_unk_score(tk)
+    let max_len = max(tk.max_token_length, 1)
+    best |> resize(n + 1)
+    back_len |> resize(n + 1)
+    back_id |> resize(n + 1)
+    for (i in range(1, n + 1)) {
+        best[i] = -3.0e38
+    }
+    best[0] = 0.0
+    var i = 0
+    while (i < n) {
+        let ni = cpt_end(d, i, n)
+        var has_single = false
+        var j = ni
+        while (j <= n && j - i <= max_len) {
+            let id = tk.lookup?[spm_piece_of(d, i, j - i)] ?? -1l
+            if (id >= 0l && byte_token_val(tk.vocab[id]) < 0 && find_index(reserved, id) < 0) {
+                has_single = has_single || j == ni
+                let sc = best[i] + tk.scores[id]
+                if (sc > best[j]) {
+                    best[j] = sc
+                    back_len[j] = j - i
+                    back_id[j] = id
+                }
+            }
+            j = j < n ? cpt_end(d, j, n) : n + 1
+        }
+        if (!has_single) {
+            let sc = best[i] + unk_score
+            if (sc > best[ni]) {
+                best[ni] = sc
+                back_len[ni] = ni - i
+                back_id[ni] = unk_id
+            }
+        }
+        i = ni
+    }
+}
+
+//! Encode text as a UNIGRAM SentencePiece model does: the dummy-space prefix, the segmentation of
+//! highest total piece score over the codepoint lattice (an unspellable codepoint is the unknown
+//! piece at the penalty score; a `reserved` control id never matches; `byte_fallback` spells an unknown as its bytes).
+def unigram_encode(tk : SpmTokenizer; text : string; unk_id : int64; byte_fallback : bool; reserved : array<int64>) : array<int64> {
+    var inscope ids : array<int64>
+    return <- ids if (empty(text))
+    if (unk_id < 0l || unk_id >= long_length(tk.vocab)) {
+        panic("dasLLAMA spm: unigram encode with no unknown piece (id {unk_id} of {length(tk.vocab)})")
+    }
+    let input = tk.add_space_prefix ? " {text}" : text
+    peek_data(input) $(d : array<uint8> const#) {
+        var inscope best : array<float>
+        var inscope back_len : array<int>
+        var inscope back_id : array<int64>
+        unigram_lattice(tk, d, unk_id, reserved, best, back_len, back_id)
+        // the pieces come off the lattice last first
+        var inscope rev : array<int64>
+        var inscope rev_at : array<int>
+        var inscope rev_len : array<int>
+        var p = length(d)
+        while (p > 0) {
+            if (back_len[p] <= 0) {   // only a score that is not a number leaves a boundary unreached
+                panic("dasLLAMA spm: the unigram lattice reached byte {p} of '{text}' through no piece - a vocabulary score is not a number")
+            }
+            rev |> push(back_id[p])
+            rev_at |> push(p - back_len[p])
+            rev_len |> push(back_len[p])
+            p -= back_len[p]
+        }
+        var k = length(rev) - 1
+        while (k >= 0) {
+            if (rev[k] == unk_id && byte_fallback) {
+                for (b in range(rev_at[k], rev_at[k] + rev_len[k])) {
+                    ids |> push(tk.lookup?[byte_piece_name(int(d[b]))] ?? unk_id)
+                }
+            } else {
+                ids |> push(rev[k])
+            }
+            k--
+        }
+    }
+    return <- ids
+}
+
+//! The text a SentencePiece id sequence spells: pieces joined (a byte piece as its byte), the
+//! dummy-space prefix dropped - the reference's `decode`, control ids rendered as their names.
+def spm_decode_ids(tk : SpmTokenizer; ids : array<int64>) : string {
+    let s = build_string() $(var wr) {
+        for (id in ids) {
+            continue if (id < 0l || id >= long_length(tk.vocab))
+            let piece = tk.vocab[id]
+            let bv = byte_token_val(piece)
+            if (bv >= 0) {
+                write(wr, string([uint8(bv)]))
+            } else {
+                write(wr, piece)
+            }
+        }
+    }
+    return (tk.add_space_prefix && !empty(s) && first_character(s) == ' ') ? slice(s, 1) : s
 }

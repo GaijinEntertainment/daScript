@@ -2,9 +2,8 @@
 
 Run CI's gates locally before pushing. The CI-lane <-> gate mapping, the tiers and the
 manual commands this tool automates live in
-[skills/internal/preflight.md](https://github.com/GaijinEntertainment/daScript/blob/master/skills/internal/preflight.md);
-the budget the tiers serve (a full run fits 20 minutes on the M5 box) is
-`plans/ci_preflight_budget.md`.
+[skills/internal/preflight.md](https://github.com/GaijinEntertainment/daScript/blob/master/skills/internal/preflight.md).
+The budget the tiers serve: a full run fits 20 minutes on the M5 box.
 
 ```bash
 # fast tier, serial, a red stops the run: untracked, format --verify, lint changed .das and .md (three

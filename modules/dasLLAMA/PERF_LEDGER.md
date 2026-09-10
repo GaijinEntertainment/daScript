@@ -2,8 +2,7 @@
 
 **Living document.** The perf backlog for the whole dasLLAMA engine - CPU, Metal, and the
 audio/ASR towers: what each finding costs today, what the fix would change, and which
-hypotheses were measured and refuted. (Extracted 2026-07-29 from `API_REWORK.md`, whose plan
-half is archived under `history/dasLLAMA/`.)
+hypotheses were measured and refuted.
 
 Standing rule (Boris, 2026-07-01): any performance possibility spotted while doing wave work
 gets a note HERE instead of being acted on mid-wave - the model waves optimize for correctness
@@ -14,8 +13,8 @@ what it costs today and what the fix would change.
 
 - **OWED ROWS - the Vulkan cm2 prefill's board cells.** `performance/records/zen2.json` carries
   one das/vulkan cell (Qwen3-4B Q8_0 under `DASLLAMA_COOPMAT=mm`, 2026-07-25) and no cm2 cell,
-  while the Vulkan pp arc (`plans/kernel_parity_pass.md`: the group-aware split-k, the hand-laid
-  four-wide twins, the last-layer slice, the parallel embed) made every Vulkan prefill faster -
+  while the Vulkan pp arc (the group-aware split-k, the hand-laid four-wide twins, the
+  last-layer slice, the parallel embed) made every Vulkan prefill faster -
   the Q4_K_M 1B window 27.8 -> 22.1 ms on the `lcpp_bench --for-debug-purposes` rig,
   stage readings only. `performance/gen_bench_records.das`'s hardware stamp refuses this box
   while the remote-access daemon runs, so the mint waits for the owner's rig window. Owed: the
@@ -24,8 +23,8 @@ what it costs today and what the fix would change.
   against the 07-25 row; done when both rows sit in `performance/records/zen2.json` and the
   site records are regenerated.
 
-- **OWED ROWS - the parity pass's ten 1B pp512 vehicles.** The mirror pass
-  (`plans/kernel_parity_pass.md`, 2026-09-03) read Q3_K_L at 1.08, IQ3_M at 1.06 and IQ2_XXS
+- **OWED ROWS - the parity pass's ten 1B pp512 vehicles.** The mirror pass (2026-09-03) read
+  Q3_K_L at 1.08, IQ3_M at 1.06 and IQ2_XXS
   at 0.98 of the reference on the `lcpp_bench --for-debug-purposes --plen 512 --ngen 0 --reps
   12` rig bracketed by `llama-bench -p 512 -n 0 -r 6`, stage readings only; the board's rows
   for those vehicles are two-rep readings and stand until re-minted. Same refusal as above -
@@ -409,7 +408,7 @@ what it costs today and what the fix would change.
   barrier COUNT isn't the whole story - a fusion OFF the critical path can't help and can hurt by
   moving a bigger node into a later, tighter level; and the 26B's barrier lever is bounded (~sub-1%)
   because the GPU is routed-GEMV-bandwidth-bound (round-1 dig), not barrier-bound.** Implication
-  for the plan's R2-R5: the [metal_dispatch] macro lens stays worth it as CAPABILITY/eDSL, but the
+  for the remaining rungs R2-R5: the [metal_dispatch] macro lens stays worth it as CAPABILITY/eDSL, but the
   fusion+reorder PERF upside on this MoE model is small - the candidate deeper fusions
   (router_norm+router, swiglu+we2) hit the same norm-into-GEMV grid-wide-dep wall or need the GEMV
   kernel itself to fuse the activation (ledger-class). Still open from the plan: [tune]
@@ -1203,8 +1202,7 @@ group; wording kept.
   Apple silicon. Every figure in this entry is `external` (their arena composite scorer and
   their `mlxfast-reports` engine.md - not our instruments; the composite is a two-commit
   delta of their trunk on their box, `direction-grade`): the 2026-08 delta (+30% composite
-  in 33 commits, 100% kernel work) carries three candidates for our Metal kernels, surveyed
-  in the MTP research notes (local: ~/.claude/plans/mtp-research/mlxfast.md):
+  in 33 commits, 100% kernel work) carries three candidates for our Metal kernels:
   (1) tight-grid dispatch - launch only causally/structurally valid threadgroups instead of
   early-returning ~75% of them (their decode step waived 158k of 211k tgs; our QK/AV grids
   have the same triangular waste, their engine.md item 4); (2) identity `scale*q`

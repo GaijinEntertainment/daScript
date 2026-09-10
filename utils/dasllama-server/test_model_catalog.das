@@ -77,7 +77,7 @@ def test_catalog_table(t : T?) {
         t |> success(tower.url |> starts_with("https://"), "asr tower url must be https")
         t |> success(find(tower.url, "/resolve/main/") < 0, "asr tower url is not commit-pinned")
     }
-    t |> run("the text-to-speech set is pinned like any carrier: three models, two packs") @(t : T?) {
+    t |> run("the text-to-speech set is pinned like any carrier: nine models, three packs") @(t : T?) {
         var inscope set <- serve_tts_set()
         var packs = 0
         var names : table<string>
@@ -92,9 +92,10 @@ def test_catalog_table(t : T?) {
                 packs++
             }
         }
-        t |> equal(length(set), 6, "the set is three models and three packs")
+        t |> equal(length(set), 12, "the set is nine models (three phoneme families, six Pocket languages) and three packs")
         t |> equal(packs, 3, "three front-end packs: the full phoneme pack, its American-only twin, the tagger")
-        for (want in ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin"]) {
+        for (want in ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin",
+                      "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf", "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf"]) {
             t |> success(key_exists(names, want), "the set carries {want}")
         }
     }

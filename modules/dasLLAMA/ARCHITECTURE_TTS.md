@@ -60,14 +60,19 @@ TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) 
   carrier), and the two family data records the shared carrier serializes - `KittenFamily` (speed
   priors, voice aliases) and `KokoroFamily` (the symbol vocabulary) - plain data, no family logic.
   Family files require this, never each other.
-- **`dasllama_tts_blocks.das`** - the StyleTTS2-lineage block home, the TTS twin of
-  `dasllama_tower.das`, in the two layouts of sec.2.28: Conv1d (dense, depthwise, forward and
-  transposed), the dense layer, LayerNorm over rows and over channels, InstanceNorm and AdaIN,
-  AdaLayerNorm, the bidirectional LSTM (gates i,f,g,o, both bias halves pre-summed), LeakyReLU /
-  Snake / sigmoid / tanh, nearest and ONNX-half-pixel linear resampling, the duration-to-frame
-  expansion, half-to-even rounding, PCG32 with a polar normal, the harmonic-plus-noise sine
-  source, multi-head attention, and the STFT pieces (edge pad, magnitude and phase, polar to
-  rectangular, reflection pad). A weight is an ONNX-layout array plus the served layout
+- **`dasllama_tts_blocks.das`** - the TTS block home, the TTS twin of `dasllama_tower.das`, in
+  the two layouts of sec.2.28: Conv1d (dense, depthwise, forward and transposed), the dense
+  layer, LayerNorm over rows and over channels, InstanceNorm and AdaIN, AdaLayerNorm, the
+  bidirectional LSTM (gates i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake / sigmoid /
+  tanh / ELU, nearest and ONNX-half-pixel linear resampling, the duration-to-frame expansion,
+  half-to-even rounding, PCG32 with a polar normal (a generator nobody seeded refuses), the
+  harmonic-plus-noise sine source, multi-head attention, and the STFT pieces (edge pad, magnitude
+  and phase, polar to rectangular, reflection pad); for the continuous-audio family
+  (`ARCHITECTURE_POCKET.md`) the causal cached attention over a per-layer `TtsKvCache` (keys
+  transposed per head, values per head, a key window; the queries go in blocks, each scored over
+  the keys its rows can see, so the scratch is a block by its window and never the cache
+  squared; a cache grows with its fill kept), rope over rows, per-channel layer scale and the
+  replicate left pad. A weight is an ONNX-layout array plus the served layout
   `conv1d_prepare` / `linear_prepare` mint for the consumer the reader names (`served_rows`,
   `rows_only`, `vec_only`), the unread one dropped; beside every weight array sits its `TtsSpan` into the
   model's blob, and `weights_walk` is the one walk that moves weights into a staging blob or
@@ -106,9 +111,13 @@ TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) 
   shape and only from it, because the language letters are ordinary first letters of ordinary
   names, so a name of any other shape has no language rather than the one its first letter spells.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
-  picked by `general.architecture` - from a GGUF or from a prepared `.dlim`; the phoneme pack
-  and `tts_postag.bin` read from the model's directory, the full pack preferred over the
-  American-only twin, sec.2.43; the packs it leaves out are named once in the log), `caps` (the voices the front
+  picked by `general.architecture` - from a GGUF or from a prepared `.dlim`; for a phoneme
+  family the phoneme pack and `tts_postag.bin` read from the model's directory, the full pack
+  preferred over the American-only twin, sec.2.43, the packs it leaves out named once in the
+  log; a Pocket file stands alone and `tts_needs_packs` says so from the file's architecture
+  before any load), `tts_has_phonemes` (whether `tts_phonemize` has an answer for the model),
+  `tts_register_voice` (a clip at the model's own rate joins the roster where `caps` says the
+  model clones; a phoneme family refuses), `caps` (the voices the front
   end can drive - a Kokoro pack's name carries its language, and only the languages the family
   declares are listed or accepted; the rest refuse with the language in the message, or, where
   the name carried none, with the fact that the front end cannot phonemize it), `tts_voice_lang`

@@ -16,9 +16,16 @@ require audio   // miniaudio: decode any audio container to PCM
 //! optional companion is the decode rail apps require when they have a file. Empty array on
 //! a decode failure (missing / unreadable / unsupported file).
 def load_audio_16k_mono(path : string) : array<float> {
+    return <- load_audio_mono(path, 16000)
+}
+
+//! ``load_audio_16k_mono`` at any rate: mono f32 PCM at ``sample_rate`` Hz, resampled from the
+//! file's own - a voice clip for a TTS model goes in at ``caps().sample_rate``. Empty array on a
+//! decode failure.
+def load_audio_mono(path : string; sample_rate : int) : array<float> {
     var samples : array<float>
     var decoder = new ma_decoder
-    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, 16000u)
+    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(sample_rate))
     if (ma_decoder_init_file(path, unsafe(addr(config)), decoder) != ma_result.MA_SUCCESS) {
         unsafe {
             delete decoder

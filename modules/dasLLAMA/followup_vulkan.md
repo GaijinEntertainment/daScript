@@ -23,7 +23,7 @@ doesn't-fit-in-VRAM tier - the heat-pinned expert cache splitting one layer's ex
 CPU and GPU is a measured win (26B on the 8 GB 3060 Ti) and has no whole-graph equivalent.
 Resident (fits) and cooperative (doesn't fit) are complementary Vulkan modes, not rivals.
 
-## The gap list (from the 2026-07-29 census's Metal<->Vulkan parity map - archived as history/dasLLAMA/INVENTORY.md)
+## The gap list (from the 2026-07-29 census's Metal<->Vulkan parity map)
 
 Ordered roughly by user-visible value; re-rank against zen2 measurements before starting.
 
@@ -33,7 +33,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    `dasllama_vulkan_shapes` on the Metal pattern: portable, no `vulkan` require, feeds the
    same decline-reason reporting.
 2. **Family coverage in the resident driver** - the DECODE half of the deltanet hybrid ladder
-   landed (`plans/vulkan_hybrid_ladder.md`; `ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v): the
+   landed (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v): the
    token command carries recurrent layers (the fused step over per-layer state slots), gated
    attention and partial rotary, the K/V mirror has one slot per attention layer, and the nextn
    block no longer declines. Qwen3.5-9B UD-Q5_K_XL decodes resident at 49.7 tg (0.88x of
@@ -87,7 +87,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      GEMVs and the prefill's k5/k6 cm2 tiles serve them; a K-quant OUT plane still declines (the
      step's o row is Q8_0), and a layer with a q8 beta/alpha arm beside kq qkv/z re-requantizes
      the row Q8_0 before those GEMVs (one x feed, two forms). 9B UD same-day: tg128 50.1 -> 51.8
-     (0.965x of the 53.7 control; decode qkv 2.21 -> 1.70 ms, z 1.13 -> 0.95; the plan's ctx
+     (0.965x of the 53.7 control; decode qkv 2.21 -> 1.70 ms, z 1.13 -> 0.95; ctx
      125655 -> 136087), pp512 2608 -> 2526 (1.02x of 2484): the k5/k6 cm2 tiles run the same
      GEMMs slower than the q8 tile (window qkv 14.8 -> 17.7 ms, z 6.3 -> 8.3) - the kq cm2 decode
      callbacks are the next prefill lever (item 11's K-quant tail), or a q8 twin of the two
@@ -615,7 +615,7 @@ module) is independent and can land any time - it is pure structure.
     0.77, IQ3_S/IQ2_S 0.70, IQ3_XXS 0.69, Q4_K 0.67) while the Q8 rows sit at 1.00x+, so the format
     decode is in it. The cm2 tile itself matches llama.cpp's design point for point - geometry,
     workgroup, decode-in-load callback, one coopMatMulAdd per k-step, no k-loop barriers, the same
-    split-k heuristic (`plans/kernel_parity_research_vk.md`). The real differences: llama.cpp hoists
+    split-k heuristic. The real differences: llama.cpp hoists
     Q4_K/Q5_K scales into shared memory as ready (d,m) pairs where ours re-extracts from a second
     SSBO with a variable shift per decoded element, and its scales sit in the quant block where ours
     ride a separate plane. Order of work: (1) split the end-to-end budget - `GGML_VK_PERF_LOGGER=1`
@@ -623,14 +623,14 @@ module) is independent and can land any time - it is pure structure.
     chain carries 367 barriers per window); (2) the scale hoist; (3) interleave the scale plane into
     the quant block; (4) pad N to the tile width. `harness/vk_gemm_probe.das` already carries the
     isolation arms (`ref` = llama.cpp's own coopmat2 blob in our harness, `k6x flat` = compose
-    without scale reads). Boris 2026-08-30: this one bothers him at 0.7. Plan: `plans/kernel_parity_pass.md`.
+    without scale reads). Boris 2026-08-30: this one bothers him at 0.7.
     CLOSED at the debug rig (2026-09-03, after #3926: the split-k group, the hand-laid twins, the
     32-row last layer, the parallel embed; `lcpp_bench --for-debug-purposes --plen 512 --ngen 0
-    --reps 12` on the RTX 5060 Ti bracketed by `llama-bench -p 512 -n 0 -r 6` of the vector build,
-    rows in `plans/kernel_parity_pass.md`; the board rows stay OWED in `PERF_LEDGER.md`): nine of
+    --reps 12` on the RTX 5060 Ti bracketed by `llama-bench -p 512 -n 0 -r 6` of the vector build;
+    the board rows stay OWED in `PERF_LEDGER.md`): nine of
     ten 1B vehicles at or past llama.cpp on pp512, IQ2_XXS at 0.98. What remains is per tile, not per
     board. Read against llama.cpp's per-role windows (`GGML_VK_PERF_LOGGER=1 llama-bench` beside
-    `DASLLAMA_GPU_PROF=1 lcpp_bench`, the role table in `plans/kernel_parity_pass.md`): the iq2xxs
+    `DASLLAMA_GPU_PROF=1 lcpp_bench`): the iq2xxs
     gate/up tile at 1.15 of llama.cpp's rate (its grid decode still shows where theirs is hidden),
     k3 and iq3s gate/up at 1.05-1.09, down at 1.04-1.14 on the 2048-wide shape. The work for
     those is the memo's delta 1 (scale hoist), delta 2 (scale interleave) and delta 8 (codebook
@@ -663,7 +663,7 @@ module) is independent and can land any time - it is pure structure.
     carries a `decode_v4` (the template's `DECV4` axis), not just the three; the grid formats'
     twins do one grid lookup per four elements and beat the scalar arm by 30-65% at the tile
     (iq3s 43-48 vs 29-30 TF/s at the gate shape, iq2s 49-50 vs 30-32, iq2xxs 44-46 vs 34-35);
-    the `DECVEC` opt-outs are gone. Rows in `plans/kernel_parity_pass.md`.
+    the `DECVEC` opt-outs are gone.
 
 37. **Device embed gather over a kq tied plane.** `vulkan_embed_gpu_gate` admits a model only
     when `rdec_set_emb` placed a q8 tied plane or the f32 table fit under `RDEC_EMB_F32_CAP`;
@@ -743,7 +743,7 @@ module) is independent and can land any time - it is pure structure.
     wave64 run. Done = a validation message naming `qk_rms_cls` by name, and a wave64 run
     of the kernel-unit suite. The emitter's operand laziness itself - eager `select` / bool `&`
     `|` as language surface, the purity heuristic dropped, the 12 kernel sites converted - is
-    `plans/shader_emitter_followups.md` item 1.
+    its own SPIR-V emitter follow-up.
 41. **`tests/test_vulkan_kernels.das`'s device-absent cells feint instead of skipping.** The file's
     idiom (its header: "every check feints cleanly") predates `tests/REVIEW.md`'s rule that a cell
     with nothing to assert registers `t |> skip`, so on a box without a Vulkan device every cell of
@@ -831,7 +831,7 @@ module) is independent and can land any time - it is pure structure.
     caps the shape, not the memory: per block a thread issues 24 shared loads and 160 sdot4 for 16
     outputs, the reference exe's `matmul_q4_k_q8_1` 4 x 32 block 40 loads for 1024. Two
     prerequisites before the next prototype of either tile: (a) the SPIR-V emitter unrolls
-    `for [unroll_full] (i in range(N))` at emission (`plans/shader_emitter_followups.md` item 2),
+    `for [unroll_full] (i in range(N))` at emission,
     so a fragment or accumulator block written as a fixed array chains constant indices the
     driver promotes to registers - the coopmat tile's sixteen accumulators need it as much as
     the integer tile's 128; (b) a hardware profile (Nsight) of our KHR tile beside the

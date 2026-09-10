@@ -18,6 +18,8 @@ require dasllama/dasllama_tts_types public
 require dasllama/dasllama_styletts2
 require dasllama/dasllama_kitten
 require dasllama/dasllama_kokoro
+require dasllama/dasllama_pocket
+require dasllama/dasllama_gguf   // gguf_file_arch: the family sniff before a load
 
 //! The TTS facade: load a model by its GGUF, run text through the front end, synthesize.
 //! Returns PCM; writing a file is the caller's job through `dasllama_audio_io`.
@@ -25,6 +27,7 @@ require dasllama/dasllama_kokoro
 enum TtsKind {
     kitten
     kokoro
+    pocket
 }
 
 struct TtsModel {
@@ -35,6 +38,8 @@ struct TtsModel {
     scratch : St2Scratch = St2Scratch()   //! the activation carrier every synthesis reuses
     g2p : G2pModel                          //! ``tts_g2p.bin``: lexicons, rules and the fallback chain
     tagger : PosTagger                      //! ``tts_postag.bin``: the tokenizer and part-of-speech tagger
+    pocket : PocketModel = PocketModel()    //! the Pocket TTS family's model, when the GGUF is one; it reads text, not phonemes
+    pocket_scratch : PocketScratch = PocketScratch()   //! its activation carrier
 }
 
 // Stated rather than inferred: the shared carrier holds borrowed planes, and a generated
@@ -45,13 +50,20 @@ def finalize(var m : TtsModel) {
     delete m.scratch
     delete m.g2p
     delete m.tagger
+    delete m.pocket
+    delete m.pocket_scratch
 }
 
 def load_tts_model(path : string) : TtsModel {
-    //! Load a TTS model: a converted GGUF (KittenTTS or Kokoro, picked from its architecture) or its prepared
-    //! ``.dlim`` image, which serves without the GGUF; ``tts_g2p.bin`` and ``tts_postag.bin`` come from the same directory.
-    //! A GGUF serves the rows GEMMs on the lane ``tts_serves_q8`` names at load time; an image serves the lane it was baked on.
+    //! Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared
+    //! ``.dlim`` image; the phoneme families read ``tts_g2p.bin`` and ``tts_postag.bin`` from the same directory (Pocket
+    //! needs neither). A GGUF serves the rows GEMMs on the lane ``tts_serves_q8`` names; an image serves the lane it was baked on.
     var inscope m = TtsModel()
+    if (!(path |> ends_with(".dlim")) && gguf_file_arch(path) == "pocket-tts") {
+        m.kind = TtsKind.pocket
+        m.pocket <- load_pocket(path)
+        return <- m
+    }
     m.model <- load_styletts2(path)
     if (m.model.family == "kitten-tts") {
         m.kind = TtsKind.kitten
@@ -84,6 +96,7 @@ def g2p_pack_path(dir : string) : string {
 def private log_dropped_voices(m : TtsModel) {
     //! Name, once per load, the voice packs ``caps`` leaves out: the front end phonemizes none
     //! of their languages, so a caller asking for one gets a refusal rather than a wrong accent.
+    return if (m.kind == TtsKind.pocket)   // every roster voice speaks the model's language
     var inscope langs <- front_end_langs(m)
     var inscope dropped : array<string>
     for (v in m.model.voice_names) {
@@ -95,15 +108,17 @@ def private log_dropped_voices(m : TtsModel) {
 }
 
 def set_tts_q8(on : bool) {
-    //! Pin the rows GEMMs' format for subsequent TTS loads: Q8_0 quants (their own prepared image
-    //! beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to the policy default.
-    //! The pin is per context: a worker thread pins for itself.
+    //! Pin the GEMM weights' format for subsequent TTS loads of every family: Q8_0 quants (their
+    //! own prepared image beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to
+    //! the policy default. The pin is per context: a worker thread pins for itself.
     set_styletts2_q8(on)
+    set_pocket_q8(on)
 }
 
 def reset_tts_q8() {
     //! Drop the ``set_tts_q8`` pin: the next load follows the policy default again.
     reset_styletts2_q8()
+    reset_pocket_q8()
 }
 
 def tts_serves_q8() : bool {
@@ -112,10 +127,14 @@ def tts_serves_q8() : bool {
 }
 
 def private front_end_langs(m : TtsModel) : array<string> {
-    //! The languages the front end phonemizes for this model, as the reference pipeline's codes. Both
-    //! families ship American English; Kokoro adds British (its ``bf_*`` / ``bm_*`` packs) when the phoneme
-    //! pack carries the British tier. A family speaks a language only once its lexicon rung lands here.
+    //! The languages the front end reads for this model, as the reference pipeline's codes: American
+    //! English for both phoneme families, British too for Kokoro when the pack carries that tier, and
+    //! for a Pocket model the one language it was trained for.
     var inscope langs : array<string>
+    if (m.kind == TtsKind.pocket) {
+        langs |> push(m.pocket.lang)
+        return <- langs
+    }
     langs |> push("en-us")
     if (m.kind == TtsKind.kokoro && !m.g2p.us_only) {
         langs |> push("en-gb")
@@ -125,23 +144,48 @@ def private front_end_langs(m : TtsModel) : array<string> {
 
 def private voice_lang(m : TtsModel; vname : string) : string {
     //! The language a canonical voice was trained on: Kitten's voices are all American
-    //! English; a Kokoro pack's name carries its language.
+    //! English; a Kokoro pack's name carries its language; a Pocket voice speaks its model's.
+    if (m.kind == TtsKind.pocket) {
+        return m.pocket.lang
+    }
     return m.kind == TtsKind.kitten ? "en-us" : kokoro_voice_lang(vname)
+}
+
+def private family_name(m : TtsModel) : string {
+    return m.kind == TtsKind.pocket ? "pocket-tts {m.pocket.name}" : "{m.model.family} {m.model.name}"
+}
+
+def private sample_rate_of(m : TtsModel) : int {
+    return m.kind == TtsKind.pocket ? m.pocket.sample_rate : m.model.sample_rate
 }
 
 def caps(m : TtsModel) : TtsCaps {
     //! What the loaded model offers: the canonical voice names the front end can drive, each with
-    //! its language (a voice whose language it does not phonemize is left out; a family's aliases
-    //! resolve at synthesis), the PCM sample rate, the languages, and whether it clones a voice.
-    var c = TtsCaps(sample_rate = m.model.sample_rate, cloning = false)
+    //! its language (a voice whose language it does not phonemize is left out; aliases resolve at
+    //! synthesis), the PCM rate, the languages, whether it clones a voice, whether a speed applies.
+    var c = TtsCaps(sample_rate = sample_rate_of(m), cloning = m.kind == TtsKind.pocket, speed = m.kind != TtsKind.pocket)
     c.langs <- front_end_langs(m)
-    for (v in m.model.voice_names) {
+    let names & = unsafe(m.kind == TtsKind.pocket ? m.pocket.voice_names : m.model.voice_names)
+    for (v in names) {
         let lang = voice_lang(m, v)
         continue if (find_index(c.langs, lang) < 0)
         c.voices |> push(v)
         c.voice_langs |> push(lang)
     }
     return <- c
+}
+
+def tts_register_voice(var m : TtsModel; name : string; pcm : array<float>; sample_rate : int) {
+    //! Clone a voice: ``pcm`` (mono, at the model's own sample rate - ``caps().sample_rate``) joins
+    //! the roster under ``name`` and speaks from the next synthesis on. A model whose ``caps()`` says
+    //! it cannot clone panics here.
+    if (m.kind != TtsKind.pocket) {
+        panic("dasLLAMA tts: {family_name(m)} cannot clone a voice")
+    }
+    if (sample_rate != m.pocket.sample_rate) {
+        panic("dasLLAMA tts: a voice clip at {sample_rate} Hz; this model takes {m.pocket.sample_rate} Hz")
+    }
+    pocket_register_voice(m.pocket, name, pcm, m.pocket_scratch)
 }
 
 def tts_voice_lang(m : TtsModel; voice : string) : string {
@@ -160,10 +204,30 @@ def tts_normalize(text : string) : string {
     return normalize_text(text)
 }
 
+def tts_needs_packs(path : string) : bool {
+    //! Whether the model at ``path`` reads the front-end packs (``tts_g2p.bin``, ``tts_postag.bin``)
+    //! from its directory: the phoneme families do, a Pocket TTS GGUF reads text and needs neither -
+    //! decided before any load, by the architecture test ``load_tts_model`` makes (a ``.dlim`` is a phoneme family).
+    return (path |> ends_with(".dlim")) || gguf_file_arch(path) != "pocket-tts"
+}
+
+def tts_has_phonemes(m : TtsModel) : bool {
+    //! Whether ``tts_phonemize`` has an answer for this model: the phoneme families yes, a Pocket
+    //! model no - it reads text, and its chunks carry no phoneme string.
+    return m.kind != TtsKind.pocket
+}
+
+def private phoneme_family_only(m : TtsModel) {
+    if (m.kind == TtsKind.pocket) {
+        panic("dasLLAMA tts: {family_name(m)} reads text, not phonemes - nothing to phonemize")
+    }
+}
+
 def tts_phonemize(m : TtsModel; text : string) : string {
     //! The phonemes one already-normalized sentence becomes, in the front end's own American
-    //! inventory: the tagger of ``tts_postag.bin`` labels the tokens, the grapheme-to-phoneme pass
-    //! of ``tts_g2p.bin`` reads them. A family wanting other symbols rewrites this string into them.
+    //! inventory (the tagger of ``tts_postag.bin`` labels the tokens, the grapheme-to-phoneme pass of
+    //! ``tts_g2p.bin`` reads them); a family wanting other symbols rewrites them. A Pocket model panics.
+    phoneme_family_only(m)
     return g2p_phonemize(m.g2p, m.tagger, text)
 }
 
@@ -171,6 +235,7 @@ def tts_phonemize(m : TtsModel; text : string; lang : string) : string {
     //! The same, in the inventory ``lang`` names - a language code from ``caps``, ``"en-us"`` or
     //! ``"en-gb"``. A language this model's front end does not phonemize panics rather than
     //! answering in the wrong dialect.
+    phoneme_family_only(m)
     var inscope langs <- front_end_langs(m)
     if (find_index(langs, lang) < 0) {
         panic("dasLLAMA tts: this front end does not phonemize '{lang}'")
@@ -306,9 +371,12 @@ def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS; ensure_punct : bo
 }
 
 def tts_chunks(m : TtsModel; norm : string) : array<string> {
-    //! The chunks a synthesis on this model takes: the family's own driver rule - Kitten's
-    //! appends a comma to a chunk the split left bare, Kokoro's pipeline sends the text as it is,
-    //! and its voices render an added mark as an audible breath.
+    //! The chunks a synthesis on this model takes, by the family's own driver rule: Kitten's appends
+    //! a comma to a chunk the split left bare, Kokoro's sends the text as it is (its voices render an
+    //! added mark as a breath), Pocket's splits on its tokenizer's sentence marks under a token budget.
+    if (m.kind == TtsKind.pocket) {
+        return <- pocket_chunks(m.pocket, norm)
+    }
     return <- tts_chunks(norm, TTS_CHUNK_CHARS, m.kind == TtsKind.kitten)
 }
 
@@ -324,13 +392,31 @@ def private add_timings(var acc : TtsTimings; t : TtsTimings) {
     acc.decoder_us += t.decoder_us
     acc.source_us += t.source_us
     acc.generator_us += t.generator_us
+    acc.prompt_us += t.prompt_us
+    acc.backbone_us += t.backbone_us
+    acc.head_us += t.head_us
+    acc.codec_us += t.codec_us
     acc.total_us += t.total_us
     acc.samples += t.samples
 }
 
 let private NOISE_SEED = 0x5eed1ul   // the chunk index folds in: consecutive chunks draw different noise
 
+def private synthesize_chunk_pocket(var m : TtsModel; chunk : string; vname : string; speed : float; chunk_index : int) : TtsAudio {
+    if (speed != 1.0) {
+        panic("dasLLAMA tts: {family_name(m)} has no speed control; asked for {speed}")
+    }
+    var inscope out = TtsAudio()
+    out.sample_rate = m.pocket.sample_rate
+    pocket_speak(m.pocket, chunk, vname, m.pocket.default_temperature, NOISE_SEED + uint64(chunk_index), out.timings, m.pocket_scratch)
+    out.pcm := m.pocket_scratch.wave
+    return <- out
+}
+
 def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; speed : float; chunk_index : int) : TtsAudio {
+    if (m.kind == TtsKind.pocket) {
+        return <- synthesize_chunk_pocket(m, norm, vname, speed, chunk_index)
+    }
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     let clock = ref_time_ticks()
@@ -352,7 +438,14 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; sp
 }
 
 def private resolve_voice(m : TtsModel; voice : string) : string {
-    let vname = m.kind == TtsKind.kitten ? kitten_voice(m.model.kitten, m.model, voice) : (styletts2_has_voice(m.model, voice) ? voice : "")
+    var vname = ""
+    if (m.kind == TtsKind.pocket) {
+        vname = key_exists(m.pocket.voices, voice) ? voice : ""
+    } elif (m.kind == TtsKind.kitten) {
+        vname = kitten_voice(m.model.kitten, m.model, voice)
+    } elif (styletts2_has_voice(m.model, voice)) {
+        vname = voice
+    }
     if (empty(vname)) {
         panic("dasLLAMA tts: unknown voice '{voice}'")
     }
@@ -371,11 +464,13 @@ def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : f
     //! soon as it exists, in order. Normalization runs once over the whole text; ``voice`` is a
     //! name from ``caps`` or a family alias, and an unknown one panics.
     let vname = resolve_voice(m, voice)
-    let norm = normalize_text(text)
+    // the normalizer reads English; a Pocket model in another language takes the text as it is,
+    // which is what its reference does in every language
+    let norm = m.kind == TtsKind.pocket && m.pocket.lang != "en" ? text : normalize_text(text)
     var inscope chunks <- tts_chunks(m, norm)
     for (i, chunk in iter_range(chunks), chunks) {
         var inscope a <- synthesize_chunk(m, chunk, vname, speed, i)
-        to_log(LOG_INFO, "dasLLAMA tts: {m.model.family} {m.model.name}: {timings_line(a.timings, a.sample_rate)}\n")
+        to_log(LOG_INFO, "dasLLAMA tts: {family_name(m)}: {timings_line(a.timings, a.sample_rate)}\n")
         invoke(blk, a)
     }
 }
@@ -385,7 +480,7 @@ def synthesize(var m : TtsModel; text : string; voice : string; speed : float = 
     //! synthesize; the chunks concatenate, the timings sum. Sample-identical to
     //! ``synthesize_stream`` over the same text.
     var inscope out = TtsAudio()
-    out.sample_rate = m.model.sample_rate
+    out.sample_rate = sample_rate_of(m)
     synthesize_stream(m, text, voice, speed) $(chunk) {
         out.pcm |> push_from(chunk.pcm)
         add_timings(out.timings, chunk.timings)

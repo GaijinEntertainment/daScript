@@ -22,18 +22,18 @@ def test_has_path_under(t : T?) {
 def test_reach_hit(t : T?) {
     let none : array<string>
     let imgui <- ["modules/dasImgui/", "modules/dasGlfw/"]
-    t |> success(reach_hit(["plans/x.md"], none), "an empty reach set runs on any change")
+    t |> success(reach_hit(["x.md"], none), "an empty reach set runs on any change")
     t |> success(reach_hit(["modules/dasImgui/daslib/imgui_boost.das"], imgui), "a path under the gate's own prefix reaches it")
     t |> success(reach_hit(["src/ast/ast_parse.cpp"], imgui), "a core change reaches every gate")
     t |> success(reach_hit(["CMakeLists.txt"], imgui), "the top-level CMakeLists is core")
-    t |> success(!reach_hit(["modules/dasLLAMA/tests/run.das", "plans/x.md"], imgui), "a change elsewhere misses the gate")
+    t |> success(!reach_hit(["modules/dasLLAMA/tests/run.das", "x.md"], imgui), "a change elsewhere misses the gate")
     t |> success(!reach_hit(none, imgui), "an empty diff misses every reach set")
 }
 
 [test]
 def test_review_md_tests_reach(t : T?) {
     t |> success(review_md_tests_reach(["utils/REVIEW.das"]), "a gate under utils/ reaches the suites")
-    t |> success(review_md_tests_reach(["modules/dasLLAMA/REVIEW.das", "plans/x.md"]), "a module's gate reaches them")
+    t |> success(review_md_tests_reach(["modules/dasLLAMA/REVIEW.das", "x.md"]), "a module's gate reaches them")
     t |> success(review_md_tests_reach(["utils/internal/review-md/gate.das"]), "the walkers reach them")
     t |> success(review_md_tests_reach(["dastest/review_gate.das"]), "the gate library reaches them")
     t |> success(!review_md_tests_reach(["utils/watchdog/REVIEW.md", "utils/watchdog/watchdog.das"]), "a checklist or a tool edit misses them")

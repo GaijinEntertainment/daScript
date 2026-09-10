@@ -3,9 +3,9 @@ require dastest/testing_boost
 require strings
 
 // Byte views are binary-safe by design: every view extern is entry glue over a length-bounded
-// core, so an interior NUL is data and the byte after the view is never read
-// (plans/byte-view-strings.md phases 1-3). This file covers the two things the parity harness
-// in view_parity.das cannot: the interior-NUL behaviour where view and string MUST diverge,
+// core, so an interior NUL is data and the byte after the view is never read. This file
+// covers the two things the parity harness in view_parity.das cannot: the interior-NUL
+// behaviour where view and string MUST diverge,
 // and the edges of the three NUL-dependence rewrites (bounded find/rfind, len-taking
 // strip/trim walkers, bounded integer parse).
 //

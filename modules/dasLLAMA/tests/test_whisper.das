@@ -27,8 +27,7 @@ require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown â
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
-// Oracle constants come from whisper-cli (CPU, greedy: -bs 1 -bo 1 -nf -ng) â€” the rig and
-// the large-v3-turbo parity runs live in history/dasLLAMA/whisper_plan.md.
+// Oracle constants come from whisper-cli (CPU, greedy: -bs 1 -bo 1 -nf -ng).
 def private whisper_models_dir() : string {
     let env = g_env_test.whisper_dir
     return empty(env) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : env

@@ -2,8 +2,7 @@
 
 **Read `ARCHITECTURE_COMMON.md` (repo root) first - its contract binds this document.** The
 checklists that bind a diff here are `REVIEW.md` (this folder) and
-`modules/REVIEW_SHADER_EMITTERS.md`. The plan sections and the implementation log this
-document grew from are archived at `history/dasMetal/MASTERPLAN_LOG.md`.
+`modules/REVIEW_SHADER_EMITTERS.md`.
 
 ## 1. Why
 

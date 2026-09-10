@@ -4,8 +4,8 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
 
 ## 3. Inherited invariants
 
-Durable "why it is built this way" facts harvested from the design docs archived under
-`history/dasLLAMA/`. Violating one of these is a bug, not a style choice.
+Durable "why it is built this way" facts harvested from the arcs' design records. Violating one
+of these is a bug, not a style choice.
 
 **From `x64_arch.md`:**
 

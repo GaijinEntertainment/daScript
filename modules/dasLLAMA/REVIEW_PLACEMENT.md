@@ -1,8 +1,7 @@
 # dasLLAMA Code Review Checklist - placement
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`,
-`ARCHITECTURE_TTS.md` (sec.1 in each - the per-file charters).
+docs: the `ARCHITECTURE_*.md` set beside this file - sec.1 in each is the per-file charters.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 it.**

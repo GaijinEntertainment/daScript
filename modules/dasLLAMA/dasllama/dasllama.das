@@ -32,9 +32,9 @@ require dasllama/dasllama_vision_embedder public   // the vision embedder of wha
 require dasllama/dasllama_audio_embedder public    // the audio encoder of whatever family (gemma4a) — audio soft tokens
 require dasllama/dasllama_asr public           // uniform ASR surface (whisper today; parakeet/qwen3-asr land behind the same sniff)
 require dasllama/dasllama_vad public           // Silero-VAD (voice-activity detection): segments + streaming iterator
-require dasllama/dasllama_tts public           // uniform TTS surface (KittenTTS, Kokoro): load_tts_model / synthesize / synthesize_stream
+require dasllama/dasllama_tts public           // uniform TTS surface (KittenTTS, Kokoro, Pocket TTS): load_tts_model / synthesize / synthesize_stream / tts_register_voice
 require dasllama/dasllama_config public        // the explicit .dlim bake configuration — the --config / identity contract
-require dasllama/dasllama_audio_io public      // audio decode (wav/mp3/flac/ogg) to 16 kHz mono f32 PCM
+require dasllama/dasllama_audio_io public      // audio decode (wav/mp3/flac/ogg) to mono f32 PCM at 16 kHz or any asked rate
 require dasllama/dasllama_vision_io public     // image decode to RGB8 VisionImage — the only stbimage seam
 require dasllama/dasllama_math                 // engine-level knobs (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_tier             // GPU tier status + marks (wrapped below, not re-exported)

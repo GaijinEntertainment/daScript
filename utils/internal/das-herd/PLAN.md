@@ -63,8 +63,7 @@ The split is strict:
 2. `modules/dasImgui/terminal` renders and interacts with terminal snapshots.
 3. `utils/internal/das-herd` owns workspace policy, session discovery, and application UI.
 
-This follows the shared text architecture recorded in
-[`modules/dasImgui/plans/text-components-architecture.md`](../../modules/dasImgui/plans/text-components-architecture.md).
+This follows the shared text architecture of the dasImgui text components.
 
 ## Architecture
 

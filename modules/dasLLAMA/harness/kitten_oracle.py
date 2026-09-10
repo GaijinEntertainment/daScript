@@ -56,30 +56,7 @@ STAGES = {
     "conv_post": "/decoder/generator/conv_post/Conv_output_0",
 }
 
-MAGIC = b"TTSO"
-DTYPES = {np.dtype(np.float32): 0, np.dtype(np.int32): 1}
-
-
-def write_dump(path, records):
-    with open(path, "wb") as f:
-        f.write(MAGIC + struct.pack("<II", 1, len(records)))
-        for name, arr in records.items():
-            arr = np.ascontiguousarray(arr)
-            if arr.dtype == np.int64:
-                arr = arr.astype(np.int32)
-            nb = name.encode("utf8")
-            f.write(struct.pack("<I", len(nb)) + nb)
-            f.write(struct.pack("<II", DTYPES[arr.dtype], arr.ndim))
-            f.write(struct.pack(f"<{arr.ndim}i", *arr.shape))
-            f.write(arr.tobytes())
-
-
-def pick_sentences(rows, count):
-    """Deterministic spread over the corpus: rows whose normalized text is 20..110 characters,
-    every k-th by corpus order."""
-    ok = [r for r in rows if 20 <= len(r["norm"]) <= 110]
-    step = max(1, len(ok) // count)
-    return ok[::step][:count]
+from tts_oracle_io import write_dump, pick_sentences  # noqa: E402,F401  (the container and the fixture pick the three oracles share)
 
 
 def resolve_stages(model):

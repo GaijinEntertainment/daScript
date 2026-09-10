@@ -1,7 +1,7 @@
 # How to add a weight format to dasLLAMA
 
-A HOW_TO is the fourth document mood: `REVIEW.md` binds a diff, `ARCHITECTURE.md` says how the
-system is, `/history` says what happened - this says **do this, then this**. It walks the code in
+A HOW_TO is the third document mood: `REVIEW.md` binds a diff, the `ARCHITECTURE*.md` set says
+how the system is - this says **do this, then this**. It walks the code in
 the order a new format lands, cites the architecture section that owns each step instead of
 restating it, and keeps a QUIRKS ledger of every step where the pattern broke. It is validated by
 execution: every step below was run in the session that wrote it, on the format named in the
@@ -286,12 +286,11 @@ the MoE GEMV/mul_mm trio for the format - ledgered for the M5 kernel pass.
 
 **Dev-loop invocation (adopted 2026-08-31):** every correctness-loop run (probe tests,
 parity, run.das spot checks) is the fast stack by default - `daslang.exe -jit <app>.das ...`
-installs the AST module cache and the split-module JIT unasked (the measured walls, per box
-and stack: `plans/jit_compile_time.md`). A bench that must see
+installs the AST module cache and the split-module JIT unasked. A bench that must see
 one-unit codegen passes `--jit-split-modules=0` after the `--` separator; a records row
 measures a released `-exe`, which always is one unit. `-no-module-cache` opts out of the
-cache. QUIRK 21 still applies to emitter edits. Numbers, caveats and the invalidation ledger:
-`plans/jit_compile_time.md`; the flags: `skills/internal/build_and_debug.md`.
+cache. QUIRK 21 still applies to emitter edits. The flags:
+`skills/internal/build_and_debug.md`.
 
 **Kernel-loop invocation (adopted 2026-09-01):** a kernel spelling is raced without a model in
 `benchmarks/matmul/kq_kernel_bench.das` - `DAS_TUNE_MODE=tune bin/Release/daslang.exe -jit
@@ -300,8 +299,7 @@ row of the tile's and gemv's `_variants()` registries at one thread on synthetic
 per try), and the reference row at the same shape is the reference exe's `test-backend-ops perf
 -o MUL_MAT -p "type_a=<type>,type_b=f32,m=4096,n=1,"` under `GGML_BENCH_THREADS=1`;
 `harness/kernel_ladder.sh` runs both sides for every format and prints the box's ratio table. The
-app run comes only after a spelling wins there. Procedure, fact base and work queue:
-`plans/kernel_parity_pass.md`.
+app run comes only after a spelling wins there.
 2026-09-01: the pass closed the M1 CPU at kernel level - all 32 ladder rows at or above the
 reference (the grid decodes 1.16-1.51x, from 0.51-0.93x) - so the per-format M1 CPU tg tails stamped
 below (0.51x-0.73x) predate the ARM row-group decode; re-stamp the vehicles before quoting them.
@@ -473,8 +471,7 @@ where, why it is so today, what unquirked looks like. An empty ledger is a legit
    row on byte-identical numbers before the cache-hit line gave it away; the hash was the same
    0xa3a02e12... across every edit). After ANY emitter change: `rm -rf .jitted_scripts` (or
    bump `LLVM_JIT_CODEGEN_VERSION`) before trusting a probe or bench. Unquirked: the cache
-   hash folds the generator bodies (plans/interpreter ledger has the sibling
-   `jit_dll_semantic_hash` item).
+   hash folds the generator bodies.
 
 22. **A Metal kernel lever is judged by a kernel-level probe, never by tg128 e2e.** A tg128
    row on the M1 carries +-8 t/s of noise; the iq3s f4-slab GEMV form (+9% at the kernel)

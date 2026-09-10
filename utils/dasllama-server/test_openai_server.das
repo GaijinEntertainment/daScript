@@ -381,7 +381,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 }
             }
             // POST /config — validated body writes an authoritative TOML to the registered path
-            POST("{base_url}/config", "\{\"model\":\"m.gguf\",\"port\":8123,\"mtp\":true,\"gpu\":\"vulkan\",\"image_mmproj\":\"mm.gguf\"}") $(resp) {
+            POST("{base_url}/config", "\{\"model\":\"m.gguf\",\"port\":8123,\"mtp\":true,\"gpu\":\"vulkan\",\"image_mmproj\":\"mm.gguf\",\"tts_voices_dir\":\"voices\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> success(find(string(resp.body), "restart_required") >= 0, "save response flags restart")
             }
@@ -397,6 +397,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     t |> equal(troot?["model"] ?? "", "m.gguf")
                     t |> success(troot?["mtp"] ?? false, "bool key round-trips")
                     t |> equal(troot?["image_mmproj"] ?? "", "mm.gguf")   // a save must not eat the vision arm
+                    t |> equal(troot?["tts_voices_dir"] ?? "", "voices")   // every key the page's field list carries is a key the save takes
                     unsafe {
                         delete troot
                     }

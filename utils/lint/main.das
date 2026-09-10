@@ -268,7 +268,7 @@ def run_rule_docs_pass(folders : array<string>) : int {
         collect_folder_mds(folder, false, strays)
         strays |> sort
         for (md in strays) {
-            print("{md}: LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, ARCHITECTURE*.md); ledgers and plans live at the module root or plans/ (repo root)\n")
+            print("{md}: LINT025: stray .md beside shipped code - rule documents only (REVIEW*.md, ARCHITECTURE*.md); ledgers and notes live at the module root, plan documents stay out of the tree\n")
             found ++
         }
     }

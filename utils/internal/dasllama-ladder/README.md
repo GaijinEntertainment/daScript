@@ -2,8 +2,7 @@
 
 The store (and, in later slices, the HTTP surface) behind dasllama.io: community tune
 sidecars are the product, bench-record measurements are the community bonus riding along.
-The site plan and trust model live in `plans/dasllama_io_site.md`; the checklist for every
-change here is `REVIEW.md`.
+The checklist for every change here is `REVIEW.md`.
 
 ## 1. Layout
 
@@ -82,8 +81,8 @@ Plain dastest - the same lane `extended_checks` runs the dasweb-playground suite
 The consuming half lives with dasLLAMA: `modules/dasLLAMA/dasllama/dasllama_exchange.das`
 (boot-time sidecar lookup/apply as llvm_tune's scope resolver, the privacy-stripped submit
 rails, the control-page surface), wired into `utils/dasllama-server` (the `/exchange`
-endpoints + `exchange_*` config keys) and `lcpp_bench --submit`. The follow-up ledger (partial
-re-race, cross-box matrix, version diff) is in `plans/dasllama_io_site.md`.
+endpoints + `exchange_*` config keys) and `lcpp_bench --submit`. Partial re-race, the cross-box
+matrix and version diff are ledgered follow-ups.
 
 ## 6. Deploy
 

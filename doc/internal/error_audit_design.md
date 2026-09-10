@@ -145,7 +145,7 @@ the style of the ~25 existing `if (verbose)` sites in `ast_infer_type.cpp`
 
 ### Phase E - `Program::deduplicateErrors()`
 
-See plan file `C:/Users/Boris/.claude/plans/look-at-wip-das-and-synchronous-quill.md` "Phase E" - implementation per the four-rule algorithm. The `not_resolved_yet_*` family is identified by the facet prefix; Rule 4 drops all of them when ANY non-not_resolved_yet, non-unspecified code exists.
+Implementation per the four-rule algorithm. The `not_resolved_yet_*` family is identified by the facet prefix; Rule 4 drops all of them when ANY non-not_resolved_yet, non-unspecified code exists.
 
 ### Phase F.1 - Test sweep
 

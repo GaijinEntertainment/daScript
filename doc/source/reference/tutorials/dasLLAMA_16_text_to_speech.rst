@@ -13,20 +13,26 @@ dasLLAMA speaks through one small surface: a loader that reads the family from
 the GGUF, a ``caps()`` call that lists the voices, and two verbs —
 ``synthesize`` for the whole text at once, ``synthesize_stream`` for one
 sentence at a time. The same program runs KittenTTS (kitten-nano and
-kitten-mini) and Kokoro-82M.
+kitten-mini), Kokoro-82M and Pocket TTS.
 
-All three are StyleTTS2-lineage models, and they share one assembly. The text
-becomes phonemes, a text encoder predicts how long each phoneme lasts, a
+The first three are StyleTTS2-lineage models, and they share one assembly. The
+text becomes phonemes, a text encoder predicts how long each phoneme lasts, a
 prosody branch predicts pitch and energy, and a decoder plus an iSTFT
 generator — inverse short-time Fourier transform, the step that turns
-per-frame spectra back into samples — write the waveform. ``caps`` reports the
-rate each model emits; the three above emit 24 kHz.
+per-frame spectra back into samples — write the waveform. Pocket TTS is a
+different lineage. A small language model reads the text as tokens and
+predicts, frame by frame, a compressed picture of the sound; a codec decoder
+turns those frames into samples. It has no phoneme step, and it speaks in a
+voice it takes from a few seconds of audio. ``caps`` reports the rate each
+model emits; all four emit 24 kHz.
 
-Run it with a TTS GGUF that has its two front-end packs beside it::
+Run it with a TTS GGUF — the phoneme families want their two front-end packs
+beside the file, a Pocket file stands alone::
 
    daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- kitten-nano.gguf hello.wav
    daslang.exe -jit ... -- kokoro-82m.gguf hello.wav --voice af_heart
    daslang.exe -jit ... -- kitten-nano.gguf hello.wav --f32
+   daslang.exe -jit ... -- pocket-tts-en-q8.gguf hello.wav --clone me.wav
 
 Use ``-jit``. Speech synthesis runs the same tuned kernels the language models
 run, and the interpreter is far too slow for them.
@@ -47,6 +53,16 @@ which reads no British voice.
 
    var m <- load_tts_model("kitten-nano.gguf")   // tts_g2p.bin + tts_postag.bin sit beside it
    print("phoneme pack: {base_name(g2p_pack_path(dir_name("kitten-nano.gguf")))}\n")
+
+A Pocket file reads text, so no pack sits beside it. ``tts_needs_packs``
+answers that from the file's own architecture metadata, before any load, so a
+program can check the file set it is about to serve.
+
+.. code-block:: das
+
+   if (tts_needs_packs(path)) {
+       print("wants tts_g2p.bin + tts_postag.bin beside it\n")
+   }
 
 caps(): ask, don't assume
 =========================
@@ -136,6 +152,19 @@ synthesis would give.
    print("{voice} reads {lang}\n")
    print("{tts_phonemize(m, spoken, lang)}\n")  // the string that voice is asked to say
 
+A Pocket model reads text, not phonemes. ``tts_has_phonemes`` answers false
+for it, and ``tts_phonemize`` panics rather than invent a string. The English
+normalizer still runs in front of the English file; the other languages read
+their text as it is.
+
+.. code-block:: das
+
+   if (tts_has_phonemes(m)) {
+       print("{tts_phonemize(m, spoken, lang)}\n")
+   } else {
+       print("{spoken}\n")   // the text itself is what the model reads
+   }
+
 The front end is where ``synthesize`` spends its first microseconds, and
 ``TtsTimings`` counts them separately from the model stages.
 
@@ -145,10 +174,11 @@ Where the time went
 ``TtsTimings`` is microseconds of wall clock per stage, model loading
 excluded: the front end, then bert — a phoneme-level language model that gives
 each phoneme the context of its neighbours — the text encoder, the durations,
-the prosody branch, the decoder, the source and the generator. ``rtf`` is the
-real-time factor, seconds of work per second of audio produced, so a number
-below 1 is faster than real time. ``timings_line`` puts the whole split on one
-line.
+the prosody branch, the decoder, the source and the generator. A Pocket
+synthesis fills four slots of its own — the prompt, the backbone, the head and
+the codec — and leaves the others at zero. ``rtf`` is the real-time factor,
+seconds of work per second of audio produced, so a number below 1 is faster
+than real time. ``timings_line`` puts the stages a family ran on one line.
 
 .. code-block:: das
 
@@ -202,10 +232,35 @@ lookup. A KittenTTS voice carries its own speed prior on top of the number you
 pass, so the same ``speed`` on two voices is not the same tempo — hold the
 voice fixed when you want to read the knob.
 
+``caps().speed`` says whether the model honours a speed at all. Pocket TTS
+has nothing that scales a duration, so it reads false there, and a ``speed``
+other than 1.0 panics.
+
 .. code-block:: das
 
-   let quick <- synthesize(m, "daslang speaks.", voice, 1.25)
+   if (c.speed) {
+       let quick <- synthesize(m, "daslang speaks.", voice, 1.25)
+   }
    let other <- synthesize(m, "daslang speaks.", c.voices[1])
+
+Cloning a voice
+===============
+
+``caps().cloning`` says whether the model takes a voice from a recording.
+Pocket TTS does: a few seconds of one speaker, mono, at the model's own rate,
+become a voice in the roster. ``load_audio_mono`` decodes a wav, flac, mp3 or
+ogg file to that rate, and ``tts_register_voice`` adds the samples under the
+name you give. From then on the name works like any bundled voice. A clip
+longer than a minute is refused, and a phoneme model panics here: it has no
+voice to take.
+
+.. code-block:: das
+
+   if (c.cloning) {
+       let clip <- load_audio_mono("me.wav", c.sample_rate)
+       tts_register_voice(m, "me", clip, c.sample_rate)
+       let mine <- synthesize(m, "daslang speaks in my voice.", "me")
+   }
 
 The two weight lanes
 ====================
@@ -213,7 +268,9 @@ The two weight lanes
 The decoder and generator matrix multiplies are served from one of two
 prepared images beside the GGUF. The q8 lane holds those weights as Q8_0
 quants and is what a load serves by default. The f32 lane holds the file's own
-planes; it is the reference the parity tests hold the q8 lane against.
+planes; it is the reference the parity tests hold the q8 lane against. A
+published Pocket file already holds Q8_0 weights, so its q8 lane reads them as
+they are and its f32 lane dequantizes them.
 
 ``tts_serves_q8`` answers which lane the next load takes. ``set_tts_q8`` pins
 it, and ``reset_tts_q8`` returns to the default. The pin is process-wide

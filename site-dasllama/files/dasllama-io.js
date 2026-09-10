@@ -6,8 +6,7 @@
 
    The table/bars builders are a copy of site/files/dasllama.js's, extended with the
    ladder's needs (das-only rows, source column, preselected filters). Extracting a
-   shared builder file is a ledgered follow-up (plans/dasllama_io_site.md), same as
-   the css was. */
+   shared builder file is a ledgered follow-up, same as the css was. */
 
 (function () {
   'use strict';

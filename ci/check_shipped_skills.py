@@ -36,7 +36,6 @@ REPO_PATH = re.compile(
     r"|tests-cpp/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
     r"|doc/source/[A-Za-z0-9_./+*-]*[A-Za-z0-9_+*-]"
     r"|benchmarks/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
-    r"|history/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
     r"|utils/daslang/[A-Za-z0-9_./+-]*"
     r"|utils/internal/[A-Za-z0-9_./+-]*"
     r"|modules/[A-Za-z0-9_-]+/(?:src|tests|tutorial|harness)[A-Za-z0-9_./+-]*"

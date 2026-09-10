@@ -1,0 +1,218 @@
+{
+ "language": "portuguese",
+ "revision": "39592ff23c9ef80098bb74895d104c26275fe2c9",
+ "rows": [
+  {
+   "id": "pt001",
+   "prepared": "A rápida raposa marrom salta sobre o cão preguiçoso.",
+   "frames_after_eos": 3,
+   "ids": [
+    302,
+    260,
+    3317,
+    260,
+    381,
+    658,
+    633,
+    1090,
+    448,
+    307,
+    1256,
+    358,
+    366,
+    267,
+    260,
+    3584,
+    618,
+    2392,
+    945,
+    616,
+    262
+   ]
+  },
+  {
+   "id": "pt002",
+   "prepared": "Bom dia, como o senhor está hoje?",
+   "frames_after_eos": 3,
+   "ids": [
+    1218,
+    406,
+    261,
+    305,
+    267,
+    260,
+    987,
+    303,
+    405,
+    281
+   ]
+  },
+  {
+   "id": "pt003",
+   "prepared": "A biblioteca abre às nove e fecha às seis.",
+   "frames_after_eos": 3,
+   "ids": [
+    302,
+    1846,
+    2782,
+    622,
+    417,
+    422,
+    2330,
+    558,
+    2699,
+    268,
+    1518,
+    558,
+    2147,
+    262
+   ]
+  }
+ ],
+ "chunks": [
+  {
+   "text": "A rápida raposa marrom salta sobre o cão preguiçoso. Bom dia, como o senhor está hoje? A biblioteca abre às nove e fecha às seis.",
+   "chunks": [
+    "A rápida raposa marrom salta sobre o cão preguiçoso. Bom dia, como o senhor está hoje? A biblioteca abre às nove e fecha às seis."
+   ]
+  }
+ ],
+ "probes": [
+  {
+   "text": "Hello world, this is a test of 3.14 kg.",
+   "ids": [
+    2864,
+    404,
+    426,
+    260,
+    822,
+    1313,
+    2584,
+    261,
+    260,
+    1444,
+    520,
+    260,
+    520,
+    264,
+    416,
+    1201,
+    267,
+    600,
+    260,
+    475,
+    262,
+    344,
+    535,
+    260,
+    681,
+    459,
+    262
+   ]
+  },
+  {
+   "text": "The café served crème brûlée 😀 to Москва.",
+   "ids": [
+    3425,
+    2772,
+    2555,
+    516,
+    322,
+    287,
+    199,
+    172,
+    534,
+    260,
+    2077,
+    199,
+    191,
+    2776,
+    370,
+    260,
+    244,
+    163,
+    156,
+    132,
+    260,
+    345,
+    260,
+    212,
+    160,
+    212,
+    194,
+    213,
+    133,
+    212,
+    190,
+    212,
+    182,
+    212,
+    180,
+    262
+   ]
+  },
+  {
+   "text": "a",
+   "ids": [
+    264
+   ]
+  },
+  {
+   "text": "  spaces   everywhere  ",
+   "ids": [
+    260,
+    260,
+    260,
+    265,
+    649,
+    508,
+    265,
+    260,
+    260,
+    268,
+    743,
+    536,
+    822,
+    1248,
+    512,
+    260,
+    260
+   ]
+  },
+  {
+   "text": "ALL CAPS SHOUTING",
+   "ids": [
+    302,
+    1589,
+    1589,
+    507,
+    834,
+    2841,
+    564,
+    2574,
+    1673,
+    2736,
+    1130,
+    880,
+    1335,
+    1564
+   ]
+  },
+  {
+   "text": "tabs\tand\nnewlines",
+   "ids": [
+    260,
+    358,
+    513,
+    265,
+    13,
+    2082,
+    14,
+    521,
+    822,
+    3191,
+    265
+   ]
+  }
+ ]
+}

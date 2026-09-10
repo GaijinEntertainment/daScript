@@ -26,7 +26,8 @@ require dasllama/dasllama_tts                           // tts_normalize / tts_c
 // cleanly otherwise. Two more model-gated tests spawn main.das: the speech-only boot, and the
 // boot whose worker CANNOT load (a front-end pack from before this build), which must serve on
 // with the reason in the `tts` block. The multi-language voice rule (a named voice's own dialect,
-// and the refusals) is gated on kokoro-82m.gguf. The configure_tts degrade, the no-TTS 503, the
+// and the refusals) is gated on kokoro-82m.gguf; the Pocket family (one file, no phonemes, no
+// speed, a cloning flag in the block, and the tts_voices_dir roster) on pocket-tts-en-q8.gguf. The configure_tts degrade, the no-TTS 503, the
 // lane normalization and the catalog's tts download arm are model-free and always run.
 
 let TEST_PORT = 18136   // 18097/18098/18099/18101/18102/18120/18121/18131/18135 belong to the sibling suites
@@ -36,6 +37,10 @@ let BOOT_PORT = 18139   // the spawned main.das boot
 let CATALOG_PORT = 18141   // 18140 belongs to the fixtures' capture_catalog rail
 let KOKORO_PORT = 18142    // the multi-language boot: its own worker, so its own port
 let STALE_PACK_PORT = 18143   // the spawned boot whose front-end pack predates this build
+let POCKET_PORT = 18144    // the Pocket boot: its own worker, so its own port
+let POCKET_CLIP_PORT = 18145    // the Pocket boot that speaks the clip the next one clones
+let POCKET_CLONE_PORT = 18146   // the Pocket boot with a voices directory
+let POCKET_NOCLONE_PORT = 18147   // the kitten boot under the same voices directory: ignored
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
 let CHILD_TIMEOUT_SEC = 420.0   // the child parses, JITs and loads before it listens
 let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, so a hung boot still joins
@@ -45,6 +50,7 @@ def private models_dir() : string {
 }
 let TTS_PATH = path_join(models_dir(), "kitten-nano.gguf")
 let KOKORO_PATH = path_join(models_dir(), "kokoro-82m.gguf")   // the multi-language front end: two dialects to be wrong about
+let POCKET_PATH = path_join(models_dir(), "pocket-tts-en-q8.gguf")   // the text-reading, voice-cloning family: no packs, no phonemes, no speed
 let BOGUS_TTS_PATH = path_join(models_dir(), "no-such-tts-model.gguf")   // never on disk: the degrade path
 
 struct private BurstAnswer {
@@ -57,10 +63,10 @@ struct private BootOutcome {
     tail : string
 }
 
-def private with_speech_server(model_path : string; port : int; lane : string; blk : block<(base_url : string) : void>) {
+def private with_speech_server(model_path : string; port : int; lane : string; voices_dir : string; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
-        new_thread() <| @capture(= model_path, = lane) {
-            configure_tts(model_path, lane)   // the server thread is its own context: the lane pin has to be requested HERE
+        new_thread() <| @capture(= model_path, = lane, = voices_dir) {
+            configure_tts(model_path, lane, voices_dir)   // the server thread is its own context: the lane pin has to be requested HERE
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
@@ -409,6 +415,9 @@ def private check_tts_stats_block(t : T?; base_url : string; want_lane : string)
         t |> success(json_present(tts?["audio_s"]), "the block carries the cumulative speech seconds")
         t |> equal(int(tts?["sample_rate"] ?? 0l), 24000, "the model's rate — the same one the wav header carries")
         t |> equal(tts?["lane"] ?? "", want_lane, "the block reports the lane the worker pinned")
+        t |> success(!(tts?["cloning"] ?? true), "a phoneme family clones nothing")
+        t |> success(tts?["speed"] ?? false, "a phoneme family scales its durations")
+        t |> equal(tts?["lang"] ?? "", "en-us", "the first language the front end reads")
         // the CANONICAL names caps() declares, not the friendly aliases the route also accepts:
         // the page's voice picker offers exactly what the model calls its voices
         var inscope voices <- json_strings(tts?["voices"])
@@ -485,12 +494,154 @@ def private check_phonemes_voice_rule(t : T?; base_url : string) {
     }
 }
 
+def private pocket_model_missing(t : T?) : bool {
+    if (!jit_enabled()) {
+        t |> skip("JIT-only: the interpreter is too slow to serve a synthesis")
+        return true
+    }
+    if (!stat(POCKET_PATH).is_valid) {
+        t |> skip("pocket-tts-en-q8.gguf not present under {models_dir()}")
+        return true
+    }
+    return false
+}
+
+// a speech answer that is a WAV of at least `min_samples` 16-bit samples at 24 kHz
+def private expect_speech_wav(t : T?; status : int; ctype : string; bytes : array<uint8>; text : string; min_samples : int) {
+    t |> equal(status, 200, text)
+    t |> success(find(ctype, "audio/wav") >= 0, "content type {ctype}")
+    t |> success(length(bytes) > 44 + min_samples * 2, "{length(bytes)} bytes: at least {min_samples} samples of speech")
+}
+
+// The Pocket family on the same routes: its GGUF stands alone (no front-end pack beside it is
+// asked for), the tts block says it clones and names its language, the phonemes route answers
+// the chunks with no phoneme string, a speed is refused as the caller's mistake, and a clip's
+// worth of speech comes back as a WAV.
+[test]
+def test_speech_route_pocket(t : T?) {
+    if (pocket_model_missing(t)) {
+        return
+    }
+    t |> success(!tts_needs_packs(POCKET_PATH), "a Pocket GGUF asks for no front-end pack")
+    t |> equal(tts_missing_file(POCKET_PATH), "", "its file set is the one file")
+    with_speech_server(POCKET_PATH, POCKET_PORT, "q8", "") $(base_url) {
+        with_tts_stats(base_url) $(tts) {
+            t |> success(json_present(tts), "the tts block is there")
+            return if (!json_present(tts))
+            t |> equal(tts?["id"] ?? "", "pocket-tts-en-q8", "the served id")
+            t |> success(tts?["cloning"] ?? false, "the block says the model clones")
+            t |> success(!(tts?["speed"] ?? true), "the block says a speed means nothing to it")
+            t |> equal(tts?["lang"] ?? "", "en", "the block names the language")
+            var inscope voices <- json_strings(tts?["voices"])
+            t |> equal(length(voices), 19, "the English roster")
+            t |> equal(voices[0], "alba", "the default voice comes first")
+        }
+        speech_request(base_url, "\{\"input\": \"Hello from the pocket model, reading plain text.\", \"voice\": \"alba\"}") $(status, ctype, bytes, text) {
+            expect_speech_wav(t, status, ctype, bytes, text, 24000)   // over a second at 24 kHz
+        }
+        speech_request(base_url, "\{\"input\": \"Hello.\", \"voice\": \"alba\", \"speed\": 1.5}") $(status, _ctype, _bytes, text) {
+            t |> equal(status, 400, "a speed on a model with no speed control is the caller's mistake: {text}")
+            t |> success(find(text, "speed") >= 0, "the refusal names the knob: {text}")
+        }
+        speech_request(base_url, "\{\"input\": \"Hello.\", \"voice\": \"nobody\"}") $(status, _ctype, _bytes, text) {
+            t |> equal(status, 400, "an unknown voice: {text}")
+        }
+        speech_request(base_url, "\{\"input\": \"   \", \"voice\": \"alba\"}") $(status, _ctype, _bytes, text) {
+            t |> equal(status, 400, "a blank text is refused, not answered with no samples: {text}")
+        }
+        phonemes_request(base_url, "\{\"input\": \"Dr. Chen paid $12. Then he left.\"}") $(status, text) {
+            t |> equal(status, 200, text)
+            var err = ""
+            var js = read_json(text, err)
+            t |> success(js != null, "the answer parses as JSON: {err}")
+            if (js != null) {
+                t |> equal(js?["lang"] ?? "", "en", "the language the model reads")
+                t |> equal(js?["normalized"] ?? "", "Doctor Chen paid twelve dollars. Then he left.", "the English normalizer runs in front of a Pocket model")
+                var inscope texts <- json_row_field(js?["chunks"], "text")
+                var inscope phons <- json_row_field(js?["chunks"], "phonemes")
+                t |> success(!empty(texts), "the chunks the model will read")
+                for (i in range(length(phons))) {
+                    t |> equal(phons[i], "", "row {i} carries no phoneme string: the model reads text")
+                }
+                unsafe {
+                    delete js
+                }
+            }
+        }
+    }
+}
+
+// tts_voices_dir on a cloning model: one boot speaks the clip, the next boot points the key at
+// its directory - the clip joins the roster under its file's stem and speaks, while a file that
+// decodes as no clip is skipped without dropping the route.
+[test]
+def test_pocket_voices_dir(t : T?) {
+    if (pocket_model_missing(t)) {
+        return
+    }
+    var terr : string
+    let tmp = temp_directory(terr)
+    let voices_dir = path_join(empty(tmp) ? "." : tmp, "dasllama_speech_voices_{ref_time_ticks()}")
+    mkdir_rec(voices_dir)
+    let clip_path = path_join(voices_dir, "mine.wav")
+    let junk_path = path_join(voices_dir, "junk.wav")
+    var roster = 0
+    with_speech_server(POCKET_PATH, POCKET_CLIP_PORT, "q8", "") $(base_url) {
+        speech_request(base_url, "\{\"input\": \"This is the voice the next boot will clone, a few seconds of one speaker.\", \"voice\": \"alba\"}") $(status, _ctype, bytes, text) {
+            t |> equal(status, 200, text)
+            fopen(clip_path, "wb") $(f) {
+                if (f != null) {
+                    f |> fwrite(bytes)
+                }
+            }
+        }
+        with_tts_stats(base_url) $(tts) {
+            roster = length(json_strings(tts?["voices"]))
+        }
+    }
+    fopen(junk_path, "wb") $(f) {
+        if (f != null) {
+            f |> fwrite("RIFF junk")
+        }
+    }
+    let note_path = path_join(voices_dir, "readme.txt")   // no clip extension: passed over, never decoded
+    fopen(note_path, "wb") $(f) {
+        if (f != null) {
+            f |> fwrite("not audio")
+        }
+    }
+    with_speech_server(POCKET_PATH, POCKET_CLONE_PORT, "q8", voices_dir) $(base_url) {
+        with_tts_stats(base_url) $(tts) {
+            var inscope voices <- json_strings(tts?["voices"])
+            t |> equal(length(voices), roster + 1, "the clip joined the roster; the junk file and the note did not")
+            t |> success(find_index(voices, "mine") >= 0, "the cloned voice carries its file's stem ({length(voices)} voices)")
+        }
+        speech_request(base_url, "\{\"input\": \"Hello from a cloned voice.\", \"voice\": \"mine\"}") $(status, ctype, bytes, text) {
+            expect_speech_wav(t, status, ctype, bytes, text, 12000)   // over half a second in the cloned voice
+        }
+    }
+    // the same directory on a model that cannot clone: logged, ignored, the route serves its own roster
+    if (stat(TTS_PATH).is_valid && stat(path_join(models_dir(), "tts_g2p.bin")).is_valid && stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
+        with_speech_server(TTS_PATH, POCKET_NOCLONE_PORT, "q8", voices_dir) $(base_url) {
+            with_tts_stats(base_url) $(tts) {
+                var inscope voices <- json_strings(tts?["voices"])
+                t |> equal(length(voices), 8, "a phoneme family keeps its own eight voices under a voices directory")
+                t |> success(!(tts?["cloning"] ?? true), "and still says it clones nothing")
+            }
+        }
+    }
+    remove(clip_path)
+    remove(junk_path)
+    remove(note_path)
+    rmdir(voices_dir)
+}
+
 [test]
 def test_speech_route(t : T?) {
     if (speech_model_missing(t)) {
         return
     }
-    with_speech_server(TTS_PATH, TEST_PORT, "q8") $(base_url) {
+    with_speech_server(TTS_PATH, TEST_PORT, "q8", "") $(base_url) {
         t |> run("/v1/models lists the TTS id") @(t : T?) {
             GET("{base_url}/v1/models") $(resp) {
                 t |> success(resp != null && resp.status_code == http_status.OK, "200")
@@ -606,7 +757,7 @@ def test_phonemes_on_a_multi_language_model(t : T?) {
         t |> skip("kokoro-82m.gguf or the front-end packs not present under {models_dir()}")
         return
     }
-    with_speech_server(KOKORO_PATH, KOKORO_PORT, "q8") $(base_url) {
+    with_speech_server(KOKORO_PATH, KOKORO_PORT, "q8", "") $(base_url) {
         t |> run("the phonemes route reads the voice's own dialect and refuses a voice it cannot") @(t : T?) {
             check_multi_language_phonemes(t, base_url)
         }
@@ -824,7 +975,7 @@ def test_speech_route_on_the_f32_lane(t : T?) {
     if (speech_model_missing(t)) {
         return
     }
-    with_speech_server(TTS_PATH, LANE_PORT, "f32") $(base_url) {
+    with_speech_server(TTS_PATH, LANE_PORT, "f32", "") $(base_url) {
         t |> run("the configured lane reaches the worker and comes back on /v1/stats") @(t : T?) {
             speech_request(base_url, "\{\"input\": \"The quick brown fox.\", \"voice\": \"Bella\"}") $(status, _ctype, bytes, text) {
                 t |> equal(status, 200, text)

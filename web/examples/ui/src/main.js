@@ -68,9 +68,9 @@ pageInit = function () {
          currentAssetsUrl = null;
      });
 
-     // The curated list comes from the sample service (store-fed, phase 2 of
-     // plans/dasweb_backend.md); the committed data.json remains the fallback
-     // for the GH Pages mirror / an empty store on first boot.
+     // The curated list comes from the sample service (store-fed); the committed
+     // data.json remains the fallback for the GH Pages mirror / an empty store on
+     // first boot.
      fetch('/api/samples/listed')
         .then(function(r) { if (!r.ok) throw new Error('listed ' + r.status); return r.json(); })
         .then(function(listed) {

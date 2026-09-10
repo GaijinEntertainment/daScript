@@ -214,6 +214,8 @@ def private skip_array(b : array<uint8> | #; off : int64; arr_type : int; count 
     return off + count * gguf_scalar_size(arr_type)
 }
 
+let GGUF_FIXED_HEADER_BYTES = 24l   // magic, version, tensor count, kv count: what parse_gguf_meta reads before any table
+
 def gguf_magic_ok(bytes : array<uint8> | #) : bool {
     return long_length(bytes) >= 4l && int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F'
 }
@@ -360,7 +362,8 @@ def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
     return <- res
 }
 
-//! `general.architecture` of the GGUF at `path` ("" when unreadable) - a header-only read.
+//! `general.architecture` of the GGUF at `path` ("" when unreadable - a file that is not a GGUF,
+//! or one cut short of its own metadata, the way a download that stopped is) - a header-only read.
 def gguf_file_arch(path : string) : string {
     var arch = ""
     fopen(path, "rb") $(f) {
@@ -368,10 +371,14 @@ def gguf_file_arch(path : string) : string {
             return
         }
         fmap(f) $(var bytes : array<uint8>#) {
-            return if (!gguf_magic_ok(bytes))
-            var inscope m <- parse_gguf_meta(bytes)
-            if (gguf_has(m, "general.architecture")) {
-                arch = gguf_str(m, bytes, "general.architecture")
+            return if (long_length(bytes) < GGUF_FIXED_HEADER_BYTES || !gguf_magic_ok(bytes))
+            try {
+                var inscope m <- parse_gguf_meta(bytes)
+                if (gguf_has(m, "general.architecture")) {
+                    arch = gguf_str(m, bytes, "general.architecture")
+                }
+            } recover {
+                arch = ""
             }
         }
     }
@@ -1540,6 +1547,9 @@ def gguf_transcode_q8_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
     if (src_off + expect_n > m.tensors[ti].n_elem) {
         panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
     }
+    if (expect_n % 32l != 0l) {
+        panic("gguf: tensor '{name}' asks for {expect_n} Q8_0 elements, not a whole number of 32-blocks")
+    }
     let nb = expect_n / 32l
     if (nb <= 0l) {
         return
@@ -1590,6 +1600,9 @@ def gguf_transcode_q5_0_to_q8(m : GGUFMeta; srcbytes : array<uint8> | #; name : 
     }
     if (src_off % 32l != 0l || expect_n % 32l != 0l) {
         panic("gguf: tensor '{name}' Q5_0 slice [{src_off}, +{expect_n}) is not block-aligned")
+    }
+    if (expect_n % 32l != 0l) {
+        panic("gguf: tensor '{name}' asks for {expect_n} Q8_0 elements, not a whole number of 32-blocks")
     }
     let nb = expect_n / 32l
     if (nb <= 0l) {

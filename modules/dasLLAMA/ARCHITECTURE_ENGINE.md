@@ -80,7 +80,7 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   replay/result text builders, reply parsers; Harmony namespace/channels, gemma-4 DSL, mistral
   control tokens, llama JSON). Every byte of tool wire text is produced here - pure string+JSON
   functions, model-free testable; the chat layer assembles the output into ChatParts and the
-  server parses through the parsers. Wire-format provenance: `history/dasLLAMA/tool_formats_plan.md`.
+  server parses through the parsers.
 - **`dasllama_chat.das`** - conversation turns and chat-template application. Per-arch template
   *content* is registered by the arch file (sec.1.6), not written here.
 - **`dasllama_par.das`** - `maybe_parallel_for` and nothing else. Threading policy (job counts,
@@ -131,8 +131,8 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
 - **`dasllama_tokenizer.das`** - the tokenizer facade: backend selection off the GGUF metadata and
   the one encode/decode/piece surface models and the chat layer call. Re-exports both backends, so
   a consumer requires this file and never picks a backend by hand.
-- **`dasllama_spm.das`** - the SentencePiece backend (Llama-2 family, Phi-3, Gemma): score-greedy
-  merges over vocab pieces, `<0xXX>` byte fallback.
+- **`dasllama_spm.das`** - the SentencePiece backend: score-greedy merges over vocab pieces (Llama-2, Phi-3, Gemma),
+  the unigram Viterbi arm over the same pieces (`unigram_encode`, GGUF `"t5"`, sec.1.7d's tokenizer), `<0xXX>` byte fallback.
 - **`dasllama_bpe.das`** - the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the
   GPT-2 byte alphabet, ranked merges, encode/decode. Split from SPM because the two algorithms
   share no state; a third merge algorithm gets a fourth file. Two sanctioned family-name tests

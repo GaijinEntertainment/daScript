@@ -91,8 +91,6 @@ RST comment on its own line directly above the block; invisible when rendered.
    pages whose subject area changed since the last sweep (git-dateable), with probe access
    and the same GENUINE/MARKER discipline. Companions' comments are not compile-gated -
    when a page and its companion carry the same wrong claim, fix both.
-3. Regen traps: check `plans/doc-sweep.md`'s ledger before re-running any doc generator -
+3. Regen traps: before re-running any doc generator, check what it overwrites -
    `doc/reflections/gen_module_examples.py` in particular would revert the handmade
    fragments wholesale.
-
-Backlog, ledger, and the wiring spec for the nightly lane live in `plans/doc-sweep.md`.

@@ -413,8 +413,8 @@ What does NOT ship
 - **Compile-time DDL emission to a .sql file.** ``dotnet ef
   migrations script`` analogue. Future work; not blocking.
 
-- **Squash tool.** Hand-recipe in ``history/dasSQLITE/API_MIGRATION.md`` when a
-  project accumulates 100+ migrations and needs collapsing.
+- **Squash tool.** Collapsing the list once a project
+  accumulates 100+ migrations is a hand recipe today.
   Future ``daspkg sql-migrate squash`` is plausible but
   deferred.
 

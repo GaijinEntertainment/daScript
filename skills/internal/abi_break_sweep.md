@@ -68,5 +68,4 @@ standalone configure - env vars do not reach daspkg's cmake).
    external module's `_build/` and rebuild before trusting any 20605.
 6. **Post-merge sweep.** Build every remaining daspkg-index package against
    the new master and fix drift (unrelated rot surfaces here too - budget for
-   it). The nightly index cron (`history/ci/COVERAGE_GAP.md` Stage 4) will turn this
-   into a standing signal.
+   it). The nightly index cron will turn this into a standing signal.

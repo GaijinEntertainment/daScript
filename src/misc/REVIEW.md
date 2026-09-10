@@ -1,7 +1,7 @@
 # src/misc Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`ARCHITECTURE.md`. Planned work: `plans/jobque-thread-ladder.md` (repo root).
+`ARCHITECTURE.md`.
 
 **A second-tier kind the arm does not recognize is not compute.** `JobQue::is_slow_tier_compute`
 returns true only for a perflevel name on the list it carries ("Performance", "Super"); a diff

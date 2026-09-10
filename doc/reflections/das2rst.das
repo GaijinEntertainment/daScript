@@ -399,12 +399,13 @@ def document_module_dasllama(_root : string) {
 // The TTS facade and its type floor share one page; the family, assembly and front-end
 // modules a TtsModel field names are engine detail, so their types print plain.
 def document_module_dasllama_tts(_root : string) {
-    for (engine in ["dasllama_styletts2", "dasllama_kitten", "dasllama_kokoro", "dasllama_g2p", "dasllama_postag"]) {
+    for (engine in ["dasllama_styletts2", "dasllama_kitten", "dasllama_kokoro", "dasllama_pocket", "dasllama_g2p", "dasllama_postag"]) {
         mark_module_pageless(engine)
     }
     var mod = [find_module("dasllama_tts"), find_module("dasllama_tts_types")]
     var groups <- array<DocGroup>(
-        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|g2p_pack_path|caps|tts_voice_lang|finalize)$%%),
+        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|g2p_pack_path|caps|tts_voice_lang|tts_needs_packs|tts_has_phonemes|finalize)$%%),
+        group_by_regex("Voices", mod, %regex~(tts_register_voice)$%%),
         group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_phonemize|tts_chunks)$%%),
         group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream)$%%),
         group_by_regex("The served lane", mod, %regex~(set_tts_q8|reset_tts_q8|tts_serves_q8)$%%),

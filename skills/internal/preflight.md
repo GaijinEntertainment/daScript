@@ -15,8 +15,7 @@ core (`src/`, `include/`, `daslib/`, `dastest/`, `CMakeLists.txt`, `cmake/`)
 changed; `--only` runs a gate whatever changed. `--list-gates` prints tier, reach
 and description; `--skip <names>` drops gates. A gate whose host tool or module is missing
 reports `SKIP` with an install/rebuild hint. The budget the tiers serve: a full
-run fits 20 minutes on the M5 box, or the gate is not in preflight
-(`plans/ci_preflight_budget.md`).
+run fits 20 minutes on the M5 box, or the gate is not in preflight.
 
 Each gate line carries its breakdown indented underneath, on PASS as well as FAIL: the
 build/run split for a gate that builds before it sweeps (`tests-aot`, `sequence`, `imgui`),

@@ -177,6 +177,8 @@ var g_tts_path = ""
 var g_tts_id = ""
 let TTS_LANE_DEFAULT = "q8"
 var g_tts_lane = TTS_LANE_DEFAULT   // the weight lane the worker is ASKED for; its ready event echoes the pin it took
+var g_tts_voices_dir = ""   // clips a cloning model adds to its voices at boot, each under its file's stem
+let TTS_VOICE_CLIP_EXTENSIONS : array<string> <- [".wav", ".flac", ".mp3", ".ogg"]   // what the decode rail reads
 let TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin"]   // load_tts_model reads both from the GGUF's directory
 var g_shutdown_requested = false
 var g_gc_requested = false
@@ -467,15 +469,19 @@ def configure_asr_workers(path, mmproj : string; workers : int = 1) {
     g_has_asr = !empty(path)
 }
 
-//! The first file of a TTS model's set that is absent — the GGUF at `path`, then each front-end
-//! pack (``tts_g2p.bin``, ``tts_postag.bin``) beside it. "" when the set is complete, and for an
-//! empty `path` (no TTS configured). This is the file ``configure_tts`` drops the route over.
+//! The first file of a TTS model's set that is absent — the GGUF at `path`, then, for a phoneme
+//! family, each front-end pack (``tts_g2p.bin``, ``tts_postag.bin``) beside it (a Pocket TTS GGUF
+//! reads text and needs none). "" when the set is complete, and for an empty `path` (no TTS
+//! configured). This is the file ``configure_tts`` drops the route over.
 def tts_missing_file(path : string) : string {
     if (empty(path)) {
         return ""
     }
     if (!stat(path).is_valid) {
         return path
+    }
+    if (!tts_needs_packs(path)) {
+        return ""
     }
     let dir = dir_name(path)
     for (pack in TTS_FRONT_END_PACKS) {
@@ -525,18 +531,28 @@ def server_tts_lane : string {
 //! ``tts`` block of ``GET /v1/stats``.
 //! `lane` is the weight lane the worker pins around its load — ``q8`` (the default) or ``f32``;
 //! an unknown spelling warns and serves q8, the way every other enum-ish config key degrades.
-def configure_tts(path : string; lane : string = TTS_LANE_DEFAULT) {
+//! `voices_dir` names a directory of voice clips a cloning model adds to its voices once loaded,
+//! each under its file's stem; a clip that does not decode is logged and skipped, and the
+//! directory on a model that cannot clone is logged and ignored - neither drops the route.
+def configure_tts(path : string; lane : string = TTS_LANE_DEFAULT; voices_dir : string = "") {
     g_tts_path = path
     g_has_tts = !empty(path)
     g_tts_error = ""   // a re-configure is a fresh answer: the previous boot's load failure is not this one's
     g_tts_id = empty(path) ? "" : stem(base_name(path))
     g_tts_lane = pick_tts_lane(lane)
+    g_tts_voices_dir = voices_dir
+    // the answer-side facts belong to the model the worker loads, never to the previous one
+    g_tts_cloning = false
+    g_tts_speed = false
+    g_tts_lang = ""
+    g_tts_sample_rate = 0
+    g_tts_voices |> clear()
     if (!g_has_tts) {
         return
     }
     let missing = tts_missing_file(path)
     if (!empty(missing)) {
-        to_log(LOG_ERROR, "dasllama-server: dropping the speech route - a TTS file was not found: {missing} (the model GGUF and the front-end packs tts_g2p.bin + tts_postag.bin sit in one directory; fix the config, then POST /restart)\n")
+        to_log(LOG_ERROR, "dasllama-server: dropping the speech route - a TTS file was not found: {missing} (a phoneme family's GGUF and the front-end packs tts_g2p.bin + tts_postag.bin sit in one directory, a Pocket TTS GGUF stands alone; fix the config, then POST /restart)\n")
         g_has_tts = false
         g_tts_path = ""
         g_tts_id = ""
@@ -3342,7 +3358,7 @@ def private tts_stats_member() : string {
     // no worker answer yet (loading, or the load failed): the lane is the one the boot asked for
     let lane = empty(g_tts_lane_served) ? g_tts_lane : g_tts_lane_served
     let failed = empty(g_tts_error) ? "" : ",\"error\":{json_str(g_tts_error)}"
-    return ",\"tts\":\{\"id\":{json_str(g_tts_id)},\"ready\":{g_tts_ready > 0},\"pending\":{g_tts_pending},\"done_jobs\":{g_tts_done_jobs},\"audio_s\":{g_tts_audio_s},\"voices\":[{voices}],\"sample_rate\":{g_tts_sample_rate},\"lane\":{json_str(lane)}{failed}}"
+    return ",\"tts\":\{\"id\":{json_str(g_tts_id)},\"ready\":{g_tts_ready > 0},\"pending\":{g_tts_pending},\"done_jobs\":{g_tts_done_jobs},\"audio_s\":{g_tts_audio_s},\"voices\":[{voices}],\"sample_rate\":{g_tts_sample_rate},\"lane\":{json_str(lane)},\"cloning\":{g_tts_cloning},\"speed\":{g_tts_speed},\"lang\":{json_str(g_tts_lang)}{failed}}"
 }
 
 // splice a member into a compact JSON object body: sprint_json/write_json_compact both close on
@@ -3545,7 +3561,7 @@ let private CONFIG_KEY_KINDS <- {
     "model" => "s", "port" => "i", "quant" => "s", "kv_dtype" => "s", "metal" => "s",
     "gpu" => "s", "gpu_layers" => "i", "gpu_stream" => "i", "gpu_dn" => "b", "gpu_attn" => "b",
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
-    "tts" => "s", "tts_lane" => "s",
+    "tts" => "s", "tts_lane" => "s", "tts_voices_dir" => "s",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
     "mtp" => "b", "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
@@ -4382,6 +4398,9 @@ struct private TtsEvent {
     voices : array<string>
     sample_rate : int
     lane : string
+    cloning : bool       // the model clones a voice from a clip (the Pocket family)
+    speed : bool         // a speed scales its durations; a model without one refuses any speed but 1.0
+    lang : string        // the first language caps declares - the one a one-language model reads everything in
 }
 
 struct private TtsWire {
@@ -4404,6 +4423,9 @@ var g_tts_audio_s = 0.0
 var g_tts_voices : array<string>   // filled from the worker's ready event, with the two below
 var g_tts_sample_rate = 0
 var g_tts_lane_served = ""
+var g_tts_cloning = false
+var g_tts_speed = false
+var g_tts_lang = ""
 var g_tts_error = ""   // why the worker could not load: the route stays down and the tts stats block carries this
 let TTS_QUEUE_LIMIT = 16
 let TTS_WRITER_KEEPALIVE_MS = 600000
@@ -4453,8 +4475,9 @@ def private tts_phonemes_lang(model : TtsModel; voice : string) : string {
 }
 
 def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channel?) {
-    let norm = tts_normalize(job.text)
     let lang = tts_phonemes_lang(model, job.voice)
+    // the normalizer reads English: a Pocket model in another language takes the text as it is
+    let norm = tts_has_phonemes(model) || lang == "en" ? tts_normalize(job.text) : job.text
     var inscope chunks <- tts_chunks(model, norm)
     let doc = build_string() $(w) {
         w |> write("\{\"normalized\":{json_str(norm)},\"lang\":{json_str(lang)},\"chunks\":[")
@@ -4462,7 +4485,9 @@ def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channe
             if (i > 0) {
                 w |> write(",")
             }
-            w |> write("\{\"text\":{json_str(chunks[i])},\"phonemes\":{json_str(tts_phonemize(model, chunks[i], lang))}}")
+            // a model that reads text has no phoneme string to show; its chunks still say what it will read
+            let phonemes = tts_has_phonemes(model) ? tts_phonemize(model, chunks[i], lang) : ""
+            w |> write("\{\"text\":{json_str(chunks[i])},\"phonemes\":{json_str(phonemes)}}")
         }
         w |> write("]}")
     }
@@ -4486,12 +4511,73 @@ def private refuse_voiceless_tts(model : TtsModel; model_path : string) {
 def private tts_ready_event(model : TtsModel) : TtsEvent {
     var inscope c <- caps(model)
     var inscope ev = TtsEvent(kind = TtsEventKind.ready, sample_rate = c.sample_rate,
-        lane = tts_serves_q8() ? "q8" : "f32")
+        lane = tts_serves_q8() ? "q8" : "f32", cloning = c.cloning, speed = c.speed, lang = empty(c.langs) ? "" : c.langs[0])
     ev.voices := c.voices
     return <- ev
 }
 
-def private tts_worker_main(model_path : string; lane : string; team_dispatch : bool; var jobs : Channel?&; var events : Channel?&) {
+def private is_voice_clip_name(fname : string) : bool {
+    let lower = to_lower(fname)
+    for (ext in TTS_VOICE_CLIP_EXTENSIONS) {
+        if (ends_with(lower, ext)) {
+            return true
+        }
+    }
+    return false
+}
+
+// the clips of `voices_dir` join the loaded model's voices, each under its file's stem, in the
+// directory's own order; a clip that does not decode, or one the model refuses, is logged and
+// skipped - a bad clip is not a reason to drop the route
+def private register_voice_clips(var model : TtsModel; voices_dir : string) {
+    return if (empty(voices_dir))
+    var inscope c <- caps(model)
+    if (!c.cloning) {
+        to_log(LOG_ERROR, "dasllama-server: tts_voices_dir '{voices_dir}' is set, but the speech model cannot clone a voice - ignored\n")
+        return
+    }
+    if (!stat(voices_dir).is_dir) {
+        to_log(LOG_ERROR, "dasllama-server: tts_voices_dir '{voices_dir}' is not a directory - no voice clip added\n")
+        return
+    }
+    var added = 0
+    var clips = 0
+    var seen : table<string>
+    dir(voices_dir) $(fname) {
+        return if (!is_voice_clip_name(fname))
+        clips++
+        let clip_path = path_join(voices_dir, fname)
+        let name = stem(fname)
+        if (key_exists(seen, name)) {
+            to_log(LOG_WARNING, "dasllama-server: voice clip {clip_path} shares its stem with an earlier clip - it replaces that voice\n")
+        } elif (find_index(c.voices, name) >= 0) {
+            to_log(LOG_WARNING, "dasllama-server: voice clip {clip_path} replaces the model's own voice '{name}'\n")
+        }
+        let pcm <- load_audio_mono(clip_path, c.sample_rate)
+        if (empty(pcm)) {
+            to_log(LOG_ERROR, "dasllama-server: voice clip {clip_path} did not decode - skipped\n")
+            return
+        }
+        var why = ""
+        let refused = catch_worker_panic(why) {
+            tts_register_voice(model, name, pcm, c.sample_rate)
+        }
+        if (refused) {
+            to_log(LOG_ERROR, "dasllama-server: voice clip {clip_path} refused: {why} - skipped\n")
+            return
+        }
+        seen |> insert(name)
+        added++
+        to_log(LOG_INFO, "dasllama-server: voice '{name}' cloned from {clip_path} ({float(length(pcm)) / float(c.sample_rate)} s)\n")
+    }
+    if (clips == 0) {
+        to_log(LOG_WARNING, "dasllama-server: tts_voices_dir '{voices_dir}' holds no clip - a voice is a {join(TTS_VOICE_CLIP_EXTENSIONS, " / ")} file\n")
+    } elif (added == 0) {
+        to_log(LOG_WARNING, "dasllama-server: tts_voices_dir '{voices_dir}' added no voice - every clip there was skipped\n")
+    }
+}
+
+def private tts_worker_main(model_path : string; lane : string; voices_dir : string; team_dispatch : bool; var jobs : Channel?&; var events : Channel?&) {
     this_context().name := "dasllama_tts"
     configure_media_worker_dispatch(team_dispatch)
     var inscope model = TtsModel()
@@ -4505,6 +4591,7 @@ def private tts_worker_main(model_path : string; lane : string; team_dispatch : 
     let load_failed = catch_worker_panic(load_failure) {
         model <- load_tts_model(model_path)   // nolint:PERF030 - target is the fresh empty decl above; the load runs inside the catch block, so it cannot fold into the declaration
         refuse_voiceless_tts(model, model_path)
+        register_voice_clips(model, voices_dir)
     }
     if (load_failed) {   // an escaping panic here would kill only this thread and hang the ready-wait
         to_log(LOG_ERROR, "dasllama-server: the TTS worker could not load {model_path}: {load_failure}\n")
@@ -4532,8 +4619,9 @@ def private tts_worker_main(model_path : string; lane : string; team_dispatch : 
                     }
                 }
                 if (failed) {
-                    // a voice the model lacks is the caller's mistake; anything else is ours
-                    let client = find(failure, "unknown voice") >= 0
+                    // a voice the model lacks, or a speed on a model with no speed control, is the
+                    // caller's mistake; anything else is ours
+                    let client = find(failure, "unknown voice") >= 0 || find(failure, "speed control") >= 0
                     to_log(LOG_ERROR, "[req {job_copy.id}] tts: failed: {failure}\n")
                     emit_tts_event(events, TtsEvent(
                         kind = TtsEventKind.completed, id = job_copy.id,
@@ -4573,7 +4661,7 @@ def private tts_route_unavailable(srv : WebSocketServer; var writer : HttpRespon
 // bytes, and a dash or a curly quote pasted from a document costs three of them
 def private tts_input_field(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?; verb : string) : string {
     let input = js?["input"] ?? ""
-    if (empty(input)) {
+    if (empty(strip(input))) {   // blank text has nothing to say: every family would answer no samples
         bad_request(srv, writer, "'input' is required (the text to {verb})")
         return ""
     }
@@ -4677,6 +4765,9 @@ def private adopt_tts_ready(event : TtsEvent#) {
     }
     g_tts_sample_rate = event.sample_rate
     g_tts_lane_served = clone_string(event.lane)
+    g_tts_cloning = event.cloning
+    g_tts_speed = event.speed
+    g_tts_lang = clone_string(event.lang)
 }
 
 def private start_tts_worker() {
@@ -4687,11 +4778,12 @@ def private start_tts_worker() {
     to_log(LOG_INFO, "dasllama-server: starting the TTS worker for {g_tts_id} on the {g_tts_lane} lane\n")
     let model_path = g_tts_path
     let lane = g_tts_lane
+    let voices_dir = g_tts_voices_dir
     let team_dispatch = g_asr_team_dispatch
     var jobs_capture = g_tts_jobs
     var events_capture = g_tts_events
-    new_thread() <| @capture(= model_path, = lane, = team_dispatch, = jobs_capture, = events_capture) {
-        tts_worker_main(model_path, lane, team_dispatch, jobs_capture, events_capture)
+    new_thread() <| @capture(= model_path, = lane, = voices_dir, = team_dispatch, = jobs_capture, = events_capture) {
+        tts_worker_main(model_path, lane, voices_dir, team_dispatch, jobs_capture, events_capture)
     }
     var load_failure = ""
     while (g_tts_ready < 1 && empty(load_failure)) {

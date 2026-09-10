@@ -1,7 +1,7 @@
 # dasllama-server control page tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `utils/dasllama-server/README.md` (repo root).
+docs: `utils/dasllama-server/README.md` (repo root), `fixtures/README.md`.
 
 **A captured response body under `fixtures/` (beside this file), whatever its extension -
 `sse_expected.json` and `capture_catalog.tune.json` are derived, not captured - is never

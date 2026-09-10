@@ -10,8 +10,8 @@ require daslib/logger
 require live/live_gc
 require live_host
 
-// dasweb-buildd — the wasm build worker on the compute box
-// (plans/dasweb_wasm_pipeline.md). Pulls the dasweb-playground build queue
+// dasweb-buildd — the wasm build worker on the compute box.
+// Pulls the dasweb-playground build queue
 // over HTTPS, runs each job through the configured sandboxed build command,
 // uploads artifacts or the compiler error. Canonical application shape:
 // exported init/update/shutdown + a standalone main with the GC boundary;
