@@ -1,7 +1,8 @@
 # dasLLAMA Code Review Checklist - placement
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: the `ARCHITECTURE_*.md` set beside this file - sec.1 in each is the per-file charters.
+doc: `ARCHITECTURE.md`, the index of the `ARCHITECTURE_*.md` set beside this file - sec.1 in each
+companion is the per-file charters. Planned work: `followup_general.md`.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 it.**
@@ -40,13 +41,16 @@ a template declared elsewhere is not a kernel body: it compiles its own PSO wher
 file, never sideways into a sibling.**
 
 **A piece two files both execute lands in their nearest shared file (its own file when none
-exists) - never a second copy.** A predicate, a constant, or a helper spelled once in each of
-two files drifts on the first edit to one copy; an enum-and-int twin of one predicate inside one
-file is the tier's idiom, not a copy, and a test's CPU oracle that restates the arithmetic is a
-witness, not a copy. A piece two folders outside each other both need lands in the folder that
-owns the concern; one landing under `dasllama/` that code outside `modules/dasLLAMA/` drives
-lands as a public entry module - one `dasllama/dasllama_lint.das` licenses a consumer to
-require directly.
+exists) - never a second copy: two spellings that can drift apart on the first edit to one.** An
+enum-and-int twin of one predicate inside one file is the tier's idiom, and a test's CPU oracle
+that restates the arithmetic is a witness - neither is a copy.
+
+**A caller never re-checks a guard its callee checks - drop the caller's copy and let the
+callee's check stand.**
+
+**A piece two folders outside each other both need lands in the folder that owns the concern;
+one landing under `dasllama/` that code outside `modules/dasLLAMA/` drives lands as a public
+entry module** - one `dasllama/dasllama_lint.das` licenses a consumer to require directly.
 
 **A family gaining an arm for a media kind adds that kind's span markers to that family's chat
 template, never to a second renderer.** Span markers are the template text that opens and
@@ -87,9 +91,8 @@ module to require. A program root (test, harness, benchmark, tool) requires the 
 module it needs directly.
 
 **A `dasllama/` module whose `[init]` registers a hook the engine dispatches through gets its
-side-effect require in the same change that adds it - in `dasllama/dasllama_transformer.das`,
-or in `dasllama/dasllama_common.das` where the rule above seats it there** - a registration
-neither file reaches never fires for a consumer of the `dasllama.das` facade.
+side-effect require in the same change that adds it** - a registration no engine file reaches
+never fires for a consumer of the `dasllama.das` facade; where it lands is the rule above's.
 
 **An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
 family name on a shared path, is a defect - it carries declarative registration only.**

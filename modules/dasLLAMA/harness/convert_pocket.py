@@ -86,8 +86,9 @@ DEFAULT_TEMPERATURE = 0.7   # pocket_tts/default_parameters.py when the config c
 
 def q8_linear(name, shape):
     """The linears the engine serves through the rows GEMM as Q8_0: the transformer layers'
-    four matrices and the frame input projection, on widths that quantize per 32. The head's
-    GEMVs, the EOS head, the speaker projection and the norms stay f16."""
+    four matrices and the frame input projection, on widths that quantize per 32. The EOS head,
+    the speaker projection and the norms stay f16; the flow head's GEMVs stay f16 in the --q8
+    form and go Q8_0 in the --kq form (head_q8_linear)."""
     rows_served = (".self_attn." in name or ".linear1." in name or ".linear2." in name) and name.endswith(".weight") \
         and (name.startswith("backbone.") or name.startswith("mimi.enc_tf.") or name.startswith("mimi.dec_tf."))
     rows_served = rows_served or name == "flow_lm.input_linear.weight"
@@ -112,6 +113,8 @@ def fake_group(name, shape, conv_served=False):
     flow head's matrices, the codec transformers' GEMMs (`codec`), the convs the engine serves
     q8 (`codecconv`), and the codec's strided, transposed and resampling convs the file keeps
     f16 (`strided`). Norms, biases and the voices are never in a group."""
+    if name == "flow_lm.speaker_proj_weight":   # the one matrix the bundle names without the ".weight" suffix
+        return "speaker" if len(shape) == 2 else None
     if not name.endswith(".weight") or len(shape) < 2:
         return None
     if name.startswith("backbone."):
@@ -122,8 +125,6 @@ def fake_group(name, shape, conv_served=False):
         return None
     if name == "flow_lm.input_linear.weight":
         return "input"
-    if name == "flow_lm.speaker_proj.weight":
-        return "speaker"
     if name == "flow_lm.conditioner.embed.weight":
         return "embed"
     if name.startswith("head."):
@@ -139,8 +140,10 @@ def parse_fake(spec):
     """`group=fmt,group=fmt` - a format per group, ggml's names (q4_0, q4_k, q6_k, iq4_nl, ...)."""
     out = {}
     for item in filter(None, spec.split(",")):
+        assert item.count("=") == 1, f"--fake wants group=fmt, got '{item}'"
         group, fmt = item.split("=")
         assert group in FAKE_GROUPS, (group, FAKE_GROUPS)
+        assert group not in out, f"--fake names {group} twice"
         out[group] = fmt.upper()
     return out
 
@@ -182,17 +185,18 @@ class FakeQuant:
         assert n == out.nbytes, (name, fmt, n, out.nbytes)
         return out
 
-    def apply(self, name, w32, fmt):
+    def apply(self, name, w32, fmt, group):
         from gguf.quants import dequantize
         t = self.gguf.GGMLQuantizationType[fmt]
-        # a conv [cout][cin][k] rounds per output channel over its cin*k taps; a matrix per row
+        # a conv rounds per slice of its leading dim over the rest ([cout][cin][k] per output
+        # channel; a transposed conv's [cin][cout][k] per input channel); a matrix per row
         rows = np.ascontiguousarray(w32.reshape(w32.shape[0], -1) if w32.ndim == 3 else w32.reshape(-1, w32.shape[-1]), dtype=np.float32)
         out = self.quantize_bytes(name, rows, fmt)
         if out is None:
             return w32
         back = dequantize(out, t).reshape(w32.shape).astype(np.float32)
         err = float(np.sqrt(((back - w32) ** 2).mean()) / max(np.sqrt((w32 ** 2).mean()), 1e-12))
-        self.done[name] = (fmt, out.nbytes, err)
+        self.done[name] = (group, fmt, out.nbytes, err)
         return back
 
 
@@ -298,8 +302,8 @@ def main():
     ap.add_argument("--llama-cpp", default=os.path.expanduser("~/Work/llama.cpp"), help="for gguf-py")
     ap.add_argument("--name", default=None, help="output file stem (default pocket-tts-<language>)")
     ap.add_argument("--q8", action="store_true", help="the published form: the served GEMM weights as Q8_0 in the kernels' layout")
-    ap.add_argument("--fake", default="", help="quality experiment, never published: group=fmt[,group=fmt] (attn, ffn, input, speaker, head, "
-                    "codec; ggml format names) - the group's weights round through that format before they are stored; needs --name")
+    ap.add_argument("--fake", default="", help=f"quality experiment, never published: group=fmt[,group=fmt] (groups {', '.join(FAKE_GROUPS)}; "
+                    "ggml format names) - the group's weights round through that format before they are stored; needs --name")
     ap.add_argument("--kq", action="store_true", help="the small form: the backbone's and the codec transformers' matrices and the text embedding "
                     "as Q4_K, the flow head as Q8_0, the rest as --q8 writes it (implies --q8)")
     ap.add_argument("--voices", default="", help="the roster as a comma list of the language's voice names (default: every voice the language ships)")
@@ -344,7 +348,7 @@ def main():
             continue
         group = fake_group(name, v.shape, q8_conv(name, v.shape, conv_stride.get(name, 1), ".convtr." in name)) if fake else None
         if group in fake:
-            v = fq.apply(name, np.ascontiguousarray(v.astype(np.float32)), fake[group])
+            v = fq.apply(name, np.ascontiguousarray(v.astype(np.float32)), fake[group], group)
         if a.kq and kq_tensor(name, v.shape):
             tensors[name] = ("k4", np.ascontiguousarray(v.astype(np.float32)))
             quantized_k4.append(name)
@@ -392,7 +396,7 @@ def main():
     stem = a.name or (f"pocket-tts-{lang}-q8" if a.q8 else f"pocket-tts-{lang}")
     path = os.path.join(a.out, stem + ".gguf")
     w = gguf.GGUFWriter(path, ARCH)
-    w.add_name(f"Pocket TTS {lang}" + (" Q8_0" if a.q8 else ""))
+    w.add_name(f"Pocket TTS {lang}" + (" Q4_K" if a.kq else " Q8_0" if a.q8 else ""))
     w.add_string("pocket.weights", "q8" if a.q8 else "f16")
     if a.kq:
         w.add_string("pocket.kq", "q4_k")
@@ -478,8 +482,8 @@ def main():
           f"{len(pieces)} pieces, {len(voices)} voices (default {default_voice}); {os.path.getsize(path)} bytes on disk")
     if fq:
         by_group = {}
-        for name, (fmt, nbytes, err) in fq.done.items():
-            g = by_group.setdefault((fake_group(name, (1, 1)) or "strided", fmt), [0, 0, 0.0])
+        for name, (group, fmt, nbytes, err) in fq.done.items():
+            g = by_group.setdefault((group, fmt), [0, 0, 0.0])
             g[0] += 1
             g[1] += nbytes
             g[2] = max(g[2], err)
@@ -487,6 +491,8 @@ def main():
             print(f"  fake {group}={fmt}: {n} tensors, {nbytes / 1e6:.1f} MB as {fmt}, worst rms rel err {err:.4f}")
         for name, fmt, width in fq.skipped:
             print(f"  fake skipped {name}: width {width} is not a whole number of {fmt} blocks")
+        unmatched = [group for group in fake if not any(g == group for g, _ in by_group) and not any(fake_group(n, (1, 1)) == group for n, _, _ in fq.skipped)]
+        assert not unmatched, f"--fake named groups no tensor belongs to: {unmatched}"
 
 
 if __name__ == "__main__":

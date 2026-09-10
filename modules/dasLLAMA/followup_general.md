@@ -1470,3 +1470,13 @@
     behind the same call (libopus + the Ogg framing, a build dependency the module does not
     carry yet) or the help text naming Vorbis; a clip that decodes to nothing is logged and
     skipped either way.
+129. **The K-quant lane's first-synthesis step.** On `pocket-tts-en-kq.gguf` the process grows
+    0.33 GB at its first synthesis and holds it; on `pocket-tts-en-q8.gguf` it grows nothing
+    (`PERF_LEDGER.md`, the small-form section: 2.70 GB against 2.54 over the run, the load itself
+    lighter by 0.16). A game embedding pays that step for a 75 MB file. Where to read: the
+    jobque forks' persistent heaps under the rows kernels (`linear_rows_kq` over
+    `matmul_kq_batch`, the parallel arm of `requant_rows_q8k_bs`), the `@scratch` rows of
+    `dasllama/dasllama_tts_blocks.das` sized by the first chunk, and what the load leaves behind
+    on the K-quant path (the f32 dequant `read_linear` hands `linear_take_kq`, released per tensor
+    but sized by the largest). The instrument is the resident set sampled per half second with the
+    `--limit` one and two forms, and the das leak profiler on the run.

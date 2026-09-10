@@ -323,6 +323,35 @@ test('a downloaded model beside the packs offers enable-speech, which wires and 
     expect(posts.some(p => p.path === '/restart')).toBe(true);
 });
 
+// the packs taken away again - the state a box is in with one file on disk
+function withPacksAbsent(doc) {
+    const d = JSON.parse(JSON.stringify(doc));
+    for (const i of d.tts) {
+        if (i.pack) { i.present = false; i.path = ''; }
+    }
+    return d;
+}
+
+test('a model that reads no packs enables speech with the packs absent; one that reads them waits for them', async ({ page }) => {
+    const idle = fx('catalog_idle');
+    const standsAlone = speechModels(idle).find(m => !m.present);
+    const readsPacks = speechModels(idle).find(m => m.present);
+    expect(readsPacks.needs_packs).toBe(true);   // the capture stocks one phoneme family
+    // the phoneme family alone, packs gone: the ladder re-offers the packs, no enable
+    const waiting = withPacksAbsent(idle);
+    await openControl(page, { catalog: waiting });
+    await expect(page.locator('#tts-offer button', { hasText: 'enable speech' })).toHaveCount(0);
+    await expect(page.locator('#tts-offer button', { hasText: 'download the front-end packs' })).toHaveCount(1);
+    // a Pocket file beside it: it is the one enable wires, the packs still absent
+    const doc = withModelPresent(waiting, standsAlone.file);
+    doc.tts.find(i => i.file === standsAlone.file).needs_packs = false;
+    const { posts } = await openControl(page, { catalog: doc });
+    await expect(page.locator('#tts-pick')).toHaveCount(0);   // the phoneme family is not a choice without its packs
+    await page.locator('#tts-offer button', { hasText: 'enable speech' }).click();
+    await expect(page.locator('#cat-note')).toContainText('speech wired (' + modelName(standsAlone.file) + ')');
+    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe(doc.models_dir + '\\' + standsAlone.file);
+});
+
 test('several downloaded models become a picker that defaults to the smallest', async ({ page }) => {
     const idle = fx('catalog_idle');
     const absent = bySize(speechModels(idle).filter(m => !m.present))[0];

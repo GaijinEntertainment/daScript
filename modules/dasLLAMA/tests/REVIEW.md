@@ -51,7 +51,7 @@ a run of skips is not the coverage the suite owes.
 **A diff that changes what a file covers - a cell added, removed or moved, its suite, an axis or
 bar an existing cell asserts - corrects that file's `CLAUDE.md` census entry, numbers included,
 in the same change.** A `{a,b}` shorthand naming several files at once, or a suite roster,
-carries nothing to correct.
+carries nothing to correct; a file with no census entry owes none, a file with one keeps it true.
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
@@ -126,7 +126,9 @@ other stocked fixture gates on its own presence.
 
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment,
-or calls no `load_model`, `load_model_cached`, or `load_model_image`.**
+or calls no loader that bakes a `.dlim` - `load_model`, `load_model_cached`, `load_model_image`,
+`load_<family>_tower`, `load_<family>_encoder`, `load_<carrier>_model`, `load_tts_model`,
+`load_styletts2`.**
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -239,10 +241,10 @@ procedurally and pins its expectations in-repo.**
 `DASLLAMA_VISION_DUMP` cannot preview, is a defect** - a red never requires adding
 instrumentation before a human can see what the model consumed.
 
-**An audio clip a test feeds an embedder that the test does not build, and that is not one of
-the clips stocked beside the models (`jfk.wav`, `gemma4a_test2.wav`), is a defect** - a clip
-nobody else can play makes a red unreadable. A newly stocked clip joins this list in the same
-change.
+**An audio clip a test feeds an embedder that the test does not build, that the repository does
+not track, and that is not one of the clips stocked beside the models (`jfk.wav`,
+`gemma4a_test2.wav`), is a defect** - a clip nobody else can play makes a red unreadable. A newly
+stocked clip joins this list in the same change.
 
 **A media fixture an embedder-parity cell regenerates in-test and compares against an oracle
 dump, with no exact-value generator - one whose values are exactly representable floats, so

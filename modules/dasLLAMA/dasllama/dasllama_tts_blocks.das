@@ -1112,7 +1112,7 @@ def conv1d_rows_transposed_depthwise(c : TtsConv1d; x : array<float>; t_in : int
 
 //! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile;
 //! a layer only `linear_rows` reads (`rows_only`) drops `w`, one with `q8` and per-32 widths takes
-//! the Q8_0 form (`repack` for the backend), and `vec_only` - `linear_vec` reads `w` - mints none.
+//! the Q8_0 form (`repack` for the backend), and `vec_only` mints none (`linear_vec` reads `w`, or the quant planes a reader handed the layer instead).
 def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = false; repack : bool = false;
                    vec_only : bool = false) {
     return if (vec_only)
@@ -1124,7 +1124,7 @@ def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = fals
             repack_q8q8_weight(l.wq, l.wqs, 0l, l.nin, l.nout)
         }
         l.q8 = true
-        delete l.w
+        release_weight(l.w)
         return
     }
     return if (l.nout % 16l != 0l)
@@ -1161,13 +1161,18 @@ def private linear_rows_add_bias(l : TtsLinear; t : int64; var y : array<float>)
     let nout = l.nout
     var yp = unsafe(addr(y[0]))
     let b4 = unsafe(addr<float4 const?>(l.b[0]))
+    let bp = unsafe(addr<float const?>(l.b[0]))
     maybe_parallel_for(0, int(t), lanes_for_work(t * nout, 0)) $(rb, re) {
         unsafe {
             let n4 = nout / 4l
             for (r in range64(int64(rb), int64(re))) {
-                var y4 = reinterpret<float4?>(yp + r * nout)
+                var yrow = yp + r * nout
+                var y4 = reinterpret<float4?>(yrow)
                 for (j in range64(n4)) {
                     y4[j] += b4[j]
+                }
+                for (o in range64(n4 * 4l, nout)) {   // the tail past the last float4: a width off 4
+                    yrow[o] += bp[o]
                 }
             }
         }
@@ -1179,7 +1184,6 @@ def private linear_rows_add_bias(l : TtsLinear; t : int64; var y : array<float>)
 var @scratch g_kq_xq : array<int8>
 var @scratch g_kq_xs : array<float>
 var @scratch g_kq_xbs : array<int>
-var @scratch g_kq_row : array<float>
 
 //! Give a layer the K-quant planes of its [nout][nin] weight (`fmt` the kernel-layer id, 4 =
 //! Q4_K; the planes as the GGUF transcoder wrote them) and repack them for the active backend
@@ -1196,25 +1200,22 @@ def linear_take_kq(var l : TtsLinear; fmt : int; var kq, ks : array<uint8>; repa
         repack_kq_weight(fmt, l.kq, l.ks, 0l, l.nin, l.nout)
         l.kq_repacked = true
     }
-    delete l.w
+    release_weight(l.w)
 }
 
-// one row [nin] through the K-quant GEMV: the row requantized to the Q8_K form, then the
-// backend's core over repacked planes or the portable one over disk order
+// one row [nin] through the K-quant GEMV: the row requantized to the Q8_K form where it sits,
+// then the backend's core over repacked planes or the portable one over disk order
 def private kq_gemv_row(l : TtsLinear; x : array<float>; xoff : int64; var y : array<float>; yoff : int64) {
     let nin = l.nin
-    var row & = g_kq_row
-    row |> reserve_resize(nin)
-    for (i in range64(nin)) {
-        row[i] = x[xoff + i]
-    }
     var xq & = g_kq_xq
     var xs & = g_kq_xs
     var xbs & = g_kq_xbs
     xq |> reserve_resize(nin)
     xs |> reserve_resize(nin / 256l)
     xbs |> reserve_resize(nin / 16l)
-    requant_rows_q8k_bs(row, nin, 1l, xq, xs, xbs, false)
+    unsafe {
+        quantize_q8_k_into_ptr(addr<float const?>(x[xoff]), nin, addr(xq[0]), addr(xs[0]), addr(xbs[0]), 0l, 0l, 0l)
+    }
     if (l.kq_repacked) {
         matmul_kq_active(l.kq_fmt, y, l.kq, l.ks, 0l, xq, xs, xbs, nin, l.nout, yoff)
     } else {
@@ -1224,6 +1225,7 @@ def private kq_gemv_row(l : TtsLinear; x : array<float>; xoff : int64; var y : a
 
 // The K-quant lane of linear_rows: the rows requantized to the Q8_K form at once and one batched
 // kq GEMM where the backend carries the tile, else the GEMV per row; then the bias.
+[arch(at = "../ARCHITECTURE_POCKET.md#pocket-q8-file")]
 def private linear_rows_kq(l : TtsLinear; x : array<float>; t : int64; var y : array<float>) {
     let nin = l.nin
     if (l.kq_repacked && kernel_backend_has_kq_batch()) {
@@ -1233,7 +1235,7 @@ def private linear_rows_kq(l : TtsLinear; x : array<float>; t : int64; var y : a
         xq |> reserve_resize(t * nin)
         xs |> reserve_resize(t * nin / 256l)
         xbs |> reserve_resize(t * nin / 16l)
-        requant_rows_q8k_bs(x, nin, t, xq, xs, xbs, t * nin >= 65536l)
+        requant_rows_q8k_bs(x, nin, t, xq, xs, xbs, t * nin >= g_requant_par_threshold)
         matmul_kq_batch(l.kq_fmt, y, l.kq, l.ks, 0l, xq, xs, xbs, nin, l.nout, t)
     } else {
         for (r in range64(t)) {

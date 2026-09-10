@@ -247,12 +247,13 @@ Cloning a voice
 ===============
 
 ``caps().cloning`` says whether the model takes a voice from a recording.
-Pocket TTS does: a few seconds of one speaker, mono, at the model's own rate,
-become a voice in the roster. ``load_audio_mono`` decodes a wav, flac, mp3 or
-ogg file to that rate, and ``tts_register_voice`` adds the samples under the
-name you give. From then on the name works like any bundled voice. A clip
-longer than a minute is refused, and a phoneme model panics here: it has no
-voice to take.
+A Pocket TTS file with its codec encoder does: a few seconds of one speaker,
+mono, at the model's own rate, become a voice in the roster. ``load_audio_mono``
+decodes a wav, flac, mp3 or ogg file to that rate, and ``tts_register_voice``
+adds the samples under the name you give. From then on the name works like any
+bundled voice. A clip longer than a minute is refused; a Pocket file converted
+without the encoder (a one-voice file for a page) reports ``cloning`` false and
+refuses by name; a phoneme model panics here: it has no voice to take.
 
 .. code-block:: das
 
@@ -262,15 +263,18 @@ voice to take.
        let mine <- synthesize(m, "daslang speaks in my voice.", "me")
    }
 
-The two weight lanes
-====================
+The weight lanes
+================
 
 The decoder and generator matrix multiplies are served from one of two
 prepared images beside the GGUF. The q8 lane holds those weights as Q8_0
 quants and is what a load serves by default. The f32 lane holds the file's own
 planes; it is the reference the parity tests hold the q8 lane against. A
 published Pocket file already holds Q8_0 weights, so its q8 lane reads them as
-they are and its f32 lane dequantizes them.
+they are and its f32 lane dequantizes them. The small Pocket files hold Q4_K
+planes for the backbone and the codec transformers too: an unpinned load serves
+those planes as they are through the engine's K-quant kernels, a third lane,
+while a pin to q8 or f32 requantizes or dequantizes them at load.
 
 ``tts_serves_q8`` answers which lane the next load takes. ``set_tts_q8`` pins
 it, and ``reset_tts_q8`` returns to the default. The pin is process-wide

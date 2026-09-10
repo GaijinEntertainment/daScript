@@ -72,7 +72,8 @@ Pocket TTS English is the cloning model: 152 MB, 19 voices (`alba` the default, 
 front of it. On the 200-sentence rig at `alba` this file reads WER 3.91 / UTMOS 4.328 at a
 real-time factor of 0.051 on an Apple M1 Max, against the reference package's 5.00 / 4.393 /
 0.210 (measured 2026-09-09 with the module's `harness/tts_rig.py`, the engine under the JIT
-tier with the box's tune profile, the reference package under torch on one thread). The five other
+tier with the box's tune profile - `DAS_TUNE_POLICY` unset - on the `arm64-gen` kernel backend,
+the reference package under torch on one thread). The five other
 languages are the same form, one file each with Kyutai's default clip for that language as its
 only voice (German `juergen`, Spanish `lola`, Italian `giovanni`, Portuguese `rafael`, French
 `estelle`); the German, Spanish, Italian and Portuguese files are the six-layer models, French
@@ -81,7 +82,8 @@ the clip's accent. Text in those languages is read as it is, since the normalize
 `pocket-tts-en-kq.gguf` is the English model in the small form, 75 MB: the backbone and the
 codec transformers as Q4_K, the flow head and the codec convolutions as Q8_0, the embedding
 table Q4_K, the encoder and the 19 voices inside (on the rig at `alba`: WER 3.86 / UTMOS 4.295
-at a real-time factor of 0.049 on the same box); it is the file the browser examples on
+at a real-time factor of 0.044, measured 2026-09-10 on the same box, tier, tune profile and
+kernel backend, the file's Q4_K planes served as they are); it is the file the browser examples on
 dasllama.io fetch. `pocket-tts-en-stuart-kq.gguf` is that form with one voice, `stuart_bell`,
 and no codec encoder, 65 MB: it reads text in that voice and cannot clone.
 

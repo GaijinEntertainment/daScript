@@ -1,10 +1,9 @@
 options gen2
 options persistent_heap
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
-options _dasllama_internal = true   // the voice-activity detector lives beside the facade, not in it
 
-require dasllama/dasllama   // the facade: the TTS model, its caps, the clone verb, the chunker, the synthesis
-require dasllama/dasllama_vad   // Silero: when a take has speech in it and when it stops
+require dasllama/dasllama   // the facade: the TTS model, its caps, the clone verb, the chunker, the synthesis, and Silero (when a take has speech and when it stops)
+require take                // the pure side: the take's numbers, the text box's rules, a button's box
 require daslib/jobque_boost
 require daslib/strings_boost
 require daslib/clargs
@@ -69,13 +68,6 @@ struct ParrotArgs {
 
 let POEM = "Whose woods these are I think I know.\nHis house is in the village though;\nHe will not see me stopping here\nTo watch his woods fill up with snow.\n\nMy little horse must think it queer\nTo stop without a farmhouse near\nBetween the woods and frozen lake\nThe darkest evening of the year.\n\nHe gives his harness bells a shake\nTo ask if there is some mistake.\nThe only other sound's the sweep\nOf easy wind and downy flake.\n\nThe woods are lovely, dark and deep,\nBut I have promises to keep,\nAnd miles to go before I sleep,\nAnd miles to go before I sleep."
 
-let MIC_RATE = 24000               //! the model's own rate: the take is cloned as recorded
-let VAD_RATE = 16000               //! Silero listens at 16 kHz; the take is resampled for it alone
-let SILENCE_ENDS_TAKE_S = 2.0      //! quiet this long after speech ends the take
-let TAKE_CAP_S = 60.0              //! the model's clip cap
-let TAKE_PAD_S = 0.25              //! kept around the speech at both ends
-let WRAP_CHARS = 74                //! droidsansmono is monospace: characters are the wrap unit
-let MAX_LINES = 24
 let TEXT_SIZE = 0.66
 let SMALL_SIZE = 0.5
 let VOICE_NAME = "you"
@@ -96,9 +88,9 @@ struct Ask {
     rate : int
 }
 
-//! speech thread -> frame thread: a voice cloned, a clip of a say, or how many clips a say will have
+//! speech thread -> frame thread: the model's facts, a voice cloned, a clip of a say, or how many clips a say will have
 struct Answer {
-    kind : int        //! 1 = cloned (seconds in text), 2 = a clip, 3 = the say's chunk count (in text)
+    kind : int        //! 0 = ready (the rate, cloning in gen, the roster size in text), 1 = cloned (seconds in text), 2 = a clip, 3 = the say's chunk count (in text)
     text : string
     gen : int
     pcm : array<float>
@@ -119,13 +111,23 @@ var g_take : array<float>         //! the microphone as recorded, 24 kHz mono
 var g_take_scratch : array<float>
 var g_vad_model = VadModel()
 var g_vad = VadIter()
+var g_ears = VadResampler()
+var g_ears_out : array<float>
 var g_speech_seen = false
 var g_in_speech = false
 var g_speech_start24 = 0l
 var g_speech_end24 = 0l
 var g_quiet_since_s = 0.0
+var g_take_started_s = 0.0
+var g_last_frames_s = 0.0         //! when the device last delivered a frame; a device that never does ends the take
+var g_frames_seen = false
 var g_level = 0.0
 var g_level_peak = 0.0
+var g_ready = false               //! the speech thread has the model: its rate, whether it clones, its roster
+var g_mic_rate = MIC_RATE
+var g_can_clone = false
+var g_roster = 0
+var g_pending_clip : array<float> //! a --clip decoded before the model was ready
 
 var g_ask : Stream?
 var g_answer : Stream?
@@ -158,7 +160,9 @@ def start_speech_thread(var ask, answer : Stream?; var now : SeqBox?; var done :
         }
         var inscope m <- load_tts_model(tts_path)
         var inscope c <- caps(m)
-        var voice = c.voices[0]
+        var voice = empty(c.voices) ? "" : c.voices[0]
+        var ready = Answer(kind = 0, text = "{length(c.voices)}", gen = c.cloning ? 1 : 0, rate = c.sample_rate)
+        answer |> push_archive(ready)
         var running = true
         while (running) {
             ask |> pop_archive() $(var a : Ask&) {
@@ -197,7 +201,19 @@ def poll_answers() {
     g_answer |> try_pop() $(bytes) {
         var a : Answer
         mem_archive_load(bytes, a)
-        if (a.kind == 1) {
+        if (a.kind == 0) {
+            g_ready = true
+            g_mic_rate = a.rate
+            g_can_clone = a.gen != 0
+            g_roster = to_int(a.text)
+            g_status = g_can_clone ? "press record and talk, then say" : "this file cannot clone - parrot needs a Pocket file with its codec encoder; say reads in the model's voice"
+            if (!empty(g_pending_clip)) {
+                if (!g_can_clone) {
+                    panic("parrot: --clip needs a file that clones; {g_args.tts_model} carries no codec encoder")
+                }
+                clone_clip(g_pending_clip, g_mic_rate)
+            }
+        } elif (a.kind == 1) {
             g_voice_ready = true
             g_voice_seconds = to_float(a.text)
             g_phase = Phase.idle
@@ -237,19 +253,37 @@ def poll_answers() {
 // ===== the take =====
 
 def start_take() {
+    if (g_phase == Phase.cloning) {
+        g_status = "cloning your voice - a moment, then record again"
+        return
+    }
     return if (g_phase != Phase.idle)
-    if (!sound_record_start(MIC_RATE, 1, MIC_RATE * 4, -1)) {
+    if (!g_ready) {
+        g_status = "the model is still loading"
+        return
+    }
+    if (!g_can_clone) {
+        g_status = "this file cannot clone - parrot needs a Pocket file with its codec encoder"
+        return
+    }
+    cancel_say()   // a clip still playing would be recorded
+    if (!sound_record_start(g_mic_rate, 1, g_mic_rate * 4, -1)) {
         g_status = "no microphone - is one connected, and allowed?"
         return
     }
     g_take |> clear()
-    g_take |> reserve(int(TAKE_CAP_S) * MIC_RATE)
-    g_take_scratch |> resize(MIC_RATE)
+    g_take |> reserve(int(TAKE_CAP_S) * g_mic_rate)
+    g_take_scratch |> resize(g_mic_rate)
     vad_iter_reset(g_vad, default_vad_opts())
+    g_ears.pos = 0.0lf
     g_speech_seen = false
     g_in_speech = false
     g_speech_start24 = 0l
     g_speech_end24 = 0l
+    g_quiet_since_s = g_elapsed_s
+    g_take_started_s = g_elapsed_s
+    g_last_frames_s = g_elapsed_s
+    g_frames_seen = false
     g_level = 0.0
     g_level_peak = 0.0
     g_phase = Phase.recording
@@ -257,26 +291,8 @@ def start_take() {
     to_log(LOG_INFO, "parrot: recording\n")
 }
 
-//! 24 kHz to 16 kHz by linear interpolation - Silero's ear, never the clone's
-def to_vad_rate(src : array<float>; n : int) : array<float> {
-    let m = n * VAD_RATE / MIC_RATE
-    var out : array<float>
-    out |> resize(m)
-    let step = float(MIC_RATE) / float(VAD_RATE)
-    for (i in range(m)) {
-        let pos = float(i) * step
-        let j = min(int(pos), n - 1)
-        let k = min(j + 1, n - 1)
-        let f = pos - float(j)
-        out[i] = src[j] * (1.0 - f) + src[k] * f
-    }
-    return <- out
-}
-
-[arch(at = "../ARCHITECTURE.md#the-take")]
-def drain_take() {
-    let n = sound_record_read(g_take_scratch)
-    return if (n <= 0)
+//! the frames the device has since delivered, onto the take
+def append_frames(n : int) {
     var ssq = 0.0
     let base = length(g_take)
     g_take |> ensure_capacity(base + n)
@@ -289,64 +305,71 @@ def drain_take() {
     let rms = sqrt(ssq / float(n))
     g_level = max(rms, g_level * 0.85)
     g_level_peak = max(g_level_peak, rms)
-    var inscope ears <- to_vad_rate(g_take_scratch, n)
-    vad_iter_feed(g_vad_model, g_vad, ears) $(ev) {
-        let at24 = ev.sample * int64(MIC_RATE) / int64(VAD_RATE)
-        if (ev.kind == VadEventKind.speech_start) {
-            if (!g_speech_seen) {
-                g_speech_start24 = at24
+    g_frames_seen = true
+    g_last_frames_s = g_elapsed_s
+}
+
+[arch(at = "../ARCHITECTURE.md#the-take")]
+def drain_take() {
+    let n = sound_record_read(g_take_scratch)
+    if (n > 0) {
+        append_frames(n)
+        resample_step(g_ears, g_take, g_ears_out)
+        vad_iter_feed(g_vad_model, g_vad, g_ears_out) $(ev) {
+            let at24 = vad_to_mic(ev.sample)
+            if (ev.kind == VadEventKind.speech_start) {
+                if (!g_speech_seen) {
+                    g_speech_start24 = at24
+                }
+                g_speech_seen = true
+                g_in_speech = true
+            } else {
+                g_speech_end24 = at24
+                g_in_speech = false
+                g_quiet_since_s = g_elapsed_s
             }
-            g_speech_seen = true
-            g_in_speech = true
-        } else {
-            g_speech_end24 = at24
-            g_in_speech = false
-            g_quiet_since_s = g_elapsed_s
         }
     }
-    if (g_speech_seen && !g_in_speech && g_elapsed_s - g_quiet_since_s >= SILENCE_ENDS_TAKE_S) {
-        stop_take()
-    } elif (float(length(g_take)) / float(MIC_RATE) >= TAKE_CAP_S) {
+    let seconds = float(length(g_take)) / float(g_mic_rate)
+    if (take_ends(g_speech_seen, g_in_speech, g_elapsed_s - g_quiet_since_s, seconds, g_elapsed_s - g_last_frames_s)) {
         stop_take()
     }
 }
 
 def stop_take() {
     return if (g_phase != Phase.recording)
+    drain_rest()   // before the device stops: stopping frees the ring
     sound_record_stop()
-    drain_rest()
+    let dropped = sound_record_overflow_frames()
+    if (dropped > 0l) {
+        to_log(LOG_WARNING, "parrot: {dropped} frames were dropped while the frame loop stalled - the take is spliced there\n")
+    }
     if (!g_speech_seen) {
         g_phase = Phase.idle
-        let seconds = float(length(g_take)) / float(MIC_RATE)
-        g_status = (g_level_peak < 0.001
-            ? "nothing heard - the microphone gave silence for {seconds} s: is it allowed for this page, and on?"
-            : "nothing heard - the microphone peaked at {g_level_peak} over {seconds} s, too quiet for speech: come closer and talk")
+        let seconds = float(length(g_take)) / float(g_mic_rate)
+        g_status = (!g_frames_seen
+            ? "nothing heard - the microphone gave no audio at all: it was refused, or there is none"
+            : g_level_peak < 0.001
+                ? "nothing heard - the microphone gave silence for {seconds} s: is it allowed for this page, and on?"
+                : "nothing heard - the microphone peaked at {g_level_peak} over {seconds} s, too quiet for speech: come closer and talk")
         to_log(LOG_INFO, "parrot: nothing heard - peak {g_level_peak} over {seconds} s\n")
         return
     }
-    let pad = int64(TAKE_PAD_S * float(MIC_RATE))
-    let total = long_length(g_take)
-    let from = max(0l, g_speech_start24 - pad)
-    let to = min(total, (g_in_speech ? total : g_speech_end24) + pad)
+    let w = clip_window(g_speech_start24, g_speech_end24, long_length(g_take), g_in_speech)
     var clip : array<float>
-    clip |> resize(to - from)
-    for (i in range64(to - from)) {
-        clip[i] = g_take[from + i]
+    clip |> resize(w.to - w.from)
+    for (i in range64(w.to - w.from)) {
+        clip[i] = g_take[w.from + i]
     }
-    clone_clip(clip, MIC_RATE)
+    clone_clip(clip, g_mic_rate)
 }
 
-//! the ring's tail after the device stopped
+//! the ring's tail before the device stops
 def drain_rest() {
     for (_i in range(8)) {
         let n = sound_record_read(g_take_scratch)
         break if (n <= 0)
-        let base = length(g_take)
-        g_take |> ensure_capacity(base + n)
-        g_take |> resize(base + n)
-        for (i in range(n)) {
-            g_take[base + i] = g_take_scratch[i]
-        }
+        append_frames(n)
     }
 }
 
@@ -357,11 +380,9 @@ def clone_clip(var clip : array<float>; rate : int) {
     g_ask |> push_archive(a)
 }
 
-// ===== saying =====
-
-def say_text() {
-    let text = strip(join(g_lines, "\n"))
-    return if (empty(text) || g_phase == Phase.cloning)
+//! a say in flight is dropped: its clip stops, its queued clips go unplayed, and the speech thread
+//! skips its remaining chunks at the next chunk boundary
+def cancel_say() {
     if (g_playing_sid != INVALID_SID) {
         stop(g_playing_sid, 0.05)
         g_playing_sid = INVALID_SID
@@ -372,6 +393,18 @@ def say_text() {
     g_speaking_until = g_elapsed_s
     g_chunks_owed = 0
     g_count_known = false
+}
+
+// ===== saying =====
+
+def say_text() {
+    let text = strip(join(g_lines, "\n"))
+    return if (empty(text) || g_phase != Phase.idle || !g_ready)   // a say while recording would be recorded
+    if (!g_voice_ready && g_roster == 0) {
+        g_status = "no voice to read in - record one"
+        return
+    }
+    cancel_say()
     var a = Ask(kind = 2, text = text, gen = g_says)
     g_ask |> push_archive(a)
     g_status = g_voice_ready ? "reading in your voice..." : "reading in the model's own voice - record to hear yours"
@@ -380,44 +413,9 @@ def say_text() {
 
 // ===== the text box =====
 
-def type_char(key : uint; shift : bool) {
-    return if (key >= 128u)
-    var c = int(key)
-    if (is_alpha(c)) {
-        c = shift ? c : c + 32   // GLFW hands the upper-case code
-    } elif (shift) {
-        c = c == '1' ? '!' : c == '/' ? '?' : c == ';' ? ':' : c == '\'' ? '"' : c == '9' ? '(' : c == '0' ? ')' : c == '-' ? '_' : c
-    }
-    let ok = is_alpha(c) || is_number(c) || c == ' ' || c == ',' || c == '.' || c == '\'' || c == '"' || c == '-' || c == ';' || c == ':' || c == '!' || c == '?' || c == '(' || c == ')' || c == '_'
-    return if (!ok)
-    let li = length(g_lines) - 1
-    return if (length(g_lines[li]) >= WRAP_CHARS)
-    g_lines[li] = "{g_lines[li]}{to_char(c)}"
-}
-
-def new_line() {
-    return if (length(g_lines) >= MAX_LINES)
-    g_lines |> push("")
-}
-
-def erase_char() {
-    let li = length(g_lines) - 1
-    let n = length(g_lines[li])
-    if (n == 0) {
-        if (li > 0) {
-            g_lines |> pop()
-        }
-        return
-    }
-    g_lines[li] = n == 1 ? "" : clone_string(slice(g_lines[li], 0, n - 1))   // never a zero-length view of the string being replaced
-}
-
 def set_text(text : string) {
     delete g_lines
-    g_lines <- split(text, "\n")
-    if (empty(g_lines)) {
-        g_lines |> push("")
-    }
+    g_lines <- lines_of(text)
 }
 
 //! down this frame and not the last
@@ -447,16 +445,19 @@ def poll_keys() {
     let shift = shift_down()
     for (key in range(GLFW_KEY_SPACE, GLFW_KEY_GRAVE_ACCENT + 1)) {
         if (key_pressed_now(key)) {
-            type_char(uint(key), shift)
+            let c = typed_char(key, shift)
+            if (c >= 0) {
+                append_char(g_lines, c)
+            }
         }
     }
     if (key_pressed_now(GLFW_KEY_BACKSPACE)) {
-        erase_char()
+        erase_last(g_lines)
         g_backspace_held_s = 0.0
     } elif (glfwGetKey(live_window, GLFW_KEY_BACKSPACE) == GLFW_PRESS) {
         g_backspace_held_s += get_dt()
         if (g_backspace_held_s > 0.4) {   // held: a repeat every 60 ms after the first 400
-            erase_char()
+            erase_last(g_lines)
             g_backspace_held_s = 0.34
         }
     }
@@ -464,7 +465,7 @@ def poll_keys() {
         if (ctrl_down()) {
             say_text()
         } else {
-            new_line()
+            new_line(g_lines)
         }
     }
     if (key_pressed_now(GLFW_KEY_TAB)) {
@@ -610,8 +611,7 @@ def poll_mouse() {
 
 //! inside the label's box, with a margin around it
 def hit(b : Button; px, py : float) : bool {
-    let pad = 8.0
-    return px >= b.x + b.box.x - pad && px <= b.x + b.box.z + pad && py >= b.y + b.box.y - pad && py <= b.y + b.box.w + pad
+    return inside_box(b.box, b.x, b.y, px, py, 8.0)
 }
 
 // ===== the program =====
@@ -625,6 +625,21 @@ def init() {
     g_args <- r |> move_unwrap
     set_text(empty(g_args.text) ? POEM : g_args.text)
     g_status = "press record and talk, then say"
+    if (!empty(g_args.clip)) {
+        // decoded before the window and the thread exist, so a clip that is not audio refuses here and the program ends
+        delete g_pending_clip
+        g_pending_clip <- load_audio_mono(g_args.clip, MIC_RATE)   // cloned once the thread says the file can; the model's rate is 24 kHz
+        if (empty(g_pending_clip)) {
+            panic("parrot: {g_args.clip} did not decode")
+        }
+        let cap = int(TAKE_CAP_S) * MIC_RATE
+        if (length(g_pending_clip) > cap) {
+            to_log(LOG_INFO, "parrot: {g_args.clip} is longer than the {int(TAKE_CAP_S)} s a voice is cloned from - the first {int(TAKE_CAP_S)} s are taken\n")
+            g_pending_clip |> resize(cap)
+        }
+        to_log(LOG_INFO, "parrot: cloning from {g_args.clip}\n")
+        g_status = "cloning from {g_args.clip}..."
+    }
     live_create_window("Parrot", 1280, 720)
     cache_ttf_objects()
     g_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
@@ -645,14 +660,6 @@ def init() {
     var setup = Ask(kind = 0, text = path_join(g_args.models, g_args.tts_model))
     g_ask |> push_archive(setup)
     start_speech_thread(g_ask, g_answer, g_say_now, g_speech_done)
-    if (!empty(g_args.clip)) {
-        var clip <- load_audio_mono(g_args.clip, MIC_RATE)
-        if (empty(clip)) {
-            panic("parrot: {g_args.clip} did not decode")
-        }
-        to_log(LOG_INFO, "parrot: cloning from {g_args.clip}\n")
-        clone_clip(clip, MIC_RATE)
-    }
 }
 
 [export]
@@ -688,6 +695,7 @@ def shutdown() {
     if (g_phase == Phase.recording) {
         sound_record_stop()
     }
+    cancel_say()   // the thread leaves a say in flight at its next chunk instead of finishing it
     var stop_ask = Ask(kind = 3)
     g_ask |> push_archive(stop_ask)
     g_speech_done |> join()

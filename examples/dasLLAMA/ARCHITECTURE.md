@@ -15,8 +15,9 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   `wish.das` holds the request side pure (typed line -> words -> prompt, the field-line stop) so a
   test reaches it without a window.
 - `parrot/` - a browser example: you press record and talk, Silero VAD ends the take when you go
-  quiet, Pocket TTS clones the voice from the take (a file with its codec encoder and no baked
-  roster), and the text in the box is read aloud in it on the say button; recording again
+  quiet, Pocket TTS clones the voice from the take (a file with its codec encoder and its
+  roster, which speaks until a take replaces it), and the text in the box is read aloud in it on
+  the say button; recording again
   replaces the voice. Same four files. Nothing leaves the program: the take is cloned in memory
   and never written.
 - `wasm/dlim_config/` - a wasm-only program: prints the running build's DlimConfiguration JSON.
@@ -51,8 +52,8 @@ shell reloads such a page (`pageshow` with `persisted`), so it starts from the g
 ### 3.2 The speech thread and its stream {#speech-thread-stream}
 
 Speech runs on its own thread so the frame loop never blocks on synthesis. The frame thread
-pushes its requests into a stream as archived records (storywish's `Line` is a sentence; parrot's
-`Ask` is a text to say or a take to clone, the PCM riding in the record) and pops finished clips
+pushes its requests into a stream as archived records (a sentence for the story examples; for
+parrot a text to say or a take to clone, the PCM riding in the record) and pops finished clips
 from a second stream; a `SeqBox` carries the number of the story (parrot: the say) being told, so
 a queued sentence of one the user replaced is skipped instead of synthesized. The thread's own
 setup - the TTS model path and the voice - rides the same request stream ahead of the first
@@ -74,9 +75,9 @@ way: parrot's buttons are text, and a click is `glfwGetMouseButton` edge-detecte
 label's own box (the glyph quads rise above the pen position) in design pixels. In the browser
 the surface is the document viewport, and the page's stage sits below the nav, so the picture is
 letterboxed; Emscripten maps a click through the canvas element's box with one ratio per axis,
-which is exact only when that box is the picture - parrot's shell sizes the canvas element to
-the letterboxed box (`max-width`/`max-height` on the replaced element) instead of stretching it
-over the stage with `object-fit`.
+which is exact only when that box is the picture - so a shell sizes the canvas element to the
+letterboxed box (`max-width`/`max-height` on the replaced element) instead of stretching it over
+the stage with `object-fit`.
 
 ### 3.4 The model set is minted for the build that ships it
 
@@ -103,14 +104,19 @@ configuration it prints is the one their programs run with.
 
 ### 3.6 Parrot's take {#the-take}
 
-The microphone is opened at the speech model's own rate, 24 kHz mono, and drained on the frame
-thread every frame into the take; a copy of each drain, resampled to 16 kHz by linear
-interpolation, feeds the Silero iterator, which is the only reader of that rate. The take ends on
-the stop button, two seconds after the iterator's last speech end, or at the model's 60 s clip
-cap; it is trimmed to the speech plus a quarter second at each end and sent to the speech thread
-as a clone request, so the clone runs off the frame thread like a synthesis. A take with no
-speech in it is dropped. The audio device is the capture's own, separate from playback, so a
-recording can start while a clip is still playing.
+The microphone is opened at the speech model's own rate (the speech thread reports it, with
+whether the file clones, before the first take), mono, and drained on the frame thread every
+frame into the take; the take is resampled to 16 kHz by linear interpolation with one running
+position across drains, so the stream the Silero iterator hears has no seam where the drains
+met, and the iterator is the only reader of that rate. The take ends on the stop button, two
+seconds after the iterator's last speech end, at the model's 60 s clip cap, or when the device
+has delivered nothing for six seconds (a refused microphone opens but never delivers); the ring's
+tail is drained before the device stops, since stopping frees the ring. The clip is the speech
+plus a quarter second at each end, never longer than the cap, and goes to the speech thread as a
+clone request, so the clone runs off the frame thread like a synthesis. A take with no speech in
+it is dropped, and the status says whether the device gave nothing, silence, or too little. A
+take starts by cancelling a say in flight - a clip still playing would be recorded - and the
+pure side of all this (`take.das`) is what the model-free cells test.
 
 ## 4. Exception ledger
 

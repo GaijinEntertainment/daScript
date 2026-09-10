@@ -135,5 +135,5 @@ obligation is a rule, and it lives in the flat list above.
 **Adding a rule starts with reading the whole checklist** - duplication, drift, and homeless
 placement all start with a rule appended by an author who had not just read the file.
 
-**A rule the diff adds that is longer than every rule already in the file is split, its
-exception dissolved, or its extra prose moved to the architecture doc.**
+**A rule the diff adds or lengthens that is longer than every other rule in the file is split,
+or its extra prose moved to the architecture doc.**

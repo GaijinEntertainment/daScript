@@ -1547,8 +1547,8 @@ def gguf_transcode_q8_0(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
     if (src_off + expect_n > m.tensors[ti].n_elem) {
         panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {m.tensors[ti].n_elem} elems")
     }
-    if (expect_n % 32l != 0l) {
-        panic("gguf: tensor '{name}' asks for {expect_n} Q8_0 elements, not a whole number of 32-blocks")
+    if (src_off % 32l != 0l || expect_n % 32l != 0l) {
+        panic("gguf: tensor '{name}' Q8_0 slice [{src_off}, +{expect_n}) is not block-aligned")
     }
     let nb = expect_n / 32l
     if (nb <= 0l) {

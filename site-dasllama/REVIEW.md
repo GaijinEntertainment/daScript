@@ -46,7 +46,8 @@ publish time is a defect.** A dated `_news` or `_stories` entry is read as a cla
 date; standing page copy - a masthead, section prose, a meta tag - is read as a claim about
 now. `README.md`'s copy rules say how a claim is checked.
 
-**A diff that falsifies standing page copy - a masthead, section prose, a meta tag - fixes it
+**A diff that falsifies standing page copy - a masthead, section prose, a meta tag - or a
+`_news/*.md` / `_stories/*.md` entry dated on or after the publish day of this change, fixes it
 in the same change.**
 
 **A PR whose copy describes what a linked download contains refreshes that artifact at its

@@ -43,14 +43,13 @@ TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) 
   and takes no rewrite, which matters because the rewrite is not the identity on one: it reads
   the DRESS vowel before a linking rhotic as SQUARE, having nothing in the string to tell merry
   from Mary. A vowel the two lexicons give no evidence for before a dropped rhotic keeps that
-  rhotic rather than losing it. The bath-trap split reaches only lexicon
-  words. Loads a phoneme pack - `tts_g2p.bin` (both dialect tiers) or `tts_g2p_en_us.bin` (the
-  American tier alone, sec.2.43) - pack
-  version 2 (`harness/build_g2p_data.py`: the gold tier extended by
+  rhotic rather than losing it. The bath-trap split reaches only lexicon words. Loads a phoneme
+  pack - `tts_g2p.bin` (both dialect tiers) or `tts_g2p_en_us.bin` (the American tier alone,
+  sec.2.43) - pack version 2 (`harness/build_g2p_data.py`: the gold tier extended by
   `harness/g2p_local_additions.json`, the US and GB keys merged into one string table per
   tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry -
-  safe because the fallback reads the lexicon first),
-  searched in place as byte-sorted string tables; a version 1 pack is refused by name. The
+  safe because the fallback reads the lexicon first), searched in place as byte-sorted string
+  tables; a version 1 pack is refused by name. The
   200-sentence fixtures under `tests/_tts_fixtures/` (American, minted by
   `harness/mint_tts_g2p_fixture.py` from the G2P fidelity experiment; British, minted by
   `harness/mint_tts_g2p_gb_fixture.py` from the reference's own British front end) are the
@@ -74,7 +73,8 @@ TTS files implement (sec.2.28-2.35, 2.43). `ARCHITECTURE_COMMON.md` (repo root) 
   squared; a cache grows with its fill kept), rope over rows, per-channel layer scale and the
   replicate left pad. A weight is an ONNX-layout array plus the served layout
   `conv1d_prepare` / `linear_prepare` mint for the consumer the reader names (`served_rows`,
-  `rows_only`, `vec_only`), the unread one dropped; beside every weight array sits its `TtsSpan` into the
+  `rows_only`, `vec_only`), the unread one dropped - or the file's own K-quant planes
+  (`linear_take_kq`), the kq lane beside f32 and q8; beside every weight array sits its `TtsSpan` into the
   model's blob, and `weights_walk` is the one walk that moves weights into a staging blob or
   binds them as borrowed views over a served plane (`release_weight` is the one teardown). One
   home: the block home holds the operators, and it names no family type.

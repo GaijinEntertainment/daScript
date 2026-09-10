@@ -77,6 +77,11 @@ def main():
         spec = json.load(f)
     os.makedirs(a.out, exist_ok=True)
     files, versions = [], set()
+    for key in ("images", "packs", "files", "tree"):
+        if key in spec and not spec[key]:
+            raise SystemExit(f"models.json names an empty `{key}` list - drop the key or fill it; a set that mints nothing must say so by omission")
+    if not any(spec.get(key) for key in ("images", "packs", "files", "tree")):
+        raise SystemExit("models.json stages nothing")
 
     for entry in spec.get("images", []):
         gguf = fetch(entry, a.cache)
