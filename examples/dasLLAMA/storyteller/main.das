@@ -38,8 +38,8 @@ require strings
 [CommandLineArgs]
 struct StoryArgs {
     @clarg_short = "m"
-    @clarg_doc = "Directory holding the story model, the TTS model and its phoneme packs"
-    models : string = "/Users/borisbatkin/Work/llama.cpp/models"
+    @clarg_doc = "Directory holding the story model, the TTS model and its phoneme packs (default: the current directory)"
+    models : string = "."
 
     @clarg_doc = "The story model file inside --models"
     story_model : string = "stories15M-Q8_0.gguf"

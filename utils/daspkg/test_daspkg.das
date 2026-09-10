@@ -2642,7 +2642,7 @@ def private push_text(var bytes : array<uint8>; text : string) {
     }
 }
 
-//! a 60-byte ar member header: name, then the decimal size in its column, then the `\n terminator
+//! a 60-byte ar member header: name, then the decimal size in its column, then the two-byte terminator (a backtick and a newline)
 def private push_ar_header(var bytes : array<uint8>; name : string; size : int) {
     let digits = "{size}"
     push_text(bytes, "{name}{repeat(" ", 48 - length(name))}{digits}{repeat(" ", 10 - length(digits))}`\n")
