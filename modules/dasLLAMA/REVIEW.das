@@ -545,7 +545,7 @@ let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 // in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 36
-let private IMAGE_LAYOUT_STAMP_HASH = 0x85a66b83df9fe94dul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x7665c61f19ad379ful
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
