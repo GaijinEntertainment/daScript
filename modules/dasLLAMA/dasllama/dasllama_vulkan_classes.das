@@ -3258,8 +3258,8 @@ def private k5_dep(hb : uint) : uint {
 // The codebook is four packed words picked by a dynamic vector index and byte-extracted: pure
 // ALU (a fixed_array local was a Function-storage table, 3.4x slower on the decode GEMV - `benchmarks/lcpp_bench.das` tg128, 5060 Ti)
 // iq3s_grid, one word per call - the staging loops copy it into workgroup memory once
-// per kernel (a few indexed reads per thread), so the local-array storage class (QUIRK 20's
-// slow path) never sits on a hot path; a shader function cannot return a fixed array.
+// per kernel (a few indexed reads per thread), so the local-array storage class (the slow path
+// of `followup_general.md` item 136) never sits on a hot path; a shader function cannot return a fixed array.
 def iq3s_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x01010101u, 0x01010103u, 0x01010105u, 0x0101010bu, 0x0101010fu, 0x01010301u, 0x01010303u, 0x01010305u,
@@ -3801,7 +3801,7 @@ def private iq2s_grid_word(i : int) : uint {   // nolint:STYLE038 - a 2048-word 
 
 // the HALVED iq3xxs grid (iq3xxs_grid with every byte / 2 - the plane convention that
 // absorbs the format's 0.25 into the stored d), one word per call; staging loops copy it into
-// workgroup memory (QUIRK 20's slow path stays off the hot loop).
+// workgroup memory (the slow path of `followup_general.md` item 136 stays off the hot loop).
 def iq3xxs_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x02020202u, 0x0202020au, 0x02020212u, 0x02020606u, 0x0202060eu, 0x0202061fu, 0x02020a02u, 0x02020a0au,

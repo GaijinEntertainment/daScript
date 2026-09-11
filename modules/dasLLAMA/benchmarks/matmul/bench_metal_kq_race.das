@@ -20,7 +20,7 @@ require ?das_metal ../../tests/_metal_kernel_common.das
 // The per-format Metal KQ kernel RACE rig - rig 1 of the kernel catch-up procedure. Races the
 // production decode GEMV and prefill mul_mm of every kq format against candidate spellings and
 // against a pinned llama.cpp test-backend-ops reference row, on synthetic planes, no model, no
-// tuner, seconds per cell. The dispatch-loop probe shape (HOW_TO_ADD_A_FORMAT.md QUIRK 22):
+// tuner, seconds per cell. The dispatch-loop probe shape (HOW_TO_ADD_A_FORMAT.md, the Metal step):
 // `reps` back-to-back dispatches per timed encoder (the shared y buffer's hazard serializes
 // them), best-of `rounds` encoders. The metric is weight-plane GB/s for GEMV (decode is
 // weight-bound) and GMAC/s for mul_mm, plus us/dispatch for the reference ratio.

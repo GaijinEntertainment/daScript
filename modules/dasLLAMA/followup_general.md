@@ -735,8 +735,8 @@
     mints new kernels only. at least in debug-only mode." Today a sidecar missing ANY demanded
     kernel re-tunes the whole scope (the completeness rule), so every new `[tune]` family - one
     per format in this arc - re-mints every application sidecar on the box on its next start,
-    minutes each (HOW_TO_ADD_A_FORMAT.md QUIRK 17), and the same rule keeps a stub-era
-    `"reference"` pin alive after the emitter lands (QUIRK 11). The partial mint keeps the
+    minutes each (the format recipe's step 4 gate), and the same rule keeps a stub-era
+    `"reference"` pin alive after the emitter lands (item 134). The partial mint keeps the
     existing entries and races only the families the sidecar lacks (or names as reference),
     validating the merged file as one. Debug-only is the acceptable first form: a
     `DAS_TUNE_PARTIAL=1` (or `--tune-partial`) rail that the auto policy does not take, so a
@@ -750,8 +750,8 @@
     loads beating hardware gather); IQ4_XS and Q3_K were written from the disk format alone.
     Toward the end of the arc: read the reference exe's vec-dot and the reference exe's vec-dot
     (x86 + arm), list every technique ours does not measure, land the missing ones as
-    `[tune_perm]` spellings and let the probe judge. Done = a per-format note naming what was
-    raced and what won, beside the existing bench rows.
+    `[tune_perm]` spellings and let the probe judge. Done = the PR body naming what was raced and
+    what won, beside the existing bench rows.
 
 61. **Grid-format CPU decode: the panel round trip, one shared cost (kernel-level 0.43x-0.91x).**
     Measured 2026-09-01 at one thread, m=4096 k=14336 (`benchmarks/matmul/kq_kernel_bench.das` vs
@@ -792,7 +792,7 @@
     10%). The f4 slab ships (+9%, tg128 0.82x -> 0.95x same-run). Candidates beyond kernel
     shape: emitted-MSL diffs vs llama.cpp's compiled kernel (half math, function constants),
     or fusing the sign flip into the staged slab per SITE via a second indexed table. Done =
-    a form that clears 180 GB/s in the dispatch-loop probe (QUIRK 22's harness), or a note
+    a form that clears 180 GB/s in the dispatch-loop probe (the format recipe's Metal step), or a note
     proving the ceiling is shared by llama.cpp's own kernel when isolated the same way.
 
 63. **Reasoning-trace length under quantization: a rollback-and-ban sampler feature (Boris,
@@ -1487,3 +1487,53 @@
     to the runner and to anyone reading the log - the stocked gate's parity file showed the shape
     at the 1200 s budget. The fix is dastest's: the timer sets a flag and the main thread finishes
     the suite and exits, or the exit runs after the worker joins. Bundled with the next PR.
+131. **The format recipe's plane fields and hand ladders.** `Model` holds a plane pair per kq
+    format (`k4q/k4s ... iq4xsq/iq4xss`) and every consumer selects the pair with an
+    `if (fmt == KqFmt.k4) ... elif` chain: 12 ladders in `dasllama_load.das`, 13 in
+    `dasllama_common.das`, 3 in `dasllama_layout.das`, 8 in `dasllama_math_gen.das`, 3 in
+    `dasllama_math_default.das`, 4 in `dasllama_math.das`, one each in `ple`, `gpu_resident`,
+    `blocks`, `config`, `image`; the planes grew one format at a time and each arm carries a
+    different literal stride. Unquirked: one `KqPlanes` (quant, scale, mr) indexed by `KqFmt` on
+    `Model`, `kq_plane_q/s` the only accessors, every ladder one table lookup, a new format the
+    enum member plus its strides. The image's per-format `kq_repack_mr<id>` field and its
+    hand-grown `IMAGE_META_FIELDS` count, the repack-interleave freeze ladder in
+    `dasllama_load.das` (a format missing from it keeps `mr` 4 while its planes sit at the
+    companion's, and every `kq_active_mr` consumer reads the wrong interleave with no diagnostic
+    - caught only end to end), and `moe_gpu_gather_stack_kq`'s two per-format ladders (the
+    grouped and the tail-row branch need a verbatim arm each for a format already in the device
+    form) all collapse into that table.
+132. **The format recipe's test ladders.** `tests/test_kquant.das` builds fixtures, transcodes,
+    dequants, dots, repacks and calls the stubs through the same `fmt == 4/5/6/40` chains in five
+    gates (28 arms for one format) and raises `_cyclomatic_complexity` / `_function_length` per
+    format; `harness/gen_tune_probe.das` repeats the shape (9 arms) and its test mode gates a hand
+    list of families separate from the tune-mode family array. Unquirked: per-format dispatch
+    helpers in one `_kq_fixtures.das` shared by the test and the harness (`kq_transcode_sb`,
+    `kq_dequant_sb`, `kq_dot`, `kq_repack`, `kq_gemv_gen`, `kq_tile_gen`), each a single ladder,
+    and one family array both probe modes walk. The Metal test ladders are the same shape as
+    nested ternaries (`kq_gemv_gate`, `kq_mvb_gate`, `kq_mulmm_gate` and the fixtures pick MSL
+    sources, entries, fastmath and tgmem names per format, an `else` that means k6): one
+    per-format record per kernel family, indexed by format.
+133. **The format recipe's three int id spaces and the hand-formatted bake identity.**
+    `int(KqFmt)` (device stack tags, image plane ids, `vk_kq_schema_id`'s input), the kernel/IR
+    id (`kq_schema_id`), and the stream/repack region code (`kq_stream_code`: 0/2 for q8/q51,
+    else the kernel id, so k2 streams under 20 and translates back at every dispatch boundary);
+    `dlim_identity` formats `DlimCpuConfig.kq_mr<id>` into the identity string by hand, so a
+    field added without the string keys two interleaves identically. Unquirked: one id, or one
+    table that derives the other two and formats the identity.
+134. **The tune sidecar's identity lacks the generator hash.** A sidecar minted while a family's
+    generator stubs declined records `"<fmt>q8_tile_gen" : "reference"`; staleness keys on the
+    binary's mtime and the emitter is `.das`, so landing the emitter arm invalidates nothing and
+    the next run serves the reference body under the same `tune-stamped` line. The JIT DLL cache
+    has the same hole from the other side: the registered generators' bodies do not fold into
+    the cached DLL's hash, so after an emitter edit a cache hit executes the old stamps with no
+    signal. Unquirked: the generator hash folds into the sidecar identity and the DLL cache key.
+135. **The MSL emitter's `static_if` has no `elif`.** A format arm beside `SIXBIT` in
+    `MetalKqMulMmK45T` re-nests the k4/k5 arm one level deeper, so the diff is mostly
+    indentation. Unquirked: `elif` on `static_if` in the MSL emitter.
+136. **The SPIR-V emitter lowers a dynamically indexed `fixed_array` local to Function storage.**
+    A 16-entry codebook held as a `let fixed_array<int>` local inside a kernel class and indexed
+    per nibble spills to private memory (the IQ4_XS Vulkan GEMV decoded at 105.7 t/s against
+    k3's 372.8 on fewer bytes a weight); the form that runs packs the codebook into four `uint4`
+    words and selects with a dynamic vector index plus a byte shift. Unquirked: the emitter
+    lowers a `let` fixed_array of literals to a constant-storage array, or a lint flags a
+    dynamically indexed fixed_array local inside a kernel class.

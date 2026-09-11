@@ -1293,4 +1293,13 @@ module) is independent and can land any time - it is pure structure.
     GEMM route has no work-size gate: a one-row window turns one router or beta/alpha dispatch into
     the convert, the GEMM and the reduce under the drain, about ten times the 4.5 us chained-dispatch
     floor a layer - gate the route on the window's rows; (7) the emitter gap above (the iq2xxs cm2
-    stamps' `OpVariable` placement) stands.
+    stamps' `OpVariable` placement) stands; (8) the tier cannot see a GPU engine timeout: on the
+    16 GB RTX 5060 Ti the stocked suite run back to back logs live kernel events of code 141 (the
+    engine's timeout reset) while every test stays green, twice in one day ending in a dead display,
+    and no file reproduces it alone - so the likely trigger is memory pressure across children
+    (a plane paged out by the desktop or a just-exited process, read under a cm2 tile as a
+    multi-second dispatch). Three detectors: `VK_EXT_memory_budget` sampled per window and per
+    token in the profiler, logging when the tier's usage crosses the heap's budget;
+    `VK_EXT_device_fault` read on a device-lost result and logged with the last recorded stamp
+    names; and `VK_EXT_memory_priority` / pageable device-local memory pinning the weight planes so
+    eviction takes other allocations first.
