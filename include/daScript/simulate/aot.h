@@ -347,6 +347,24 @@ namespace das {
     DAS_SUPPRESS_UB
     __forceinline void das_memcpy ( void * left, const void * right, uint64_t size ) { memcpy(left, right, size_t(size)); }
 
+    // memmove: the overlapping-range twin of memcpy, same four size spellings and const-source twins
+    DAS_SUPPRESS_UB
+    __forceinline void das_memmove ( void * left, void * right, int size ) { memmove(left, right, size); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memmove ( void * left, void * right, uint32_t size ) { memmove(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memmove ( void * left, void * right, int64_t size ) { memmove(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memmove ( void * left, void * right, uint64_t size ) { memmove(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memmove ( void * left, const void * right, int size ) { memmove(left, right, size); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memmove ( void * left, const void * right, uint32_t size ) { memmove(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memmove ( void * left, const void * right, int64_t size ) { memmove(left, right, size_t(size)); }
+    DAS_SUPPRESS_UB
+    __forceinline void das_memmove ( void * left, const void * right, uint64_t size ) { memmove(left, right, size_t(size)); }
+
     // Suppress null argument with size = 0
     DAS_SUPPRESS_UB
     __forceinline void das_memset8 ( void * left, uint8_t value, int size ) {

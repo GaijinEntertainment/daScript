@@ -57,7 +57,7 @@ def private is_block_terminator(expr : ExpressionPtr) : bool {
 }
 
 //! the memory builtins that write through their first argument
-let private lint031_builtin_writers <- { "memcpy", "memset8", "memset16", "memset32", "memset64", "memset128" }
+let private lint031_builtin_writers <- { "memcpy", "memmove", "memset8", "memset16", "memset32", "memset64", "memset128" }
 
 struct private RefIndex {
     @do_not_delete functions : table<Function const?>
@@ -1175,7 +1175,7 @@ class LintVisitor : AstVisitor {
             ? expr.func.fromGeneric.name
             : expr.name)
         let nargs = length(expr.arguments)
-        if ((fname == "memcpy" || fname == "memcmp") && nargs == 3) {
+        if ((fname == "memcpy" || fname == "memmove" || fname == "memcmp") && nargs == 3) {
             lint018_check_arg(expr, fname, 2, true)
             return
         }

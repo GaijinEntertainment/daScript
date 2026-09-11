@@ -2704,6 +2704,18 @@ namespace das
         addExternInline<int (*)(void *, void *, uint64_t), das_memcmp>(*this, lib, "memcmp",
             SideEffects::none, "das_memcmp")
                 ->args({"left","right","size"})->unsafeOperation = true;
+        addExternInline<void (*)(void *, void *, int), das_memmove>(*this, lib, "memmove",
+            SideEffects::modifyArgumentAndExternal, "das_memmove")
+                ->args({"left","right","size"})->unsafeOperation = true;
+        addExternInline<void (*)(void *, void *, uint32_t), das_memmove>(*this, lib, "memmove",
+            SideEffects::modifyArgumentAndExternal, "das_memmove")
+                ->args({"left","right","size"})->unsafeOperation = true;
+        addExternInline<void (*)(void *, void *, int64_t), das_memmove>(*this, lib, "memmove",
+            SideEffects::modifyArgumentAndExternal, "das_memmove")
+                ->args({"left","right","size"})->unsafeOperation = true;
+        addExternInline<void (*)(void *, void *, uint64_t), das_memmove>(*this, lib, "memmove",
+            SideEffects::modifyArgumentAndExternal, "das_memmove")
+                ->args({"left","right","size"})->unsafeOperation = true;
         addExternInline<DAS_BIND_FUN(das_memset8)>(*this, lib, "memset8",
             SideEffects::modifyArgumentAndExternal, "das_memset8")
                 ->args({"left","value","count"})->unsafeOperation = true;

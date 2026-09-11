@@ -15,7 +15,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 //   memcpy(dst, src, nbytes)
 //   arr |> resize(newSize)
 
-expect 50503:10
+expect 50503:11
 
 require daslib/lint
 
@@ -27,6 +27,11 @@ def bad_memcpy_int64(var dst : void?; src : void?; nbytes : int64) {
 // bad: int() narrowing of a uint64 size (1 warning)
 def bad_memcpy_uint64(var dst : void?; src : void?; nbytes : uint64) {
     unsafe(memcpy(dst, src, int(nbytes)))
+}
+
+// bad: int() narrowing on memmove (1 warning)
+def bad_memmove_int64(var dst : void?; src : void?; nbytes : int64) {
+    unsafe(memmove(dst, src, int(nbytes)))
 }
 
 // bad: int() narrowing on memcmp (1 warning)

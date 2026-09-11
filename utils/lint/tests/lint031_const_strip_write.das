@@ -5,7 +5,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // type denies a write the function performs; the parameter is declared var instead. The
 // finding anchors at the parameter, the line the fix rewrites.
 
-expect 50503:23
+expect 50503:24
 
 require daslib/lint
 
@@ -161,6 +161,14 @@ def route_memcpy(dst : void?; v : int) {                    // LINT031
     var src = v
     unsafe {
         memcpy(dst, addr<void?>(src), 4)
+    }
+}
+
+// a const void? handed to memmove's destination slot
+def route_memmove(dst : void?; v : int) {                   // LINT031
+    var src = v
+    unsafe {
+        memmove(dst, addr<void?>(src), 4)
     }
 }
 
@@ -374,6 +382,7 @@ def main() {
         route_ref_local(addr(slot), 12)
         route_intptr(addr<void?>(slot), 4)
         route_memcpy(addr<void?>(slot), 5)
+        route_memmove(addr<void?>(slot), 5)
         route_memset(addr<void?>(slot), 5u8)
         route_op_assign(addr(slot), 6)
         route_inc_top(addr(slot))
