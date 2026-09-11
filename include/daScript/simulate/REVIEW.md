@@ -7,7 +7,9 @@ retypes a public member of a struct or class under this folder, applies
 resolves to for a `daslib/*.das` caller - a rename, a removal, or a new overload of a struct or
 member the AOT C++ emitter writes into generated code, or of a flag or field a daslib predicate
 reads - applies `daslib/REVIEW.md` too; checklist discovery walks changed paths only, so the
-C++ half never opens the daslib checklist on its own.
+C++ half never opens the daslib checklist on its own. A diff that adds, reorders or retypes a
+member of a C++ type das binds through an annotation applies `src/builtin/REVIEW.md` too, for
+the same reason.
 
 - **A diff that adds a field to `CodeOfPolicies` (`code_of_policies.h`) adds it to
   `DAS_MODULE_CACHE_POLICY_FIELDS` in `src/builtin/module_builtin_ast_serialize.cpp`, in the
@@ -65,22 +67,3 @@ C++ half never opens the daslib checklist on its own.
   pin for each field it adds** - a field that lands in tail padding leaves `sizeof`
   unchanged, so no other assertion in that file fails.
 
-- **In a C++ type with `addField` in its annotation (`src/builtin/module_builtin_rtti.cpp`,
-  `module_builtin_fio.cpp`), a member whose size differs between the standard libraries the
-  repo's targets use (`mutex`, `std::function`, `condition_variable`) or a platform struct
-  embedded by value (`struct stat`) is declared after the last such field.** A cross-compiled
-  exe bakes the host's field offsets into the code it generates, and the target's standard
-  library sizes such a member differently (a mutex is 64 bytes on darwin and 40 under
-  emscripten, a `std::function` 48 under Linux libc++ and 32 elsewhere), so every das-visible
-  field behind one is read at the wrong address. `std::string` is 24 bytes under every libc++
-  the targets use, and a das-visible field that is one pins its own offset.
-
-- **A type das holds by value (`isLocal`, `canCopy` or `canMove` true in its annotation) is
-  built from fixed-width members only: copy what das needs out of a platform struct instead of
-  embedding one.** The exe bakes the host's `sizeof` for such a type, so a target that sizes an
-  embedded member differently gives every das local of it the wrong length.
-
-- **A diff that changes the member order or member set of a type either rule reaches states
-  its `--jit-check-abi` result for a cross target in its own PR description.** The check
-  reports a mismatch at the bundle's first launch, for the types the bundle links; nothing
-  native can observe one.

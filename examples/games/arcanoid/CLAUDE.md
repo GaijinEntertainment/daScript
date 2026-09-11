@@ -57,10 +57,12 @@ Use `live_command` with `name="help"` to list all available commands.
 | `cmd_slow_motion` | Set game speed multiplier | `speed` (float, 0.1=slow, 1=normal, 2=fast) |
 | `cmd_decs_dump` | Dump DECS archetypes/entities | - |
 | `cmd_level` | Jump to a board | `level` (int, 1-based) |
-| `cmd_next_level` | Clear the board as a win would (next level's card, or the win on the last) | - |
+| `cmd_next_level` | Advance as a win does: the next board, or the win screen on the last | - |
 | `cmd_bonus_row` | One capsule of every type in a row across the field | - |
-| `cmd_attract` | Start the spectator round now | - |
-| `cmd_toggle_crt` / `cmd_toggle_ssao` / `cmd_fx_debug` | Post chain switches and debug views | `view` (string) for fx_debug |
+| `cmd_attract` | Start the bot-played demo round now | - |
+| `cmd_toggle_crt` | Toggle the CRT present | - |
+| `cmd_toggle_ssao` | Toggle the ambient-occlusion pass | - |
+| `cmd_fx_debug` | Present a post buffer instead of the frame | `view` (int: 0 frame, 1 occlusion, 2 normal-depth) |
 
 **Powerup/bonus types:** `triple_ball`, `wide_paddle`, `narrow_paddle`, `sticky_paddle`, `fireball`, `extra_life`, `speed_up`, `speed_down`
 
@@ -103,5 +105,5 @@ Pause available during `playing` via Escape.
 ## File Structure
 
 - `main.das` - shaders, audio generation, game logic, rendering, HUD, live commands, state preservation, the strudel beds
-- `levels.das` - the boards as ASCII stencils: `1`..`5` colour rows, `#` two hits, `X` metal (never breaks, never counts), `?` always drops a capsule, `.` air; first line is the far edge
+- `levels.das` - the boards as ASCII stencils; the legend is the file's own header
 - `arcanoid_postfx.das` - the post chain (SSAO, bloom, CRT present)

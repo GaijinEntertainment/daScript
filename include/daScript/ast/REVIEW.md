@@ -1,7 +1,10 @@
 # AST Headers Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`src/ast/ARCHITECTURE.md` (repo root).
+`src/ast/ARCHITECTURE.md` (repo root). A diff that adds, reorders or retypes a member of a C++
+type das binds through an annotation (`Program`, `Function`, `Variable`, the AST nodes) applies
+`src/builtin/REVIEW.md` too; checklist discovery walks changed paths only, so a header edit
+never opens that checklist on its own.
 
 - **A diff that changes what a cached JIT DLL binds - the module a bind registers into or the
   name it registers under (`vectorHomeModule`, `typeFactory<vector<TT>>::make`,
@@ -22,11 +25,3 @@
   `compile`, a late `require`, the folding program - would otherwise overwrite the outer
   program's answer mid-simulate. The per-compile fields that remain, and why each is tolerated,
   are `src/ast/ARCHITECTURE.md` sec.4's.
-
-- **In a C++ type with `addField` in its annotation (`Program` in
-  `src/builtin/module_builtin_rtti.cpp`), a member whose size differs between the standard
-  libraries the repo's targets use (`mutex`, `std::function`, `condition_variable`) is declared
-  after the last such field.** A cross-compiled exe bakes the host's field offsets into the
-  code it generates, and the target's standard library sizes such a member differently (a
-  `std::function` is 48 bytes under Linux libc++ and 32 under emscripten's), so every
-  das-visible field behind one is read at the wrong address.
