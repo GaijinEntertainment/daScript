@@ -1517,6 +1517,7 @@ namespace das
 
         das_hash_map<TypeInfo *,string>          t2cppTypeName;
         das_hash_map<StructInfo *,string>        s2cppTypeName;
+        bool collectCppNames = true;    // the C++ spellings above are read only through debug_helper_find_*_cppname, by the AOT emitter's own helper; a simulate's helper turns this off
     };
 
     struct CommentReader {

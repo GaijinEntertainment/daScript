@@ -3742,6 +3742,7 @@ namespace das
             context.constStringHeap->setInitialSize(globalStringHeapSize);
         }
         DebugInfoHelper helper(context.debugInfo);
+        helper.collectCppNames = false;     // nothing reads a simulate's C++ spellings (ast.h DebugInfoHelper)
         context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;
