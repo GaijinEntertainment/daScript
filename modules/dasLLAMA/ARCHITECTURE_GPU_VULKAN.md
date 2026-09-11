@@ -216,6 +216,15 @@ per invocation, and the grid runs over both group axes, so a layer of only `2 x 
 (`nvh`, the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two
 q8 GEMMs and copies.
 
+The conv is channel-major: a workgroup owns 256 channels over `DN_CONV_PB` positions
+(`dn_conv_wgs` sizes the grid), every thread slides one channel's window over them with the taps
+in registers and one new row read per position, and holds its outputs in registers for the SiLU
+and the per-head L2 norm - the head's sum of squares crosses the head's lanes by shuffles and its
+warps by one shared row, a head being `ds` consecutive channels with `ds` dividing 256. The
+position-major form it replaced (one workgroup per position, the row staged in 32 KB of shared
+memory) re-read every input row once per tap and the whole tap table once per position, all from
+L2.
+
 The scan is the plain per-token delta rule in upstream's shape: one column of a head's state per
 lane cluster, 16 state rows per lane in registers, four subgroups per workgroup, and every lane
 reads its own k and q elements from the conv plane per token - no shared staging, no barrier.

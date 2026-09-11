@@ -251,6 +251,11 @@ def dn_scan_wgs(nvh, ds : int64) : int64 {
     return nvh * ((ds + cpg - 1l) / cpg)
 }
 
+let DN_CONV_PB = 32u   //! the conv's positions per workgroup: a thread's channel slides its window over them
+//! The conv's workgroup count for a channel width and a row count: 256-channel blocks by DN_CONV_PB-position blocks
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int64(DN_CONV_PB) - 1l) / int64(DN_CONV_PB))
+
 //! The prefill's beta/alpha tile GEMM's workgroups: 16-position tiles x 16-output groups over the 2 x nvh rows.
 def dn_ba_wgs(npos, nvh : int64) : int64 => ((npos + 15l) / 16l) * ((2l * nvh + 15l) / 16l)
 let DN_MAX_HEADS = 64l

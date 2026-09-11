@@ -1330,6 +1330,7 @@ class MoeGatherF16 {
 // ===== deltanet: the conv front =====
 
 struct DnConvArgs {
+    npos : uint       // the window's rows
     cd : uint         // conv width (channels)
     kd : uint         // q/k region width (2*kd channels L2-normed in ds-blocks)
     ds : uint         // d_state (the norm block)
@@ -1341,66 +1342,94 @@ struct DnConvArgs {
     qscale : float
 }
 
-// depthwise conv + SiLU + per-head q/k L2-norm, one workgroup per position; every handoff stays
-// in shared, each global output element has exactly one writer
-[vk_dispatch(name = "dn_conv_cls", grid = "npos", params = "npos : int64")]
+// depthwise conv + SiLU + per-head q/k L2-norm, channel-major: a workgroup owns 256 channels over DN_CONV_PB positions,
+// every thread one channel's sliding window (the taps in registers, one new row read per position) and its outputs in
+// registers; the per-head sum of squares crosses the head's lanes by shuffles and its warps by one shared row - a head is
+// ds consecutive channels and ds divides 256, so no head straddles a workgroup
+[vk_dispatch(name = "dn_conv_cls", grid = "wgs", params = "wgs : int64")]
 class DnConv {
     @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
     @ssbo @binding = 1 outr : array<float>     // conv output rows
     @ssbo @binding = 2 smalls : array<float>   // taps + history + any small planes (push offsets)
     @push_constant pa : DnConvArgs
-    @workgroup row : float[8192]               // the position row's q/k region, silu'd: staged for the per-head norm (2 kd <= DN_MAX_QK); the v region streams through
-    @workgroup nsc : float[64]                 // per-block L2 scales
+    @workgroup wsum : float[256]               // the eight warps' per-position sums of squares
+
+    //! channel ch's input at window row sp: a window row, or the history row sp + taps below the window in the layout hist_mode names
+    def xrow(sp : int; ch, taps : uint) : float {
+        if (sp >= 0) {
+            return src[uint(sp) * pa.cd + ch]
+        }
+        let hidx = uint(max(sp + int(taps), 0))
+        if (pa.hist_mode == 1u) {
+            return smalls[pa.hist_off + ch * taps + hidx]
+        }
+        return smalls[pa.hist_off + hidx * pa.cd + ch]
+    }
 
     [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv")]
-    def run {
-        let p = gl_WorkGroupID.x
+    def run {   // nolint:STYLE038 — the conv's slide, the SiLU, the two-level norm and the store over one register-held position block
+        let cblocks = (pa.cd + 255u) / 256u
+        let p0 = (gl_WorkGroupID.x / cblocks) * DN_CONV_PB
+        let ch = (gl_WorkGroupID.x % cblocks) * 256u + gl_LocalInvocationID.x
+        let live = ch < pa.cd
+        let cch = live ? ch : 0u               // a dead lane reads channel 0 and stores nothing
         let taps = pa.dconv - 1u
-        let tid = gl_LocalInvocationID.x
-        // depthwise conv + SiLU into shared, strided channels; taps in the raw fblob layout
-        var ch = tid
-        while (ch < pa.cd) {
-            var acc = 0.0
-            var k = 0u
-            while (k < pa.dconv) {
-                let sp = int(p + k) - int(taps)
-                var xv = 0.0
-                if (sp >= 0) {
-                    xv = src[uint(sp) * pa.cd + ch]
-                } elif (pa.hist_mode == 1u) {
-                    xv = smalls[pa.hist_off + ch * taps + p + k]
-                } else {
-                    xv = smalls[pa.hist_off + (p + k) * pa.cd + ch]
+        let lead = 4u - pa.dconv               // the ring holds the last four rows whatever dconv: the leading taps read zero
+        var w : float[4]
+        for [unroll] (j in range(4)) {
+            let jj = uint(j)
+            w[j] = jj >= lead ? smalls[pa.taps_off + cch * pa.dconv + (jj - lead)] : 0.0
+        }
+        var x0 = xrow(int(p0) - 3, cch, taps)
+        var x1 = xrow(int(p0) - 2, cch, taps)
+        var x2 = xrow(int(p0) - 1, cch, taps)
+        let normed = live && ch < 2u * pa.kd   // the q/k region takes the per-head norm
+        var y : float[32]
+        var s : float[32]
+        for [unroll] (i in range(32)) {
+            let p = p0 + uint(i)
+            let x3 = p < pa.npos ? xrow(int(p), cch, taps) : 0.0
+            let acc = w[0] * x0 + w[1] * x1 + w[2] * x2 + w[3] * x3
+            y[i] = (live && p < pa.npos) ? acc / (1.0 + exp(-acc)) : 0.0
+            x0 = x1
+            x1 = x2
+            x2 = x3
+            // the head's sum of squares over this warp's lanes: ds lanes below a warp, the whole warp at ds >= 32
+            var v = normed ? y[i] * y[i] : 0.0
+            if (pa.ds > 16u) {
+                v += subgroupShuffleXor(v, 16u)
+            }
+            v += subgroupShuffleXor(v, 8u)
+            v += subgroupShuffleXor(v, 4u)
+            v += subgroupShuffleXor(v, 2u)
+            v += subgroupShuffleXor(v, 1u)
+            s[i] = v
+        }
+        let warp = gl_SubgroupID
+        if (gl_SubgroupInvocationID == 0u) {
+            for [unroll] (i in range(32)) {
+                wsum[warp * 32u + uint(i)] = s[i]
+            }
+        }
+        barrier()
+        let wpg = pa.ds > 32u ? pa.ds / 32u : 1u   // the head's warps
+        let wb = (warp / wpg) * wpg
+        let qs = ch < pa.kd ? pa.qscale : 1.0
+        for [unroll] (i in range(32)) {
+            let p = p0 + uint(i)
+            var tot = s[i]
+            if (wpg > 1u) {
+                tot = 0.0
+                var ww = 0u
+                while (ww < wpg) {
+                    tot += wsum[(wb + ww) * 32u + uint(i)]
+                    ww++
                 }
-                acc += xv * smalls[pa.taps_off + ch * pa.dconv + k]
-                k++
             }
-            let sv = acc / (1.0 + exp(-acc))
-            if (ch < 2u * pa.kd) {
-                row[ch] = sv
-            } else {
-                outr[p * pa.cd + ch] = sv
+            let sc = normed ? (1.0 / max(sqrt(tot), pa.eps)) * qs : 1.0
+            if (live && p < pa.npos) {
+                outr[p * pa.cd + ch] = y[i] * sc
             }
-            ch += 256u
-        }
-        barrier()
-        // per-head L2 norm scale over the q and k regions, q pre-scale folded in
-        let nblk = (2u * pa.kd) / pa.ds
-        if (tid < nblk) {
-            var sum = 0.0
-            var j = 0u
-            while (j < pa.ds) {
-                let v = row[tid * pa.ds + j]
-                sum += v * v
-                j++
-            }
-            nsc[tid] = (1.0 / max(sqrt(sum), pa.eps)) * (tid < pa.kd / pa.ds ? pa.qscale : 1.0)
-        }
-        barrier()
-        ch = tid
-        while (ch < 2u * pa.kd) {
-            outr[p * pa.cd + ch] = row[ch] * nsc[ch / pa.ds]
-            ch += 256u
         }
     }
 }

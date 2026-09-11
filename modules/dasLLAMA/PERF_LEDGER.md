@@ -175,6 +175,17 @@ what it costs today and what the fix would change.
   were); the 0.8B unchanged at 26741 +- 81 (q8 beta/alpha planes, no router) [direction-grade -
   one commit].
 
+- **LANDED (2026-09-10) - the deltanet conv is channel-major: a workgroup owns 256 channels
+  over 32 positions, a thread slides one channel's window with the taps in registers, the
+  per-head norm crosses lanes by shuffles and warps by one shared row.** The position-major form
+  (one workgroup per position, the row staged in 32 KB of shared memory) re-read every input row
+  once per tap and the whole tap table once per position from L2. Linux RTX 5080: the 0.8B's
+  profiled conv 1351 -> 824 us per window (75 -> 46 us per layer; the reference exe's SSM_CONV
+  27-47), pp512 26741 +- 81 -> 27524 +- 88 (0.919x of 29957), tg32 within noise (340 -> 336);
+  the 35B's conv 2740 -> 1660 us over 30 layers, pp512 4960.8 +- 49.7 -> 5010.1 +- 47.0 at five
+  reps (0.960x of 5217), tg32 132.5; the sanity argmax the same token, its logit 0.02 apart (the
+  norm's sum in butterfly order) [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

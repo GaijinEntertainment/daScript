@@ -6248,9 +6248,9 @@ def test_vkd_dn_family(t0 : T?) {
             let taps = dconv - 1
             let eps = 0.00001
             let qscale = 1.25
-            // --- dn_conv: depthwise conv + SiLU + q/k L2-norm, one wg per position ---
+            // --- dn_conv: depthwise conv + SiLU + q/k L2-norm, 256 channels by 32 positions per wg; 37 rows = a second position block primed from window rows ---
             {
-                let npos = 3
+                let npos = 37
                 let hist_mode = 1
                 let taps_off = 16
                 let hist_off = taps_off + cd * dconv
@@ -6286,10 +6286,10 @@ def test_vkd_dn_family(t0 : T?) {
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
-                    var pc = DnConvArgs(cd = uint(cd), kd = uint(kd), ds = uint(ds),
+                    var pc = DnConvArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), ds = uint(ds),
                         dconv = uint(dconv), hist_mode = uint(hist_mode), taps_off = uint(taps_off),
                         hist_off = uint(hist_off), eps = eps, qscale = qscale)
-                    enc_dn_conv_cls(raw2, h2, sc, pc, int64(npos))
+                    enc_dn_conv_cls(raw2, h2, sc, pc, dn_conv_wgs(int64(cd), int64(npos)))
                     vhz_dep(raw2, h2, 1u, 0u, true)
                     cmd_copy_whole(raw2, od2, host.buf, out_bytes)
                     vk_check(vkEndCommandBuffer(raw2), null)

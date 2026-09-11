@@ -708,10 +708,10 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         vhz_dep(raw, h, VHZ_DNBG, VHZ_DNSM, true)
         cmd_copy_range(raw, g_rd.pf_dnbg, 0l, L.dn.smalls_dev, DN_SM_G * 4l, wlen * nvh * 4l)
     }
-    var pcc = DnConvArgs(cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
+    var pcc = DnConvArgs(npos = uint(wlen), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
         hist_mode = 2u, taps_off = uint(DN_SM_TAPS), hist_off = uint(DN_SM_HIST),
         eps = eps, qscale = 1.0 / sqrt(float(ds)))
-    enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, wlen)
+    enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, dn_conv_wgs(cd, wlen))
     pfq_ts(raw)
     var pcs = DnScanArgs(npos = uint(wlen), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
         beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
@@ -2438,10 +2438,10 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     stack_batch_enc(raw, h, s_qkv, nwg_qkv, dim, cd)
     stack_batch_enc(raw, h, s_z, nwg_z, dim, di)
     pfq_ts(raw)   // q2: qkv+z GEMMs
-    var pcc = DnConvArgs(cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(taps + 1l),
+    var pcc = DnConvArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(taps + 1l),
         hist_mode = first ? 1u : 2u, taps_off = uint(DN_SM_TAPS), hist_off = uint(DN_SM_HIST),
         eps = eps, qscale = 1.0 / sqrt(float(ds)))
-    enc_dn_conv_cls(raw, h, g_gpu.dn_conv_set, pcc, rows)
+    enc_dn_conv_cls(raw, h, g_gpu.dn_conv_set, pcc, dn_conv_wgs(cd, rows))
     pfq_ts(raw)   // q3: conv
     var pcs = DnScanArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
         beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
