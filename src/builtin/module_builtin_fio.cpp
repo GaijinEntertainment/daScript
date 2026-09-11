@@ -878,15 +878,17 @@ namespace das {
 
     bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "fstat of null");
-        return das_fstat64(fileno((FILE *)f), fs.stats) == 0;
+        das_filestat st;
+        if ( das_fstat64(fileno((FILE *)f), st) != 0 ) { fs.clear(); return false; }
+        fs.set(st);
+        return true;
     }
 
     bool builtin_stat ( const char * filename, FStat & fs ) {
-        if ( filename!=nullptr ) {
-            return das_stat64(filename, fs.stats) == 0;
-        } else {
-            return false;
-        }
+        das_filestat st;
+        if ( filename==nullptr || das_stat64(filename, st) != 0 ) { fs.clear(); return false; }
+        fs.set(st);
+        return true;
     }
 
      void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at ) {

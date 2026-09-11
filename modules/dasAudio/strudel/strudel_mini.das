@@ -119,8 +119,9 @@ def tokenize(input : string) : array<Token> { // nolint:STYLE038 — flat one-ar
             } elif (ch == '|') {
                 tokens |> push(Token(kind = TokenKind.PIPE, text = "|", pos = i))
                 i ++
-            } elif (is_number(ch)) {
+            } elif (is_number(ch) || (ch == '-' && i + 1 < n && (is_number(int(data[i + 1])) || int(data[i + 1]) == '.'))) {
                 let start = i
+                i ++
                 while (i < n) {
                     let c = int(data[i])
                     if (is_number(c) || c == '.') {
@@ -346,6 +347,11 @@ def private parse_atom(var p : Parser) : Pattern {
 
 // ─── Note Name Parsing ───
 
+//! the note letter folded to lower case: `C4` and `Bb3` name the same notes as `c4` and `bb3`
+def private note_letter(ch : int) : int {
+    return (ch >= 'A' && ch <= 'G') ? ch + ('a' - 'A') : ch
+}
+
 def parse_note_name(name : string) : float {
     //! Parse a note name with explicit octave (`"c3"`, `"eb4"`, `"fs2"`) into a MIDI
     //! number. Returns `-1.0` on miss. Bare letters without an octave return -1 —
@@ -354,7 +360,7 @@ def parse_note_name(name : string) : float {
     if (n < 2 || n > 3) return -1.0
     var result = -1.0
     peek_data(name) $(bytes) {
-        let ch = int(bytes[0])
+        let ch = note_letter(int(bytes[0]))
         var semitone = -1
         if (ch == 'c') { semitone = 0; }
         elif (ch == 'd') { semitone = 2; }
@@ -391,7 +397,7 @@ def parse_note_name_default(name : string; default_oct : int) : float {
     if (n < 1 || n > 3) return -1.0
     var result = -1.0
     peek_data(name) $(bytes) {
-        let ch = int(bytes[0])
+        let ch = note_letter(int(bytes[0]))
         var semitone = -1
         if (ch == 'c') { semitone = 0; }
         elif (ch == 'd') { semitone = 2; }

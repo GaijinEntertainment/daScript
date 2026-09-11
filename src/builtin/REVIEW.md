@@ -25,7 +25,8 @@
   version `getVersion()` returns in `include/daScript/ast/ast_serializer.h`, in the same
   change** - a reader accepts a stream only when its stored version equals `getVersion()`, so
   without the bump an older cache passes that check and decodes the changed bytes as something
-  else.
+  else. A C++ layout change to a handled type or an AST class is not a record byte: functions
+  and annotations stream by module hash and name and re-resolve against the running binary.
 
 - **A diff that streams or compares a `CodeOfPolicies` field in `module_builtin_ast_serialize.cpp`
   outside `DAS_MODULE_CACHE_POLICY_FIELDS` is a defect - put the field on the list instead** - the
@@ -69,7 +70,28 @@
   built from a narrow string decodes through the ANSI codepage, so a UTF-8 name the codepage
   cannot represent is misread on the way in and throws on the way out.
 
-- **A diff that changes C++ whose comment cites a section of an architecture document - this
-  folder's (`// src/builtin/ARCHITECTURE.md sec.N`) or another's (`// src/ast/ARCHITECTURE.md
-  sec.N`) - updates that section in the same change.** C++ carries no `[arch]` annotation, so
-  nothing but this rule keeps a cited section true.
+- **A diff that changes the function or block a citing comment annotates - a comment naming a
+  section of an architecture document, this folder's (`// src/builtin/ARCHITECTURE.md sec.N`)
+  or another's (`// src/ast/ARCHITECTURE.md sec.N`) - updates that section in the same
+  change.** C++ carries no `[arch]` annotation, so nothing but this rule keeps a cited section
+  true.
+
+- **In a C++ type das binds through an annotation with `addField` (declared in this folder's
+  `module_builtin_rtti.cpp`, `module_builtin_fio.cpp`, `module_builtin_ast_annotations*.cpp`),
+  a member whose size differs between the standard libraries the repo's targets use
+  (`std::mutex`, `std::function`, `condition_variable`; not `std::string`) or a platform struct
+  embedded by value (`struct stat`) is declared after the last das-visible field.** A
+  cross-compiled exe bakes the host's field offsets into the code it generates, and the
+  target's standard library sizes such a member differently, so every das-visible field behind
+  one is read at the wrong address.
+
+- **A type das holds by value (`isLocal`, `canCopy` or `canMove` true in its annotation) is
+  built from members whose size is the same under every target's standard library -
+  fixed-width scalars and `std::string`: copy what das needs out of a platform struct instead of
+  embedding one.** The exe bakes the host's `sizeof` for such a type, so a target that sizes an
+  embedded member differently gives every das local of it the wrong length.
+
+- **A diff that changes the member order or member set of a C++ type das binds through an
+  annotation states its `--jit-check-abi` result for a cross target in its own PR
+  description.** The check reports a mismatch at the bundle's first launch, for the types the
+  bundle links; nothing native can observe one.

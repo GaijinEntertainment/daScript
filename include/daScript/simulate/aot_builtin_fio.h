@@ -42,20 +42,38 @@ namespace das {
 #endif
 
     struct FStat {
-        das_filestat stats;
         bool        is_valid;
-        uint64_t size() const   { return stats.st_size; }
-        Time     atime() const  { return { stats.st_atime }; }
-        Time     ctime() const  { return { stats.st_ctime }; }
-        Time     mtime() const  { return { stats.st_mtime }; }
+        uint32_t    mode;
+        uint64_t    bytes;
+        int64_t     atime_sec;
+        int64_t     ctime_sec;
+        int64_t     mtime_sec;
+        void clear () {
+            is_valid = false;
+            mode = 0;
+            bytes = 0;
+            atime_sec = ctime_sec = mtime_sec = 0;
+        }
+        void set ( const das_filestat & st ) {
+            is_valid = true;
+            mode = uint32_t(st.st_mode);
+            bytes = uint64_t(st.st_size);
+            atime_sec = int64_t(st.st_atime);
+            ctime_sec = int64_t(st.st_ctime);
+            mtime_sec = int64_t(st.st_mtime);
+        }
+        uint64_t size() const   { return bytes; }
+        Time     atime() const  { return { time_t(atime_sec) }; }
+        Time     ctime() const  { return { time_t(ctime_sec) }; }
+        Time     mtime() const  { return { time_t(mtime_sec) }; }
 #if defined(_WIN32)
-        bool     is_reg() const { return stats.st_mode & _S_IFREG; }
-        bool     is_dir() const { return stats.st_mode & _S_IFDIR; }
-        bool     is_exec() const { return stats.st_mode & _S_IEXEC; }
+        bool     is_reg() const { return mode & _S_IFREG; }
+        bool     is_dir() const { return mode & _S_IFDIR; }
+        bool     is_exec() const { return mode & _S_IEXEC; }
 #else
-        bool     is_reg() const { return S_ISREG(stats.st_mode); }
-        bool     is_dir() const { return S_ISDIR(stats.st_mode); }
-        bool     is_exec() const { return (stats.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0; }
+        bool     is_reg() const { return S_ISREG(mode); }
+        bool     is_dir() const { return S_ISDIR(mode); }
+        bool     is_exec() const { return (mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0; }
 #endif
     };
 #else

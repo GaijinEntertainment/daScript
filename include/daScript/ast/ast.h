@@ -1652,8 +1652,6 @@ namespace das
         void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
         void linkError ( const string & str, const string & extra );
     public:
-        UpdateAliasMapCallback updateAliasMapCallback;
-    public:
         template <typename TT>
         string describeCandidates ( const TT & result, bool needHeader = true ) const {
             if ( !result.size() ) return "";
@@ -1728,6 +1726,7 @@ namespace das
         // stores and re-validates them, so a changed input invalidates the cached record instead
         // of serving what a compile folded from the old value.
         vector<tuple<string,int64_t,uint64_t>> moduleCacheDependencies;
+        UpdateAliasMapCallback      updateAliasMapCallback;
     };
 
     // the shared capture/validate stat for Program::moduleCacheDependencies: size -1 + hash 0

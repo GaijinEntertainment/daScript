@@ -7,7 +7,9 @@ retypes a public member of a struct or class under this folder, applies
 resolves to for a `daslib/*.das` caller - a rename, a removal, or a new overload of a struct or
 member the AOT C++ emitter writes into generated code, or of a flag or field a daslib predicate
 reads - applies `daslib/REVIEW.md` too; checklist discovery walks changed paths only, so the
-C++ half never opens the daslib checklist on its own.
+C++ half never opens the daslib checklist on its own. A diff that adds, reorders or retypes a
+member of a C++ type das binds through an annotation applies `src/builtin/REVIEW.md` too, for
+the same reason.
 
 - **A diff that adds a field to `CodeOfPolicies` (`code_of_policies.h`) adds it to
   `DAS_MODULE_CACHE_POLICY_FIELDS` in `src/builtin/module_builtin_ast_serialize.cpp`, in the
@@ -64,3 +66,4 @@ C++ half never opens the daslib checklist on its own.
   `tests-cpp/small/test_debug_info_layout_pin.cpp` it makes false, and adds an `offsetof`
   pin for each field it adds** - a field that lands in tail padding leaves `sizeof`
   unchanged, so no other assertion in that file fails.
+

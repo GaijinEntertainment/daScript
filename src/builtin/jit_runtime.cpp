@@ -392,6 +392,22 @@ extern "C" {
             gv.flags = shared ? 1u : 0u;
         }
 
+        void setStandaloneFunctionArgInfo ( uint64_t index, uint32_t arg, void * debugInfo ) {
+            DAS_ASSERT(index < (uint64_t) totalFunctions);
+            auto finfo = functions[index].debugInfo;
+            if ( !finfo || arg >= finfo->count ) return;
+            if ( !finfo->fields ) {
+                finfo->fields = (VarInfo **) code->allocate(sizeof(VarInfo *) * finfo->count);
+                memset(finfo->fields, 0, sizeof(VarInfo *) * finfo->count);
+            }
+            // the emitter hands a TypeInfo; readers of fields[] expect a VarInfo (name, offset past it)
+            auto vi = (VarInfo *) code->allocate(sizeof(VarInfo));
+            memset(vi, 0, sizeof(VarInfo));
+            memcpy((TypeInfo *) vi, debugInfo, sizeof(TypeInfo));
+            vi->name = "";
+            finfo->fields[arg] = vi;
+        }
+
         void initFunctionAddr ( uint64_t index, void * globPtr ) {
             DAS_ASSERT(index < (uint64_t) totalFunctions);
             *((SimFunction **) globPtr) = &functions[index];
@@ -438,6 +454,10 @@ extern "C" {
     // is the exe-resident TypeInfo, so it can only be wired at codegen time).
     DAS_API void jit_set_global_var ( Context * ctx, uint64_t index, uint64_t offset, void* debugInfo, int shared ) {
         static_cast<JitContext *>(ctx)->setStandaloneGlobalInfo(index, offset, debugInfo, shared);
+    }
+
+    DAS_API void jit_set_standalone_function_arg ( Context * ctx, uint64_t index, uint32_t arg, void * debugInfo ) {
+        static_cast<JitContext *>(ctx)->setStandaloneFunctionArgInfo(index, arg, debugInfo);
     }
 
     DAS_API void jit_set_init_script ( Context * ctx, Context::JitInitScriptFn fn ) {
@@ -602,6 +622,7 @@ extern "C" {
     DAS_API void jit_check_handled_type_size ( const char * moduleName, const char * typeName, uint32_t hostSize ) {
         auto ann = jit_find_handled_annotation(moduleName, typeName);
         if ( !ann ) { g_abi_types_skipped ++; return; } // not registered on target -> module not linked here
+        if ( !ann->isLocal() && !ann->canCopy() && !ann->canMove() ) { g_abi_types_skipped ++; return; }
         g_abi_types_checked ++;
         uint32_t targetSize = uint32_t(ann->getSizeOf());
         if ( targetSize != hostSize ) {

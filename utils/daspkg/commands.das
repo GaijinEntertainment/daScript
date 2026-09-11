@@ -3094,7 +3094,7 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
             write(w, " --disable-module {m}")
         }
     }
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-threads --jit-runtime-lib=\"{runtime_archive}\""
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-check-abi --jit-threads --jit-runtime-lib=\"{runtime_archive}\""
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {

@@ -8,7 +8,7 @@
     {
       "name" : "Game: Arcanoid (3D, arrow keys + space)",
       "slug" : "arcanoid",
-      "files" : ["examples/arcanoid/main.das"]
+      "files" : ["examples/arcanoid/main.das", "examples/arcanoid/levels.das", "examples/arcanoid/arcanoid_postfx.das"]
     },
     {
       "name" : "Game: Pac-Man (3D, arrow keys + space)",

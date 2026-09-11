@@ -78,12 +78,15 @@ let private WORKER_EXIT_TIMEOUT_MS = 5000
 var public g_track_pcm : array<array<float>>
 //! Master mixed stereo PCM output for the most recent tick (main-thread mode only).
 var public g_master_pcm : array<float>
+//! the worker's mix buffer lives in a global: the worker collects its heap, and a jitted frame's locals are not roots
+var private g_worker_output : array<float>
 
 //! Rolling visualizer index — incremented by strudel_add_track, read by visualizer combinators.
 var public g_vis_index : int = 0
 
 // --- Memory tracking ---
 let private LEAK_WARN_THRESHOLD = 1024l  // bytes; only warn on leaks strictly above this
+let private WORKER_GC_GROWTH_BYTES = 2ul * 1024ul * 1024ul
 var private g_debug_memory : bool = false
 var private g_mem_heap_baseline : uint64 = 0ul
 var private g_mem_str_baseline : uint64 = 0ul
@@ -105,6 +108,18 @@ struct AudioChunk {
 struct private PlaybackTime {
     wall_time : double
     cps       : double
+    worker_heap_bytes : uint64     //! the worker context's heap after its last tick
+}
+
+def public strudel_get_worker_heap_bytes() : uint64 {
+    //! The playback worker's heap, as of its last tick; 0 in main-thread mode, where the caller's own heap is the one in play.
+    var bytes = 0ul
+    if (g_playback_box != null) {
+        g_playback_box |> read() $(pt : PlaybackTime) {
+            bytes = pt.worker_heap_bytes
+        }
+    }
+    return bytes
 }
 
 // --- Playback time ---
@@ -696,22 +711,30 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     var mixer : ma_volume_mixer
     ma_volume_mixer_init(unsafe(addr(mixer)), 2u)
     let chunkSamples = int(CHUNK_SEC * float(SAMPLE_RATE)) * 2
-    var output : array<float>
-    output |> resize(chunkSamples)
+    g_worker_output |> resize(chunkSamples)
     // memory tracking
     let mem_heap_base = heap_bytes_allocated()
     let mem_str_base = string_heap_bytes_allocated()
     var mem_heap_max = mem_heap_base
     var mem_str_max = mem_str_base
+    var mem_gc_floor = mem_heap_base   //!< the live set after the last collect; a fixed floor collects every tick once the pools outgrow it
     let mem_log_interval = max(int(1.0 / CHUNK_SEC), 1)
     var mem_tick_count = 0
+    //! one probe on the empty heap: heap_collect throws without options gc + persistent_heap; no aot_enabled() gate, a fold of it would split the AOT hash
+    var gc_allowed = true
+    try {
+        unsafe(heap_collect(false, false))
+    } recover {
+        gc_allowed = false
+        to_log(LOG_WARNING, "strudel: the worker cannot collect its heap - the program lacks `options gc` or `options persistent_heap` - so a long run grows it without bound\n")
+    }
     while (strudel_process_commands(cmd_fn)) {
         if (!pcm_box.isReady) {
             sleep(1u)
             continue
         }
         let t0 = ref_time_ticks()
-        for (v in output) { v = 0.0; }
+        for (v in g_worker_output) { v = 0.0; }
         // tick all active tracks
         var i = length(g_tracks) - 1
         while (i >= 0) {
@@ -729,12 +752,12 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
             // mix into output with track gain
             if (!empty(track.sched.output) && track.gain > 0.001) {
                 ma_volume_mixer_set_volume(unsafe(addr(mixer)), track.gain)
-                let nFrames = uint64(min(length(track.sched.output), length(output)) / 2)
+                let nFrames = uint64(min(length(track.sched.output), length(g_worker_output)) / 2)
                 unsafe {
                     ma_volume_mixer_process_pcm_frames(
                         addr(mixer),
                         addr(track.sched.output[0]),
-                        addr(output[0]),
+                        addr(g_worker_output[0]),
                         nFrames
                     )
                 }
@@ -760,8 +783,8 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
             retire_one_shot(i)
             i --
         }
-        if (!empty(output)) {
-            append_box_to_pcm(g_sid, pcm_box, output)
+        if (!empty(g_worker_output)) {
+            append_box_to_pcm(g_sid, pcm_box, g_worker_output)
         }
         let chunk_usec = double(get_time_usec(t0))
         total_time += chunk_usec / 1000.lf
@@ -771,7 +794,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         g_wall_samples += int64(chunkFrames)
         g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
         if (g_playback_box != null) {
-            g_playback_box |> publish(PlaybackTime(wall_time = g_wall_time, cps = g_cps))
+            g_playback_box |> publish(PlaybackTime(wall_time = g_wall_time, cps = g_cps, worker_heap_bytes = heap_bytes_allocated()))
         }
         // buffer level feedback
         var que_len = 0
@@ -789,6 +812,11 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         mem_heap_max = max(mem_heap_max, mem_heap_cur)
         mem_str_max = max(mem_str_max, mem_str_cur)
         mem_tick_count ++
+        //! the worker's context is nobody else's to collect; a query's garbage grows it a megabyte a second on a four-track bed
+        if (gc_allowed && mem_heap_cur > mem_gc_floor + WORKER_GC_GROWTH_BYTES) {
+            unsafe(heap_collect(true, false))
+            mem_gc_floor = heap_bytes_allocated()
+        }
         if (g_debug_memory && mem_tick_count % mem_log_interval == 0) {
             to_log(0, "strudel mem: heap {mem_heap_cur/1024ul}kb / str {mem_str_cur/1024ul}kb (max heap {mem_heap_max/1024ul}kb / str {mem_str_max/1024ul}kb)\n")
         }
@@ -801,7 +829,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
     unset_status_update(g_sid)
     status_box |> seq_box_release
-    delete output
+    delete g_worker_output
     // release thread-local tracks so sample voices and orbit buses are freed
     // before the leak-check below (and before the context dies).
     for (t in g_tracks) {
@@ -821,6 +849,9 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         let chunk_budget_usec = double(CHUNK_SEC) * 1000000.lf
         let MAX_UTIL = int(max_chunk_usec / chunk_budget_usec * 1000.lf)
         // leak = heap after cleanup minus baseline; peak is just informational.
+        if (gc_allowed) {
+            unsafe(heap_collect(true, false))
+        }
         let mem_heap_final = heap_bytes_allocated()
         let mem_str_final = string_heap_bytes_allocated()
         let leak_heap = int64(mem_heap_final) - int64(mem_heap_base)
@@ -835,6 +866,8 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
 def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : string) : void> = @@strudel_noop_cmd) {
     //! Spawn the strudel playback thread and inject shared resources (sample bank, SF2, audio channel).
     //! fn runs on the new thread — it should add tracks and call strudel_play(). Call from main thread only.
+    //! The worker collects its own heap while strudel_play runs, and a jitted frame's locals are not roots:
+    //! fn must hold no collectable local (array, table, string, class) across its strudel_play call.
     if (get_audio_command_stream() == null) {
         panic("strudel_init: audio system not initialized. Call audio_system_create() first.")
     }

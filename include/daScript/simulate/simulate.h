@@ -857,9 +857,6 @@ namespace das
         // release on the worker thread, so the pool is mutex-guarded. Only safe for pure-data jobs.
         Context * acquireForkContext ( uint32_t category );
         void releaseForkContext ( Context * forkContext );
-    protected:
-        vector<Context *>               forkContextPool;
-        mutex                           forkContextPoolMutex;
     public:
         string                          name;
         Bitfield                        category = Bitfield(0u);
@@ -914,6 +911,8 @@ namespace das
     protected:
         das_hash_map<void *, TypeInfo *> gcRoots;
     public:
+        das_hash_map<TypeInfo *, TypeInfo *> captureByValueTypes;   // a job lambda's capture type with the ref stripped, one per clone function, owned by this context's code arena
+    public:
         int32_t         fnDepth = 0;
     public:
         // It's better to use shared memory + finalize for things like this.
@@ -924,6 +923,9 @@ namespace das
         };
         JitContext deleteJITOnFinish = {};
         vector<FileInfo*>  deleteUponFinish;
+    protected:
+        vector<Context *>               forkContextPool;
+        mutex                           forkContextPoolMutex;
     };
 
     struct DebugAgentInstance {

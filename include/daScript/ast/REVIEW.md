@@ -1,7 +1,10 @@
 # AST Headers Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`src/ast/ARCHITECTURE.md` (repo root).
+`src/ast/ARCHITECTURE.md` (repo root). A diff that adds, reorders or retypes a member of a C++
+type das binds through an annotation (`Program`, `Function`, `Variable`, the AST nodes) applies
+`src/builtin/REVIEW.md` too; checklist discovery walks changed paths only, so a header edit
+never opens that checklist on its own.
 
 - **A diff that changes what a cached JIT DLL binds - the module a bind registers into or the
   name it registers under (`vectorHomeModule`, `typeFactory<vector<TT>>::make`,

@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
 `ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`,
-`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`. Planned work: `DEBUGGING.md` (sec. Roadmap), `fat_mode_plan.md`.
+`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`. Planned work: `LEDGER.md` takes a new row; `DEBUGGING.md` (sec. Roadmap) and `fat_mode_plan.md` carry older plans.
 
 **A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives

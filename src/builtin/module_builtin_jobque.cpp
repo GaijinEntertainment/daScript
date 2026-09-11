@@ -750,12 +750,31 @@ namespace das {
         JobStatus::sJoinSpin.store(level, std::memory_order_relaxed);
     }
 
+    // the type a collect walks the capture by: the clone function's first argument, never the source lambda's header
+    static TypeInfo * captureBlockHeaderType ( Func fn, Context * forkContext ) {
+        SimFunction * sf = fn.PTR;
+        if ( !sf || !sf->debugInfo || !sf->debugInfo->fields || sf->debugInfo->count < 1 ) return nullptr;
+        TypeInfo * arg = sf->debugInfo->fields[0];
+        if ( !arg ) return nullptr;
+        if ( !(arg->flags & TypeInfo::flag_ref) ) return arg;
+        // the stripped copy lives as long as the context that hands it out, in the code arena it shares with its program
+        auto & byValue = forkContext->captureByValueTypes;
+        auto it = byValue.find(arg);
+        if ( it != byValue.end() ) return it->second;
+        auto ti = (TypeInfo *) forkContext->code->allocate(sizeof(TypeInfo));
+        memcpy(ti, arg, sizeof(TypeInfo));
+        ti->flags &= ~TypeInfo::flag_ref;
+        byValue[arg] = ti;
+        return ti;
+    }
+
     // A panic inside a job body used to unwind straight out of the worker's thread function into
     // std::terminate -> abort, which is a fast-fail: no unhandled-exception filter runs, so the
     // message and location were lost and the process died with no diagnostic at all. Catch it on
     // the worker, report it the way the host reports a main-thread panic, then let it terminate as
     // before -- a panic stays fatal, it just stops being silent.
     __forceinline void invoke_job_lambda ( Context * forkContext, LineInfoArg * lineinfo, Lambda & flambda ) {
+        GcRootLambda root(flambda, forkContext);
         bool ok = forkContext->runWithCatch([&]() {
             das_invoke_lambda<void>::invoke(forkContext, lineinfo, flambda);
         });
@@ -779,6 +798,7 @@ namespace das {
             auto ptr = forkContext->allocate(lambdaSize + 16, lineinfo);
             forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
             memset ( ptr, 0, lambdaSize + 16 );
+            *((TypeInfo **)ptr) = captureBlockHeaderType(fn, forkContext);   // the header a collect walks the capture by
             ptr += 16;
             das_invoke_function<void>::invoke(forkContext, lineinfo, fn, ptr, lambda.capture);
             das_delete<Lambda>::clear(context, lambda);
@@ -801,6 +821,7 @@ namespace das {
         auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize + 16 );
+        *((TypeInfo **)ptr) = captureBlockHeaderType(fn, forkContext.get());   // the header a collect walks the capture by
         ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
@@ -1200,6 +1221,7 @@ namespace das {
         auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
         memset ( ptr, 0, lambdaSize + 16 );
+        *((TypeInfo **)ptr) = captureBlockHeaderType(fn, forkContext.get());   // the header a collect walks the capture by
         ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
