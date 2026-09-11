@@ -152,6 +152,7 @@ var g_audio_initialized = false
 var g_asch : AudioSystemChannels
 var g_frames = 0
 var g_jobs_max = 1
+var g_spin_window_us = 30000
 var g_jobs_applied = -1
 var g_team_applied = true
 var g_spin_applied = true
@@ -230,6 +231,7 @@ def on_ready(var a : Answer) {
     JOBS.value = clamp(get_jobque_worker_limit(), 1, g_jobs_max)   // the limit reads as a huge number when unset
     TEAM.value = get_jobque_team_mode()
     SPIN.value = get_jobque_spin_us() > 0l   // the engine's default for the platform: parked in a browser
+    g_spin_window_us = SPIN.value ? int(get_jobque_spin_us()) : 30000   // the window the toggle turns back on: the box's own, or the desktop's in a browser
     g_jobs_applied = JOBS.value
     g_team_applied = TEAM.value
     g_spin_applied = SPIN.value
@@ -621,7 +623,7 @@ def apply_jobque_knobs() {
     }
     if (SPIN.value != g_spin_applied) {
         g_spin_applied = SPIN.value
-        set_jobque_worker_spin(SPIN.value ? 30000 : 0)
+        set_jobque_worker_spin(SPIN.value ? g_spin_window_us : 0)
     }
 }
 
