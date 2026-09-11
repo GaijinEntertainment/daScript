@@ -64,6 +64,25 @@ process:
    }
    set_dispatch_worker_limit(0)   // 0 = back to all of them
 
+The workers' spin-before-park window is the other queue knob a program sets:
+``set_jobque_spin_us(us)`` is how long an idle worker spins before it parks
+(``0`` = park at once), and ``get_jobque_spin_us()`` reads it back. The
+desktop default is 30 ms, which keeps the workers hot through a token's serial
+gaps; in a browser the default is 0, because a spinning web worker costs the
+caller its core (Pocket TTS in Chrome measured 1.1x real time spinning against
+1.4x parked). Like the cap, ``setup_dasllama_jobque()`` latches it:
+
+.. das-doc: given var m = Model()
+.. code-block:: das
+
+   let spin_was = get_jobque_spin_us()
+   set_jobque_spin_us(0l)
+   with_job_que() {
+       setup_dasllama_jobque()   // the window is latched here
+       print("spin window: {get_jobque_spin_us()} us\n")
+   }
+   set_jobque_spin_us(spin_was)   // the platform's default back
+
 On a big SMT box also set ``DAS_JOBQUE_AFFINITY`` (``1`` = ideal-CPU hint,
 ``2`` = hard pin): unpinned, the OS placement lottery can land two compute
 lanes on one physical core's SMT pair, which roughly halves batched prefill

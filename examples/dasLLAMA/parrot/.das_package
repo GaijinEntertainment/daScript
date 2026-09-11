@@ -5,7 +5,7 @@ require daslib/daspkg
 [export]
 def package() {
     package_name("parrot")
-    package_description("Parrot: talk for a few seconds, Pocket TTS clones the voice, and the text you type is read aloud in it - dasGlfw + dasOpenGL + dasAudio over dasLLAMA")
+    package_description("Parrot: talk for a few seconds, Pocket TTS clones the voice, and the text you type is read aloud in it, with the take, the chunks and the stage times on the panels - Dear ImGui + dasAudio over dasLLAMA")
 }
 
 [export]

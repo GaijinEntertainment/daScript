@@ -1583,7 +1583,7 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "jobque_pool") $(v) { set_jobque_threads(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "phase_decode_workers") $(v) { set_phase_decode_workers(int(min(v, 2147483647l))) }
     // stored only — the queue may not exist yet; setup_dasllama_jobque applies these inside with_job_que
-    apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us(v) }
+    apply_i64_knob(rt, "jobque_spin_us") $(v) { set_jobque_spin_us_(v) }
     apply_i64_knob(rt, "jobque_join_poll") $(v) { set_jobque_join_poll(v) }
     apply_i64_knob(rt, "team_rank_gate") $(v) { set_team_rank_gate(int(min(v, 1l))) }
     apply_i64_knob(rt, "metal_tall_floor") $(v) { set_metal_tall_floor(v) }

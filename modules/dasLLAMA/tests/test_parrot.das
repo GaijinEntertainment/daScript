@@ -13,14 +13,14 @@ require _example_rail
 require ../../../examples/dasLLAMA/parrot/take.das
 
 // Parrot (examples/dasLLAMA/parrot): the take's pure side (take.das) is tested directly - the
-// resampler Silero hears through, the rule that ends a take, the clip's window, the text box's
-// editing rules and a button's box. The smoke cell spawns the example under --smoke with the
+// resampler Silero hears through, the rule that ends a take, the clip's window, the silence
+// countdown, the waveform's columns and the chunk ledger. The smoke cell spawns the example under --smoke with the
 // tree's own clip in place of the microphone and reads the witness lines it logs: the voice is
 // cloned from the clip, the text is said in it, and the say is read out to the end. Model-gated
 // on pocket-tts-en-kq.gguf (the Pocket file with its codec encoder, the one the page ships) under
 // models_dir(); the voice-activity model is the tree's own. The run opens the example's window
-// for about half a minute, so a box without a window server skips, and --null-audio keeps it
-// silent - and off the microphone, which --clip never opens anyway.
+// for about half a minute and plays the say through the mixer, so a box without a window server
+// skips; --clip stands in for the microphone, which the run never opens.
 
 [test]
 def test_vad_resampler(t : T?) {
@@ -100,53 +100,56 @@ def test_take_rules(t : T?) {
 }
 
 [test]
-def test_text_box(t : T?) {
-    t |> run("a key lands as its character: letters follow shift, the punctuation the poem needs, nothing else") @(t : T?) {
-        t |> equal(typed_char('A', false), 'a')
-        t |> equal(typed_char('A', true), 'A')
-        t |> equal(typed_char('1', false), '1')
-        t |> equal(typed_char('1', true), '!')
-        t |> equal(typed_char('/', true), '?')
-        t |> equal(typed_char(';', true), ':')
-        t |> equal(typed_char('\'', true), '"')
-        t |> equal(typed_char('-', true), '_')
-        t |> equal(typed_char(',', false), ',')
-        t |> equal(typed_char(' ', false), ' ')
-        t |> equal(typed_char('[', false), -1, "a bracket is not taken")
-        t |> equal(typed_char('=', false), -1, "nor an equals sign")
-        t |> equal(typed_char(300, false), -1, "nor a key past ASCII")
+def test_panels(t : T?) {
+    t |> run("the silence countdown: nothing before speech or during it, the seconds left after") @(t : T?) {
+        t |> equal(countdown_left(false, false, 0.5), 0.0, "no speech yet")
+        t |> equal(countdown_left(true, true, 0.5), 0.0, "speech still going")
+        t |> equal(countdown_left(true, false, 0.5), SILENCE_ENDS_TAKE_S - 0.5, "quiet for half a second")
+        t |> equal(countdown_left(true, false, 9.0), 0.0, "never below zero")
     }
-    t |> run("the box: a line fills to its width, the box to its height, backspace walks back over lines") @(t : T?) {
-        var lines <- lines_of("ab\ncd")
-        t |> equal(length(lines), 2)
-        t |> equal(lines[1], "cd")
-        append_char(lines, 'e')
-        t |> equal(lines[1], "cde")
-        for (_i in range(WRAP_CHARS)) {
-            append_char(lines, 'x')
+    t |> run("the waveform's columns: min and max per column, grown in drains, the open column redone") @(t : T?) {
+        var samples : array<float>
+        samples |> resize(1000)
+        for (i in range(1000)) {
+            samples[i] = float(i % 100) / 100.0 - 0.5
         }
-        t |> equal(length(lines[1]), WRAP_CHARS, "a full line takes no more")
-        erase_last(lines)
-        t |> equal(length(lines[1]), WRAP_CHARS - 1)
-        for (_i in range(MAX_LINES + 5)) {
-            new_line(lines)
+        var at_once : array<float2>
+        peaks_append(at_once, samples, 0l, 100)
+        t |> equal(length(at_once), 10, "ten full columns of a hundred")
+        t |> equal(at_once[0].x, -0.5, "the column's lowest sample")
+        t |> equal(at_once[0].y, 0.49, "and its highest")
+        var grown : array<float2>
+        var partial : array<float>
+        var fed = 0
+        var step = 37
+        while (fed < 1000) {
+            let n = min(step, 1000 - fed)
+            partial |> resize(fed + n)
+            for (i in range(fed, fed + n)) {
+                partial[i] = samples[i]
+            }
+            let from = int64(fed)
+            fed += n
+            step = (step * 7 + 11) % 260 + 1
+            peaks_append(grown, partial, from, 100)
         }
-        t |> equal(length(lines), MAX_LINES, "a full box takes no more lines")
-        for (_i in range(MAX_LINES)) {
-            erase_last(lines)
+        t |> equal(length(grown), length(at_once), "the same count")
+        var diffs = 0
+        for (a, b in grown, at_once) {
+            diffs += (a.x != b.x || a.y != b.y) ? 1 : 0
         }
-        t |> equal(length(lines), 2, "backspace on an empty line drops it, down to the line above")
-        var one <- lines_of("")
-        t |> equal(length(one), 1, "an empty text is one empty line")
-        erase_last(one)
-        t |> equal(length(one), 1, "the only line stays")
+        t |> equal(diffs, 0, "column for column the same picture - a column open at a drain's end is redone by the next")
+        var tail : array<float2>
+        peaks_append(tail, samples, 950l, 100)
+        t |> equal(length(tail), 10, "a start inside the last column redoes that column alone")
     }
-    t |> run("a button answers inside its label's box with a margin") @(t : T?) {
-        let box = float4(0.0, -20.0, 120.0, 4.0)   // left, top, right, bottom relative to the pen
-        t |> success(inside_box(box, 60.0, 600.0, 100.0, 590.0, 8.0), "on the glyphs above the pen")
-        t |> success(inside_box(box, 60.0, 600.0, 55.0, 605.0, 8.0), "inside the margin")
-        t |> success(!inside_box(box, 60.0, 600.0, 100.0, 640.0, 8.0), "below the label")
-        t |> success(!inside_box(box, 60.0, 600.0, 200.0, 590.0, 8.0), "past its right edge")
+    t |> run("a say is read out when every chunk played, and never before it has any") @(t : T?) {
+        let none : array<ChunkRow>
+        t |> success(!all_spoken(none), "no chunks yet")
+        var rows <- [ChunkRow(state = ChunkState.spoken), ChunkRow(state = ChunkState.speaking)]
+        t |> success(!all_spoken(rows), "one still speaking")
+        rows[1].state = ChunkState.spoken
+        t |> success(all_spoken(rows), "all played")
     }
 }
 
@@ -172,7 +175,7 @@ def private run_parrot(var out : string&) : int {
     set_env_variable("DASLLAMA_IMAGE", "0")   //! never mint a sidecar beside the stocked models
     let root = get_das_root()
     let argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/parrot/main.das", "--",
-                 "--models", models_dir(), "--smoke", "--clip", path_join(root, CLIP), "--text", SMOKE_TEXT, "--null-audio"]
+                 "--models", models_dir(), "--smoke", "--clip", path_join(root, CLIP), "--text", SMOKE_TEXT]
     let rc = run_and_capture(argv, out, 300.0)
     set_env_variable("DASLLAMA_IMAGE", prev_image)
     return rc
@@ -187,6 +190,20 @@ def private tail_of(out : string) : string {
     return slice(out, max(0, length(out) - 600))
 }
 
+//! the read-out line's two figures: "... is read out - S s of speech over P s of playback"
+def private read_out_figures(out : string) : tuple<speech : float; playback : float> {
+    var inscope lines <- split(out, "\n")
+    for (line in lines) {
+        continue if (find(line, READ_LINE) < 0)
+        var inscope words <- split(line, " ")
+        var inscope got <- [for (i in range(length(words) - 1)); to_float(words[i]); where words[i + 1] == "s" && (i + 2 >= length(words) || words[i + 2] == "of")]
+        if (length(got) >= 2) {
+            return (speech = got[0], playback = got[1])
+        }
+    }
+    return (speech = 0.0, playback = 0.0)
+}
+
 [test]
 def test_smoke_clones_and_says(t : T?) {
     t |> run("the smoke rail clones the voice from the clip, says the text in it and reads it out to the end") @(t : T?) {
@@ -198,6 +215,9 @@ def test_smoke_clones_and_says(t : T?) {
         t |> success(find(out, CLONED_LINE) >= 0, "the voice was cloned from the clip:\n{witness(out)}")
         t |> success(find(out, SAY_LINE) >= 0, "the text was said in the cloned voice:\n{witness(out)}")
         t |> success(find(out, READ_LINE) >= 0, "the say was read out:\n{witness(out)}")
+        let figures = read_out_figures(out)
+        t |> success(figures.speech > 2.0, "the say carries speech ({figures.speech} s):\n{witness(out)}")
+        t |> success(figures.playback >= figures.speech * 0.8, "the say played to its end ({figures.playback} s of playback for {figures.speech} s of speech): a clip read as stopped before its end cuts the say short\n{witness(out)}")
         t |> success(find(out, DONE_LINE) >= 0, "the rail ended on the read-out, not the frame cap:\n{witness(out)}")
     }
     t |> run("a --clip that is not audio is refused by name, before any window opens") @(t : T?) {
@@ -205,7 +225,7 @@ def test_smoke_clones_and_says(t : T?) {
         var out = ""
         let root = get_das_root()
         let argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/parrot/main.das", "--",
-                     "--models", models_dir(), "--smoke", "--clip", "{root}/examples/dasLLAMA/parrot/models.json", "--null-audio"]
+                     "--models", models_dir(), "--smoke", "--clip", "{root}/examples/dasLLAMA/parrot/models.json"]
         let rc = run_and_capture(argv, out, 60.0)
         t |> success(rc != 0, "a clip that does not decode is a refusal, not a run")
         t |> success(find(out, "did not decode") >= 0, "and it says so by name:\n{tail_of(out)}")

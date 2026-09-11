@@ -17,6 +17,9 @@ Module_dasIMGUI::Module_dasIMGUI() : Module("imgui") {
 }
 bool Module_dasIMGUI::initDependencies() {
 	if ( initialized ) return true;
+	auto mod_clipboard_core = Module::require("clipboard_core");
+	if ( !mod_clipboard_core ) return false;
+	if ( !mod_clipboard_core->initDependencies() ) return false;
 	initialized = true;
 	lib.addModule(this);
 	lib.addBuiltInModule();

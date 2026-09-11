@@ -502,6 +502,17 @@ def get_dispatch_worker_limit() : int {
     return get_dispatch_worker_limit_()
 }
 
+def set_jobque_spin_us(v : int64) {
+    //! The workers' spin-before-park window in microseconds (0 = park at once). Latched by
+    //! ``setup_dasllama_jobque`` — set it before that call; the default is 30 ms on a desktop and 0 in a browser.
+    set_jobque_spin_us_(v)
+}
+
+def get_jobque_spin_us() : int64 {
+    //! The spin window in force — ``set_jobque_spin_us``'s read half.
+    return get_jobque_spin_us_()
+}
+
 def select_matmul_backend_for_load() : bool {
     //! Select the best matmul backend for the NEXT model load (honors a pin). Returns true when
     //! the choice needs the loader to repack weights into its interleaved layout.

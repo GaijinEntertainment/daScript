@@ -63,9 +63,9 @@ if(DAS_VECMATH_SCALAR)
     add_compile_definitions(_TARGET_SIMD_SCALAR=1)
 endif()
 # Upper bound on JobQue worker threads (caps get_total_hw_threads / get_total_hw_jobs and the
-# persistent job pool). Empty = platform.h default: 4 on wasm (keeps a web build from spawning one
+# persistent job pool). Empty = platform.h default: 8 on wasm (keeps a web build from spawning one
 # Web Worker per logical core), effectively uncapped elsewhere (the cores-1 rule governs).
-set(DAS_MAX_HW_JOBS "" CACHE STRING "Max JobQue worker threads (empty = platform.h default: 4 wasm, uncapped elsewhere)")
+set(DAS_MAX_HW_JOBS "" CACHE STRING "Max JobQue worker threads (empty = platform.h default: 8 wasm, uncapped elsewhere)")
 if(DAS_MAX_HW_JOBS)
     add_compile_definitions(DAS_MAX_HW_JOBS=${DAS_MAX_HW_JOBS})
 endif()

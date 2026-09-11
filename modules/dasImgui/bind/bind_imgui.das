@@ -48,6 +48,7 @@ class ImguiGen : CppGenBind {
         )
         // CppGenBind constructor runs init_args(...) + setDefaultFiles()
         super(pfn, cfg.input, args)
+        require_load_modules |> push("clipboard_core")   // the shared module imports dasModuleClipboard (modules/REVIEW.md); its types stay out of this library, or imgui's ImVector fields resolve to clipboard_core's copies
         bind_root = cfg.output
         bind_module = mod_name
         bind_das_module = das_mod_name

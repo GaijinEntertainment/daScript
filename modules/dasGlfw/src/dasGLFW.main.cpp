@@ -99,17 +99,28 @@ namespace das {
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 namespace das {
-    // The CSS box the canvas can occupy = the document viewport (the iframe inner size on the
-    // examples page, the screen when that iframe is fullscreen). NOT canvas.clientWidth: under
+    // The CSS box the canvas can occupy = its parent's box when the page gave it one (a stage
+    // below a site nav), else the document viewport (the iframe inner size on the examples page,
+    // the screen when that iframe is fullscreen). NOT canvas.clientWidth: under
     // GLFW_SCALE_TO_MONITOR emscripten forces the canvas's own CSS size to the GLFW logical size,
-    // so reading it back would lock the harness to the initial size and never track the box.
+    // so reading it back would lock the harness to the initial size and never track the box. A
+    // parent that is the body is the viewport already, and a fullscreened canvas reads the
+    // document (the screen), since its parent's box does not follow it there.
     EM_JS(int, DAS_glfwCanvasCssWidth, (), {
-        var w = ((typeof document !== 'undefined') && document.documentElement && document.documentElement.clientWidth)
+        var doc = (typeof document !== 'undefined') ? document : null;
+        var c = (typeof Module !== 'undefined' && Module.canvas) || (doc && doc.getElementById('canvas'));
+        var p = c && c.parentElement;
+        if (doc && p && p !== doc.body && !doc.fullscreenElement && p.clientWidth > 0) return Math.round(p.clientWidth);
+        var w = (doc && doc.documentElement && doc.documentElement.clientWidth)
              || ((typeof window !== 'undefined') && window.innerWidth) || 0;
         return Math.round(w);
     });
     EM_JS(int, DAS_glfwCanvasCssHeight, (), {
-        var h = ((typeof document !== 'undefined') && document.documentElement && document.documentElement.clientHeight)
+        var doc = (typeof document !== 'undefined') ? document : null;
+        var c = (typeof Module !== 'undefined' && Module.canvas) || (doc && doc.getElementById('canvas'));
+        var p = c && c.parentElement;
+        if (doc && p && p !== doc.body && !doc.fullscreenElement && p.clientHeight > 0) return Math.round(p.clientHeight);
+        var h = (doc && doc.documentElement && doc.documentElement.clientHeight)
              || ((typeof window !== 'undefined') && window.innerHeight) || 0;
         return Math.round(h);
     });

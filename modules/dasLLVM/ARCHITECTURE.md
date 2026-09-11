@@ -3,8 +3,9 @@
 The design document `REVIEW.md` cites. Numbered sections are the stable reference targets;
 usage and installation live in `README.md`, the debugger rail and its roadmap in `DEBUGGING.md`.
 Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU
-classes), `ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12) and
-`ARCHITECTURE_JIT_ENTRY.md` (the entry module, the emitter-free cache hit, the candidate-set key).
+classes), `ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12),
+`ARCHITECTURE_JIT_ENTRY.md` (the entry module, the emitter-free cache hit, the candidate-set key)
+and `ARCHITECTURE_EXE.md` (the standalone exe's link decision and startup - sec.10).
 
 ## 1. The jit backend pipeline
 
@@ -271,18 +272,10 @@ operand and answers the wrong sign there, and `+relaxed-simd` is a whole-module 
 turns float-vector `min`/`max` and `mad` into engine-defined instructions (NaN and signed-zero
 answers, fusion) - the feature string stays `+simd128,+nontrapping-fptoint`, the runtime archive's.
 
-## 10. A standalone exe's require-resolver rows
+## 10. The standalone exe
 
-`inject_main` (`daslib/llvm_exe.das`) decides the exe's link - the runtime-only library, or the
-whole compiler library when the program registers every builtin module, ships a dynamic module,
-or reaches a compiler-lib module - and emits the `register_native_path` rows the host's module
-scan loaded only under the whole-lib link, once, after that decision. The rows feed the
-compile-time require resolver (`FsFileAccess::getModuleInfo`), which lives in the compiler
-library: a runtime-only exe has no compiler and can never reach them, and every row it would
-carry is a startup `jit_register_native_path_resolve` call - one exe-file lookup and one stat per
-row, for every row the host scan loaded - and a build-machine path baked into the binary. A whole-lib
-exe (`dastest.exe`, which compiles test files at run time) still carries every row, re-rooted at
-run time the way dynamic modules are.
+Moved to `ARCHITECTURE_EXE.md`: sec.1 (the require-resolver rows) and sec.2 (a global
+initializer's addresses are filled at startup).
 
 ## 11. A global's address is a memory(none) lookup at its use site
 

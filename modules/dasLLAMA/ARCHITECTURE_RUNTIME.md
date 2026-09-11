@@ -217,6 +217,18 @@ measured race - records the fast-tier-only "uncapped" default rather than a meas
 hybrid box ignores it and keeps the fast-tier cap; a non-zero value is a measured choice and
 applies.
 
+### 2.18a A browser's workers park {#browser-workers-park}
+
+The spin-before-park window (`g_jobque_spin_us`, 30 ms on a desktop) keeps a worker hot through
+the serial gaps of a token; in a browser the workers are web workers, and one that spins holds a
+core the caller's own thread is competing for, so the window costs more than the wake it saves.
+Pocket TTS in Chrome (wasm64, eight workers in the pool) generates at 1.1x real time with the
+window and the renderer at 800% CPU, and at 1.4x with the workers parked at ~112% - the same
+text, three runs each; team dispatch keeps its small edge there, and the pool still pays (one
+worker reads 0.7x). The engine's `[init]` therefore sets the window to 0 when the platform is
+emscripten (`dasllama_jobque_spin_default`); a box profile's `jobque_spin_us` and the setter still
+override it, and a program reads the value in force through `get_jobque_spin_us`.
+
 ### 2.19 The CPU MoE region list caps a region at 32 rows {#moe-region-split}
 
 The grouped MoE prefill hands its expert regions to the batch dispatcher as (weight offset, first

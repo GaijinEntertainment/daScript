@@ -164,8 +164,8 @@ def copy_floats(var d : float?; s : float const?; n : int64) {}
 // useful window tracks the box's serial-gap lengths, not the kernel. 30ms covers the between-call
 // gaps of a decode/prefill loop, keeping workers hot through a whole token instead of parking.
 var g_jobque_spin_us = 30000l
-def public set_jobque_spin_us(v : int64) { g_jobque_spin_us = max(v, 0l) }
-def public get_jobque_spin_us() : int64 { return g_jobque_spin_us }
+def set_jobque_spin_us_(v : int64) { g_jobque_spin_us = max(v, 0l) }
+def get_jobque_spin_us_() : int64 { return g_jobque_spin_us }
 
 // Join-poll level for fork/join joins (see setup_dasllama_jobque): level*1024*128 relax-rounds
 // on the joining thread before it parks (0 = park immediately); the poll burns only the
@@ -288,6 +288,13 @@ def dasllama_jobque_threads_cap() {
         set_jobque_threads(cores)
         set_gemv_lane_cap(perf)
         set_phase_decode_workers(max(perf - 1, 1))
+    }
+}
+
+[init, arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-park")]
+def dasllama_jobque_spin_default() {
+    if (get_running_platform_name() == "emscripten") {   // the RUNNING platform: the compile-time name is the cross-compile's host
+        g_jobque_spin_us = 0l
     }
 }
 

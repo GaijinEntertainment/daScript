@@ -87,7 +87,9 @@
      copy only on a browser that can run the build, so an unsupported one loads no program -->
 <template id="loader">{{{ SCRIPT }}}</template>
 <script>
-  var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1, Tab:1 };
+  // the keys the page would scroll or leave on; not the space bar, whose keypress the editor
+  // needs (a prevented keydown swallows it) - the body cannot scroll anyway
+  var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, PageUp:1, PageDown:1, Home:1, End:1, Tab:1 };
   window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key]) e.preventDefault(); }, { passive: false });
 
   // the IMAGE_VERSION this page's program was built with - the deploy stamps it (pages.yml, from
@@ -200,12 +202,31 @@
     return m;
   }
 
-  // fetch every file with one shared progress bar, sizes from the manifest
+  // the fetched bytes' digest, so a wrong body under an HTTP 200 (a proxy's error page) is refused
+  // instead of cached under the manifest's hash; '' where the page cannot hash (no secure context)
+  async function sha256Hex(bytes) {
+    if (!(window.crypto && crypto.subtle)) return '';
+    var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    var s = '';
+    for (var i = 0; i < d.length; i++) s += (d[i] < 16 ? '0' : '') + d[i].toString(16);
+    return s;
+  }
+
+  // fetch every file with one shared progress bar, sizes from the manifest. A file this origin
+  // already holds in its Cache Storage under its sha256 is read from there instead, so a
+  // revisit fetches nothing and a re-minted set (a new hash) fetches only what changed; a fetched
+  // file is cached only once its bytes hash to the manifest's sha256; a browser without the
+  // store, or one that refuses the bytes, simply fetches every time
   async function fetchModels(manifest, onFile) {
     var total = manifest.files.reduce(function (a, f) { return a + (f.bytes || 0); }, 0), done = 0;
+    var store = null;
+    try { store = (typeof caches !== 'undefined') ? await caches.open('dasllama-models') : null; } catch (e) { store = null; }
     for (var i = 0; i < manifest.files.length; i++) {
-      var name = manifest.files[i].name;
-      var r = await fetch(modelsBase + name);
+      var f = manifest.files[i], name = f.name;
+      var key = new URL(modelsBase + name, location.href).href + '?sha256=' + (f.sha256 || '');
+      var cached = null;
+      try { cached = store ? await store.match(key) : null; } catch (e) { cached = null; }
+      var r = cached || await fetch(modelsBase + name);
       if (!r.ok) throw new Error(name + ': HTTP ' + r.status);
       var chunks = [], reader = r.body.getReader();
       for (;;) {
@@ -214,11 +235,32 @@
         chunks.push(step.value);
         done += step.value.length;
         setProgress(done, total);
-        setStatus('fetching ' + name + '  ' + (done / 1048576).toFixed(0) + ' / ' + (total / 1048576).toFixed(0) + ' MB');
+        setStatus((cached ? 'reading ' : 'fetching ') + name + '  ' + (done / 1048576).toFixed(0) + ' / ' + (total / 1048576).toFixed(0) + ' MB');
       }
       var bytes = new Uint8Array(chunks.reduce(function (a, c) { return a + c.length; }, 0)), off = 0;
       chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
+      if (!cached) {
+        var digest = await sha256Hex(bytes);
+        if (digest && f.sha256 && digest !== f.sha256) {
+          throw new Error(name + ': the fetched bytes do not match the manifest (sha256 ' + digest.slice(0, 12) + ', expected ' + f.sha256.slice(0, 12) + ') - reload the page; nothing was cached');
+        }
+        if (store && digest && digest === f.sha256) {
+          try { await store.put(key, new Response(bytes, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (e) { /* no room: fetched again next time */ }
+        }
+      }
       onFile(name, bytes);
+    }
+    // this page's files the manifest no longer names leave the store (a sibling page's keys sit
+    // under another path and stay), so a re-mint does not wait on the browser's quota eviction
+    if (store) {
+      try {
+        var base = new URL(modelsBase, location.href).href, keep = {};
+        manifest.files.forEach(function (g) { keep[new URL(modelsBase + g.name, location.href).href + '?sha256=' + (g.sha256 || '')] = true; });
+        var held = await store.keys();
+        for (var k = 0; k < held.length; k++) {
+          if (held[k].url.indexOf(base) === 0 && !keep[held[k].url]) await store.delete(held[k]);
+        }
+      } catch (e) { /* the store refused the sweep: the next visit tries again */ }
     }
   }
 

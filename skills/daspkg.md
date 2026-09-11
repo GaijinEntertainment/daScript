@@ -363,6 +363,8 @@ def release() {
 
 A game keeps its plain desktop `main` - on wasm the browser lifecycle auto-drives `init`/`update`/`shutdown` per `requestAnimationFrame` and **bypasses `main`**. No `eval_main_loop` / per-platform edits. (Graphics examples may need `options stack = 8_388_608` - decs nested queries overflow the 16 KB default context stack in the cross-compiled exe.)
 
+A branch on the platform that must hold in the artifact reads `get_running_platform_name()` (`"emscripten"` in the browser). `get_platform_name()` is folded at compile time, so a cross-compiled artifact carries the build HOST's name (`"darwin"` on a Mac) - an `[init]` gated on it never fires in the browser.
+
 ## Resetting a Project (cleanup)
 
 Use `cleanup` to wipe a consumer project's daspkg state so the next `install` starts from scratch - useful when auditing packages or recovering from a bad partial install.

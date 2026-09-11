@@ -16,10 +16,13 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   test reaches it without a window.
 - `parrot/` - a browser example: you press record and talk, Silero VAD ends the take when you go
   quiet, Pocket TTS clones the voice from the take (a file with its codec encoder and its
-  roster, which speaks until a take replaces it), and the text in the box is read aloud in it on
-  the say button; recording again
-  replaces the voice. Same four files. Nothing leaves the program: the take is cloned in memory
-  and never written.
+  roster, which the picker offers beside the clone), and the text in the editor is read aloud in
+  it on the say button; recording again replaces the voice. Its panels are Dear ImGui through
+  the `imgui_harness` (sec.3.7): the take's waveform and level as it records, the say's chunks
+  as they are generated and spoken, the stage times of each, the job queue's knobs. Same four
+  files, plus `take.das`, the pure side (the take's numbers, the waveform columns, the chunk
+  ledger) a test reaches without a window. Nothing leaves the program: the take is cloned in
+  memory and never written.
 - `wasm/dlim_config/` - a wasm-only program: prints the running build's DlimConfiguration JSON.
   `wasm/mint_models.py` - the deploy's staging step for a browser example's model set.
   `wasm/run_node.js` - runs the wasm64 engine host under node.
@@ -57,8 +60,9 @@ parrot a text to say or a take to clone, the PCM riding in the record) and pops 
 from a second stream; a `SeqBox` carries the number of the story (parrot: the say) being told, so
 a queued sentence of one the user replaced is skipped instead of synthesized. The thread's own
 setup - the TTS model path and the voice - rides the same request stream ahead of the first
-request. Parrot's thread answers a say with its chunk count before the first clip, so the frame
-thread can tell the last clip from a pause. A string captured by the thread's lambda would be a
+request. Parrot's thread answers a say with its chunk count before the first clip, then each
+chunk's text before it synthesizes it and the clip with its stage times after, so the frame
+thread can show what is being generated and tell the last clip from a pause. A string captured by the thread's lambda would be a
 pointer into the frame thread's heap, which that thread reuses on its own schedule; a browser
 worker starts slowly enough to read story text where the path was. An archived message is copied
 out of the stream into the reader's heap, so the stream is the one channel that is safe for a
@@ -66,18 +70,22 @@ string.
 
 ### 3.3 Input is polled {#polled-keys}
 
-A browser example reads the keyboard with `glfwGetKey` each frame, edge-detected per key code,
-never through a GLFW callback. In the browser build a callback lambda fires from a JavaScript
-event outside any frame of the program, where the example's state is not live, and the program
-traps. A printable GLFW key code is its upper-case ASCII, so the key range doubles as the
-character range for a typed line, and repeats come from a hold timer. The mouse is read the same
-way: parrot's buttons are text, and a click is `glfwGetMouseButton` edge-detected against the
-label's own box (the glyph quads rise above the pen position) in design pixels. In the browser
-the surface is the document viewport, and the page's stage sits below the nav, so the picture is
-letterboxed; Emscripten maps a click through the canvas element's box with one ratio per axis,
-which is exact only when that box is the picture - so a shell sizes the canvas element to the
-letterboxed box (`max-width`/`max-height` on the replaced element) instead of stretching it over
-the stage with `object-fit`.
+A browser example that draws its own text reads the keyboard with `glfwGetKey` each frame,
+edge-detected per key code, never through a GLFW callback. In the browser build a callback
+lambda fires from a JavaScript event outside any frame of the program, where the example's state
+is not live, and the program traps. A printable GLFW key code is its upper-case ASCII, so the key
+range doubles as the character range for a typed line, and repeats come from a hold timer. The
+mouse is read the same way: a click is `glfwGetMouseButton` edge-detected against a label's own
+box in design pixels. An example on the imgui harness (sec.3.7) reads nothing from GLFW itself:
+the backend's callbacks are C++ and enter no daslang code, and the program reads ImGui's key and
+mouse state inside its frame. In the browser the GLFW window is reconciled every frame to the
+box the canvas may fill - its parent's box, the stage below the nav (dasGlfw's glue reads the
+document viewport only when the parent is the body, or in fullscreen) - so the program's
+picture is the stage; a program that keeps its own aspect is letterboxed inside it. Emscripten
+maps a click through the canvas element's box with one ratio per axis, which is exact only when
+that box is the picture - so a shell sizes the canvas element to the letterboxed box
+(`max-width`/`max-height` on the replaced element) instead of stretching it over the stage with
+`object-fit`.
 
 ### 3.4 The model set is minted for the build that ships it
 
@@ -92,7 +100,13 @@ DlimConfiguration, copies the packs, files and tree files as they are, writes
 with no image carries the version the deploy expects) and
 stamps that version into the page's `/* @image-version */ 0` slot. The shell reads the manifest,
 refuses a set minted for another version before fetching it, and shows a program abort's last
-engine lines on the page. The configuration the mint bakes against comes from the wasm build
+engine lines on the page. A fetched file is put in the origin's Cache Storage under its URL and
+sha256 once its bytes hash to that sha256 - a wrong body under an HTTP 200, a proxy's error
+page, is refused and never cached, since the store would serve it on every later visit - and a
+later visit reads it from there, so a set fetches once per browser and a re-minted file (a new
+hash) fetches alone; the page's files the manifest no longer names leave the store after the
+set is read (the three pages share one store, so each sweeps only the keys under its own
+models path); a browser without the store fetches every time. The configuration the mint bakes against comes from the wasm build
 itself: `wasm/dlim_config/` is cross-compiled and run under node in the deploy, because an image
 is keyed by the build's identity and a set minted for a previous build is declined by the next.
 
@@ -116,7 +130,47 @@ plus a quarter second at each end, never longer than the cap, and goes to the sp
 clone request, so the clone runs off the frame thread like a synthesis. A take with no speech in
 it is dropped, and the status says whether the device gave nothing, silence, or too little. A
 take starts by cancelling a say in flight - a clip still playing would be recorded - and the
-pure side of all this (`take.das`) is what the model-free cells test.
+pure side of all this (`take.das`) is what the model-free cells test. The gain slider scales the
+frames as they land in the take, before the detector hears them and before the clone, so it
+reaches a quiet microphone; the physical input gain is the browser's or the system's, out of the
+program's reach.
+
+### 3.7 Parrot's panels {#parrot-panels}
+
+Parrot draws with Dear ImGui through `imgui_harness`, the same lifecycle the graphics labs run
+in the browser: a dockspace over the viewport with five dock windows the user can split and
+tab at will, laid out once on the first frame - `parrot` across the top (the promise that the
+recording stays in the window as its first line, a status chip that pulses with a spinner
+beside it while anything is going on, the status line), the voice on the left (the record disc
+with the silence countdown drawn around it, the level, the gain, the take's waveform with its
+kept window shaded, the voice picker), the text in the middle (the editor, the play and stop
+icon buttons naming the voice, the say's chunks in their state's colour) with the output below
+it (the say's waveform growing chunk by chunk with a tick at each chunk's start and the
+playhead, the per-chunk table of stage times), and the lab on the right (the model's facts, the
+job queue's knobs, the measure button). The shell keeps the space bar's keydown for the editor:
+a prevented keydown swallows the keypress the editor reads, and the page cannot scroll anyway;
+the editor takes Tab as a character (`AllowTabInput`), since a Tab that moves focus is no use
+in a text one types into.
+The say is a ledger of chunks (`ChunkRow` in `take.das`): the speech thread answers a say with
+its chunk count, then each chunk's text before its synthesis and its clip with the stage times
+after, so a chunk reads pending, generating, generated, speaking and spoken in turn, and the
+say is read out when every chunk played. The playhead is the mixer's own clock: each clip gets
+a fresh status box through `set_status_update`, read every frame for its playback position and
+its stopped state, and released when the clip ends - a box shared across clips reads the last
+clip's stop as the next one's, which cuts the say short. A waveform is min/max columns of ten
+milliseconds each, grown as frames land and redone from the column a drain left open, drawn one
+pixel per column or per group of columns. The job queue knobs reach the queue the speech thread
+dispatches on, applied after the thread's own setup has run, since that setup restores the
+engine's defaults: the jobs slider goes through the engine's own cap (`set_dispatch_worker_limit`,
+which also stands the hybrid pool's per-phase parking down - a raw `set_jobque_worker_limit` is
+overridden by it at the next phase) and the live queue's limit, the toggles through
+`set_jobque_team_mode` and `set_jobque_worker_spin`, and the spin toggle starts from the engine's
+default for the platform (`get_jobque_spin_us`: parked in a browser, a 30 ms window on a desktop);
+the measure button says the text three times with playback off and reports each run's speed as
+times real time - seconds of audio per second of generation, the inverse of the engine's
+real-time factor - the same figure on any box. The output waveform keeps a fixed time scale
+(thirty seconds at least) so the playhead moves at one speed while chunks land. The chords are Ctrl (or Command) with Enter to say and with R
+to record and stop.
 
 ## 4. Exception ledger
 

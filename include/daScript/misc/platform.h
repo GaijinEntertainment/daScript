@@ -623,11 +623,13 @@ private:
 
 // Upper bound on JobQue worker threads, and therefore on get_total_hw_threads / get_total_hw_jobs.
 // On wasm the persistent job pool spawns one Web Worker per thread (navigator.hardwareConcurrency
-// of them without a cap), so keep 4 there; everywhere else the cores-1 rule in job_que.cpp governs
-// and the cap is effectively off. Override in CMake (-DDAS_MAX_HW_JOBS=N) either way.
+// of them without a cap), so cap it at 8 there - inside the 16-worker pthread pool the wasm64
+// builds link, with room for the program's own threads; everywhere else the cores-1 rule in
+// job_que.cpp governs and the cap is effectively off. Override in CMake (-DDAS_MAX_HW_JOBS=N)
+// either way.
 #ifndef DAS_MAX_HW_JOBS
 #if defined(__EMSCRIPTEN__)
-#define DAS_MAX_HW_JOBS 4
+#define DAS_MAX_HW_JOBS 8
 #else
 #define DAS_MAX_HW_JOBS 1024
 #endif

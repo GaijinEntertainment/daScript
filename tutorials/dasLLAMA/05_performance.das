@@ -72,7 +72,8 @@ def bench_gen(m : Model; tag : string) {
 //     queue lock at join time instead of one push (and one worker wake) per job;
 //   spin-before-park (set_jobque_worker_spin) — idle workers spin-poll before parking,
 //     so a token's back-to-back matmuls never pay the OS thread-wake per dispatched job.
-//     The window ships at 30ms; box_profile.json's "runtime" `jobque_spin_us` tunes it per box.
+//     The window ships at 30ms on a desktop and 0 in a browser, where a spinning web worker costs
+//     the caller its core; box_profile.json's "runtime" `jobque_spin_us` tunes it per box.
 //   join poll (set_jobque_join_spin) — the joining thread polls the wait counter before
 //     parking (ships at level 50, ggml's --poll denomination; "runtime" `jobque_join_poll`);
 //   and the caller's own thread priority — in team mode only the dispatch caller
@@ -100,6 +101,19 @@ def section_threads(m : Model) {
         bench_gen(m, "capped:   ")
     }
     set_dispatch_worker_limit(0)
+
+    // set_jobque_spin_us is the workers' spin-before-park window: how long an idle worker
+    // spins before it parks (0 = at once); get_jobque_spin_us reads it back. The desktop
+    // default is 30 ms, which keeps the workers hot through a token's serial gaps; a browser's
+    // is 0, since a spinning web worker costs the caller its core. Latched like the cap.
+    let spin_was = get_jobque_spin_us()
+    set_jobque_spin_us(0l)
+    with_job_que() {
+        setup_dasllama_jobque()
+        print("workers park at once (spin window {get_jobque_spin_us()} us) | ")
+        bench_gen(m, "parked:   ")
+    }
+    set_jobque_spin_us(spin_was)   // the platform's default back
 }
 
 // ──────────────────────────────────────────────────────────────────────────
