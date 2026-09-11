@@ -48,8 +48,9 @@ under it would GC-purge the box's tuned images, so the runner refuses `--no-tune
 (`test_audio_embedder`'s direct-route cell) skips on the knob and keeps its coverage on the tuned
 arm. The runner redirects
 the COMPLETE output to a log file, and prints that path on the DONE line. It owns the dastest
-timeout, and repeats a file only when `--nreps` is passed explicitly (default 1, never
-best-of-N). Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
+timeout - 3600 s per child on the stocked gate and under `--full`, where the large tier's parity
+file alone runs past 20 minutes, 1200 s in arm mode - and repeats a file only when `--nreps` is
+passed explicitly (default 1, never best-of-N). Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
 that cache serves dastest's own module graph only - the test program dastest compiles at
 runtime sits past it, so each child still pays the engine compile.
 No preflight tier runs the two per-PR suites: `preflight -- --only dasllama-model-free` and
