@@ -29,6 +29,7 @@ require strudel/strudel_live
 require daslib/strings_boost
 require daslib/strings_convert
 require live_host
+require arcanoid_postfx
 
 // --- Constants ---
 
@@ -343,15 +344,22 @@ var @uniform v_view : float4x4
 var @uniform v_projection : float4x4
 var @inout f_normal : float3
 var @inout f_position : float3
+var @inout f_view_pos : float3
 var @uniform f_Color : float4
-var @out f_FragColor : float4
+var @uniform f_ZFar : float
+var @out @location = 0 f_FragColor : float4
+var @out @location = 1 f_FragNormalDepth : float4     // view-space normal and linear depth, the occlusion pass's input
+
+let Z_FAR = 100.0
 
 [vertex_program]
 def vs_arcanoid {
     f_normal = normalize(float3x3(v_model) * v_normal)
     let tpos = v_model * float4(v_position, 1.0)
     f_position = tpos.xyz
-    gl_Position = v_projection * v_view * tpos
+    let vpos = v_view * tpos
+    f_view_pos = vpos.xyz
+    gl_Position = v_projection * vpos
 }
 
 [fragment_program]
@@ -360,6 +368,13 @@ def fs_arcanoid {
     let k = saturate(-dot(LIGHT_DIRECTION, normal))
     f_FragColor.xyz = f_Color.xyz * (k * 0.8 + 0.2)
     f_FragColor.w = f_Color.w
+    // view-space normal in xy (z is recovered from them, every visible face points at the camera),
+    // linear depth split into a high and a low byte, so an 8-bit target still resolves 1/65535
+    let view_nrm = normalize(float3x3(v_view) * normal)
+    let depth = saturate(-f_view_pos.z / f_ZFar)
+    let hi = floor(depth * 255.0) / 255.0
+    let lo = (depth - hi) * 255.0
+    f_FragNormalDepth = float4(view_nrm.xy * 0.5 + float2(0.5), hi, lo)
 }
 
 let SHADOW_COLOR = float3(0.05, 0.03, 0.08)
@@ -439,6 +454,7 @@ var hud_font : Font?
 def create_gl_objects() {
     program = cache_shader_program(vs_arcanoid`shader_text, fs_arcanoid`shader_text)
     shadow_program = cache_shader_program(vs_arcanoid`shader_text, fs_shadow`shader_text)
+    create_postfx_programs()
     cube <- create_geometry_fragment <| gen_cube()
     brick_geo <- create_geometry_fragment <| gen_rounded_cube(0.2)
     ground_plane <- create_geometry_fragment <| gen_plane(GenDirection.xz)
@@ -545,6 +561,8 @@ var @live lives = START_LIVES
 var @live game_state = GameState.menu
 var space_was_pressed = false
 var esc_was_pressed = false
+var f1_was_pressed = false
+var f2_was_pressed = false
 var @live god_mode = false
 var @live game_speed = 1.0
 var @live prev_music_state = GameState.menu
@@ -757,12 +775,92 @@ def reset_powerups() {
 
 var @live paddle_x = 0.0
 
-def update_paddle(dt : float) {
-    if (glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-        paddle_x += PADDLE_SPEED * dt
+// --- Spectator (attract) mode ---
+// The menu left alone for ATTRACT_IDLE seconds starts a round the bot plays, old-arcade style:
+// the paddle chases the lowest moving ball at its own speed and releases a held ball after a
+// short hold. Any key, the round's end, or ATTRACT_LENGTH seconds returns to the menu.
+
+let ATTRACT_IDLE = 30.0
+let ATTRACT_LENGTH = 45.0
+let BOT_RELEASE_HOLD = 0.6
+let BOT_DEADZONE = 0.05
+
+var @live spectator = false
+var @live idle_timer = 0.0
+var @live attract_timer = 0.0
+var @live bot_hold_timer = 0.0
+
+//! fresh bricks, score and lives; the caller sets the state
+def new_round() {
+    decs::restart()
+    spawn_bricks()
+    commit()
+    score = 0
+    lives = START_LIVES
+    paddle_x = 0.0
+    reset_powerups()
+}
+
+def start_attract() {
+    new_round()
+    spectator = true
+    attract_timer = 0.0
+    bot_hold_timer = 0.0
+    game_state = GameState.playing
+}
+
+def end_attract() {
+    spectator = false
+    idle_timer = 0.0
+    decs::restart()
+    commit()
+    reset_powerups()
+    game_state = GameState.menu
+}
+
+//! the x the bot steers under: the moving ball nearest the paddle, or where the paddle already is
+def bot_target_x() : float {
+    var target = paddle_x
+    var best_z = FIELD_H * 2.0
+    query() $(b : Ball) {
+        if (b.stuck == 0 && b.pos.z < best_z) {
+            best_z = b.pos.z
+            target = b.pos.x
+        }
     }
-    if (glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-        paddle_x -= PADDLE_SPEED * dt
+    return target
+}
+
+def update_bot_paddle(dt : float) {
+    let diff = bot_target_x() - paddle_x
+    if (abs(diff) > BOT_DEADZONE) {
+        paddle_x += clamp(diff, -PADDLE_SPEED * dt, PADDLE_SPEED * dt)
+    }
+    if (has_stuck_balls()) {
+        bot_hold_timer += dt
+        if (bot_hold_timer >= BOT_RELEASE_HOLD) {
+            bot_hold_timer = 0.0
+            query() $(var b : Ball) {
+                if (b.stuck != 0) {
+                    b.vel = stuck_launch_velocity(b.stuck_offset)
+                    b.stuck = 0
+                    b.stuck_offset = 0.0
+                }
+            }
+        }
+    }
+}
+
+def update_paddle(dt : float) {
+    if (spectator) {
+        update_bot_paddle(dt)
+    } else {
+        if (glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+            paddle_x += PADDLE_SPEED * dt
+        }
+        if (glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+            paddle_x -= PADDLE_SPEED * dt
+        }
     }
     let pw = current_paddle_w()
     let limit = FIELD_W * 0.5 - pw * 0.5
@@ -1050,7 +1148,7 @@ def update_particles(eid : EntityId; var p : Particle) {
     p.vel.y -= 6.0 * tick_dt  // gravity
 }
 
-[decs(stage=draw)]
+[decs(stage=draw_fx)]
 def draw_particles(p : Particle) {
     let frac = p.lifetime / p.max_life
     let alpha = frac
@@ -1093,7 +1191,7 @@ def update_trail(eid : EntityId; var t : Trail) {
     }
 }
 
-[decs(stage=draw)]
+[decs(stage=draw_fx)]
 def draw_trail(t : Trail) {
     let alpha = t.lifetime / 0.15
     var color = BALL_COLOR
@@ -1179,6 +1277,8 @@ struct GameStatusResult {
     god_mode : bool
     speed : float
     paddle_x : float
+    spectator : bool
+    idle : float
 }
 
 [live_command(description="Show score, lives, ball/brick counts")]
@@ -1192,7 +1292,15 @@ def cmd_game_status(_input : JsonValue?) : JsonValue? {
     result.god_mode = god_mode
     result.speed = game_speed
     result.paddle_x = paddle_x
+    result.spectator = spectator
+    result.idle = idle_timer
     return JV(result)
+}
+
+[live_command(description="Start the spectator round now, as the idle menu would")]
+def cmd_attract(_input : JsonValue?) : JsonValue? {
+    start_attract()
+    return JV(true)
 }
 
 [live_command(description="Spawn a new set of bricks")]
@@ -1247,14 +1355,9 @@ def cmd_powerup(input : JsonValue?) : JsonValue? {
 
 [live_command(description="Reset game to initial state")]
 def cmd_reset_game(_input : JsonValue?) : JsonValue? {
-    decs::restart()
-    spawn_bricks()
-    commit()
-    score = 0
-    lives = START_LIVES
-    paddle_x = 0.0
+    spectator = false
+    new_round()
     game_state = GameState.playing
-    reset_powerups()
     return JV(true)
 }
 
@@ -1305,6 +1408,7 @@ def draw_text(text : string; x, y : int; tint : float3 = float3(1.0)) {
     var quads <- (*hud_font) |> create_quads(text)
     (*hud_font) |> draw_quads_2d(quads, display_w, display_h, x, y, tint)
     delete quads
+    rebind_scene_target()
 }
 
 def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) {
@@ -1315,12 +1419,15 @@ def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) 
     let x = cx - tw / 2
     (*hud_font) |> draw_quads_2d(quads, display_w, display_h, x, y, tint)
     delete quads
+    rebind_scene_target()
 }
 
 def pulse_tint(base : float3) : float3 {
     let pulse = 0.5 + 0.5 * sin(get_uptime() * 4.5)
     return lerp(base * 0.86, base * 1.06, pulse)
 }
+
+let HUD_MARGIN = 48     // clear of the tube's curved corner
 
 def draw_hud() {
     let cx = display_w / 2
@@ -1330,13 +1437,18 @@ def draw_hud() {
         draw_text_centered("PRESS SPACE TO START", cx, cy + 10, pulse_tint(float3(0.7, 0.7, 0.7)))
         return
     }
-    draw_text("SCORE: {score}", 10, 35, float3(1.0, 1.0, 1.0))
+    draw_text("SCORE: {score}", HUD_MARGIN, 45, float3(1.0, 1.0, 1.0))
     var lives_color = float3(0.3, 0.8, 1.0)
     if (lives_blink_timer > 0.0) {
         let blink = sin(lives_blink_timer * 20.0) > 0.0 ? 1.0 : 0.3
         lives_color = float3(blink, 1.0, blink)
     }
-    draw_text("LIVES: {lives}", 10, 70, lives_color)
+    draw_text("LIVES: {lives}", HUD_MARGIN, 80, lives_color)
+    if (spectator) {
+        draw_text_centered("DEMO", cx, 35, float3(1.0, 0.8, 0.2))
+        draw_text_centered("PRESS SPACE TO PLAY", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
+        return
+    }
     if (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.2, 0.2))
         draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
@@ -1406,15 +1518,13 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
         return
     }
     live_get_framebuffer_size(display_w, display_h)
-    glViewport(0, 0, display_w, display_h)
-    glClearColor(0.05, 0.02, 0.1, 1.0)
-    glClearDepthf(1.0)   // glClearDepth(double) is desktop-GL-only; glClearDepthf is WebGL2-safe (and exists on desktop GL too)
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    glEnable(GL_DEPTH_TEST)
+    ensure_render_targets(display_w, display_h)
+    begin_scene_pass(float3(0.05, 0.02, 0.1))
     glEnable(GL_CULL_FACE)
 
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_minus1_to_1(45.0 * PI / 180.0, aspect, 0.1, 100.0)
+    v_projection = perspective_rh_minus1_to_1(FOV_Y, aspect, 0.1, Z_FAR)
+    f_ZFar = Z_FAR
     v_view = look_at_rh(
         float3(0.0, 14.0, -4.0),
         float3(0.0, 0.0, 5.0),
@@ -1429,26 +1539,45 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     let esc_pressed = glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS
     let esc_just = esc_pressed && !esc_was_pressed
     esc_was_pressed = esc_pressed
+    let left_pressed = glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS
+    let right_pressed = glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS
+    let any_key = space_pressed || esc_pressed || left_pressed || right_pressed
+    idle_timer = any_key ? 0.0 : idle_timer + dt
+    // F1 and F2 toggle the CRT and the occlusion pass; they are looks, not play, so they leave a demo running
+    let f1_pressed = glfwGetKey(live_window, GLFW_KEY_F1) == GLFW_PRESS
+    let f2_pressed = glfwGetKey(live_window, GLFW_KEY_F2) == GLFW_PRESS
+    if (f1_pressed && !f1_was_pressed) {
+        crt_enabled = !crt_enabled
+    }
+    if (f2_pressed && !f2_was_pressed) {
+        ssao_enabled = !ssao_enabled
+    }
+    f1_was_pressed = f1_pressed
+    f2_was_pressed = f2_pressed
+    // Spectator: the menu left alone starts a bot round; a key, the round's end or the clock ends it
+    if (spectator) {
+        attract_timer += dt
+        let round_over = game_state == GameState.game_over_state || game_state == GameState.win_state
+        if (any_key || attract_timer > ATTRACT_LENGTH || (round_over && attract_timer > ATTRACT_LENGTH * 0.5)) {
+            end_attract()
+        }
+    } elif (game_state == GameState.menu && idle_timer >= ATTRACT_IDLE) {
+        start_attract()
+    }
     // Menu → start
     if (game_state == GameState.menu && space_just) {
         game_state = GameState.playing
     }
     // Pause toggle
-    if (game_state == GameState.playing && esc_just) {
+    if (!spectator && game_state == GameState.playing && esc_just) {
         game_state = GameState.paused
     } elif (game_state == GameState.paused && (esc_just || space_just)) {
         game_state = GameState.playing
     }
     // Restart from game over / win
-    if ((game_state == GameState.game_over_state || game_state == GameState.win_state) && space_just) {
-        decs::restart()
-        spawn_bricks()
-        commit()
-        score = 0
-        lives = START_LIVES
-        paddle_x = 0.0
+    if (!spectator && (game_state == GameState.game_over_state || game_state == GameState.win_state) && space_just) {
+        new_round()
         game_state = GameState.playing
-        reset_powerups()
     }
     update_music()
     if (game_state == GameState.playing) {
@@ -1534,20 +1663,65 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
 
     glUseProgram(program)
     active_program = program
+    // opaque geometry writes colour and normal-depth; everything blended, and the HUD, colour only
     draw_ground()
+    begin_color_only_span()
     draw_shadows()
+    end_color_only_span()
     draw_walls()
-    draw_shield()
     draw_paddle()
-    // Particles and trail need blending
+    decs_stage("draw")
+    begin_color_only_span()
+    draw_shield()
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    decs_stage("draw")
+    decs_stage("draw_fx")
     glDisable(GL_BLEND)
-
     glDisable(GL_CULL_FACE)
+    glActiveTexture(GL_TEXTURE0)      // the post chain leaves the active unit on its last sampler; the font binds on unit 0
     draw_hud()
+    run_postfx(post_settings(aspect))
     live_end_frame()
+}
+
+var @live crt_enabled = true
+var @live ssao_enabled = true
+var @live fx_debug_view = 0
+let FOV_Y = 45.0 * PI / 180.0
+
+def post_settings(aspect : float) : PostSettings {
+    var cfg = PostSettings()
+    cfg.crt = crt_enabled
+    cfg.ssao = ssao_enabled
+    cfg.debug_view = fx_debug_view
+    let t = tan(FOV_Y * 0.5)
+    cfg.tan_half_fov = float2(t * aspect, t)
+    cfg.z_far = Z_FAR
+    cfg.time = get_uptime()
+    return cfg
+}
+
+[live_command(description="Toggle the CRT present pass")]
+def cmd_toggle_crt(_input : JsonValue?) : JsonValue? {
+    crt_enabled = !crt_enabled
+    return JV(crt_enabled)
+}
+
+[live_command(description="Toggle screen-space ambient occlusion")]
+def cmd_toggle_ssao(_input : JsonValue?) : JsonValue? {
+    ssao_enabled = !ssao_enabled
+    return JV(ssao_enabled)
+}
+
+struct CmdFxDebugArgs {
+    view : int = 0
+}
+
+[live_command(description="Present a post buffer instead of the frame. Args: view (0 frame, 1 occlusion, 2 normal-depth)")]
+def cmd_fx_debug(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdFxDebugArgs>)
+    fx_debug_view = args.view
+    return JV(args)
 }
 
 [export]
