@@ -206,9 +206,7 @@ further issues - loop gate 1 locally until clean. Workflow:
 | 1 | das2rst runs clean (positional handmade-doc validation panics on count mismatch) | `<daslang> -documentation doc/reflections/das2rst.das` - repeat until no panic; the host policy keeps per-box transforms inert |
 | 2 | imgui2rst regenerates clean | `<daslang> modules/dasImgui/utils/imgui2rst.das` |
 | 3 | vulkan2rst regenerates clean | `<daslang> modules/dasVulkan/utils/vulkan2rst.das` |
-| 4 | no `// stub` in handmade docs | `grep -rl '// stub' doc/source/stdlib/handmade/` -> must be empty |
-| 5 | no `Uncategorized` sections | `grep -rl '^Uncategorized$' doc/source/stdlib/generated/` -> must be empty; fix via `group_by_regex` in das2rst.das |
-| 6 | no untracked generated RST | `git ls-files --others --exclude-standard doc/source/stdlib/` -> must be empty; `git add` the new files |
+| 4-6 | the generated docs are fresh: no `// stub` in handmade docs, no `Uncategorized` sections, no untracked generated RST | `cmake --build build --target check_docs_fresh` - names the offending file and the fix (a `group_by_regex` in the owning generator for Uncategorized, `git add` for an untracked page). This is the same target doc.yml runs |
 | 7 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` - delete `doc/sphinx-build` first; cached builds hide errors |
 
 preflight finds sphinx-build on PATH, then in `~/Library/Python/*/bin` +
