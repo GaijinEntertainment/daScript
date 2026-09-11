@@ -24,6 +24,11 @@ def public run_jit_codegen(prog : Program?; var ctx : Context?; var ok : bool?) 
     *ok = run_jit(prog, ctx)
 }
 
+[finalize(late)]
+def private shutdown_llvm {
+    LLVMShutdown()
+}
+
 //! the in-memory engine's teardown; the finalizer in `llvm_jit_link` delegates here
 [export]
 def public free_jit_engine(ee : void?; ctx : void?) {
