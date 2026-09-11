@@ -392,6 +392,19 @@ extern "C" {
             gv.flags = shared ? 1u : 0u;
         }
 
+        // registerJitFunction leaves fields NULL; the exe-resident TypeInfo of a lambda's capture
+        // argument lands here so a job or thread lambda's block header can carry it.
+        void setStandaloneFunctionArgInfo ( uint64_t index, uint32_t arg, void * debugInfo ) {
+            DAS_ASSERT(index < (uint64_t) totalFunctions);
+            auto finfo = functions[index].debugInfo;
+            if ( !finfo || arg >= finfo->count ) return;
+            if ( !finfo->fields ) {
+                finfo->fields = (VarInfo **) code->allocate(sizeof(VarInfo *) * finfo->count);
+                memset(finfo->fields, 0, sizeof(VarInfo *) * finfo->count);
+            }
+            finfo->fields[arg] = (VarInfo *) debugInfo;
+        }
+
         void initFunctionAddr ( uint64_t index, void * globPtr ) {
             DAS_ASSERT(index < (uint64_t) totalFunctions);
             *((SimFunction **) globPtr) = &functions[index];
@@ -438,6 +451,10 @@ extern "C" {
     // is the exe-resident TypeInfo, so it can only be wired at codegen time).
     DAS_API void jit_set_global_var ( Context * ctx, uint64_t index, uint64_t offset, void* debugInfo, int shared ) {
         static_cast<JitContext *>(ctx)->setStandaloneGlobalInfo(index, offset, debugInfo, shared);
+    }
+
+    DAS_API void jit_set_standalone_function_arg ( Context * ctx, uint64_t index, uint32_t arg, void * debugInfo ) {
+        static_cast<JitContext *>(ctx)->setStandaloneFunctionArgInfo(index, arg, debugInfo);
     }
 
     DAS_API void jit_set_init_script ( Context * ctx, Context::JitInitScriptFn fn ) {

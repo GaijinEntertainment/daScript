@@ -1523,15 +1523,11 @@ def init() {
         init_audio_samples()
     }
     if (!music_initialized) {
-        // The worker arm needs a real thread: any native build has one, and so
-        // does the standalone wasm card (pthread pool + a yielding main loop).
-        // The wasm playground interpreter does not -- spawning there parks the
-        // whole tab -- and a single-threaded audio backend has no consumer for
-        // a worker either. Everyone else falls back to the main-thread arm.
-        music_threaded = (
-            !audio_is_single_threaded() &&
-            (get_platform_name() != "emscripten" || is_standalone_exe())
-        )
+        // The worker arm needs a real audio thread to feed: any native build has one, and so
+        // does the standalone wasm card (pthread pool). The wasm playground's backend runs
+        // its device callback on the main thread, with no consumer for a worker, and takes
+        // the main-thread arm, whose heap the host collects every frame.
+        music_threaded = !audio_is_single_threaded()
         if (music_threaded) {
             strudel_init(@@strudel_music_main)
         } else {

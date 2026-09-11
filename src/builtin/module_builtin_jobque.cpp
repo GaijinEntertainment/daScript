@@ -755,6 +755,27 @@ namespace das {
     // message and location were lost and the process died with no diagnostic at all. Catch it on
     // the worker, report it the way the host reports a main-thread panic, then let it terminate as
     // before -- a panic stays fatal, it just stops being silent.
+    // the type a collect walks a job or thread lambda's capture by: the value type of the clone
+    // function's first argument. The source lambda's own header is not consulted - a JIT allocates
+    // a capture without one when nothing in the program reads it, and the bytes before the block
+    // are then whatever the heap holds there.
+    static TypeInfo * cloneCaptureTypeInfo ( Func fn ) {
+        SimFunction * sf = fn.PTR;
+        if ( !sf || !sf->debugInfo || !sf->debugInfo->fields || sf->debugInfo->count < 1 ) return nullptr;
+        TypeInfo * arg = sf->debugInfo->fields[0];
+        if ( !arg ) return nullptr;
+        if ( !(arg->flags & TypeInfo::flag_ref) ) return arg;
+        static std::mutex g_byValueMutex;
+        static das_hash_map<TypeInfo *, TypeInfo *> g_byValue;    // one copy per clone struct, for the process
+        std::lock_guard<std::mutex> guard(g_byValueMutex);
+        auto it = g_byValue.find(arg);
+        if ( it != g_byValue.end() ) return it->second;
+        auto ti = new TypeInfo(*arg);
+        ti->flags &= ~TypeInfo::flag_ref;
+        g_byValue[arg] = ti;
+        return ti;
+    }
+
     __forceinline void invoke_job_lambda ( Context * forkContext, LineInfoArg * lineinfo, Lambda & flambda ) {
         GcRootLambda root(flambda, forkContext);   // a collect inside the lambda must see its capture; no jitted frame shows it
         bool ok = forkContext->runWithCatch([&]() {
@@ -780,7 +801,7 @@ namespace das {
             auto ptr = forkContext->allocate(lambdaSize + 16, lineinfo);
             forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
             memset ( ptr, 0, lambdaSize + 16 );
-            *((TypeInfo **)ptr) = lambda.getTypeInfo();   // the header a collect walks the capture by (das_ascend writes the same)
+            *((TypeInfo **)ptr) = cloneCaptureTypeInfo(fn);   // the header a collect walks the capture by
             ptr += 16;
             das_invoke_function<void>::invoke(forkContext, lineinfo, fn, ptr, lambda.capture);
             das_delete<Lambda>::clear(context, lambda);
@@ -803,7 +824,7 @@ namespace das {
         auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize + 16 );
-        *((TypeInfo **)ptr) = lambda.getTypeInfo();   // the header a collect walks the capture by (das_ascend writes the same)
+        *((TypeInfo **)ptr) = cloneCaptureTypeInfo(fn);   // the header a collect walks the capture by
         ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
@@ -1203,7 +1224,7 @@ namespace das {
         auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
         memset ( ptr, 0, lambdaSize + 16 );
-        *((TypeInfo **)ptr) = lambda.getTypeInfo();   // the header a collect walks the capture by (das_ascend writes the same)
+        *((TypeInfo **)ptr) = cloneCaptureTypeInfo(fn);   // the header a collect walks the capture by
         ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);

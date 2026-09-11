@@ -7892,6 +7892,32 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                 )
                 LLVMBuildCall2(visitor.g_builder, set_gv_type, set_gv_fn, gv_args, "")
             }
+            // A lambda body's capture type, so new_job/new_thread can head the capture block with it
+            // (registration carries the argument count alone).
+            let set_fa_type = LLVMFunctionType(types.t_void,
+                fixed_array<LLVMTypeRef>(
+                    types.LLVMVoidPtrType(),  // Context *
+                    types.t_int64,            // uint64_t index
+                    types.t_int32,            // uint32_t arg
+                    types.LLVMVoidPtrType()   // void * debugInfo (TypeInfo)
+                )
+            )
+            var set_fa_fn = LLVMGetNamedFunction(g_mod, "jit_set_standalone_function_arg")
+            if (set_fa_fn == null) {
+                set_fa_fn = LLVMAddFunctionWithType(g_mod, "jit_set_standalone_function_arg", set_fa_type)
+            }
+            for (fi in range(get_context_total_functions(ctx))) {
+                let di = get_function_capture_debug_info(ctx, fi)
+                if (di == null) continue
+                let tinfo_ptr = visitor.create_type_info_global(unsafe(reinterpret<TypeInfo?>(di)))
+                var fa_args = fixed_array(
+                    ctx_param,
+                    types.ConstI64(uint64(fi)),
+                    types.ConstI32(0ul),
+                    tinfo_ptr
+                )
+                LLVMBuildCall2(visitor.g_builder, set_fa_type, set_fa_fn, fa_args, "")
+            }
         }
         LLVMBuildRetVoid(visitor.g_builder)
         // terminate entry block with branch to body (entry only has allocas from at_function_entry)

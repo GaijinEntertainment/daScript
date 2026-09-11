@@ -2242,7 +2242,7 @@ def slice(var pat : Pattern; n : int; var idx_pat : Pattern) : Pattern {
 // struct_(pat, s("t f t t")) — play events only where mask is true
 //! a mask step is on unless its atom spells false: `f`, `false`, or a number that is `0` (strudel.cc's
 //! booleans; a numeric atom parses to a sound-less event carrying the number in `note`); a rest (`~`) has no hap at all
-def truthy(e : Event) : bool {
+def private truthy(e : Event) : bool {
     if (empty(e.s)) {
         return e.note != 0.0
     }
