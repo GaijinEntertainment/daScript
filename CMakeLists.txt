@@ -1000,6 +1000,7 @@ src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.h
 src/builtin/module_builtin_uriparser.h
 src/builtin/module_builtin_uriparser.cpp
+src/builtin/jit_runtime.cpp
 src/builtin/module_jit.cpp
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_dasbind.cpp

@@ -83,6 +83,18 @@ def test_extern_argument_passing(t : T?) {
         let fv = 1.5
         t |> equal(probe_ref_result(1l, 2l, 3l, 4l, 5l, 6l, 7l, fv), 1.5)
     }
+    t |> run("an address-taken extern refuses at eval - transformCall rewrites call sites, not pointers") @(t : T?) {
+        let fp = @@probe_regs7
+        var caught = false
+        try {
+            invoke(fp, int8(1), int16(2), 3, 4l, 0.5, 0.25lf, 6)
+        } recover {
+            caught = true
+        }
+        t |> success(caught, "the body throws rather than answering uninitialized stack")
+        t |> equal(probe_regs7(int8(1), int16(2), 3, 4l, 0.5, 0.25lf, 6), 4367l, "and the call site still goes through the binding")
+    }
+
     t |> run("the call survives the extern being applied again by another program in the process") @(t : T?) {
         var inscope access <- make_file_access("")
         using() $(var mg : ModuleGroup) {

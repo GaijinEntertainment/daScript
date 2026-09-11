@@ -32,7 +32,7 @@ namespace das {
     DAS_API AotLibrary & getGlobalAotLibrary();
     DAS_API void clearGlobalAotLibrary();
 
-    // makeAotJitNode builds a SimNode_Jit (defined in module_jit.cpp, where it is visible);
+    // makeAotJitNode builds a SimNode_Jit (defined in jit_runtime.cpp, where it is visible);
     SimNode * makeAotJitNode ( Context & ctx, void * publ );
 
 }

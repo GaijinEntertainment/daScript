@@ -2886,7 +2886,7 @@ namespace das {
     }
 
     // 3-tier directory resolver mirroring the shared-module resolution policy
-    // from PR #2579 (module_jit.cpp::resolve_dynamic_module_path), but for
+    // from PR #2579 (jit_runtime.cpp::resolve_dynamic_module_path), but for
     // source-side asset directories.  Given a baked source-file path captured
     // at macro expansion (e.g. ".../modules/das-cards/cards/card_mesh.das"),
     // returns the directory where that module's runtime assets currently live:
