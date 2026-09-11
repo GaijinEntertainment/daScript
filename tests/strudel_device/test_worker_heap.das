@@ -41,7 +41,10 @@ def test_worker_heap_stays_flat(t : T?) {
                 peak = max(peak, strudel_get_worker_heap_bytes())
             }
             strudel_shutdown()
-            let LIMIT = 5ul * 1024ul * 1024ul
+            // the published number is the heap before the tick's collect, so a peak sits one collect
+            // window plus one tick's garbage above a base sampled at a trough - and a starved CI tick
+            // leaves five megabytes, where an uncollected worker grows twenty in the same six seconds
+            let LIMIT = 10ul * 1024ul * 1024ul
             t |> success(peak < base + LIMIT, "the worker heap grew {int64(peak - base) / 1024l} KB in the six seconds past warm-up")
         }
         sound_set_null_device(false)   // sticky process-wide flag: leave a clean slate

@@ -717,6 +717,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     let mem_str_base = string_heap_bytes_allocated()
     var mem_heap_max = mem_heap_base
     var mem_str_max = mem_str_base
+    var mem_gc_floor = mem_heap_base   //!< the live set after the last collect; a fixed floor collects every tick once the pools outgrow it
     let mem_log_interval = max(int(1.0 / CHUNK_SEC), 1)
     var mem_tick_count = 0
     //! one probe on the empty heap: heap_collect throws without options gc + persistent_heap, and an AOT frame's locals are no roots
@@ -814,8 +815,9 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         mem_str_max = max(mem_str_max, mem_str_cur)
         mem_tick_count ++
         //! the worker's context is nobody else's to collect; a query's garbage grows it a megabyte a second on a four-track bed
-        if (gc_allowed && mem_heap_cur > mem_heap_base + WORKER_GC_GROWTH_BYTES) {
+        if (gc_allowed && mem_heap_cur > mem_gc_floor + WORKER_GC_GROWTH_BYTES) {
             unsafe(heap_collect(true, false))
+            mem_gc_floor = heap_bytes_allocated()
         }
         if (g_debug_memory && mem_tick_count % mem_log_interval == 0) {
             to_log(0, "strudel mem: heap {mem_heap_cur/1024ul}kb / str {mem_str_cur/1024ul}kb (max heap {mem_heap_max/1024ul}kb / str {mem_str_max/1024ul}kb)\n")
