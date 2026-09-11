@@ -296,6 +296,7 @@ namespace das {
     bool builtin_chdir ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_mkdir ( const char * ) GENERATE_IO_STUB_RET
     void builtin_exit ( int32_t, Context *, LineInfoArg * ) GENERATE_IO_STUB
+    void builtin_exit_now ( int32_t, Context *, LineInfoArg * ) GENERATE_IO_STUB
     char * builtin_resolve_this_module_dir ( const char *, bool, Context * ) GENERATE_IO_STUB_RET
     bool builtin_remove_file ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_rename_file ( const char *, const char * ) GENERATE_IO_STUB_RET
@@ -992,6 +993,12 @@ namespace das {
             if ( context ) context->stackWalk(at, false, false);
         }
         exit(ec);
+    }
+
+    void builtin_exit_now ( int32_t ec, Context *, LineInfoArg * ) {
+        fflush(stdout);
+        fflush(stderr);
+        _exit(ec);
     }
 
     int builtin_popen_impl ( const char * cmd, bool bin, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
@@ -3176,6 +3183,9 @@ namespace das {
                 SideEffects::modifyExternal, "getchar_wrapper");
             addExtern<DAS_BIND_FUN(builtin_exit)>(*this, lib, "exit",
                 SideEffects::modifyExternal, "builtin_exit")
+                    ->args({"exitCode","context","line"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_exit_now)>(*this, lib, "exit_now",
+                SideEffects::modifyExternal, "builtin_exit_now")
                     ->args({"exitCode","context","line"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_popen)>(*this, lib, "popen",
                 SideEffects::modifyExternal, "builtin_popen")

@@ -32,7 +32,7 @@ Running only **some** selected benchmarks (uses `vector_alloc` as a filtering pr
 - `--uri-paths`: Print uri paths instead of file paths (vscode friendly)
 - `--color`: Print colored output
 - `--verbose`: Print verbose output
-- `--timeout <seconds>`: If tests run longer than duration d, panic. If d is 0, the timeout is disabled. The default is 10 minutes
+- `--timeout <seconds>`: The whole suite's budget. When it runs out, the process ends at once with exit code 124 and no summary, after one line naming the budget - the log above it names the file that was running. `0` disables it. The default is 20 minutes
 - `--max-file-time <seconds>`: Fail after the suite finishes if any completed test file exceeded this wall-clock duration. `0` (default) disables the limit; this is independent of the global `--timeout` deadlock guard.
 - `--isolated-mode`: Run tests in isolated processes, useful to catch crashes
 - `--isolated-mode-threads <n>`: Number of worker threads in isolated mode. `0` uses a conservative JIT rule (`min(32, max(4, logical_threads / 2))`) and 2x hardware threads otherwise. Preflight can override the JIT width per machine through its user config.

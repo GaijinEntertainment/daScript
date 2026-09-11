@@ -21,6 +21,7 @@ require dastest_clargs
 require worker_policy
 
 options multiple_contexts
+options threadlock_context = true   //! the sub-test rails call back into this context from the test files' contexts
 
 // BBATKIN:
 //  temporary: disables persistent heap, because this crashes /tests/dastest
@@ -28,6 +29,8 @@ options multiple_contexts
 options persistent_heap = false
 
 let private jsonResultPrefix = "##dastest##\n"
+
+let TIMEOUT_EXIT_CODE = 124   //! the exit code of a suite that ran past --timeout, GNU timeout's convention
 
 struct FileTiming {
     uri : string
@@ -533,8 +536,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     let timeout = test_args.timeout
     if (timeout > 0.) {
         unsafe {
-            var mainCtx & = this_context()
-            new_thread <| @capture(& res, & mainCtx) {
+            new_thread() @() {
                 // Polled sleep: chunk into 100ms slices and watch for jobque
                 // shutdown so a clean main-return does not have to wait for
                 // the full timeout. ~Module_JobQue busy-waits on the thread
@@ -547,8 +549,11 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
                     slept += chunk
                 }
                 if (slept >= total_ms) {
+                    //! this thread never enters the main context: the main thread is still running the
+                    //! suite on it, and a plain exit from here waits on this thread in the job queue's teardown
+                    log::error("dastest: the suite ran past its --timeout of {timeout}s; the process ends here with exit code {TIMEOUT_EXIT_CODE} and no summary - the log above names the file that was running")
                     unsafe {
-                        mainCtx |> invoke_in_context("timeout_tests", res, startTime, timeout)
+                        fio::exit_now(TIMEOUT_EXIT_CODE)
                     }
                 }
             }
@@ -776,19 +781,6 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         }
     }
     return finish_tests(res, startTime)
-}
-
-
-[export, pinvoke]
-def timeout_tests(var res : SuiteResult; start_time : int64; timeout_sec : float) {
-    res.errors++
-    res.total++
-    log::error("Test timed out after {timeout_sec}s while running {currentTestFile}")
-    // timeout fires from a worker thread; fio::exit is the cross-thread
-    // cancellation mechanism (bypasses shutdown dump — acceptable for this path).
-    unsafe {
-        fio::exit(finish_tests(res, start_time))
-    }
 }
 
 
