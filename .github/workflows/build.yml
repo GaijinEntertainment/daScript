@@ -458,6 +458,26 @@ jobs:
             ;;
         esac
         ctest --test-dir build --build-config ${{ matrix.cmake_preset }} -L big -E memory_model_4gb --output-on-failure
+    - name: "Nightly Backend Sweeps"
+      # The three rails the per-PR lanes never walk, over test_aot's own corpus:
+      # LLVM-AOT objects, and both standalone tiers - -ctx emits C++ a host
+      # compiles, -lib emits a native library dasbind loads back. Same nightly
+      # gate as the step above; 32-bit Windows has no AOT rail to sweep.
+      if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      run: |
+        set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+           windows32)
+            echo "Skipping backend sweeps on 32-bit Windows"
+            ;;
+           *)
+            cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_standalone_sweep_aot
+            if [ "${{ env.das_llvm_disabled }}" != "ON" ] && [ "${{ matrix.jit_disabled }}" != "ON" ]; then
+              cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_tests_llvm_aot
+              cmake --build ./build --config ${{ matrix.cmake_preset }} --target standalone_sweep_jit
+            fi
+            ;;
+        esac
 
   ###########################################################
   build_windows_relwithdebinfo_nightly:
