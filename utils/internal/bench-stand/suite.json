@@ -1,0 +1,32 @@
+{
+    "root": "benchmarks",
+    "exclude": [
+        "**/tests/**",
+        "**/_*.das"
+    ],
+    "lanes": [
+        "interp",
+        "jit",
+        "aot"
+    ],
+    "repeat": 3,
+    "timeout_seconds": 900,
+    "memory_limit_mb": 4096,
+    "regression_threshold": 0.1,
+    "noise_multiplier": 3.0,
+    "baseline_runs": 7,
+    "files": {
+        "core/array/test01.das": {
+            "skip": "allocates ~19 GB under persistent_heap and gets OOM-killed; unskip once the benchmark is fixed"
+        }
+    },
+    "lane_excludes": {
+        "aot": {
+            "audio/**": "needs dasAudio's own AOT half, which the benchmark AOT set does not carry",
+            "terminal/**": "needs dasTerminal's own AOT half, which the benchmark AOT set does not carry",
+            "sql/**": "needs dasSQLITE and dasPUGIXML's own AOT halves, which the benchmark AOT set does not carry",
+            "micro/*_shapes.das": "the XML-source shapes need dasPUGIXML's own AOT half",
+            "core/math/scalar_crt.das": "requires the UnitTest module, which the benchmark AOT set does not carry"
+        }
+    }
+}

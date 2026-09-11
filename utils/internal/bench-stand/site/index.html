@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>daslang benchmark stand</title>
+<meta name="description" content="Nightly performance of the daslang interpreter and JIT over commits: every [benchmark] arm in the repository, measured on one box, plotted over time.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+    <div class="top__title">
+        <a class="top__brand" href="https://daslang.io/">daslang</a>
+        <h1>benchmark stand</h1>
+    </div>
+    <div class="top__status" id="status"></div>
+</header>
+
+<main>
+    <section class="filters" id="filters" aria-label="filters">
+        <div class="filters__group" role="group" aria-label="range">
+            <button class="chip" data-range="30">30 runs</button>
+            <button class="chip" data-range="90">90 runs</button>
+            <button class="chip is-on" data-range="365">365 runs</button>
+            <button class="chip" data-range="0">all</button>
+        </div>
+        <div class="filters__group" role="group" aria-label="lanes">
+            <label class="lane lane--interp"><input type="checkbox" data-lane="interp" checked> interp</label>
+            <label class="lane lane--jit"><input type="checkbox" data-lane="jit" checked> jit</label>
+        </div>
+        <div class="filters__group">
+            <label class="select">group <select id="group"><option value="">all groups</option></select></label>
+            <input class="search" id="search" type="search" placeholder="filter benchmarks by name" aria-label="filter benchmarks by name">
+        </div>
+        <div class="filters__group">
+            <label class="lane"><input type="checkbox" id="only-changed"> only changed tonight</label>
+        </div>
+    </section>
+
+    <section class="night" id="night" aria-label="latest night"></section>
+
+    <section class="section" id="index-section">
+        <h2>Group index <span class="muted">geometric mean of each series against its own first runs, 100 = reference</span></h2>
+        <div class="grid grid--index" id="index"></div>
+    </section>
+
+    <section class="section" id="series-section">
+        <h2>Benchmarks <span class="muted" id="series-count"></span></h2>
+        <div id="series"></div>
+    </section>
+
+    <section class="section" id="history-section">
+        <h2>Run history</h2>
+        <div class="table-wrap"><table class="runs" id="runs"></table></div>
+    </section>
+</main>
+
+<footer class="foot">
+    <span>Every point is the minimum ns/op over the night's repeats of a <code>dastest --bench</code> run; the tooltip shows the spread. Source: <code>utils/internal/bench-stand</code> in the daslang repository.</span>
+    <span id="generated"></span>
+</footer>
+
+<div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# bench-stand routes for the daslang.io vhost in /etc/caddy/Caddyfile.
+# This file is the authoritative copy of the stand's public boundary — the
+# deployed Caddyfile is edited to match it, never the other way round.
+#
+# Paste inside the `daslang.io { ... }` block, ahead of `root`/`file_server`.
+# `bench-stand-deploy.sh caddy` does the splice, validates, and reloads.
+
+# The nightly benchmark stand: a static tree the `bench` user rewrites every
+# night (viewer, data.json, status.json, summary.md, runs/). No service behind
+# it. no-cache: the viewer fetches data.json on every visit and a day-old
+# cached copy would show yesterday's night as tonight's.
+redir /bench /bench/ 308
+handle_path /bench/* {
+	root * /srv/bench-stand/site
+	header Cache-Control "no-cache"
+	file_server
+}

@@ -178,8 +178,17 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das ${DAS_AOT_DASLIB_DEPENDS} ${DAS_AOT_EXTRA_DEPENDS})
     set(all_outputs "")
     # Per-batch arg buffer; chunked to keep each invocation under Windows'
-    # 32K command-line limit when worktree paths are long.
-    set(_DAS_AOT_BATCH_SIZE 60)
+    # 32K command-line limit when worktree paths are long. A caller may set
+    # DAS_AOT_BATCH_SIZE to something smaller: one tool run compiles every file it
+    # is given in one process, so a file whose require graph installs macros can
+    # perturb the ones after it in its batch (error[20600] / error[30100] on an
+    # annotation that exists). A batch of 1 costs a process per file and makes that
+    # impossible.
+    if(DEFINED DAS_AOT_BATCH_SIZE)
+        set(_DAS_AOT_BATCH_SIZE ${DAS_AOT_BATCH_SIZE})
+    else()
+        set(_DAS_AOT_BATCH_SIZE 60)
+    endif()
     set(_batches "")
     set(_batch_idx 0)
     set(_batch_count 0)
