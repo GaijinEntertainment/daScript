@@ -2,6 +2,8 @@ options gen2
 options persistent_heap
 options indenting = 4
 
+module levels public
+
 // The boards, drawn as they play: one character per brick cell, top row furthest from the
 // paddle. `1`..`5` are the colour rows and their points, `#` takes two hits, `X` never breaks
 // and never counts toward the clear, `?` always drops a capsule, `.` is air.

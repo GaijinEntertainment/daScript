@@ -617,8 +617,8 @@ extern "C" {
     DAS_API void jit_check_handled_type_size ( const char * moduleName, const char * typeName, uint32_t hostSize ) {
         auto ann = jit_find_handled_annotation(moduleName, typeName);
         if ( !ann ) { g_abi_types_skipped ++; return; } // not registered on target -> module not linked here
+        if ( !ann->isLocal() && !ann->canCopy() && !ann->canMove() ) { g_abi_types_skipped ++; return; }
         g_abi_types_checked ++;
-        if ( !ann->isLocal() && !ann->canCopy() && !ann->canMove() ) return;
         uint32_t targetSize = uint32_t(ann->getSizeOf());
         if ( targetSize != hostSize ) {
             char buf[256];

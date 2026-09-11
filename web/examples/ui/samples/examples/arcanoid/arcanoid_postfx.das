@@ -2,6 +2,8 @@ options gen2
 options persistent_heap
 options indenting = 4
 
+module arcanoid_postfx public
+
 require opengl/opengl_boost public
 require opengl/opengl_cache public
 require live_host public
