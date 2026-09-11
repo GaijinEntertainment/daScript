@@ -121,6 +121,17 @@ what it costs today and what the fix would change.
   tg32 130.2 -> 129.8 (0.805x of the reference exe's 5217 there). The four-wide twin arm (the RTX
   5060 Ti's) never runs the scalar callback, so its rows stand [direction-grade - one commit].
 
+- **LANDED (2026-09-10) - the iq2xs, iq3s, iq3xxs, k5 and k6 scalar decodes take the pair form
+  too, the K-quants dropping their byte2 lane selects for the shift form on the way.** Linux RTX
+  5080, the scalar arm, `cm2:<fmt>` hot rates: k6 gate l 85.6 -> 94.3 TFLOP/s, m 65.4 -> 70.5, s
+  27.6 -> 34.6, q/wo l 71.0 -> 78.2, m 56.1 -> 60.7, the shared expert's down (64 workgroups of
+  K 512) 22.6 -> 21.5 us; k5 gate l 83.9 / m 62.7, q/wo l 69.9 / m 54.0, the shared expert's
+  gate/up m stamp 105 -> 81 us, its down 31 -> 25 (the k5 rows before were read at the eight-copy
+  unroll, so they fold that lever in); `moesk:iq3s` e+s reads 0.326 / 0.347 ms (no earlier pod
+  row). The 35B's profiled q 3106 -> 2918, k 1205 -> 1103, v 1025 -> 940, wo 1974 -> 1815, the
+  shared expert's three stamps 6653 -> 6430 us; pp512 4201.0 +- 39.5 (`-r 3`) -> 4235.8 +- 33.0
+  (`-r 5`), tg32 129.9 (0.812x of 5217; the day's start 3833) [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

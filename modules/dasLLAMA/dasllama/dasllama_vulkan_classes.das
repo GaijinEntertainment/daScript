@@ -5626,19 +5626,21 @@ class template K6Cm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK6Blk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let bu = e >> 5u
-        let hh = (e >> 4u) & 1u
-        let j = e & 15u
+        let e2 = e & ~1u   //! the pair's first element: the pair's two low bytes are one 16-bit lane, its high bits two of one byte
+        let bu = e2 >> 5u
+        let hh = (e2 >> 4u) & 1u
+        let j = e2 & 15u
         let lb = bu * 16u + j
-        let lo = uint(int(unpack8(blk.ql[int(lb >> 1u)])[int(lb & 1u)])) & 0xFFu
+        let lw = uint(int(blk.ql[int(lb >> 1u)])) & 0xFFFFu
         let qb = (bu >> 2u) * 32u + hh * 16u + j
-        let hby = uint(int(unpack8(blk.qh[int(qb >> 1u)])[int(qb & 1u)])) & 0xFFu
-        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        let hw = uint(int(blk.qh[int(qb >> 1u)])) & 0xFFFFu
+        let q60 = int(((lw >> (hh * 4u)) & 0xFu) | (((hw >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        let q61 = int(((lw >> (hh * 4u + 8u)) & 0xFu) | (((hw >> ((bu & 3u) * 2u + 8u)) & 3u) << 4u)) - 32
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let sidx = e >> 4u
+        let sidx = e2 >> 4u
         let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-        let d = unpackHalf2x16(ws[srow + 4u]).x
-        return float16(d * float(sc) * float(q6))
+        let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
+        return float16(ds * float((e & 1u) != 0u ? q61 : q60))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5701,18 +5703,20 @@ class template K5Cm2T : KqCm2BatchT {
     def decode(blk : VkK5Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
-        let j = e & 15u
-        let h = e >> 4u
+        let e2 = e & ~1u   //! the pair's first element: the pair's two quant bytes are one 16-bit lane, its high bits two of one byte
+        let j = e2 & 15u
+        let h = e2 >> 4u
         let bidx = g * 16u + j
-        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
+        let w = uint(int(blk.qs[int(bidx >> 1u)])) & 0xFFFFu
         let hidx = g * 4u + (j >> 2u)
-        let hby = uint(int(unpack8(blk.qh[int(hidx >> 1u)])[int(hidx & 1u)])) & 0xFFu
-        let q = ((by >> (h * 4u)) & 0xFu) | (((hby >> ((j & 3u) + h * 4u)) & 1u) << 4u)
+        let hb = ((uint(int(blk.qh[int(hidx >> 1u)])) & 0xFFFFu) >> ((hidx & 1u) * 8u)) >> ((j & 3u) + h * 4u)
+        let q0 = ((w >> (h * 4u)) & 0xFu) | ((hb & 1u) << 4u)
+        let q1 = ((w >> (h * 4u + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dm = unpackHalf2x16(ws[srow])
-        let sc = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let mn = (ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
+        let sc = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+        let mn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+        return float16((e & 1u) != 0u ? sc * float(q1) - mn : sc * float(q0) - mn)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6006,20 +6010,25 @@ class template Iq3sCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3sBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let g = e >> 5u
-        let r = e & 31u
+        let e2 = e & ~1u   //! the pair's first element: every read below is the pair's, the element is picked last
+        let g = e2 >> 5u
+        let r = e2 & 31u
         let wj = r >> 2u
         let qi = g * 8u + wj
         let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu   //! the grid-index byte, shifted out of its lane
         let qhw = (uint(int(blk.qh[int(g >> 1u)])) & 0xFFFFu) >> ((g & 1u) * 8u)   //! the ninth-bit byte g, shifted out of its lane
         let si = g * 4u + (r >> 3u)
         let sgw = (uint(int(blk.sg[int(si >> 1u)])) & 0xFFFFu) >> ((si & 1u) * 8u)   //! the sign byte, shifted out of its lane
+        let sgn = sgw >> (((r >> 2u) & 1u) * 4u + (r & 3u))
         let gw = iq3s_gridc[qb | ((qhw << (8u - wj)) & 256u)]
-        let gb = float((gw >> ((r & 3u) * 8u)) & 0xFFu)
+        let gp = gw >> ((r & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let d = unpackHalf2x16(ws[srow]).x
-        let sc = grid_sc(ws[srow + 1u], g)
-        return float16(d * float(sc) * (((sgw >> (((r >> 2u) & 1u) * 4u + (r & 3u))) & 1u) != 0u ? -gb : gb))
+        let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
+        let g0 = float(gp & 0xFFu)
+        let g1 = float((gp >> 8u) & 0xFFu)
+        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+        return float16((e & 1u) != 0u ? v1 : v0)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6085,8 +6094,9 @@ class template Iq3xxsCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3xxsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let g = e >> 5u
-        let r = e & 31u
+        let e2 = e & ~1u   //! the pair's first element: every read below is the pair's, the element is picked last
+        let g = e2 >> 5u
+        let r = e2 & 31u
         let wj = r >> 2u
         let qi = g * 8u + wj
         let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
@@ -6097,13 +6107,16 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         var tt = sidx ^ (sidx >> 4u)
         tt = tt ^ (tt >> 2u)
         tt = tt ^ (tt >> 1u)
-        let sgb = sidx | ((tt & 1u) << 7u)
+        let sgn = (sidx | ((tt & 1u) << 7u)) >> (r & 7u)
         let gw = iq3x_gridc[qb]
-        let gb = float((gw >> ((r & 3u) * 8u)) & 0xFFu)
+        let gp = gw >> ((r & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let d = unpackHalf2x16(ws[srow]).x
-        let sc = grid_sc(ws[srow + 1u], g)
-        return float16(d * float(sc) * (((sgb >> (r & 7u)) & 1u) != 0u ? -gb : gb))
+        let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
+        let g0 = float(gp & 0xFFu)
+        let g1 = float((gp >> 8u) & 0xFFu)
+        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+        return float16((e & 1u) != 0u ? v1 : v0)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6307,21 +6320,25 @@ class template Iq2xsCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let wi = e >> 3u
-        let j = e & 7u
+        let e2 = e & ~1u   //! the pair's first element: every read below is the pair's, the element is picked last
+        let wi = e2 >> 3u
+        let j = e2 & 7u
         let w16 = uint(int(blk.qs[int(wi)])) & 0xFFFFu
         let sidx = w16 >> 9u
         var tt = sidx ^ (sidx >> 4u)
         tt = tt ^ (tt >> 2u)
         tt = tt ^ (tt >> 1u)
-        let sgb = sidx | ((tt & 1u) << 7u)
+        let sgn = (sidx | ((tt & 1u) << 7u)) >> j
         let gw = iq2xs_gridc[(w16 & 511u) * 2u + (j >> 2u)]
-        let gb = float((gw >> ((j & 3u) * 8u)) & 0xFFu)
+        let gp = gw >> ((j & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dv = unpackHalf2x16(ws[srow]).x
-        let si = e >> 4u
-        let sc = (ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu
-        return float16(dv * float(sc) * (((sgb >> j) & 1u) != 0u ? -gb : gb))
+        let si = e2 >> 4u
+        let ds = unpackHalf2x16(ws[srow]).x * float((ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+        let g0 = float(gp & 0xFFu)
+        let g1 = float((gp >> 8u) & 0xFFu)
+        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+        return float16((e & 1u) != 0u ? v1 : v0)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
