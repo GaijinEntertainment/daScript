@@ -1131,7 +1131,14 @@ module) is independent and can land any time - it is pure structure.
     ds as a spec constant (immediate load offsets, a folded `subgroupClusteredAdd` instead of three
     branch-guarded shuffles in the dependency chain), one exp per token (its g and beta arrive
     pre-activated from the graph; ours spends exp, log, exp, exp and a divide per token per lane), one
-    warp per workgroup. The scan still reads 448 us per layer against its 202. Found on the way, not
+    warp per workgroup. The scan still reads 448 us per layer against its 202. Three scratch ablations
+    on the 0.8B split that: ds as literals (immediate offsets, branch-free shuffles) 8060 -> 7816 us, the
+    gates as constants 7816 -> 5156, the cluster reductions removed 7816 -> 6585 - so the gates were a
+    third and the reductions a sixth. The gates are now computed once per workgroup into shared memory
+    before the token loop: scan 8060 -> 5240 us, the 0.8B pp512 23310 -> 26722 +- 68 (0.892x), the 35B
+    4673 -> 4776 +- 39 at five reps (0.915x). Left on the scan: the reductions (a
+    `subgroupClusteredAdd` at a literal cluster size, which the emitter has, against three shuffles),
+    ds as a template constant (3%), one warp per workgroup. Found on the way, not
     of this lever: the iq2xxs cm2 stamps' modules fail spirv-val's OpVariable placement check ("All
     OpVariable instructions in a function must be the first instructions in the first block") in a
     decode function - the emitter hoists a kernel body's locals to its entry block but not a

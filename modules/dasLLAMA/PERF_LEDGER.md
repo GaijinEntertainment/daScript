@@ -152,6 +152,17 @@ what it costs today and what the fix would change.
   read the scan 8084 -> 8668 us and the 0.8B pp512 20047, and is not kept: the reference exe's
   shader interleaves its rows exactly as the scalar form does [direction-grade - one commit].
 
+- **LANDED (2026-09-10) - the deltanet scan computes its per-token gates once per workgroup
+  into shared memory.** The recurrence paid the decay (`exp(a * softplus(g + dt))`: exp, log,
+  exp) and `sigmoid(beta)` (exp and a divide) per token per lane, with two global loads; the
+  ablation that replaced them by constants cut the scan 7816 -> 5156 us per 0.8B window (the
+  cluster reductions' ablation 7816 -> 6585, the ds-as-literal experiment 8060 -> 7816). The
+  workgroup now fills two `DN_WINDOW`-long shared arrays before the token loop and the loop reads
+  them. Linux RTX 5080, Qwen3.5-0.8B-Q8_0: scan 8060 -> 5240 us, pp512 23310 +- 70 -> 26722 +- 68
+  (0.892x of the reference exe's 29957), tg32 within noise (338 -> 337); the 35B 4673 +- 38 ->
+  4775.7 +- 39.2 at five reps (0.915x of 5217; a three-rep read of 4654 +- 91 was noise), tg32
+  132.8 -> 132.7; the sanity logits bit-identical on both [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

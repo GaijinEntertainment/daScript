@@ -1643,6 +1643,8 @@ class DnScan {
     @ssbo @binding = 2 @readonly smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
     @ssbo @binding = 3 orows : array<float>              // the raw o rows at o_off
     @push_constant pa : DnScanArgs
+    @workgroup egs : float[int(DN_WINDOW)]   //! the head's decay per token, exp(a * softplus(g + dt)), computed once per workgroup: the five transcendentals a token the recurrence paid per lane
+    @workgroup bts : float[int(DN_WINDOW)]   //! the head's sigmoid(beta) per token, the same way
 
     def cluster_add(v : float; lanes_per_col : uint) : float {
         var r = v
@@ -1676,6 +1678,14 @@ class DnScan {
         let voff = 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
+        var ti = gl_LocalInvocationID.x
+        while (ti < pa.npos) {
+            let graw = smalls[pa.g_off + ti * pa.nvh + h] + dtb
+            egs[ti] = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+            bts[ti] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + ti * pa.nvh + h]))
+            ti += 128u
+        }
+        barrier()
         let sb = h * ds * ds + (live ? col : 0u) + lane * ds
         let row_stride = lanes_per_col * ds
         var s : float[16]
@@ -1698,9 +1708,8 @@ class DnScan {
         var t = 0u
         while (t < pa.npos) {
             let crow = t * pa.cd
-            let graw = smalls[pa.g_off + t * pa.nvh + h] + dtb
-            let eg = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
-            let bt = 1.0 / (1.0 + exp(-smalls[pa.beta_off + t * pa.nvh + h]))
+            let eg = egs[t]
+            let bt = bts[t]
             let v = conv[crow + voff]
             let kb = crow + krow0
             var k : float[16]
