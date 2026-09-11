@@ -1108,7 +1108,10 @@ module) is independent and can land any time - it is pure structure.
     the new unroll, since the skewed probe read the 64-deep m stamp 4% ahead of the 32-deep e stamp on
     the pod (7-14% on the 5060 Ti): the 35B's down plane at 64 read pp512 3903 against 3987 and e_down
     21.9 against 20.1 ms, so the five grid formats keep 32 - the whole-model row settles a step, the
-    uniform probe does not. (2) The q5_K stamps run 0.74x of the reference's rate on the
+    uniform probe does not. The pair-form scalar decode of (a) landed for iq2xxs and iq2s: e+s
+    0.357 -> 0.316 / 0.428 -> 0.380 ms on the skewed schedule, pp512 3987 -> 4201 (0.805x); the other
+    grid formats (iq2xs, iq3s, iq3xxs) and the K-quants k5 / k6 (the 35B's dense planes) are the
+    next stamps to take the form. (2) The q5_K stamps run 0.74x of the reference's rate on the
     big shapes there (`cm2:k5 gate` l 70.6 TFLOP/s against its 93-96; k6 85.3 against its 72.7, so the
     q6_K stamp is already ahead): the reference's q5_K decoder beats its own q6_K by 1.18x through the
     `shAscales` shared-scale cache, ours trails k6 by 1.2x - the K-quant shared-scale lever of (a),

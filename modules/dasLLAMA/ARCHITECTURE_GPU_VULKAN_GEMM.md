@@ -25,34 +25,34 @@ and every kq superblock format - is spelled the 16-bit way, which is why the blo
 `int16` arrays over the same bytes. A byte the decode needs at a runtime position comes out of
 its lane by a shift - `(uint(int(blk.qs[i >> 1u])) & 0xFFFFu) >> ((i & 1u) * 8u)` - not by an
 `unpack8(w)[i & 1u]` byte2 lane select: the select reads the same lane, but a decode built on
-selects runs 1.1x to 1.5x slower than the shift form on the expert-schedule shape
-(`harness/vk_gemm_probe.das -- moe:<fmt>`, RTX 5060 Ti, per gate/up plane, the shift form:
-iq2xxs 724 us, iq3xxs 569, iq3s 766, iq2s 736 against llama.cpp's cm2 `mul_mat_id` tile at
-754 / 788 / 870 / 797; the select form read 1.28x, 1.24x, 1.49x and 1.08x of those times on the
-same shape). A sign index that straddles two bytes (the
-IQ2_XXS and IQ3_XXS aux32 words) is assembled from its two lanes and shifted, never built from
-two selected bytes.
+selects runs 1.1x to 1.5x slower than the shift form on the expert-schedule shape (`moe:<fmt>`,
+RTX 5060 Ti: iq2xxs 1.28x, iq3xxs 1.24x, iq3s 1.49x, iq2s 1.08x). A sign index that straddles two
+bytes (the IQ2_XXS and IQ3_XXS aux32 words) is assembled from its two lanes and shifted, never
+built from two selected bytes. The scalar callback is written in PAIR form: every read and every
+word the two elements of an aligned pair share - the grid byte, the sign word, the scale row - is
+derived from the pair's first element (`e & ~1u`), both values are computed, and the element is
+selected last. The driver runs the scalar callback two elements at a time and commons what the
+two bodies share, which the pair form makes literal: on the RTX 5080's scalar arm the iq2xxs and
+iq2s expert stamps read 11-13% faster on the skewed schedule (`moesk:iq2xxs` e+s 0.357 -> 0.316
+ms, `moesk:iq2s` 0.428 -> 0.380) and the 35B's pp512 3987 -> 4201.
 Every table a decode reads at a runtime index is staged into a `@workgroup` array ahead of the
-tile loop, never selected out of a register vector per element: the iq4 formats' 16-entry
-codebook (`kvalues_iq4nl`, shared by IQ4_XS and IQ4_NL) as f16, each grid format's codebook as
-its own word array. That is the shared-memory table-staging form of the reference exe -
-llama.cpp's Vulkan build, the upstream binary `benchmarks/lcpp_bench.das` measures against
+tile loop, never selected out of a register vector per element: the iq4 formats' 16-entry codebook
+(`kvalues_iq4nl`, shared by IQ4_XS and IQ4_NL) as f16, each grid format's codebook as its own word
+array - the shared-memory table-staging form of the reference exe, llama.cpp's Vulkan build
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.5).
 
-Every kq format's four-wide twin is hand-written (`decode_v4`, the template's `DECV4` axis): it
-keeps the same spelling and shares what four consecutive elements share. A K-quant twin reads
-its four quant bytes as two 16-bit lanes and extracts the sub-block's scale pair once; a grid
-format's twin looks its grid word up once and takes the four bytes and the four sign bits from
-it. The synthesized twin (`DECVEC`, the axis a new format starts on) repeats the whole scalar
-body four times - the lane selects, the scale-plane words, the grid lookup and the sign parity
-- and on the grid formats it runs slower than the scalar callback for exactly that reason. The
-twin computes each element in the scalar's operation order, so the tile's CPU oracle holds under
-either callback; which callback a box runs is the `device ready` line's `four-wide decode`.
+Every kq format's four-wide twin is hand-written (`decode_v4`, the template's `DECV4` axis): the
+same spelling, sharing what four consecutive elements share - a K-quant twin reads its four quant
+bytes as two 16-bit lanes and extracts the sub-block's scale pair once, a grid format's twin looks
+its grid word up once and takes the four bytes and four sign bits from it. The synthesized twin
+(`DECVEC`, where a new format starts) repeats the whole scalar body four times and on the grid
+formats runs slower than the scalar callback for that reason. The twin computes each element in the
+scalar's operation order, so the tile's CPU oracle holds under either callback; which callback a
+box runs is the `device ready` line's `four-wide decode`.
 
-One decode body serves the tensor load's callback, the cm2 tiles and the CPU oracle. A kernel
-body can also call it on the plane element itself - `decode_v4(wq[i], ...)`, where the
-element's index travels and the callee chains through the plane, so no block is copied. The
-test `test_vkd_direct_decode` in `tests/test_vulkan_kernels.das` keeps that emitter capability.
+One decode body serves the tensor load's callback, the cm2 tiles and the CPU oracle. A kernel body
+can also call it on the plane element itself - `decode_v4(wq[i], ...)`, the element's index travels
+and the callee chains through the plane, no block copied (`test_vkd_direct_decode` keeps that).
 
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
 

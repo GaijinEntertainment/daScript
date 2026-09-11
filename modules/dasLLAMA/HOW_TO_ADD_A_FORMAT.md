@@ -209,7 +209,9 @@ three more hand-stamped bodies. IQ4_XS prefill rides the kq batch tile like q40 
 On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile template
 (`KqCm2BatchT`): a new format is a format template authoring `[spirv_decode] def decode` over
 the DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3
-verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) plus four width stamps (the l, m and s
+verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) in
+PAIR form - every shared read derived from `e & ~1u`, both elements computed, the element selected
+last (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k; iq2xxs's `decode` is the model) - plus four width stamps (the l, m and s
 columns and the expert schedule's e column - the m column at the format's k step; each names its
 `BN`, `STILE`, the k step `BK` where it is not the template's 64 with the unroll `UNR` that keeps
 the unrolled block at one superblock (`override UNR = 8u` beside `override BK = 32u`), and the

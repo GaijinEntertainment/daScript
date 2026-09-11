@@ -112,6 +112,15 @@ what it costs today and what the fix would change.
   box read 3236 the day before), its scalar arm 2391.5 -> 2389.6 +- 30.3, the Qwen1.5-MoE Q4_K_M
   twin 5442.7 -> 5565.6 +- 12.1 / tg128 163.9 [direction-grade - one commit].
 
+- **LANDED (2026-09-10) - the iq2xxs and iq2s scalar decode callbacks in pair form.** The callback
+  derives every shared read from the pair's first element and selects the element last
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k), so the driver's two-wide callback commons the
+  pair's work. Linux RTX 5080 (the scalar decode arm, the bench form of the rows above): the skewed
+  expert schedule's e+s ladder `moesk:iq2xxs` 0.357 -> 0.316 ms (gate/up) and 0.360 -> 0.320 (down),
+  `moesk:iq2s` 0.428 -> 0.380 and 0.484 -> 0.432; the 35B pp512 3986.8 +- 34.2 -> 4201.0 +- 39.5,
+  tg32 130.2 -> 129.8 (0.805x of the reference exe's 5217 there). The four-wide twin arm (the RTX
+  5060 Ti's) never runs the scalar callback, so its rows stand [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous
