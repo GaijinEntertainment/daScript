@@ -24,5 +24,22 @@ def main {
         }
         ch |> join()
     }
+    // the job path writes the same header from its own site
+    var jdata <- [for (i in range(32)); i * 2]
+    with_job_que() {
+        with_channel(1) $(ch) {
+            new_job() <| @capture(:= jdata) {
+                unsafe(heap_collect(false, true))
+                let churn <- [for (i in range(4096)); i]
+                var sum = 0
+                for (v in jdata) {
+                    sum += v
+                }
+                print("JOB_COLLECT_SUM {sum}\n")
+                ch |> notify_and_release()
+            }
+            ch |> join()
+        }
+    }
     print("THREAD_COLLECT_DONE\n")
 }

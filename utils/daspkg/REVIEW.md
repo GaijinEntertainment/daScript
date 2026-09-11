@@ -21,7 +21,7 @@ directory).
 **A diff that adds a command also adds its `print_usage` line and its row in the `README.md`
 Commands table, in the same change.**
 
-**A diff that adds a flag also adds its `@clarg_doc` on the new `DaspkgArgs` field and its row
+**A diff that adds a `daspkg` command-line flag also adds its `@clarg_doc` on the new `DaspkgArgs` field and its row
 in the `README.md` Options table, in the same change** - the help text renders the annotation,
 so a field without one is a blank help line.
 

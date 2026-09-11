@@ -65,13 +65,22 @@ C++ half never opens the daslib checklist on its own.
   pin for each field it adds** - a field that lands in tail padding leaves `sizeof`
   unchanged, so no other assertion in that file fails.
 
-- **In a C++ type das reads fields of (`addField` in its annotation - `Context`, `Program`,
-  `FStat`), a member whose size the host toolchain picks - a `mutex`, a `std::function`, a
-  platform struct such as `struct stat` - goes after every das-visible field, and a type das
-  holds by value (`isLocal`, `canCopy` or `canMove` true) is built from fixed-width members
-  only: copy what das needs out of a platform struct instead of embedding one.** A
-  cross-compiled exe bakes the host's `sizeof` and field offsets into the code it generates,
-  and the target's standard library sizes such a member differently (a mutex is 64 bytes on
-  darwin and 40 under emscripten, a `std::function` 48 under Linux libc++ and 32 elsewhere),
-  so every das-visible field behind one is read at the wrong address. `--jit-check-abi`
-  reports the mismatch at the bundle's first launch, for the types the bundle links.
+- **In a C++ type with `addField` in its annotation (`src/builtin/module_builtin_rtti.cpp`,
+  `module_builtin_fio.cpp`), a member whose size differs between the standard libraries the
+  repo's targets use (`mutex`, `std::function`, `condition_variable`) or a platform struct
+  embedded by value (`struct stat`) is declared after the last such field.** A cross-compiled
+  exe bakes the host's field offsets into the code it generates, and the target's standard
+  library sizes such a member differently (a mutex is 64 bytes on darwin and 40 under
+  emscripten, a `std::function` 48 under Linux libc++ and 32 elsewhere), so every das-visible
+  field behind one is read at the wrong address. `std::string` is 24 bytes under every libc++
+  the targets use, and a das-visible field that is one pins its own offset.
+
+- **A type das holds by value (`isLocal`, `canCopy` or `canMove` true in its annotation) is
+  built from fixed-width members only: copy what das needs out of a platform struct instead of
+  embedding one.** The exe bakes the host's `sizeof` for such a type, so a target that sizes an
+  embedded member differently gives every das local of it the wrong length.
+
+- **A diff that changes the member order or member set of a type either rule reaches states
+  its `--jit-check-abi` result for a cross target in its own PR description.** The check
+  reports a mismatch at the bundle's first launch, for the types the bundle links; nothing
+  native can observe one.

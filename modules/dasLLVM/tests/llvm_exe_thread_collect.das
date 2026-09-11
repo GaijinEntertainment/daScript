@@ -51,6 +51,7 @@ def private build_and_run(t : T?; dir : string; tag : string) : string {
 
 def private expect_lines(t : T?; out : string; what : string) {
     t |> success(find(out, "THREAD_COLLECT_SUM 2016") >= 0, "{what}: the captured array survives the thread's collect: {tail(out)}")
+    t |> success(find(out, "JOB_COLLECT_SUM 992") >= 0, "{what}: the captured array survives the job's collect: {tail(out)}")
     t |> success(find(out, "THREAD_COLLECT_DONE") >= 0, "{what}: the thread is joined: {tail(out)}")
 }
 

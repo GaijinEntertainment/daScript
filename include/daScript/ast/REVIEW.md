@@ -22,3 +22,11 @@
   `compile`, a late `require`, the folding program - would otherwise overwrite the outer
   program's answer mid-simulate. The per-compile fields that remain, and why each is tolerated,
   are `src/ast/ARCHITECTURE.md` sec.4's.
+
+- **In a C++ type with `addField` in its annotation (`Program` in
+  `src/builtin/module_builtin_rtti.cpp`), a member whose size differs between the standard
+  libraries the repo's targets use (`mutex`, `std::function`, `condition_variable`) is declared
+  after the last such field.** A cross-compiled exe bakes the host's field offsets into the
+  code it generates, and the target's standard library sizes such a member differently (a
+  `std::function` is 48 bytes under Linux libc++ and 32 under emscripten's), so every
+  das-visible field behind one is read at the wrong address.

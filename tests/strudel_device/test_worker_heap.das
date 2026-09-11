@@ -28,7 +28,7 @@ def worker_setup() {
 
 [test]
 def test_worker_heap_stays_flat(t : T?) {
-    t |> run("the playback worker collects its own heap: a four-track bed holds within one collect window past its warm-up") @(t : T?) {
+    t |> run("the playback worker collects its own heap: a four-track bed holds within a few collect windows past its warm-up") @(t : T?) {
         sound_set_null_device(true)
         with_audio_system() {
             strudel_init(@@worker_setup)

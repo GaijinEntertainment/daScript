@@ -114,6 +114,7 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_aliases.das
         tests/strudel/test_chorus_per_orbit.das
         tests/strudel/test_combinators.das
+        tests/strudel/test_port_gaps.das
         tests/strudel/test_delay.das
         tests/strudel/test_effects.das
         tests/strudel/test_fx_routing.das

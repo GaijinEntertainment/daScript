@@ -1,11 +1,8 @@
 options gen2
 options indenting = 4
 
-require dastest/testing_boost public
+require dastest/testing_boost
 require strudel/strudel
-require strudel/strudel_pattern
-require strudel/strudel_mini
-require strudel/strudel_scales
 
 // The shapes strudel.cc patterns lean on that ported silently wrong or not at all: a mask step
 // that spells false, the space form of a scale name, the time shifts, the 25% chance, and the
@@ -85,7 +82,7 @@ def test_early_late(t : T?) {
 [test]
 def test_rarely(t : T?) {
     t |> run("rarely is public and keeps every event") @(t : T?) {
-        let pat <- s("a b c d") |> rarely(@(x) => x |> transpose(12))
+        let pat <- s("a b c d") |> rarely(@(var x : Pattern) => x |> set_note(72.0))
         t |> equal(length(sounds(pat, 0.0lf, 1.0lf)), 4)
     }
 }
