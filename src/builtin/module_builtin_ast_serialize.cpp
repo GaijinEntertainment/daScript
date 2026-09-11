@@ -2283,6 +2283,8 @@ namespace das {
                 program->thisModuleGroup = ser.thisModuleGroup;
                 program->thisModuleName.clear();
                 program->library.reset();
+                program->policies.jit_enabled = ser.readJitEnabled;     // the two things the cold path's program also carries
+                program->options = ser.readOptions;
                 program->policies.stack = 64 * 1024;
                 program->thisModule.release();
                 program->thisModule.reset(this_mod);
@@ -2936,6 +2938,8 @@ namespace das {
                 ser.failed = true;
                 return;
             }
+            ser.readJitEnabled = program->policies.jit_enabled;
+            ser.readOptions = program->options;
         }
 
         if ( writing ) {

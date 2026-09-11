@@ -136,6 +136,8 @@ namespace das {
         string              cutoffFile;
         string              cutoffReason;
         bool                policyMismatch = false;
+        bool                readJitEnabled = false; // the compile's jit_enabled, for the macro program a served record reinstantiates (the cold path's program carries it)
+        AnnotationArgumentList readOptions;         // the served module's own `options`, for the same macro program (its fusion opt-in reads them)
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up

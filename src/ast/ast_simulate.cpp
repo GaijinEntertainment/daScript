@@ -3917,7 +3917,12 @@ namespace das
 #if DAS_FUSION
         if ( !folding ) {               // note: only run fusion when not folding
             DAS_ASSERTF(g_fusionContextFn, "fusion library not loaded, add call to NEED_FUSION macro.");
-            g_fusionContextFn(context, logs, options.getBoolOption("fusion", policies.fusion));
+            // under the jit the interpreter's nodes are the fallback, not the product, so a
+            // user context never fuses and a macro context fuses only when its module asks
+            // (options fusion = true); without the jit the option keeps its meaning
+            bool fusion = options.getBoolOption("fusion", policies.fusion);
+            if ( policies.jit_enabled ) fusion = isCompilingMacros && options.getBoolOption("fusion", false);
+            g_fusionContextFn(context, logs, fusion);
             context.relocateCode(true); // this to get better estimate on relocated size. its fust enough
         }
 #else
