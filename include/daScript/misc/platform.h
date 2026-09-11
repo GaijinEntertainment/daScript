@@ -621,18 +621,28 @@ private:
 #define WIN_EH_NO_ASAN
 #endif
 
-// Upper bound on JobQue worker threads, and therefore on get_total_hw_threads / get_total_hw_jobs.
+// Upper bound on the JobQue's default pool, whose workers get_total_hw_threads / get_total_hw_jobs
+// report: a worker count on a desktop; on wasm the bound counts lanes (below), one more than the
+// workers it yields.
 // On wasm the persistent job pool spawns one Web Worker per thread (navigator.hardwareConcurrency
 // of them without a cap), so cap it at 8 there - inside the 16-worker pthread pool the wasm64
 // builds link, with room for the program's own threads; everywhere else the cores-1 rule in
 // job_que.cpp governs and the cap is effectively off. Override in CMake (-DDAS_MAX_HW_JOBS=N)
-// either way.
+// either way. On wasm both numbers count LANES - the workers plus the computing main, as
+// DAS_JOBQUE_THREADS counts - so the cap of 8 is 7 workers, the pool an 8-core desktop runs, and
+// the floor of 4 is 3 workers: a browser under fingerprint protection (Brave's shields, Firefox's
+// resistFingerprinting) reports two logical cores whatever the box has, and the cores-1 rule
+// would leave one worker; a two-core box is older than any browser that runs the wasm64 build.
+// Override with -DDAS_MIN_WEB_JOBS=N.
 #ifndef DAS_MAX_HW_JOBS
 #if defined(__EMSCRIPTEN__)
 #define DAS_MAX_HW_JOBS 8
 #else
 #define DAS_MAX_HW_JOBS 1024
 #endif
+#endif
+#ifndef DAS_MIN_WEB_JOBS
+#define DAS_MIN_WEB_JOBS 4
 #endif
 
 #include "daScript/misc/smart_ptr.h"

@@ -281,6 +281,9 @@ def setup_dasllama_jobque_() {
 
 [init, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def dasllama_jobque_threads_cap() {
+    if (get_running_platform_name() == "emscripten") {   // a browser's core count can be a fingerprint cap of 2: the runtime's floor and cap size the pool there
+        return
+    }
     let cores = get_total_hw_cores()
     set_jobque_threads_cap(max(cores - 1, 1))
     let perf = get_total_perf_cores()
