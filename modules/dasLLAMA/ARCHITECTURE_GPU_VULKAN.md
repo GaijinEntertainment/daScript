@@ -227,9 +227,10 @@ L2.
 
 The scan is the plain per-token delta rule in upstream's shape: one column of a head's state per
 lane cluster, 16 state rows per lane in registers, four subgroups per workgroup, and every lane
-reads its own k and q elements from the conv plane per token - no shared staging, no barrier.
-`dn_scan_wgs` sizes the grid, a workgroup covering `4 x 32 / (ds / 16)` columns of one head. The
-head's per-token gates - the decay `exp(a * softplus(g + dt))` and `sigmoid(beta)` - are
+reads its own k and q elements from the conv plane per token - no shared staging, no barrier
+between tokens. `dn_scan_wgs` sizes the grid, a workgroup covering `4 x 32 / (ds / 16)` columns
+of one head (upstream's one warp per workgroup read the 35B 6% slower here: a thousand
+one-warp workgroups each holding the gate arrays in shared memory). The head's per-token gates - the decay `exp(a * softplus(g + dt))` and `sigmoid(beta)` - are
 computed once per workgroup into shared memory before the token loop, so the recurrence reads
 two shared words a token where it paid five transcendentals and a divide per lane (a third of
 the scan's time on the Linux RTX 5080; upstream's graph hands its scan the gates pre-activated).

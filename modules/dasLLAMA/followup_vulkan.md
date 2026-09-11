@@ -1149,7 +1149,9 @@ module) is independent and can land any time - it is pure structure.
     GPU sum 101; the record phase is 1.5 ms of host time the chunked submit already overlaps). The conv
     then went channel-major (a thread's channel sliding over 32 positions, the per-head norm by shuffles
     and one shared row): the 0.8B's conv 1351 -> 824 us, pp512 26741 -> 27524 +- 88 (0.919x), the 35B's
-    conv 2740 -> 1660 and pp512 4961 -> 5010 +- 47 at five reps (0.960x). Found on the way, not
+    conv 2740 -> 1660 and pp512 4961 -> 5010 +- 47 at five reps (0.960x). The scan at one warp per
+    workgroup (upstream's shape) read the 0.8B +1% (scan 5258 -> 5084 us) but the 35B 5010 -> 4719 +- 40,
+    so the four-warp workgroup stays. Found on the way, not
     of this lever: the iq2xxs cm2 stamps' modules fail spirv-val's OpVariable placement check ("All
     OpVariable instructions in a function must be the first instructions in the first block") in a
     decode function - the emitter hoists a kernel body's locals to its entry block but not a
