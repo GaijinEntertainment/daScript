@@ -36,6 +36,8 @@ def check_record(path):
             record = json.load(f)
     except (OSError, ValueError) as e:
         return [f"{path}: unreadable record: {e}"]
+    if not isinstance(record, dict):
+        return [f"{path}: record root is {type(record).__name__}, not an object"]
     for board in (INTERPRETED, AOT_OR_JIT, STARTUP):
         if not isinstance(record.get(board), dict) or not record[board]:
             problems.append(f"{path}: board '{board}' is missing or empty")
