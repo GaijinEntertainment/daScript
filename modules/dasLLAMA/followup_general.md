@@ -1480,3 +1480,10 @@
     on the K-quant path (the f32 dequant `read_linear` hands `linear_take_kq`, released per tensor
     but sized by the largest). The instrument is the resident set sampled per half second with the
     `--limit` one and two forms, and the das leak profiler on the run.
+130. **dastest's timeout path exits from the worker thread and crashes.** `timeout_tests` in
+    `dastest/dastest.das` fires on the timer's worker thread and calls `fio::exit` there (its
+    comment names the bypass); the process dies with an access violation writing address 0 and
+    the child's exit code reads 139, so a file that merely ran past its budget looks like a crash
+    to the runner and to anyone reading the log - the stocked gate's parity file showed the shape
+    at the 1200 s budget. The fix is dastest's: the timer sets a flag and the main thread finishes
+    the suite and exits, or the exit runs after the worker joins. Bundled with the next PR.
