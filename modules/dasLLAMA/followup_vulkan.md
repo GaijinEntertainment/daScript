@@ -1196,10 +1196,13 @@ module) is independent and can land any time - it is pure structure.
     -> 141.5 (0.975x of 145.2); the `dec` probe arm says the kernels read 4.6 and 8.8 us where the token profile
     bills 17 and 25, so the rest of a small role's figure is the chain around it: a role after a GEMV reads ~10 us
     more than the same kernel after a small dispatch (ar1 12 after out, ar2 14 after down, rq_x 4 after ar2, rq_f 4
-    after ar1) - the GEMV's wave tail and the barrier the successor waits at. Next decode levers: the qkv and z
-    GEMVs share VHZ_DNP and serialize on a WAW hazard the per-op tier already splits (VHG_Y1 / VHG_Y2) - give the
-    resident decode's z its own class; the residual add + norm + requant pairs (ar1 + rq_f, ar2 + the next rq_x) as
-    one kernel; then the GEMV family on the 4096-wide planes (ours 500 GB/s in the token against the reference
+    after ar1) - the GEMV's wave tail and the barrier the successor waits at. LANDED next: the qkv and z GEMVs
+    shared VHZ_DNP and serialized on a WAW hazard the per-op tier already splits (VHG_Y1 / VHG_Y2) - the resident
+    decode's z rides VHZ_DNZ: tg32 0.8B 354 -> 370.5, 9B 96.1 -> 97.6, 35B 141.5 -> 143.9 (0.991x of 145.2). Next
+    decode levers: the residual add + norm + requant pairs (ar1 + rq_f, ar2 + the next rq_x) as one kernel on every
+    model - the fused twin `cls_ar_rq` exists but `rd_fuse_gates` keeps it off hybrids (the beta/alpha GEMV reads
+    the normed f32 row), MoE (the router reads it) and any Q8_K feed (the twin quantizes Q8_0 only): a Q8_K twin
+    and a store-the-row arm lift all three; then the GEMV family on the 4096-wide planes (ours 500 GB/s in the token against the reference
     exe's 610-780; its form: 2 rows a workgroup, 16 lanes a superblock, f32 x read as vec4, no shared memory). Left
     for the dense files' prefill: the scan (2.2 ms on the 9B), the 27B UD-Q3_K_XL's q3_K roles (k3 reads a 6-bit
     split scale per element and stages no cache yet). Found on the way, not

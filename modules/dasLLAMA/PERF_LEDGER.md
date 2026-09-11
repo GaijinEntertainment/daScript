@@ -186,6 +186,15 @@ what it costs today and what the fix would change.
   reps (0.960x of 5217), tg32 132.5; the sanity argmax the same token, its logit 0.02 apart (the
   norm's sum in butterfly order) [direction-grade - one commit].
 
+- **LANDED (2026-09-11) - the resident decode's qkv and z GEMVs co-run: the z half of the projection
+  row rides its own hazard class (`VHZ_DNZ`, the prefill's z class) and the step waits on both.** Both
+  halves wrote under `VHZ_DNP`, so the rail put a write-after-write barrier between two GEMVs that
+  read the same row and write disjoint halves; the per-op tier already split them (`VHG_Y1 / Y2`).
+  tg32 on the pod (Linux RTX 5080, -r 5, -r 10 on the 0.8B): the 0.8B 354.1 -> 370.5 +- 0.9, the 9B
+  96.1 -> 97.6 +- 0.1, the 35B 141.5 -> 143.9 +- 0.4 (0.991x of the reference exe's 145.2); pp512
+  flat (27521, 5136, 5045 +- 193). The resident hybrid parity file holds on the split (15 of 15)
+  [direction-grade - one commit].
+
 - **LANDED (2026-09-11) - the fused deltanet decode step runs the delta rule with every thread owning
   one state column's row part in registers, its norms and q.k by subgroup adds, and the beta and
   alpha rows as one GEMV dispatch.** The step read the state column-per-thread in a rolled loop

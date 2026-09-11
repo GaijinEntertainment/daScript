@@ -572,7 +572,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
             fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_DNP))
         L.s_dnz = gemv_cls_set(fz, fixed_array(pz.wq, pz.ws, L.m_dnz.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.dn_proj_dev),
             fixed_array(pz.wqb, pz.wsb, META_BYTES, dim, (dim / 32l) * 4l, (cd + di) * 4l),
-            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_DNP))
+            fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_DNZ))   //! the z half of the row under its own class: the qkv and z GEMVs co-run, the step waits on both
         if (g_rd.dn_ba_f32) {
             L.s_dnba = set_router_gemv_f16_cls(fixed_array(g_rd.dn_ba_dev, g_rd.xb_dev, L.dn.smalls_dev),
                 fixed_array(g_rd.dn_ba_bytes, dim * 4l, DND_SMALLS_BYTES),
@@ -592,7 +592,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         L.s_dnstep = set_dn_step_cls(
             fixed_array(g_rd.dn_proj_dev, L.dn.state_dev, L.dn.smalls_dev, g_rd.dn_os_dev, g_rd.dn_oq_dev, g_rd.tok_meta.buf, g_rd.dn_of_dev),
             fixed_array((cd + di) * 4l, L.dn.state_bytes, DND_SMALLS_BYTES, DND_OS_BYTES, DND_OQ_BYTES, 16l, DND_OQ_BYTES * 4l),
-            fixed_array(VHZ_DNP, VHZ_DNST, VHZ_DNSM, VHZ_DNO, VHZ_DNO, 0u, VHZ_DNO))
+            fixed_array(VHZ_DNP | VHZ_DNZ, VHZ_DNST, VHZ_DNSM, VHZ_DNO, VHZ_DNO, 0u, VHZ_DNO))
         if (kq_sb(fout)) {
             L.s_quant_dno = set_rq_cls(fixed_array(g_rd.dn_of_dev, g_rd.dn_oq_dev, g_rd.dn_os_dev),
                 fixed_array(DND_OQ_BYTES * 4l, DND_OQ_BYTES, DND_OS_BYTES),
