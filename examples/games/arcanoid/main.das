@@ -19,6 +19,7 @@ require live/live_watch_boost
 require live/live_vars
 require live/audio_live
 require daslib/json_boost
+require levels
 require daslib/math_boost
 require daslib/archive
 require opengl/opengl_ttf
@@ -512,6 +513,9 @@ var cube : OpenGLGeometryFragment
 var brick_geo : OpenGLGeometryFragment
 var ground_plane : OpenGLGeometryFragment
 var sphere : OpenGLGeometryFragment
+var capsule_shell : OpenGLGeometryFragment   // a cylinder along x: the capsule body
+var cone : OpenGLGeometryFragment            // axis along y: the badge that points
+var halo : OpenGLGeometryFragment            // a flat cylinder: the ring and the light pool
 var hud_font : Font?
 
 def create_gl_objects() {
@@ -522,6 +526,9 @@ def create_gl_objects() {
     brick_geo <- create_geometry_fragment <| gen_rounded_cube(0.2)
     ground_plane <- create_geometry_fragment <| gen_plane(GenDirection.xz)
     sphere <- create_geometry_fragment <| gen_sphere(16, 8, false)
+    capsule_shell <- create_geometry_fragment <| gen_cylinder(GenDirection.yz, 14)
+    cone <- create_geometry_fragment <| gen_cone(GenDirection.xz, 12)
+    halo <- create_geometry_fragment <| gen_cylinder(GenDirection.xz, 24)
     cache_ttf_objects()
     hud_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
 }
@@ -708,12 +715,13 @@ def current_paddle_w() : float {
 }
 
 def current_ball_speed() : float {
-    if (speed_mod_timer > 0.0) { return BALL_SPEED * speed_mod_factor; }
-    return BALL_SPEED
+    let base = BALL_SPEED * g_levels[clamp(level, 0, level_count() - 1)].speed
+    if (speed_mod_timer > 0.0) { return base * speed_mod_factor; }
+    return base
 }
 
-def spawn_bonus(pos : float3) {
-    if (game_random() > BONUS_DROP_CHANCE) { return ; }
+def spawn_bonus(pos : float3; always : bool) {
+    if (!always && game_random() > BONUS_DROP_CHANCE) { return ; }
     let btype = int(game_random() * float(NUM_BONUS_TYPES)) % NUM_BONUS_TYPES
     create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Bonus(
@@ -853,19 +861,40 @@ var @live idle_timer = 0.0
 var @live attract_timer = 0.0
 var @live bot_hold_timer = 0.0
 
-//! fresh bricks, score and lives; the caller sets the state
-def new_round() {
+//! fresh bricks, score and lives on board `lv`; the caller sets the state
+def new_round(lv : int = 0) {
+    level = clamp(lv, 0, level_count() - 1)
     decs::restart()
     spawn_bricks()
     commit()
     score = 0
     lives = START_LIVES
     paddle_x = 0.0
+    level_card_timer = 0.0
     reset_powerups()
 }
 
+//! the cleared board gives way to the next: score and lives carry, the ball waits on the paddle
+//! behind the LEVEL card
+def next_level() {
+    level++
+    query() $(eid : EntityId; _b : Ball) {
+        delete_entity(eid)
+    }
+    query() $(eid : EntityId; _bn : Bonus) {
+        delete_entity(eid)
+    }
+    commit()
+    spawn_bricks()
+    spawn_ball_on_paddle()
+    commit()
+    reset_powerups()
+    level_card_timer = LEVEL_CARD_TIME
+    play_sfx(snd_win)
+}
+
 def start_attract() {
-    new_round()
+    new_round(int(game_random() * float(level_count())) % level_count())
     spectator = true
     attract_timer = 0.0
     bot_hold_timer = 0.0
@@ -1076,28 +1105,90 @@ def draw_balls(b : Ball) {
 
 [decs_template]
 struct Brick {
-    pos   : float3
-    color : float3
-    row   : int
+    pos    : float3
+    color  : float3
+    row    : int      // colour row of a plain brick, the particle colour on a hit
+    kind   : int      // BrickKind as int
+    hp     : int
+    points : int
 }
 
+enum BrickKind {
+    plain
+    hard      // two hits, cracks after the first
+    metal     // never breaks, never counts toward the clear
+    bonus     // always drops a capsule
+}
+
+let HARD_COLOR = float3(0.88, 0.88, 0.92)
+let CRACKED_COLOR = float3(0.52, 0.5, 0.56)
+let METAL_COLOR = float3(0.5, 0.54, 0.62)
+let HARD_POINTS = 60
+let BONUS_POINTS = 30
+
+var g_levels <- level_defs()
+var @live level = 0
+var @live level_card_timer = 0.0   // the LEVEL card holds the board still while it shows
+let LEVEL_CARD_TIME = 2.2
+
+def level_count() : int {
+    return length(g_levels)
+}
+
+//! one brick per stencil cell of the current level, the rows centred on the field
 def spawn_bricks() {
-    let total_w = float(BRICK_COLS) * (BRICK_W + BRICK_GAP) - BRICK_GAP
+    let lv = clamp(level, 0, level_count() - 1)
+    var cells : array<tuple<col : int; row : int; ch : int>>
+    var width = 0
+    for (row, line in range(length(g_levels[lv].rows)), g_levels[lv].rows) {
+        width = max(width, length(line))
+        for (col, ch in range(length(line)), line) {
+            if (ch != '.') {
+                cells |> push((col = col, row = row, ch = ch))
+            }
+        }
+    }
+    let total_w = float(width) * (BRICK_W + BRICK_GAP) - BRICK_GAP
     let x_offset = -total_w * 0.5 + BRICK_W * 0.5
-    let total = BRICK_ROWS * BRICK_COLS
-    create_entities`Brick(total) $(_eid : EntityId; i : int; var b : Brick) {
-        let row = i / BRICK_COLS
-        let col = i % BRICK_COLS
-        b.pos = float3(x_offset + float(col) * (BRICK_W + BRICK_GAP), BRICK_H * 0.5, BRICK_START_Z + float(row) * (BRICK_D + BRICK_GAP))
-        b.color = BRICK_COLORS[row]
-        b.row = row
+    let last_row = length(g_levels[lv].rows) - 1   // the stencil's first line is the far edge
+    create_entities`Brick(length(cells)) $(_eid : EntityId; i : int; var b : Brick) {
+        let c = cells[i]
+        b.pos = float3(x_offset + float(c.col) * (BRICK_W + BRICK_GAP), BRICK_H * 0.5, BRICK_START_Z + float(last_row - c.row) * (BRICK_D + BRICK_GAP))
+        if (c.ch == '#') {
+            b.kind = int(BrickKind.hard)
+            b.hp = 2
+            b.points = HARD_POINTS
+            b.color = HARD_COLOR
+            b.row = 2
+        } elif (c.ch == 'X') {
+            b.kind = int(BrickKind.metal)
+            b.hp = 0
+            b.points = 0
+            b.color = METAL_COLOR
+            b.row = 2
+        } elif (c.ch == '?') {
+            b.kind = int(BrickKind.bonus)
+            b.hp = 1
+            b.points = BONUS_POINTS
+            b.row = 1
+            b.color = BRICK_COLORS[1]
+        } else {
+            b.kind = int(BrickKind.plain)
+            b.hp = 1
+            b.row = clamp(c.ch - '1', 0, BRICK_ROWS - 1)
+            b.points = BRICK_POINTS[b.row]
+            b.color = BRICK_COLORS[b.row]
+        }
     }
 }
 
+//! any brick that still has to go: metal never counts
 def has_bricks() : bool {
     var found = false
     query() $(br : Brick) {
-        found = true
+        if (br.kind != int(BrickKind.metal)) {
+            found = true
+        }
     }
     return found
 }
@@ -1105,7 +1196,11 @@ def has_bricks() : bool {
 [decs(stage=draw)]
 def draw_bricks(br : Brick) {
     v_model = compose(br.pos, float4(0), float3(BRICK_W, BRICK_H, BRICK_D) * 0.5)
-    f_Color = float4(br.color, 1.0)
+    var color = br.color
+    if (br.kind == int(BrickKind.bonus)) {
+        color *= 0.75 + 0.35 * sin(get_uptime() * 5.0 + br.pos.x)   // a slow pulse marks the capsule brick
+    }
+    f_Color = float4(color, 1.0)
     vs_arcanoid_bind_uniform(active_program)
     if (active_program == shadow_program) {
         fs_shadow_bind_uniform(active_program)
@@ -1140,15 +1235,106 @@ def update_bonuses(eid : EntityId; var bn : Bonus) {
     }
 }
 
+def quat_axis(axis : float3; angle : float) : float4 {
+    let h = angle * 0.5
+    return float4(axis * sin(h), cos(h))
+}
+
+def quat_rotate(q : float4; v : float3) : float3 {
+    let u = q.xyz
+    return u * (2.0 * dot(u, v)) + v * (q.w * q.w - dot(u, u)) + cross(u, v) * (2.0 * q.w)
+}
+
+//! one part of a capsule, lit like the rest of the scene (the shadow pass takes the same call)
+def bonus_part(pos : float3; rot : float4; scale : float3; color : float3; geo : OpenGLGeometryFragment) {
+    v_model = compose(pos, rot, scale)
+    f_Color = float4(color, 1.0)
+    vs_arcanoid_bind_uniform(active_program)
+    if (active_program == shadow_program) {
+        fs_shadow_bind_uniform(active_program)
+    } else {
+        fs_arcanoid_bind_uniform(active_program)
+    }
+    geo |> draw_geometry_fragment()
+}
+
+//! the capsule's spin, phased by where it fell so a row of them does not turn in step
+def bonus_spin(phase : float) : float4 {
+    let t = get_uptime() + phase
+    return quat_mul(quat_axis(float3(0.0, 1.0, 0.0), t * 1.1), quat_axis(float3(1.0, 0.0, 0.0), t * 2.6))
+}
+
+def bonus_pulse(phase : float) : float {
+    return 0.9 + 0.1 * sin(get_uptime() * 4.0 + phase)
+}
+
+// A capsule is built in layers the way river_run's pickups are: a steel shell that takes the
+// scene light, end caps and a core in the capsule's own colour hot enough to bloom, and a badge
+// bolted to the middle whose silhouette says the type before the colour does.
 [decs(stage=draw)]
 def draw_bonuses(bn : Bonus) {
-    // Draw as small rotating cube
-    let angle = get_uptime() * 3.0
-    v_model = compose(bn.pos, float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5)), float3(BONUS_SIZE * 0.5))
-    f_Color = float4(bn.color, 1.0)
-    vs_arcanoid_bind_uniform(program)
-    fs_arcanoid_bind_uniform(program)
-    cube |> draw_geometry_fragment()
+    let rot = bonus_spin(bn.pos.x)
+    let pulse = bonus_pulse(bn.pos.x)
+    let p = bn.pos
+    let color = bn.color
+    let shell = float3(0.7, 0.72, 0.78)
+    bonus_part(p, rot, float3(0.30, 0.12, 0.12) * pulse, shell, capsule_shell)
+    for (side in fixed_array(-1.0, 1.0)) {
+        let cap = p + quat_rotate(rot, float3(side * 0.28, 0.0, 0.0)) * pulse
+        bonus_part(cap, rot, float3(0.05, 0.14, 0.14) * pulse, color * 1.5, capsule_shell)
+    }
+    let kind = bn.bonus_type
+    if (kind == int(BonusType.triple_ball)) {
+        for (i in range(3)) {
+            let a = get_uptime() * 2.6 + bn.pos.x + float(i) * (2.0 * PI / 3.0)
+            let off = quat_rotate(rot, float3(0.0, cos(a), sin(a)) * 0.2)
+            bonus_part(p + off, rot, float3(0.06), color * 1.3, sphere)
+        }
+    } elif (kind == int(BonusType.wide_paddle)) {
+        bonus_part(p, rot, float3(0.46, 0.035, 0.09), color * 1.2, cube)
+    } elif (kind == int(BonusType.narrow_paddle)) {
+        bonus_part(p, rot, float3(0.12, 0.035, 0.09), color * 1.2, cube)
+    } elif (kind == int(BonusType.sticky_paddle)) {
+        for (side in fixed_array(-1.0, 1.0)) {
+            let off = quat_rotate(rot, float3(side * 0.1, 0.13, 0.0))
+            bonus_part(p + off, rot, float3(0.08, 0.06, 0.08), color * 1.3, sphere)
+        }
+    } elif (kind == int(BonusType.fireball)) {
+        bonus_part(p + float3(0.0, 0.16, 0.0), float4(0.0, 0.0, 0.0, 1.0), float3(0.1, 0.16, 0.1) * pulse, color * 1.8, cone)
+    } elif (kind == int(BonusType.extra_life)) {
+        bonus_part(p, rot, float3(0.2, 0.05, 0.05), color * 1.4, cube)
+        bonus_part(p, rot, float3(0.05, 0.2, 0.05), color * 1.4, cube)
+    } elif (kind == int(BonusType.speed_up)) {
+        bonus_part(p + float3(0.0, 0.0, -0.16), quat_axis(float3(1.0, 0.0, 0.0), -PI * 0.5), float3(0.1, 0.14, 0.1), color * 1.6, cone)
+    } elif (kind == int(BonusType.speed_down)) {
+        bonus_part(p + float3(0.0, 0.0, 0.16), quat_axis(float3(1.0, 0.0, 0.0), PI * 0.5), float3(0.1, 0.14, 0.1), color * 1.6, cone)
+    } elif (kind == int(BonusType.shield)) {
+        bonus_part(p + float3(0.0, 0.0, -0.14), float4(0.0, 0.0, 0.0, 1.0), float3(0.2, 0.1, 0.02), color * 1.3, cube)
+    }
+    bonus_part(p, rot, float3(0.075) * pulse, color * 2.2, sphere)
+}
+
+// The blended layers: two tilted discs counter-rotating through the capsule, a containment field
+// rather than a decal, and a pool of its light on the board underneath.
+[decs(stage=draw_fx)]
+def draw_bonus_fx(bn : Bonus) {
+    let color = bn.color
+    let pulse = bonus_pulse(bn.pos.x)
+    let t = get_uptime() + bn.pos.x
+    let tilt_a = quat_mul(quat_axis(float3(0.0, 1.0, 0.0), t * 1.6), quat_axis(float3(1.0, 0.0, 0.0), 1.25))
+    let tilt_b = quat_mul(quat_axis(float3(0.0, 1.0, 0.0), -t * 1.1), quat_axis(float3(0.0, 0.0, 1.0), 1.4))
+    for (rot, radius in fixed_array(tilt_a, tilt_b), fixed_array(0.42, 0.34)) {
+        v_model = compose(bn.pos, rot, float3(radius * pulse, 0.006, radius * pulse))
+        f_Color = float4(color * 1.6, 0.28)
+        vs_arcanoid_bind_uniform(active_program)
+        fs_arcanoid_bind_uniform(active_program)
+        halo |> draw_geometry_fragment()
+    }
+    v_model = compose(float3(bn.pos.x, GROUND_Y + 0.012, bn.pos.z), float4(0.0, 0.0, 0.0, 1.0), float3(0.5 * pulse, 0.004, 0.5 * pulse))
+    f_Color = float4(color, 0.22)
+    vs_arcanoid_bind_uniform(active_program)
+    fs_arcanoid_bind_uniform(active_program)
+    halo |> draw_geometry_fragment()
 }
 
 // --- Particles ---
@@ -1321,6 +1507,10 @@ struct CmdSpawnBallArgs {
     vx : float = 0.3
 }
 
+struct CmdLevelArgs {
+    level : int = 1
+}
+
 [live_command(description="Spawn a ball. Args: x, vx")]
 def cmd_spawn_ball(input : JsonValue?) : JsonValue? {
     var args = from_JV(input, type<CmdSpawnBallArgs>)
@@ -1362,6 +1552,42 @@ def cmd_game_status(_input : JsonValue?) : JsonValue? {
 def cmd_attract(_input : JsonValue?) : JsonValue? {
     start_attract()
     return JV(true)
+}
+
+[live_command(description="One capsule of every type in a row across the field, for a look at them")]
+def cmd_bonus_row(_input : JsonValue?) : JsonValue? {
+    for (i in range(NUM_BONUS_TYPES)) {
+        let x = (float(i) - float(NUM_BONUS_TYPES - 1) * 0.5) * 1.05
+        create_entity() @(eid, cmp) {
+            apply_decs_template(cmp, Bonus(pos = float3(x, BONUS_SIZE * 0.5, 4.5), bonus_type = i, color = BONUS_COLORS[i]))
+        }
+    }
+    commit()
+    return JV(NUM_BONUS_TYPES)
+}
+
+[live_command(description="Clear the board as a win would: the next level's card, or the win on the last")]
+def cmd_next_level(_input : JsonValue?) : JsonValue? {
+    if (level + 1 < level_count()) {
+        next_level()
+    } else {
+        game_state = GameState.win_state
+    }
+    return JV((level = level + 1, state = "{game_state}"))
+}
+
+[live_command(description="Jump to a board: level (1-based)")]
+def cmd_level(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdLevelArgs>)
+    let lv = clamp(args.level - 1, 0, level_count() - 1)
+    query() $(eid : EntityId; _b : Brick) {
+        delete_entity(eid)
+    }
+    commit()
+    level = lv
+    spawn_bricks()
+    commit()
+    return JV((level = level + 1, name = g_levels[level].name))
 }
 
 [live_command(description="Spawn a new set of bricks")]
@@ -1505,6 +1731,12 @@ def draw_hud() {
         lives_color = float3(blink, 1.0, blink)
     }
     draw_text("LIVES: {lives}", HUD_MARGIN, 80, lives_color)
+    draw_text("LEVEL {level + 1}", display_w - HUD_MARGIN - 130, 45, float3(0.9, 0.9, 0.95))
+    if (level_card_timer > 0.0) {
+        let fade = min(level_card_timer / 0.4, 1.0)
+        draw_text_centered("LEVEL {level + 1}", cx, cy - 40, float3(1.0, 0.85, 0.3) * fade)
+        draw_text_centered(g_levels[clamp(level, 0, level_count() - 1)].name, cx, cy, float3(0.9, 0.9, 0.95) * fade)
+    }
     if (spectator) {
         draw_text_centered("DEMO", cx, 35, float3(1.0, 0.8, 0.2))
         draw_text_centered("PRESS SPACE TO PLAY", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
@@ -1589,6 +1821,11 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
 
     let dt = get_dt()
     tick_dt = min(dt, 1.0 / 30.0) * game_speed
+    if (level_card_timer > 0.0) {
+        // the LEVEL card: the board holds still, the clock runs
+        level_card_timer -= dt
+        tick_dt = 0.0
+    }
     let space_pressed = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
     let space_just = space_pressed && !space_was_pressed
     space_was_pressed = space_pressed
@@ -1676,6 +1913,9 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
         var hit_ball_idx = -1
         var hit_side = false
         var hit_row = 0
+        var hit_kind = 0
+        var hit_hp = 0
+        var hit_points = 0
         var ball_idx = 0
         let is_fireball = fireball_timer > 0.0
         query() $(var b : Ball) {
@@ -1689,7 +1929,11 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
                         hit_ball_idx = ball_idx
                         hit_side = dx > dz
                         hit_row = br.row
-                        if (!is_fireball) {
+                        hit_kind = br.kind
+                        hit_hp = br.hp
+                        hit_points = br.points
+                        // a fireball goes through everything but metal
+                        if (!is_fireball || br.kind == int(BrickKind.metal)) {
                             if (hit_side) {
                                 b.vel.x = -b.vel.x
                             } else {
@@ -1704,16 +1948,39 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
             ball_idx++
         }
         if (hit_ball_idx >= 0) {
-            delete_entity(hit_eid)
-            commit()
-            score += BRICK_POINTS[hit_row]
-            play_sfx(snd_brick_break)
-            spawn_bonus(hit_pos)
-            spawn_particles(hit_pos, BRICK_COLORS[hit_row])
-            commit()
-            if (!has_bricks()) {
-                game_state = GameState.win_state
-                play_sfx(snd_win)
+            if (hit_kind == int(BrickKind.metal)) {
+                play_sfx(snd_wall_bounce)
+            } elif (hit_hp > 1 && !is_fireball) {
+                // a hard brick cracks first
+                query() $(eid : EntityId; var br : Brick) {
+                    if (eid == hit_eid) {
+                        br.hp--
+                        br.color = CRACKED_COLOR
+                    }
+                }
+                play_sfx(snd_wall_bounce)
+                spawn_particles(hit_pos, HARD_COLOR, 4)
+                commit()
+            } else {
+                delete_entity(hit_eid)
+                commit()
+                score += hit_points
+                play_sfx(snd_brick_break)
+                if (hit_kind == int(BrickKind.bonus)) {
+                    spawn_bonus(hit_pos, true)
+                } else {
+                    spawn_bonus(hit_pos, false)
+                }
+                spawn_particles(hit_pos, hit_kind == int(BrickKind.hard) ? HARD_COLOR : BRICK_COLORS[hit_row])
+                commit()
+                if (!has_bricks()) {
+                    if (level + 1 < level_count()) {
+                        next_level()
+                    } else {
+                        game_state = GameState.win_state
+                        play_sfx(snd_win)
+                    }
+                }
             }
         }
     }
