@@ -100,8 +100,18 @@ def slow(var pat : Pattern; n : int | float | double) : Pattern {
     return fast(pat, 1.0lf / numd(n))
 }
 
+def early(var pat : Pattern; offset : int | float | double) : Pattern {
+    //! Shifts `pat` earlier by `offset` cycles (strudel.cc's `<~`). Example: `pat |> early(0.25)`.
+    return <- shift_early(pat, numd(offset))
+}
+
+def late(var pat : Pattern; offset : int | float | double) : Pattern {
+    //! Shifts `pat` later by `offset` cycles (strudel.cc's `~>`). Example: `pat |> late(0.125)`.
+    return <- shift_early(pat, 0.0lf - numd(offset))
+}
+
 // Shift pattern earlier in time by `offset` cycles.
-def private early(var pat : Pattern; offset : double) : Pattern {
+def private shift_early(var pat : Pattern; offset : double) : Pattern {
     return @capture(= offset, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         let innerSpan = TimeSpan(start = span.start + offset, stop = span.stop + offset)
@@ -118,11 +128,6 @@ def private early(var pat : Pattern; offset : double) : Pattern {
         delete haps
         return <- result
     }
-}
-
-// Shift pattern later in time.
-def private late(var pat : Pattern; offset : double) : Pattern {
-    return early(pat, 0.0lf - offset)
 }
 
 // Onsets are kept only when they land in [0, n); the query is clipped to the same
@@ -1065,8 +1070,8 @@ def often(var pat : Pattern; transform : PatternTransform) : Pattern {
     return <- sometimesby(pat, 0.75, transform)
 }
 
-// rarely = 25% probability
-def private rarely(var pat : Pattern; transform : PatternTransform) : Pattern {
+def rarely(var pat : Pattern; transform : PatternTransform) : Pattern {
+    //! Applies `transform` to each event with 25% probability. Shorthand for `sometimesby(pat, 0.25, transform)`.
     return <- sometimesby(pat, 0.25, transform)
 }
 
@@ -1091,6 +1096,25 @@ def transpose(var pat : Pattern; semitones : int | float | double) : Pattern {
 def add(var pat : Pattern; semitones : int | float | double) : Pattern {
     //! Alias for `transpose` — adds `semitones` to each event's note. Matches strudel naming.
     return <- transpose(pat, semitones)
+}
+
+def add(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    //! Pattern-valued `add` — the semitones sampled from `mod_pat` at each event onset, strudel.cc's `.add("<0 3>")`. Example: `note("c3 e3") |> add(n("<0 12>"))`.
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.note += val; return r
+    })
+}
+
+def sub(var pat : Pattern; semitones : int | float | double) : Pattern {
+    //! Subtracts `semitones` from each event's note. Matches strudel naming.
+    return <- transpose(pat, 0.0 - numf(semitones))
+}
+
+def sub(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    //! Pattern-valued `sub` — the semitones sampled from `mod_pat` at each event onset. Example: `note("a4 a3") |> sub(n("<7 12>"))`.
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.note -= val; return r
+    })
 }
 
 // ─── innerJoin (patternified parameters) ───
@@ -2216,13 +2240,22 @@ def slice(var pat : Pattern; n : int; var idx_pat : Pattern) : Pattern {
 
 // Restructure pattern using a boolean mask from mini-notation.
 // struct_(pat, s("t f t t")) — play events only where mask is true
+//! a mask step is on unless its atom spells false: `f`, `false`, or a number that is `0` (strudel.cc's
+//! booleans; a numeric atom parses to a sound-less event carrying the number in `note`); a rest (`~`) has no hap at all
+def truthy(e : Event) : bool {
+    if (empty(e.s)) {
+        return e.note != 0.0
+    }
+    return e.s != "f" && e.s != "false"
+}
+
 def struct_(var pat : Pattern; var bool_pat : Pattern) : Pattern {
-    //! Restructures `pat` to the rhythmic positions of `bool_pat`'s truthy haps — values come from `pat`, timing from the mask. Example: `pat |> struct_(s("t f t t"))`.
+    //! Restructures `pat` to the rhythmic positions of `bool_pat`'s truthy haps — values come from `pat`, timing from the mask; `f`, `false` and `0` steps are off. Example: `pat |> struct_(s("t f t t"))`.
     return @capture(<- pat, <- bool_pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         var mask_haps <- bool_pat(span)
         for (mh in mask_haps) {
-            if (!mh.has_whole) continue
+            if (!mh.has_whole || !truthy(mh.value)) continue
             // query inner pattern at mask hap's whole
             var inner_haps <- pat(mh.whole)
             for (ih in inner_haps) {
@@ -2246,15 +2279,21 @@ def struct_(var pat : Pattern; var bool_pat : Pattern) : Pattern {
 
 // Keep events where mask pattern is active (has events).
 def mask(var pat : Pattern; var mask_pat : Pattern) : Pattern {
-    //! Keeps only events from `pat` whose timespan overlaps an event in `mask_pat`. Example: `pat |> mask(s("t t f t"))`.
+    //! Keeps only events from `pat` whose timespan overlaps a truthy event in `mask_pat`; `f`, `false` and `0` steps mask out. Example: `pat |> mask(s("t t f t"))`, `pat |> mask(s("<1 0>/8"))`.
     return @capture(<- pat, <- mask_pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         var haps <- pat(span)
         for (h in haps) {
             if (!h.has_whole) continue
-            // check if mask has any event overlapping this hap
             var mask_haps <- mask_pat(h.whole)
-            if (!empty(mask_haps)) {
+            var keep = false
+            for (mh in mask_haps) {
+                if (truthy(mh.value)) {
+                    keep = true
+                    break
+                }
+            }
+            if (keep) {
                 result |> push(h)
             }
             delete mask_haps

@@ -95,14 +95,15 @@ def private normalize_scale_type(raw : string) : string {
     return replace(raw, ":", "_")
 }
 
-// Parse a scale definition string "Root:Type" or "Root:Mod:Type" → (root_midi, scale_type).
-// Examples: "C4:major" → (60, "major"), "D:pentatonic" → (50, "pentatonic") using default oct=3.
-// If no colon, treats entire string as type with C3 root.
+//! `C4:major`, `C4:harmonic:minor` or strudel.cc's `C4 major`; a bare type keeps the C3 root
 def private parse_scale_def(scale_def : string) : tuple<int; string> {
-    let colon_pos = find(scale_def, ":")
-    if (colon_pos < 0) return tuple(48, scale_def)
-    let root_str = slice(scale_def, 0, colon_pos)
-    let type_str = normalize_scale_type(slice(scale_def, colon_pos + 1))
+    var sep = find(scale_def, ":")
+    if (sep < 0) {
+        sep = find(scale_def, " ")
+    }
+    if (sep < 0) return tuple(48, normalize_scale_type(scale_def))
+    let root_str = slice(scale_def, 0, sep)
+    let type_str = normalize_scale_type(slice(scale_def, sep + 1))
     return tuple(parse_scale_root(root_str), type_str)
 }
 
