@@ -49,11 +49,13 @@ namespace das {
         int64_t     ctime_sec;
         int64_t     mtime_sec;
         void clear () {
+            is_valid = false;
             mode = 0;
             bytes = 0;
             atime_sec = ctime_sec = mtime_sec = 0;
         }
         void set ( const das_filestat & st ) {
+            is_valid = true;
             mode = uint32_t(st.st_mode);
             bytes = uint64_t(st.st_size);
             atime_sec = int64_t(st.st_atime);
