@@ -58,7 +58,8 @@ jobs:
         # two statements: a substitution inside echo would hide the script's exit code
         run: |
           set -eu
-          matrix=$(python3 ci/ci_matrix.py build '${{ github.event_name }}')
+          # TEMP: nightly matrix forced on - revert with the rest of this commit
+          matrix=$(python3 ci/ci_matrix.py build 'schedule')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
       - name: Cache LLVM
@@ -80,7 +81,7 @@ jobs:
     # nightly AOT signal). The cell list is per event - ci/ci_matrix.py, read
     # through pre_job - because `matrix` is not available in a job-level `if`.
     if: >-
-      (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
+      true
       || (github.event_name != 'schedule' && needs.pre_job.outputs.should_skip != 'true')
     name: "build (${{ matrix.target }}, ${{ matrix.architecture }}, ${{ matrix.cmake_preset }}, ${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && ', fastmath' || '' }})"
     runs-on: ${{ matrix.runner }}
@@ -397,7 +398,7 @@ jobs:
       # per-PR ctest is -L small, so only this step executes a generated
       # context. memory_model_4gb allocates a real 4 GB chunk and stays
       # local-only.
-      if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      if: matrix.cmake_preset == 'Release'   # TEMP: nightly forced on
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
@@ -422,7 +423,7 @@ jobs:
       # LLVM-AOT objects, and both standalone tiers - -ctx emits C++ a host
       # compiles, -lib emits a native library dasbind loads back. Same nightly
       # gate as the step above; 32-bit Windows has no AOT rail to sweep.
-      if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      if: matrix.cmake_preset == 'Release'   # TEMP: nightly forced on
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
@@ -446,7 +447,7 @@ jobs:
     # PR. Keep it on the canonical nightly and explicit full-workflow runs.
     needs: pre_job
     if: >-
-      (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
+      true
       || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     permissions:
@@ -550,7 +551,7 @@ jobs:
     # run still owns the full AOT suite, so do not duplicate that sweep here.
     needs: pre_job
     if: >-
-      (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
+      true
       || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     permissions:
@@ -648,7 +649,7 @@ jobs:
     # is what seeds this job's sccache slot below (a master push run is usually pre_job-skipped
     # as a concurrent duplicate of the PR that just merged, so its save rarely lands).
     if: >-
-      (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
+      true
       || (github.event_name != 'schedule' && needs.pre_job.outputs.should_skip != 'true')
     runs-on: ubuntu-latest
     # actions: write needed for `gh cache delete` in the sccache refresh step.
@@ -757,7 +758,7 @@ jobs:
     # scheduled cron runs the toolchains only on the canonical repo, so forks
     # don't run (and fail) the nightly — that would email every fork owner.
     # Manual workflow_dispatch still runs them anywhere.
-    if: (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript') || github.event_name == 'workflow_dispatch'
+    if: true || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     defaults:
       run:
@@ -914,7 +915,7 @@ jobs:
     # scheduled cron runs the toolchains only on the canonical repo, so forks
     # don't run (and fail) the nightly — that would email every fork owner.
     # Manual workflow_dispatch still runs them anywhere.
-    if: (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript') || github.event_name == 'workflow_dispatch'
+    if: true || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
     - name: "SCM Checkout"

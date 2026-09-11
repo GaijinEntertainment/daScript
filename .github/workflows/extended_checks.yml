@@ -49,7 +49,8 @@ jobs:
         # two statements: a substitution inside echo would hide the script's exit code
         run: |
           set -eu
-          matrix=$(python3 ci/ci_matrix.py extended '${{ github.event_name }}')
+          # TEMP: nightly matrix forced on - revert with the rest of this commit
+          matrix=$(python3 ci/ci_matrix.py extended 'schedule')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   ###########################################################
@@ -59,7 +60,7 @@ jobs:
     # Same shape as build.yml: the nightly cron bypasses pre_job (and runs only on
     # the canonical repo, so forks don't), everything else keeps the duplicate-skip.
     if: >-
-      (github.event_name == 'schedule' && github.repository == 'GaijinEntertainment/daScript')
+      true
       || (github.event_name != 'schedule' && needs.pre_job.outputs.should_skip != 'true')
     name: "extended_checks (${{ matrix.target }}, ${{ matrix.role }})"
     runs-on: ${{ matrix.runner }}
@@ -284,7 +285,7 @@ jobs:
       # Nightly: the run form costs 5-8 minutes; per PR, preflight's compile-sweep gate
       # compiles every example and tutorial root, and the ci-das step below covers the
       # CI-only surface.
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      if: true   # TEMP: nightly forced on
       run: cmake --build ./build --config Release --target run_examples
 
     - name: "Run utils tests"
@@ -293,7 +294,7 @@ jobs:
 
     - name: "Run tutorial dry-runs"
       # Nightly, for the same reason as the examples' run form (8-11 minutes per lane).
-      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      if: true   # TEMP: nightly forced on
       run: cmake --build ./build --config Release --target dry_run_tutorials
 
     - name: "Check the example games stay wired to the site"
@@ -311,14 +312,14 @@ jobs:
       # (skills/internal/doc_sweep.md). Nightly-only per policy: doc rot is not a
       # per-PR gate. Skipped on windows: the checker spawns one daslang per
       # page via popen and is exercised on the posix cells.
-      if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.target != 'windows'
+      if: true && matrix.target != 'windows'
       run: $BIN/daslang ./utils/internal/doc-verify/main.das -- --daslang $BIN/daslang
 
     - name: "Cross-compile nano for cortex-m4"
       # nano's drift tripwire - the only freestanding build in CI. Nightly, on the linux
       # cell: the toolchain is an apt package no darwin cell (the per-PR platform) and no
       # developer box carries, so no per-PR cell and no preflight gate can run it.
-      if: matrix.target == 'linux' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      if: matrix.target == 'linux' && true
       run: |
         set -eux
         # newlib and its libstdc++ are only *recommended* by gcc-arm-none-eabi,
@@ -485,7 +486,7 @@ jobs:
       # Nightly is the right cadence for what it catches: malformed AST out of
       # macro code, which lands in daslib/ and macro-authoring changes, not in the
       # average PR. On demand: gh workflow run extended_checks.yml
-      if: matrix.target == 'linux' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      if: matrix.target == 'linux' && true
       run: |
         set -euo pipefail
         # daslib/ast_verify reports AST shapes the compiler dereferences unguarded.
@@ -778,7 +779,7 @@ jobs:
 
     - name: "Coverage"
       # a report, not a gate (dascov fails on nothing it measures); nightly on the linux cell
-      if: matrix.target == 'linux' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      if: matrix.target == 'linux' && true
       run: |
         $BIN/daslang dastest/dastest.das -- --cov-path coverage.lcov --color --test ./tests/language --timeout 1800
         $BIN/dascov.exe -- coverage.lcov --exclude tests/language
