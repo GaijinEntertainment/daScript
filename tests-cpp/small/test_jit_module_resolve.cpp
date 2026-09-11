@@ -7,7 +7,7 @@
 #include <set>
 #include <string>
 
-// Test entry points exposed by src/builtin/module_jit.cpp.
+// Test entry points exposed by src/builtin/jit_runtime.cpp.
 extern "C" {
     DAS_API void jit_set_exe_file_for_test_( const char * (*fn)() );
     DAS_API void jit_set_path_exists_for_test_( bool (*fn)(const char *) );
