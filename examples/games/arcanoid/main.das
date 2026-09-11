@@ -1120,9 +1120,9 @@ enum BrickKind {
     bonus     // always drops a capsule
 }
 
-let HARD_COLOR = float3(0.88, 0.88, 0.92)
-let CRACKED_COLOR = float3(0.52, 0.5, 0.56)
-let METAL_COLOR = float3(0.5, 0.54, 0.62)
+let HARD_COLOR = float3(0.9, 0.9, 0.94)
+let CRACKED_COLOR = float3(0.72, 0.66, 0.58)   // a chipped, dirty white: still a brick to break
+let METAL_COLOR = float3(0.3, 0.34, 0.44)      // dark steel, and drawn sharp-edged: the one that never goes
 let HARD_POINTS = 60
 let BONUS_POINTS = 30
 
@@ -1207,7 +1207,11 @@ def draw_bricks(br : Brick) {
     } else {
         fs_arcanoid_bind_uniform(active_program)
     }
-    brick_geo |> draw_geometry_fragment()
+    if (br.kind == int(BrickKind.metal)) {
+        cube |> draw_geometry_fragment()
+    } else {
+        brick_geo |> draw_geometry_fragment()
+    }
 }
 
 // --- Bonus entities ---
