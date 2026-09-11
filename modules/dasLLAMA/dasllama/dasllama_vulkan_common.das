@@ -2242,6 +2242,8 @@ struct RLayer {
     pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
     pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (batched router GEMV)
     pf_dn_cvt_set : VkDescriptorSet        // the cm2 route: pf_xb -> pf_xf, the qkv / z GEMMs' f16 feed
+    pf_f16g_ba_set, pf_f16g_ba_red_set : VkDescriptorSet   //! the f32 arm on the cm2 route: dn_ba_dev x pf_xf into the split-k planes, the reduce into this layer's smalls
+    pf_f16g_router_set, pf_f16g_router_red_set, pf_router_cvt_set : VkDescriptorSet   //! the MoE block's router on the cm2 route: pf_xb -> pf_xf, router16 x pf_xf into the split-k planes, the reduce into the logits
     m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
     //! the MoE form: the routed expert triple beside the dense triple (the shared expert's, or none: b1 < 0)
     moe : bool
@@ -2365,6 +2367,8 @@ struct RDec {
     wscale : float
     router_dev : uint64           //! [n_moe x ner x dim] f32 router rows, the gate row last
     router_bytes : int64
+    router16_dev : uint64         //! the same rows as f16: the window chain's router GEMM on the cm2 tile
+    router16_bytes : int64
     moe_ident_dev : uint64        //! 0..MAX_ROUTED_SLOTS-1: the decode combine's identity slot map
     moe_dlog_dev : uint64         //! the decode's logits row (ner floats)
     moe_dw_dev : uint64           //! the decode's k routing weights

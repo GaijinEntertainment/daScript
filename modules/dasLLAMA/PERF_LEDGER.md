@@ -163,6 +163,18 @@ what it costs today and what the fix would change.
   4775.7 +- 39.2 at five reps (0.915x of 5217; a three-rep read of 4654 +- 91 was noise), tg32
   132.8 -> 132.7; the sanity logits bit-identical on both [direction-grade - one commit].
 
+- **LANDED (2026-09-10) - the window chain's MoE router and deltanet beta/alpha GEMMs ride the
+  cm2 tile as f16 GEMMs (`F16GemmCm2`, eight k chunks into the split-k scratch, the reduce
+  into the target).** The scalar tiles were bound by shared-memory traffic: the router at 53 us
+  per layer for 0.27 GFLOP (82 before the NonWritable lever), the 16 x 16 beta/alpha tile at 94
+  us per layer for 0.13 GFLOP, against the reference exe's f16 mul_mm at 10-20 us. Linux RTX
+  5080, the 35B's profiled window: ba 2828 -> 1170 us over 30 layers, router 2125 -> 1621 over
+  40 (three dispatches each under the drain: the f16 convert, the GEMM, the reduce); pp512
+  4775.7 +- 39.2 -> 4960.8 +- 49.7 at five reps (0.951x of 5217), tg32 132.7 -> 133.6; the
+  sanity argmax the same token at a logit 0.02 apart (f16 rows and activations where f32 ones
+  were); the 0.8B unchanged at 26741 +- 81 (q8 beta/alpha planes, no router) [direction-grade -
+  one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

@@ -27,21 +27,26 @@ five device stages over the window's FFN-normed rows. Every window millisecond a
 microsecond below is the `DASLLAMA_GPU_PROF=1` window profile (`vk_rdpf`) on the RTX 5060 Ti,
 except where a probe arm is named.
 
-- **The router GEMM** (`RouterGemm`) is the span's router GEMV batched: a 64 x 32 tile of
-  positions by router rows per workgroup, each invocation a 4 x 2 block whose two rows sit 16
-  apart, K in 64-wide steps through a float4 stage in shared memory at a row stride of 17
-  float4, the next step's rows fetched into registers while the current step computes, and each
-  output's four products per float4 added in k order (the scalar loop's sums to the bit). The
-  stride and the row split are the bank rule: sixteen lanes reading sixteen rows land on all
-  eight 16-byte bank groups, so a warp's two weight loads take two wavefronts each and its four
-  activation loads (two distinct rows) one. The scalar stage this replaced - rows 2te and 2te+1
-  at a stride of 68 floats - put four of every sixteen lanes on one bank, and the tile ran at
-  about 17 FMAs per cycle per SM: 4.3 ms per 30B window against the float4 stage's 2.4 (a 16 x 16 tile of one
-  output each, stepping K by 32, was barrier-bound at 243 us per layer for 268 MFLOP; a 32 x
-  32 tile of 2 x 2 blocks staging each step before computing it read 142). The 64-wide K step
-  is why the MoE seats ask for a 64-multiple row width. The router plane holds every MoE layer's f32 rows,
-  and a gated shared expert's gate vector rides as one more row past the experts, so one
-  dispatch writes the logits row `[ne | gate]` per position.
+- **The router GEMM** rides the cm2 tile where the split-k scratch exists (an f16 feed on a
+  cm2 device) and the model width is a 512-multiple: the FFN-normed rows are converted to f16
+  into the x feed plane, then `F16GemmCm2` - an f16 x f16 GEMM on the workgroup-scope 128 x 128
+  tile with an f32 accumulator, its weights an f16 copy of the router rows minted at prepare
+  beside the decode GEMV's f32 plane - runs eight k chunks into the split-k scratch planes and
+  the reduce sums them into the logits (`pf_f16g_enc`). The grid of such a GEMM alone (four
+  position tiles by two row tiles on the 35B) leaves the device under-filled, which is what the
+  chunks are for. The same class computes the deltanet beta and alpha rows
+  (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ad). Off that route `RouterGemm` serves, the span's router
+  GEMV batched: a 64 x 32 tile of positions by router rows per workgroup, each invocation a 4 x 2
+  block whose two rows sit 16 apart, K in 64-wide steps through a float4 stage in shared memory
+  at a row stride of 17 float4, the next step's rows fetched into registers while the current
+  step computes, and each output's four products per float4 added in k order (the scalar loop's
+  sums to the bit). The stride and the row split are the bank rule: sixteen lanes reading
+  sixteen rows land on all eight 16-byte bank groups, so a warp's two weight loads take two
+  wavefronts each and its four activation loads (two distinct rows) one; the scalar tile is
+  bound by that shared-memory traffic at about six FMAs per staged float4. The 64-wide K step is
+  why the MoE seats ask for a 64-multiple row width. The router plane holds every MoE layer's
+  f32 rows, and a gated shared expert's gate vector rides as one more row past the experts, so
+  one dispatch writes the logits row `[ne | gate]` per position.
 - **The per-row select** (`TopKRows`, one workgroup per position) is the decode top-k's core
   over each row: the softmax, k picks largest-first with ties to the lower index, the
   renormalized or scaled weights - the host `moe_select_core`'s arithmetic - written

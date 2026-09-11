@@ -349,6 +349,17 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     assert(r.router_bytes == n_moe * r.ner * dim * 4l, "vk_rdec_prepare_moe: the router plane is not [n_moe x ner x dim]")
     r.router_dev = make_device_buf(r.router_bytes)
     upload_region_at(r.router_dev, 0l, unsafe(addr<uint8 const?>(router[0])), r.router_bytes)
+    // the window chain's router GEMM rides the cm2 tile over an f16 copy of the rows; the decode GEMV keeps the f32 plane
+    var half : array<float16>
+    half |> reserve(long_length(router))
+    half |> resize(long_length(router))
+    for (v, hv in router, half) {
+        hv = float16(v)
+    }
+    r.router16_bytes = long_length(half) * 2l
+    r.router16_dev = make_device_buf(r.router16_bytes)
+    upload_region_at(r.router16_dev, 0l, unsafe(addr<uint8 const?>(half[0])), r.router16_bytes)
+    delete half
     r.moe_ident_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.staging.mapped)

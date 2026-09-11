@@ -23,6 +23,7 @@ require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle 
 require dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
 require daslib/fio   // the lens readonly gate's spawned compiles
 require daslib/strings_boost   // join: the spawned fixture's source
+require daslib/math_bits   // float_bits_to_uint: the f16 GEMM cell reads its NaN sentinel by bit pattern
 
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: the s and m tiles load a partial column unclamped
 
@@ -238,6 +239,124 @@ def test_vkd_lens_readonly_gate(t0 : T?) {
             t |> success(find(bad.out, "is @readonly but a kernel of RoFixture writes binding 1") >= 0, "the refusal names the member and the binding: {bad.out}")
             let good = spawn_readonly_fixture(false, "ok")
             t |> equal(0, good.rc, "the twin without the qualifier compiles: {good.out}")
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+//! one small f16 GEMM shape through the cm2 class, twice: the direct store into y at a base and stride, and the eight-chunk
+//! split into the partial planes with the reduce into y at the same base - both against the f32 dot of the same f16 values,
+//! the header under the base kept as the sentinel, the bar's poison an added value that must red it
+def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {   // nolint:STYLE038 — one flat gate: fixture, two dispatch arms, compare
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        {
+            let nsplit = 8
+            let ybase = 16   // the rows land past a header the kernels must leave alone
+            let yn = ybase + rows * d
+            var wh : array<float16>
+            var xh : array<float16>
+            wh |> resize(d * n)
+            xh |> resize(rows * n)
+            for (i in range(d * n)) {
+                wh[i] = float16(float((i * 7) % 61) * 0.02 - 0.6)
+            }
+            for (i in range(rows * n)) {
+                xh[i] = float16(float((i * 11) % 53) * 0.03 - 0.8)
+            }
+            let w_bytes = int64(d * n) * 2l
+            let x_bytes = int64(rows * n) * 2l
+            let y_bytes = int64(yn) * 4l
+            let part_bytes = int64(nsplit * rows * d) * 4l
+            let wd = make_device_buf(w_bytes)
+            let xd = make_device_buf(x_bytes)
+            let yd = make_device_buf(y_bytes)
+            let yd2 = make_device_buf(y_bytes)
+            let pd = make_device_buf(part_bytes)
+            var host = make_host_buf(2l * y_bytes, true, [cached = true])
+            var got : array<float>
+            got |> resize(2 * yn)
+            nan_sentinel_upload(yd, y_bytes, 0l)
+            nan_sentinel_upload(yd2, y_bytes, 0l)
+            let tiles = int64(((rows + 127) / 128) * ((d + 127) / 128))
+            unsafe {
+                upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+                upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
+                var sd = set_f16_gemm_cm2_cls(fixed_array(wd, xd, yd), fixed_array(w_bytes, x_bytes, y_bytes), fixed_array(1u, 2u, 4u))
+                var sp = set_f16_gemm_cm2_cls(fixed_array(wd, xd, pd), fixed_array(w_bytes, x_bytes, part_bytes), fixed_array(1u, 2u, 8u))
+                var sr = set_splitk_reduce_cls(fixed_array(pd, yd2), fixed_array(part_bytes, y_bytes), fixed_array(8u, 16u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, xoff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
+                enc_f16_gemm_cm2_cls(raw, h, sd, pc, tiles)
+                var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, xoff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / nsplit))
+                enc_f16_gemm_cm2_cls(raw, h, sp, pc2, tiles * int64(nsplit))
+                var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit), ybase = uint(ybase))
+                enc_splitk_reduce_cls(raw, h, sr, pcr, int64(rows * d + 1023) / 1_024l)
+                vhz_dep(raw, h, 4u | 16u, 0u, true)
+                cmd_copy_range(raw, yd, 0l, host.buf, 0l, y_bytes)
+                cmd_copy_range(raw, yd2, 0l, host.buf, y_bytes, y_bytes)
+                vk_check(vkEndCommandBuffer(raw), null)
+                submit_wait(raw)
+                memcpy(addr<void?>(got[0]), host.mapped, 2l * y_bytes)
+            }
+            var ref : array<float>
+            ref |> resize(rows * d)
+            var amax = 0.0
+            for (p in range(rows)) {
+                for (e in range(d)) {
+                    var s = 0.0
+                    for (kk in range(n)) {
+                        s += float(xh[p * n + kk]) * float(wh[e * n + kk])
+                    }
+                    ref[p * d + e] = s
+                    amax = max(amax, abs(s))
+                }
+            }
+            let tol = amax * 2e-5   // the tensor tile and the CPU sum the same f16 products in different orders
+            let poison = tol * 4.0
+            let arms = fixed_array("direct", "split-k")
+            for (arm in range(2)) {
+                let base = arm * yn
+                var header_ok = true
+                for (i in range(ybase)) {
+                    header_ok = header_ok && float_bits_to_uint(got[base + i]) == 0x7fc00000u
+                }
+                var worst = 0.0
+                var worst_poisoned = 1.0e30
+                for (i in range(rows * d)) {
+                    let dv = abs(got[base + ybase + i] - ref[i])
+                    worst = max(worst, dv)
+                    worst_poisoned = min(worst_poisoned, abs(got[base + ybase + i] - (ref[i] + poison)))
+                }
+                t |> success(header_ok, "f16 GEMM {tag} {arms[arm]}: the {ybase} words under the base stay the sentinel")
+                t |> success(worst <= tol, "f16 GEMM {tag} {arms[arm]}: {rows} x {d} over K {n} within {tol} of the f32 dot (worst {worst}, max |y| {amax})")
+                t |> success(worst_poisoned > tol, "f16 GEMM {tag} {arms[arm]}: the poisoned expectation reds the bar (nearest {worst_poisoned})")
+            }
+            delete wh
+            delete xh
+            delete got
+            delete ref
+        }
+    }
+}
+
+[test]
+def test_vkd_f16_gemm(t0 : T?) {
+    t0 |> run("the small f16 GEMM on the cm2 tile (the router logits, the deltanet beta/alpha rows) == the f32 dot, direct and split-k") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            if (g_gpu.coopmat_mode != COOPMAT_CM2 || !ensure_f16_gemm_cm2_cls() || !ensure_splitk_reduce_cls()) {
+                feint("no cm2 tile family on this device - skipping\n")
+                return
+            }
+            f16_gemm_cell(t, "ba-like", 32, 512, 70)
+            f16_gemm_cell(t, "router-like", 200, 1024, 130)
         } else {
             feint("dasVulkan not present - skipping\n")
         }

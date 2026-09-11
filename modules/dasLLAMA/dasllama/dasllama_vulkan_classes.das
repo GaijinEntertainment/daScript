@@ -7078,6 +7078,7 @@ class Iq2xxsKhrBatch : Iq2xxsCm2T {
 struct SkRedArgs {
     nelem : uint   // one partial plane's float count (cnt x d; always a 4-multiple, d is 32-aligned)
     k : uint       // planes
+    ybase : uint   // the sum's element base in y (the smalls' beta or alpha rows; 0 for a plane of its own)
 }
 
 // ===== the split-k reduce (sums the cm2 partial planes into y) =====
@@ -7106,11 +7107,77 @@ class SplitKReduce {
                 s3 += part[b + 3u]
                 p++
             }
-            y[e] = s0
-            y[e + 1u] = s1
-            y[e + 2u] = s2
-            y[e + 3u] = s3
+            let o = pa.ybase + e
+            y[o] = s0
+            y[o + 1u] = s1
+            y[o + 2u] = s2
+            y[o + 3u] = s3
         }
+    }
+}
+
+struct F16GemmArgs {
+    n : uint        //! K, the row width (elements), a 64-multiple
+    d : uint        //! M, the weight rows
+    rows : uint     //! N, the positions
+    woff : uint     //! the weight rows' element base
+    xoff : uint     //! the activation rows' element base
+    ybase : uint    //! the output's element base: the sum's, or the first partial plane's
+    ystride : uint  //! the output row stride (elements) when the GEMM stores whole
+    ksplit : uint   //! the k chunk per workgroup; 0 = the whole K, one plane at ybase with ystride
+}
+
+//! a small f16 x f16 GEMM on the cm2 128 x 128 tile with an f32 accumulator, y[rows x d] = x[rows x n] w[d x n]^T: the
+//! router logits and the deltanet beta and alpha rows, whose weights are f16 planes and whose K is the model width; a
+//! k chunk's partial plane lands at ybase + chunk * rows * d (stride d) for the split-k reduce
+[vk_dispatch(name = "f16_gemm_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class F16GemmCm2 {
+    @ssbo @binding = 0 @role = "weight" w : array<float16>
+    @ssbo @binding = 1 xf16 : array<float16>
+    @ssbo @binding = 2 y : array<float>
+    @push_constant pa : F16GemmArgs
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_spv")]
+    def run {
+        let xtiles = (pa.rows + 127u) / 128u
+        let wtiles = (pa.d + 127u) / 128u
+        let chunk = gl_WorkGroupID.x / (xtiles * wtiles)
+        let rem = gl_WorkGroupID.x % (xtiles * wtiles)
+        let t0 = (rem / wtiles) * 128u
+        let m0 = (rem % wtiles) * 128u
+        let split = pa.ksplit != 0u
+        let k0 = split ? chunk * pa.ksplit : 0u
+        let k1 = split ? min(k0 + pa.ksplit, pa.n) : pa.n
+        let ybase = split ? pa.ybase + chunk * pa.rows * pa.d : pa.ybase
+        let ystride = split ? pa.d : pa.ystride
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, pa.rows, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, pa.rows, pa.d)
+        tensorLayoutSetStride(tlo, ystride, 1u)
+        var a : AT
+        var b : BT
+        var acc : ACC
+        var k = k0
+        while (k < k1) {
+            coopmatLoadTensor(a, w, pa.woff, tla, m0, 128u, k, 64u)
+            coopmatLoadTensor(b, xf16, pa.xoff, tlb, t0, 128u, k, 64u, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += 64u
+        }
+        coopmatStoreTensor(acc, y, ybase, tlo, t0, 128u, m0, 128u, tv)
     }
 }
 

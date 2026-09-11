@@ -206,11 +206,15 @@ attention head's kq planes do, and the q8 beta/alpha arm re-requantizes the rows
 the z GEMM - one feed, two forms, as the decode step does (`ARCHITECTURE_GPU_VULKAN_DECODE.md`
 sec.2.2v).
 
-The beta and alpha rows take one of two arms. The f32 arm is a tile GEMM over the
-`[beta ; alpha]` rows: one workgroup covers 16 positions by 16 output rows, one output per
-invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows (`nvh`,
-the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two q8 GEMMs
-and copies.
+The beta and alpha rows take one of three arms. A file that carries them as f32 rows keeps them
+f16 on the device; on the cm2 route with the f16 x feed they are two small f16 GEMMs - the beta
+rows and the alpha rows each through `F16GemmCm2`, eight k chunks into the split-k scratch and
+the reduce into the layer's smalls at the beta and alpha bases (the class is the MoE router's,
+`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af). Off that route the f32 arm is a scalar tile GEMM
+over the `[beta ; alpha]` rows: one workgroup covers 16 positions by 16 output rows, one output
+per invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows
+(`nvh`, the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two
+q8 GEMMs and copies.
 
 The scan is the plain per-token delta rule in upstream's shape: one column of a head's state per
 lane cluster, 16 state rows per lane in registers, four subgroups per workgroup, and every lane

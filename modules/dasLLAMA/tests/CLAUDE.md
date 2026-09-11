@@ -308,7 +308,10 @@ formats against the k-lattice ones and q8 at the whole subgroup. `test_vkd_reado
 the toy kernel's SPIR-V words and holds the lens's derived NonWritable to the binding the kernel
 never writes and off the one it writes; `test_vkd_lens_readonly_gate` spawns two `-compile-only`
 children (up to 180 s each) proving the lens refuses a `@readonly` binding a kernel writes, the
-plain twin as the must-compile control.
+plain twin as the must-compile control. `test_vkd_f16_gemm` holds the small f16 GEMM class (the
+router logits, the deltanet beta/alpha rows) to the f32 dot of the same f16 values at two padded
+shapes, the direct store at a base and the eight-chunk split with the reduce at the same base,
+the header under the base kept as the sentinel and every bar with its added-value poison.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the

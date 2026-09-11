@@ -1136,9 +1136,17 @@ module) is independent and can land any time - it is pure structure.
     gates as constants 7816 -> 5156, the cluster reductions removed 7816 -> 6585 - so the gates were a
     third and the reductions a sixth. The gates are now computed once per workgroup into shared memory
     before the token loop: scan 8060 -> 5240 us, the 0.8B pp512 23310 -> 26722 +- 68 (0.892x), the 35B
-    4673 -> 4776 +- 39 at five reps (0.915x). Left on the scan: the reductions (a
-    `subgroupClusteredAdd` at a literal cluster size, which the emitter has, against three shuffles),
-    ds as a template constant (3%), one warp per workgroup. Found on the way, not
+    4673 -> 4776 +- 39 at five reps (0.915x). Left on the scan: ds as a template constant (3%), one
+    warp per workgroup; `subgroupClusteredAdd` at a literal cluster size in place of the three shuffles
+    read the scan 5240 -> 6962 us on the 580 driver and is out. The 35B's profile at that state put the
+    rest of the gap in two small f32 GEMMs on scalar tiles - the deltanet beta/alpha rows (2.8 ms over 30
+    layers, 94 us each for 0.13 GFLOP) and the router (2.1 ms over 40) - so both ride the cm2 tile as f16
+    GEMMs now (`F16GemmCm2`, eight k chunks into the split-k scratch, the reduce): ba 2828 -> 1170 us,
+    router 2125 -> 1621, pp512 4776 -> 4961 +- 50 at five reps (0.951x), the sanity argmax's logit 0.02
+    apart. What the profile still shows over the reference exe: the scan 10.2 ms against 7.5, conv 2.7
+    against 1.0, the shared expert 5.7 against 4.0, e_down 20.7 against 19.6, e_gate+e_up 32.9 against
+    31.5, the router+select chain 3.3 against 1.7, and a host gap of ~3 ms (wall 103 ms, the drained
+    GPU sum 101). Found on the way, not
     of this lever: the iq2xxs cm2 stamps' modules fail spirv-val's OpVariable placement check ("All
     OpVariable instructions in a function must be the first instructions in the first block") in a
     decode function - the emitter hoists a kernel body's locals to its entry block but not a

@@ -577,6 +577,22 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     pfq_ts(raw)
 }
 
+let private PF_F16G_SPLIT = 8l   //! the small f16 GEMMs' k chunks: their tile grids alone leave the device under-filled
+
+//! the cm2 route for the window chain's small f16 GEMMs (the router logits, the deltanet beta and alpha rows): the split-k
+//! scratch exists (an f16 feed on a cm2 device) and the model width takes eight 64-aligned k chunks
+def private pf_f16g_on() : bool => g_rd.pf_splitk != 0ul && g_rd.dim % (64l * PF_F16G_SPLIT) == 0l
+
+//! one small f16 GEMM, y[rows x d] at ybase = x[rows x n] w[d x n]^T over the weight rows at woff: eight k chunks into the
+//! split-k planes, then the reduce into y
+def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : VkDescriptorSet; n, d, rows, woff, ybase : int64) {
+    verify(PF_F16G_SPLIT * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the f16 GEMM's partial planes exceed the split-k scratch")
+    var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = uint(woff), xoff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / PF_F16G_SPLIT))
+    enc_f16_gemm_cm2_cls(raw, h, gset, pc, ((rows + 127l) / 128l) * ((d + 127l) / 128l) * PF_F16G_SPLIT)
+    var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(PF_F16G_SPLIT), ybase = uint(ybase))
+    enc_splitk_reduce_cls(raw, h, rset, pcr, (rows * d + 1_023l) / 1_024l)
+}
+
 //! one recurrent layer's prefill window sets; the o feed sets (`pf_dnof_set` / `pf_dnrq_set`) are shared by every recurrent layer
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
 def private pf_dn_layer_sets(l, dim, cd, di : int64) {
@@ -607,6 +623,12 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     if (pf_dnx6(l)) {
         L.pf_dn_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
             fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
+    }
+    if (g_rd.dn_ba_f32 && pf_dnx6(l) && pf_f16g_on()) {
+        L.pf_f16g_ba_set = set_f16_gemm_cm2_cls(fixed_array(g_rd.dn_ba_dev, g_rd.pf_xf, g_rd.pf_splitk),
+            fixed_array(g_rd.dn_ba_bytes, np * dim * 2l, g_rd.pf_splitk_bytes), fixed_array(0u, VHZ_XQ, VHZ_SK))
+        L.pf_f16g_ba_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, L.dn.smalls_dev),
+            fixed_array(g_rd.pf_splitk_bytes, DND_SMALLS_BYTES), fixed_array(VHZ_SK, VHZ_DNSM))
     }
 }
 
@@ -660,9 +682,15 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     pf_gemm_enc(raw, h, b + 2, L.fz, pz.wq, pz.ws, xqb, xsb, g_rd.pf_dnz,
         pz.wqb, pz.wsb, xqn, xsn, np * di * 4l, VHZ_XQ, VHZ_DNZ, dim, di, L.bz, wlen, x6, cm2_tiles(cd, wlen))
     if (g_rd.dn_ba_f32) {
-        var pcb = DnBaArgs(npos = uint(wlen), dim = uint(dim), nvh = uint(nvh), woff = uint(L.ba_off), xstride = uint(dim),
-            obase_b = uint(DN_SM_BETA), obase_g = uint(DN_SM_G), ostride = uint(nvh))
-        enc_dn_ba_cls(raw, h, L.pf_dn_ba_set, pcb, dn_ba_wgs(wlen, nvh))
+        if (x6 && pf_f16g_on()) {
+            // the beta rows and the alpha rows as two f16 GEMMs on the cm2 tile, each into its smalls plane
+            pf_f16g_enc(raw, h, L.pf_f16g_ba_set, L.pf_f16g_ba_red_set, dim, nvh, wlen, L.ba_off, DN_SM_BETA)
+            pf_f16g_enc(raw, h, L.pf_f16g_ba_set, L.pf_f16g_ba_red_set, dim, nvh, wlen, L.ba_off + nvh * dim, DN_SM_G)
+        } else {
+            var pcb = DnBaArgs(npos = uint(wlen), dim = uint(dim), nvh = uint(nvh), woff = uint(L.ba_off), xstride = uint(dim),
+                obase_b = uint(DN_SM_BETA), obase_g = uint(DN_SM_G), ostride = uint(nvh))
+            enc_dn_ba_cls(raw, h, L.pf_dn_ba_set, pcb, dn_ba_wgs(wlen, nvh))
+        }
         pfq_ts(raw)
     } else {
         if (xq8k) {   // the qkv/z GEMMs read the rows as Q8_K; the q8 beta/alpha GEMMs read them as Q8_0
@@ -810,6 +838,15 @@ def private pf_moe_layer_sets(l : int64) {
         && cm2_cls_ensure(L.fe1, tce) && cm2_cls_ensure(L.fe3, tce) && cm2_cls_ensure(L.fe2, tce), "vk prefill: the expert tile class rails must engage")
     L.pf_router_set = set_router_gemm_cls(fixed_array(g_rd.router_dev, g_rd.pf_xb, g_rd.pf_mlog),
         fixed_array(g_rd.router_bytes, np * dim * 4l, np * ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
+    if (pf_f16g_on()) {
+        verify(ensure_f16_gemm_cm2_cls() && ensure_splitk_reduce_cls() && ensure_f16cvt_cls(), "vk prefill: the router's f16 GEMM rails must engage")
+        L.pf_router_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
+            fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
+        L.pf_f16g_router_set = set_f16_gemm_cm2_cls(fixed_array(g_rd.router16_dev, g_rd.pf_xf, g_rd.pf_splitk),
+            fixed_array(g_rd.router16_bytes, np * dim * 2l, g_rd.pf_splitk_bytes), fixed_array(0u, VHZ_XQ, VHZ_SK))
+        L.pf_f16g_router_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, g_rd.pf_mlog),
+            fixed_array(g_rd.pf_splitk_bytes, np * ner * 4l), fixed_array(VHZ_SK, VHZ_MRT))
+    }
     L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw),
         fixed_array(np * ner * 4l, nk * 4l, nk * 4l), fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT))
     L.pf_sched_set = set_moe_sched_cls(fixed_array(g_rd.pf_midx, g_rd.pf_minv, g_rd.pf_msch1, g_rd.pf_msch3, g_rd.pf_msch2),
@@ -848,8 +885,15 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let nfe = g_rd.nfe
     let ner = g_rd.ner
     let nk = wlen * k
-    var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(ner), dim = uint(dim), woff = uint(L.router_slot * ner * dim), ostride = uint(ner))
-    enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
+    if (pf_f16g_on()) {
+        // the FFN-normed rows as f16, then the router as an f16 GEMM on the cm2 tile
+        var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+        enc_f16cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
+        pf_f16g_enc(raw, h, L.pf_f16g_router_set, L.pf_f16g_router_red_set, dim, ner, wlen, L.router_slot * ner * dim, 0l)
+    } else {
+        var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(ner), dim = uint(dim), woff = uint(L.router_slot * ner * dim), ostride = uint(ner))
+        enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
+    }
     pfq_ts(raw)
     var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale)
     enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)
@@ -1041,7 +1085,8 @@ def private pf_setup {
     if (g_rd.hybrid) {
         ensure_dn_state()   // dn_ws_dev (the scan workspace) + the staging buffers the reset/handoff ride
         verify(ensure_dn_conv_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls()
-            && ensure_dn_tail_cls() && (!g_rd.dn_ba_f32 || ensure_dn_ba_cls()),
+            && ensure_dn_tail_cls() && (!g_rd.dn_ba_f32 || ensure_dn_ba_cls())
+            && (!(g_rd.dn_ba_f32 && pf_f16g_on()) || (ensure_f16_gemm_cm2_cls() && ensure_splitk_reduce_cls())),
             "vk prefill: the deltanet class rails must engage on a live device")
         let cd = g_rd.dn_cd
         let di = g_rd.dn_di
