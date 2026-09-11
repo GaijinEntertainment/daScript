@@ -75,12 +75,13 @@ caller its core (Pocket TTS in Chrome measured 1.1x real time spinning against
 .. das-doc: given var m = Model()
 .. code-block:: das
 
+   let spin_was = get_jobque_spin_us()
    set_jobque_spin_us(0l)
    with_job_que() {
        setup_dasllama_jobque()   // the window is latched here
        print("spin window: {get_jobque_spin_us()} us\n")
    }
-   set_jobque_spin_us(30000l)   // the desktop default back
+   set_jobque_spin_us(spin_was)   // the platform's default back
 
 On a big SMT box also set ``DAS_JOBQUE_AFFINITY`` (``1`` = ideal-CPU hint,
 ``2`` = hard pin): unpinned, the OS placement lottery can land two compute

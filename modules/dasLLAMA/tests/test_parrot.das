@@ -19,8 +19,8 @@ require ../../../examples/dasLLAMA/parrot/take.das
 // cloned from the clip, the text is said in it, and the say is read out to the end. Model-gated
 // on pocket-tts-en-kq.gguf (the Pocket file with its codec encoder, the one the page ships) under
 // models_dir(); the voice-activity model is the tree's own. The run opens the example's window
-// for about half a minute, so a box without a window server skips, and --null-audio keeps it
-// silent - and off the microphone, which --clip never opens anyway.
+// for about half a minute and plays the say through the mixer, so a box without a window server
+// skips; --clip stands in for the microphone, which the run never opens.
 
 [test]
 def test_vad_resampler(t : T?) {

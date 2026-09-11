@@ -106,13 +106,14 @@ def section_threads(m : Model) {
     // spins before it parks (0 = at once); get_jobque_spin_us reads it back. The desktop
     // default is 30 ms, which keeps the workers hot through a token's serial gaps; a browser's
     // is 0, since a spinning web worker costs the caller its core. Latched like the cap.
+    let spin_was = get_jobque_spin_us()
     set_jobque_spin_us(0l)
     with_job_que() {
         setup_dasllama_jobque()
         print("workers park at once (spin window {get_jobque_spin_us()} us) | ")
         bench_gen(m, "parked:   ")
     }
-    set_jobque_spin_us(30000l)
+    set_jobque_spin_us(spin_was)   // the platform's default back
 }
 
 // ──────────────────────────────────────────────────────────────────────────
