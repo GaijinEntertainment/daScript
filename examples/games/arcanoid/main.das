@@ -267,11 +267,21 @@ def tune_gameover() {
         |> lpf(sine() |> range(300, 900) |> slow(8)) |> release(1.0) |> room(1.0)), 0.12)
 }
 
-//! every track ducked to `factor` of its gain over `time` - 0 fades the bed out, 1 brings it back
+//! every track ducked to `factor` of its gain over `time` - a pause ducks the bed, an unpause brings it back
 def music_fade_all(factor, time : float) {
     for (name, idx in keys(g_music_tracks), values(g_music_tracks)) {
         strudel_fade_track(idx, g_music_gains[name] * factor, time)
     }
+}
+
+//! the bed fades out and leaves the tables: the engine drops a track once it has faded to silence,
+//! and a name still in the table would bring it back at full gain on the next unpause
+def music_stop_all(time : float) {
+    for (idx in values(g_music_tracks)) {
+        strudel_fade_track(idx, 0.0, time)
+    }
+    g_music_tracks |> clear()
+    g_music_gains |> clear()
 }
 
 //! a bed is built where the engine runs: a Pattern is a lambda over its context's heap and cannot cross to the worker
@@ -292,6 +302,8 @@ def strudel_music_cmd(cmd : string) {
         } elif (name == "gameover") {
             tune_gameover()
         }
+    } elif (action == "stopall") {
+        music_stop_all(float(to_double(parts[1])))
     } elif (action == "fadeall" && length(parts) >= 3) {
         music_fade_all(float(to_double(parts[1])), float(to_double(parts[2])))
     } elif (action == "play" && length(parts) >= 3) {
@@ -313,6 +325,8 @@ def strudel_music_cmd(cmd : string) {
         if (key_exists(g_music_tracks, name)) {
             let fade_time = length(parts) >= 3 ? float(to_double(parts[2])) : 0.5
             strudel_fade_track(g_music_tracks[name], 0.0, fade_time)
+            g_music_tracks |> erase(name)
+            g_music_gains |> erase(name)
         }
     } elif (action == "fade" && length(parts) >= 4) {
         if (key_exists(g_music_tracks, name)) {
@@ -340,7 +354,7 @@ def music_dispatch(cmd : string) {
 }
 
 def stop_all_tracks(fade : float) {
-    music_dispatch("fadeall:0:{fade}")
+    music_dispatch("stopall:{fade}")
 }
 
 def start_menu_music() {
