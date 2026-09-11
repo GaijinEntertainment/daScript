@@ -720,15 +720,13 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     var mem_gc_floor = mem_heap_base   //!< the live set after the last collect; a fixed floor collects every tick once the pools outgrow it
     let mem_log_interval = max(int(1.0 / CHUNK_SEC), 1)
     var mem_tick_count = 0
-    //! one probe on the empty heap: heap_collect throws without options gc + persistent_heap, and an AOT frame's locals are no roots
-    var gc_allowed = !aot_enabled()
-    if (gc_allowed) {
-        try {
-            unsafe(heap_collect(false, false))
-        } recover {
-            gc_allowed = false
-            to_log(LOG_WARNING, "strudel: the worker cannot collect its heap - the program lacks `options gc` or `options persistent_heap` - so a long run grows it without bound\n")
-        }
+    //! one probe on the empty heap: heap_collect throws without options gc + persistent_heap; no aot_enabled() gate, a fold of it would split the AOT hash
+    var gc_allowed = true
+    try {
+        unsafe(heap_collect(false, false))
+    } recover {
+        gc_allowed = false
+        to_log(LOG_WARNING, "strudel: the worker cannot collect its heap - the program lacks `options gc` or `options persistent_heap` - so a long run grows it without bound\n")
     }
     while (strudel_process_commands(cmd_fn)) {
         if (!pcm_box.isReady) {
