@@ -15,7 +15,7 @@ module llvm_jit_plan shared private
 //! a miss; the emitter builds on the same plan and the same install. The three host queries
 //! the key folds - triple, CPU name, CPU features - are the one use of the LLVM bindings here.
 
-require llvm/bindings/llvm_func
+require llvm/bindings/llvm_host
 require llvm/daslib/llvm_dll_utils public
 require llvm/daslib/llvm_env
 require llvm/daslib/llvm_cpu_class

@@ -23,7 +23,7 @@ def initialize(project_path : string) {
         "llvm_tune"           // [tune] framework: perm grids, three modes, the manifest
     ]
     let bindings_paths = [
-        "llvm_const", "llvm_enum", "llvm_func", "llvm_struct",
+        "llvm_const", "llvm_enum", "llvm_func", "llvm_host", "llvm_struct",
     ]
     for (path in daslib_paths) {
         register_native_path("llvm", "daslib/{path}", "{project_path}/daslib/{path}.das")
