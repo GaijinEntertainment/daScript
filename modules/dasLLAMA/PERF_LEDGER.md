@@ -132,6 +132,14 @@ what it costs today and what the fix would change.
   shared expert's three stamps 6653 -> 6430 us; pp512 4201.0 +- 39.5 (`-r 3`) -> 4235.8 +- 33.0
   (`-r 5`), tg32 129.9 (0.812x of 5217; the day's start 3833) [direction-grade - one commit].
 
+- **LANDED (2026-09-10) - the deltanet scan runs one column per lane cluster, k and q read from
+  the read-only conv plane per lane, no shared staging and no per-token barrier.** Linux RTX
+  5080, Qwen3.5-0.8B-Q8_0 (18 recurrent layers): the profiled scan 8854 -> 8084 us per window,
+  pp512 21639 +- 65 -> 22354 +- 67 (0.746x of the reference exe's 29957), tg32 within noise
+  (325 -> 320); the 35B 4236 +- 33 -> 4217 +- 44 (noise). The same kernel without `@readonly` on
+  `conv` and `smalls` read 19004 us and pp512 15132: the NonWritable decoration is what lets a
+  token's k and q loads pass the previous token's o store [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

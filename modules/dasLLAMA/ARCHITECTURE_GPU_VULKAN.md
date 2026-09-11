@@ -212,11 +212,16 @@ invocation, and the grid runs over both group axes, so a layer of only `2 x nvh`
 the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two q8 GEMMs
 and copies.
 
-The scan is the plain per-token delta rule. One four-subgroup workgroup runs per (head, column
-group). A lane keeps 16 state rows of two adjacent columns in registers, so it runs two
-independent chains that interleave. The token's k and q rows are staged once per workgroup in
-shared memory and feed both columns. The tokens loop inside the kernel; each token costs two
-shuffle reductions per column. The raw o rows land in the per-op tier's workspace, for the
+The scan is the plain per-token delta rule in upstream's shape: one column of a head's state per
+lane cluster, 16 state rows per lane in registers, four subgroups per workgroup, and every lane
+reads its own k and q elements from the conv plane per token - no shared staging, no barrier.
+`dn_scan_wgs` sizes the grid, a workgroup covering `4 x 32 / (ds / 16)` columns of one head. The
+tokens loop inside the kernel; each token costs two cluster reductions inside the dependency
+chain. The conv and smalls bindings carry `@readonly`, which the emitter decorates NonWritable,
+and that decoration is load-bearing: without it the driver orders each token's k and q loads
+behind the previous token's o store (the two buffers may alias), and the same kernel ran 2.35x
+slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged
+two-column form it replaced 8854). The raw o rows land in the per-op tier's workspace, for the
 gated out-norm's one workgroup per position.
 
 The conv history crosses windows position-major in ring image 0; the last window transposes the

@@ -1638,83 +1638,63 @@ struct DnScanArgs {
 
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
 class DnScan {
-    @ssbo @binding = 0 conv : array<float>     // the conv output rows (position-major: q | k | v)
-    @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state [nvh][ds][ds]
-    @ssbo @binding = 2 smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
-    @ssbo @binding = 3 orows : array<float>    // the raw o rows at o_off
+    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v); the @readonly is the scan's speed (sec.2.2ad): without it a token's k/q loads queue behind the previous token's o store
+    @ssbo @binding = 1 state : array<float>              // the persistent per-head f32 state [nvh][ds][ds]
+    @ssbo @binding = 2 @readonly smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
+    @ssbo @binding = 3 orows : array<float>              // the raw o rows at o_off
     @push_constant pa : DnScanArgs
-    @workgroup ks : float[256]                 // the token's k row, two slots of DN_MAX_DS
-    @workgroup qs : float[256]                 // the token's q row, two slots
 
-    def cluster_add(v : float; lanes_per_pair : uint) : float {
+    def cluster_add(v : float; lanes_per_col : uint) : float {
         var r = v
-        if (lanes_per_pair > 4u) {
+        if (lanes_per_col > 4u) {
             r += subgroupShuffleXor(r, 4u)
         }
-        if (lanes_per_pair > 2u) {
+        if (lanes_per_col > 2u) {
             r += subgroupShuffleXor(r, 2u)
         }
-        if (lanes_per_pair > 1u) {
+        if (lanes_per_col > 1u) {
             r += subgroupShuffleXor(r, 1u)
         }
         return r
     }
 
     [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv")]
-    def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of two columns, written out
+    def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of one column, written out
         let ds = pa.ds
-        let lanes_per_pair = ds / 16u          // 16 state rows each; ds % 16 == 0 host-side
-        let pairs_per_subgroup = 32u / lanes_per_pair
-        let cols_per_group = 8u * pairs_per_subgroup
+        let lanes_per_col = ds / 16u           // 16 state rows each; ds % 16 == 0 host-side
+        let cols_per_subgroup = 32u / lanes_per_col
+        let cols_per_group = 4u * cols_per_subgroup
         let cgroups = (ds + cols_per_group - 1u) / cols_per_group
         let h = gl_WorkGroupID.x / cgroups
-        let tid = gl_LocalInvocationID.x
         let sl = gl_SubgroupInvocationID
-        let lane = sl % lanes_per_pair
-        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + (gl_SubgroupID * pairs_per_subgroup + sl / lanes_per_pair) * 2u
-        let live = col < ds                    // a whole cluster shares col and col + 1 (ds is even), so its shuffles stay uniform
+        let lane = sl % lanes_per_col
+        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + gl_SubgroupID * cols_per_subgroup + sl / lanes_per_col
+        let live = col < ds                    // a whole cluster shares col, so its shuffles stay uniform
         let kh = h % pa.nkh
-        let qrow0 = kh * ds                    // the head's q row within a conv row
-        let krow0 = pa.kd + kh * ds
+        let qrow0 = kh * ds + lane             // the lane's first q element within a conv row
+        let krow0 = pa.kd + kh * ds + lane
         let voff = 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
-        let sb = h * ds * ds + (live ? col : 0u)
-        let row_stride = lanes_per_pair * ds
+        let sb = h * ds * ds + (live ? col : 0u) + lane * ds
+        let row_stride = lanes_per_col * ds
         var s : float[16]
-        s[0] = state[sb + lane * ds]
-        s[1] = state[sb + lane * ds + row_stride]
-        s[2] = state[sb + lane * ds + 2u * row_stride]
-        s[3] = state[sb + lane * ds + 3u * row_stride]
-        s[4] = state[sb + lane * ds + 4u * row_stride]
-        s[5] = state[sb + lane * ds + 5u * row_stride]
-        s[6] = state[sb + lane * ds + 6u * row_stride]
-        s[7] = state[sb + lane * ds + 7u * row_stride]
-        s[8] = state[sb + lane * ds + 8u * row_stride]
-        s[9] = state[sb + lane * ds + 9u * row_stride]
-        s[10] = state[sb + lane * ds + 10u * row_stride]
-        s[11] = state[sb + lane * ds + 11u * row_stride]
-        s[12] = state[sb + lane * ds + 12u * row_stride]
-        s[13] = state[sb + lane * ds + 13u * row_stride]
-        s[14] = state[sb + lane * ds + 14u * row_stride]
-        s[15] = state[sb + lane * ds + 15u * row_stride]
-        var u : float[16]                      // the same rows of column col + 1
-        u[0] = state[sb + lane * ds + 1u]
-        u[1] = state[sb + lane * ds + row_stride + 1u]
-        u[2] = state[sb + lane * ds + 2u * row_stride + 1u]
-        u[3] = state[sb + lane * ds + 3u * row_stride + 1u]
-        u[4] = state[sb + lane * ds + 4u * row_stride + 1u]
-        u[5] = state[sb + lane * ds + 5u * row_stride + 1u]
-        u[6] = state[sb + lane * ds + 6u * row_stride + 1u]
-        u[7] = state[sb + lane * ds + 7u * row_stride + 1u]
-        u[8] = state[sb + lane * ds + 8u * row_stride + 1u]
-        u[9] = state[sb + lane * ds + 9u * row_stride + 1u]
-        u[10] = state[sb + lane * ds + 10u * row_stride + 1u]
-        u[11] = state[sb + lane * ds + 11u * row_stride + 1u]
-        u[12] = state[sb + lane * ds + 12u * row_stride + 1u]
-        u[13] = state[sb + lane * ds + 13u * row_stride + 1u]
-        u[14] = state[sb + lane * ds + 14u * row_stride + 1u]
-        u[15] = state[sb + lane * ds + 15u * row_stride + 1u]
+        s[0] = state[sb]
+        s[1] = state[sb + row_stride]
+        s[2] = state[sb + 2u * row_stride]
+        s[3] = state[sb + 3u * row_stride]
+        s[4] = state[sb + 4u * row_stride]
+        s[5] = state[sb + 5u * row_stride]
+        s[6] = state[sb + 6u * row_stride]
+        s[7] = state[sb + 7u * row_stride]
+        s[8] = state[sb + 8u * row_stride]
+        s[9] = state[sb + 9u * row_stride]
+        s[10] = state[sb + 10u * row_stride]
+        s[11] = state[sb + 11u * row_stride]
+        s[12] = state[sb + 12u * row_stride]
+        s[13] = state[sb + 13u * row_stride]
+        s[14] = state[sb + 14u * row_stride]
+        s[15] = state[sb + 15u * row_stride]
         var t = 0u
         while (t < pa.npos) {
             let crow = t * pa.cd
@@ -1722,32 +1702,24 @@ class DnScan {
             let eg = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
             let bt = 1.0 / (1.0 + exp(-smalls[pa.beta_off + t * pa.nvh + h]))
             let v = conv[crow + voff]
-            let vu = conv[crow + voff + 1u]
-            // the token's k and q rows into this token's slot; the other slot was read before the last barrier
-            let par = (t & 1u) * 128u
-            if (tid < ds) {
-                ks[par + tid] = conv[crow + krow0 + tid]
-                qs[par + tid] = conv[crow + qrow0 + tid]
-            }
-            barrier()
-            let kb = par + lane
+            let kb = crow + krow0
             var k : float[16]
-            k[0] = ks[kb]
-            k[1] = ks[kb + lanes_per_pair]
-            k[2] = ks[kb + 2u * lanes_per_pair]
-            k[3] = ks[kb + 3u * lanes_per_pair]
-            k[4] = ks[kb + 4u * lanes_per_pair]
-            k[5] = ks[kb + 5u * lanes_per_pair]
-            k[6] = ks[kb + 6u * lanes_per_pair]
-            k[7] = ks[kb + 7u * lanes_per_pair]
-            k[8] = ks[kb + 8u * lanes_per_pair]
-            k[9] = ks[kb + 9u * lanes_per_pair]
-            k[10] = ks[kb + 10u * lanes_per_pair]
-            k[11] = ks[kb + 11u * lanes_per_pair]
-            k[12] = ks[kb + 12u * lanes_per_pair]
-            k[13] = ks[kb + 13u * lanes_per_pair]
-            k[14] = ks[kb + 14u * lanes_per_pair]
-            k[15] = ks[kb + 15u * lanes_per_pair]
+            k[0] = conv[kb]
+            k[1] = conv[kb + lanes_per_col]
+            k[2] = conv[kb + 2u * lanes_per_col]
+            k[3] = conv[kb + 3u * lanes_per_col]
+            k[4] = conv[kb + 4u * lanes_per_col]
+            k[5] = conv[kb + 5u * lanes_per_col]
+            k[6] = conv[kb + 6u * lanes_per_col]
+            k[7] = conv[kb + 7u * lanes_per_col]
+            k[8] = conv[kb + 8u * lanes_per_col]
+            k[9] = conv[kb + 9u * lanes_per_col]
+            k[10] = conv[kb + 10u * lanes_per_col]
+            k[11] = conv[kb + 11u * lanes_per_col]
+            k[12] = conv[kb + 12u * lanes_per_col]
+            k[13] = conv[kb + 13u * lanes_per_col]
+            k[14] = conv[kb + 14u * lanes_per_col]
+            k[15] = conv[kb + 15u * lanes_per_col]
             var kv = k[0] * s[0]
             kv += k[1] * s[1]
             kv += k[2] * s[2]
@@ -1764,27 +1736,9 @@ class DnScan {
             kv += k[13] * s[13]
             kv += k[14] * s[14]
             kv += k[15] * s[15]
-            var ku = k[0] * u[0]
-            ku += k[1] * u[1]
-            ku += k[2] * u[2]
-            ku += k[3] * u[3]
-            ku += k[4] * u[4]
-            ku += k[5] * u[5]
-            ku += k[6] * u[6]
-            ku += k[7] * u[7]
-            ku += k[8] * u[8]
-            ku += k[9] * u[9]
-            ku += k[10] * u[10]
-            ku += k[11] * u[11]
-            ku += k[12] * u[12]
-            ku += k[13] * u[13]
-            ku += k[14] * u[14]
-            ku += k[15] * u[15]
-            kv = cluster_add(kv, lanes_per_pair)
-            ku = cluster_add(ku, lanes_per_pair)
+            kv = cluster_add(kv, lanes_per_col)
             let delta = bt * (v - eg * kv)
-            let deltu = bt * (vu - eg * ku)
-            let qb = par + lane
+            let qb = crow + qrow0
             s[0] = s[0] * eg + k[0] * delta
             s[1] = s[1] * eg + k[1] * delta
             s[2] = s[2] * eg + k[2] * delta
@@ -1801,95 +1755,45 @@ class DnScan {
             s[13] = s[13] * eg + k[13] * delta
             s[14] = s[14] * eg + k[14] * delta
             s[15] = s[15] * eg + k[15] * delta
-            u[0] = u[0] * eg + k[0] * deltu
-            u[1] = u[1] * eg + k[1] * deltu
-            u[2] = u[2] * eg + k[2] * deltu
-            u[3] = u[3] * eg + k[3] * deltu
-            u[4] = u[4] * eg + k[4] * deltu
-            u[5] = u[5] * eg + k[5] * deltu
-            u[6] = u[6] * eg + k[6] * deltu
-            u[7] = u[7] * eg + k[7] * deltu
-            u[8] = u[8] * eg + k[8] * deltu
-            u[9] = u[9] * eg + k[9] * deltu
-            u[10] = u[10] * eg + k[10] * deltu
-            u[11] = u[11] * eg + k[11] * deltu
-            u[12] = u[12] * eg + k[12] * deltu
-            u[13] = u[13] * eg + k[13] * deltu
-            u[14] = u[14] * eg + k[14] * deltu
-            u[15] = u[15] * eg + k[15] * deltu
-            var ou = qs[qb] * u[0]
-            ou += qs[qb + lanes_per_pair] * u[1]
-            ou += qs[qb + 2u * lanes_per_pair] * u[2]
-            ou += qs[qb + 3u * lanes_per_pair] * u[3]
-            ou += qs[qb + 4u * lanes_per_pair] * u[4]
-            ou += qs[qb + 5u * lanes_per_pair] * u[5]
-            ou += qs[qb + 6u * lanes_per_pair] * u[6]
-            ou += qs[qb + 7u * lanes_per_pair] * u[7]
-            ou += qs[qb + 8u * lanes_per_pair] * u[8]
-            ou += qs[qb + 9u * lanes_per_pair] * u[9]
-            ou += qs[qb + 10u * lanes_per_pair] * u[10]
-            ou += qs[qb + 11u * lanes_per_pair] * u[11]
-            ou += qs[qb + 12u * lanes_per_pair] * u[12]
-            ou += qs[qb + 13u * lanes_per_pair] * u[13]
-            ou += qs[qb + 14u * lanes_per_pair] * u[14]
-            ou += qs[qb + 15u * lanes_per_pair] * u[15]
-            var o = qs[qb] * s[0]
-            o += qs[qb + lanes_per_pair] * s[1]
-            o += qs[qb + 2u * lanes_per_pair] * s[2]
-            o += qs[qb + 3u * lanes_per_pair] * s[3]
-            o += qs[qb + 4u * lanes_per_pair] * s[4]
-            o += qs[qb + 5u * lanes_per_pair] * s[5]
-            o += qs[qb + 6u * lanes_per_pair] * s[6]
-            o += qs[qb + 7u * lanes_per_pair] * s[7]
-            o += qs[qb + 8u * lanes_per_pair] * s[8]
-            o += qs[qb + 9u * lanes_per_pair] * s[9]
-            o += qs[qb + 10u * lanes_per_pair] * s[10]
-            o += qs[qb + 11u * lanes_per_pair] * s[11]
-            o += qs[qb + 12u * lanes_per_pair] * s[12]
-            o += qs[qb + 13u * lanes_per_pair] * s[13]
-            o += qs[qb + 14u * lanes_per_pair] * s[14]
-            o += qs[qb + 15u * lanes_per_pair] * s[15]
-            o = cluster_add(o, lanes_per_pair)
-            ou = cluster_add(ou, lanes_per_pair)
+            var o = conv[qb] * s[0]
+            o += conv[qb + lanes_per_col] * s[1]
+            o += conv[qb + 2u * lanes_per_col] * s[2]
+            o += conv[qb + 3u * lanes_per_col] * s[3]
+            o += conv[qb + 4u * lanes_per_col] * s[4]
+            o += conv[qb + 5u * lanes_per_col] * s[5]
+            o += conv[qb + 6u * lanes_per_col] * s[6]
+            o += conv[qb + 7u * lanes_per_col] * s[7]
+            o += conv[qb + 8u * lanes_per_col] * s[8]
+            o += conv[qb + 9u * lanes_per_col] * s[9]
+            o += conv[qb + 10u * lanes_per_col] * s[10]
+            o += conv[qb + 11u * lanes_per_col] * s[11]
+            o += conv[qb + 12u * lanes_per_col] * s[12]
+            o += conv[qb + 13u * lanes_per_col] * s[13]
+            o += conv[qb + 14u * lanes_per_col] * s[14]
+            o += conv[qb + 15u * lanes_per_col] * s[15]
+            o = cluster_add(o, lanes_per_col)
             if (live && lane == 0u) {
                 orows[pa.o_off + t * pa.di + h * ds + col] = o
-                orows[pa.o_off + t * pa.di + h * ds + col + 1u] = ou
             }
             t++
         }
         if (live) {
-            state[sb + lane * ds] = s[0]
-            state[sb + lane * ds + row_stride] = s[1]
-            state[sb + lane * ds + 2u * row_stride] = s[2]
-            state[sb + lane * ds + 3u * row_stride] = s[3]
-            state[sb + lane * ds + 4u * row_stride] = s[4]
-            state[sb + lane * ds + 5u * row_stride] = s[5]
-            state[sb + lane * ds + 6u * row_stride] = s[6]
-            state[sb + lane * ds + 7u * row_stride] = s[7]
-            state[sb + lane * ds + 8u * row_stride] = s[8]
-            state[sb + lane * ds + 9u * row_stride] = s[9]
-            state[sb + lane * ds + 10u * row_stride] = s[10]
-            state[sb + lane * ds + 11u * row_stride] = s[11]
-            state[sb + lane * ds + 12u * row_stride] = s[12]
-            state[sb + lane * ds + 13u * row_stride] = s[13]
-            state[sb + lane * ds + 14u * row_stride] = s[14]
-            state[sb + lane * ds + 15u * row_stride] = s[15]
-            state[sb + lane * ds + 1u] = u[0]
-            state[sb + lane * ds + row_stride + 1u] = u[1]
-            state[sb + lane * ds + 2u * row_stride + 1u] = u[2]
-            state[sb + lane * ds + 3u * row_stride + 1u] = u[3]
-            state[sb + lane * ds + 4u * row_stride + 1u] = u[4]
-            state[sb + lane * ds + 5u * row_stride + 1u] = u[5]
-            state[sb + lane * ds + 6u * row_stride + 1u] = u[6]
-            state[sb + lane * ds + 7u * row_stride + 1u] = u[7]
-            state[sb + lane * ds + 8u * row_stride + 1u] = u[8]
-            state[sb + lane * ds + 9u * row_stride + 1u] = u[9]
-            state[sb + lane * ds + 10u * row_stride + 1u] = u[10]
-            state[sb + lane * ds + 11u * row_stride + 1u] = u[11]
-            state[sb + lane * ds + 12u * row_stride + 1u] = u[12]
-            state[sb + lane * ds + 13u * row_stride + 1u] = u[13]
-            state[sb + lane * ds + 14u * row_stride + 1u] = u[14]
-            state[sb + lane * ds + 15u * row_stride + 1u] = u[15]
+            state[sb] = s[0]
+            state[sb + row_stride] = s[1]
+            state[sb + 2u * row_stride] = s[2]
+            state[sb + 3u * row_stride] = s[3]
+            state[sb + 4u * row_stride] = s[4]
+            state[sb + 5u * row_stride] = s[5]
+            state[sb + 6u * row_stride] = s[6]
+            state[sb + 7u * row_stride] = s[7]
+            state[sb + 8u * row_stride] = s[8]
+            state[sb + 9u * row_stride] = s[9]
+            state[sb + 10u * row_stride] = s[10]
+            state[sb + 11u * row_stride] = s[11]
+            state[sb + 12u * row_stride] = s[12]
+            state[sb + 13u * row_stride] = s[13]
+            state[sb + 14u * row_stride] = s[14]
+            state[sb + 15u * row_stride] = s[15]
         }
     }
 }

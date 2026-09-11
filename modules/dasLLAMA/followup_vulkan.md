@@ -1117,7 +1117,15 @@ module) is independent and can land any time - it is pure structure.
     ~3000 against 5666; the 0.8B's per-role window (22989 us against the reference's 16177) puts 5.4
     of the 6.8 ms in the deltanet scan alone (8854 us, 492 per layer, against `GATED_DELTA_NET` 17 x
     202), conv 0.9 ms (93 per layer against 27-47), the out GEMM 0.8 (63 against 31), down 0.4 -
-    so the scan is the next lever, with the 0.8B as its ten-second loop. (2) The q5_K stamps run 0.74x of the reference's rate on the
+    so the scan is the next lever, with the 0.8B as its ten-second loop. The scan then took upstream's
+    shape (one column per lane cluster, k and q per lane from the conv plane, no staging, no barrier):
+    8854 -> 8084 us and pp512 21639 -> 22354 on the 0.8B, the 35B flat at 4217 +- 44; its first cut read
+    19004 us until `conv` and `smalls` carried `@readonly` - the emitter decorates NonWritable from that
+    annotation alone, so every other binding in the kernel file is declared writable and the driver
+    orders its loads behind every store. Next: the dispatch macro stamps `readonly` on every binding its
+    classifier finds unwritten (the whole kernel file at once), then the scan's lane shards go four wide
+    (a lane's 16 k or q elements as four float4 loads; upstream's spec-constant ds table makes its
+    addressing immediate, ours is a push constant). (2) The q5_K stamps run 0.74x of the reference's rate on the
     big shapes there (`cm2:k5 gate` l 70.6 TFLOP/s against its 93-96; k6 85.3 against its 72.7, so the
     q6_K stamp is already ahead): the reference's q5_K decoder beats its own q6_K by 1.18x through the
     `shAscales` shared-scale cache, ours trails k6 by 1.2x - the K-quant shared-scale lever of (a),

@@ -244,10 +244,10 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // with headroom — vk_moe_dn asserts them and the engine arm fail-closes on bigger models.
 let DN_MAX_DS = 128l
 
-//! The sequential scan's workgroup count for a head count and state width
+//! The sequential scan's workgroup count for a head count and state width: four subgroups of 16-row lane clusters, one column each
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
 def dn_scan_wgs(nvh, ds : int64) : int64 {
-    let cpg = 8l * (32l / (ds / 16l))
+    let cpg = 4l * (32l / (ds / 16l))
     return nvh * ((ds + cpg - 1l) / cpg)
 }
 
