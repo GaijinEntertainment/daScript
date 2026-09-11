@@ -14,7 +14,7 @@ def private check_cm2_tiles(t : T?; words : array<uint>; lbl : string; want : ar
     t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_6, "{lbl}: SPIR-V header version 1.6")
     t |> success(op_has_operand(words, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixKHR)), "{lbl}: OpCapability CooperativeMatrixKHR")
     var got <- spv_coopmat_shapes(words)
-    t |> equal(want, got, "{lbl}: the OpTypeCooperativeMatrixKHR shapes (A, B, f16 acc, f32 acc)")
+    t |> equal(want, got, "{lbl}: the sorted OpTypeCooperativeMatrixKHR shape set - the two operand tiles and the f16 and f32 accumulators")
     delete got
     t |> success(count_op(words, SpvOp.CooperativeMatrixMulAddKHR) == 1, "{lbl}: one OpCooperativeMatrixMulAddKHR")
     t |> success(count_op(words, SpvOp.FConvert) >= 1, "{lbl}: the f16 -> f32 accumulator convert emits OpFConvert")

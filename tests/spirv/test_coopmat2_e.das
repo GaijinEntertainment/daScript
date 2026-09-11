@@ -18,7 +18,7 @@ def test_coopmat2_e_tiles(t : T?) {
             "OpCapability CooperativeMatrixKHR")
         var got <- spv_coopmat_shapes(words)
         var want <- ["128x128", "128x128", "128x32", "32x128"]
-        t |> equal(want, got, "the OpTypeCooperativeMatrixKHR shapes (A, B, f16 acc, f32 acc) - the e stamp's, not the s stamp's")
+        t |> equal(want, got, "the sorted OpTypeCooperativeMatrixKHR shape set - the e stamp's 128x32 and 32x128 operand tiles and its two 128x128 accumulators, not the s stamp's")
         delete want
         delete got
         t |> success(count_op(words, SpvOp.CooperativeMatrixMulAddKHR) == 1, "one OpCooperativeMatrixMulAddKHR")

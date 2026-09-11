@@ -2913,7 +2913,7 @@ def public ray_query_words : array<uint> {
     return clone_to_move(ray_query_spv)
 }
 
-//! a module's OpConstant value by result id (its third operand); 0 when no such constant
+//! a module's OpConstant value by result id (the instruction's second operand after the type; the value is its third); 0 when no such constant
 def public spv_const_uint(words : array<uint>; id : uint) : uint {
     var v = 0u
     foreach_inst(words) $(opcode : uint; w : array<uint>; opStart : int; opCount : int) {
