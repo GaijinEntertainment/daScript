@@ -186,6 +186,20 @@ what it costs today and what the fix would change.
   reps (0.960x of 5217), tg32 132.5; the sanity argmax the same token, its logit 0.02 apart (the
   norm's sum in butterfly order) [direction-grade - one commit].
 
+- **LANDED (2026-09-11) - the deltanet scan loads the next token's k, q and v into registers while
+  the current token computes.** The per-token chain was latency-bound on its own row's loads (the
+  9B's scan 342 us a layer against the reference exe's GATED_DELTA_NET 250: 668 ns a token); now a
+  token's loads issue a token ahead and only the recurrence stays on the chain. pp512 on the pod
+  (Linux RTX 5080, -r 5, -r 10 on the 0.8B): the 0.8B 27558 -> 29016 +- 90 (0.919x -> 0.969x of
+  the reference exe's 29957; its scan is a quarter of the window), the 9B 5133 -> 5145 +- 12 (its
+  scan role 8193 -> 7736 us a window), the 35B 5091 -> 5156 +- 54; tg32 flat. The deltanet cells
+  match the CPU oracle (6 of 6). Dead beside it, all measured on the pod by whole-model rows: a
+  forced barrier between the prefill's gate and up GEMMs costs only 1.9% (they already co-run), a
+  hazard barrier naming this op's stage alone leaves the chained-dispatch floor at 4.5 us and tg32
+  flat, and the step computing its own beta/alpha dots in place of the GEMV dispatch reads the 0.8B
+  382.7 -> 373.7 and the 9B 102.9 -> 102.1 (the GEMV co-runs under qkv and z for free; its 17 us
+  profile figure was the Linux driver's drain at the stamp) [direction-grade - one commit].
+
 - **LANDED (2026-09-11) - the decode GEMV's block loop takes four blocks a lane straight-line, so
   four blocks' loads are in flight before a sum waits on one.** The rolled loop issued a block's
   loads after the last block's sum, one DRAM latency a block; the guarded single step stays as the

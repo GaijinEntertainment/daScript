@@ -1207,7 +1207,15 @@ module) is independent and can land any time - it is pure structure.
     (the loads of four blocks in flight a lane): the 9B 100.8 -> 102.9 (0.912x), the rest flat (their rows are
     one or two blocks a lane); the GEMV probe's `single` arm reads the chained-dispatch floor at 4.5 us on every
     format and the ring form ~900 GB/s at the 9B shape before and after - the token's remaining GEMV deficit is
-    the ramp of a plane read once (14-35 MB planes at 660-770 GB/s in the token). Next decode levers: the GEMV family on the 4096-wide planes (ours 500 GB/s in the token against the reference
+    the ramp of a plane read once (14-35 MB planes at 660-770 GB/s in the token). LANDED next: the scan prefetches
+    token t+1's k, q and v while t computes - the 0.8B pp512 27558 -> 29016 (0.969x), the 9B's scan 8193 -> 7736 us,
+    the 35B 5091 -> 5156. DEAD, by whole-model rows: a barrier forced between the prefill's gate and up costs 1.9%
+    (they co-run already); a hazard barrier with this op's stage alone as its destination leaves the 4.5 us
+    chained-dispatch floor where it is; the step computing its own beta/alpha dots reads slower (0.8B 382.7 ->
+    373.7) - the GEMV co-runs under qkv and z, and a co-running role reads its neighbours' drain in the Linux
+    profile, so a decode lever is judged by tg32 rows alone. Next: one dispatch for the dense prefill's gate+up
+    pair (384 workgroups in five waves, as the reference exe runs them; the barrier A/B says our two grids recover
+    a third of that overlap), then the GEMV family on the 4096-wide planes (ours 500 GB/s in the token against the reference
     exe's 610-780; its form: 2 rows a workgroup, 16 lanes a superblock, f32 x read as vec4, no shared memory). Left
     for the dense files' prefill: the scan (2.2 ms on the 9B), the 27B UD-Q3_K_XL's q3_K roles (k3 reads a 6-bit
     split scale per element and stages no cache yet). Found on the way, not

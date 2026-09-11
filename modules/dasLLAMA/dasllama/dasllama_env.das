@@ -334,7 +334,7 @@ struct public VulkanEnv {
     @clarg_doc = "Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument."
     mm_smalld : int64 = 64l
 
-    @clarg_doc = "Fused add+rms+requant: the decode tail (plus qk-norm+rope) AND the prefill batch ar+rq pairs; 0 pins the split dispatches for a same-build A/B."
+    @clarg_doc = "Fused add+rms+requant on every site of the decode token command, every model (Q8_0 or Q8_K by the consumer, the normed row stored where a head or router reads it; plus qk-norm+rope) AND the prefill batch ar+rq pairs; 0 pins the split dispatches for a same-build A/B."
     vk_fuse : bool = true
 
     @clarg_doc = "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail."
