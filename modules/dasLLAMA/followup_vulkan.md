@@ -1173,9 +1173,26 @@ module) is independent and can land any time - it is pure structure.
     the 9B 4369 -> 5133 +- 8 (0.892x; its window 116 -> 99 ms against the reference's 89 - what is left
     there: the scan 8.2 ms, out 4.1, z 5.5, the q/k/v/wo 6.9), the 27B UD-IQ4_XS 1496 -> 1708.5 +- 1.6
     (1.014x of 1684.9 +- 1.6; tg32 39.35, decode untouched), the 27B UD-Q3_K_XL 1469 -> 1596.3 +- 0.8
-    (0.959x of 1665.2 +- 2.9; tg32 41.3). Left for the dense files: the 9B's non-GEMM ms above, the 27B
-    UD-Q3_K_XL's q3_K roles (k3 reads a 6-bit split scale per element and stages no cache yet), then the
-    decode arc. Found on the way, not
+    (0.959x of 1665.2 +- 2.9; tg32 41.3). THE 9B WINDOW against the reference exe's concurrent logger (86.2 ms
+    of GPU time; ours 98.8 profiled, ~94 unprofiled): the K-quant tiles read at its rates on the filled
+    shapes (`cm2d:k5` on the pod: down 107 TFLOP/s against its q5_K 105, qkv 103 against 102, z/out 101
+    against 91-98) and 0.84x on the FFN gate shape (104 against 124; k6 84.5 against 112) - 192 workgroups
+    are 2.3 waves of the 5080's 84 SMs, and the `cm2w:` sweep says the l stamp runs ONE workgroup per SM
+    with a partial wave costing a whole one (84 workgroups 0.170 ms, 126 0.333, 168 0.379, 336 0.746), so the
+    grid costs three waves; the reference exe co-runs gate and up in one barrier group (384 workgroups in
+    five waves against three and three), which the hazard rail's co-run gives us only where the driver
+    overlaps the two dispatches. Its other window terms: GATED_DELTA_NET 250 us a layer against our scan
+    342, ADD + RMS_NORM 49 us a layer against our ar1 + ar2 71; ours shorter: ba + conv 2.8 ms against 5.5,
+    act 1.2 against 2.0, the out-norm 0.5 against 1.9. DECODE (the reference exe's logger, one token): the
+    9B 8.40 ms against our 11.0 profiled, per recurrent layer 254 us against 321 - our step 23.5 us against
+    its GATED_DELTA_NET 4.1 + SSM_CONV 5.2 (one 256-thread workgroup a head with single-thread loops over the
+    128 columns, against 4096 32-lane workgroups, a state column each), ba 17 against ~10 (two `RouterGemvF16`
+    dispatches of 32 workgroups with a hazard barrier between them), out 30.7 against ~20, up 49.6 against 42,
+    ar1 + ar2 26 against 18; every GEMV over 12 MB runs at 700-820 GB/s on both. The same step and ba floors
+    on every hybrid (step 23-25 us a layer, ba 12-26): 19% of the 0.8B's token, 9.5% of the 35B's, 6% of the
+    9B's and 27B's - the decode arc's first lever. Left for the dense files' prefill: the scan (2.2 ms on the
+    9B), the 27B UD-Q3_K_XL's q3_K roles (k3 reads a 6-bit split scale per element and stages no cache yet).
+    Found on the way, not
     of this lever: the iq2xxs cm2 stamps' modules fail spirv-val's OpVariable placement check ("All
     OpVariable instructions in a function must be the first instructions in the first block") in a
     decode function - the emitter hoists a kernel body's locals to its entry block but not a

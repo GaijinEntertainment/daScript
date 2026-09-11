@@ -96,6 +96,16 @@ k step the engine does not run for that format (64 where the engine runs 32, 32 
 64). `cm2:<fmt>` runs the same twin beside the s stamp on a 64-row window (`gate@64`),
 the dense chain's s use, and the 35B's shared expert shapes (`shexp`: 512 rows over K 2048;
 `shdown`: 2048 over 512), where the m column takes 16 and 64 workgroups on a 512-token window.
+`cm2d:<fmt>` runs the same sweep over the 4096-wide dense hybrid's window shapes (the
+Qwen3.5-9B: the FFN pair 12288 over K 4096, its down 4096 over K 12288, the fused qkv 8192, a z
+or out plane 4096 and an attention k or v plane 1024, at 512 tokens); its alternate is the
+reference exe's own rate on that model's window under its concurrent logger
+(`GGML_VK_PERF_LOGGER=1 GGML_VK_PERF_LOGGER_CONCURRENT=1 llama-bench -p 512 -n 0`: the q5_K
+pair 124 TFLOP/s and its down 105, q6_K 112 and 94, on the RTX 5080). `cm2w:<fmt>` is the wave
+sweep: the l stamp over one 256-token column (K 4096) at half-wave steps of the device's SM count
+from one wave to four, so the cost of a second wave says how many of the stamp's workgroups an SM
+runs at once; its alternate is the one-wave row (the RTX 5080 runs one: k5 at 84 workgroups
+0.170 ms, 126 0.333, 168 0.379, 252 0.562, 336 0.746 - a partial wave costs a whole one).
 The reference row is `test-backend-ops perf MUL_MAT_ID` at `n_mats=128,n_used=8,m=768,n=512,k=2048`.
 Two arms read the window chain's own overheads at those shapes rather than a tile: `ts:<fmt>`
 dispatches two m stamps back to back into two planes - plain, with the profile's bottom-of-pipe

@@ -7,7 +7,8 @@ options _dasllama_internal = true
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
-// k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m tiles; moe:<fmt> its s tile over the
+// k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m tiles, cm2d:<fmt> the same over the
+// 4096-wide dense hybrid's shapes, cm2w:<fmt> its l stamp's wave sweep; moe:<fmt> its s tile over the
 // MoE expert schedule; ts:<fmt> a timestamp between two of its m stamps; cold:<fmt> its m stamp
 // on planes the L2 cannot hold; cm2x|k6x|ref the bisect
 // and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
@@ -467,7 +468,9 @@ def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; 
     var xfh : array<uint>
     var xqh : array<uint>
     var axsh : array<float>
+    wqh |> reserve(totsb * wq_words)   //! a wave sweep's fourth wave is 75 MB of q5_K blocks, past the unreserved growth cap
     wqh |> resize(totsb * wq_words)
+    wsuh |> reserve(totsb * ws_words)
     wsuh |> resize(totsb * ws_words)
     xfh |> resize(cnt * n / 2)
     xqh |> resize(cnt * nsb * 64)
@@ -537,13 +540,13 @@ def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int) {
+def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; lonly : bool = false) {
     let dv = cm2_shape_upload(fmt, d, n, cnt)
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     //! the l/m/s stamps, the s stamp's other-depth twin where the format has one, and the kq batch tile
     let vnames = fixed_array("cm2l", "cm2m", "cm2s", "s{probe_stwin_depth(fmt)} ", "kq  ")
     for (v in range(5)) {
-        if (v == 3 && !probe_stwin_has(fmt)) continue
+        if ((lonly && v != 0) || (v == 3 && !probe_stwin_has(fmt))) continue
         let ttile = v == 0 ? 256 : (v == 1 ? 128 : 32)
         if (cnt < ttile) continue   //! a column wider than the region: the pick never takes it, and the m stamp's unclamped load would read past the plane
         let wtile = v == 4 ? 32 : 128
@@ -3183,6 +3186,14 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             only = "cm2:"
             var pf : KqFmt
             cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
+        } elif (a |> starts_with("cm2d:")) {
+            only = "cm2d:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
+        } elif (a |> starts_with("cm2w:")) {
+            only = "cm2w:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
         } elif (a |> starts_with("moe:")) {
             only = "moe:"
             var pf : KqFmt
@@ -3215,20 +3226,36 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         }
     }
     g_probe_exit = 0
-    if (only == "cm2:") {
+    if (only == "cm2:" || only == "cm2d:" || only == "cm2w:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
             return
         }
         if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
-            print("cm2:<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            print("{only}<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
             return
         }
         if (g_gpu.coopmat_mode != COOPMAT_CM2) {
-            print("cm2:<fmt> reads the cm2 stamps; off cm2 mode the class ladders route to the KHR tile - run with DASLLAMA_COOPMAT=cm2\n")
+            print("{only}<fmt> reads the cm2 stamps; off cm2 mode the class ladders route to the KHR tile - run with DASLLAMA_COOPMAT=cm2\n")
             return
         }
-        print("ATTRIBUTION SWEEP cm2:{cm2_fmt_names()}: timing-only rows, no output compared\n")
+        if (only == "cm2w:") {
+            //! the wave sweep: the l stamp over one 256-token column at half-wave steps of the device's SM count, so the
+            //! cost of a second wave says how many of the stamp's workgroups an SM runs at once (a whole first wave: one)
+            let sm = g_gpu.sm_count
+            if (sm <= 0) {
+                print("cm2w:<fmt> needs the device's SM count (VK_NV_shader_sm_builtins)\n")
+                return
+            }
+            print("WAVE SWEEP cm2w:{cm2_fmt_names()}: the l stamp over one 256-token column, K 4096, {sm} workgroups a wave\n")
+            verify(cm2_cls_ensure(cm2_fmt, 256l), "cm2w:<fmt> probe pipeline must engage")
+            for (h in range(2, 9)) {
+                let wgs = (h * sm) / 2
+                run_cm2_fmt_shape(cm2_fmt, "{wgs} wgs ({h}/2 waves)", wgs * 128, 4096, 256, true)
+            }
+            return
+        }
+        print("ATTRIBUTION SWEEP {only}{cm2_fmt_names()}: timing-only rows, no output compared\n")
         // the four-wide decode's A/B, both arms in ONE process, interleaved: the class pipelines
         // rebuild under each arm (the twin served, then stripped), two rounds so drift shows
         let twin_device = g_gpu.decvec_on
@@ -3241,6 +3268,15 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                     && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
                     && kq_batch_cls_ensure(cm2_fmt, false), "cm2:<fmt> probe pipelines must engage")
                 let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
+                if (only == "cm2d:") {
+                    //! the 4096-wide dense hybrid's window (the Qwen3.5-9B): the FFN pair over K 4096 (192 l workgroups), its down over K 12288, the fused qkv, a z or out plane, and an attention k or v plane (16 l workgroups: the split-k shape)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down ", 4096, 12288, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} qkv  ", 8192, 4096, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} z/out", 4096, 4096, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v  ", 1024, 4096, 512)
+                    continue
+                }
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
