@@ -191,14 +191,61 @@ def play_sfx(samples : array<float>) {
 
 // --- Music (daStrudel) ---
 
+// The beds are built where the engine runs (the worker thread, or here in the main-thread arm):
+// a Pattern is a lambda over this context's heap and cannot cross to the worker, so a state
+// change sends a `tune:<name>` command and the handler builds the tracks. Track names and their
+// gains live in these tables so a pause can duck every track and bring it back.
 var g_music_tracks : table<string; int>
+var g_music_gains : table<string; float>
 
-def setup_menu_music() {
-    // Title screen — mysterious, anticipatory, classic arcade title vibe
-    g_music_tracks["drums"] = strudel_add_track(s("<bd ~ [~ hh] ~> <bd ~ [~ hh] [hh?0.3 ~]> <bd ~ [~ hh] ~> <bd ~ [~ cp?0.4] [hh?0.3 ~]>"), 0.45)
-    g_music_tracks["bass"] = strudel_add_track(note_pattern("<[a2 a2] ~ [e2 e2] ~> <[a2 a2] ~ [f2 f2] ~> <[a2 a2] ~ [g2 g2] ~> <[a2 a2] ~ [e2 e2] [f2 e2]>", "sine"), 0.35)
-    g_music_tracks["lead"] = strudel_add_track(note_pattern("<a4 c5 e5 c5> <a4 b4 c5 e5> <f5 e5 c5 a4> <e5?0.7 d5 c5 b4>", "triangle"), 0.2)
-    g_music_tracks["arp"] = strudel_add_track(note_pattern("<[a4 c5 e5 a5]> <[a4 c5 e5 c5]> <[f4 a4 c5 f5?0.5]> <[e4 g4 b4 e5?0.5]>", "triangle"), 0.1)
+def music_replace_track(name : string; var pat : Pattern; gain : float) {
+    if (key_exists(g_music_tracks, name)) {
+        strudel_remove_track(g_music_tracks[name])
+    }
+    g_music_tracks[name] = strudel_add_track(pat, gain)
+    g_music_gains[name] = gain
+}
+
+// Title: a four-token phrase that harmonises itself at half and quarter speed, a three-voice canon
+// that breathes for as long as the menu sits there
+def tune_menu() {
+    strudel_set_bpm(120.0lf)
+    music_replace_track("flute", (note("c3 eb3(3,8) c4/2 g3*2", "triangle")
+        |> superimpose(@(var x : Pattern) => x |> slow(2) |> add(12))
+        |> superimpose(@(var x : Pattern) => x |> slow(4) |> sub(5))
+        |> add(n("<0 1>/16"))
+        |> release(0.1)
+        |> room(1.0)), 0.35)
+}
+
+// Stage: four on the floor in G minor, a plucked saw bass on a five-in-eight, square stabs under
+// a sixteen-cycle filter sweep, a lead that comes and goes every sixteen cycles; the masks and
+// sweeps are what keep it alive past the third minute
+def tune_play() {
+    strudel_set_bpm(132.0lf)
+    music_replace_track("drums", s("bd*2, ~ [cp,sd]"), 0.55)
+    music_replace_track("hats", (s("hh*4")
+        |> sometimes(@(var x : Pattern) => fast(x, 2))
+        |> rarely(@(var x : Pattern) => x |> speed(0.5) |> delay(0.5))
+        |> end_pos(perlin() |> range(0.02, 0.05) |> slow(8))
+        |> room(0.5)), 0.3)
+    music_replace_track("bass", (n("<0 2 5 3>") |> scale("G1:minor") |> struct_(s("x(5,8,-1)"))
+        |> set_sound("sawtooth") |> decay(0.1) |> sustain(0) |> lpf(800) |> lpq(8)), 0.45)
+    music_replace_track("stabs", (note("<G4 A4 Bb4 A4>,Bb3,D3") |> struct_(s("~ x*2")) |> set_sound("square")
+        |> lpf(sine() |> range(500, 4000) |> slow(16)) |> lpq(10)
+        |> decay(sine() |> slow(15) |> range(0.05, 0.2)) |> sustain(0)
+        |> room(0.5) |> delay(0.2) |> mask(s("<0 1 1 1>/8"))), 0.3)
+    music_replace_track("lead", (n("0 5 3 2") |> sometimes(@(var x : Pattern) => slow(x, 2))
+        |> off(0.125, @(var x : Pattern) => add(x, 5))
+        |> scale("G4:minor") |> set_sound("triangle")
+        |> decay(0.05) |> sustain(0) |> delay(0.2) |> degradeBy(0.5) |> mask(s("<0 1>/16"))), 0.25)
+}
+
+//! every track ducked to `factor` of its gain over `time` - 0 fades the bed out, 1 brings it back
+def music_fade_all(factor, time : float) {
+    for (name, idx in keys(g_music_tracks), values(g_music_tracks)) {
+        strudel_fade_track(idx, g_music_gains[name] * factor, time)
+    }
 }
 
 def strudel_music_cmd(cmd : string) {
@@ -208,12 +255,21 @@ def strudel_music_cmd(cmd : string) {
     }
     let action = parts[0]
     let name = parts[1]
-    if (action == "play" && length(parts) >= 3) {
+    if (action == "tune") {
+        if (name == "menu") {
+            tune_menu()
+        } elif (name == "play") {
+            tune_play()
+        }
+    } elif (action == "fadeall" && length(parts) >= 3) {
+        music_fade_all(float(to_double(parts[1])), float(to_double(parts[2])))
+    } elif (action == "play" && length(parts) >= 3) {
         let gain = length(parts) >= 4 ? float(to_double(parts[3])) : 1.0
         if (key_exists(g_music_tracks, name)) {
             strudel_remove_track(g_music_tracks[name])
         }
         g_music_tracks[name] = strudel_add_track(s(parts[2]), gain)
+        g_music_gains[name] = gain
     } elif (action == "note" && length(parts) >= 4) {
         let synth = parts[3]
         let gain = length(parts) >= 5 ? float(to_double(parts[4])) : 0.4
@@ -221,6 +277,7 @@ def strudel_music_cmd(cmd : string) {
             strudel_remove_track(g_music_tracks[name])
         }
         g_music_tracks[name] = strudel_add_track(note_pattern(parts[2], synth), gain)
+        g_music_gains[name] = gain
     } elif (action == "stop") {
         if (key_exists(g_music_tracks, name)) {
             let fade_time = length(parts) >= 3 ? float(to_double(parts[2])) : 0.5
@@ -236,8 +293,7 @@ def strudel_music_cmd(cmd : string) {
 }
 
 def strudel_music_main() {
-    strudel_set_bpm(118.0lf)
-    setup_menu_music()
+    tune_menu()
     strudel_play(@@strudel_music_cmd)
 }
 
@@ -253,27 +309,15 @@ def music_dispatch(cmd : string) {
 }
 
 def stop_all_tracks(fade : float) {
-    music_dispatch("stop:drums:{fade}")
-    music_dispatch("stop:bass:{fade}")
-    music_dispatch("stop:lead:{fade}")
-    music_dispatch("stop:arp:{fade}")
+    music_dispatch("fadeall:0:{fade}")
 }
 
 def start_menu_music() {
-    strudel_set_bpm(118.0lf)
-    music_dispatch("play:drums:<bd ~ [~ hh] ~> <bd ~ [~ hh] [hh?0.3 ~]> <bd ~ [~ hh] ~> <bd ~ [~ cp?0.4] [hh?0.3 ~]>:0.45")
-    music_dispatch("note:bass:<[a2 a2] ~ [e2 e2] ~> <[a2 a2] ~ [f2 f2] ~> <[a2 a2] ~ [g2 g2] ~> <[a2 a2] ~ [e2 e2] [f2 e2]>:sine:0.35")
-    music_dispatch("note:lead:<a4 c5 e5 c5> <a4 b4 c5 e5> <f5 e5 c5 a4> <e5?0.7 d5 c5 b4>:triangle:0.2")
-    music_dispatch("note:arp:<[a4 c5 e5 a5]> <[a4 c5 e5 c5]> <[f4 a4 c5 f5?0.5]> <[e4 g4 b4 e5?0.5]>:triangle:0.1")
+    music_dispatch("tune:menu")
 }
 
 def start_play_music() {
-    // Stage theme — driving, energetic, classic arcade action in A minor
-    strudel_set_bpm(142.0lf)
-    music_dispatch("play:drums:<bd [hh hh] sd [hh hh]> <bd [hh hh] sd [hh cp]> <bd [hh hh] sd [hh hh]> <bd [hh hh] [sd sd] [hh hh]> <bd [hh hh] sd [hh hh]> <bd [hh cp?0.5] sd [hh hh]> <bd [hh hh] sd [hh?0.6 hh]> <bd [hh hh] [sd?0.4 sd] [cp?0.5 hh]>:0.6")
-    music_dispatch("note:bass:<[a2 a2] [a2 a2] [f2 f2] [g2 g2]> <[a2 a2] [a2 g2] [f2 f2] [e2 e2]> <[a2 a2] [a2 a2] [f2 f2] [g2 g2]> <[a2 a2] [c3 c3] [d3 d3] [e3 e3]> <[a2 a2] [a2 a2] [f2 f2] [g2 g2]> <[a2 a2] [g2 f2] [e2 e2] [e2 f2]> <[a2 a2] [a2 a2] [d3 d3] [c3 c3]> <[a2 a2] [f2?0.7 f2] [g2 g2] [a2 b2]>:square:0.3")
-    music_dispatch("note:lead:<a4 c5 e5 a5> <g5 e5 c5 ~> <a4 c5 e5 a5> <f5 e5 d5 c5> <a4 ~ [c5 d5] e5> <g5 e5 c5 a4> <[a4 b4] c5 e5 ~> <b4?0.7 c5 [d5 e5?0.8] a5>:sawtooth:0.25")
-    music_dispatch("note:arp:<[a4 c5 e5 a5 c6 a5 e5 c5]> <[e5 a5 c6 e6 c6 a5 e5 a4]> <[a4 c5 e5 a5?0.6 c6?0.6 a5 e5 c5]> <[f4 a4 c5 f5 c5 a4 f4 a4]> <[a4 c5 e5 a5 c6 a5 e5 c5]> <[e4 g4 b4 e5 b4 g4?0.7 e4 g4]> <[a4 e5?0.6 c5 a5?0.6 e5 c5?0.6 a4 e5]> <[f4 a4 c5 f5?0.5 c5 a4?0.7 f4 a4]>:triangle:0.12")
+    music_dispatch("tune:play")
 }
 
 def start_win_music() {
@@ -304,19 +348,13 @@ def update_music() {
     let FADE_IN = 0.5
     // Pause: fade down existing tracks, keep them alive
     if (game_state == GameState.paused) {
-        music_dispatch("fade:drums:0.15:{FADE_OUT}")
-        music_dispatch("fade:bass:0.15:{FADE_OUT}")
-        music_dispatch("fade:lead:0.1:{FADE_OUT}")
-        music_dispatch("fade:arp:0.0:{FADE_OUT}")
+        music_dispatch("fadeall:0.25:{FADE_OUT}")
         prev_music_state = game_state
         return
     }
     // Unpause: fade tracks back up
     if (prev_music_state == GameState.paused && game_state == GameState.playing) {
-        music_dispatch("fade:drums:0.6:{FADE_IN}")
-        music_dispatch("fade:bass:0.3:{FADE_IN}")
-        music_dispatch("fade:lead:0.25:{FADE_IN}")
-        music_dispatch("fade:arp:0.15:{FADE_IN}")
+        music_dispatch("fadeall:1:{FADE_IN}")
         prev_music_state = game_state
         return
     }
@@ -1498,8 +1536,7 @@ def init() {
             strudel_init(@@strudel_music_main)
         } else {
             strudel_create_channel()
-            strudel_set_bpm(118.0lf)
-            setup_menu_music()
+            tune_menu()
         }
         strudel_set_volume(0.4, 0.0)
         music_enabled = true
