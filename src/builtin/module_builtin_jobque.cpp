@@ -756,6 +756,7 @@ namespace das {
     // the worker, report it the way the host reports a main-thread panic, then let it terminate as
     // before -- a panic stays fatal, it just stops being silent.
     __forceinline void invoke_job_lambda ( Context * forkContext, LineInfoArg * lineinfo, Lambda & flambda ) {
+        GcRootLambda root(flambda, forkContext);   // a collect inside the lambda must see its capture; no jitted frame shows it
         bool ok = forkContext->runWithCatch([&]() {
             das_invoke_lambda<void>::invoke(forkContext, lineinfo, flambda);
         });
@@ -779,6 +780,7 @@ namespace das {
             auto ptr = forkContext->allocate(lambdaSize + 16, lineinfo);
             forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
             memset ( ptr, 0, lambdaSize + 16 );
+            *((TypeInfo **)ptr) = lambda.getTypeInfo();   // the header a collect walks the capture by (das_ascend writes the same)
             ptr += 16;
             das_invoke_function<void>::invoke(forkContext, lineinfo, fn, ptr, lambda.capture);
             das_delete<Lambda>::clear(context, lambda);
@@ -801,6 +803,7 @@ namespace das {
         auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize + 16 );
+        *((TypeInfo **)ptr) = lambda.getTypeInfo();   // the header a collect walks the capture by (das_ascend writes the same)
         ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
@@ -1200,6 +1203,7 @@ namespace das {
         auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
         memset ( ptr, 0, lambdaSize + 16 );
+        *((TypeInfo **)ptr) = lambda.getTypeInfo();   // the header a collect walks the capture by (das_ascend writes the same)
         ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
