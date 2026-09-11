@@ -94,10 +94,10 @@ Three consequences the code is shaped around:
   per-dispatch: the wrong lattice indexes garbage scales, outputs stay finite, and nothing
   panics - only end-to-end token parity (`harness/parity.das`) catches it, so a resident
   change is witnessed only by parity runs over both a q8 and a k-quant model.
-- **The fused add-rms+requant twin exists only for the per-32 form.** The rail gates it on
-  "every consumer of this buffer is Q8_0-scaled" (`rd_x_quants_b32`), and the profiler stamp
-  shape rides the SAME gate; on a different gate the profiles desync from what actually
-  dispatched.
+- **The fused add-rms+requant twin quantizes the consumer's block form per site** (`RqStamp`:
+  Q8_0 or Q8_K, the normed row also stored where a consumer reads it as floats), picked once
+  every layer is registered (`rd_ensure_fused_sets`); the profiler keys on the stamps' recorded
+  names, so no count rides the gate.
 - **The activation group - the dispatches that read one activation buffer, never a layer - is the
   decision unit: its members share one lattice, and its feed is picked once for all of them.**
   q/k/v share one quantized x; gate/up share another. Resident arming classifies each member's

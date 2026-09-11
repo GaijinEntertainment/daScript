@@ -67,6 +67,54 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
     return kfn
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens")]
+def private family_write_mask(st : StructurePtr; mod : Module?; bufs : array<VkBufField>; tracked : table<string>) : uint {
+    var wmask = 0u
+    mod |> for_each_function("") $(fn) {
+        if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
+            var is_kernel = false
+            for (ann in fn.annotations) {
+                if (ann.annotation.name == "spirv_kernel") {
+                    is_kernel = true
+                    break
+                }
+            }
+            if (is_kernel) {
+                var res <- classify_field_access(fn, mod, st, tracked)
+                if (!empty(res.err)) {
+                    wmask = ~0u
+                }
+                for (bf in bufs) {
+                    if (key_exists(res.writes, bf.name)) {
+                        wmask |= 1u << uint(bf.binding)
+                    }
+                }
+                delete res
+            }
+        }
+    }
+    return wmask
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens")]
+def private stamp_readonly(var st : StructurePtr; base : string; write_mask : uint; var errors : das_string) : bool {
+    for (field in st.fields) {
+        continue if (!(find_arg(field.annotation, "ssbo") is tBool))
+        let fb = find_arg(field.annotation, "binding") ?as tInt ?? -1
+        continue if (fb < 0)
+        let written = (write_mask & (1u << uint(fb))) != 0u
+        let declared = find_arg(field.annotation, "readonly") is tBool
+        if (written && declared) {
+            errors := "[vk_dispatch] {base}: member '{field.name}' is @readonly but a kernel of {st.name} writes binding {fb}"
+            return false
+        }
+        if (!written && !declared && !(find_arg(field.annotation, "writeonly") is tBool) && !(find_arg(field.annotation, "maybe_readonly") is tBool)) {
+            field.annotation |> add_annotation_argument("readonly", true)
+        }
+    }
+    return true
+}
+
 def private mk_ret_bool(at : LineInfo; v : bool) : ExpressionPtr {
     return new ExprReturn(at = at, subexpr = new ExprConstBool(at = at, value = v))
 }
@@ -293,7 +341,11 @@ class VkDispatch : AstStructureAnnotation {
             }
         }
         delete res
+        let write_mask = family_write_mask(st, compiling_module(), bufs, tracked)
         delete tracked
+        if (!stamp_readonly(st, base, write_mask, errors)) {
+            return false
+        }
 
         // ===== the generated surface =====
         // one VkdClass global + one set builder per FAMILY (ordinal 0 generates them); every

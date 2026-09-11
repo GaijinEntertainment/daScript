@@ -27,9 +27,10 @@ here.
 ## HOW_TO documents (REQUIRED for the task they name)
 
 A HOW_TO is a procedure: imperative, ordered, each step citing the architecture section that
-owns it, validated by execution, with a QUIRKS ledger of every place the pattern broke so a
-follow-up arc can unquirk it. Read the one that matches your task before the first edit, and
-fix it in the same session when a step turns out wrong.
+owns it, validated by execution. A place where the pattern broke is a trap sentence at the step
+where it bites when the author must know it, and a row of `followup_general.md` when it is work
+to unquirk - never a record of what happened, which git keeps. Read the one that matches your
+task before the first edit, and fix it in the same session when a step turns out wrong.
 
 | Document | Read BEFORE... |
 |---|---|

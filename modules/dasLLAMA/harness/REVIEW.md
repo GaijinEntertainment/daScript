@@ -19,12 +19,12 @@ the exchange.
 
 **Never set `@role = "alias"` or `"weight"` on a `[vk_dispatch]` binding a file in this folder
 declares that no body in that file reads and a `../dasllama/` body does - move the read into a
-body the binding's own file declares.** The lens - the compile-time pass that collects a binding's accesses from the
-declaring file's bodies alone - reports such a binding as never accessed, and `@role` silences
-that report by leaving the binding out of the read and write binding sets the generated
-dispatch builds its barriers from.
+body the binding's own file declares.** The lens - the pass that collects a binding's accesses
+from its declaring file alone - reports such a binding as never accessed, and `@role` silences
+the report.
 
-**A diff that adds an arm to `vk_gemm_probe.das` ships the alternate that arm's number is ranked
-against - the prior tile, the reference engine's own kernel, the other lane count, whichever the
-arm exists to beat (`../ARCHITECTURE_MEASUREMENT.md` sec.2.5).** A number with no alternate
-beside it ranks nothing.
+**A diff that adds a timed arm to a file in this folder that prints timed rows, or changes
+which kernel an existing arm times, ships the alternate that arm's number is ranked against as
+a printed row of the same run, or records in `../ARCHITECTURE_MEASUREMENT.md` sec.2.5 the
+reference-engine row the arm is read against, with the command that produced it.** An arm is a
+timed row such a file prints under one arg. A number with no alternate beside it ranks nothing.

@@ -148,9 +148,13 @@ class ArRqBase : ArBase {
     // quantize the normed row instead of storing it: 8 lanes per 32-block, 32 blocks per pass
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def rq_row(rbase, qb0 : uint) {
-        let tid = gl_LocalInvocationID.x
         let ss = accum_row(rbase)
         let inv = rms_inv(ss)
+        quant32(qb0, inv)
+    }
+
+    def quant32(qb0 : uint; inv : float) {
+        let tid = gl_LocalInvocationID.x
         let nblk = pa.dim / 32u
         let lane8 = tid % 8u
         var b = tid / 8u
@@ -190,6 +194,75 @@ class ClsArAddRmsRqB : ArRqBase {
     def run {
         rq_row(gl_WorkGroupID.x * pa.dim, gl_WorkGroupID.x * (pa.dim / 32u))
     }
+}
+
+[ |> template_struct_instance]
+class template ArRqT : ArRqBase {
+    @template_constant KBLK : bool = false    //!< the quant form: Q8_K superblocks (a scale per 256) instead of Q8_0's 32-blocks
+    @template_constant STOREX : bool = false  //!< the normed row stored to binding 5 as floats beside the quants
+    @ssbo @binding = 5 @template_gate = STOREX yo : array<float>   //! the normed row, for the consumers that read it as floats
+
+    //! the Q8_K superblocks of the stashed row at inv: a 32-lane block a 256-block, eight values a lane - the block by the invocation id, as the requant class maps it, so the amax fold's masks stay inside it on any subgroup width
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def quant_k(inv : float) {
+        let nblk = pa.dim / 256u
+        let lane = gl_LocalInvocationID.x & 31u
+        var b = gl_LocalInvocationID.x >> 5u
+        while (b < nblk) {
+            let base = b * 256u + lane
+            var vals : float[8]
+            var m = 0.0
+            for [unroll] (r in range(8)) {
+                let e = base + uint(r) * 32u
+                let v = wn[pa.woff + e] * (row[e] * inv)
+                vals[r] = v
+                m = max(m, abs(v))
+            }
+            let d = q8k_amax5(m) / 127.0
+            if (lane == 0u) {
+                outs[b] = d
+            }
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            for [unroll] (r in range(8)) {
+                outq[base + uint(r) * 32u] = q8_quant1(vals[r], id)
+            }
+            b += 8u   //! the 256-thread workgroup's eight blocks
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let ss = accum_row(0u)
+        let inv = rms_inv(ss)
+        static_if (STOREX) {
+            var k = gl_LocalInvocationID.x
+            while (k < pa.dim) {
+                yo[k] = wn[pa.woff + k] * (row[k] * inv)
+                k += 256u
+            }
+        }
+        static_if (KBLK) {
+            quant_k(inv)
+        } else {
+            quant32(0u, inv)
+        }
+    }
+}
+
+[vk_dispatch(name = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqX : ArRqT {
+    override STOREX = true
+}
+
+[vk_dispatch(name = "cls_ar_rqk", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqK : ArRqT {
+    override KBLK = true
+}
+
+[vk_dispatch(name = "cls_ar_rqkx", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqKX : ArRqT {
+    override KBLK = true
+    override STOREX = true
 }
 
 class ArCombBase : ArBase {
@@ -685,11 +758,15 @@ struct RouterArgs {
     dim : uint    // row width
     woff : uint   // this layer's row base in the span's router plane (elements)
     obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
+    ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0 = one base
+    obase_split : uint
 }
 
 [ |> template_struct_instance]
 class template RouterGemvT {
+    @template_constant PAIRS : bool = false   //!< the f16 stamp reads its row as half pairs, one word a step
     @ssbo @binding = 0 @role = "weight" w : array<KT>   // the rows, row-major [ne x dim] per layer
+    @ssbo @binding = 0 @role = "alias" @template_gate = PAIRS w_pairs : array<uint>   //! the same rows as half pairs
     @ssbo @binding = 1 x : array<float>       // the FFN-normed row
     @ssbo @binding = 2 logits : array<float>  // ne logits
     @push_constant pa : RouterArgs
@@ -701,9 +778,19 @@ class template RouterGemvT {
         let base = pa.woff + e * pa.dim
         var acc = 0.0
         var i = gl_LocalInvocationID.x
-        while (i < pa.dim) {
-            acc += float(w[base + i]) * x[i]   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
-            i += 256u
+        static_if (PAIRS) {
+            let hb = base >> 1u
+            let hd = pa.dim >> 1u
+            while (i < hd) {
+                let p = unpackHalf2x16(w_pairs[hb + i])
+                acc += p.x * x[2u * i] + p.y * x[2u * i + 1u]
+                i += 256u
+            }
+        } else {
+            while (i < pa.dim) {
+                acc += float(w[base + i]) * x[i]   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
+                i += 256u
+            }
         }
         let s = subgroupAdd(acc)
         if (gl_SubgroupInvocationID == 0u) {
@@ -717,7 +804,11 @@ class template RouterGemvT {
                 tot += part[sgi]
                 sgi++
             }
-            logits[pa.obase + e] = tot
+            var o = pa.obase + e
+            if (pa.ne_split != 0u && e >= pa.ne_split) {
+                o = pa.obase_split + (e - pa.ne_split)
+            }
+            logits[o] = tot
         }
     }
 }
@@ -730,6 +821,7 @@ class RouterGemv : RouterGemvT {
 [vk_dispatch(name = "router_gemv_f16_cls", grid = "ne", params = "ne : int64")]
 class RouterGemvF16 : RouterGemvT {
     typedef KT = float16
+    override PAIRS = true
 }
 
 struct DnBaArgs {
@@ -1154,6 +1246,7 @@ struct SchedArgs {
 
 let SCHED_S_ROWS = 32u    //! the s column: the ladder's small-bucket and remainder tile
 let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the last one partial
+let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column: a sentinel no column width can be (the dense m stamp already keys by its 128 rows)
 
 //! the ladder's m rows of a bucket of `c` rows: none up to the s column, else whole m columns plus a
 //! partial one when the remainder passes the s column (a remainder within it takes the s column)
@@ -1329,6 +1422,7 @@ class MoeGatherF16 {
 // ===== deltanet: the conv front =====
 
 struct DnConvArgs {
+    npos : uint       // the window's rows
     cd : uint         // conv width (channels)
     kd : uint         // q/k region width (2*kd channels L2-normed in ds-blocks)
     ds : uint         // d_state (the norm block)
@@ -1340,66 +1434,90 @@ struct DnConvArgs {
     qscale : float
 }
 
-// depthwise conv + SiLU + per-head q/k L2-norm, one workgroup per position; every handoff stays
-// in shared, each global output element has exactly one writer
-[vk_dispatch(name = "dn_conv_cls", grid = "npos", params = "npos : int64")]
+[vk_dispatch(name = "dn_conv_cls", grid = "wgs", params = "wgs : int64")]
 class DnConv {
     @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
     @ssbo @binding = 1 outr : array<float>     // conv output rows
     @ssbo @binding = 2 smalls : array<float>   // taps + history + any small planes (push offsets)
     @push_constant pa : DnConvArgs
-    @workgroup row : float[8192]               // the position row's q/k region, silu'd: staged for the per-head norm (2 kd <= DN_MAX_QK); the v region streams through
-    @workgroup nsc : float[64]                 // per-block L2 scales
+    @workgroup wsum : float[int(8u * DN_CONV_PB)]   //! the eight 32-lane blocks' per-position sums of squares
 
-    [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv")]
+    //! channel ch's input at window row sp: a window row, or the history row sp + taps below the window in the layout hist_mode names
+    def xrow(sp : int; ch, taps : uint) : float {
+        if (sp >= 0) {
+            return src[uint(sp) * pa.cd + ch]
+        }
+        let hidx = uint(max(sp + int(taps), 0))
+        if (pa.hist_mode == 1u) {
+            return smalls[pa.hist_off + ch * taps + hidx]
+        }
+        return smalls[pa.hist_off + hidx * pa.cd + ch]
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
     def run {
-        let p = gl_WorkGroupID.x
+        let cblocks = (pa.cd + 255u) / 256u
+        let p0 = (gl_WorkGroupID.x / cblocks) * DN_CONV_PB
+        let ch = (gl_WorkGroupID.x % cblocks) * 256u + gl_LocalInvocationID.x
+        let live = ch < pa.cd
+        let cch = live ? ch : 0u               // a dead lane reads channel 0 and stores nothing
         let taps = pa.dconv - 1u
-        let tid = gl_LocalInvocationID.x
-        // depthwise conv + SiLU into shared, strided channels; taps in the raw fblob layout
-        var ch = tid
-        while (ch < pa.cd) {
-            var acc = 0.0
-            var k = 0u
-            while (k < pa.dconv) {
-                let sp = int(p + k) - int(taps)
-                var xv = 0.0
-                if (sp >= 0) {
-                    xv = src[uint(sp) * pa.cd + ch]
-                } elif (pa.hist_mode == 1u) {
-                    xv = smalls[pa.hist_off + ch * taps + p + k]
-                } else {
-                    xv = smalls[pa.hist_off + (p + k) * pa.cd + ch]
+        let lead = 4u - pa.dconv               // the ring holds the last four rows whatever dconv: the leading taps read zero
+        var w : float[4]
+        for [unroll] (j in range(4)) {
+            let jj = uint(j)
+            w[j] = jj >= lead ? smalls[pa.taps_off + cch * pa.dconv + (jj - lead)] : 0.0
+        }
+        var x0 = xrow(int(p0) - 3, cch, taps)
+        var x1 = xrow(int(p0) - 2, cch, taps)
+        var x2 = xrow(int(p0) - 1, cch, taps)
+        let normed = live && ch < 2u * pa.kd
+        var y : float[int(DN_CONV_PB)]
+        var s : float[int(DN_CONV_PB)]
+        for [unroll] (i in range(int(DN_CONV_PB))) {
+            let p = p0 + uint(i)
+            let x3 = p < pa.npos ? xrow(int(p), cch, taps) : 0.0
+            let acc = w[0] * x0 + w[1] * x1 + w[2] * x2 + w[3] * x3
+            y[i] = (live && p < pa.npos) ? acc / (1.0 + exp(-acc)) : 0.0
+            x0 = x1
+            x1 = x2
+            x2 = x3
+            //! the head's sum of squares over an aligned 32-lane block (ds lanes below 32): the fold's masks stay inside the block on any subgroup width
+            var v = normed ? y[i] * y[i] : 0.0
+            if (pa.ds > 16u) {
+                v += subgroupShuffleXor(v, 16u)
+            }
+            v += subgroupShuffleXor(v, 8u)
+            v += subgroupShuffleXor(v, 4u)
+            v += subgroupShuffleXor(v, 2u)
+            v += subgroupShuffleXor(v, 1u)
+            s[i] = v
+        }
+        let blk = gl_LocalInvocationID.x >> 5u   //! the lane block by the invocation id, never the subgroup: a 64-lane subgroup is two blocks
+        if ((gl_LocalInvocationID.x & 31u) == 0u) {
+            for [unroll] (i in range(int(DN_CONV_PB))) {
+                wsum[blk * DN_CONV_PB + uint(i)] = s[i]
+            }
+        }
+        barrier()
+        let blocks_per_head = pa.ds > 32u ? pa.ds / 32u : 1u
+        let wb = (blk / blocks_per_head) * blocks_per_head
+        let qs = ch < pa.kd ? pa.qscale : 1.0
+        for [unroll] (i in range(int(DN_CONV_PB))) {
+            let p = p0 + uint(i)
+            var tot = s[i]
+            if (blocks_per_head > 1u) {
+                tot = 0.0
+                var ww = 0u
+                while (ww < blocks_per_head) {
+                    tot += wsum[(wb + ww) * DN_CONV_PB + uint(i)]
+                    ww++
                 }
-                acc += xv * smalls[pa.taps_off + ch * pa.dconv + k]
-                k++
             }
-            let sv = acc / (1.0 + exp(-acc))
-            if (ch < 2u * pa.kd) {
-                row[ch] = sv
-            } else {
-                outr[p * pa.cd + ch] = sv
+            let sc = normed ? (1.0 / max(sqrt(tot), pa.eps)) * qs : 1.0
+            if (live && p < pa.npos) {
+                outr[p * pa.cd + ch] = y[i] * sc
             }
-            ch += 256u
-        }
-        barrier()
-        // per-head L2 norm scale over the q and k regions, q pre-scale folded in
-        let nblk = (2u * pa.kd) / pa.ds
-        if (tid < nblk) {
-            var sum = 0.0
-            var j = 0u
-            while (j < pa.ds) {
-                let v = row[tid * pa.ds + j]
-                sum += v * v
-                j++
-            }
-            nsc[tid] = (1.0 / max(sqrt(sum), pa.eps)) * (tid < pa.kd / pa.ds ? pa.qscale : 1.0)
-        }
-        barrier()
-        ch = tid
-        while (ch < 2u * pa.kd) {
-            outr[p * pa.cd + ch] = row[ch] * nsc[ch / pa.ds]
-            ch += 256u
         }
     }
 }
@@ -1471,10 +1589,14 @@ class DnStepFused {
     @workgroup dv : float[128]
     @workgroup dvn : float[128]
     @workgroup dout : float[128]
+    @workgroup partk : float[256]   //! each row part's k.S column partials (part-major, ds wide: the thread's own slot)
+    @workgroup partq : float[256]   //! ... and q.S
+    @workgroup sg_sumsq : float[16]   //! per-subgroup partial squared sums (q and k), re-used for the out-norm's after the second barrier
+    @workgroup sg_qk : float[16]      //! per-subgroup partials of the raw q.k
     @workgroup ds8 : float[8]
 
-    [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim fused chain, parity-locked to the shipped kernel
+    [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+    def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
         let h = gl_WorkGroupID.x
         let ds = pa.ds
         let taps = pa.dconv - 1u
@@ -1514,69 +1636,115 @@ class DnStepFused {
             e += 256u
         }
         barrier()
-        // q/k L2 scales + the per-token beta/g transforms — tiny serial lanes (ds is 128-class)
-        if (tid < 2u) {
-            var sum = 0.0
-            var j = 0u
-            while (j < ds) {
-                let v = tid == 0u ? dq[j] : dk[j]
-                sum += v * v
-                j++
+        //! the q and k squared sums and the raw q.k by subgroup adds: the first half of the threads hold q, the second k
+        var pn = 0.0
+        var pq = 0.0
+        if (tid < ds) {
+            pn = dq[tid] * dq[tid]
+            pq = dq[tid] * dk[tid]
+        } elif (tid >= 128u && tid < 128u + ds) {
+            pn = dk[tid - 128u] * dk[tid - 128u]
+        }
+        let sn = subgroupAdd(pn)
+        let spq = subgroupAdd(pq)
+        if (gl_SubgroupInvocationID == 0u) {
+            sg_sumsq[gl_SubgroupID] = sn
+            sg_qk[gl_SubgroupID] = spq
+        }
+        barrier()
+        if (tid == 0u) {   //! q.k is summed raw; the q and k scales apply here
+            var sumq = 0.0
+            var sumk = 0.0
+            var qkr = 0.0
+            let half = gl_NumSubgroups / 2u
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                if (sgi < half) {
+                    sumq += sg_sumsq[sgi]
+                    qkr += sg_qk[sgi]
+                } else {
+                    sumk += sg_sumsq[sgi]
+                }
+                sgi++
             }
-            ds8[tid] = (1.0 / max(sqrt(sum), pa.eps)) * (tid == 0u ? pa.qscale : 1.0)
-        } elif (tid == 2u) {
+            let sq = (1.0 / max(sqrt(sumq), pa.eps)) * pa.qscale
+            let sk = 1.0 / max(sqrt(sumk), pa.eps)
+            ds8[0u] = sq
+            ds8[1u] = sk
             let graw = smalls[pa.g_off + h] + smalls[pa.dt_off + h]
             ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
             ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + h]))
+            ds8[4u] = qkr * sq * sk
         }
         barrier()
-        e = tid
-        while (e < ds) {
-            dq[e] = dq[e] * ds8[0u]
-            dk[e] = dk[e] * ds8[1u]
-            e += 256u
-        }
-        barrier()
-        if (tid == 0u) {
-            var qk = 0.0
-            var j = 0u
-            while (j < ds) {
-                qk += dq[j] * dk[j]
-                j++
-            }
-            ds8[4u] = qk
-        }
-        barrier()
-        // the delta rule at chunk length 1, state in place
-        let sbase = h * ds * ds
+        let sq = ds8[0u]
+        let sk = ds8[1u]
         let eg = ds8[2u]
         let bt = ds8[3u]
+        let qk = ds8[4u]
+        let rows_per_part = min(ds, 64u)
+        let nparts = ds / rows_per_part
+        let active = tid < ds * nparts
+        let c = tid % ds
+        let r0 = (tid / ds) * rows_per_part
+        let sbase = h * ds * ds
+        var sreg : float[64]
+        var ksp = 0.0
+        var qsp = 0.0
+        if (active) {
+            //! the loads first, straight-line (a short part re-reads its last row), so all 64 issue before a sum waits on one
+            for [unroll] (j in range(64)) {
+                sreg[j] = state[sbase + (r0 + min(uint(j), rows_per_part - 1u)) * ds + c]
+            }
+            for [unroll] (j in range(64)) {
+                if (uint(j) < rows_per_part) {
+                    ksp += dk[r0 + uint(j)] * sreg[j]
+                    qsp += dq[r0 + uint(j)] * sreg[j]
+                }
+            }
+        }
+        if (active) {
+            partk[tid] = ksp
+            partq[tid] = qsp
+        }
+        barrier()
         if (tid < ds) {
             var ks = 0.0
             var qs = 0.0
-            var i = 0u
-            while (i < ds) {
-                let sv = state[sbase + i * ds + tid]
-                ks += dk[i] * sv
-                qs += dq[i] * sv
-                i++
+            var p = 0u
+            while (p < nparts) {
+                ks += partk[p * ds + tid]
+                qs += partq[p * ds + tid]
+                p++
             }
-            let vn = bt * (dv[tid] - eg * ks)
+            let vn = bt * (dv[tid] - eg * (sk * ks))
             dvn[tid] = vn
-            dout[tid] = eg * qs + ds8[4u] * vn
+            dout[tid] = eg * (sq * qs) + qk * vn
         }
         barrier()
-        e = tid
-        while (e < ds * ds) {
-            state[sbase + e] = state[sbase + e] * eg + dk[e / ds] * dvn[e % ds]
-            e += 256u
+        if (active) {
+            let vnc = dvn[c]
+            for [unroll] (j in range(64)) {
+                if (uint(j) < rows_per_part) {
+                    state[sbase + (r0 + uint(j)) * ds + c] = sreg[j] * eg + (sk * dk[r0 + uint(j)]) * vnc
+                }
+            }
         }
+        var po = 0.0
+        if (tid < ds) {
+            po = dout[tid] * dout[tid]
+        }
+        let so = subgroupAdd(po)
+        if (gl_SubgroupInvocationID == 0u) {
+            sg_sumsq[gl_SubgroupID] = so
+        }
+        barrier()
         if (tid == 0u) {
             var sum = 0.0
-            var j = 0u
-            while (j < ds) {
-                sum += dout[j] * dout[j]
-                j++
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                sum += sg_sumsq[sgi]
+                sgi++
             }
             ds8[5u] = 1.0 / sqrt(sum / float(ds) + pa.eps)
         }
@@ -1637,116 +1805,184 @@ struct DnScanArgs {
 
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
 class DnScan {
-    @ssbo @binding = 0 conv : array<float>     // the conv output rows (position-major: q | k | v)
-    @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state [nvh][ds][ds]
-    @ssbo @binding = 2 smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
-    @ssbo @binding = 3 orows : array<float>    // the raw o rows at o_off
+    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v)
+    @ssbo @binding = 1 state : array<float>              // the persistent per-head f32 state [nvh][ds][ds]
+    @ssbo @binding = 2 @readonly smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
+    @ssbo @binding = 3 orows : array<float>              // the raw o rows at o_off
     @push_constant pa : DnScanArgs
-    @workgroup ks : float[256]                 // the token's k row, two slots of DN_MAX_DS
-    @workgroup qs : float[256]                 // the token's q row, two slots
+    @workgroup egs : float[int(DN_WINDOW)]   //! the head's decay per token, exp(a * softplus(g + dt)), staged once per workgroup
+    @workgroup bts : float[int(DN_WINDOW)]   //! the head's sigmoid(beta) per token, the same way
 
-    def cluster_add(v : float; lanes_per_pair : uint) : float {
+    def cluster_add(v : float; lanes_per_col : uint) : float {
         var r = v
-        if (lanes_per_pair > 4u) {
+        if (lanes_per_col > 4u) {
             r += subgroupShuffleXor(r, 4u)
         }
-        if (lanes_per_pair > 2u) {
+        if (lanes_per_col > 2u) {
             r += subgroupShuffleXor(r, 2u)
         }
-        if (lanes_per_pair > 1u) {
+        if (lanes_per_col > 1u) {
             r += subgroupShuffleXor(r, 1u)
         }
         return r
     }
 
-    [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv")]
-    def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of two columns, written out
+    [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+    def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of one column, written out
         let ds = pa.ds
-        let lanes_per_pair = ds / 16u          // 16 state rows each; ds % 16 == 0 host-side
-        let pairs_per_subgroup = 32u / lanes_per_pair
-        let cols_per_group = 8u * pairs_per_subgroup
+        let lanes_per_col = ds / 16u           // 16 state rows each; ds % 16 == 0 host-side
+        let cols_per_block = 32u / lanes_per_col   //! the 128-thread workgroup's four 32-lane blocks, by the invocation id: a cluster's shuffles (masks under 8) stay inside a block on any subgroup width
+        let cols_per_group = 4u * cols_per_block
         let cgroups = (ds + cols_per_group - 1u) / cols_per_group
         let h = gl_WorkGroupID.x / cgroups
-        let tid = gl_LocalInvocationID.x
-        let sl = gl_SubgroupInvocationID
-        let lane = sl % lanes_per_pair
-        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + (gl_SubgroupID * pairs_per_subgroup + sl / lanes_per_pair) * 2u
-        let live = col < ds                    // a whole cluster shares col and col + 1 (ds is even), so its shuffles stay uniform
+        let sl = gl_LocalInvocationID.x & 31u
+        let lane = sl % lanes_per_col
+        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + (gl_LocalInvocationID.x >> 5u) * cols_per_block + sl / lanes_per_col
+        let live = col < ds                    // a whole cluster shares col, so its shuffles stay uniform
         let kh = h % pa.nkh
-        let qrow0 = kh * ds                    // the head's q row within a conv row
-        let krow0 = pa.kd + kh * ds
+        let q_elem0 = kh * ds + lane
+        let k_elem0 = pa.kd + kh * ds + lane
         let voff = 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
-        let sb = h * ds * ds + (live ? col : 0u)
-        let row_stride = lanes_per_pair * ds
+        var ti = gl_LocalInvocationID.x
+        while (ti < pa.npos) {
+            let graw = smalls[pa.g_off + ti * pa.nvh + h] + dtb
+            egs[ti] = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+            bts[ti] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + ti * pa.nvh + h]))
+            ti += 128u
+        }
+        barrier()
+        let sb = h * ds * ds + (live ? col : 0u) + lane * ds
+        let row_stride = lanes_per_col * ds
         var s : float[16]
-        s[0] = state[sb + lane * ds]
-        s[1] = state[sb + lane * ds + row_stride]
-        s[2] = state[sb + lane * ds + 2u * row_stride]
-        s[3] = state[sb + lane * ds + 3u * row_stride]
-        s[4] = state[sb + lane * ds + 4u * row_stride]
-        s[5] = state[sb + lane * ds + 5u * row_stride]
-        s[6] = state[sb + lane * ds + 6u * row_stride]
-        s[7] = state[sb + lane * ds + 7u * row_stride]
-        s[8] = state[sb + lane * ds + 8u * row_stride]
-        s[9] = state[sb + lane * ds + 9u * row_stride]
-        s[10] = state[sb + lane * ds + 10u * row_stride]
-        s[11] = state[sb + lane * ds + 11u * row_stride]
-        s[12] = state[sb + lane * ds + 12u * row_stride]
-        s[13] = state[sb + lane * ds + 13u * row_stride]
-        s[14] = state[sb + lane * ds + 14u * row_stride]
-        s[15] = state[sb + lane * ds + 15u * row_stride]
-        var u : float[16]                      // the same rows of column col + 1
-        u[0] = state[sb + lane * ds + 1u]
-        u[1] = state[sb + lane * ds + row_stride + 1u]
-        u[2] = state[sb + lane * ds + 2u * row_stride + 1u]
-        u[3] = state[sb + lane * ds + 3u * row_stride + 1u]
-        u[4] = state[sb + lane * ds + 4u * row_stride + 1u]
-        u[5] = state[sb + lane * ds + 5u * row_stride + 1u]
-        u[6] = state[sb + lane * ds + 6u * row_stride + 1u]
-        u[7] = state[sb + lane * ds + 7u * row_stride + 1u]
-        u[8] = state[sb + lane * ds + 8u * row_stride + 1u]
-        u[9] = state[sb + lane * ds + 9u * row_stride + 1u]
-        u[10] = state[sb + lane * ds + 10u * row_stride + 1u]
-        u[11] = state[sb + lane * ds + 11u * row_stride + 1u]
-        u[12] = state[sb + lane * ds + 12u * row_stride + 1u]
-        u[13] = state[sb + lane * ds + 13u * row_stride + 1u]
-        u[14] = state[sb + lane * ds + 14u * row_stride + 1u]
-        u[15] = state[sb + lane * ds + 15u * row_stride + 1u]
+        s[0] = state[sb]
+        s[1] = state[sb + row_stride]
+        s[2] = state[sb + 2u * row_stride]
+        s[3] = state[sb + 3u * row_stride]
+        s[4] = state[sb + 4u * row_stride]
+        s[5] = state[sb + 5u * row_stride]
+        s[6] = state[sb + 6u * row_stride]
+        s[7] = state[sb + 7u * row_stride]
+        s[8] = state[sb + 8u * row_stride]
+        s[9] = state[sb + 9u * row_stride]
+        s[10] = state[sb + 10u * row_stride]
+        s[11] = state[sb + 11u * row_stride]
+        s[12] = state[sb + 12u * row_stride]
+        s[13] = state[sb + 13u * row_stride]
+        s[14] = state[sb + 14u * row_stride]
+        s[15] = state[sb + 15u * row_stride]
+        //! the last token re-reads its own row
+        var k_next : float[16]
+        var q_next : float[16]
+        var v_next = conv[voff]
+        k_next[0] = conv[k_elem0]
+        k_next[1] = conv[k_elem0 + lanes_per_col]
+        k_next[2] = conv[k_elem0 + 2u * lanes_per_col]
+        k_next[3] = conv[k_elem0 + 3u * lanes_per_col]
+        k_next[4] = conv[k_elem0 + 4u * lanes_per_col]
+        k_next[5] = conv[k_elem0 + 5u * lanes_per_col]
+        k_next[6] = conv[k_elem0 + 6u * lanes_per_col]
+        k_next[7] = conv[k_elem0 + 7u * lanes_per_col]
+        k_next[8] = conv[k_elem0 + 8u * lanes_per_col]
+        k_next[9] = conv[k_elem0 + 9u * lanes_per_col]
+        k_next[10] = conv[k_elem0 + 10u * lanes_per_col]
+        k_next[11] = conv[k_elem0 + 11u * lanes_per_col]
+        k_next[12] = conv[k_elem0 + 12u * lanes_per_col]
+        k_next[13] = conv[k_elem0 + 13u * lanes_per_col]
+        k_next[14] = conv[k_elem0 + 14u * lanes_per_col]
+        k_next[15] = conv[k_elem0 + 15u * lanes_per_col]
+        q_next[0] = conv[q_elem0]
+        q_next[1] = conv[q_elem0 + lanes_per_col]
+        q_next[2] = conv[q_elem0 + 2u * lanes_per_col]
+        q_next[3] = conv[q_elem0 + 3u * lanes_per_col]
+        q_next[4] = conv[q_elem0 + 4u * lanes_per_col]
+        q_next[5] = conv[q_elem0 + 5u * lanes_per_col]
+        q_next[6] = conv[q_elem0 + 6u * lanes_per_col]
+        q_next[7] = conv[q_elem0 + 7u * lanes_per_col]
+        q_next[8] = conv[q_elem0 + 8u * lanes_per_col]
+        q_next[9] = conv[q_elem0 + 9u * lanes_per_col]
+        q_next[10] = conv[q_elem0 + 10u * lanes_per_col]
+        q_next[11] = conv[q_elem0 + 11u * lanes_per_col]
+        q_next[12] = conv[q_elem0 + 12u * lanes_per_col]
+        q_next[13] = conv[q_elem0 + 13u * lanes_per_col]
+        q_next[14] = conv[q_elem0 + 14u * lanes_per_col]
+        q_next[15] = conv[q_elem0 + 15u * lanes_per_col]
         var t = 0u
         while (t < pa.npos) {
-            let crow = t * pa.cd
-            let graw = smalls[pa.g_off + t * pa.nvh + h] + dtb
-            let eg = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
-            let bt = 1.0 / (1.0 + exp(-smalls[pa.beta_off + t * pa.nvh + h]))
-            let v = conv[crow + voff]
-            let vu = conv[crow + voff + 1u]
-            // the token's k and q rows into this token's slot; the other slot was read before the last barrier
-            let par = (t & 1u) * 128u
-            if (tid < ds) {
-                ks[par + tid] = conv[crow + krow0 + tid]
-                qs[par + tid] = conv[crow + qrow0 + tid]
-            }
-            barrier()
-            let kb = par + lane
+            let eg = egs[t]
+            let bt = bts[t]
+            let v = v_next
             var k : float[16]
-            k[0] = ks[kb]
-            k[1] = ks[kb + lanes_per_pair]
-            k[2] = ks[kb + 2u * lanes_per_pair]
-            k[3] = ks[kb + 3u * lanes_per_pair]
-            k[4] = ks[kb + 4u * lanes_per_pair]
-            k[5] = ks[kb + 5u * lanes_per_pair]
-            k[6] = ks[kb + 6u * lanes_per_pair]
-            k[7] = ks[kb + 7u * lanes_per_pair]
-            k[8] = ks[kb + 8u * lanes_per_pair]
-            k[9] = ks[kb + 9u * lanes_per_pair]
-            k[10] = ks[kb + 10u * lanes_per_pair]
-            k[11] = ks[kb + 11u * lanes_per_pair]
-            k[12] = ks[kb + 12u * lanes_per_pair]
-            k[13] = ks[kb + 13u * lanes_per_pair]
-            k[14] = ks[kb + 14u * lanes_per_pair]
-            k[15] = ks[kb + 15u * lanes_per_pair]
+            var q : float[16]
+            k[0] = k_next[0]
+            k[1] = k_next[1]
+            k[2] = k_next[2]
+            k[3] = k_next[3]
+            k[4] = k_next[4]
+            k[5] = k_next[5]
+            k[6] = k_next[6]
+            k[7] = k_next[7]
+            k[8] = k_next[8]
+            k[9] = k_next[9]
+            k[10] = k_next[10]
+            k[11] = k_next[11]
+            k[12] = k_next[12]
+            k[13] = k_next[13]
+            k[14] = k_next[14]
+            k[15] = k_next[15]
+            q[0] = q_next[0]
+            q[1] = q_next[1]
+            q[2] = q_next[2]
+            q[3] = q_next[3]
+            q[4] = q_next[4]
+            q[5] = q_next[5]
+            q[6] = q_next[6]
+            q[7] = q_next[7]
+            q[8] = q_next[8]
+            q[9] = q_next[9]
+            q[10] = q_next[10]
+            q[11] = q_next[11]
+            q[12] = q_next[12]
+            q[13] = q_next[13]
+            q[14] = q_next[14]
+            q[15] = q_next[15]
+            let crow_next = min(t + 1u, pa.npos - 1u) * pa.cd
+            v_next = conv[crow_next + voff]
+            let kbn = crow_next + k_elem0
+            k_next[0] = conv[kbn]
+            k_next[1] = conv[kbn + lanes_per_col]
+            k_next[2] = conv[kbn + 2u * lanes_per_col]
+            k_next[3] = conv[kbn + 3u * lanes_per_col]
+            k_next[4] = conv[kbn + 4u * lanes_per_col]
+            k_next[5] = conv[kbn + 5u * lanes_per_col]
+            k_next[6] = conv[kbn + 6u * lanes_per_col]
+            k_next[7] = conv[kbn + 7u * lanes_per_col]
+            k_next[8] = conv[kbn + 8u * lanes_per_col]
+            k_next[9] = conv[kbn + 9u * lanes_per_col]
+            k_next[10] = conv[kbn + 10u * lanes_per_col]
+            k_next[11] = conv[kbn + 11u * lanes_per_col]
+            k_next[12] = conv[kbn + 12u * lanes_per_col]
+            k_next[13] = conv[kbn + 13u * lanes_per_col]
+            k_next[14] = conv[kbn + 14u * lanes_per_col]
+            k_next[15] = conv[kbn + 15u * lanes_per_col]
+            let qbn = crow_next + q_elem0
+            q_next[0] = conv[qbn]
+            q_next[1] = conv[qbn + lanes_per_col]
+            q_next[2] = conv[qbn + 2u * lanes_per_col]
+            q_next[3] = conv[qbn + 3u * lanes_per_col]
+            q_next[4] = conv[qbn + 4u * lanes_per_col]
+            q_next[5] = conv[qbn + 5u * lanes_per_col]
+            q_next[6] = conv[qbn + 6u * lanes_per_col]
+            q_next[7] = conv[qbn + 7u * lanes_per_col]
+            q_next[8] = conv[qbn + 8u * lanes_per_col]
+            q_next[9] = conv[qbn + 9u * lanes_per_col]
+            q_next[10] = conv[qbn + 10u * lanes_per_col]
+            q_next[11] = conv[qbn + 11u * lanes_per_col]
+            q_next[12] = conv[qbn + 12u * lanes_per_col]
+            q_next[13] = conv[qbn + 13u * lanes_per_col]
+            q_next[14] = conv[qbn + 14u * lanes_per_col]
+            q_next[15] = conv[qbn + 15u * lanes_per_col]
             var kv = k[0] * s[0]
             kv += k[1] * s[1]
             kv += k[2] * s[2]
@@ -1763,27 +1999,8 @@ class DnScan {
             kv += k[13] * s[13]
             kv += k[14] * s[14]
             kv += k[15] * s[15]
-            var ku = k[0] * u[0]
-            ku += k[1] * u[1]
-            ku += k[2] * u[2]
-            ku += k[3] * u[3]
-            ku += k[4] * u[4]
-            ku += k[5] * u[5]
-            ku += k[6] * u[6]
-            ku += k[7] * u[7]
-            ku += k[8] * u[8]
-            ku += k[9] * u[9]
-            ku += k[10] * u[10]
-            ku += k[11] * u[11]
-            ku += k[12] * u[12]
-            ku += k[13] * u[13]
-            ku += k[14] * u[14]
-            ku += k[15] * u[15]
-            kv = cluster_add(kv, lanes_per_pair)
-            ku = cluster_add(ku, lanes_per_pair)
+            kv = cluster_add(kv, lanes_per_col)
             let delta = bt * (v - eg * kv)
-            let deltu = bt * (vu - eg * ku)
-            let qb = par + lane
             s[0] = s[0] * eg + k[0] * delta
             s[1] = s[1] * eg + k[1] * delta
             s[2] = s[2] * eg + k[2] * delta
@@ -1800,95 +2017,45 @@ class DnScan {
             s[13] = s[13] * eg + k[13] * delta
             s[14] = s[14] * eg + k[14] * delta
             s[15] = s[15] * eg + k[15] * delta
-            u[0] = u[0] * eg + k[0] * deltu
-            u[1] = u[1] * eg + k[1] * deltu
-            u[2] = u[2] * eg + k[2] * deltu
-            u[3] = u[3] * eg + k[3] * deltu
-            u[4] = u[4] * eg + k[4] * deltu
-            u[5] = u[5] * eg + k[5] * deltu
-            u[6] = u[6] * eg + k[6] * deltu
-            u[7] = u[7] * eg + k[7] * deltu
-            u[8] = u[8] * eg + k[8] * deltu
-            u[9] = u[9] * eg + k[9] * deltu
-            u[10] = u[10] * eg + k[10] * deltu
-            u[11] = u[11] * eg + k[11] * deltu
-            u[12] = u[12] * eg + k[12] * deltu
-            u[13] = u[13] * eg + k[13] * deltu
-            u[14] = u[14] * eg + k[14] * deltu
-            u[15] = u[15] * eg + k[15] * deltu
-            var ou = qs[qb] * u[0]
-            ou += qs[qb + lanes_per_pair] * u[1]
-            ou += qs[qb + 2u * lanes_per_pair] * u[2]
-            ou += qs[qb + 3u * lanes_per_pair] * u[3]
-            ou += qs[qb + 4u * lanes_per_pair] * u[4]
-            ou += qs[qb + 5u * lanes_per_pair] * u[5]
-            ou += qs[qb + 6u * lanes_per_pair] * u[6]
-            ou += qs[qb + 7u * lanes_per_pair] * u[7]
-            ou += qs[qb + 8u * lanes_per_pair] * u[8]
-            ou += qs[qb + 9u * lanes_per_pair] * u[9]
-            ou += qs[qb + 10u * lanes_per_pair] * u[10]
-            ou += qs[qb + 11u * lanes_per_pair] * u[11]
-            ou += qs[qb + 12u * lanes_per_pair] * u[12]
-            ou += qs[qb + 13u * lanes_per_pair] * u[13]
-            ou += qs[qb + 14u * lanes_per_pair] * u[14]
-            ou += qs[qb + 15u * lanes_per_pair] * u[15]
-            var o = qs[qb] * s[0]
-            o += qs[qb + lanes_per_pair] * s[1]
-            o += qs[qb + 2u * lanes_per_pair] * s[2]
-            o += qs[qb + 3u * lanes_per_pair] * s[3]
-            o += qs[qb + 4u * lanes_per_pair] * s[4]
-            o += qs[qb + 5u * lanes_per_pair] * s[5]
-            o += qs[qb + 6u * lanes_per_pair] * s[6]
-            o += qs[qb + 7u * lanes_per_pair] * s[7]
-            o += qs[qb + 8u * lanes_per_pair] * s[8]
-            o += qs[qb + 9u * lanes_per_pair] * s[9]
-            o += qs[qb + 10u * lanes_per_pair] * s[10]
-            o += qs[qb + 11u * lanes_per_pair] * s[11]
-            o += qs[qb + 12u * lanes_per_pair] * s[12]
-            o += qs[qb + 13u * lanes_per_pair] * s[13]
-            o += qs[qb + 14u * lanes_per_pair] * s[14]
-            o += qs[qb + 15u * lanes_per_pair] * s[15]
-            o = cluster_add(o, lanes_per_pair)
-            ou = cluster_add(ou, lanes_per_pair)
+            var o = q[0] * s[0]
+            o += q[1] * s[1]
+            o += q[2] * s[2]
+            o += q[3] * s[3]
+            o += q[4] * s[4]
+            o += q[5] * s[5]
+            o += q[6] * s[6]
+            o += q[7] * s[7]
+            o += q[8] * s[8]
+            o += q[9] * s[9]
+            o += q[10] * s[10]
+            o += q[11] * s[11]
+            o += q[12] * s[12]
+            o += q[13] * s[13]
+            o += q[14] * s[14]
+            o += q[15] * s[15]
+            o = cluster_add(o, lanes_per_col)
             if (live && lane == 0u) {
                 orows[pa.o_off + t * pa.di + h * ds + col] = o
-                orows[pa.o_off + t * pa.di + h * ds + col + 1u] = ou
             }
             t++
         }
         if (live) {
-            state[sb + lane * ds] = s[0]
-            state[sb + lane * ds + row_stride] = s[1]
-            state[sb + lane * ds + 2u * row_stride] = s[2]
-            state[sb + lane * ds + 3u * row_stride] = s[3]
-            state[sb + lane * ds + 4u * row_stride] = s[4]
-            state[sb + lane * ds + 5u * row_stride] = s[5]
-            state[sb + lane * ds + 6u * row_stride] = s[6]
-            state[sb + lane * ds + 7u * row_stride] = s[7]
-            state[sb + lane * ds + 8u * row_stride] = s[8]
-            state[sb + lane * ds + 9u * row_stride] = s[9]
-            state[sb + lane * ds + 10u * row_stride] = s[10]
-            state[sb + lane * ds + 11u * row_stride] = s[11]
-            state[sb + lane * ds + 12u * row_stride] = s[12]
-            state[sb + lane * ds + 13u * row_stride] = s[13]
-            state[sb + lane * ds + 14u * row_stride] = s[14]
-            state[sb + lane * ds + 15u * row_stride] = s[15]
-            state[sb + lane * ds + 1u] = u[0]
-            state[sb + lane * ds + row_stride + 1u] = u[1]
-            state[sb + lane * ds + 2u * row_stride + 1u] = u[2]
-            state[sb + lane * ds + 3u * row_stride + 1u] = u[3]
-            state[sb + lane * ds + 4u * row_stride + 1u] = u[4]
-            state[sb + lane * ds + 5u * row_stride + 1u] = u[5]
-            state[sb + lane * ds + 6u * row_stride + 1u] = u[6]
-            state[sb + lane * ds + 7u * row_stride + 1u] = u[7]
-            state[sb + lane * ds + 8u * row_stride + 1u] = u[8]
-            state[sb + lane * ds + 9u * row_stride + 1u] = u[9]
-            state[sb + lane * ds + 10u * row_stride + 1u] = u[10]
-            state[sb + lane * ds + 11u * row_stride + 1u] = u[11]
-            state[sb + lane * ds + 12u * row_stride + 1u] = u[12]
-            state[sb + lane * ds + 13u * row_stride + 1u] = u[13]
-            state[sb + lane * ds + 14u * row_stride + 1u] = u[14]
-            state[sb + lane * ds + 15u * row_stride + 1u] = u[15]
+            state[sb] = s[0]
+            state[sb + row_stride] = s[1]
+            state[sb + 2u * row_stride] = s[2]
+            state[sb + 3u * row_stride] = s[3]
+            state[sb + 4u * row_stride] = s[4]
+            state[sb + 5u * row_stride] = s[5]
+            state[sb + 6u * row_stride] = s[6]
+            state[sb + 7u * row_stride] = s[7]
+            state[sb + 8u * row_stride] = s[8]
+            state[sb + 9u * row_stride] = s[9]
+            state[sb + 10u * row_stride] = s[10]
+            state[sb + 11u * row_stride] = s[11]
+            state[sb + 12u * row_stride] = s[12]
+            state[sb + 13u * row_stride] = s[13]
+            state[sb + 14u * row_stride] = s[14]
+            state[sb + 15u * row_stride] = s[15]
         }
     }
 }
@@ -3091,9 +3258,9 @@ def private k5_dep(hb : uint) : uint {
 // The codebook is four packed words picked by a dynamic vector index and byte-extracted: pure
 // ALU (a fixed_array local was a Function-storage table, 3.4x slower on the decode GEMV - `benchmarks/lcpp_bench.das` tg128, 5060 Ti)
 // iq3s_grid, one word per call - the staging loops copy it into workgroup memory once
-// per kernel (a few indexed reads per thread), so the local-array storage class (QUIRK 20's
-// slow path) never sits on a hot path; a shader function cannot return a fixed array.
-def private iq3s_grid_word(i : int) : uint {
+// per kernel (a few indexed reads per thread), so the local-array storage class (the slow path
+// of `followup_general.md` item 136) never sits on a hot path; a shader function cannot return a fixed array.
+def iq3s_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x01010101u, 0x01010103u, 0x01010105u, 0x0101010bu, 0x0101010fu, 0x01010301u, 0x01010303u, 0x01010305u,
         0x01010309u, 0x0101030du, 0x01010501u, 0x01010503u, 0x0101050bu, 0x01010707u, 0x01010901u, 0x01010905u,
@@ -3164,7 +3331,7 @@ def private iq3s_grid_word(i : int) : uint {
 
 // iq2xxs_grid as low/high word pairs - 256 u64 entries, one uint word per call (word
 // 2i = magnitudes 0..3 of entry i, word 2i+1 = 4..7); staged into workgroup memory per kernel.
-def private iq2xxs_grid_word(i : int) : uint {
+def iq2xxs_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x08080808, 0x08080808, 0x0808082b, 0x08080808, 0x08081919, 0x08080808, 0x08082b08, 0x08080808,
         0x08082b2b, 0x08080808, 0x08190819, 0x08080808, 0x08191908, 0x08080808, 0x082b0808, 0x08080808,
@@ -3634,8 +3801,8 @@ def private iq2s_grid_word(i : int) : uint {   // nolint:STYLE038 - a 2048-word 
 
 // the HALVED iq3xxs grid (iq3xxs_grid with every byte / 2 - the plane convention that
 // absorbs the format's 0.25 into the stored d), one word per call; staging loops copy it into
-// workgroup memory (QUIRK 20's slow path stays off the hot loop).
-def private iq3xxs_grid_word(i : int) : uint {
+// workgroup memory (the slow path of `followup_general.md` item 136 stays off the hot loop).
+def iq3xxs_grid_word(i : int) : uint {
     let tbl = fixed_array<uint>(
         0x02020202u, 0x0202020au, 0x02020212u, 0x02020606u, 0x0202060eu, 0x0202061fu, 0x02020a02u, 0x02020a0au,
         0x02020e06u, 0x0202120au, 0x02021f0eu, 0x02021f16u, 0x02060206u, 0x0206020eu, 0x02060602u, 0x0206060au,
@@ -5163,11 +5330,13 @@ struct VkIq2xxsBlk {
     qs : int16[32]   // one IQ2_XXS superblock's 64B qs as 16-bit lanes: per block 4 grid byte indices + its aux32 (4 x 7-bit ksigns + per-32 ls nibble); scales (f16 d8 + 8 unsigned (1 + 2s) strips) live in ws
 }
 
-// The cm2 tile: one class template over the two stamp axes. The token column BN - l 256, m 128,
-// s 32 (the expert-bucket geometry) - and the weight format: BLK
+let SC_STRIDE = 130u   //! the cm2 scale cache's sub-block stride: the tile's 128 rows and two of pad
+
+// The cm2 tile: one class template over three stamp axes - the token column BN, the k step BK
+// and the weight format: BLK
 // the 16-bit-lane block struct, ST the scale plane's element, BLKW the block's element width, and
-// the format template's decode. 256 threads, one 128-weight x BN-token tile per wg, BK=64 per
-// step, an 8x-unrolled k loop; the decode METHOD reads the separate scale plane by block index -
+// the format template's decode. 256 threads, one 128-weight x BN-token tile per wg, BK per
+// step, a k loop unrolled UNR steps (one superblock); the decode METHOD reads the separate scale plane by block index -
 // the reason the class-method decode form exists. Binding 4 unused (sparse)
 [ |> template_struct_instance]
 class template KqCm2BatchT : MoeCmBase {
@@ -5182,6 +5351,8 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant BN : uint = 256u                   // the token column
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
+    @template_constant BK : uint = 64u                    //!< the k step of the tile loop (its AT/BT carry the depth)
+    @template_constant UNR : uint = 4u                    //!< the k loop's hand unroll: BK x UNR is one superblock (8 on a 32-deep stamp)
     @template_constant DECVEC : bool = true               //!< when DECV4 is off: the synthesized four-wide twin rides the loads; false serves the scalar callback only
     @template_constant DECV4 : bool = false               //!< the format's hand-laid `decode_v4` is the twin instead of the synthesized one
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
@@ -5199,6 +5370,10 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant KHR : bool = false                 //!< the KHR cooperative-matrix arm: hand-staged f16 tiles over the format's own decode, no cm2 API (a card without NV_coopmat2)
     @workgroup @template_gate = KHR khr_ao : uint[int(128u * KHR_STRIDE)]   //! the A stage: 128 weight rows of f16 pairs; then the edge tile's f32 store bounce, 8 subgroups x 256 words
     @workgroup @template_gate = KHR khr_b : uint[int(128u * KHR_STRIDE)]    //! the B stage: BN (128) token rows of f16 pairs
+    @template_constant SCACHE : bool = false              //!< the scale cache: the tile's 128 rows' eight sub-block scale pairs staged per superblock
+    @template_constant SCIQ4 : bool = false               //!< the cache's fill reads the IQ4_XS two-word scale row (d | the high scale bits, the low nibbles) instead of the K-quant five
+    @workgroup @template_gate = SCACHE sc_cache : float2[int(8u * SC_STRIDE)]   //! sub-block-major, row-minor, two rows of pad per sub-block against bank conflicts
+    @ssbo @binding = 1 @role = "alias" @template_gate = SCACHE ws_words : array<uint>   //! the scale plane as words, the cache's source (K-quant: five per superblock - d | dmin, eight scale bytes, eight min bytes; IQ4_XS: two)
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
     def run {
@@ -5271,15 +5446,54 @@ class template KqCm2BatchT : MoeCmBase {
         }
     }
 
+    //! the scale cache for superblock column `sb` of the tile's rows from m0; a row past the plane reads the last row (its entries unused)
+    def sc_fill(m0, wblk0, sb : uint) {
+        static_if (SCACHE) {
+            let t = gl_LocalInvocationID.x
+            let r = t >> 1u
+            let g0 = (t & 1u) * 4u
+            let row = min(m0 + r, pa.d - 1u)
+            static_if (SCIQ4) {
+                let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 2u
+                let w0 = ws_words[srow]
+                let w1 = ws_words[srow + 1u]
+                let d = unpackHalf2x16(w0).x
+                for [unroll] (i in range(4)) {
+                    sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(d * float(iq4xs_sc(w0, w1, g0 + uint(i))), 0.0)
+                }
+            } else {
+                let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 5u
+                let dm = unpackHalf2x16(ws_words[srow])
+                let scw = ws_words[srow + 1u + (g0 >> 2u)]
+                let mnw = ws_words[srow + 3u + (g0 >> 2u)]
+                for [unroll] (i in range(4)) {
+                    let sh = uint(i) * 8u
+                    sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(dm.x * float((scw >> sh) & 0xFFu), dm.y * float((mnw >> sh) & 0xFFu))
+                }
+            }
+        }
+    }
+
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    def sc_step(m0, wblk0, k : uint) {
+        static_if (SCACHE) {
+            if ((k & (BLKW - 1u)) == 0u) {
+                barrier()
+                sc_fill(m0, wblk0, k / BLKW)
+                barrier()
+            }
+        }
+    }
+
     def cm2_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         var tv : tensorView2Dt
         tensorViewCreate(tv)
-        var a : coopmatWgA_f16_128x64
+        var a : AT
         var b : BT
         var acc : ACC
         let t0 = row0 + xt * BN
         let m0 = wt * 128u
-        if (m0 + 128u <= pa.d && (STILE || xt * BN + BN <= cnt) && (pa.n & 63u) == 0u) {
+        if (m0 + 128u <= pa.d && (STILE || xt * BN + BN <= cnt) && (pa.n & (BK - 1u)) == 0u) {
             var fla : tensorLayout2D
             tensorLayoutCreate(fla)
             tensorLayoutSetBlockSize(fla, 1u, BLKW)
@@ -5300,27 +5514,29 @@ class template KqCm2BatchT : MoeCmBase {
             tensorLayoutSetStride(flp, pa.d & ~7u, 1u)
             if (pa.ksplit == 0u) {
                 var k = 0u
-                for (_i in range(int(pa.n / 512u))) {
-                    for [unroll] (_j in range(8)) {
+                for (_i in range(int(pa.n / (BK * UNR)))) {
+                    sc_step(m0, wblk0, k)
+                    for [unroll] (_j in range(int(UNR))) {
                         static_if (DECV4) {
-                            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, self.decode_v4)
+                            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                         } else {
-                            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
+                            coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, DECVEC)
                         }
-                        coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
+                        coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, BK, tv)
                         acc = coopmatMulAdd(a, b, acc)
-                        k += 64u
+                        k += BK
                     }
                 }
                 while (k < pa.n) {
+                    sc_step(m0, wblk0, k)
                     static_if (DECV4) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, self.decode_v4)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                     } else {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, DECVEC)
                     }
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, BK, tv)
                     acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
+                    k += BK
                 }
                 coopmatClamp(acc, -65504.0, 65504.0)
                 var accw : ACCW
@@ -5333,27 +5549,29 @@ class template KqCm2BatchT : MoeCmBase {
                 return
             }
             var k = k0
-            for (_i in range(int((k1 - k0) / 512u))) {
-                for [unroll] (_j in range(8)) {
+            for (_i in range(int((k1 - k0) / (BK * UNR)))) {
+                sc_step(m0, wblk0, k)
+                for [unroll] (_j in range(int(UNR))) {
                     static_if (DECV4) {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, self.decode_v4)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                     } else {
-                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
+                        coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, DECVEC)
                     }
-                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
+                    coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, BK, tv)
                     acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
+                    k += BK
                 }
             }
             while (k < k1) {
+                sc_step(m0, wblk0, k)
                 static_if (DECV4) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, self.decode_v4)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                 } else {
-                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, 64u, self.decode, DECVEC)
+                    coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, DECVEC)
                 }
-                coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, 64u, tv)
+                coopmatLoadTensor(b, xf16, 0u, flb, t0, BN, k, BK, tv)
                 acc = coopmatMulAdd(a, b, acc)
-                k += 64u
+                k += BK
             }
             coopmatClamp(acc, -65504.0, 65504.0)
             var accw : ACCW
@@ -5381,19 +5599,21 @@ class template KqCm2BatchT : MoeCmBase {
         tensorLayoutSetStride(tlo, pa.d, 1u)
         if (pa.ksplit == 0u) {
             var k = 0u
-            for (_i in range(int(pa.n / 512u))) {
-                for [unroll] (_j in range(8)) {
-                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
-                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
+            for (_i in range(int(pa.n / (BK * UNR)))) {
+                sc_step(m0, wblk0, k)
+                for [unroll] (_j in range(int(UNR))) {
+                    coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
+                    coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                     acc = coopmatMulAdd(a, b, acc)
-                    k += 64u
+                    k += BK
                 }
             }
             while (k < pa.n) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
+                sc_step(m0, wblk0, k)
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                 acc = coopmatMulAdd(a, b, acc)
-                k += 64u
+                k += BK
             }
             coopmatClamp(acc, -65504.0, 65504.0)
             var accw : ACCW
@@ -5402,19 +5622,21 @@ class template KqCm2BatchT : MoeCmBase {
             return
         }
         var k = k0
-        for (_i in range(int((k1 - k0) / 512u))) {
-            for [unroll] (_j in range(8)) {
-                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
-                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
+        for (_i in range(int((k1 - k0) / (BK * UNR)))) {
+            sc_step(m0, wblk0, k)
+            for [unroll] (_j in range(int(UNR))) {
+                coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
+                coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                 acc = coopmatMulAdd(a, b, acc)
-                k += 64u
+                k += BK
             }
         }
         while (k < k1) {
-            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, 64u, self.decode)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, 64u, tv)
+            sc_step(m0, wblk0, k)
+            coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
             acc = coopmatMulAdd(a, b, acc)
-            k += 64u
+            k += BK
         }
         coopmatClamp(acc, -65504.0, 65504.0)
         var accw : ACCW
@@ -5540,6 +5762,7 @@ class template K4Cm2T : KqCm2BatchT {
     typedef BLK = VkK4Blk
     typedef ST = uint
     override DECV4 = true
+    override SCACHE = true
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
@@ -5565,11 +5788,8 @@ class template K4Cm2T : KqCm2BatchT {
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let sc = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let mn = (ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return float16(sc_pair.x * float(q) - sc_pair.y)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5580,12 +5800,9 @@ class template K4Cm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        return half4(float4(ds * float((l0 >> sh) & 0xFu) - dmn, ds * float((l0 >> (sh + 8u)) & 0xFu) - dmn,
-            ds * float((l1 >> sh) & 0xFu) - dmn, ds * float((l1 >> (sh + 8u)) & 0xFu) - dmn))
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return half4(float4(sc_pair.x * float((l0 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l0 >> (sh + 8u)) & 0xFu) - sc_pair.y,
+            sc_pair.x * float((l1 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l1 >> (sh + 8u)) & 0xFu) - sc_pair.y))
     }
 }
 
@@ -5623,19 +5840,21 @@ class template K6Cm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK6Blk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let bu = e >> 5u
-        let hh = (e >> 4u) & 1u
-        let j = e & 15u
+        let pair0 = e & ~1u   //! the pair's two low bytes are one 16-bit lane, its high bits two of one byte
+        let bu = pair0 >> 5u
+        let hh = (pair0 >> 4u) & 1u
+        let j = pair0 & 15u
         let lb = bu * 16u + j
-        let lo = uint(int(unpack8(blk.ql[int(lb >> 1u)])[int(lb & 1u)])) & 0xFFu
+        let lw = uint(int(blk.ql[int(lb >> 1u)])) & 0xFFFFu
         let qb = (bu >> 2u) * 32u + hh * 16u + j
-        let hby = uint(int(unpack8(blk.qh[int(qb >> 1u)])[int(qb & 1u)])) & 0xFFu
-        let q6 = int(((lo >> (hh * 4u)) & 0xFu) | (((hby >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        let hw = uint(int(blk.qh[int(qb >> 1u)])) & 0xFFFFu
+        let q60 = int(((lw >> (hh * 4u)) & 0xFu) | (((hw >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
+        let q61 = int(((lw >> (hh * 4u + 8u)) & 0xFu) | (((hw >> ((bu & 3u) * 2u + 8u)) & 3u) << 4u)) - 32
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let sidx = e >> 4u
+        let sidx = pair0 >> 4u
         let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-        let d = unpackHalf2x16(ws[srow + 4u]).x
-        return float16(d * float(sc) * float(q6))
+        let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
+        return float16(ds * float((e & 1u) != 0u ? q61 : q60))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5669,6 +5888,7 @@ class template K5Cm2T : KqCm2BatchT {
     typedef BLK = VkK5Blk
     typedef ST = uint
     override DECV4 = true
+    override SCACHE = true
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
@@ -5698,18 +5918,17 @@ class template K5Cm2T : KqCm2BatchT {
     def decode(blk : VkK5Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
-        let j = e & 15u
-        let h = e >> 4u
+        let pair0 = e & ~1u   //! the pair's two quant bytes are one 16-bit lane, its high bits two of one byte
+        let j = pair0 & 15u
+        let h = pair0 >> 4u
         let bidx = g * 16u + j
-        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
+        let w = uint(int(blk.qs[int(bidx >> 1u)])) & 0xFFFFu
         let hidx = g * 4u + (j >> 2u)
-        let hby = uint(int(unpack8(blk.qh[int(hidx >> 1u)])[int(hidx & 1u)])) & 0xFFu
-        let q = ((by >> (h * 4u)) & 0xFu) | (((hby >> ((j & 3u) + h * 4u)) & 1u) << 4u)
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let sc = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let mn = (ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
+        let hb = ((uint(int(blk.qh[int(hidx >> 1u)])) & 0xFFFFu) >> ((hidx & 1u) * 8u)) >> ((j & 3u) + h * 4u)
+        let q0 = ((w >> (h * 4u)) & 0xFu) | ((hb & 1u) << 4u)
+        let q1 = ((w >> (h * 4u + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return float16((e & 1u) != 0u ? sc_pair.x * float(q1) - sc_pair.y : sc_pair.x * float(q0) - sc_pair.y)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5728,11 +5947,8 @@ class template K5Cm2T : KqCm2BatchT {
         let q1 = ((l0 >> (sh + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
         let q2 = ((l1 >> sh) & 0xFu) | (((hb >> 2u) & 1u) << 4u)
         let q3 = ((l1 >> (sh + 8u)) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        return half4(float4(ds * float(q0) - dmn, ds * float(q1) - dmn, ds * float(q2) - dmn, ds * float(q3) - dmn))
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return half4(float4(sc_pair.x * float(q0) - sc_pair.y, sc_pair.x * float(q1) - sc_pair.y, sc_pair.x * float(q2) - sc_pair.y, sc_pair.x * float(q3) - sc_pair.y))
     }
 }
 
@@ -5792,6 +6008,8 @@ class template Iq4xsCm2T : KqCm2BatchT {
     typedef ST = uint
     override IQLUT = true
     override DECV4 = true
+    override SCACHE = true
+    override SCIQ4 = true
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
@@ -5816,11 +6034,8 @@ class template Iq4xsCm2T : KqCm2BatchT {
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let w0 = ws[srow]
-        let d = unpackHalf2x16(w0).x
-        let sc = iq4xs_sc(w0, ws[srow + 1u], g)
-        return float16(d * float(sc) * float(iq4lut[int(q)]))
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return float16(sc_pair.x * float(iq4lut[int(q)]))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5831,11 +6046,7 @@ class template Iq4xsCm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let w0 = ws[srow]
-        let d = unpackHalf2x16(w0).x
-        let sc = iq4xs_sc(w0, ws[srow + 1u], g)
-        let ds = d * float(sc)
+        let ds = sc_cache[g * SC_STRIDE + (bc.x & 127u)].x
         return half4(float4(ds * float(iq4lut[int((l0 >> sh) & 0xFu)]), ds * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
             ds * float(iq4lut[int((l1 >> sh) & 0xFu)]), ds * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
     }
@@ -6003,20 +6214,25 @@ class template Iq3sCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3sBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let g = e >> 5u
-        let r = e & 31u
+        let pair0 = e & ~1u
+        let g = pair0 >> 5u
+        let r = pair0 & 31u
         let wj = r >> 2u
         let qi = g * 8u + wj
         let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu   //! the grid-index byte, shifted out of its lane
         let qhw = (uint(int(blk.qh[int(g >> 1u)])) & 0xFFFFu) >> ((g & 1u) * 8u)   //! the ninth-bit byte g, shifted out of its lane
         let si = g * 4u + (r >> 3u)
         let sgw = (uint(int(blk.sg[int(si >> 1u)])) & 0xFFFFu) >> ((si & 1u) * 8u)   //! the sign byte, shifted out of its lane
+        let sgn = sgw >> (((r >> 2u) & 1u) * 4u + (r & 3u))
         let gw = iq3s_gridc[qb | ((qhw << (8u - wj)) & 256u)]
-        let gb = float((gw >> ((r & 3u) * 8u)) & 0xFFu)
+        let gp = gw >> ((r & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let d = unpackHalf2x16(ws[srow]).x
-        let sc = grid_sc(ws[srow + 1u], g)
-        return float16(d * float(sc) * (((sgw >> (((r >> 2u) & 1u) * 4u + (r & 3u))) & 1u) != 0u ? -gb : gb))
+        let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
+        let g0 = float(gp & 0xFFu)
+        let g1 = float((gp >> 8u) & 0xFFu)
+        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+        return float16((e & 1u) != 0u ? v1 : v0)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6082,8 +6298,9 @@ class template Iq3xxsCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3xxsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let g = e >> 5u
-        let r = e & 31u
+        let pair0 = e & ~1u
+        let g = pair0 >> 5u
+        let r = pair0 & 31u
         let wj = r >> 2u
         let qi = g * 8u + wj
         let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
@@ -6094,13 +6311,16 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         var tt = sidx ^ (sidx >> 4u)
         tt = tt ^ (tt >> 2u)
         tt = tt ^ (tt >> 1u)
-        let sgb = sidx | ((tt & 1u) << 7u)
+        let sgn = (sidx | ((tt & 1u) << 7u)) >> (r & 7u)
         let gw = iq3x_gridc[qb]
-        let gb = float((gw >> ((r & 3u) * 8u)) & 0xFFu)
+        let gp = gw >> ((r & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let d = unpackHalf2x16(ws[srow]).x
-        let sc = grid_sc(ws[srow + 1u], g)
-        return float16(d * float(sc) * (((sgb >> (r & 7u)) & 1u) != 0u ? -gb : gb))
+        let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
+        let g0 = float(gp & 0xFFu)
+        let g1 = float((gp >> 8u) & 0xFFu)
+        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+        return float16((e & 1u) != 0u ? v1 : v0)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6223,21 +6443,25 @@ class template Iq2sCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2sBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let g = e >> 5u
-        let r = e & 31u
+        let pair0 = e & ~1u
+        let g = pair0 >> 5u
+        let r = pair0 & 31u
         let l = r >> 3u
         let j = r & 7u
         let qi = g * 4u + l
         let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
         let qhw = (uint(int(blk.qh[int(g >> 1u)])) & 0xFFFFu) >> ((g & 1u) * 8u)
-        let sgw = (uint(int(blk.sg[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)
+        let sgn = ((uint(int(blk.sg[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) >> j
         let gw = iq2s_gridc[(qb | ((qhw << (8u - 2u * l)) & 0x300u)) * 2u + (j >> 2u)]
-        let gb = float((gw >> ((j & 3u) * 8u)) & 0xFFu)
+        let gp = gw >> ((j & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let d = unpackHalf2x16(ws[srow]).x
         let si = g * 2u + (r >> 4u)
-        let sc = (ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu
-        return float16(d * float(sc) * (((sgw >> j) & 1u) != 0u ? -gb : gb))
+        let ds = unpackHalf2x16(ws[srow]).x * float((ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+        let g0 = float(gp & 0xFFu)
+        let g1 = float((gp >> 8u) & 0xFFu)
+        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+        return float16((e & 1u) != 0u ? v1 : v0)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6300,21 +6524,25 @@ class template Iq2xsCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let wi = e >> 3u
-        let j = e & 7u
+        let pair0 = e & ~1u
+        let wi = pair0 >> 3u
+        let j = pair0 & 7u
         let w16 = uint(int(blk.qs[int(wi)])) & 0xFFFFu
         let sidx = w16 >> 9u
         var tt = sidx ^ (sidx >> 4u)
         tt = tt ^ (tt >> 2u)
         tt = tt ^ (tt >> 1u)
-        let sgb = sidx | ((tt & 1u) << 7u)
+        let sgn = (sidx | ((tt & 1u) << 7u)) >> j
         let gw = iq2xs_gridc[(w16 & 511u) * 2u + (j >> 2u)]
-        let gb = float((gw >> ((j & 3u) * 8u)) & 0xFFu)
+        let gp = gw >> ((j & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dv = unpackHalf2x16(ws[srow]).x
-        let si = e >> 4u
-        let sc = (ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu
-        return float16(dv * float(sc) * (((sgb >> j) & 1u) != 0u ? -gb : gb))
+        let si = pair0 >> 4u
+        let ds = unpackHalf2x16(ws[srow]).x * float((ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
+        let g0 = float(gp & 0xFFu)
+        let g1 = float((gp >> 8u) & 0xFFu)
+        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+        return float16((e & 1u) != 0u ? v1 : v0)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6382,8 +6610,9 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xxsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let g = e >> 5u
-        let r = e & 31u
+        let pair0 = e & ~1u
+        let g = pair0 >> 5u
+        let r = pair0 & 31u
         let l = r >> 3u
         let j = r & 7u
         let qi = g * 8u + l
@@ -6394,13 +6623,16 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         var tt = sidx ^ (sidx >> 4u)
         tt = tt ^ (tt >> 2u)
         tt = tt ^ (tt >> 1u)
-        let sgb = sidx | ((tt & 1u) << 7u)
+        let sgn = (sidx | ((tt & 1u) << 7u)) >> j
         let gw = iq2xxs_gridc[qb * 2u + (j >> 2u)]
-        let gb = float((gw >> ((j & 3u) * 8u)) & 0xFFu)
+        let gp = gw >> ((j & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let dv = unpackHalf2x16(ws[srow]).x
-        let sc = grid_sc(ws[srow + 1u], g)
-        return float16(dv * float(sc) * (((sgb >> j) & 1u) != 0u ? -gb : gb))
+        let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
+        let g0 = float(gp & 0xFFu)
+        let g1 = float((gp >> 8u) & 0xFFu)
+        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+        return float16((e & 1u) != 0u ? v1 : v0)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6434,9 +6666,9 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     }
 }
 
-// the stamps: the three width columns of each format (the dispatcher keys on (fmt, tc))
 [vk_dispatch(name = "q8_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : Q8Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6446,6 +6678,7 @@ class Q8Cm2LBatch : Q8Cm2T {
 class Q8Cm2MBatch : Q8Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6455,6 +6688,7 @@ class Q8Cm2MBatch : Q8Cm2T {
 class Q8Cm2SBatch : Q8Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6462,6 +6696,7 @@ class Q8Cm2SBatch : Q8Cm2T {
 
 [vk_dispatch(name = "kq_batch_k4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K4Cm2LBatch : K4Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6471,6 +6706,7 @@ class K4Cm2LBatch : K4Cm2T {
 class K4Cm2MBatch : K4Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6480,6 +6716,7 @@ class K4Cm2MBatch : K4Cm2T {
 class K4Cm2SBatch : K4Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6487,6 +6724,7 @@ class K4Cm2SBatch : K4Cm2T {
 
 [vk_dispatch(name = "kq_batch_k6_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K6Cm2LBatch : K6Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6496,6 +6734,7 @@ class K6Cm2LBatch : K6Cm2T {
 class K6Cm2MBatch : K6Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6505,6 +6744,7 @@ class K6Cm2MBatch : K6Cm2T {
 class K6Cm2SBatch : K6Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6512,6 +6752,7 @@ class K6Cm2SBatch : K6Cm2T {
 
 [vk_dispatch(name = "kq_batch_k5_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K5Cm2LBatch : K5Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6521,6 +6762,7 @@ class K5Cm2LBatch : K5Cm2T {
 class K5Cm2MBatch : K5Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6530,6 +6772,7 @@ class K5Cm2MBatch : K5Cm2T {
 class K5Cm2SBatch : K5Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6537,6 +6780,7 @@ class K5Cm2SBatch : K5Cm2T {
 
 [vk_dispatch(name = "kq_batch_q40_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q40Cm2LBatch : Q40Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6546,6 +6790,7 @@ class Q40Cm2LBatch : Q40Cm2T {
 class Q40Cm2MBatch : Q40Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6555,6 +6800,7 @@ class Q40Cm2MBatch : Q40Cm2T {
 class Q40Cm2SBatch : Q40Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6562,6 +6808,7 @@ class Q40Cm2SBatch : Q40Cm2T {
 
 [vk_dispatch(name = "kq_batch_iq4xs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4xsCm2LBatch : Iq4xsCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6571,6 +6818,7 @@ class Iq4xsCm2LBatch : Iq4xsCm2T {
 class Iq4xsCm2MBatch : Iq4xsCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6580,6 +6828,7 @@ class Iq4xsCm2MBatch : Iq4xsCm2T {
 class Iq4xsCm2SBatch : Iq4xsCm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6587,6 +6836,7 @@ class Iq4xsCm2SBatch : Iq4xsCm2T {
 
 [vk_dispatch(name = "kq_batch_k3_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K3Cm2LBatch : K3Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6596,6 +6846,7 @@ class K3Cm2LBatch : K3Cm2T {
 class K3Cm2MBatch : K3Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6605,6 +6856,7 @@ class K3Cm2MBatch : K3Cm2T {
 class K3Cm2SBatch : K3Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6612,6 +6864,7 @@ class K3Cm2SBatch : K3Cm2T {
 
 [vk_dispatch(name = "kq_batch_iq3s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3sCm2LBatch : Iq3sCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6621,6 +6874,7 @@ class Iq3sCm2LBatch : Iq3sCm2T {
 class Iq3sCm2MBatch : Iq3sCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6630,13 +6884,17 @@ class Iq3sCm2MBatch : Iq3sCm2T {
 class Iq3sCm2SBatch : Iq3sCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
 [vk_dispatch(name = "kq_batch_iq3xxs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq3xxsCm2LBatch : Iq3xxsCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6646,6 +6904,7 @@ class Iq3xxsCm2LBatch : Iq3xxsCm2T {
 class Iq3xxsCm2MBatch : Iq3xxsCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6655,13 +6914,17 @@ class Iq3xxsCm2MBatch : Iq3xxsCm2T {
 class Iq3xxsCm2SBatch : Iq3xxsCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
 [vk_dispatch(name = "kq_batch_iq4nl_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nlCm2LBatch : Iq4nlCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6671,6 +6934,7 @@ class Iq4nlCm2LBatch : Iq4nlCm2T {
 class Iq4nlCm2MBatch : Iq4nlCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6680,6 +6944,7 @@ class Iq4nlCm2MBatch : Iq4nlCm2T {
 class Iq4nlCm2SBatch : Iq4nlCm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6687,6 +6952,7 @@ class Iq4nlCm2SBatch : Iq4nlCm2T {
 
 [vk_dispatch(name = "kq_batch_k2_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K2Cm2LBatch : K2Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6696,6 +6962,7 @@ class K2Cm2LBatch : K2Cm2T {
 class K2Cm2MBatch : K2Cm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6705,6 +6972,7 @@ class K2Cm2MBatch : K2Cm2T {
 class K2Cm2SBatch : K2Cm2T {
     override BN = 32u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
@@ -6712,6 +6980,7 @@ class K2Cm2SBatch : K2Cm2T {
 
 [vk_dispatch(name = "kq_batch_iq2s_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2sCm2LBatch : Iq2sCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6721,6 +6990,7 @@ class Iq2sCm2LBatch : Iq2sCm2T {
 class Iq2sCm2MBatch : Iq2sCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6730,13 +7000,17 @@ class Iq2sCm2MBatch : Iq2sCm2T {
 class Iq2sCm2SBatch : Iq2sCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
 [vk_dispatch(name = "kq_batch_iq2xs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xsCm2LBatch : Iq2xsCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6746,6 +7020,7 @@ class Iq2xsCm2LBatch : Iq2xsCm2T {
 class Iq2xsCm2MBatch : Iq2xsCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6755,13 +7030,17 @@ class Iq2xsCm2MBatch : Iq2xsCm2T {
 class Iq2xsCm2SBatch : Iq2xsCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
 [vk_dispatch(name = "kq_batch_iq2xxs_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xxsCm2LBatch : Iq2xxsCm2T {
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x256
     typedef ACC = coopmatWgAcc_f16_128x256
     typedef ACCW = coopmatWgAcc_f32_128x256
@@ -6771,6 +7050,7 @@ class Iq2xxsCm2LBatch : Iq2xxsCm2T {
 class Iq2xxsCm2MBatch : Iq2xxsCm2T {
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6780,9 +7060,162 @@ class Iq2xxsCm2MBatch : Iq2xxsCm2T {
 class Iq2xxsCm2SBatch : Iq2xxsCm2T {
     override BN = 32u
     override STILE = true
-    typedef BT = coopmatWgB_f16_64x32
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
     typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
+[vk_dispatch(name = "q8_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8Cm2EBatch : Q8Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k4_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K4Cm2EBatch : K4Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k6_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K6Cm2EBatch : K6Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k5_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K5Cm2EBatch : K5Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_q40_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q40Cm2EBatch : Q40Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq4xs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4xsCm2EBatch : Iq4xsCm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k3_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K3Cm2EBatch : K3Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq3s_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3sCm2EBatch : Iq3sCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq3xxs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3xxsCm2EBatch : Iq3xxsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq4nl_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq4nlCm2EBatch : Iq4nlCm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_k2_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class K2Cm2EBatch : K2Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq2s_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2sCm2EBatch : Iq2sCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq2xs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xsCm2EBatch : Iq2xsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq2xxs_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq2xxsCm2EBatch : Iq2xxsCm2T {
+    override BN = 128u
+    override STILE = true
+    override BK = 32u
+    override UNR = 8u
+    typedef AT = coopmatWgA_f16_128x32
+    typedef BT = coopmatWgB_f16_32x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
 }
 
 // the KHR arm of every kq format (KHR, BN 128); the cm2 typedefs belong to the template's uncalled
@@ -6792,6 +7225,7 @@ class K4KhrBatch : K4Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6802,6 +7236,7 @@ class K5KhrBatch : K5Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6812,6 +7247,7 @@ class K6KhrBatch : K6Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6822,6 +7258,7 @@ class Q40KhrBatch : Q40Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6832,6 +7269,7 @@ class Iq4xsKhrBatch : Iq4xsCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6842,6 +7280,7 @@ class K3KhrBatch : K3Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6852,6 +7291,7 @@ class Iq3sKhrBatch : Iq3sCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6862,6 +7302,7 @@ class Iq3xxsKhrBatch : Iq3xxsCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6872,6 +7313,7 @@ class Iq4nlKhrBatch : Iq4nlCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6882,6 +7324,7 @@ class K2KhrBatch : K2Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6892,6 +7335,7 @@ class Iq2sKhrBatch : Iq2sCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6902,6 +7346,7 @@ class Iq2xsKhrBatch : Iq2xsCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
@@ -6912,14 +7357,16 @@ class Iq2xxsKhrBatch : Iq2xxsCm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f16_128x128
     typedef ACCW = coopmatWgAcc_f32_128x128
 }
 
 struct SkRedArgs {
-    nelem : uint   // one partial plane's float count (cnt x d; always a 4-multiple, d is 32-aligned)
+    nelem : uint   //! one partial plane's float count (rows x d): any count - the reduce guards its four-wide tail element by element
     k : uint       // planes
+    ybase : uint   // the sum's element base in y (the smalls' beta or alpha rows; 0 for a plane of its own)
 }
 
 // ===== the split-k reduce (sums the cm2 partial planes into y) =====
@@ -6939,20 +7386,98 @@ class SplitKReduce {
             var s1 = 0.0
             var s2 = 0.0
             var s3 = 0.0
+            let n1 = e + 1u < pa.nelem
+            let n2 = e + 2u < pa.nelem
+            let n3 = e + 3u < pa.nelem
             var p = 0u
             while (p < pa.k) {
                 let b = p * pa.nelem + e
                 s0 += part[b]
-                s1 += part[b + 1u]
-                s2 += part[b + 2u]
-                s3 += part[b + 3u]
+                if (n1) {
+                    s1 += part[b + 1u]
+                }
+                if (n2) {
+                    s2 += part[b + 2u]
+                }
+                if (n3) {
+                    s3 += part[b + 3u]
+                }
                 p++
             }
-            y[e] = s0
-            y[e + 1u] = s1
-            y[e + 2u] = s2
-            y[e + 3u] = s3
+            let o = pa.ybase + e
+            y[o] = s0
+            if (n1) {
+                y[o + 1u] = s1
+            }
+            if (n2) {
+                y[o + 2u] = s2
+            }
+            if (n3) {
+                y[o + 3u] = s3
+            }
         }
+    }
+}
+
+struct F16GemmArgs {
+    n : uint        //! K, the row width (elements), a 64-multiple
+    d : uint        //! M, the weight rows
+    rows : uint     //! N, the positions
+    woff : uint     //! the weight rows' element base
+    ybase : uint    //! the output's element base: the sum's, or the first partial plane's
+    ystride : uint  //! the output row stride (elements) when the GEMM stores whole
+    ksplit : uint   //! the k chunk per workgroup; 0 = the whole K, one plane at ybase with ystride
+}
+
+//! a small f16 x f16 GEMM on the cm2 128 x 128 tile, y[rows x d] = x[rows x n] w[d x n]^T; a k chunk's partial plane lands at ybase + chunk * rows * d (stride d)
+[vk_dispatch(name = "f16_gemm_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class F16GemmCm2 {
+    @ssbo @binding = 0 @role = "weight" w : array<float16>
+    @ssbo @binding = 1 xf16 : array<float16>
+    @ssbo @binding = 2 y : array<float>
+    @push_constant pa : F16GemmArgs
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f32_128x128
+
+    [spirv_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+    def run {
+        let xtiles = (pa.rows + 127u) / 128u
+        let wtiles = (pa.d + 127u) / 128u
+        let chunk = gl_WorkGroupID.x / (xtiles * wtiles)
+        let rem = gl_WorkGroupID.x % (xtiles * wtiles)
+        let t0 = (rem / wtiles) * 128u
+        let m0 = (rem % wtiles) * 128u
+        let split = pa.ksplit != 0u
+        let k0 = split ? chunk * pa.ksplit : 0u
+        let k1 = split ? min(k0 + pa.ksplit, pa.n) : pa.n
+        let ybase = split ? pa.ybase + chunk * pa.rows * pa.d : pa.ybase
+        let ystride = split ? pa.d : pa.ystride
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var tla : tensorLayout2DPad
+        tensorLayoutCreate(tla)
+        tensorLayoutSetDimension(tla, pa.d, pa.n)
+        tensorLayoutSetStride(tla, pa.n, 1u)
+        var tlb : tensorLayout2DPad
+        tensorLayoutCreate(tlb)
+        tensorLayoutSetDimension(tlb, pa.rows, pa.n)
+        tensorLayoutSetStride(tlb, pa.n, 1u)
+        var tlo : tensorLayout2DPad
+        tensorLayoutCreate(tlo)
+        tensorLayoutSetDimension(tlo, pa.rows, pa.d)
+        tensorLayoutSetStride(tlo, ystride, 1u)
+        var a : AT
+        var b : BT
+        var acc : ACC
+        var k = k0
+        while (k < k1) {
+            coopmatLoadTensor(a, w, pa.woff, tla, m0, 128u, k, F16G_BK)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, F16G_BK, tv)
+            acc = coopmatMulAdd(a, b, acc)
+            k += F16G_BK
+        }
+        coopmatStoreTensor(acc, y, ybase, tlo, t0, 128u, m0, 128u, tv)
     }
 }
 
@@ -7445,6 +7970,7 @@ class KqGemvBase {
         return dm.x * float(sc * idot) - dm.y * float(mn * bs)
     }
 
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
     def gemv_shell {
         let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
         let lane = gl_SubgroupInvocationID
@@ -7460,6 +7986,17 @@ class KqGemvBase {
             let xsb0 = regions[r * 2u + 1u]
             let nb = nsb * 8u
             var b0 = 0u
+            while (b0 + 4u * lanes_per_row <= nb) {
+                let bb = b0 + row_lane
+                acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)
+                let b1 = bb + lanes_per_row
+                acc += blk_contrib(wsb0 + b1 / 8u, b1 % 8u, xsb0 + b1 / 8u)
+                let b2 = b1 + lanes_per_row
+                acc += blk_contrib(wsb0 + b2 / 8u, b2 % 8u, xsb0 + b2 / 8u)
+                let b3 = b2 + lanes_per_row
+                acc += blk_contrib(wsb0 + b3 / 8u, b3 % 8u, xsb0 + b3 / 8u)
+                b0 += 4u * lanes_per_row
+            }
             while (b0 < nb) {
                 let bb = b0 + row_lane
                 if (bb < nb) {

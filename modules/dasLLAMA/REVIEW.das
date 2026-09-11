@@ -545,7 +545,7 @@ let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 // in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 36
-let private IMAGE_LAYOUT_STAMP_HASH = 0xbadc54ac04cbcad1ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x4098e7f964aefc1ful
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
@@ -741,7 +741,7 @@ def private check_image_layout_stamp {
     }
 }
 
-// ===== the Vulkan checklist's four mechanical checks (REVIEW_GPU_VULKAN.md) =====
+// ===== the Vulkan checklist's mechanical checks (REVIEW_GPU_VULKAN.md) =====
 
 let private VK_CLASSES = "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das"
 let private VK_PREFILL = "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das"
@@ -841,50 +841,272 @@ def private check_ar_max_dim_triple {
 // q8 is no superblock format: its cm2 tiles are the fmt-0 cells with no KHR arm, and the KHR
 // mode serves q8 through its own tile - the one template the KHR set does not reach.
 var private CM2_KHR_EXEMPT <- {"Q8Cm2T"}
+var private CM2_NO_EXEMPT : table<string>
 
-// the `<Fmt>Cm2T` format templates on the cm2 base, by name
-def private cm2_format_templates : array<string> {
+def private cm2_format_templates(exempt : table<string>) : array<string> {
     var out : array<string>
     for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
         continue if (!(line |> starts_with("class template ")))
         let name = ident_prefix(slice(line, length("class template ")))
-        if (name |> ends_with("Cm2T") && find(line, ": KqCm2BatchT") >= 0 && !key_exists(CM2_KHR_EXEMPT, name)) {
+        if (name |> ends_with("Cm2T") && find(line, ": KqCm2BatchT") >= 0 && !key_exists(exempt, name)) {
             out |> push(name)
         }
     }
     return <- out
 }
 
-// Every superblock format on the cm2 template ships its KHR instantiation and its arm in each of the
-// prefill's three KHR ladders: the f16 feed admits every such format, so a format missing one panics
-// inside the ladder on a card whose cooperative-matrix mode is KHR - a card class this box is not.
-def private check_cm2_khr_set {
-    var inscope templates <- cm2_format_templates()
+//! one class ladder trio every format template on the cm2 base joins
+struct private LadderTrio {
+    suffix : string     //! the stamp's class suffix: `<Fmt>` + suffix
+    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail, `q8_batch_` + tail for q8
+    ladder : string     //! the ladder functions' prefix: ladder + `ensure` / `set` / `enc`
+    why : string        //! what a missing arm does at run time
+}
+
+def private cm2_dispatch_name(fmt, tail : string) : string {
+    return fmt == "q8" ? "q8_batch_{tail}" : "kq_batch_{fmt}_{tail}"
+}
+
+def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
+    var inscope templates <- cm2_format_templates(exempt)
     if (empty(templates)) {
-        gate_finding(VK_CLASSES, "no `class template <Fmt>Cm2T : KqCm2BatchT` found - the KHR set rule has no templates to walk; keep the spelling or move this check with it")
+        gate_finding(VK_CLASSES, "no `class template <Fmt>Cm2T : KqCm2BatchT` found - the {trio.ladder}* ladder rule has no templates to walk; keep the spelling or move this check with it")
         return
     }
     let classes = strip_line_comments(fread(VK_CLASSES))
     var inscope ladders <- function_bodies(VK_PREFILL) $(header) {
-        return header |> starts_with("def khr_cls_ensure") || header |> starts_with("def khr_cls_set") || header |> starts_with("def khr_cls_enc")
+        return header |> starts_with("def {trio.ladder}ensure") || header |> starts_with("def {trio.ladder}set") || header |> starts_with("def {trio.ladder}enc")
+    }
+    if (length(ladders) != 3) {
+        gate_finding(VK_PREFILL, "found {length(ladders)} of the three `{trio.ladder}ensure` / `{trio.ladder}set` / `{trio.ladder}enc` ladders - keep the spelling or move this check with it")
     }
     for (tpl in templates) {
         let pfx = slice(tpl, 0, length(tpl) - length("Cm2T"))
-        let fmt = to_lower(pfx)
-        if (find(classes, "class {pfx}KhrBatch : {tpl}") < 0) {
-            gate_finding(VK_CLASSES, "{tpl} has no `class {pfx}KhrBatch : {tpl}` - a superblock format on the cm2 template ships its KHR instantiation in the same change, or the KHR ladders panic on a KHR-mode card")
+        let dispatch = cm2_dispatch_name(to_lower(pfx), trio.tail)
+        if (find(classes, "class {pfx}{trio.suffix} : {tpl}") < 0) {
+            gate_finding(VK_CLASSES, "{tpl} has no `class {pfx}{trio.suffix} : {tpl}` - a format on the cm2 template ships its {trio.suffix} stamp in the same change, or {trio.why}")
         }
-        if (find(classes, "name = \"kq_batch_{fmt}_khr_cls\"") < 0) {
-            gate_finding(VK_CLASSES, "{tpl} has no `[vk_dispatch(name = \"kq_batch_{fmt}_khr_cls\"` stamp - its KHR class has no dispatch")
+        if (find(classes, "name = \"{dispatch}\"") < 0) {
+            gate_finding(VK_CLASSES, "{tpl} has no `[vk_dispatch(name = \"{dispatch}\"` stamp - its {trio.suffix} class has no dispatch")
         }
         for (f in ladders) {
             let ladder = ident_prefix(slice(f.body, length("def ")))
-            let arm = "{slice(ladder, length("khr_cls_"))}_kq_batch_{fmt}_khr_cls("
+            let arm = "{slice(ladder, length(trio.ladder))}_{dispatch}("
             if (find(f.body, arm) < 0) {
-                gate_finding(VK_PREFILL, f.line, "{ladder} has no arm for {tpl} ({arm}) - the f16 feed admits the format and the ladder panics on a KHR-mode card")
+                gate_finding(VK_PREFILL, f.line, "{ladder} has no arm for {tpl} ({arm}) - {trio.why}")
             }
         }
     }
+}
+
+def private check_cm2_ladder_sets {
+    check_cm2_ladder_set(LadderTrio(suffix = "KhrBatch", tail = "khr_cls", ladder = "khr_cls_",
+        why = "the f16 feed admits the format on a KHR-mode card, where the KHR ladders panic"), CM2_KHR_EXEMPT)
+    check_cm2_ladder_set(LadderTrio(suffix = "Cm2EBatch", tail = "cm2e_cls", ladder = "cm2e_cls_",
+        why = "the expert schedule takes the format's planes, and the e ladders panic on the first resident MoE window"), CM2_NO_EXEMPT)
+}
+
+struct private VkStamp {
+    dispatch_name : string
+    cls : string
+    base : string
+    line : int
+    body : string
+}
+
+//! every `[vk_dispatch]`-stamped class of `path`, in file order (a body ends at the first line starting with `}`)
+def private vk_stamps(path : string) : array<VkStamp> {
+    var out : array<VkStamp>
+    var pending = ""
+    var line_no = 0
+    var cur = -1
+    for (line in split(strip_line_comments(fread(path)), "\n")) {
+        line_no++
+        if (cur >= 0) {
+            if (line |> starts_with("}")) {
+                cur = -1
+            } else {
+                out[cur].body += "{line}\n"
+            }
+            continue
+        }
+        if (line |> starts_with("[vk_dispatch(name = \"")) {
+            let from = length("[vk_dispatch(name = \"")
+            pending = slice(line, from, find(line, "\"", from))
+        } elif (!empty(pending) && line |> starts_with("class ")) {
+            let colon = find(line, " : ")
+            out |> push(VkStamp(dispatch_name = pending, line = line_no,
+                cls = ident_prefix(slice(line, length("class "))),
+                base = colon < 0 ? "" : ident_prefix(slice(line, colon + 3))))
+            cur = length(out) - 1
+            pending = ""
+        } elif (!(line |> starts_with("["))) {
+            pending = ""
+        }
+    }
+    return <- out
+}
+
+// the identifier the first line of `lines` carrying `marker` declares right after it, "" when no line does
+def private ident_after(lines : array<string>; marker : string) : string {
+    for (line in lines) {
+        let at = find(line, marker)
+        if (at >= 0) {
+            return ident_prefix(strip(slice(line, at + length(marker))))
+        }
+    }
+    return ""
+}
+
+//! the template's constants a stamp inherits where it overrides none, and the two schedule widths
+struct private StampDefaults {
+    bn, bk, unr, blkw, s_rows, m_rows : int
+}
+
+//! one stamp against the tile rule: its unrolled block one superblock, a scale-cache format's BLKW that block, its four tile typedefs at its BK and BN, an s or e stamp's BN the schedule's width
+def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults) {
+    var inscope body <- split(st.body, "\n")
+    let bn_over = literal_after(body, "override BN = ")
+    let bk_over = literal_after(body, "override BK = ")
+    let unr_over = literal_after(body, "override UNR = ")
+    let bn = bn_over < 0 ? d.bn : bn_over
+    let bk = bk_over < 0 ? d.bk : bk_over
+    let unr = unr_over < 0 ? d.unr : unr_over
+    if (bk * unr != d.bk * d.unr) {
+        gate_finding(path, st.line, "{st.dispatch_name}: UNR {unr} at BK {bk} - a stamp's unrolled block is one superblock ({d.bk * d.unr} elements: the template's BK x UNR), so a 32-deep stamp carries `override UNR = {d.bk * d.unr / 32}u` and a 64-deep one none")
+    }
+    var inscope tlines <- class_lines(VK_CLASSES, "class template {st.base}")
+    if (ident_after(tlines, "override SCACHE = ") == "true") {
+        let blkw_over = literal_after(tlines, "override BLKW = ")
+        let blkw = blkw_over < 0 ? d.blkw : blkw_over
+        if (blkw != bk * unr) {
+            gate_finding(path, st.line, "{st.dispatch_name}: a scale-cache stamp at BLKW {blkw} with an unrolled block of {bk * unr} - the cache refills once per superblock (`sc_step` keys on BLKW), so a SCACHE format's BLKW is its BK x UNR")
+        }
+    }
+    let want <- fixed_array(
+        (name = "AT", tile = "coopmatWgA_f16_128x{bk}", why = "a stamp's A tile is 128 rows by its k step"),
+        (name = "BT", tile = "coopmatWgB_f16_{bk}x{bn}", why = "a stamp's B tile is its k step by its token column"),
+        (name = "ACC", tile = "coopmatWgAcc_f16_128x{bn}", why = "a stamp's accumulator is 128 rows by its token column"),
+        (name = "ACCW", tile = "coopmatWgAcc_f32_128x{bn}", why = "a stamp's f32 accumulator is 128 rows by its token column"))
+    for (w in want) {
+        let got = ident_after(body, "typedef {w.name} = ")
+        if (empty(got)) {
+            gate_finding(path, st.line, "{st.dispatch_name}: no `typedef {w.name}` at BK {bk} BN {bn} - {w.why} ({w.tile}); a stamp declares all four tile types")
+        } elif (got != w.tile) {
+            gate_finding(path, st.line, "{st.dispatch_name}: `typedef {w.name} = {got}` at BK {bk} BN {bn} - {w.why} ({w.tile}); change the constants and the types together")
+        }
+    }
+    if (st.dispatch_name |> ends_with("_cm2e_cls") && bn != d.m_rows) {
+        gate_finding(path, st.line, "{st.dispatch_name}: BN {bn} on an e stamp - the expert schedule's m pieces are SCHED_M_ROWS ({d.m_rows}) rows wide, the column the stamp serves")
+    }
+    if (st.dispatch_name |> ends_with("_cm2s_cls") && bn != d.s_rows) {
+        gate_finding(path, st.line, "{st.dispatch_name}: BN {bn} on an s stamp - the expert schedule's s pieces are SCHED_S_ROWS ({d.s_rows}) rows wide, the column the stamp serves")
+    }
+}
+
+def private check_cm2_stamp_tiles {
+    var inscope templates <- cm2_format_templates(CM2_NO_EXEMPT)
+    var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
+    let bn0 = literal_after(base_lines, "@template_constant BN : uint = ")
+    let bk0 = literal_after(base_lines, "@template_constant BK : uint = ")
+    let unr0 = literal_after(base_lines, "@template_constant UNR : uint = ")
+    var inscope all_lines <- split(strip_line_comments(fread(VK_CLASSES)), "\n")
+    let s_rows = literal_after(all_lines, "let SCHED_S_ROWS = ")
+    let m_rows = literal_after(all_lines, "let SCHED_M_ROWS = ")
+    if (bn0 < 0 || bk0 < 0 || unr0 < 0) {
+        gate_finding(VK_CLASSES, "no `@template_constant BN : uint = N` / `BK : uint = N` / `UNR : uint = N` inside `class template KqCm2BatchT` - the stamp tile rule has no defaults to read; keep the spelling or move this check with it")
+    }
+    if (s_rows < 0 || m_rows < 0) {
+        gate_finding(VK_CLASSES, "no `let SCHED_S_ROWS = N` / `let SCHED_M_ROWS = N` line - the stamp tile rule has no schedule widths to compare; keep the spelling or move this check with it")
+    }
+    return if (bn0 < 0 || bk0 < 0 || unr0 < 0 || s_rows < 0 || m_rows < 0)
+    let blkw0 = literal_after(base_lines, "@template_constant BLKW : uint = ")
+    let defaults = StampDefaults(bn = bn0, bk = bk0, unr = unr0, blkw = blkw0, s_rows = s_rows, m_rows = m_rows)
+    var stamped = 0
+    //! every file that stamps a `<Fmt>Cm2T` template: the engine's classes, the probe's other-depth twins, the toy fixture (a walk fixture holds only the first)
+    for (path in fixed_array(VK_CLASSES, "modules/dasLLAMA/harness/vk_gemm_probe.das", "modules/dasLLAMA/tests/_vkd_toy.das")) {
+        continue if (!fexist(path))
+        var inscope stamps <- vk_stamps(path)
+        for (st in stamps) {
+            continue if (find_index(templates, st.base) < 0)
+            stamped++
+            check_cm2_stamp_tile(path, st, defaults)
+        }
+    }
+    if (stamped == 0) {
+        gate_finding(VK_CLASSES, "no `[vk_dispatch]` stamp of a `<Fmt>Cm2T` template found - the stamp tile rule has nothing to read; keep the spelling or move this check with it")
+    }
+}
+
+let private VK_BOOST = "modules/dasVulkan/daslib/vulkan_boost.das"
+
+def private vk_boost_probes : array<string> {
+    var out : array<string>
+    for (line in split(strip_line_comments(fread(VK_BOOST)), "\n")) {
+        continue if (!(line |> starts_with("def public ")))
+        let name = ident_prefix(slice(line, length("def public ")))
+        if (name |> ends_with("_supported")) {
+            out |> push(name)
+        }
+    }
+    return <- out
+}
+
+// every whole-string `"VK_*"` literal of `text` - an extension read by name, never a name inside prose
+def private vk_ext_literals(text : string) : array<string> {
+    var out : array<string>
+    peek_data(text) $(d) {
+        var from = 0
+        while (true) {
+            let at = find(d, "\"VK_", from)
+            break if (at < 0)
+            var n = at + 1
+            while (n < length(d) && is_ident_byte(int(d[n]))) {
+                n++
+            }
+            if (n < length(d) && int(d[n]) == '"') {
+                out |> push(slice(d, at + 1, n))
+            }
+            from = n
+        }
+    }
+    return <- out
+}
+
+def private check_vk_extension_roster {
+    if (!fexist(VK_BOOST)) {
+        gate_finding(VK_COMMON, "no {VK_BOOST} - the extension roster rule has no probe list to read; keep the path or move this check with it")
+        return
+    }
+    var inscope probes <- vk_boost_probes()
+    var inscope rosters <- function_bodies(VK_COMMON) $(header) {
+        return header |> starts_with("def public vk_ext_roster") || header |> starts_with("def vk_ext_roster")
+    }
+    if (length(rosters) != 1) {
+        gate_finding(VK_COMMON, "no `def vk_ext_roster` in dasllama_vulkan_common.das - the extension roster rule has nothing to read; keep the spelling or move this check with it")
+        return
+    }
+    let roster = rosters[0].body
+    var files : array<string>
+    collect_das_files("modules/dasLLAMA/dasllama", files)
+    for (p in files) {
+        var line_no = 0
+        for (line in split(strip_line_comments(fread(p)), "\n")) {
+            line_no++
+            var inscope names <- vk_ext_literals(line)
+            for (name in names) {
+                if (find(roster, name) < 0) {
+                    gate_finding(p, line_no, "the tier reads {name} here, and vk_ext_roster (dasllama_vulkan_common.das) does not name it - add the capability with what the tier does with it and what serves without it, so the device-init log says which route it decided")
+                }
+            }
+            for (probe in probes) {
+                if (find(line, "{probe}(") >= 0 && find(roster, "{probe}(") < 0) {
+                    gate_finding(p, line_no, "the tier calls {probe} here, and vk_ext_roster (dasllama_vulkan_common.das) does not - add the capability it probes to the roster with what the tier does with it and what serves without it")
+                }
+            }
+        }
+    }
+    delete files
 }
 
 // A Vulkan pipeline is built only by the `[vk_dispatch]`-generated `ensure_*`: a hand build bypasses the
@@ -922,7 +1144,9 @@ def main() : int {
     check_image_backing_release()
     check_khr_stage16_abstract()
     check_ar_max_dim_triple()
-    check_cm2_khr_set()
+    check_cm2_ladder_sets()
+    check_cm2_stamp_tiles()
+    check_vk_extension_roster()
     check_no_hand_pipelines()
     var inscope tut_texts : array<string>
     read_das_stripped(TUTORIAL_DIR, tut_texts)

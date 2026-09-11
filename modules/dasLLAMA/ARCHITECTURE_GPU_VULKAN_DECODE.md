@@ -199,9 +199,16 @@ whole-model driver (`ARCHITECTURE_GPU.md` sec.1.5, `dasllama_gpu_resident.das`) 
 command per model whose per-layer body is one of two heads followed by the shared FFN tail: an
 attention head (q/k/v GEMVs, the fused qk-norm and rope storing the mirror row, decode attention
 over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
-GEMV into one projection row (z at offset `cd`), the beta and alpha GEMVs into the layer's smalls
-at the step's beta and g rows, the fused deltanet step (`dn_step_cls`, the same kernel the
-per-op tier's `vk_moe_dn_step` dispatches), and the out GEMV. Both heads leave the block output
+GEMV into one projection row (z at offset `cd`; the two halves under their own hazard classes,
+`VHZ_DNP` and `VHZ_DNZ`, so the GEMVs co-run and the step waits on both), the beta and alpha rows as ONE `RouterGemvF16`
+dispatch (the rows read as half pairs, the alpha half landing at the smalls' g rows through the
+push block's second base: a dispatch and a hazard barrier fewer a layer), the fused deltanet step
+(`dn_step_cls`, the same kernel the per-op tier's `vk_moe_dn_step` dispatches: one workgroup a
+head - the conv preamble over the head's channels, the q and k norms and the raw q.k by subgroup
+adds, then the delta rule with each of the 256 threads owning one state column's row part, 64
+rows at ds 128, held in registers from the k.S / q.S pass through the update so the state
+streams once each way with a row's loads coalesced across the columns, the out-norm's sum by a
+subgroup add, and the o row) and the out GEMV. Both heads leave the block output
 in `xb2`, so the residual add, the FFN and the next layer's norm never know which head ran. The
 deltanet qkv and z planes ride their file formats - the loader tags a dense hybrid's planes
 natively where this driver will be attempted or no GPU rail wants them (Metal off, the file not
@@ -214,8 +221,12 @@ it writes the f32 row and the Q8_K requant - the attention head's wo twin - make
 feed, billed to the out role so the stamp count stands; the beta and alpha rows are q8 arena planes when
 the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
 recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
-base into the smalls. A hybrid takes the split activation rail (no fused add+rms+requant): the f32
-GEMVs read the normed row `xb`, which the fused twin never writes.
+base into the smalls. The fused add+rms+requant serves every site on every model: each site's
+stamp (`RqStamp`, picked by `rd_ensure_fused_sets` once all layers are registered) is Q8_0 or
+Q8_K by the consumer's block form (the layer's triple, a bare MoE layer's experts, the next
+layer's head, the classifier), storing the normed row too where a consumer reads it as floats (a
+recurrent head's beta/alpha GEMV, a MoE router); a MoE layer's residual step stays the combine,
+so the layer after it requants on its own.
 
 **Each recurrent layer owns a device state slot in the per-op step's shape** (`DnStep`: the
 state, the smalls with the parity-double-buffered conv ring, the owner's host addresses), and
@@ -249,16 +260,16 @@ decode block binds the layer's row to the same rope kernels (sec.2.2r), and the 
 v window - `AtPrep` with no rope and no norm is a copy plus bias, in place - so the attention and
 the v rows that come home both carry it (`ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op chain).
 
-**Gated attention and partial rotary ride the fused qk-norm+rope kernel and the decode
-attention kernel, not a detour.** On a gated model the q GEMV writes `2 x qd` rows in the
-loader's per-head `[q | gate]` layout; the fused kernel reads and writes q head-strided
-(`qstride = 2 x hs`) and leaves the gate half in place, and the attention kernel reads q by the
-same stride and multiplies each head's output by the sigmoid of its gate half before the store.
-On a partial-rope model the rotation half is `rot / 2`, the cos and sin row is built over `rot`
-(its frequencies are `rot`-based, the CPU form's), and the normed unrotated tail of a head is
-stored back in place (q) or into the mirror (k). The split qk-rms + rope pair carries neither
-arm, so a gated or partial-rope model takes the fused kernel whatever the fuse gate says; the
-two arms need qk-norm, and a model with either but without it declines by name.
+**Gated attention and partial rotary ride the fused qk-norm+rope kernel and the decode attention
+kernel, not a detour.** On a gated model the q GEMV writes `2 x qd` rows in the loader's per-head
+`[q | gate]` layout; the fused kernel reads and writes q head-strided (`qstride = 2 x hs`) and
+leaves the gate half in place, and the attention kernel reads q by the same stride and multiplies
+each head's output by the sigmoid of its gate half before the store. On a partial-rope model the
+rotation half is `rot / 2`, the cos and sin row is built over `rot` (the CPU form's frequencies),
+and the normed unrotated tail of a head is stored back in place (q) or into the mirror (k). The
+split qk-rms + rope pair carries neither arm, so a gated or partial-rope model takes the fused
+kernel whatever the lever says (`DASLLAMA_VK_FUSE=0` pins the split pair only on a plain qk-norm
+model); the two arms need qk-norm, and a model with either but without it declines by name.
 
 **The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md`
 sec.2.2ad): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
@@ -278,3 +289,12 @@ session's prefill superseded is hydrated on the host; the decode override upload
 layers' rows `[0, pos)` into the mirror (`rdec_take_mirror`), mints a generation and serves - the
 same sync the batch decode does per row. The gap decline remains for a session that owns the
 mirror and asks past its rows.
+
+**The token command's profile bills its intervals by the recorder's stamp names.** Under
+`DASLLAMA_GPU_PROF=1` the recorder stamps a bottom-of-pipe timestamp after each named group of
+dispatches (`rd_ts`), and the sampler sums every interval under the name the recorder gave it: a
+name's prefix picks its table - `a:` an attention head's, `d:` a recurrent head's, `m:` the MoE
+tail's, `p:` the prologue's, `t:` the tail's - a name two stamps share sums both (the attention
+head's two `a:kv`), and a bare name is the anchor no interval bills to. What one stamp costs the
+command, and why a Linux driver's per-role figures are standalone, is `ARCHITECTURE_GPU_VULKAN.md`
+sec.2.2j's.

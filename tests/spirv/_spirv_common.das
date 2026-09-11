@@ -2505,10 +2505,52 @@ def public coopmat2_words : array<uint> {
     return clone_to_move(coopmat2_spv)
 }
 
-// the s-tile siblings of coopmat2_kernel (A f16 128x64 decoded from q8, B f16 64x32, acc f16 128x32
-// converted to f32 128x32): the MoE expert-bucket geometry dasLLAMA's cm2 chain runs
+//! the MoE expert-bucket s stamp at the 32-deep k step: the shapes dasLLAMA's Cm2SBatch classes declare for the grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s)
 [compute_shader(local_size_x=128, name="coopmat2s_spv"), marker(no_coverage)]
 def coopmat2s_kernel {
+    let m = cm2_meta[0u]
+    let n = cm2_meta[1u]
+    let kk = cm2_meta[2u]
+    let ti = gl_WorkGroupID.x
+    let tj = gl_WorkGroupID.y
+    var tla : tensorLayout2DPad
+    tensorLayoutCreate(tla)
+    tensorLayoutSetBlockSize(tla, 1u, 32u)
+    tensorLayoutSetDimension(tla, m, kk)
+    tensorLayoutSetStride(tla, kk / 32u, 1u)
+    var tlb : tensorLayout2DPad
+    tensorLayoutCreate(tlb)
+    tensorLayoutSetDimension(tlb, n, kk)
+    tensorLayoutSetStride(tlb, kk, 1u)
+    var tlo : tensorLayout2D
+    tensorLayoutCreate(tlo)
+    tensorLayoutSetDimension(tlo, m, n)
+    tensorLayoutSetStride(tlo, n, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    var a : coopmatWgA_f16_128x32
+    var b : coopmatWgB_f16_32x32
+    var acc : coopmatWgAcc_f16_128x32
+    var k = 0u
+    while (k < kk) {
+        coopmatLoadTensorDecode(a, cm2_a, 0u, tla, ti * 128u, 128u, k, 32u, @@cm2_decode_q8)
+        coopmatLoadTensor(b, cm2_b, 0u, tlb, tj * 32u, 32u, k, 32u, tv)
+        acc = coopmatMulAdd(a, b, acc)
+        k += 32u
+    }
+    coopmatClamp(acc, -65504.0, 65504.0)
+    var accw : coopmatWgAcc_f32_128x32
+    coopmatConvert(accw, acc)
+    coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 128u, 128u, tj * 32u, 32u)
+}
+
+def public coopmat2s_words : array<uint> {
+    return clone_to_move(coopmat2s_spv)
+}
+
+//! the s stamp at the 64-deep k step: the shapes dasLLAMA's Cm2SBatch classes declare for every format whose decode is step-bound - the K-quants, q4_0, q8 and the 4-bit LUT formats
+[compute_shader(local_size_x=128, name="coopmat2s64_spv"), marker(no_coverage)]
+def coopmat2s64_kernel {
     let m = cm2_meta[0u]
     let n = cm2_meta[1u]
     let kk = cm2_meta[2u]
@@ -2545,8 +2587,51 @@ def coopmat2s_kernel {
     coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 128u, 128u, tj * 32u, 32u)
 }
 
-def public coopmat2s_words : array<uint> {
-    return clone_to_move(coopmat2s_spv)
+def public coopmat2s64_words : array<uint> {
+    return clone_to_move(coopmat2s64_spv)
+}
+
+//! the e stamp at the 32-deep k step: the shapes dasLLAMA's Cm2EBatch classes declare for the grid-codebook formats; every other format's e stamp runs the m stamp's 64-deep shapes
+[compute_shader(local_size_x=128, name="coopmat2e_spv"), marker(no_coverage)]
+def coopmat2e_kernel {
+    let m = cm2_meta[0u]
+    let n = cm2_meta[1u]
+    let kk = cm2_meta[2u]
+    let ti = gl_WorkGroupID.x
+    let tj = gl_WorkGroupID.y
+    var tla : tensorLayout2DPad
+    tensorLayoutCreate(tla)
+    tensorLayoutSetBlockSize(tla, 1u, 32u)
+    tensorLayoutSetDimension(tla, m, kk)
+    tensorLayoutSetStride(tla, kk / 32u, 1u)
+    var tlb : tensorLayout2DPad
+    tensorLayoutCreate(tlb)
+    tensorLayoutSetDimension(tlb, n, kk)
+    tensorLayoutSetStride(tlb, kk, 1u)
+    var tlo : tensorLayout2D
+    tensorLayoutCreate(tlo)
+    tensorLayoutSetDimension(tlo, m, n)
+    tensorLayoutSetStride(tlo, n, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    var a : coopmatWgA_f16_128x32
+    var b : coopmatWgB_f16_32x128
+    var acc : coopmatWgAcc_f16_128x128
+    var k = 0u
+    while (k < kk) {
+        coopmatLoadTensorDecode(a, cm2_a, 0u, tla, ti * 128u, 128u, k, 32u, @@cm2_decode_q8)
+        coopmatLoadTensor(b, cm2_b, 0u, tlb, tj * 128u, 128u, k, 32u, tv)
+        acc = coopmatMulAdd(a, b, acc)
+        k += 32u
+    }
+    coopmatClamp(acc, -65504.0, 65504.0)
+    var accw : coopmatWgAcc_f32_128x128
+    coopmatConvert(accw, acc)
+    coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 128u, 128u, tj * 128u, 128u)
+}
+
+def public coopmat2e_words : array<uint> {
+    return clone_to_move(coopmat2e_spv)
 }
 
 // ===== The cm2 flash-attention fixture: llama.cpp's flash_attn_cm2 inner loop at Br=Bc=64,
@@ -2826,4 +2911,27 @@ def ray_query {
 
 def public ray_query_words : array<uint> {
     return clone_to_move(ray_query_spv)
+}
+
+//! a module's OpConstant value by result id (the instruction's second operand after the type; the value is its third); 0 when no such constant
+def public spv_const_uint(words : array<uint>; id : uint) : uint {
+    var v = 0u
+    foreach_inst(words) $(opcode : uint; w : array<uint>; opStart : int; opCount : int) {
+        if (opcode == uint(SpvOp.Constant) && opCount >= 3 && w[opStart + 1] == id) {
+            v = w[opStart + 2]
+        }
+    }
+    return v
+}
+
+//! every OpTypeCooperativeMatrixKHR of a module as "rows x cols", sorted - the shape set a fixture declares, whatever the declaration order
+def public spv_coopmat_shapes(words : array<uint>) : array<string> {
+    var shapes : array<string>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; opStart : int; opCount : int) {
+        if (opcode == uint(SpvOp.TypeCooperativeMatrixKHR) && opCount >= 5) {
+            shapes |> push("{int(spv_const_uint(words, w[opStart + 3]))}x{int(spv_const_uint(words, w[opStart + 4]))}")
+        }
+    }
+    shapes |> sort()
+    return <- shapes
 }

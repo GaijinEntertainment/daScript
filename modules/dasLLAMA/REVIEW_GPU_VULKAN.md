@@ -1,7 +1,8 @@
 # dasLLAMA Vulkan Tier Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_VULKAN.md` and the companions it routes to. Planned work:
+docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_MOE.md`. Planned work:
 `followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
@@ -49,9 +50,17 @@ is a fallback a user finds only by profiling.
 `continue` routes work to the CPU path - that does not log the concrete reason it declined,
 once per reason per armed model, is a defect.**
 
-**A prefill GEMM dispatched at a nonzero start row never asks `cm2_split_k` for a split - it
-encodes unsplit.** The split-k reduce sums partial planes counted from row 0, so a dispatch
-starting above row 0 would reduce the wrong rows.
+**A diff that keys a route of the tier on a Vulkan capability it did not read before - a
+device or instance extension by name, a feature bit a `*_supported` probe of
+`modules/dasVulkan/daslib/vulkan_boost.das` reads, or a device limit - adds that capability to
+`vk_ext_roster` (`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what
+serves without it, in the same change.** The device-init log prints the roster, so a box's log
+says which route each capability decided.
+
+**A prefill GEMM whose output rows start above row 0 encodes unsplit, whatever splitter it
+uses - `cm2_split_k` or the small f16 GEMM's `F16G_SPLIT` chunks.** The split-k reduce sums
+partial planes counted from row 0, so a dispatch starting above row 0 would reduce the wrong
+rows.
 
 **Never leave a K/V codec unserved by the kernels that read or write the whole-model driver's
 `k_mirror`/`v_mirror` slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
@@ -60,38 +69,47 @@ template cover both codecs, or a single-codec kernel has a sibling that serves t
 behind an arming gate that keys on `kv16`. The whole-model driver serves both codecs, so a
 codec no kernel covers silently drops that codec's GPU path.
 
-**A diff that changes what a kq superblock format's cm2 tile emits - its instance set, its
-decode body or four-wide twin (`decode_v4`), its `DECV4` or `DECVEC` constant, or the shared
-`cm2_tile` or `run` of `KqCm2BatchT` - puts that format's `cm2:<fmt>` probe rows
-(`harness/vk_gemm_probe.das`), both the `DASLLAMA_VK_DECVEC=1` and the `=0` rows, in the PR
-body, or the claim that the format's cm2-stamped kernels are byte-identical to master's.** A
-cm2 tile is the NV_cooperative_matrix2 GEMM class stamped per weight format and token-column
-width (the class's `BN`) in `dasllama/dasllama_vulkan_classes.das`.
-
-**A diff that changes what a kq superblock format's KHR tile emits - its `khr_stage16`
-override, a constant or typedef the KHR arm's emitted code reads, or the shared `khr_tile` or
-`run` of `KqCm2BatchT` - puts that format's kernel cell - that format's test block in
-`tests/test_vulkan_kernels.das` - run on its KHR arm in the PR body, with either the `khrx`
-probe rows (`harness/vk_gemm_probe.das`) or a `tests/test_gpu_resident_hybrid.das` run on a
-model in that format, or the claim that the format's KHR-stamped kernels are byte-identical to
-master's.** A KHR tile is the `<Fmt>KhrBatch` class stamped per weight format in
+**A diff that changes what a kq superblock format's cm2 tile emits - a `@template_constant`
+value its stamped kernel reads (on `KqCm2BatchT`, on the format's `<Fmt>Cm2T`, or `override`n
+on a stamp), a stamp's tile typedefs or instance set, its decode body or four-wide twin
+(`decode_v4`), or the shared `cm2_tile` or `run` of `KqCm2BatchT` - puts probe rows in the PR
+body, both the `DASLLAMA_VK_DECVEC=1` and the `=0` rows: every format's when the change is to
+`KqCm2BatchT` or to a constant's default there, that format's alone when it is to a format's
+own template or one of its stamps.** A cm2 tile is the NV_cooperative_matrix2 GEMM class
+stamped per weight format, token-column width (`BN`) and k step (`BK`) in
 `dasllama/dasllama_vulkan_classes.das`.
 
-**A `kq_sb` format (`dasllama/dasllama_kqformat.das`) that joins the cm2 template - a
-`<Fmt>Cm2T` format template in `dasllama/dasllama_vulkan_classes.das` - ships its KHR
-instantiation (`<Fmt>KhrBatch`, the `kq_batch_<fmt>_khr_cls` dispatch) and its arm in each of
-`khr_cls_ensure`, `khr_cls_set` and `khr_cls_enc` (`dasllama/dasllama_vulkan_prefill.das`), in
-the same change; weakening the `REVIEW.das` check that requires that set for every `kq_sb`
-format's `<Fmt>Cm2T` template is a defect.** `pf_f16_feed` admits every `kq_sb` format, so a
-format with no KHR class panics in `khr_cls_ensure`, `khr_cls_set` or `khr_cls_enc` on a card
-whose cooperative-matrix mode is KHR.
+**A diff that owes a cm2 stamp's probe rows takes them from the arm that dispatches that stamp,
+all in `harness/vk_gemm_probe.das`: `cm2:<fmt>` for the l and m stamps (`<Fmt>Cm2LBatch`,
+`<Fmt>Cm2MBatch`), `moe:<fmt>` or `moesk:<fmt>` for the s and e stamps (`<Fmt>Cm2SBatch`,
+`<Fmt>Cm2EBatch`).**
+
+**A diff that answers a probe-row or kernel-cell duty with a claim that a stamp's emitted words
+did not move carries that stamp's `DASLLAMA_VK_SPV_DUMP` words diffed against master's.**
+
+**A diff that changes what a kq superblock format's KHR tile emits - its `khr_stage16`
+override, a constant or a gated member the KHR stamp emits, or the shared `khr_tile` or `run`
+of `KqCm2BatchT` - puts that format's kernel cell - that format's test block in
+`tests/test_vulkan_kernels.das` - run on its KHR arm in the PR body.** A KHR tile is the
+`<Fmt>KhrBatch` class stamped per weight format in `dasllama/dasllama_vulkan_classes.das`; a
+member a `@template_gate` admits on the stamp is emitted whether or not its body reads it.
+
+**A diff that owes a KHR tile's kernel-cell run carries with it either the `khrx` probe rows
+(`harness/vk_gemm_probe.das`) or a `tests/test_gpu_resident_hybrid.das` run on a model in that
+format.**
+
+**Weakening `check_cm2_ladder_sets` in `REVIEW.das` (beside this file) is a defect.**
+
+**Weakening `check_cm2_stamp_tiles` in `REVIEW.das` (beside this file) is a defect.**
+
+**A diff that retires a shape a fixture under `tests/spirv/` (repo root) declares replaces that
+fixture's declaration in the same change.** The emitter suite validates the shapes it emits; a
+fixture left on a retired shape validates nothing the stamp runs.
 
 **A `kq_sb` format that ships a KHR instantiation runs its KHR arm in that format's kernel cell,
 in the same change.**
 
-**Weakening the `REVIEW.das` check that requires `def abstract khr_stage16` on `class template
-KqCm2BatchT` (`dasllama/dasllama_vulkan_classes.das`) is a defect.** A default body lets a format
-template that forgot its override compile and decode garbage on every KHR card.
+**Weakening `check_khr_stage16_abstract` in `REVIEW.das` (beside this file) is a defect.**
 
 **A kernel body that calls a `[spirv_decode]` method directly passes the plane element itself
 (`decode(wq[i], ...)`), never a local copy of it (`let blk = wq[i]` then `decode(blk, ...)`).**
@@ -99,7 +117,7 @@ Both compile: on the element the emitter passes the index and the callee chains 
 plane; on a copy it loads and spills the whole block per call
 (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k).
 
-**A diff that puts a format's `cm2:<fmt>` probe rows in the PR body whose
+**A diff that puts a format's probe rows in the PR body whose
 `DASLLAMA_VK_DECVEC=1` row is slower than its `=0` row ships one of two fixes in the same
 change: a hand-written `decode_v4` under `override DECV4 = true` on that format's class
 (`dasllama/dasllama_vulkan_classes.das`), re-measured so its `=1` row now beats its `=0` row;
@@ -107,13 +125,12 @@ or `override DECV4 = false` and `override DECVEC = false` together, which puts t
 on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
 `override DECVEC = false` alone leaves the hand-written twin running.
 
-**A diff that changes how many GPU timestamps the resident decode's token command records - the
-`pfq_ts` calls in `dasllama/dasllama_vulkan_decode.das` - updates the stamp count `rdq_sample`
-expects and, for every layer kind whose count moved, that file's role-name tables
-(`rdq_role_names`, `RDQ_DN_NAMES`, `rd_moe_tail_names`) and the matching accumulators in
-`dasllama/dasllama_vulkan_common.das` (`g_rdq_role`, `g_rdq_dn`, `g_rdq_moe`), in the same
-change.** `rdq_sample` indexes a fixed count per layer, so one extra or missing timestamp
-reports every later stamp under the wrong role name.
+**A GPU timestamp the resident decode's token command records goes through `rd_ts` with the name
+its interval bills - never a bare `pfq_ts` - in `dasllama/dasllama_vulkan_decode.das`; the
+command's first stamp is the anchor and takes the empty name.** The profiler (`rdq_sample`) sums
+intervals by the recorder's own names, so a bare stamp leaves the stamp count past the names and
+the token's roles unaggregated; a name's prefix (`a:` `d:` `m:` `p:` `t:`) picks its table, and a
+name shared by two stamps (`a:kv`) sums them on purpose.
 
 **A decode GEMV class - a `KqGemvBase` leaf in `dasllama/dasllama_vulkan_classes.das` - that
 stages a codebook into `@workgroup` memory reads it from the family's grid buffer (`gridb`,
@@ -128,8 +145,4 @@ whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
 
-**Weakening the `REVIEW.das` check that compares `AR_MAX_DIM`
-(`dasllama/dasllama_vulkan_common.das`), the `row` `@workgroup` slab of `ArBase`
-(`dasllama/dasllama_vulkan_classes.das`) and the `c.dim` cap of `attn_dec_shape_ok`
-(`dasllama/dasllama_blocks.das`) is a defect.** The add+rms kernels stage a whole row in that
-slab, so a cap past the slab writes past its end.
+**Weakening `check_ar_max_dim_triple` in `REVIEW.das` (beside this file) is a defect.**

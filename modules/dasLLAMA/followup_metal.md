@@ -1,8 +1,8 @@
 # Metal / mac-session follow-up - the M5 catch-up ledger
 
 **Status: OPEN (2026-08-31, unquirk pass).** The ledger for the parallel mac session that
-forks after the unquirk pass's PR-1. Metal-tier perf items move here from the
-per-format notes during the Phase E doc split; the CPU items below are mac-session work too -
+forks after the unquirk pass's PR-1. Metal-tier perf items land here; the CPU items below are
+mac-session work too -
 the M-series CPU tiers are minted and raced from that box.
 
 ## 1. The smmla (i8mm) leg - RACED on M5, NEON keeps the crown
@@ -52,9 +52,9 @@ every format: `harness/parity.das -- -m <gguf> -n 40 --ids 128000,12805,5304,264
 
 ## 3. Metal tier perf items
 
-Placeholder - the per-format Metal notes (tg 0.78-0.93x tails, the IQ4_XS lane-map gap of
-followup_general #58, the Q22 dispatch-loop probe method) consolidate here in the unquirk
-pass's Phase E; until then they live in `HOW_TO_ADD_A_FORMAT.md`'s per-format notes.
+The per-format Metal items: the IQ4_XS lane-map gap is `followup_general.md` item 58, the
+dispatch-loop probe method is `HOW_TO_ADD_A_FORMAT.md`'s Metal step, and the M1 tg tails of the
+formats' bring-ups predate the ARM row-group decode - re-stamp a vehicle before quoting one.
 
 ## 4. The elementwise / activation-precision lane (the last M5 pp residual)
 

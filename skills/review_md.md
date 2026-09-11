@@ -119,9 +119,11 @@ contradiction wins, a rule deleted because a test enforces it, a scope reassignm
 formatting`** - the tag locates the defect; the forced-vs-semantic test on the repair
 decides the disposition.
 
-One checklist-edit batch per round, one dragon pass over the batch; a FRESH dragon then
-re-reads cold. Serious findings it returns open one more batch on the same terms; the round
-exits when a fresh cold read returns none.
+One checklist-edit batch per round, one dragon pass over the batch, then one FRESH dragon's
+cold re-read - two dragon passes per document per round, never a third. Serious findings the
+re-read returns land in one closing batch on the same terms, and no dragon reads that batch:
+prose can be exercised endlessly, and a third pass buys polish, not verdicts. The round ends
+there.
 
 A dragon pass reads only the wording the round itself authored; wording a dragon authored and
 the round applied verbatim is not part of the batch - re-judging its own prose oscillates. A

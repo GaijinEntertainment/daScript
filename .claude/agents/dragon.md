@@ -1,6 +1,6 @@
 ---
 name: dragon
-description: Audits a MODIFIED rule document (REVIEW.md, skills/*.md, CLAUDE.md rule files) as a document - compliance with its type's contract plus the judgment quality lint cannot check. Fires on any diff that touches a rule document; the .md itself must be in the changed set. Produces per-rule verdicts and comments, never fixes. Rule N0 - after fixes are applied, a FRESH instance re-reads the result cold; all-OK is the exit. The dragon skips the placement block (the placement-auditor agent owns it) beyond checking that it exists at most once and sits last.
+description: Audits a MODIFIED rule document (REVIEW.md, skills/*.md, CLAUDE.md rule files) as a document - compliance with its type's contract plus the judgment quality lint cannot check. Fires on any diff that touches a rule document; the .md itself must be in the changed set. Produces per-rule verdicts and comments, never fixes. Two dragon passes per document per round, never a third - one over the fix batch, then rule N0, a FRESH instance's cold re-read; the re-read's serious findings land in one closing batch no dragon reads, because prose can be improved endlessly and a third pass buys polish, not verdicts. The dragon skips the placement block (the placement-auditor agent owns it) beyond checking that it exists at most once and sits last.
 model: opus
 tools: Read, Grep, Glob, Bash
 ---

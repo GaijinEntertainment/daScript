@@ -166,18 +166,18 @@ entry here:**
   the same-slab verify and the NextN draft forward exist only in the Metal decode driver, and
   Vulkan serves the CPU round (`ARCHITECTURE_GPU_MTP.md`).
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
-  `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants; the
-  class-kernel arc retired the hand-built 6-slot set ladders outright) - and both speak the
-  multi-kernel form (`kernel=` names the method, one macro instance per kernel, declared roles
-  must cover every kernel).
+  `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants, and
+  NonWritable derived per binding from the access classification - `ARCHITECTURE_GPU_VULKAN.md`
+  sec.2.2aj carries the rule, its refusal and its reading; Metal lowers a read role to `device const`
+  already) - and both speak the multi-kernel form (`kernel=` names the method, one macro instance per kernel, declared roles must cover every kernel).
 - **`family=` is Vulkan-only.** A vulkan family shares the per-class surface - the `VkdClass`
   global, the `set_*` builder, the pipe slots - across classes with one binding layout. Metal's
   `enc_*` builder is the entire generated surface, so there is nothing for a family to share;
   cross-class PSO/source sharing on Metal is a PSO-lifecycle question, not a lens one.
 - **`@default` is Metal-only.** A `[metal_dispatch]` field may name a fallback global
   (`@default = g_one`) that the generated builder binds when the caller passes null;
-  `[vk_dispatch]` has no counterpart - vulkan callers pass a real buffer at every slot. If
-  vulkan grows an optional-bind shape, it lands as this same annotation, not a new spelling.
+  `[vk_dispatch]` has no counterpart - vulkan callers pass a real buffer at every slot, and an
+  optional-bind shape there takes this same annotation, not a new spelling.
 - **The workgroup-footprint gate is Vulkan-only.** `[vk_dispatch]` sums a class's `@workgroup`
   members and its generated `ensure_*` declines by name (`vkd_wg_fits`) before the pipeline
   build, because MoltenVK's over-cap failure is an opaque `INITIALIZATION_FAILED` - and the
@@ -261,7 +261,7 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 and why they lose.
 
 The Vulkan resident driver's sections live in its companions, each head saying what it holds: 2.2j,
-2.2p, 2.2ab, 2.2ac and 2.2ad in `ARCHITECTURE_GPU_VULKAN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
+2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
 `ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2r-2.2v in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af and 2.2ag in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
 

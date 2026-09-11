@@ -131,7 +131,8 @@ Fix policy is the repo's standing one, not this skill's: findings are DISCUSSED 
 finding that reveals a lint-able pattern is named as a lint candidate in the summary.
 Checklist self-review findings go through the acceptance damper in `skills/review_md.md` -
 that section alone decides which enter the batch and how each is disposed; its standard is
-good enough, not clean.
+good enough, not clean, and its dragon budget is two passes per document per round: one over
+the batch, one cold re-read whose serious findings close the round without a third read.
 
 ## Mechanics
 
