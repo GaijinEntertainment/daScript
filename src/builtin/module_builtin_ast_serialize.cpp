@@ -3038,6 +3038,8 @@ namespace das {
         ser << flags;
 
         ser << options << policies;
+        ser.readJitEnabled = policies.jit_enabled;  // what finalizeModule hands the macro program a served module reinstantiates
+        ser.readOptions = options;
 
     // serialize library
         if ( ser.writing ) {

@@ -405,7 +405,7 @@ namespace {
             // alongside the already-leaked context (one program per frame)
             if ( g_webloop_defer_module_shutdown ) {
                 g_webloop_defer_module_shutdown = false;
-                if ( drained ) Module::Shutdown(g_webloop_dump_leaks);
+                if ( drained ) Module::Shutdown(g_webloop_dump_leaks, !DAS_ORPHAN_FUSION_AT_EXIT);
             }
         }
     }
