@@ -46,8 +46,9 @@ static bool quiet = false;
 #ifndef MAIN_FUNC_NAME
   #define MAIN_FUNC_NAME main
   // the process ends when this returns: the fusion table is orphaned, not torn down - unless
-  // the build tracks allocations, whose exit audit must see it freed
-  #if DAS_TRACK_ALLOC
+  // the build tracks allocations, whose exit audit must see it freed, or the browser host,
+  // which calls main once per run
+  #if DAS_TRACK_ALLOC || defined(__EMSCRIPTEN__)
     #define DAS_ORPHAN_FUSION_AT_EXIT false
   #else
     #define DAS_ORPHAN_FUSION_AT_EXIT true

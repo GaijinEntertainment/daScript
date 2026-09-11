@@ -137,7 +137,7 @@ namespace das {
         das_hash_map<const void *, uint32_t>        writeIds;
         vector<uint8_t>                             writtenIds;     // indexed by SerializeNodeId::index
         vector<void *>                              readNodes;      // indexed by SerializeNodeId::index
-        vector<pair<void **, SerializeNodeId>>      pendingRefs;
+        vector<pair<void *, SerializeNodeId>>       pendingRefs;    // storage of a TT * slot, and the number it waits for
         using DataOffset = uint64_t;
         das_hash_map<FileInfo*, DataOffset>                writingFileInfoMap;
         das_hash_map<DataOffset, FileInfo*>                readingFileInfoMap;
@@ -309,7 +309,7 @@ namespace das {
                 ptr = node;
             } else {
                 ptr = ( TT * ) 1;
-                pendingRefs.emplace_back((void **) &ptr, id);
+                pendingRefs.emplace_back(&ptr, id);     // the slot's storage; patch() writes it bytewise, whatever TT is
             }
         }
         template <typename TT>

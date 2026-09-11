@@ -115,7 +115,8 @@ namespace das {
         for ( auto & p : pendingRefs ) {
             auto node = readNodes[p.second.index];
             if ( !node ) throw_formatted_error("ast serializer ref #%u not found", p.second.index);
-            *p.first = node;
+            memcpy(p.first, &node, sizeof(node));   // the slot is some TT *, not a void *; a typed store through void ** would alias it
+
         }
         pendingRefs.clear();
 
