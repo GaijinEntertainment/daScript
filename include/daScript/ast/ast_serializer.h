@@ -81,28 +81,13 @@ namespace das {
         }
     };
 
-    // Composite key for serializer maps. Pairs a raw pointer with a per-
-    // AstSerializer epoch so reused addresses don't collide with prior entries.
-    // Hoisted to namespace das so daslang_hash can be specialized before the
-    // map instantiations inside AstSerializer.
+    // A node's identity in a record: the writer numbers nodes from 1 in first-mention order,
+    // the reader indexes a vector with the number. 0 is the null pointer. Per record - the
+    // tables reset with the maps at the end of every program.
     struct SerializeNodeId {
-        void *  ptr = nullptr;
-        size_t  epoch = 0;
-        bool operator == ( const SerializeNodeId & o ) const noexcept {
-            return ptr == o.ptr && epoch == o.epoch;
-        }
-        bool operator != ( const SerializeNodeId & o ) const noexcept {
-            return !(*this == o);
-        }
-    };
-
-    template <>
-    struct daslang_hash<SerializeNodeId, void> {
-        size_t operator () ( const SerializeNodeId & s ) const noexcept {
-            const uint64_t pmix = (uint64_t(reinterpret_cast<uintptr_t>(s.ptr)) >> 4)
-                                * uint64_t(0x9E3779B97F4A7C15ull);
-            return size_t(pmix ^ (uint64_t(s.epoch) * uint64_t(0xBF58476D1CE4E5B9ull)));
-        }
+        uint32_t index = 0;
+        bool operator == ( const SerializeNodeId & o ) const noexcept { return index == o.index; }
+        bool operator != ( const SerializeNodeId & o ) const noexcept { return index != o.index; }
     };
 
     struct DAS_API AstSerializer {
@@ -136,6 +121,8 @@ namespace das {
         string              cutoffFile;
         string              cutoffReason;
         bool                policyMismatch = false;
+        bool                readJitEnabled = false; // the compile's jit_enabled, for the macro program a served record reinstantiates (the cold path's program carries it)
+        AnnotationArgumentList readOptions;         // the served module's own `options`, for the same macro program (its fusion opt-in reads them)
     // expression lookup
         das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
@@ -143,32 +130,17 @@ namespace das {
         das_hash_set<FileInfo*>   doNotDelete;
     // profile data
         uint64_t totMacroTime = 0;
-    // Per-program epoch for SerializeNodeId. Bumped at the start of each
-    // serialize/deserialize call so reused pointer addresses across program
-    // boundaries don't collide with prior map entries on this persistent
-    // serializer. Must be initialized — uninitialized epoch produces garbage
-    // keys and silent map collisions.
-        size_t                                      epoch = 0;
-    // pointers
-        das_hash_map<SerializeNodeId, ExprBlock*>          exprBlockMap;
+    // node identity (SerializeNodeId): the writer numbers a node at its first mention and
+    // remembers which numbers have had their payload written; the reader keeps the node
+    // each number resolved to, null until its payload is read (a forward reference is
+    // patched in patch()). Per record.
+        das_hash_map<const void *, uint32_t>        writeIds;
+        vector<uint8_t>                             writtenIds;     // indexed by SerializeNodeId::index
+        vector<void *>                              readNodes;      // indexed by SerializeNodeId::index
+        vector<pair<void *, SerializeNodeId>>       pendingRefs;    // storage of a TT * slot, and the number it waits for
         using DataOffset = uint64_t;
         das_hash_map<FileInfo*, DataOffset>                writingFileInfoMap;
         das_hash_map<DataOffset, FileInfo*>                readingFileInfoMap;
-        das_hash_map<SerializeNodeId, FileAccess*>         fileAccessMap;
-    // smart pointers
-        das_hash_map<SerializeNodeId, MakeFieldDeclPtr>    smartMakeFieldDeclMap;
-        das_hash_map<SerializeNodeId, EnumerationPtr>      smartEnumerationMap;
-        das_hash_map<SerializeNodeId, StructurePtr>        smartStructureMap;
-        das_hash_map<SerializeNodeId, VariablePtr>         smartVariableMap;
-        das_hash_map<SerializeNodeId, FunctionPtr>         smartFunctionMap;
-        das_hash_map<SerializeNodeId, MakeStructPtr>       smartMakeStructMap;
-        das_hash_map<SerializeNodeId, TypeDeclPtr>         smartTypeDeclMap;
-    // refs
-        vector<pair<ExprBlock**,SerializeNodeId>>          blockRefs;
-        vector<pair<Function **,SerializeNodeId>>          functionRefs;
-        vector<pair<Variable **,SerializeNodeId>>          variableRefs;
-        vector<pair<Structure **,SerializeNodeId>>         structureRefs;
-        vector<pair<Enumeration **,SerializeNodeId>>       enumerationRefs;
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
         // parsedModules record: fileName, source content hash, source size, program, thisModule, the collector's require names
@@ -260,7 +232,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 207;   // 207: neither Function nor Variable flags carry a used bit, and neither streams an index (206: the record header carries the requires the parse took; 205: a vector of a handled element streams under the element's module; 204: the record header stamps the source by content hash; the policy stream carries every CodeOfPolicies field)
+            return 208;   // 208: a node reference is the writer's first-mention number as a varint, not a pointer-and-epoch word (207: neither Function nor Variable flags carry a used bit, and neither streams an index; 206: the record header carries the requires the parse took; 205: a vector of a handled element streams under the element's module; 204: the record header stamps the source by content hash; the policy stream carries every CodeOfPolicies field)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -330,10 +302,26 @@ namespace das {
         void writeIdentifications ( Variable * & ptr );
         void writeIdentifications ( TypeInfoMacro * & ptr );
 
-        void fillOrPatchLater ( Function * & func, SerializeNodeId id );
-        void fillOrPatchLater ( Enumeration * & ptr, SerializeNodeId id );
-        void fillOrPatchLater ( Structure * & ptr, SerializeNodeId id );
-        void fillOrPatchLater ( Variable * & ptr, SerializeNodeId id );
+        // reading: the node a number resolved to, or a patch-later slot when its payload is still ahead
+        template <typename TT>
+        void fillOrPatchLater ( TT * & ptr, SerializeNodeId id ) {
+            if ( auto node = readNode<TT>(id) ) {
+                ptr = node;
+            } else {
+                ptr = ( TT * ) 1;
+                pendingRefs.emplace_back(&ptr, id);     // the slot's storage; patch() writes it bytewise, whatever TT is
+            }
+        }
+        template <typename TT>
+        __forceinline TT * readNode ( SerializeNodeId id ) const { return (TT *) readNodes[id.index]; }
+        __forceinline void setReadNode ( SerializeNodeId id, void * node ) { readNodes[id.index] = node; }
+        // writing: has this number's payload gone into the stream already
+        __forceinline bool isWritten ( SerializeNodeId id ) const { return id.index < writtenIds.size() && writtenIds[id.index]; }
+        void markWritten ( SerializeNodeId id ) {
+            if ( id.index >= writtenIds.size() ) writtenIds.resize(id.index + 1, 0);
+            writtenIds[id.index] = 1;
+        }
+        void clearNodeIds ();
 
         auto readModuleAndName () -> pair<Module *, string>;
         auto readModuleAndNameHash () -> pair<Module *, uint64_t>;
@@ -344,7 +332,14 @@ namespace das {
         void findExternal ( Variable * & ptr );
         void findExternal ( TypeInfoMacro * & ptr );
 
-        SerializeNodeId getSerializeId(void *ptr) { return {ptr, epoch}; }
+        // writing: the node's number, assigned at its first mention; reading: a placeholder the
+        // stream overwrites
+        SerializeNodeId getSerializeId ( const void * ptr ) {
+            if ( !writing || !ptr ) return {0};
+            auto & slot = writeIds[ptr];
+            if ( !slot ) slot = uint32_t(writeIds.size());   // the fresh entry counts itself: numbers run from 1
+            return {slot};
+        }
 
         template <typename EnumType>
         void serialize_small_enum ( EnumType & baseType ) {

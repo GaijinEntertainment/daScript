@@ -284,9 +284,14 @@ namespace das {
         setDeferredModuleLoader(nullptr);
 
         clearGlobalAotLibrary();
+        // the standalone runtime links no fusion library and sets no hook; with one, a
+        // shutdown that does not reset orphans the table instead of leaving it to the
+        // thread-local's destructor at exit, which would free it all the same
         if ( resetFusion ) {
             DAS_ASSERTF(g_resetFusionEngineFn, "fusion library not loaded");
-            g_resetFusionEngineFn();
+            g_resetFusionEngineFn(false);
+        } else if ( g_resetFusionEngineFn ) {
+            g_resetFusionEngineFn(true);
         }
         daScriptEnvironment::setBound(nullptr);
         if ( daScriptEnvironment::getOwned() ) {
@@ -295,8 +300,8 @@ namespace das {
         }
     }
 
-    void Module::Shutdown( bool dumpHandleLeaks ) {
-        shutdownInternal(dumpHandleLeaks, /*resetFusion=*/true);
+    void Module::Shutdown( bool dumpHandleLeaks, bool resetFusion ) {
+        shutdownInternal(dumpHandleLeaks, resetFusion);
     }
 
     // Standalone exes built with `daslang -exe` link only libDaScript*_runtime

@@ -20,6 +20,16 @@ def descriptor_line(out : string; mod : string) : string {
     return eol < 0 ? rest : slice(rest, 0, eol)
 }
 
+def line_count(text : string; prefix : string) : int {
+    var n = 0
+    for (line in split(text, "\n")) {
+        if (line |> starts_with(prefix)) {
+            n++
+        }
+    }
+    return n
+}
+
 //! the `DOLLAR N` line the dollar.das child prints: the builtin module's function count
 def dollar_count(out : string) : int {
     let marker = "DOLLAR "
@@ -340,6 +350,8 @@ def arms_nameless_rows(t : T?; fx : Fixture) {
         // the real dm row with its name blanked
         let doctored = replace(text, "\t{UNIT_TEST_MODULE}\n", "\t\n")
         t |> success(doctored != text, "the manifest carries the named row: {text}")
+        let depLines = line_count(text, "dep\t")
+        t |> success(depLines > 0, "the manifest carries dep lines: {text}")
         fwrite(fx.utManifest, doctored)
         var eager : string
         t |> success(run_child_reported(t, "eager", child_cmd(fx, fx.plain), eager, "PLAIN"), "the program runs")
@@ -347,7 +359,9 @@ def arms_nameless_rows(t : T?; fx : Fixture) {
         t |> success(find(eager, "{UNIT_TEST_CLASS} <- ") >= 0 && loaded, "the nameless row loads at the scan:\n{eager}")
         // the trace joins the descriptor with "/" whatever the platform, as descriptor_line reads it
         t |> success(find(eager, "{UNIT_TEST_FOLDER}/.das_module: manifest rewritten, 1 row(s) named") >= 0, "the scan writes the name back:\n{eager}")
-        t |> success(find(fread(fx.utManifest), "\t{UNIT_TEST_MODULE}\n") >= 0, "the manifest carries the name again")
+        let healed = fread(fx.utManifest)
+        t |> success(find(healed, "\t{UNIT_TEST_MODULE}\n") >= 0, "the manifest carries the name again")
+        t |> equal(depLines, line_count(healed, "dep\t"), "and every dep line it had: {healed}")
         var lazy : string
         t |> success(run_child_reported(t, "lazy", child_cmd(fx, fx.plain), lazy, "PLAIN"), "the next start runs")
         t |> equal(-1, find(lazy, "{UNIT_TEST_CLASS} <- "), "the next start defers the row and loads nothing:\n{lazy}")

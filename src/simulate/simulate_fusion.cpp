@@ -133,8 +133,12 @@ namespace das {
         return *g_fusionEngine;
     }
 
-    void resetFusionEngine() {
-        g_fusionEngine->reset();
+    void resetFusionEngine( bool orphan ) {
+        if ( orphan ) {
+            (void) g_fusionEngine->release();   // the thread-local's destructor would otherwise free it all at exit
+        } else {
+            g_fusionEngine->reset();
+        }
     }
 
     void createFusionEngine() {

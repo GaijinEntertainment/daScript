@@ -548,7 +548,7 @@ namespace das
             hb.update(enumType->baseType);
             for ( auto & e : enumType->list ) {
                 hb.updateString(e.name);
-                wr << *(e.value);
+                hb.update(e.value ? getConstExprIntOrUInt(e.value) : int64_t(-1));   // the folded constant, not the printer's text
             }
         } else if ( annotation ) {
             DAS_ASSERT(annotation->ownSemanticHash!=0);
@@ -604,7 +604,7 @@ namespace das
             hb.update(enumType->baseType);
             for ( auto & e : enumType->list ) {
                 hb.updateString(e.name);
-                wr << *(e.value);
+                hb.update(e.value ? getConstExprIntOrUInt(e.value) : int64_t(-1));   // the folded constant, not the printer's text
             }
         } else if ( annotation ) {
             if ( adep.find(annotation) == adep.end() ) {
@@ -1595,14 +1595,20 @@ namespace das
 
     int32_t TypeDecl::gcFlags(das_set<Structure *> & dep, das_set<Annotation *> & depA) const {
         int32_t gcf = 0;
+        // a structure's or a handled type's flags are cached on the owner, but only from a
+        // top-level walk: a walk that reaches the owner mid-cycle takes the cycle cut (0 for
+        // an owner already visited) and that partial value must not be what later asks read
         if ( baseType==Type::tStructure ) {
             if ( structType ) {
                 if (dep.find(structType) != dep.end()) return 0;
+                if ( structType->cachedGcFlags >= 0 ) return structType->cachedGcFlags;
+                bool topLevel = dep.empty() && depA.empty();
                 dep.insert(structType);
                 if ( structType->isLambda || structType->isClass ) gcf |= gcFlag_heap | gcFlag_stringHeap;
                 for ( auto fld : structType->fields ) {
                     gcf |= fld.type->gcFlags(dep,depA);
                 }
+                if ( topLevel ) structType->cachedGcFlags = gcf;
             }
         } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
@@ -1618,9 +1624,12 @@ namespace das
             if ( firstType ) gcf |= firstType->gcFlags(dep,depA);
         } else if ( baseType==Type::tHandle ) {
             if (depA.find(annotation) != depA.end()) return 0;
-            depA.insert(annotation);
             auto ann = static_cast<TypeAnnotation *>(annotation);
+            if ( ann->cachedGcFlags >= 0 ) return ann->cachedGcFlags;
+            bool topLevel = dep.empty() && depA.empty();
+            depA.insert(annotation);
             gcf |= ann->getGcFlags(dep,depA);
+            if ( topLevel ) ann->cachedGcFlags = gcf;
         } else if ( baseType==Type::tString ) {
             gcf |= gcFlag_stringHeap;
         } else if ( baseType==Type::tPointer ) {

@@ -43,6 +43,20 @@ static bool astVerifyRequired = false;
 static bool scopedStackAllocator = true;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
+#ifndef MAIN_FUNC_NAME
+  #define MAIN_FUNC_NAME main
+  // the process ends when this returns: the fusion table is orphaned, not torn down - unless
+  // the build tracks allocations, whose exit audit must see it freed, or the browser host,
+  // which calls main once per run
+  #if DAS_TRACK_ALLOC || defined(__EMSCRIPTEN__)
+    #define DAS_ORPHAN_FUSION_AT_EXIT false
+  #else
+    #define DAS_ORPHAN_FUSION_AT_EXIT true
+  #endif
+#else
+  // a host's entry point: the host may initialize again, so shutdown resets everything
+  #define DAS_ORPHAN_FUSION_AT_EXIT false
+#endif
 enum class JitMode {
     None,
     Direct,
@@ -271,7 +285,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     daScriptEnvironment::getBound()->g_isInAot = true;
     bool compiled = true;
     compiled = aot_compile(aot_files, dryRun, cross_platform);
-    Module::Shutdown();
+    Module::Shutdown(true, !DAS_ORPHAN_FUSION_AT_EXIT);
     return compiled ? 0 : -1;
 }
 
@@ -392,7 +406,7 @@ namespace {
             // alongside the already-leaked context (one program per frame)
             if ( g_webloop_defer_module_shutdown ) {
                 g_webloop_defer_module_shutdown = false;
-                if ( drained ) Module::Shutdown(g_webloop_dump_leaks);
+                if ( drained ) Module::Shutdown(g_webloop_dump_leaks, !DAS_ORPHAN_FUSION_AT_EXIT);
             }
         }
     }
@@ -772,9 +786,6 @@ void print_help() {
     ;
 }
 
-#ifndef MAIN_FUNC_NAME
-  #define MAIN_FUNC_NAME main
-#endif
 
 #include <inttypes.h>
 
@@ -1165,7 +1176,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // destruction (drains job threads) and DLL unload (invalidates the
     // dumpHandleLeaks<T> function pointers registered from shared modules).
     auto shutdown0 = ref_time_ticks();
-    Module::Shutdown(dumpLeaks);
+    Module::Shutdown(dumpLeaks, !DAS_ORPHAN_FUSION_AT_EXIT);
     if ( dumpLeaks ) {
         JobStatus::DumpJobQueLeaks();
     }

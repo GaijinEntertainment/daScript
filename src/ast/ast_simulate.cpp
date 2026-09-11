@@ -26,7 +26,7 @@ namespace das
 {
     // fusion function pointers (defined here in main lib, set by fusion lib)
     void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
-    void (*g_resetFusionEngineFn) () = nullptr;
+    void (*g_resetFusionEngineFn) ( bool orphan ) = nullptr;
     // ARCHITECTURE.md sec.4
     static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
         return context.thisProgram ? context.thisProgram->indexOf(fn) : -1;
@@ -3742,6 +3742,7 @@ namespace das
             context.constStringHeap->setInitialSize(globalStringHeapSize);
         }
         DebugInfoHelper helper(context.debugInfo);
+        helper.collectCppNames = false;     // nothing reads a simulate's C++ spellings (ast.h DebugInfoHelper)
         context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;
@@ -3917,7 +3918,12 @@ namespace das
 #if DAS_FUSION
         if ( !folding ) {               // note: only run fusion when not folding
             DAS_ASSERTF(g_fusionContextFn, "fusion library not loaded, add call to NEED_FUSION macro.");
-            g_fusionContextFn(context, logs, options.getBoolOption("fusion", policies.fusion));
+            // under the jit the interpreter's nodes are the fallback, not the product, so a
+            // user context never fuses and a macro context fuses only when its module asks
+            // (options fusion = true); without the jit the option keeps its meaning
+            bool fusion = options.getBoolOption("fusion", policies.fusion);
+            if ( policies.jit_enabled ) fusion = isCompilingMacros && options.getBoolOption("fusion", false);
+            g_fusionContextFn(context, logs, fusion);
             context.relocateCode(true); // this to get better estimate on relocated size. its fust enough
         }
 #else
@@ -4095,10 +4101,16 @@ namespace das
                 }
             }
         }
-        for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
-            Function * func = indexToFunction[i];
-            SimFunction & fn = context.functions[i];
-            func->hash = getFunctionHash(func, fn.code, &context);
+        // the semantic hash feeds getFunctionAotHash - the jit's keys, the AOT generator and
+        // linker - which only ever ask about a user program's functions; a macro context is
+        // never asked, and a function it shares with the user program gets hashed by that
+        // program's own simulate
+        if ( !isCompilingMacros ) {
+            for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
+                Function * func = indexToFunction[i];
+                SimFunction & fn = context.functions[i];
+                func->hash = getFunctionHash(func, fn.code, &context);
+            }
         }
         for (auto pm : library.modules) {
             pm->structures.foreach([&](auto st){
