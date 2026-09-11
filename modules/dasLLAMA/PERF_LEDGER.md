@@ -98,6 +98,20 @@ what it costs today and what the fix would change.
   chunks than the group (the 35B's pair fills 32 of 36 and runs whole) [direction-grade -
   one commit].
 
+- **LANDED (2026-09-10) - the cm2 tile loop's hand unroll is one superblock per block (`UNR`: 4
+  steps of 64, 8 of 32) instead of eight steps.** The decode inlines once per unrolled copy, so an
+  eight-copy 64-deep stamp's code, refetched after each window's weight stream had passed the L2,
+  cost a 64-workgroup GEMM 16 us of its 27 on the Linux RTX 5080 (`harness/vk_gemm_probe.das --
+  cold:k6`'s flush row: 43.0 us against 26.7 warm; 3 us on the RTX 5060 Ti), and four copies run
+  the m tiles 10-14% faster hot there (`cm2:k6` gate m 57.3 -> 64.5 TFLOP/s, q/wo m 51.1 -> 55.5;
+  the l tiles +5%, the s tiles even, `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l). Pod (the bench
+  form of the two rows above at `-n 32`, `-t 8`, the scalar decode arm): pp512 3906.6 +- 43.8 ->
+  3986.8 +- 34.2, tg32 129.3 -> 130.2; the 32-deep expert stamps at 2 copies read 3940.9 and their
+  e_gate / e_up 2.5% longer, at 8 they read as before. RTX 5060 Ti (`-r 5`, `-t 16`, same session):
+  the 35B twin arm 3201.0 +- 17.4 (eight copies) against 3191.4 +- 24.8 and 3165.9 +- 40.8 (the
+  box read 3236 the day before), its scalar arm 2391.5 -> 2389.6 +- 30.3, the Qwen1.5-MoE Q4_K_M
+  twin 5442.7 -> 5565.6 +- 12.1 / tg128 163.9 [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

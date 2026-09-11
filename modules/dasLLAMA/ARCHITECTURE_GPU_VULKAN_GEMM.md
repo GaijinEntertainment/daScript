@@ -56,46 +56,50 @@ test `test_vkd_direct_decode` in `tests/test_vulkan_kernels.das` keeps that emit
 
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
 
-**The l/m tile pick is a wave-efficiency comparison.** For a GEMM of width `d` over `cnt` rows
-the l tile (256-row columns) and the m tile (128-row columns) each take some number of
-workgroups. Each grid runs in whole waves over the device's SM count, so a grid's wave count
-times that SM count is the slots it allocates. The pick takes the tile whose workgroups fill
-the larger share of its allocated slots, the two ratios compared by cross-multiplying. The m
-tile wins only on a strict win; a tie goes to l, whose bigger tile carries twice the arithmetic
-intensity. Three rules sit ahead of the comparison: a region of 64 rows or fewer takes the s
-tile (32-row columns - the per-op tier's MoE expert-bucket shape, where a 512-token window
-routes ~32 rows to each of 128 experts on average), a window of 128 rows or fewer takes m (the
-l column would run half empty), and a device that reports no SM count takes l and never splits
-k. Beyond `(d, cnt, sm_count)` the pick reads only two values fixed at init - the served mode
-and `DASLLAMA_CM2_TILE` - so the class the pipeline binds and the tile rule the meta fill writes
-can never disagree; `cnt` is the AVERAGE rows per active region of the dispatch, so one tile
-serves every region of a per-op MoE schedule. The resident MoE block makes no pick: its device
-schedule cuts every bucket into s and m pieces by size and dispatches both classes per plane
-(`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af) - the s stamp and the e stamp, the m column at the
-format's k step, keyed `CM2_TC_E` in the class ladders - which is what a real window's skew
-needs: one tile per bucket costs the same whatever its fill, and a 467-row bucket is 15 s tiles
-or 4 m columns. A region below the s tile's row count goes to the decode GEMV family, not to a tile.
-The s and m tiles' fast path loads a partial column UNCLAMPED (the layout's row dimension
-rounded up to the column) and clamps only the store, so every f16 plane the chain feeds them -
-the gathered activation image and the hidden plane - is sized with 128 rows of slack past its
-last region (`TILE_READ_SLACK`, `ffn_cm2_chunk_rows`); the l tile takes the edge path on a
-partial column, since only a window's last column is ever partial there. The dense chain's
-planes carry no slack: they hold the whole window's rows whatever the last window's length, so
-a partial m column's unclamped load stays inside them. The store-layout constant the m and s
-tiles read (`STILE`) is inert on the KHR classes, whose tile never reads it.
+**The l/m tile pick is a wave-efficiency comparison.** For a GEMM of width `d` over `cnt` rows the
+l tile (256-row columns) and the m tile (128-row columns) each take some number of workgroups. Each
+grid runs in whole waves over the device's SM count, so a grid's wave count times that SM count is
+the slots it allocates. The pick takes the tile whose workgroups fill the larger share of its
+allocated slots, the two ratios compared by cross-multiplying; the m tile wins only on a strict
+win, a tie goes to l, whose bigger tile carries twice the arithmetic intensity. Three rules sit
+ahead of the comparison: a region of 64 rows or fewer takes the s tile (32-row columns - the per-op
+tier's MoE expert-bucket shape, where a 512-token window routes ~32 rows to each of 128 experts on
+average), a window of 128 rows or fewer takes m (the l column would run half empty), and a device
+that reports no SM count takes l and never splits k. Beyond `(d, cnt, sm_count)` the pick reads only
+two values fixed at init - the served mode and `DASLLAMA_CM2_TILE` - so the class the pipeline binds
+and the tile rule the meta fill writes can never disagree; `cnt` is the AVERAGE rows per active
+region of the dispatch, so one tile serves every region of a per-op MoE schedule. The resident MoE
+block makes no pick: its device schedule cuts every bucket into s and m pieces by size and
+dispatches both classes per plane (`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af) - the s stamp and
+the e stamp, the m column at the format's k step, keyed `CM2_TC_E` in the class ladders - which a
+real window's skew needs (a 467-row bucket is 15 s tiles or 4 m columns). A region below the s
+tile's row count goes to the decode GEMV family. The s and m tiles' fast path loads a partial column
+UNCLAMPED (the layout's row dimension rounded up to the column) and clamps only the store, so every
+f16 plane the chain feeds them - the gathered activation image and the hidden plane - is sized with
+128 rows of slack past its last region (`TILE_READ_SLACK`, `ffn_cm2_chunk_rows`); the l tile takes
+the edge path on a partial column, since only a window's last column is ever partial there. The
+dense chain's planes carry no slack: they hold the whole window's rows whatever the last window's
+length, so a partial m column's unclamped load stays inside them. The store-layout constant the m
+and s tiles read (`STILE`) is inert on the KHR classes, whose tile never reads it.
 
-**The k step follows the column and the decode.** The template's k step (`BK`) is 64 on the dense
-l and m tiles and on the expert stamps of the K-quants, q4_0, q8 and the 4-bit LUT formats, and
-32 on the s and e stamps of the five grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s;
-the e stamp is `<Fmt>Cm2EBatch`, the `cm2e_cls_*` ladder beside the KHR one); a stamp's `AT`/`BT`
-carry its depth. A grid decode is occupancy-bound - a 64-deep column holds twice the A tile, and
-with the codebook lookup's live range a workgroup fewer fits an SM: at 32 the iq2xxs gate/up
-plane reads 0.611 against 0.730 ms with the four-wide twin and 0.99 against 1.33 without, iq3s
-0.652 against 0.764 (`moe:<fmt>`, RTX 5060 Ti). A light decode is step-bound: the k4 s tile reads
-0.744 against 0.679 at 32 on the skewed schedule (`moesk:k4`), the Qwen1.5-MoE Q4_K_M twin 4330
-against 5443 pp512, and the dense k4 l and m tiles 44.2 against 48.8 and 38.5 against 48.6 TFLOP/s
-(`cm2:k4`). Whole model the 35B's pp512 reads 2996 -> 3236 (twin) and 2049 -> 2391 (scalar), the
-reference exe 2829 and 2385-2393 on its arms (`PERF_LEDGER.md`); a whole-model row settles a step.
+**The k step follows the column and the decode; the k loop is unrolled by hand, a superblock per
+block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of
+the K-quants, q4_0, q8 and the 4-bit LUT formats, and 32 on the s and e stamps of the five
+grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; the e stamp is `<Fmt>Cm2EBatch`, the
+`cm2e_cls_*` ladder beside the KHR one); a stamp's `AT`/`BT` carry its depth. A grid decode is
+occupancy-bound - a 64-deep column holds twice the A tile, and with the codebook lookup's live range
+a workgroup fewer fits an SM: at 32 the iq2xxs gate/up plane reads 0.611 against 0.730 ms with the
+four-wide twin and 0.99 against 1.33 without (`moe:<fmt>`, RTX 5060 Ti). A light decode is
+step-bound: the k4 s tile reads 0.744 against 0.679 at 32 (`moesk:k4`), the Qwen1.5-MoE Q4_K_M twin
+4330 against 5443 pp512, the dense k4 l and m tiles 44.2 against 48.8 and 38.5 against 48.6 TFLOP/s
+(`cm2:k4`); whole model the 35B reads 2996 -> 3236 (twin) and 2049 -> 2391 (scalar), and a
+whole-model row settles a step. The loop's unroll (`UNR`: 4 steps of 64, 8 of 32 - 256 elements
+either way) is written out, because the driver leaves a rolled loop rolled whatever control its
+`OpLoopMerge` carries (`[unroll]` and `[partial_count = 4]` read the k6 tiles at half rate on the
+RTX 5060 Ti); the block is one superblock because the decode inlines once per copy: the eight-copy
+64-deep stamp's code, refetched after each window's weight stream had passed the L2, cost a
+64-workgroup GEMM 16 us of its 27 on the RTX 5080 (`cold:k6`'s flush row), and four copies run the
+m tiles 10-14% faster hot there (`cm2:k6`); the 32-deep e stamps read alike at 8 and 1 (`moesk:`).
 
 **The dispatch group decides whether k splits; the role's own grid decides into how many.** With
 long K (2048 and up), a group that fills at most half the SMs splits each of its roles' reduction
@@ -111,47 +115,43 @@ there but split in four on 84 SMs (64 workgroups of K 512, 27 us against 55 at t
 otherwise split-k is the lone role's - wo, down, a small model's classifier (`cold:k6`, RTX 5080).
 
 **The f16 feed admits q8 and every kq superblock format** (`kq_sb`) - the set the cm2 decode
-callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class. The
-prefill driver reaches them through one dispatcher per stage (`cm2_cls_ensure`, `cm2_cls_set`,
-`cm2_cls_enc`), all three keyed on the same `(fmt, ml)` pair, so the pipeline a role ensures,
-the set it binds and the kernel it encodes can never be three different classes. The three are
-not private: the per-format arm of `harness/vk_gemm_probe.das` drives the same ladders, so a
-probe row times the class the driver would serve rather than a copy of it. The decode
-GEMV keeps its quant chains: the feed format pick is decoupled from the weight format.
+callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class. The prefill
+driver reaches them through one dispatcher per stage (`cm2_cls_ensure`, `cm2_cls_set`,
+`cm2_cls_enc`), all three keyed on the same `(fmt, ml)` pair, so the pipeline a role ensures, the
+set it binds and the kernel it encodes can never be three different classes. The three are not
+private: the per-format arm of `harness/vk_gemm_probe.das` drives the same ladders, so a probe row
+times the class the driver serves. The decode GEMV keeps its quant chains: the feed format pick is
+decoupled from the weight format.
 
 **The served GEMM mode resolves once, at init, through one ladder.** cm2 where the device has
-NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4;
-`DASLLAMA_COOPMAT` overrides the ladder by name, and a cm2 request or force on a device without
-the extension lands on mm. The same resolver stamps the mode into the `.dlim` flavor
-configuration, so the recorded mode and the running mode cannot drift. The four-wide decode
-callback is not in that configuration. A cm2 tile names both callbacks
-(`coopmatLoadTensorDecode`'s tenth argument): the format's own `decode_v4` where the template's
-`DECV4` axis is on - every kq superblock format, sec.2.2k - else the `DECVEC` axis, which
-synthesizes the twin from the scalar body and is where a new format starts; its `cm2:<fmt>`
-probe row is what decides whether the format gets a hand-written twin. The device decides which
-one the driver runs - it is created with `DASLLAMA_VK_DECVEC` and the extension - and neither
-choice shapes an image byte, so the bake identity ignores it: a serve-only knob is not a
-configuration field. `decvec_on` is the run's arm, announced on the `device ready` line.
+NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4; `DASLLAMA_COOPMAT`
+overrides the ladder by name, and a cm2 request or force on a device without the extension lands
+on mm. The same resolver stamps the mode into the `.dlim` flavor configuration, so the recorded
+mode and the running mode cannot drift. The four-wide decode callback is not in that
+configuration. A cm2 tile names both callbacks (`coopmatLoadTensorDecode`'s tenth argument): the
+format's own `decode_v4` where the template's `DECV4` axis is on - every kq superblock format,
+sec.2.2k - else the `DECVEC` axis, which synthesizes the twin from the scalar body and is where a
+new format starts; its `cm2:<fmt>` probe row decides whether the format gets a hand-written twin.
+The device decides which one the driver runs - it is created with `DASLLAMA_VK_DECVEC` and the
+extension - and neither choice shapes an image byte, so the bake identity ignores it: a serve-only
+knob is not a configuration field. `decvec_on` is the run's arm, on the `device ready` line.
 
-**The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is
-whole (`m0 + 128 <= d`), the token column is whole or the stamp carries the partial-column path
-(`STILE`: the s and m columns), and K is a whole number of BK steps; the layouts are then
-created clamp-Undefined and the B and output strides are masked to a multiple of 8 f16
-(`stride &= ~7`). The mask changes nothing while `n` and `d` are 32-multiples, which every
-served shape is; it exists to make the alignment PROVABLE to the driver's address analysis,
-which is what keeps the loads on the wide path. A partial-column stamp gates only the weight
-tile: its partial token column loads unclamped and that column's store clamps
-(`tensorLayout2DPad`), while a whole column stores unclamped on every stamp (the clamp on a
-whole column measured free on the k4 m tile, 48.0 against 48.1 TFLOP/s at the gate shape
-(`harness/vk_gemm_probe.das -- cm2:k4`, RTX 5060 Ti), so
-the branch is there for the layout's meaning, not its cost). Everything else takes the edge
-path with clamped layouts.
+**The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is whole
+(`m0 + 128 <= d`), the token column is whole or the stamp carries the partial-column path (`STILE`:
+the s and m columns), and K is a whole number of BK steps; the layouts are then created
+clamp-Undefined and the B and output strides are masked to a multiple of 8 f16 (`stride &= ~7`).
+The mask changes nothing while `n` and `d` are 32-multiples, which every served shape is; it exists
+to make the alignment PROVABLE to the driver's address analysis, which is what keeps the loads on
+the wide path. A partial-column stamp gates only the weight tile: its partial token column loads
+unclamped and that column's store clamps (`tensorLayout2DPad`), while a whole column stores
+unclamped on every stamp (the clamp on a whole column measured free on the k4 m tile, 48.0 against
+48.1 TFLOP/s at the gate shape, `cm2:k4` on the RTX 5060 Ti, so the branch is there for the
+layout's meaning, not its cost). Everything else takes the edge path with clamped layouts.
 
-**The no-split arm keeps literal loop bounds and a literal store base.** Where `ksplit` is zero
-the k loop runs the literal `0 .. n` with the store at the row base rather than the general
-`k0`/`k1`/`ybase` form, although those values are exactly `0`, `n` and `0` on that path: the
-general spelling costs 27% of prefill throughput (`benchmarks/lcpp_bench.das` pp512, 5060 Ti).
-The split arm keeps the general form.
+**The no-split arm keeps literal loop bounds and a literal store base.** Where `ksplit` is zero the
+k loop runs the literal `0 .. n` with the store at the row base rather than the general
+`k0`/`k1`/`ybase` form, although those values are exactly `0`, `n` and `0` on that path: the general
+spelling costs 27% of prefill throughput (`benchmarks/lcpp_bench.das` pp512, RTX 5060 Ti).
 
 ### 2.2m Class-pipeline creation is the Vulkan tier's one shader A/B seat {#vk-class-pipeline-build}
 

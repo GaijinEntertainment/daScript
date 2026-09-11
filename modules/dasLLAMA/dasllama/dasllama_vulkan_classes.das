@@ -5184,6 +5184,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
     @template_constant BK : uint = 64u                    //!< the k step of the tile loop; a stamp whose decode is occupancy-bound runs 32 (its AT/BT carry the depth)
+    @template_constant UNR : uint = 4u                    //!< the k loop's hand unroll, a superblock per unrolled block (8 on a 32-deep stamp): the decode inlines once per copy, and the code a window streams out of the L2 is refetched per dispatch
     @template_constant DECVEC : bool = true               //!< when DECV4 is off: the synthesized four-wide twin rides the loads; false serves the scalar callback only
     @template_constant DECV4 : bool = false               //!< the format's hand-laid `decode_v4` is the twin instead of the synthesized one
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
@@ -5302,8 +5303,8 @@ class template KqCm2BatchT : MoeCmBase {
             tensorLayoutSetStride(flp, pa.d & ~7u, 1u)
             if (pa.ksplit == 0u) {
                 var k = 0u
-                for (_i in range(int(pa.n / (BK * 8u)))) {
-                    for [unroll] (_j in range(8)) {
+                for (_i in range(int(pa.n / (BK * UNR)))) {
+                    for [unroll] (_j in range(int(UNR))) {
                         static_if (DECV4) {
                             coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                         } else {
@@ -5335,8 +5336,8 @@ class template KqCm2BatchT : MoeCmBase {
                 return
             }
             var k = k0
-            for (_i in range(int((k1 - k0) / (BK * 8u)))) {
-                for [unroll] (_j in range(8)) {
+            for (_i in range(int((k1 - k0) / (BK * UNR)))) {
+                for [unroll] (_j in range(int(UNR))) {
                     static_if (DECV4) {
                         coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                     } else {
@@ -5383,8 +5384,8 @@ class template KqCm2BatchT : MoeCmBase {
         tensorLayoutSetStride(tlo, pa.d, 1u)
         if (pa.ksplit == 0u) {
             var k = 0u
-            for (_i in range(int(pa.n / (BK * 8u)))) {
-                for [unroll] (_j in range(8)) {
+            for (_i in range(int(pa.n / (BK * UNR)))) {
+                for [unroll] (_j in range(int(UNR))) {
                     coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
                     coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                     acc = coopmatMulAdd(a, b, acc)
@@ -5404,8 +5405,8 @@ class template KqCm2BatchT : MoeCmBase {
             return
         }
         var k = k0
-        for (_i in range(int((k1 - k0) / (BK * 8u)))) {
-            for [unroll] (_j in range(8)) {
+        for (_i in range(int((k1 - k0) / (BK * UNR)))) {
+            for [unroll] (_j in range(int(UNR))) {
                 coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
                 coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                 acc = coopmatMulAdd(a, b, acc)
@@ -6658,6 +6659,7 @@ class Iq3sCm2SBatch : Iq3sCm2T {
     override BN = 32u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
@@ -6687,6 +6689,7 @@ class Iq3xxsCm2SBatch : Iq3xxsCm2T {
     override BN = 32u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
@@ -6772,6 +6775,7 @@ class Iq2sCm2SBatch : Iq2sCm2T {
     override BN = 32u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
@@ -6801,6 +6805,7 @@ class Iq2xsCm2SBatch : Iq2xsCm2T {
     override BN = 32u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
@@ -6830,6 +6835,7 @@ class Iq2xxsCm2SBatch : Iq2xxsCm2T {
     override BN = 32u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
@@ -6911,6 +6917,7 @@ class Iq3sCm2EBatch : Iq3sCm2T {
     override BN = 128u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x128
     typedef ACC = coopmatWgAcc_f16_128x128
@@ -6922,6 +6929,7 @@ class Iq3xxsCm2EBatch : Iq3xxsCm2T {
     override BN = 128u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x128
     typedef ACC = coopmatWgAcc_f16_128x128
@@ -6953,6 +6961,7 @@ class Iq2sCm2EBatch : Iq2sCm2T {
     override BN = 128u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x128
     typedef ACC = coopmatWgAcc_f16_128x128
@@ -6964,6 +6973,7 @@ class Iq2xsCm2EBatch : Iq2xsCm2T {
     override BN = 128u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x128
     typedef ACC = coopmatWgAcc_f16_128x128
@@ -6975,6 +6985,7 @@ class Iq2xxsCm2EBatch : Iq2xxsCm2T {
     override BN = 128u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x128
     typedef ACC = coopmatWgAcc_f16_128x128

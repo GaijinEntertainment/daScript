@@ -1086,9 +1086,29 @@ module) is independent and can land any time - it is pure structure.
     pipeline change between stamps, not the l/m/s stamps taking turns over cold planes, not ReBAR off
     (`DASLLAMA_VK_REBAR=0` reads the same profile), and the card holds 2827 MHz through both; the
     reference exe's per-op logger stamps the same way (`eAllCommands`) and reads no such excess, so it
-    is the engine's, and finding it means stamping inside the engine (a stamp between the barrier and
-    the dispatch, per role) rather than another probe form; with ~490 cm2 dispatches per window it
-    bounds at 10-15 ms of the 35 ms gap. (2) The q5_K stamps run 0.74x of the reference's rate on the
+    was the engine's. FOUND: a stamp before every cm2 dispatch (a scratch experiment on the pod's copy,
+    never committed) read the barriers at 0 us - the excess sits inside the dispatch - and the probe's
+    flush row (a 128 MB reduce before each dispatch, so the stamp's code, descriptors and planes are
+    out of every cache, as they are in the window after ~250 MB of weights per layer) reproduced it:
+    the 64-workgroup k6 m stamp 26.7 us warm or plane-cold, 43.0 after the flush on the pod, 34.5
+    against 31.7 on the 5060 Ti. The cost is the stamp's CODE refetched: the k loop was unrolled eight
+    steps with the decode inlined per copy. The unroll is now a stamp constant, one superblock per
+    block (`UNR` 4 at BK 64, 8 at BK 32; `REVIEW.das` holds BK x UNR to the template's): the pod sweep
+    (u8/4/2/1 on k6) read the l tiles best at 4 (+5%), the m tiles +10-14% at 4 or 2, the 64-deep s
+    tiles even, the flush penalty gone at 4 and below, and the 32-deep iq2xxs e stamps alike at 8 and
+    1, 2% behind at 2, 12% at 4; pp512 3906.6 -> 3986.8 on the pod, the 5060 Ti's twin arm within
+    noise (3201 eight-copy against 3191 / 3166), its scalar arm flat, the k4 twin +2.3%
+    (`PERF_LEDGER.md`). Two facts about the driver's own unrolling came out of it: `[unroll]` and
+    `[partial_count = 4]` on a runtime-bound `while` leave the loop rolled (the k6 tiles at half rate;
+    the SPIR-V dump shows the control on `OpLoopMerge`), while the hand form - an outer runtime loop
+    over an inner literal-bound `[unroll]` loop - unrolls, so the driver honours `Unroll` only on a
+    constant trip count; and a plain `while (k < k1)` over the general `k0`/`k1`/`ybase` bounds also
+    drops the no-split arm's literal-bound form (sec.2.2l), so that experiment confounded the two -
+    a clean hint re-test on the no-split path alone is still owed. The iq2s k step was re-asked under
+    the new unroll, since the skewed probe read the 64-deep m stamp 4% ahead of the 32-deep e stamp on
+    the pod (7-14% on the 5060 Ti): the 35B's down plane at 64 read pp512 3903 against 3987 and e_down
+    21.9 against 20.1 ms, so the five grid formats keep 32 - the whole-model row settles a step, the
+    uniform probe does not. (2) The q5_K stamps run 0.74x of the reference's rate on the
     big shapes there (`cm2:k5 gate` l 70.6 TFLOP/s against its 93-96; k6 85.3 against its 72.7, so the
     q6_K stamp is already ahead): the reference's q5_K decoder beats its own q6_K by 1.18x through the
     `shAscales` shared-scale cache, ours trails k6 by 1.2x - the K-quant shared-scale lever of (a),

@@ -975,16 +975,17 @@ def private check_cm2_stamp_tiles {
     var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
     let bn0 = literal_after(base_lines, "@template_constant BN : uint = ")
     let bk0 = literal_after(base_lines, "@template_constant BK : uint = ")
+    let unr0 = literal_after(base_lines, "@template_constant UNR : uint = ")
     var inscope all_lines <- split(strip_line_comments(fread(VK_CLASSES)), "\n")
     let s_rows = literal_after(all_lines, "let SCHED_S_ROWS = ")
     let m_rows = literal_after(all_lines, "let SCHED_M_ROWS = ")
-    if (bn0 < 0 || bk0 < 0) {
-        gate_finding(VK_CLASSES, "no `@template_constant BN : uint = N` / `BK : uint = N` inside `class template KqCm2BatchT` - the stamp tile rule has no defaults to read; keep the spelling or move this check with it")
+    if (bn0 < 0 || bk0 < 0 || unr0 < 0) {
+        gate_finding(VK_CLASSES, "no `@template_constant BN : uint = N` / `BK : uint = N` / `UNR : uint = N` inside `class template KqCm2BatchT` - the stamp tile rule has no defaults to read; keep the spelling or move this check with it")
     }
     if (s_rows < 0 || m_rows < 0) {
         gate_finding(VK_CLASSES, "no `let SCHED_S_ROWS = N` / `let SCHED_M_ROWS = N` line - the stamp tile rule has no schedule widths to compare; keep the spelling or move this check with it")
     }
-    return if (bn0 < 0 || bk0 < 0 || s_rows < 0 || m_rows < 0)
+    return if (bn0 < 0 || bk0 < 0 || unr0 < 0 || s_rows < 0 || m_rows < 0)
     var stamped = 0
     var inscope stamps <- vk_stamps(VK_CLASSES)
     for (st in stamps) {
@@ -993,8 +994,14 @@ def private check_cm2_stamp_tiles {
         var inscope body <- split(st.body, "\n")
         let bn_over = literal_after(body, "override BN = ")
         let bk_over = literal_after(body, "override BK = ")
+        let unr_over = literal_after(body, "override UNR = ")
         let bn = bn_over < 0 ? bn0 : bn_over
         let bk = bk_over < 0 ? bk0 : bk_over
+        //! the unrolled block is one superblock's 256 elements at either k step: 64 x 4, 32 x 2 in the copies the loop's decode inlines
+        let unr = unr_over < 0 ? unr0 : unr_over
+        if (bk * unr != bk0 * unr0) {
+            gate_finding(VK_CLASSES, st.line, "{st.name}: UNR {unr} at BK {bk} - a stamp's unrolled block is one superblock ({bk0 * unr0} elements: the template's BK x UNR), so a 32-deep stamp carries `override UNR = {bk0 * unr0 / 32}u` and a 64-deep one none")
+        }
         let want <- fixed_array(
             (name = "AT", tile = "coopmatWgA_f16_128x{bk}", why = "a stamp's A tile is 128 rows by its k step"),
             (name = "BT", tile = "coopmatWgB_f16_{bk}x{bn}", why = "a stamp's B tile is its k step by its token column"),

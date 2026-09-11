@@ -610,9 +610,20 @@ def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {   // nol
     let deep = cm2_shape_upload(fmt, d, n, cnt, int(3_000_000_000l / arena_block_bytes(fmt).wq))
     let scd = one_region_sched(cnt, wgs[1], false, deep.wblk0)
     let wide = cm2_shape_upload(fmt, d, n, cnt, 0, 8192)
-    //! rows 0-5: the three stamps warm then cold; 6: the m stamp on the host schedule; 7: the stamps' turns; 8-9: the m stamp on the engine's forms
-    let vnames = fixed_array("warm    ", "cold    ", "warm    ", "cold    ", "warm    ", "cold    ", "hostmeta", "turns   ", "deepslab", "wideplan")
-    for (v in range(10)) {
+    //! the flush: the split-k reduce copying a 128 MB plane, so the next dispatch finds its code, descriptors and
+    //! planes out of every cache (the window chain streams that much weight between two uses of one stamp); its
+    //! write claims the feed's region, so the stamp after it waits on it and the flush after the stamp waits in turn
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
+    let fl_bytes = 134_217_728l
+    let fl1 = make_device_buf(fl_bytes)
+    let fl2 = make_device_buf(fl_bytes)
+    var sfl = set_splitk_reduce_cls(fixed_array(fl1, fl2), fixed_array(fl_bytes, fl_bytes), fixed_array(64u, 4u))
+    var pfl = SkRedArgs(nelem = uint(fl_bytes / 4l), k = 1u)
+    let fl_wgs = (fl_bytes / 4l + 1_023l) / 1_024l
+    //! rows 0-5: the three stamps warm then cold; 6: the m stamp on the host schedule; 7: the stamps' turns; 8-9: the m
+    //! stamp on the engine's forms; 10: the flush alone; 11: the flush then the m stamp on the warm planes
+    let vnames = fixed_array("warm    ", "cold    ", "warm    ", "cold    ", "warm    ", "cold    ", "hostmeta", "turns   ", "deepslab", "wideplan", "flush   ", "flushed ")
+    for (v in range(12)) {
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -620,6 +631,10 @@ def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {   // nol
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
         var wsum = 0
         for (c in range(COLD_COPIES)) {
+            if (v >= 10) {
+                enc_splitk_reduce_cls(raw, hz, sfl, pfl, fl_wgs)
+            }
+            if (v == 10) continue
             let t = v < 6 ? v / 2 : (v == 7 ? c % 3 : 1)
             let cold = v == 7 || (v < 6 && v % 2 == 1)
             let dv = v == 8 ? deep : (v == 9 ? wide : dvs[cold ? c : 0])
@@ -633,7 +648,7 @@ def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {   // nol
         vk_check(vkEndCommandBuffer(raw), null)
         let us = usec_per_dispatch(raw, COLD_COPIES)
         let tf = flop / (us * 1000000.0lf)
-        let tn = v < 6 ? tnames[v / 2] : (v == 7 ? "l/m/s" : "cm2m")
+        let tn = v < 6 ? tnames[v / 2] : (v == 7 ? "l/m/s" : (v == 10 ? "none" : "cm2m"))
         print("{name} {tn} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  ({wsum / COLD_COPIES} workgroups)  timing-only\n")
     }
     delete dvs

@@ -109,9 +109,11 @@ with no KHR class panics in the KHR ladders on a card whose cooperative-matrix m
 one with no e stamp panics in the e ladders on the first resident MoE window.
 
 **Weakening the `REVIEW.das` check that ties each cm2 stamp's `AT` / `BT` / `ACC` / `ACCW`
-typedefs to its `BK` and `BN`, and the s and e stamps' `BN` to `SCHED_S_ROWS` /
-`SCHED_M_ROWS`, is a defect.** A stamp whose types disagree with its constants compiles and
-loads a tile of the wrong depth.
+typedefs to its `BK` and `BN`, the s and e stamps' `BN` to `SCHED_S_ROWS` / `SCHED_M_ROWS`, and
+its k loop's unroll `UNR` to one superblock per unrolled block (`BK` x `UNR` = 256), is a
+defect.** A stamp whose types disagree with its constants compiles and loads a tile of the wrong
+depth; one whose unroll runs past a superblock carries code the window's weight stream evicts
+from the L2, refetched at every dispatch.
 
 **A diff that changes a cm2 stamp's tile typedefs or its `BK` k step updates every fixture
 under `tests/spirv/` (repo root) that declares that stamp's tile types, in the same change.**

@@ -211,9 +211,11 @@ On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile te
 the DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3
 verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) plus four width stamps (the l, m and s
 columns and the expert schedule's e column - the m column at the format's k step; each names its
-`BN`, `STILE`, the k step `BK` where it is not the template's 64, and the `AT`/`BT`/`ACC`/`ACCW`
-tile types of that depth - copy k4's for a K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a
-grid-codebook decode, and settle the k step on a whole-model MoE row, not the uniform probe alone), arms in the `cm2_cls_ensure/set/enc` and `cm2e_cls_*`
+`BN`, `STILE`, the k step `BK` where it is not the template's 64 with the unroll `UNR` that keeps
+the unrolled block at one superblock (`override UNR = 8u` beside `override BK = 32u`), and the
+`AT`/`BT`/`ACC`/`ACCW` tile types of that depth - copy k4's for a K-quant or LUT decode, iq2xxs's
+32-deep s and e stamps for a grid-codebook decode, and settle the k step on a whole-model MoE row,
+not the uniform probe alone), arms in the `cm2_cls_ensure/set/enc` and `cm2e_cls_*`
 ladders, and `pf_f16_feed` admits it via `kq_sb` automatically. A
 codebook format raises the `IQLUT` axis - a gated `@workgroup` f16 table staged ahead of the
 tile loop (llama.cpp's `init_iq_shmem` form); never select codes out of a register vector per
