@@ -284,6 +284,7 @@ namespace das
             uint32_t    flags = 0;
         };
         mutable bool circularGuard = false;   // we prevent circular lookups with this guard. Do not serialize, do not expose to daslang
+        mutable int32_t cachedGcFlags = -1;   // gc flags of the whole structure, -1 until a top-level walk fills it. Not serialized
     };
 
     struct DAS_API Variable : gc_node {
@@ -475,6 +476,7 @@ namespace das
             return hb.getHash();
         }
         virtual int32_t getGcFlags(das_set<Structure *> &, das_set<Annotation *> &) const { return 0; }
+        mutable int32_t cachedGcFlags = -1;   // gc flags of the handled type, -1 until a top-level walk fills it
         virtual bool canAot(das_set<Structure *> &) const { return true; }
         virtual bool canMove() const {
             return !hasNonTrivialCopy();
