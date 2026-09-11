@@ -241,6 +241,35 @@ def tune_play() {
         |> decay(0.05) |> sustain(0) |> delay(0.2) |> degradeBy(0.5) |> mask(s("<0 1>/16"))), 0.25)
 }
 
+// Cleared: a C major fanfare - a rising triangle arpeggio that climbs an octave every two cycles,
+// square stabs on the I-IV-V-I turn, a driving saw bass, drums that fill on the fourth bar
+def tune_win() {
+    strudel_set_bpm(140.0lf)
+    music_replace_track("drums", s("<[bd*2 [~ cp] bd [sd sd]] [bd*2 [~ cp] bd [sd sd]] [bd*2 [~ cp] bd [sd sd]] [bd [cp cp] [bd bd] [sd sd sd sd]]>"), 0.5)
+    music_replace_track("bass", (n("<0 3 4 0>") |> scale("C2:major") |> struct_(s("x*8"))
+        |> set_sound("sawtooth") |> decay(0.08) |> sustain(0) |> lpf(700) |> lpq(6)), 0.4)
+    music_replace_track("stabs", (note("<[c4,e4,g4] [f4,a4,c5] [g4,b4,d5] [c5,e5,g5]>") |> struct_(s("x ~ x [~ x]"))
+        |> set_sound("square") |> lpf(2500) |> decay(0.15) |> sustain(0) |> room(0.4) |> delay(0.15)), 0.28)
+    music_replace_track("arp", (n("0 2 4 7 9 12 9 7") |> add(n("<0 12>/2")) |> scale("C4:major")
+        |> set_sound("triangle") |> decay(0.06) |> sustain(0) |> delay(0.25) |> room(0.6)), 0.3)
+    music_replace_track("lead", (note("<[c5 e5 g5 c6] [~ g5 e5 g5] [c6 ~ b5 g5] [c6 ~ ~ ~]>") |> set_sound("triangle")
+        |> superimpose(@(var x : Pattern) => x |> add(12) |> degradeBy(0.5))
+        |> release(0.15) |> room(0.8)), 0.22)
+}
+
+// Lost: a slow C minor lament - a sine bass sinking through the octave, a triangle sigh that
+// answers every other bar, a kick that comes and goes, reverb doing most of the talking
+def tune_gameover() {
+    strudel_set_bpm(80.0lf)
+    music_replace_track("drums", (s("bd ~ ~ ~") |> degradeBy(0.3) |> room(0.6)), 0.25)
+    music_replace_track("bass", (n("<0 -2 -4 -5> <0 -2 -4 -7>") |> scale("C3:minor") |> struct_(s("x ~ ~ x"))
+        |> set_sound("sine") |> release(0.8) |> room(0.9)), 0.35)
+    music_replace_track("sigh", (note("<[eb4 ~ d4 ~] [~ c4 ~ ~] [eb4 d4 c4 ~] [~ ~ b3 ~]>")
+        |> set_sound("triangle") |> release(0.6) |> lpf(1400) |> room(1.0) |> delay(0.3)), 0.2)
+    music_replace_track("pad", (note("<[c3,eb3,g3] [ab2,c3,eb3]>") |> slow(2) |> set_sound("sawtooth")
+        |> lpf(sine() |> range(300, 900) |> slow(8)) |> release(1.0) |> room(1.0)), 0.12)
+}
+
 //! every track ducked to `factor` of its gain over `time` - 0 fades the bed out, 1 brings it back
 def music_fade_all(factor, time : float) {
     for (name, idx in keys(g_music_tracks), values(g_music_tracks)) {
@@ -260,6 +289,10 @@ def strudel_music_cmd(cmd : string) {
             tune_menu()
         } elif (name == "play") {
             tune_play()
+        } elif (name == "win") {
+            tune_win()
+        } elif (name == "gameover") {
+            tune_gameover()
         }
     } elif (action == "fadeall" && length(parts) >= 3) {
         music_fade_all(float(to_double(parts[1])), float(to_double(parts[2])))
@@ -321,19 +354,11 @@ def start_play_music() {
 }
 
 def start_win_music() {
-    // Victory — triumphant C major fanfare, fast arpeggios
-    strudel_set_bpm(152.0lf)
-    music_dispatch("play:drums:<bd sd bd [sd sd]> <bd [sd cp] bd sd> <bd sd [bd bd] [sd cp]> <bd [cp cp] bd [sd?0.7 sd?0.7]>:0.6")
-    music_dispatch("note:bass:<[c3 c3] [e3 e3] [g3 g3] [c4 c4]> <[c3 c3] [d3 d3] [e3 e3] [g3 g3]> <[e3 e3] [g3 g3] [c4 c4] [e4 e4]> <[c4 c4] [g3 g3] [e3 e3] [c3 c3]>:square:0.3")
-    music_dispatch("note:lead:<c5 e5 g5 c6> <e5 g5 c6 e6> <g5 e5 c6 g5> <c6 b5 a5 g5>:sawtooth:0.3")
-    music_dispatch("note:arp:<[c5 e5 g5 c6 e6 c6 g5 e5]> <[e5 g5 c6 e6 g6?0.7 e6 c6 g5]> <[g5 c6 e6 g6 e6 c6 g5 c6]> <[c6 g5 e5 c5 e5 g5 c6?0.8 e6?0.8]>:triangle:0.18")
+    music_dispatch("tune:win")
 }
 
 def start_gameover_music() {
-    strudel_set_bpm(85.0lf)
-    music_dispatch("play:drums:<bd ~ ~ ~> <bd ~ [~ hh?0.3] ~> <bd ~ ~ [~ bd?0.3]> <bd ~ ~ ~>:0.25")
-    music_dispatch("note:bass:<c3 bb2 ab2 g2> <c3 ~ ab2 ~> <bb2 ab2 g2 f2> <g2 ~ ab2 ~>:sine:0.3")
-    music_dispatch("note:lead:<eb4 ~ d4 ~> <~ d4 ~ c4> <eb4 d4?0.5 c4 ~> <~ ~ d4?0.5 ~>:triangle:0.2")
+    music_dispatch("tune:gameover")
 }
 
 def update_music() {
