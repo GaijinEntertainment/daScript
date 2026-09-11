@@ -880,6 +880,9 @@ def next_level() {
     query() $(eid : EntityId; _bn : Bonus) {
         delete_entity(eid)
     }
+    query() $(eid : EntityId; _br : Brick) {   //! the metal left standing, or it shields the next board's cell
+        delete_entity(eid)
+    }
     commit()
     spawn_bricks()
     spawn_ball_on_paddle()
