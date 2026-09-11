@@ -838,7 +838,7 @@ def draw_text_panel() {
     text(SAY_LABEL, (text = empty(who) ? "say" : "say as {who}"))
     same_line((spacing = 18.0))
     with_style((ImGuiCol.Text, DIM)) {
-        text("Ctrl+Enter says   Ctrl+R records and stops")
+        text("Ctrl or Cmd + Enter says   Ctrl or Cmd + R records and stops")
     }
     text(VIEW_LABEL, (text = empty(g_chunks) ? "the say, chunk by chunk - nothing said yet" : "the say, chunk by chunk"))
     child(SCRIPT_VIEW, (text = "script", size = float2(0.0, 0.0), child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {

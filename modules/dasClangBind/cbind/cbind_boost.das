@@ -980,6 +980,7 @@ class CppGenBind : AnyGenBind {
     nsst2st : table<string; string>
     st2nsst : table<string; string>
     require_modules : array<string>
+    require_load_modules : array<string>    //! required before this module initializes, but their types stay out of this module's library
     alias2type : table<string; string>
     enums_with_flags : table<string; bool>
     abstract_class : array<bool>
@@ -1759,6 +1760,11 @@ class CppGenBind : AnyGenBind {
         module_cpp_file |> fwrite("bool Module_{bind_module}::initDependencies() \{\n")
         module_cpp_file |> fwrite("\tif ( initialized ) return true;\n")
         for (rm in require_modules) {
+            module_cpp_file |> fwrite("\tauto mod_{rm} = Module::require(\"{rm}\");\n")
+            module_cpp_file |> fwrite("\tif ( !mod_{rm} ) return false;\n")
+            module_cpp_file |> fwrite("\tif ( !mod_{rm}->initDependencies() ) return false;\n")
+        }
+        for (rm in require_load_modules) {
             module_cpp_file |> fwrite("\tauto mod_{rm} = Module::require(\"{rm}\");\n")
             module_cpp_file |> fwrite("\tif ( !mod_{rm} ) return false;\n")
             module_cpp_file |> fwrite("\tif ( !mod_{rm}->initDependencies() ) return false;\n")
