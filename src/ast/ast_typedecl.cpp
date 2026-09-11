@@ -548,7 +548,7 @@ namespace das
             hb.update(enumType->baseType);
             for ( auto & e : enumType->list ) {
                 hb.updateString(e.name);
-                wr << *(e.value);
+                hb.update(e.value ? getConstExprIntOrUInt(e.value) : int64_t(-1));   // the folded constant, not the printer's text
             }
         } else if ( annotation ) {
             DAS_ASSERT(annotation->ownSemanticHash!=0);
@@ -604,7 +604,7 @@ namespace das
             hb.update(enumType->baseType);
             for ( auto & e : enumType->list ) {
                 hb.updateString(e.name);
-                wr << *(e.value);
+                hb.update(e.value ? getConstExprIntOrUInt(e.value) : int64_t(-1));   // the folded constant, not the printer's text
             }
         } else if ( annotation ) {
             if ( adep.find(annotation) == adep.end() ) {
