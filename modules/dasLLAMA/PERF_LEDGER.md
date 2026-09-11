@@ -186,6 +186,20 @@ what it costs today and what the fix would change.
   reps (0.960x of 5217), tg32 132.5; the sanity argmax the same token, its logit 0.02 apart (the
   norm's sum in butterfly order) [direction-grade - one commit].
 
+- **LANDED (2026-09-11) - the decode GEMV's block loop takes four blocks a lane straight-line, so
+  four blocks' loads are in flight before a sum waits on one.** The rolled loop issued a block's
+  loads after the last block's sum, one DRAM latency a block; the guarded single step stays as the
+  tail. The GEMV probe's `single` arm (one plane a dispatch under the token's hazard chain) reads
+  the chained-dispatch floor at 4.5 us on every format (0.6 MB planes, Linux RTX 5080) and the
+  served planes L2-warm; its ring form reads the streaming rate unchanged by the unroll (k4 903 ->
+  897 GB/s, k5 896 -> 895, k6 902 -> 903 at 4096 x 12288), so the gain is the in-token ramp of a
+  plane read once: tg32 on the pod the 9B 100.8 -> 102.9 +- 0.15 (0.912x of the reference exe's
+  112.8; its rows are four blocks a lane at K 4096 and twelve at K 12288), the 0.8B 381.2 -> 382.7
+  +- 4.0 (one or two blocks a lane: the tail alone), the 35B 146.6 -> 146.7 (the expert rows under
+  one block a lane), the 27B UD-IQ4_XS 41.7 -> 41.5 +- 0.02; pp512 flat. The GEMV family cell runs
+  its 13 formats at 5120 wide too (four unrolled steps and a tail at every lane split) beside the
+  512-wide rows the tail alone serves [direction-grade - one commit].
+
 - **LANDED (2026-09-11) - the token command's fused add+rms+requant serves every site on every model:
   a Q8_K twin for the K-quant feeds and a row-storing twin for the consumers that read the normed row
   as floats.** The fused twin (`cls_ar_rq`) quantized Q8_0 only and never stored the row, so

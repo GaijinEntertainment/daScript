@@ -114,7 +114,11 @@ reference exe's decode logger rows on the same models (its two f32 m=32 GEMVs ~5
 GATED_DELTA_NET 4.1 us + SSM_CONV 5.2 at one token, RTX 5080), and a whole-token profile role
 that reads past the isolated figure names the chain around the kernel, not the kernel (the RTX
 5080 reads the GEMV at 4.6 / 3.0 / 4.7 us and the step at 8.8 where the token profile bills the
-roles 17 and 25).
+roles 17 and 25). The decode GEMV probe (`harness/vk_gemv_probe.das <n> <d>`) streams a ring of
+plane copies past the L2 for the DRAM rate; its `single` arm dispatches one plane copy under the
+same hazard chain, so the row reads the chained dispatch's floor past its bytes (4.5 us on every
+format at 0.6 MB planes, RTX 5080) and the served plane L2-warm - the two figures a token's GEMV
+role sits between.
 The reference row is `test-backend-ops perf MUL_MAT_ID` at `n_mats=128,n_used=8,m=768,n=512,k=2048`.
 Two arms read the window chain's own overheads at those shapes rather than a tile: `ts:<fmt>`
 dispatches two m stamps back to back into two planes - plain, with the profile's bottom-of-pipe

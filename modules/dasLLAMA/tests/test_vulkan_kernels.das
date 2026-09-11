@@ -1024,7 +1024,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
                 return
             }
-            let nsb = 2      // superblocks per row reduction (n = 512)
+            for (nsb in fixed_array(2, 20)) {   //! superblocks a row: 512 wide, the guarded tail alone; 5120 wide, four unrolled steps and a tail at every lane split
             let d = 3        // rows per region
             let nreg = 2
             let rows = nreg * d
@@ -1077,7 +1077,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     regs[r * 2] = uint(r * d * nsb)
                     regs[r * 2 + 1] = 0u
                 }
-                var y_ref <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                var y_ref <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                 unsafe {
                     upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
                     upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
@@ -1096,7 +1096,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                         let begin = VkCommandBufferBeginInfo()
                         vk_check(vkBeginCommandBuffer(raw2, begin), null)
                         var h2 : VkHaz
-                        var pc = GemvArgs(n = 512u, d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row)
+                        var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row)
                         if (fmt == int(KqFmt.k4)) {
                             enc_kq_gemv_k4_cls(raw2, h2, s_cls, pc, wgs)
                         } elif (fmt == int(KqFmt.q40)) {
@@ -1135,43 +1135,43 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                     }
                 }
                 if (fmt == int(KqFmt.iq4xs)) {   // the codebook pack has an independent float witness
-                    var y_flt <- iq4xs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                    var y_flt <- iq4xs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "iq4xs: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
                     delete y_flt
                 }
                 if (fmt == int(KqFmt.k3)) {   // the lane/mask compose has an independent float witness
-                    var y_flt <- k3_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                    var y_flt <- k3_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "k3: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
                     delete y_flt
                 }
                 if (fmt == int(KqFmt.iq3s)) {   // the grid/sign gather has an independent float witness
-                    var y_flt <- iq3s_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                    var y_flt <- iq3s_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "iq3s: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
                     delete y_flt
                 }
                 if (fmt == int(KqFmt.iq3xxs)) {   // the halved-grid/parity-sign gather has its own float witness
-                    var y_flt <- iq3xxs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                    var y_flt <- iq3xxs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "iq3xxs: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
                     delete y_flt
                 }
                 if (fmt == int(KqFmt.iq2s)) {   // the u64-grid/sign-byte gather has its own float witness
-                    var y_flt <- iq2s_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                    var y_flt <- iq2s_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "iq2s: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
                     delete y_flt
                 }
                 if (fmt == int(KqFmt.iq2xs)) {   // the u64-grid/ksigns-parity gather has its own float witness
-                    var y_flt <- iq2xs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                    var y_flt <- iq2xs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "iq2xs: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
                     delete y_flt
                 }
                 if (fmt == int(KqFmt.iq2xxs)) {   // the byte-grid/aux32 gather has its own float witness
-                    var y_flt <- iq2xxs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, 512, d, nreg)
+                    var y_flt <- iq2xxs_gemv_float_oracle(wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
                     let badf = mismatch_approx(y_ref, y_flt)
                     t |> success(badf == 0, "iq2xxs: the class bit-math matches the float dequant oracle ({badf} of {rows} rows off)")
                     delete y_flt
@@ -1183,6 +1183,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                 delete xqh
                 delete xsh
                 delete y_cls
+            }
             }
         } else {
             feint("dasVulkan not present - skipping\n")

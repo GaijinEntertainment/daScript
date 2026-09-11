@@ -7902,6 +7902,19 @@ class KqGemvBase {
             let xsb0 = regions[r * 2u + 1u]
             let nb = nsb * 8u
             var b0 = 0u
+            //! four blocks a lane per step, straight-line, so the four blocks' loads issue together (a rolled loop waits
+            //! on each block's loads before the next issues); the tail keeps the guarded step
+            while (b0 + 4u * lanes_per_row <= nb) {
+                let bb = b0 + row_lane
+                acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)
+                let b1 = bb + lanes_per_row
+                acc += blk_contrib(wsb0 + b1 / 8u, b1 % 8u, xsb0 + b1 / 8u)
+                let b2 = b1 + lanes_per_row
+                acc += blk_contrib(wsb0 + b2 / 8u, b2 % 8u, xsb0 + b2 / 8u)
+                let b3 = b2 + lanes_per_row
+                acc += blk_contrib(wsb0 + b3 / 8u, b3 % 8u, xsb0 + b3 / 8u)
+                b0 += 4u * lanes_per_row
+            }
             while (b0 < nb) {
                 let bb = b0 + row_lane
                 if (bb < nb) {

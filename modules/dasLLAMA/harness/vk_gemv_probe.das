@@ -9,7 +9,9 @@ options _dasllama_internal = true
 // timed over repeated submits with a dependency between dispatches. Prints the bytes a dispatch
 // reads, its wall per dispatch and the GB/s - the number llama.cpp's per-type mat-vec rates
 // (test-backend-ops perf -o MUL_MAT, the m=4096 n=1 k=14336 rows) are read against.
-// Args: <n> <d> (default 4096 12288, the Qwen3.5-9B FFN gate; 5120 17408 is the 27B's).
+// Args: <n> <d> (default 4096 12288, the Qwen3.5-9B FFN gate; 5120 17408 is the 27B's); `single` dispatches ONE
+// plane copy - the served size, L2-warm across the chain - so the row reads the dispatch's own floor past its
+// bytes at the streaming rate (the decode's small planes pay it once per GEMV).
 
 require strings
 require vulkan
@@ -26,15 +28,17 @@ let private STREAM_MB = 128   //! the least a dispatch streams: four times the 3
 
 let private YBIT = 32u   //! the y buffer's hazard bit in the binding order below
 
+var private g_single = false   //! `single`: one plane copy a dispatch (the served size) instead of the STREAM_MB ring
+
 //! one format at [n x d] with `lanes_per_row` lanes per row (0 = the whole subgroup): the shipped class over as
-//! many d-row region copies as one dispatch needs to stream STREAM_MB
+//! many d-row region copies as one dispatch needs to stream STREAM_MB (one under `single`)
 def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint) : tuple<mb : double; us : double> {
     let nsb = n / 256
     let nwsb = d * nsb
     let qsb_words = int(kq_qsb(fmt) / 4l)
     let ssb_words = int(kq_dev_ssb(fmt) / 4l)
     let plane_bytes = nwsb * (qsb_words + ssb_words) * 4   //! under 2^31 for every served shape (the 27B's largest plane is 89 MB)
-    let copies = (STREAM_MB * 1048576 + plane_bytes - 1) / plane_bytes
+    let copies = g_single ? 1 : (STREAM_MB * 1048576 + plane_bytes - 1) / plane_bytes
     let wq_words = nwsb * qsb_words * copies
     let ws_words = nwsb * ssb_words * copies
     var wqh : array<uint>
@@ -117,6 +121,9 @@ def main : int {
         n = to_int(shape_args[length(shape_args) - 2])
         d = to_int(shape_args[length(shape_args) - 1])
     }
+    for (a in args) {
+        g_single = g_single || a == "single"
+    }
     if (!ensure_q8_batch_cls()) {
         print("vk_gemv_probe: no Vulkan device\n")
         return 1
@@ -125,7 +132,8 @@ def main : int {
     for (f in fmts) {
         verify(gemv_cls_ensure(int(f)), "vk_gemv_probe: every kq gemv class rail must engage on a live device")
     }
-    print("vk_gemv_probe: decode GEMV classes at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, plane copies to {STREAM_MB} MB per dispatch, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up; lanes = lanes per output row (32 = one row per subgroup)\n")
+    let ring = g_single ? "one plane copy per dispatch (single)" : "plane copies to {STREAM_MB} MB per dispatch"
+    print("vk_gemv_probe: decode GEMV classes at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, {ring}, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up; lanes = lanes per output row (32 = one row per subgroup)\n")
     print("| fmt    | lanes |   MB/dispatch |  us/dispatch |    GB/s |             |\n")
     print("| :----- | ----: | ------------: | -----------: | ------: | :---------- |\n")
     let splits = fixed_array(0u, 16u, 8u)

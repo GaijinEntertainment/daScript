@@ -1203,7 +1203,11 @@ module) is independent and can land any time - it is pure structure.
     hybrids (the beta/alpha GEMV reads the normed f32 row), MoE (the router reads it) and any Q8_K feed (it
     quantized Q8_0 only); the Q8_K and row-storing stamps of `ArRqT` lift all three (the profiler now keys on the
     stamps' recorded names): tg32 0.8B 370.5 -> 381.2, 9B 97.6 -> 100.8 (0.894x), 35B 143.9 -> 146.6 (1.009x of
-    145.2 - past the reference exe), 27B 38.2 -> 41.7 (0.88x). Next decode levers: the GEMV family on the 4096-wide planes (ours 500 GB/s in the token against the reference
+    145.2 - past the reference exe), 27B 38.2 -> 41.7 (0.88x). LANDED next: the GEMV block loop unrolled by four
+    (the loads of four blocks in flight a lane): the 9B 100.8 -> 102.9 (0.912x), the rest flat (their rows are
+    one or two blocks a lane); the GEMV probe's `single` arm reads the chained-dispatch floor at 4.5 us on every
+    format and the ring form ~900 GB/s at the 9B shape before and after - the token's remaining GEMV deficit is
+    the ramp of a plane read once (14-35 MB planes at 660-770 GB/s in the token). Next decode levers: the GEMV family on the 4096-wide planes (ours 500 GB/s in the token against the reference
     exe's 610-780; its form: 2 rows a workgroup, 16 lanes a superblock, f32 x read as vec4, no shared memory). Left
     for the dense files' prefill: the scan (2.2 ms on the 9B), the 27B UD-Q3_K_XL's q3_K roles (k3 reads a 6-bit
     split scale per element and stages no cache yet). Found on the way, not

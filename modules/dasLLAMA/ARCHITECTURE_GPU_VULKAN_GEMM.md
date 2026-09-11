@@ -22,10 +22,10 @@ sub-fields pulled out by shift and mask. A 32-bit word with a variable shift run
 path, to about a third of the rate - so every cm2 decode, q8 and every kq superblock format, is
 spelled the 16-bit way (the block structs are `int16` arrays over the same bytes), a byte at a
 runtime position comes out of its lane by a shift, `(uint(int(blk.qs[i >> 1u])) & 0xFFFFu) >>
-((i & 1u) * 8u)`, not an `unpack8(w)[i & 1u]` byte2 select (it reads the same lane, but a decode
-built on selects runs 1.1x to 1.5x slower on the expert-schedule shape - `moe:<fmt>`, RTX 5060
-Ti: iq2xxs 1.28x, iq3xxs 1.24x, iq3s 1.49x, iq2s 1.08x), and a sign index that straddles two
-bytes (the IQ2_XXS and IQ3_XXS aux32 words) is assembled from its two lanes and shifted. The
+((i & 1u) * 8u)`, not an `unpack8(w)[i & 1u]` byte2 select (the same lane, but a decode built
+on selects runs slower on the expert-schedule shape - `moe:<fmt>`, RTX 5060 Ti: iq2xxs 1.28x,
+iq3xxs 1.24x, iq3s 1.49x, iq2s 1.08x), and a sign index straddling two bytes (the IQ2_XXS and
+IQ3_XXS aux32 words) is assembled from its two lanes and shifted. The
 scalar callback is written in PAIR form: every read the two elements of an aligned pair share -
 the grid byte, the sign word, the scale row - is derived from the pair's first element (`e &
 ~1u`), both values are computed and the element is selected last, because the driver runs the
@@ -172,10 +172,9 @@ seat is also the in-process A/B: `vkd_pipes_rebuild`
 marks every class slot stale, so the next ensure rebuilds it under whatever `decvec_on` says,
 which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
 
-**The dump runs before the override.** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the EMITTED words as
-`<dir>/<kernel>.spv`; `DASLLAMA_VK_SPV_OVERRIDE=<dir>` then replaces them with that directory's
-file. The order makes the pair a round trip (dump a kernel, edit or spirv-opt the file, serve it
-back); a dump taken after the override would capture the served words, not the emitted ones.
+**The dump runs before the override:** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the EMITTED words as
+`<dir>/<kernel>.spv` and `DASLLAMA_VK_SPV_OVERRIDE=<dir>` then serves that directory's file - a round
+trip (dump, edit or spirv-opt, serve back) a dump taken after the override would not give.
 
 **Full subgroups are a whole-run arm, never a per-pipeline one.** `DASLLAMA_VK_FULLSG` plus a
 device that reports the feature sets `g_gpu.full_sg_on` once at device init, and every class
@@ -269,15 +268,16 @@ that 49152 B floor; a device that offers less workgroup memory is not a target.
 **The arm exists at one geometry** - 128 weights by 128 tokens, k step 32 - so in mm mode the
 tile pick answers 128 and split-k never engages, and `cm2_cls_ensure/set/enc` route to the
 `khr_cls_*` ladders, the same `(fmt)` key on both. The f16 feed admits a kq format in mm mode
-only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile,
-so a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4
-batch tile.
+only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile, so
+a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4 tile.
 
 ### 2.2ah The decode GEMV family splits a subgroup across rows by the row length {#kq-gemv-lanes}
 
 **A subgroup of the kq GEMV family takes one, two or four output rows, each row's lanes a cluster
-of the fold.** A lane loads one 32-block per step (`gemv_shell`), so a row of nb blocks over 32
-lanes keeps nb / 32 loads in flight per lane: two at K 2048, under one at a MoE's expert rows
+of the fold.** A lane takes one 32-block per step (`gemv_shell`), four steps straight-line so
+four blocks' loads are in flight before a sum waits on one (a rolled loop issued a block's loads
+after the last block's sum), the guarded single step as the tail; a row of nb blocks over 32
+lanes has nb / 32 blocks per lane: four at K 4096, two at K 2048, under one at a MoE's expert rows
 (K 512 to 1408, 16 to 44 blocks), where most of the subgroup idled and the DRAM rate fell to a
 third of the k4 band. `gemv_lanes_per_row` picks the lanes per row from the row's blocks - 8 to
 24 blocks; 8 for the grid formats and 16 for the k-lattice to 48; 16 to 96; past that the whole
