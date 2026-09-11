@@ -4101,10 +4101,16 @@ namespace das
                 }
             }
         }
-        for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
-            Function * func = indexToFunction[i];
-            SimFunction & fn = context.functions[i];
-            func->hash = getFunctionHash(func, fn.code, &context);
+        // the semantic hash feeds getFunctionAotHash - the jit's keys, the AOT generator and
+        // linker - which only ever ask about a user program's functions; a macro context is
+        // never asked, and a function it shares with the user program gets hashed by that
+        // program's own simulate
+        if ( !isCompilingMacros ) {
+            for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
+                Function * func = indexToFunction[i];
+                SimFunction & fn = context.functions[i];
+                func->hash = getFunctionHash(func, fn.code, &context);
+            }
         }
         for (auto pm : library.modules) {
             pm->structures.foreach([&](auto st){
