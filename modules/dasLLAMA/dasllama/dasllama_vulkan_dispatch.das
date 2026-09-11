@@ -67,6 +67,57 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
     return kfn
 }
 
+// the binding bits some [spirv_kernel] method of the class writes, over every method: a field is one
+// declaration for the whole family, so its NonWritable is the family's verdict; a classification the
+// classifier refused counts as writing every binding
+def private family_wmask(st : StructurePtr; mod : Module?; bufs : array<VkBufField>; tracked : table<string>) : uint {
+    var wmask = 0u
+    mod |> for_each_function("") $(fn) {
+        if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
+            var is_kernel = false
+            for (ann in fn.annotations) {
+                if (ann.annotation.name == "spirv_kernel") {
+                    is_kernel = true
+                }
+            }
+            if (is_kernel) {
+                var res <- classify_field_access(fn, mod, st, tracked)
+                if (!empty(res.err)) {
+                    wmask = 0xFFu
+                }
+                for (bf in bufs) {
+                    if (key_exists(res.writes, bf.name)) {
+                        wmask |= 1u << uint(bf.binding)
+                    }
+                }
+                delete res
+            }
+        }
+    }
+    return wmask
+}
+
+// every @ssbo member on a binding no kernel of the class writes gains `readonly`, which the emitter
+// decorates NonWritable - the driver then orders no load of it behind a store; a declared @readonly on
+// a written binding is the one shape that yields a module the validator rejects, so it is refused here
+def private stamp_readonly(var st : StructurePtr; base : string; fam_w : uint; var errors : das_string) : bool {
+    for (field in st.fields) {
+        continue if (!(find_arg(field.annotation, "ssbo") is tBool))
+        let fb = find_arg(field.annotation, "binding") ?as tInt ?? -1
+        continue if (fb < 0)
+        let written = (fam_w & (1u << uint(fb))) != 0u
+        let declared = find_arg(field.annotation, "readonly") is tBool
+        if (written && declared) {
+            errors := "[vk_dispatch] {base}: member '{field.name}' is @readonly but a kernel of {st.name} writes binding {fb}"
+            return false
+        }
+        if (!written && !declared && !(find_arg(field.annotation, "writeonly") is tBool) && !(find_arg(field.annotation, "maybe_readonly") is tBool)) {
+            field.annotation |> add_annotation_argument("readonly", true)
+        }
+    }
+    return true
+}
+
 def private mk_ret_bool(at : LineInfo; v : bool) : ExpressionPtr {
     return new ExprReturn(at = at, subexpr = new ExprConstBool(at = at, value = v))
 }
@@ -293,7 +344,11 @@ class VkDispatch : AstStructureAnnotation {
             }
         }
         delete res
+        let fam_w = family_wmask(st, compiling_module(), bufs, tracked)
         delete tracked
+        if (!stamp_readonly(st, base, fam_w, errors)) {
+            return false
+        }
 
         // ===== the generated surface =====
         // one VkdClass global + one set builder per FAMILY (ordinal 0 generates them); every

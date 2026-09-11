@@ -140,6 +140,18 @@ what it costs today and what the fix would change.
   `conv` and `smalls` read 19004 us and pp512 15132: the NonWritable decoration is what lets a
   token's k and q loads pass the previous token's o store [direction-grade - one commit].
 
+- **LANDED (2026-09-10) - every Vulkan binding no kernel of its class writes is NonWritable: the
+  `[vk_dispatch]` lens stamps `readonly` from its access classification.** Only four bindings in
+  the kernel file carried the qualifier by hand; every other buffer was declared writable, so the
+  driver ordered a kernel's loads behind its stores to any other buffer. Linux RTX 5080: the 35B
+  pp512 4217.5 +- 43.7 -> 4673.0 +- 38.3 (0.896x of the reference exe's 5217), tg32 129.2 ->
+  132.8; the 0.8B pp512 22354 +- 67 -> 23310 +- 70 (0.778x of 29957), tg32 320 -> 338 (0.705x
+  of 480); the 0.8B's profiled conv 1685 -> 1344 us per window, gate 1091 -> 1000, up 1007 -> 916,
+  the decode step's total 3685 -> 3478 us per token; the sanity logits bit-identical. A same-run
+  float4 form of the scan's lane shards (a lane's 16 rows contiguous, four loads per operand)
+  read the scan 8084 -> 8668 us and the 0.8B pp512 20047, and is not kept: the reference exe's
+  shader interleaves its rows exactly as the scalar form does [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

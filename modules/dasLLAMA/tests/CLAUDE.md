@@ -304,7 +304,11 @@ row at its gate, ungated, and no shared expert; the in-place residual moved off 
 f32 normed row and the f16 twin against one oracle) - every output under a sentinel fill before
 its dispatch, every bar with its own poison. `test_vkd_gemv_lane_rule` pins the decode GEMV
 family's lanes-per-row rule (`gemv_lanes_per_row`) per format class and row length, the grid
-formats against the k-lattice ones and q8 at the whole subgroup.
+formats against the k-lattice ones and q8 at the whole subgroup. `test_vkd_readonly_stamp` reads
+the toy kernel's SPIR-V words and holds the lens's derived NonWritable to the binding the kernel
+never writes and off the one it writes; `test_vkd_lens_readonly_gate` spawns two `-compile-only`
+children (up to 180 s each) proving the lens refuses a `@readonly` binding a kernel writes, the
+plain twin as the must-compile control.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the

@@ -217,10 +217,13 @@ lane cluster, 16 state rows per lane in registers, four subgroups per workgroup,
 reads its own k and q elements from the conv plane per token - no shared staging, no barrier.
 `dn_scan_wgs` sizes the grid, a workgroup covering `4 x 32 / (ds / 16)` columns of one head. The
 tokens loop inside the kernel; each token costs two cluster reductions inside the dependency
-chain. The conv and smalls bindings carry `@readonly`, which the emitter decorates NonWritable,
-and that decoration is load-bearing: without it the driver orders each token's k and q loads
-behind the previous token's o store (the two buffers may alias), and the same kernel ran 2.35x
-slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged
+chain. The conv and smalls bindings are NonWritable, as every binding no kernel of a class writes
+is: the `[vk_dispatch]` lens stamps `readonly` on it from its access classification (a family
+shares one declaration, so the verdict is the family's; a written view protects its same-binding
+aliases; a declared `@readonly` on a written binding is refused) and the emitter decorates the
+variable. The decoration is load-bearing: without it the driver orders each token's k and q
+loads behind the previous token's o store (the two buffers may alias), and the same kernel ran
+2.35x slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged
 two-column form it replaced 8854). The raw o rows land in the per-op tier's workspace, for the
 gated out-norm's one workgroup per position.
 

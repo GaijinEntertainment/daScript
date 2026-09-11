@@ -1122,10 +1122,22 @@ module) is independent and can land any time - it is pure structure.
     8854 -> 8084 us and pp512 21639 -> 22354 on the 0.8B, the 35B flat at 4217 +- 44; its first cut read
     19004 us until `conv` and `smalls` carried `@readonly` - the emitter decorates NonWritable from that
     annotation alone, so every other binding in the kernel file is declared writable and the driver
-    orders its loads behind every store. Next: the dispatch macro stamps `readonly` on every binding its
-    classifier finds unwritten (the whole kernel file at once), then the scan's lane shards go four wide
-    (a lane's 16 k or q elements as four float4 loads; upstream's spec-constant ds table makes its
-    addressing immediate, ours is a push constant). (2) The q5_K stamps run 0.74x of the reference's rate on the
+    orders its loads behind every store. The dispatch macro now stamps `readonly` on every binding its
+    classifier finds unwritten: the 35B 4217 -> 4673 +- 38 (0.896x), tg32 129.2 -> 132.8, the 0.8B 22354
+    -> 23310 and tg32 320 -> 338, conv 1685 -> 1344 us, the logits bit-identical. The scan's lane shards
+    four wide (a lane's 16 rows contiguous, four float4 loads per operand, `dot` trees) read the scan
+    8084 -> 8668 and the 0.8B 20047 - dropped; upstream's `gated_delta_net.comp` interleaves its rows
+    (`r * LANES_PER_COLUMN + lane`) as the scalar form does. What upstream has that the scan lacks:
+    ds as a spec constant (immediate load offsets, a folded `subgroupClusteredAdd` instead of three
+    branch-guarded shuffles in the dependency chain), one exp per token (its g and beta arrive
+    pre-activated from the graph; ours spends exp, log, exp, exp and a divide per token per lane), one
+    warp per workgroup. The scan still reads 448 us per layer against its 202. Found on the way, not
+    of this lever: the iq2xxs cm2 stamps' modules fail spirv-val's OpVariable placement check ("All
+    OpVariable instructions in a function must be the first instructions in the first block") in a
+    decode function - the emitter hoists a kernel body's locals to its entry block but not a
+    `[spirv_decode]` body's; the driver accepts the module and the tiles match the oracle, so the fix
+    is the emitter's (a `collect_locals` pass over decode functions), owed before the emitter suite's
+    validator run covers the kernel file. (2) The q5_K stamps run 0.74x of the reference's rate on the
     big shapes there (`cm2:k5 gate` l 70.6 TFLOP/s against its 93-96; k6 85.3 against its 72.7, so the
     q6_K stamp is already ahead): the reference's q5_K decoder beats its own q6_K by 1.18x through the
     `shAscales` shared-scale cache, ours trails k6 by 1.2x - the K-quant shared-scale lever of (a),

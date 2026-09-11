@@ -21,6 +21,8 @@ require ?vulkan dasllama/dasllama_gemm_schema   // kq_dev_ssb_i - the fixtures s
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
 require dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
+require daslib/fio   // the lens readonly gate's spawned compiles
+require daslib/strings_boost   // join: the spawned fixture's source
 
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: the s and m tiles load a partial column unclamped
 
@@ -120,6 +122,122 @@ def test_vkd_class_dispatch(t0 : T?) {
             unsafe {
                 delete k
             }
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+//! SPIR-V's OpDecorate is opcode 71, three words (target, decoration) or four with the decoration's literal; Binding is 33, NonWritable 24
+let private SPV_OP_DECORATE = 71u
+let private SPV_DECOR_NONWRITABLE = 24u
+let private SPV_DECOR_BINDING = 33u
+
+//! the bindings a module's words decorate NonWritable
+def private nonwritable_bindings(words : array<uint>) : table<int> {
+    var binding_of : table<uint; int>
+    var nonwritable : table<uint>
+    var i = 5   // past the five-word header
+    while (i < length(words)) {
+        let wc = int(words[i] >> 16u)
+        let op = words[i] & 0xFFFFu
+        if (op == SPV_OP_DECORATE && wc == 4 && words[i + 2] == SPV_DECOR_BINDING) {
+            binding_of[words[i + 1]] = int(words[i + 3])
+        } elif (op == SPV_OP_DECORATE && wc == 3 && words[i + 2] == SPV_DECOR_NONWRITABLE) {
+            nonwritable |> insert(words[i + 1])
+        }
+        i += max(wc, 1)
+    }
+    var res : table<int>
+    for (id, b in keys(binding_of), values(binding_of)) {
+        if (key_exists(nonwritable, id)) {
+            res |> insert(b)
+        }
+    }
+    return <- res
+}
+
+[test]
+def test_vkd_readonly_stamp(t0 : T?) {
+    t0 |> run("the lens stamps NonWritable on every binding the kernel never writes, and on those alone") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            // the toy reads xs (binding 0) and writes ys (binding 1); neither declares a role or a qualifier
+            var ro <- nonwritable_bindings(vkd_toy_spv)
+            t |> success(key_exists(ro, 0), "binding 0, read only, is NonWritable")
+            t |> success(!key_exists(ro, 1), "binding 1, written, is not")
+            t |> equal(1, length(ro), "one binding of the two is NonWritable")
+            delete ro
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+//! spawns a compile of a one-class [vk_dispatch] program whose kernel writes its second binding; `ro`
+//! declares that binding @readonly - the shape the lens refuses, since the NonWritable would be a lie
+def private spawn_readonly_fixture(ro : bool; tag : string) : tuple<rc : int; out : string> {
+    let roarg = ro ? "@readonly " : ""
+    let src = join([
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require spirv/spirv_shader",
+        "require vulkan",
+        "require vulkan/vulkan_boost",
+        "require dasllama/dasllama_vulkan_common",
+        "require dasllama/dasllama_vulkan_dispatch",
+        "",
+        "struct RoArgs \{",
+        "    n : uint",
+        "\}",
+        "",
+        "[vk_dispatch(name = \"ro_fixture\", grid = \"n/64\", params = \"n : int64\")]",
+        "class RoFixture \{",
+        "    @ssbo @binding = 0 xs : array<float>",
+        "    @ssbo @binding = 1 {roarg}ys : array<float>",
+        "    @push_constant pa : RoArgs",
+        "",
+        "    [spirv_kernel(local_size_x = 64, name = \"ro_fixture_spv\")]",
+        "    def run \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        if (i < pa.n) \{",
+        "            ys[i] = xs[i] * 2.0",
+        "        \}",
+        "    \}",
+        "\}",
+        "",
+        "[export]",
+        "def main() \{",
+        "    print(\"ok\\n\")",
+        "\}"], "\n")
+    let dir_r = create_temp_directory_result("dasllama_vk_lens_{tag}")
+    if (!(dir_r is value)) {
+        return (rc = -1, out = "temp dir failed")
+    }
+    let dir = unsafe(dir_r.value)
+    let path = path_join(dir, "prog.das")
+    if (!fwrite(path, src)) {
+        rmdir_rec_result(dir)
+        return (rc = -1, out = "fwrite failed")
+    }
+    let argv <- get_command_line_arguments()
+    let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
+    var out : string
+    let rc = run_and_capture([self, "-compile-only", path], out, 180.0)
+    rmdir_rec_result(dir)
+    return (rc = rc, out = out)
+}
+
+[test]
+def test_vkd_lens_readonly_gate(t0 : T?) {
+    t0 |> run("[vk_dispatch] refuses @readonly on a binding a kernel writes and compiles the plain twin") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let bad = spawn_readonly_fixture(true, "bad")
+            t |> success(bad.rc != 0, "a written @readonly binding must not compile")
+            t |> success(find(bad.out, "is @readonly but a kernel of RoFixture writes binding 1") >= 0, "the refusal names the member and the binding: {bad.out}")
+            let good = spawn_readonly_fixture(false, "ok")
+            t |> equal(0, good.rc, "the twin without the qualifier compiles: {good.out}")
         } else {
             feint("dasVulkan not present - skipping\n")
         }

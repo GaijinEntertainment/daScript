@@ -1638,7 +1638,7 @@ struct DnScanArgs {
 
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
 class DnScan {
-    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v); the @readonly is the scan's speed (sec.2.2ad): without it a token's k/q loads queue behind the previous token's o store
+    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v); read-only, and its NonWritable is the scan's speed (sec.2.2ad)
     @ssbo @binding = 1 state : array<float>              // the persistent per-head f32 state [nvh][ds][ds]
     @ssbo @binding = 2 @readonly smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
     @ssbo @binding = 3 orows : array<float>              // the raw o rows at o_off

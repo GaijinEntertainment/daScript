@@ -172,8 +172,8 @@ stocked model can, or names it in that file's blind-spot list for its backend -
 stocked model reaches it and the model-less test cell that dispatches it.**
 
 **Weakening the `[metal_dispatch]` / `[vk_dispatch]` lens's refusal to compile an `@ssbo` field
-with no `@binding`, or an `@ssbo` field the kernel body never accesses that declares no `@role`,
-is a defect.**
+with no `@binding`, an `@ssbo` field the kernel body never accesses that declares no `@role`, or
+a `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, is a defect.**
 
 **Weakening `[metal_dispatch]`'s refusal to compile a `@workgroup` field with no `tgmem=` spec,
 or its gate `test_lens_tgmem_gate` (`tests/test_metal_misc_kernels.das`), is a defect.**
