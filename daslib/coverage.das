@@ -310,7 +310,7 @@ class CoverageMacro : AstVisitor {
         return true
     }
 
-    def override preVisitFunctionBody(fun : FunctionPtr; expr : ExpressionPtr) {
+    def override preVisitFunctionBody(fun : FunctionPtr; var expr : ExpressionPtr) {
         //! Inserts function coverage call at the start of each function body.
         if (fun.flags.generated || fun.flags.init || fun.flags.builtIn
                 || fun.at.fileInfo == null || !(expr is ExprBlock)) return

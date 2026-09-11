@@ -1,5 +1,6 @@
 options gen2
 options no_unused_function_arguments = false
+options _nolint = "LINT031"   // the const-stripped write is the shape under test
 require dastest/testing_boost public
 
 // Regression for issue #3311: a write performed by const-stripping (reinterpret to

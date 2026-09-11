@@ -3121,7 +3121,7 @@ def fill_dn_meta(hb : HostBuf; npos_w, cd, kd, di, nvh, nkh, ds, dconv : int64; 
 // while the box's DRAM feeds 3-4x that; jobque lanes are idle while the GPU owns the layer
 let PAR_COPY_CHUNK = 2_097_152l
 
-def par_memcpy(dst : void?; src : void?; bytes : int64) {
+def par_memcpy(var dst : void?; src : void?; bytes : int64) {
     if (bytes < PAR_COPY_CHUNK * 2l || !is_job_que_available()) {
         unsafe {
             memcpy(dst, src, bytes)

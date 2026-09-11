@@ -3,31 +3,31 @@ require dastest/testing_boost
 
 require daslib/constant_expression
 
-def jit_memset8(data : void?; value : uint8; size : int) {
+def jit_memset8(var data : void?; value : uint8; size : int) {
     unsafe {
         memset8(data, value, size)
     }
 }
 
-def jit_memset16(data : void?; value : uint16; size : int) {
+def jit_memset16(var data : void?; value : uint16; size : int) {
     unsafe {
         memset16(data, value, size)
     }
 }
 
-def jit_memset32(data : void?; value : uint; size : int) {
+def jit_memset32(var data : void?; value : uint; size : int) {
     unsafe {
         memset32(data, value, size)
     }
 }
 
-def jit_memset64(data : void?; value : uint64; size : int) {
+def jit_memset64(var data : void?; value : uint64; size : int) {
     unsafe {
         memset64(data, value, size)
     }
 }
 
-def jit_memset128(data : void?; value : uint4; size : int) {
+def jit_memset128(var data : void?; value : uint4; size : int) {
     unsafe {
         memset128(data, value, size)
     }

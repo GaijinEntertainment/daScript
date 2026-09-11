@@ -227,8 +227,7 @@ or reinterpret to `uint8?` first.
 `var` handle: `def f(var p : float?)` stores, while a plain `p : float?` parameter is
 `float? const` and rejects the store. Const flows from the handle through deref, index, and
 field access. Never take a writable pointer as `T const?` and `reinterpret` the const away -
-the const type already licensed optimizations that can delete the write. Declare `var T?`
-(memory.md).
+declare `var T?` (memory.md).
 
 `addr<T?>(x)` is sugar for `reinterpret<T?>(addr(x))` under one `unsafe` gate; the target must
 be a pointer type. Casts are call-style - `reinterpret<int>(f)`, never `reinterpret<int> f` (a

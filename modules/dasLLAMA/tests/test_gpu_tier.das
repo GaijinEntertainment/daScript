@@ -100,11 +100,25 @@ def private d_prefill(x_batch : array<float>; cos_batch : array<float>; npos : i
 [unused_argument(l, kp, vp, npos)]
 def private d_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
 
-[unused_argument(l, pos, kp, vp)]
-def private d_read(l, pos : int64; kp : uint8?; vp : uint8?) {}
+var private g_read_pos = -1l
+var private g_read_bulk_npos = -1l
 
-[unused_argument(l, kp, vp, npos)]
-def private d_read_bulk(l : int64; kp : uint8?; vp : uint8?; npos : int64) {}
+// the readback doubles write a sentinel through the pointers the forwarder handed them
+def private d_read(l, pos : int64; var kp : uint8?; var vp : uint8?) {
+    g_read_pos = pos
+    unsafe {
+        *kp = uint8(l + 1l)
+        *vp = uint8(pos + 1l)
+    }
+}
+
+def private d_read_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) {
+    g_read_bulk_npos = npos
+    unsafe {
+        *kp = uint8(npos)
+        *vp = uint8(l)
+    }
+}
 
 // ===== the ids-form prefill seat's doubles (installed separately from the driver bundle) =====
 
@@ -214,6 +228,24 @@ def test_gpu_tier_contract(t : T?) {
         t |> success(!moe_gpu_tier_arm_(), "reset to unarmed for the rest of the process")
         t |> success(!moe_gpu_backend_registered(), "registration witness resets with the hook")
     }
+}
+
+[test]
+def test_rdec_readback_reaches_the_doubles(t : T?) {
+    install_moe_gpu_resident(@@d_reserve, @@d_place, @@d_prepare, @@d_norms, @@d_set_layer,
+                             @@d_set_cls, @@d_token, @@d_prefill, @@d_sync, @@d_read, @@d_read_bulk)
+    var krow : uint8[2]
+    var vrow : uint8[2]
+    unsafe {
+        rdec_read_kv(3l, 5l, addr(krow[0]), addr(vrow[0]))
+        rdec_read_kv_bulk(2l, addr(krow[1]), addr(vrow[1]), 7l)
+    }
+    t |> equal(g_read_pos, 5l)
+    t |> equal(int(krow[0]), 4, "the read double writes back through kp")
+    t |> equal(int(vrow[0]), 6, "the read double writes back through vp")
+    t |> equal(g_read_bulk_npos, 7l)
+    t |> equal(int(krow[1]), 7, "the bulk double writes back through kp")
+    t |> equal(int(vrow[1]), 2, "the bulk double writes back through vp")
 }
 
 [test]
