@@ -67,9 +67,7 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
     return kfn
 }
 
-// the binding bits some [spirv_kernel] method of the class writes, over every method: a field is one
-// declaration for the whole family, so its NonWritable is the family's verdict; a classification the
-// classifier refused counts as writing every binding
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens")]
 def private family_wmask(st : StructurePtr; mod : Module?; bufs : array<VkBufField>; tracked : table<string>) : uint {
     var wmask = 0u
     mod |> for_each_function("") $(fn) {
@@ -97,9 +95,7 @@ def private family_wmask(st : StructurePtr; mod : Module?; bufs : array<VkBufFie
     return wmask
 }
 
-// every @ssbo member on a binding no kernel of the class writes gains `readonly`, which the emitter
-// decorates NonWritable - the driver then orders no load of it behind a store; a declared @readonly on
-// a written binding is the one shape that yields a module the validator rejects, so it is refused here
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens")]
 def private stamp_readonly(var st : StructurePtr; base : string; fam_w : uint; var errors : das_string) : bool {
     for (field in st.fields) {
         continue if (!(find_arg(field.annotation, "ssbo") is tBool))

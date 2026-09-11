@@ -608,8 +608,6 @@ def test_metal_kernel_coverage(tst : T?) {
 
 // The Vulkan census's DECLARED blind spots, by census name (`<vk_dispatch name>_spv`): kernel
 // classes no zoo row below can dispatch, each with the reason and the kernel-unit cell that does.
-// A new [vk_dispatch] class belongs in a census row, not here; the list drains itself - an entry a
-// row dispatches is a red - and the report's NEVER DISPATCHED warnings name the gaps still owed a row.
 let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the expert schedule's e stamps of the formats no stocked MoE carrier holds a routed expert
     // plane in: the zoo's resident MoE carriers put q8 and k4 planes (the Qwen1.5-MoE files) and
@@ -745,8 +743,7 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             // the Q4_K_M twin fits a 16 GB card whole: the whole-model driver's MoE block (the router GEMM, the
             // per-row select, the bucket schedule, the combine-folded residual step, the token command's routed block)
             vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"), "qwen2moe", none)
-            // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over the published dynamic
-            // quant's iq2xxs expert planes, the whole-model fit of a 16 GB card
+            // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over iq2xxs expert planes, whole on a 16 GB card
             vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "qwen3moe", none)
             vk_kernel_coverage_report()
             var cov <- vk_kernel_coverage()
@@ -761,8 +758,6 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
                 feint("no vulkan dispatches - arm DASLLAMA_GPU=1 on a device box (the census needs the serving tier)\n")
                 return
             }
-            // the blind-spot list self-drains: a declared entry a stocked carrier dispatched is a STALE entry
-            // (a name nothing seeded panics in the accessor, so a misspelt entry cannot read as a zero count)
             for (blind in VK_CENSUS_NEVER_DISPATCHED) {
                 let hits = vk_kernel_coverage_of(blind)
                 t |> success(hits == 0l,

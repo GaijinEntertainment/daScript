@@ -153,7 +153,6 @@ class ArRqBase : ArBase {
         quant32(qb0, inv)
     }
 
-    //! the Q8_0 blocks of the stashed row at inv: 8 lanes a 32-block, 32 blocks a pass
     def quant32(qb0 : uint; inv : float) {
         let tid = gl_LocalInvocationID.x
         let nblk = pa.dim / 32u
@@ -197,10 +196,6 @@ class ClsArAddRmsRqB : ArRqBase {
     }
 }
 
-// the token command's fused add+rms+requant over one row on two axes: KBLK quantizes the Q8_K superblocks a
-// K-quant consumer reads (one subgroup a 256-block, the whole-subgroup amax fold of the requant class) in place
-// of the Q8_0 blocks, and STOREX also stores the normed row for a consumer that reads it as floats (the deltanet
-// head's beta/alpha GEMV, the MoE router)
 [ |> template_struct_instance]
 class template ArRqT : ArRqBase {
     @template_constant KBLK : bool = false
@@ -1251,7 +1246,7 @@ struct SchedArgs {
 
 let SCHED_S_ROWS = 32u    //! the s column: the ladder's small-bucket and remainder tile
 let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the last one partial
-let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column - a sentinel no column width can be, not a width like 256/128/32 (the dense m stamp keys by its 128 rows)
+let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column: a sentinel no column width can be (the dense m stamp already keys by its 128 rows)
 
 //! the ladder's m rows of a bucket of `c` rows: none up to the s column, else whole m columns plus a
 //! partial one when the remainder passes the s column (a remainder within it takes the s column)
@@ -1439,10 +1434,6 @@ struct DnConvArgs {
     qscale : float
 }
 
-// depthwise conv + SiLU + per-head q/k L2-norm, channel-major: a workgroup owns 256 channels over DN_CONV_PB positions,
-// every thread one channel's sliding window (the taps in registers, one new row read per position) and its outputs in
-// registers; the per-head sum of squares crosses the head's lanes by shuffles and its warps by one shared row - a head is
-// ds consecutive channels and ds divides 256, so no head straddles a workgroup
 [vk_dispatch(name = "dn_conv_cls", grid = "wgs", params = "wgs : int64")]
 class DnConv {
     @ssbo @binding = 0 src : array<float>      // the projected rows (position-major)
@@ -1463,7 +1454,7 @@ class DnConv {
         return smalls[pa.hist_off + hidx * pa.cd + ch]
     }
 
-    [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
     def run {
         let cblocks = (pa.cd + 255u) / 256u
         let p0 = (gl_WorkGroupID.x / cblocks) * DN_CONV_PB
@@ -1480,7 +1471,7 @@ class DnConv {
         var x0 = xrow(int(p0) - 3, cch, taps)
         var x1 = xrow(int(p0) - 2, cch, taps)
         var x2 = xrow(int(p0) - 1, cch, taps)
-        let normed = live && ch < 2u * pa.kd   // the q/k region takes the per-head norm
+        let normed = live && ch < 2u * pa.kd
         var y : float[32]
         var s : float[32]
         for [unroll] (i in range(32)) {
@@ -1509,16 +1500,16 @@ class DnConv {
             }
         }
         barrier()
-        let wpg = pa.ds > 32u ? pa.ds / 32u : 1u   // the head's warps
-        let wb = (warp / wpg) * wpg
+        let warps_per_head = pa.ds > 32u ? pa.ds / 32u : 1u
+        let wb = (warp / warps_per_head) * warps_per_head
         let qs = ch < pa.kd ? pa.qscale : 1.0
         for [unroll] (i in range(32)) {
             let p = p0 + uint(i)
             var tot = s[i]
-            if (wpg > 1u) {
+            if (warps_per_head > 1u) {
                 tot = 0.0
                 var ww = 0u
-                while (ww < wpg) {
+                while (ww < warps_per_head) {
                     tot += wsum[(wb + ww) * 32u + uint(i)]
                     ww++
                 }
@@ -1604,7 +1595,7 @@ class DnStepFused {
     @workgroup sgb : float[16]      //! per-subgroup partials of the raw q.k
     @workgroup ds8 : float[8]
 
-    [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
         let h = gl_WorkGroupID.x
         let ds = pa.ds
@@ -1686,8 +1677,6 @@ class DnStepFused {
             ds8[4u] = qkr * sq * sk
         }
         barrier()
-        //! the delta rule at chunk length 1, state in place: a thread owns one column's row part (64 rows at ds 128),
-        //! held in registers between the k.S / q.S pass and the update, the loads of a row coalesced across the columns
         let sq = ds8[0u]
         let sk = ds8[1u]
         let eg = ds8[2u]
@@ -1816,12 +1805,12 @@ struct DnScanArgs {
 
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
 class DnScan {
-    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v); read-only, and its NonWritable is the scan's speed (sec.2.2ad)
+    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v)
     @ssbo @binding = 1 state : array<float>              // the persistent per-head f32 state [nvh][ds][ds]
     @ssbo @binding = 2 @readonly smalls : array<float>   // raw beta/g rows, a/dt per head (push offsets)
     @ssbo @binding = 3 orows : array<float>              // the raw o rows at o_off
     @push_constant pa : DnScanArgs
-    @workgroup egs : float[int(DN_WINDOW)]   //! the head's decay per token, exp(a * softplus(g + dt)), computed once per workgroup: the five transcendentals a token the recurrence paid per lane
+    @workgroup egs : float[int(DN_WINDOW)]   //! the head's decay per token, exp(a * softplus(g + dt)), staged once per workgroup
     @workgroup bts : float[int(DN_WINDOW)]   //! the head's sigmoid(beta) per token, the same way
 
     def cluster_add(v : float; lanes_per_col : uint) : float {
@@ -1838,7 +1827,7 @@ class DnScan {
         return r
     }
 
-    [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv")]
+    [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
     def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of one column, written out
         let ds = pa.ds
         let lanes_per_col = ds / 16u           // 16 state rows each; ds % 16 == 0 host-side
@@ -1851,8 +1840,8 @@ class DnScan {
         let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + gl_SubgroupID * cols_per_subgroup + sl / lanes_per_col
         let live = col < ds                    // a whole cluster shares col, so its shuffles stay uniform
         let kh = h % pa.nkh
-        let qrow0 = kh * ds + lane             // the lane's first q element within a conv row
-        let krow0 = pa.kd + kh * ds + lane
+        let q_elem0 = kh * ds + lane
+        let k_elem0 = pa.kd + kh * ds + lane
         let voff = 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
@@ -1883,43 +1872,42 @@ class DnScan {
         s[13] = state[sb + 13u * row_stride]
         s[14] = state[sb + 14u * row_stride]
         s[15] = state[sb + 15u * row_stride]
-        //! the next token's k, q and v load while this token computes: a row's loads never wait on the recurrence
-        //! (the last token re-reads its own row)
+        //! the next token's k, q and v load while this token computes (the last token re-reads its own row)
         var kn : float[16]
         var qn : float[16]
         var vn = conv[voff]
-        kn[0] = conv[krow0]
-        kn[1] = conv[krow0 + lanes_per_col]
-        kn[2] = conv[krow0 + 2u * lanes_per_col]
-        kn[3] = conv[krow0 + 3u * lanes_per_col]
-        kn[4] = conv[krow0 + 4u * lanes_per_col]
-        kn[5] = conv[krow0 + 5u * lanes_per_col]
-        kn[6] = conv[krow0 + 6u * lanes_per_col]
-        kn[7] = conv[krow0 + 7u * lanes_per_col]
-        kn[8] = conv[krow0 + 8u * lanes_per_col]
-        kn[9] = conv[krow0 + 9u * lanes_per_col]
-        kn[10] = conv[krow0 + 10u * lanes_per_col]
-        kn[11] = conv[krow0 + 11u * lanes_per_col]
-        kn[12] = conv[krow0 + 12u * lanes_per_col]
-        kn[13] = conv[krow0 + 13u * lanes_per_col]
-        kn[14] = conv[krow0 + 14u * lanes_per_col]
-        kn[15] = conv[krow0 + 15u * lanes_per_col]
-        qn[0] = conv[qrow0]
-        qn[1] = conv[qrow0 + lanes_per_col]
-        qn[2] = conv[qrow0 + 2u * lanes_per_col]
-        qn[3] = conv[qrow0 + 3u * lanes_per_col]
-        qn[4] = conv[qrow0 + 4u * lanes_per_col]
-        qn[5] = conv[qrow0 + 5u * lanes_per_col]
-        qn[6] = conv[qrow0 + 6u * lanes_per_col]
-        qn[7] = conv[qrow0 + 7u * lanes_per_col]
-        qn[8] = conv[qrow0 + 8u * lanes_per_col]
-        qn[9] = conv[qrow0 + 9u * lanes_per_col]
-        qn[10] = conv[qrow0 + 10u * lanes_per_col]
-        qn[11] = conv[qrow0 + 11u * lanes_per_col]
-        qn[12] = conv[qrow0 + 12u * lanes_per_col]
-        qn[13] = conv[qrow0 + 13u * lanes_per_col]
-        qn[14] = conv[qrow0 + 14u * lanes_per_col]
-        qn[15] = conv[qrow0 + 15u * lanes_per_col]
+        kn[0] = conv[k_elem0]
+        kn[1] = conv[k_elem0 + lanes_per_col]
+        kn[2] = conv[k_elem0 + 2u * lanes_per_col]
+        kn[3] = conv[k_elem0 + 3u * lanes_per_col]
+        kn[4] = conv[k_elem0 + 4u * lanes_per_col]
+        kn[5] = conv[k_elem0 + 5u * lanes_per_col]
+        kn[6] = conv[k_elem0 + 6u * lanes_per_col]
+        kn[7] = conv[k_elem0 + 7u * lanes_per_col]
+        kn[8] = conv[k_elem0 + 8u * lanes_per_col]
+        kn[9] = conv[k_elem0 + 9u * lanes_per_col]
+        kn[10] = conv[k_elem0 + 10u * lanes_per_col]
+        kn[11] = conv[k_elem0 + 11u * lanes_per_col]
+        kn[12] = conv[k_elem0 + 12u * lanes_per_col]
+        kn[13] = conv[k_elem0 + 13u * lanes_per_col]
+        kn[14] = conv[k_elem0 + 14u * lanes_per_col]
+        kn[15] = conv[k_elem0 + 15u * lanes_per_col]
+        qn[0] = conv[q_elem0]
+        qn[1] = conv[q_elem0 + lanes_per_col]
+        qn[2] = conv[q_elem0 + 2u * lanes_per_col]
+        qn[3] = conv[q_elem0 + 3u * lanes_per_col]
+        qn[4] = conv[q_elem0 + 4u * lanes_per_col]
+        qn[5] = conv[q_elem0 + 5u * lanes_per_col]
+        qn[6] = conv[q_elem0 + 6u * lanes_per_col]
+        qn[7] = conv[q_elem0 + 7u * lanes_per_col]
+        qn[8] = conv[q_elem0 + 8u * lanes_per_col]
+        qn[9] = conv[q_elem0 + 9u * lanes_per_col]
+        qn[10] = conv[q_elem0 + 10u * lanes_per_col]
+        qn[11] = conv[q_elem0 + 11u * lanes_per_col]
+        qn[12] = conv[q_elem0 + 12u * lanes_per_col]
+        qn[13] = conv[q_elem0 + 13u * lanes_per_col]
+        qn[14] = conv[q_elem0 + 14u * lanes_per_col]
+        qn[15] = conv[q_elem0 + 15u * lanes_per_col]
         var t = 0u
         while (t < pa.npos) {
             let eg = egs[t]
@@ -1961,7 +1949,7 @@ class DnScan {
             q[15] = qn[15]
             let crown = min(t + 1u, pa.npos - 1u) * pa.cd
             vn = conv[crown + voff]
-            let kbn = crown + krow0
+            let kbn = crown + k_elem0
             kn[0] = conv[kbn]
             kn[1] = conv[kbn + lanes_per_col]
             kn[2] = conv[kbn + 2u * lanes_per_col]
@@ -1978,7 +1966,7 @@ class DnScan {
             kn[13] = conv[kbn + 13u * lanes_per_col]
             kn[14] = conv[kbn + 14u * lanes_per_col]
             kn[15] = conv[kbn + 15u * lanes_per_col]
-            let qbn = crown + qrow0
+            let qbn = crown + q_elem0
             qn[0] = conv[qbn]
             qn[1] = conv[qbn + lanes_per_col]
             qn[2] = conv[qbn + 2u * lanes_per_col]
@@ -5363,8 +5351,8 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant BN : uint = 256u                   // the token column
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
-    @template_constant BK : uint = 64u                    //!< the k step of the tile loop; a stamp whose decode is occupancy-bound runs 32 (its AT/BT carry the depth)
-    @template_constant UNR : uint = 4u                    //!< the k loop's hand unroll, a superblock per unrolled block (8 on a 32-deep stamp): the decode inlines once per copy, and the code a window streams out of the L2 is refetched per dispatch
+    @template_constant BK : uint = 64u                    //!< the k step of the tile loop (its AT/BT carry the depth)
+    @template_constant UNR : uint = 4u                    //!< the k loop's hand unroll: BK x UNR is one superblock (8 on a 32-deep stamp)
     @template_constant DECVEC : bool = true               //!< when DECV4 is off: the synthesized four-wide twin rides the loads; false serves the scalar callback only
     @template_constant DECV4 : bool = false               //!< the format's hand-laid `decode_v4` is the twin instead of the synthesized one
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
@@ -5382,7 +5370,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant KHR : bool = false                 //!< the KHR cooperative-matrix arm: hand-staged f16 tiles over the format's own decode, no cm2 API (a card without NV_coopmat2)
     @workgroup @template_gate = KHR khr_ao : uint[int(128u * KHR_STRIDE)]   //! the A stage: 128 weight rows of f16 pairs; then the edge tile's f32 store bounce, 8 subgroups x 256 words
     @workgroup @template_gate = KHR khr_b : uint[int(128u * KHR_STRIDE)]    //! the B stage: BN (128) token rows of f16 pairs
-    @template_constant SCACHE : bool = false              //!< the scale cache: the tile's 128 rows' eight sub-block scale pairs ((d x sc, dmin x mn); IQ4_XS (d x sc, 0)) staged per superblock, so the decode reads one word pair instead of the scale plane per element
+    @template_constant SCACHE : bool = false              //!< the scale cache: the tile's 128 rows' eight sub-block scale pairs staged per superblock
     @template_constant SCIQ4 : bool = false               //!< the cache's fill reads the IQ4_XS two-word scale row (d | the high scale bits, the low nibbles) instead of the K-quant five
     @workgroup @template_gate = SCACHE sc_cache : float2[int(8u * SC_STRIDE)]   //! sub-block-major, row-minor, two rows of pad per sub-block against bank conflicts
     @ssbo @binding = 1 @role = "alias" @template_gate = SCACHE wsw : array<uint>   //! the scale plane as words, the cache's source (K-quant: five per superblock - d | dmin, eight scale bytes, eight min bytes; IQ4_XS: two)
@@ -5458,8 +5446,7 @@ class template KqCm2BatchT : MoeCmBase {
         }
     }
 
-    //! the scale cache for superblock column `sb` of the tile's rows from m0: two threads per row, four sub-blocks each, the pair
-    //! premultiplied (d x sc, dmin x mn) from the scale plane's five words; a row past the plane reads the last row (its entries unused)
+    //! the scale cache for superblock column `sb` of the tile's rows from m0; a row past the plane reads the last row (its entries unused)
     def sc_fill(m0, wblk0, sb : uint) {
         static_if (SCACHE) {
             let t = gl_LocalInvocationID.x
@@ -5487,7 +5474,7 @@ class template KqCm2BatchT : MoeCmBase {
         }
     }
 
-    //! the scale cache's refill at a superblock's first k step, fenced both ways
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def sc_step(m0, wblk0, k : uint) {
         static_if (SCACHE) {
             if ((k & (BLKW - 1u)) == 0u) {
@@ -5801,8 +5788,8 @@ class template K4Cm2T : KqCm2BatchT {
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's (d x sc, dmin x mn) for the tile row, staged per superblock
-        return float16(v.x * float(q) - v.y)
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return float16(sc_pair.x * float(q) - sc_pair.y)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5813,9 +5800,9 @@ class template K4Cm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's (d x sc, dmin x mn) for the tile row, staged per superblock
-        return half4(float4(v.x * float((l0 >> sh) & 0xFu) - v.y, v.x * float((l0 >> (sh + 8u)) & 0xFu) - v.y,
-            v.x * float((l1 >> sh) & 0xFu) - v.y, v.x * float((l1 >> (sh + 8u)) & 0xFu) - v.y))
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return half4(float4(sc_pair.x * float((l0 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l0 >> (sh + 8u)) & 0xFu) - sc_pair.y,
+            sc_pair.x * float((l1 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l1 >> (sh + 8u)) & 0xFu) - sc_pair.y))
     }
 }
 
@@ -5853,10 +5840,10 @@ class template K6Cm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkK6Blk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let e2 = e & ~1u   //! the pair's first element: the pair's two low bytes are one 16-bit lane, its high bits two of one byte
-        let bu = e2 >> 5u
-        let hh = (e2 >> 4u) & 1u
-        let j = e2 & 15u
+        let pair0 = e & ~1u   //! the pair's two low bytes are one 16-bit lane, its high bits two of one byte
+        let bu = pair0 >> 5u
+        let hh = (pair0 >> 4u) & 1u
+        let j = pair0 & 15u
         let lb = bu * 16u + j
         let lw = uint(int(blk.ql[int(lb >> 1u)])) & 0xFFFFu
         let qb = (bu >> 2u) * 32u + hh * 16u + j
@@ -5864,7 +5851,7 @@ class template K6Cm2T : KqCm2BatchT {
         let q60 = int(((lw >> (hh * 4u)) & 0xFu) | (((hw >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
         let q61 = int(((lw >> (hh * 4u + 8u)) & 0xFu) | (((hw >> ((bu & 3u) * 2u + 8u)) & 3u) << 4u)) - 32
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let sidx = e2 >> 4u
+        let sidx = pair0 >> 4u
         let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
         let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
         return float16(ds * float((e & 1u) != 0u ? q61 : q60))
@@ -5931,17 +5918,17 @@ class template K5Cm2T : KqCm2BatchT {
     def decode(blk : VkK5Blk; bc, cib : uint2) : float16 {
         let g = cib.y >> 5u
         let e = cib.y & 31u
-        let e2 = e & ~1u   //! the pair's first element: the pair's two quant bytes are one 16-bit lane, its high bits two of one byte
-        let j = e2 & 15u
-        let h = e2 >> 4u
+        let pair0 = e & ~1u   //! the pair's two quant bytes are one 16-bit lane, its high bits two of one byte
+        let j = pair0 & 15u
+        let h = pair0 >> 4u
         let bidx = g * 16u + j
         let w = uint(int(blk.qs[int(bidx >> 1u)])) & 0xFFFFu
         let hidx = g * 4u + (j >> 2u)
         let hb = ((uint(int(blk.qh[int(hidx >> 1u)])) & 0xFFFFu) >> ((hidx & 1u) * 8u)) >> ((j & 3u) + h * 4u)
         let q0 = ((w >> (h * 4u)) & 0xFu) | ((hb & 1u) << 4u)
         let q1 = ((w >> (h * 4u + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
-        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's (d x sc, dmin x mn) for the tile row, staged per superblock
-        return float16((e & 1u) != 0u ? v.x * float(q1) - v.y : v.x * float(q0) - v.y)
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return float16((e & 1u) != 0u ? sc_pair.x * float(q1) - sc_pair.y : sc_pair.x * float(q0) - sc_pair.y)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5960,8 +5947,8 @@ class template K5Cm2T : KqCm2BatchT {
         let q1 = ((l0 >> (sh + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
         let q2 = ((l1 >> sh) & 0xFu) | (((hb >> 2u) & 1u) << 4u)
         let q3 = ((l1 >> (sh + 8u)) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
-        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's (d x sc, dmin x mn) for the tile row, staged per superblock
-        return half4(float4(v.x * float(q0) - v.y, v.x * float(q1) - v.y, v.x * float(q2) - v.y, v.x * float(q3) - v.y))
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return half4(float4(sc_pair.x * float(q0) - sc_pair.y, sc_pair.x * float(q1) - sc_pair.y, sc_pair.x * float(q2) - sc_pair.y, sc_pair.x * float(q3) - sc_pair.y))
     }
 }
 
@@ -6047,8 +6034,8 @@ class template Iq4xsCm2T : KqCm2BatchT {
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's d x sc for the tile row, staged per superblock
-        return float16(v.x * float(iq4lut[int(q)]))
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        return float16(sc_pair.x * float(iq4lut[int(q)]))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6227,9 +6214,9 @@ class template Iq3sCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3sBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let e2 = e & ~1u   //! the pair's first element: every read below is the pair's, the element is picked last
-        let g = e2 >> 5u
-        let r = e2 & 31u
+        let pair0 = e & ~1u
+        let g = pair0 >> 5u
+        let r = pair0 & 31u
         let wj = r >> 2u
         let qi = g * 8u + wj
         let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu   //! the grid-index byte, shifted out of its lane
@@ -6311,9 +6298,9 @@ class template Iq3xxsCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq3xxsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let e2 = e & ~1u   //! the pair's first element: every read below is the pair's, the element is picked last
-        let g = e2 >> 5u
-        let r = e2 & 31u
+        let pair0 = e & ~1u
+        let g = pair0 >> 5u
+        let r = pair0 & 31u
         let wj = r >> 2u
         let qi = g * 8u + wj
         let qb = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
@@ -6456,9 +6443,9 @@ class template Iq2sCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2sBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let e2 = e & ~1u   //! the pair's first element: every read below is the pair's, the element is picked last
-        let g = e2 >> 5u
-        let r = e2 & 31u
+        let pair0 = e & ~1u
+        let g = pair0 >> 5u
+        let r = pair0 & 31u
         let l = r >> 3u
         let j = r & 7u
         let qi = g * 4u + l
@@ -6537,9 +6524,9 @@ class template Iq2xsCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let e2 = e & ~1u   //! the pair's first element: every read below is the pair's, the element is picked last
-        let wi = e2 >> 3u
-        let j = e2 & 7u
+        let pair0 = e & ~1u
+        let wi = pair0 >> 3u
+        let j = pair0 & 7u
         let w16 = uint(int(blk.qs[int(wi)])) & 0xFFFFu
         let sidx = w16 >> 9u
         var tt = sidx ^ (sidx >> 4u)
@@ -6549,7 +6536,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
         let gw = iq2xs_gridc[(w16 & 511u) * 2u + (j >> 2u)]
         let gp = gw >> ((j & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let si = e2 >> 4u
+        let si = pair0 >> 4u
         let ds = unpackHalf2x16(ws[srow]).x * float((ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
         let g0 = float(gp & 0xFFu)
         let g1 = float((gp >> 8u) & 0xFFu)
@@ -6623,9 +6610,9 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkIq2xxsBlk; bc, cib : uint2) : float16 {
         let e = cib.y
-        let e2 = e & ~1u   //! the pair's first element: every read below is the pair's, the element is picked last
-        let g = e2 >> 5u
-        let r = e2 & 31u
+        let pair0 = e & ~1u
+        let g = pair0 >> 5u
+        let r = pair0 & 31u
         let l = r >> 3u
         let j = r & 7u
         let qi = g * 8u + l
@@ -6679,9 +6666,6 @@ class template Iq2xxsCm2T : KqCm2BatchT {
     }
 }
 
-// the stamps of each format, keyed (fmt, tc): the l/m/s width columns and the expert schedule's e column; the s
-// and e stamps run 32-deep on the five grid-codebook formats, whose decode is occupancy-bound (iq2xxs, iq2xs,
-// iq2s, iq3xxs, iq3s), and 64 on the K-quants, q4_0, q8 and the 4-bit LUT formats
 [vk_dispatch(name = "q8_batch_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2LBatch : Q8Cm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -7431,9 +7415,7 @@ struct F16GemmArgs {
     ksplit : uint   //! the k chunk per workgroup; 0 = the whole K, one plane at ybase with ystride
 }
 
-//! a small f16 x f16 GEMM on the cm2 128 x 128 tile with an f32 accumulator, y[rows x d] = x[rows x n] w[d x n]^T: the
-//! router logits and the deltanet beta and alpha rows, whose weights are f16 planes and whose K is the model width; a
-//! k chunk's partial plane lands at ybase + chunk * rows * d (stride d) for the split-k reduce
+//! a small f16 x f16 GEMM on the cm2 128 x 128 tile, y[rows x d] = x[rows x n] w[d x n]^T; a k chunk's partial plane lands at ybase + chunk * rows * d (stride d)
 [vk_dispatch(name = "f16_gemm_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class F16GemmCm2 {
     @ssbo @binding = 0 @role = "weight" w : array<float16>
@@ -7444,7 +7426,7 @@ class F16GemmCm2 {
     typedef BT = coopmatWgB_f16_64x128
     typedef ACC = coopmatWgAcc_f32_128x128
 
-    [spirv_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_spv")]
+    [spirv_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let xtiles = (pa.rows + 127u) / 128u
         let wtiles = (pa.d + 127u) / 128u
@@ -7974,6 +7956,7 @@ class KqGemvBase {
         return dm.x * float(sc * idot) - dm.y * float(mn * bs)
     }
 
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
     def gemv_shell {
         let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
         let lane = gl_SubgroupInvocationID
@@ -7989,8 +7972,6 @@ class KqGemvBase {
             let xsb0 = regions[r * 2u + 1u]
             let nb = nsb * 8u
             var b0 = 0u
-            //! four blocks a lane per step, straight-line, so the four blocks' loads issue together (a rolled loop waits
-            //! on each block's loads before the next issues); the tail keeps the guarded step
             while (b0 + 4u * lanes_per_row <= nb) {
                 let bb = b0 + row_lane
                 acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)

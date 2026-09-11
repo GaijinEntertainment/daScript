@@ -577,14 +577,13 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     pfq_ts(raw)
 }
 
-let private PF_F16G_SPLIT = 8l   //! the small f16 GEMMs' k chunks: their tile grids alone leave the device under-filled
+let private PF_F16G_SPLIT = 8l   //! the small f16 GEMMs' k chunks
 
-//! the cm2 route for the window chain's small f16 GEMMs (the router logits, the deltanet beta and alpha rows): the split-k
-//! scratch exists (an f16 feed on a cm2 device) and the model width takes eight 64-aligned k chunks
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_f16g_on() : bool => g_rd.pf_splitk != 0ul && g_rd.dim % (64l * PF_F16G_SPLIT) == 0l
 
-//! one small f16 GEMM, y[rows x d] at ybase = x[rows x n] w[d x n]^T over the weight rows at woff: eight k chunks into the
-//! split-k planes, then the reduce into y
+//! one small f16 GEMM: y[rows x d] at ybase = x[rows x n] w[d x n]^T over the weight rows at woff, through the split-k planes
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : VkDescriptorSet; n, d, rows, woff, ybase : int64) {
     verify(PF_F16G_SPLIT * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the f16 GEMM's partial planes exceed the split-k scratch")
     var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = uint(woff), xoff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / PF_F16G_SPLIT))
@@ -683,7 +682,6 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         pz.wqb, pz.wsb, xqn, xsn, np * di * 4l, VHZ_XQ, VHZ_DNZ, dim, di, L.bz, wlen, x6, cm2_tiles(cd, wlen))
     if (g_rd.dn_ba_f32) {
         if (x6 && pf_f16g_on()) {
-            // the beta rows and the alpha rows as two f16 GEMMs on the cm2 tile, each into its smalls plane
             pf_f16g_enc(raw, h, L.pf_f16g_ba_set, L.pf_f16g_ba_red_set, dim, nvh, wlen, L.ba_off, DN_SM_BETA)
             pf_f16g_enc(raw, h, L.pf_f16g_ba_set, L.pf_f16g_ba_red_set, dim, nvh, wlen, L.ba_off + nvh * dim, DN_SM_G)
         } else {
@@ -886,7 +884,6 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let ner = g_rd.ner
     let nk = wlen * k
     if (pf_f16g_on()) {
-        // the FFN-normed rows as f16, then the router as an f16 GEMM on the cm2 tile
         var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
         pf_f16g_enc(raw, h, L.pf_f16g_router_set, L.pf_f16g_router_red_set, dim, ner, wlen, L.router_slot * ner * dim, 0l)

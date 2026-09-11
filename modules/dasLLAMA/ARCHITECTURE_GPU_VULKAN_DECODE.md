@@ -289,3 +289,12 @@ session's prefill superseded is hydrated on the host; the decode override upload
 layers' rows `[0, pos)` into the mirror (`rdec_take_mirror`), mints a generation and serves - the
 same sync the batch decode does per row. The gap decline remains for a session that owns the
 mirror and asks past its rows.
+
+**The token command's profile bills its intervals by the recorder's stamp names.** Under
+`DASLLAMA_GPU_PROF=1` the recorder stamps a bottom-of-pipe timestamp after each named group of
+dispatches (`rd_ts`), and the sampler sums every interval under the name the recorder gave it: a
+name's prefix picks its table - `a:` an attention head's, `d:` a recurrent head's, `m:` the MoE
+tail's, `p:` the prologue's, `t:` the tail's - a name two stamps share sums both (the attention
+head's two `a:kv`), and a bare name is the anchor no interval bills to. What one stamp costs the
+command, and why a Linux driver's per-role figures are standalone, is `ARCHITECTURE_GPU_VULKAN.md`
+sec.2.2j's.

@@ -2505,9 +2505,7 @@ def public coopmat2_words : array<uint> {
     return clone_to_move(coopmat2_spv)
 }
 
-// the s-tile siblings of coopmat2_kernel (A f16 128x32 decoded from q8, B f16 32x32, acc f16 128x32
-// converted to f32 128x32): the MoE expert-bucket geometry dasLLAMA's cm2 chain runs, at the 32-deep k
-// step the grid-codebook formats' s stamps run (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s)
+//! the MoE expert-bucket s stamp at the 32-deep k step: the shapes dasLLAMA's Cm2SBatch classes declare for the grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s)
 [compute_shader(local_size_x=128, name="coopmat2s_spv"), marker(no_coverage)]
 def coopmat2s_kernel {
     let m = cm2_meta[0u]
@@ -2550,8 +2548,7 @@ def public coopmat2s_words : array<uint> {
     return clone_to_move(coopmat2s_spv)
 }
 
-// the 64-deep s-tile sibling (A f16 128x64 decoded from q8, B f16 64x32, the same accumulators): the s
-// stamp of every format whose decode is step-bound - the K-quants, q4_0, q8 and the 4-bit LUT formats
+//! the s stamp at the 64-deep k step: the shapes dasLLAMA's Cm2SBatch classes declare for every format whose decode is step-bound - the K-quants, q4_0, q8 and the 4-bit LUT formats
 [compute_shader(local_size_x=128, name="coopmat2s64_spv"), marker(no_coverage)]
 def coopmat2s64_kernel {
     let m = cm2_meta[0u]
@@ -2594,8 +2591,7 @@ def public coopmat2s64_words : array<uint> {
     return clone_to_move(coopmat2s64_spv)
 }
 
-// the e-column twin of coopmat2s_kernel - the grid-codebook formats' e stamps instantiate exactly these shapes;
-// the other formats' e stamps run the m stamp's 64-deep shapes
+//! the e stamp at the 32-deep k step: the shapes dasLLAMA's Cm2EBatch classes declare for the grid-codebook formats; every other format's e stamp runs the m stamp's 64-deep shapes
 [compute_shader(local_size_x=128, name="coopmat2e_spv"), marker(no_coverage)]
 def coopmat2e_kernel {
     let m = cm2_meta[0u]

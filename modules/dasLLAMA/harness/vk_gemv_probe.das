@@ -28,10 +28,9 @@ let private STREAM_MB = 128   //! the least a dispatch streams: four times the 3
 
 let private YBIT = 32u   //! the y buffer's hazard bit in the binding order below
 
-var private g_single = false   //! `single`: one plane copy a dispatch (the served size) instead of the STREAM_MB ring
+var private g_single = false
 
-//! one format at [n x d] with `lanes_per_row` lanes per row (0 = the whole subgroup): the shipped class over as
-//! many d-row region copies as one dispatch needs to stream STREAM_MB (one under `single`)
+//! one format at [n x d], lanes_per_row 0 = the whole subgroup
 def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint) : tuple<mb : double; us : double> {
     let nsb = n / 256
     let nwsb = d * nsb

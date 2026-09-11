@@ -133,7 +133,11 @@ across dispatches) and cold (a ring of 96 copies, past a 64 MB L2), the m stamp 
 schedule words in host memory (the prefill's meta) and over the engine's plane forms (the weight
 planes at the far end of a 3 GB slab; the feed and output planes sized to an 8192-row window),
 and the three stamps taking turns over the ring; the warm row is the alternate every other row
-ranks against (the RTX 5080 reads the 64-workgroup m stamp at 26-27 us on every row).
+ranks against (the RTX 5080 reads the 64-workgroup m stamp at 26-27 us on every row). The arm's
+flush row is the split-k reduce copying a 128 MB plane between two dispatches of one stamp, so
+the next dispatch finds its code, descriptors and planes out of every cache - the weight a
+window chain streams between two uses of one stamp; the flush writes the feed's region, so the
+stamp after it waits on the flush and the next flush waits on the stamp.
 
 **A measured number proves its kernel provenance through `tune_gate()`
 (`performance/profile_common.das`), one arm per world it can run in.** Four worlds, because

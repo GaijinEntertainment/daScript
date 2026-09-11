@@ -165,7 +165,6 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         L.s_addr_ffn = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xb_dev),
             fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l),
             fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
-        // the fused twins of addr_ffn / addr_next are picked with every site at the first record (rd_fused_sets)
         g_rd.fused_sets_made = false
         // quantize xb (post-ffn-norm) -> xq/xs
         L.s_quant_xb2 = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
@@ -345,7 +344,6 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     assert(r.router_bytes == n_moe * r.ner * dim * 4l, "vk_rdec_prepare_moe: the router plane is not [n_moe x ner x dim]")
     r.router_dev = make_device_buf(r.router_bytes)
     upload_region_at(r.router_dev, 0l, unsafe(addr<uint8 const?>(router[0])), r.router_bytes)
-    // the window chain's router GEMM rides the cm2 tile over an f16 copy of the rows; the decode GEMV keeps the f32 plane
     var half : array<float16>
     half |> reserve(long_length(router))
     half |> resize(long_length(router))
@@ -677,7 +675,6 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int) {
         g_rd.s_prologue = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xb_dev),
             fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l),
             fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
-        // the fused twin (layer 0's quant_xb folded in) is picked with the other fused sites at the first record
         g_rd.fused_sets_made = false
         // quantize final xb
         g_rd.s_quant_final = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
@@ -733,12 +730,10 @@ def private rd_record_token {
     rd_encode_token()
 }
 
-//! the fused add+rms+requant stamp a site takes: the consumer's block form (Q8_K for a kq superblock plane, else
-//! Q8_0) and whether a consumer also reads the normed row as floats (a recurrent head's beta/alpha GEMV, a router)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rq_kind(kfmt : int; storex : bool) : int => (kq_sb(kfmt) ? 2 : 0) + (storex ? 1 : 0)
 
-//! a fused site's set: x and its add partner, the norm rows, the quant feed (xq, xs) and - on a stamp that stores the
-//! row - the normed row xb; the add partner's class is the site's (the FFN site's xb2, the next site's ffnout)
+//! a fused site's set: x, its add partner (the FFN site's xb2, the next site's ffnout), the norms, the quant feed and - on a row-storing stamp - xb
 def private set_ar_rq_kind(kind : int; add : uint64; aclass : uint; xq, xs : uint64) : VkDescriptorSet {
     let dim = g_rd.dim
     let nb = g_rd.norms_bytes
@@ -768,12 +763,9 @@ def private enc_ar_rq_kind(kind : int; raw : VkCommandBuffer; var h : VkHaz; var
     }
 }
 
-//! the feed form a layer's head reads, and whether it reads the normed row as floats too
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_head_feed(L : RLayer) : tuple<fmt : int; storex : bool> => (fmt = L.recurrent ? L.fqkv : L.fq, storex = L.recurrent)
 
-//! The fused sites' stamps and sets, picked once every layer is registered (a site's consumer may be the NEXT layer's
-//! head, or experts registered after the layer): the prologue feeds layer 0's head, a layer's FFN site its dense
-//! triple (a router beside it reads the row) or a bare MoE layer's experts, the next site the following head or the classifier
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_fused_sets {
     if (g_rd.fused_sets_made) {
@@ -892,7 +884,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
     gemv_enc(L.fz, raw, h, L.s_dnz, pcz, di)
     rd_ts(raw, "d:z")
-    if (g_rd.dn_ba_f32) {   //! the beta rows and the alpha rows behind them, one dispatch, each half to its own smalls base
+    if (g_rd.dn_ba_f32) {
         var pcb = RouterArgs(ne = uint(2l * nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA),
             ne1 = uint(nvh), obase2 = uint(DN_SM_G))
         enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcb, 2l * nvh)
@@ -923,16 +915,13 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     rd_ts(raw, "d:out")
 }
 
-//! The token command's fuse gates: `fuse` = the add+rms+requant twins on every site (the lever `DASLLAMA_VK_FUSE`
-//! pins off), `fuse_qkr` = the fused qk-norm+rope pair (also the gated and partial-rope arms the split pair lacks)
+//! the token command's fuse gates; a gated or partial-rope model rides the fused qk-norm+rope pair whatever the fuse lever says - the split pair lacks those arms
 def private rd_fuse_gates : tuple<fuse : bool; fuse_qkr : bool> {
     let fuse = vk_fuse_on()
     return (fuse = fuse, fuse_qkr = g_rd.qk_norm && (fuse || g_rd.q_gated || g_rd.rot != g_rd.head_size))
 }
 
-//! a profile stamp with the name its interval bills - the recorder's own account, so the sampler never counts
-//! positions; the prefix groups the print: "a:" an attention head, "d:" a recurrent head, "m:" a MoE tail,
-//! "p:" / "t:" the prologue and the tail, "" the anchor
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_ts(raw : VkCommandBuffer; name : string) {
     let n0 = g_pfq_n
     pfq_ts(raw)
@@ -941,7 +930,7 @@ def private rd_ts(raw : VkCommandBuffer; name : string) {
     }
 }
 
-//! the stamp prefix of a layer's tail: a MoE layer's tail lands in the MoE table, the rest with its head
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_tail_pfx(L : RLayer) : string => L.moe ? "m:" : (L.recurrent ? "d:" : "a:")
 
 def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; hid : int64; var pc_act : ActArgs; var pc_act_k : ActArgs) {
@@ -1060,9 +1049,8 @@ def private rd_encode_token {
             var L & = g_rd.layers[l]
             let hpfx = L.recurrent ? "d:" : "a:"
             let tpfx = rd_tail_pfx(L)
-            //! a MoE layer's residual step is the combine, which stores the normed row alone: the layer after it requants
-            let after_comb = l > 0l && g_rd.layers[l - 1l].moe
-            if (!fuse || after_comb) {
+            let after_moe_combine = l > 0l && g_rd.layers[l - 1l].moe
+            if (!fuse || after_moe_combine) {
                 if (kq_sb(L.recurrent ? L.fqkv : L.fq)) {
                     enc_cls_q8k_rq(raw, h, L.s_quant_xb, pc_rq_dim_k, rqwg_dim_k)
                 } else {
@@ -1097,7 +1085,7 @@ def private rd_encode_token {
             }
             let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   //! rms_att[l+1] | final
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
-            if (L.moe) {   //! a MoE layer's residual step is the combine: the routed rows, the shared row and the norm in one
+            if (L.moe) {
                 var pc14c = rd_ar_comb_args(L, nxt)
                 enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)
                 rd_ts(raw, "m:ar2")
@@ -1129,7 +1117,6 @@ def private rd_encode_token {
     g_rd.tok_recorded = true
 }
 
-//! the names of one group in first-seen order with their per-token means, the profile line's body
 def private rdq_group_line(pfx : string; n : double) : string {
     return build_string() $(w) {
         for (nm in g_rdq_order) {
@@ -1140,8 +1127,6 @@ def private rdq_group_line(pfx : string; n : double) : string {
     }
 }
 
-//! the per-role sums keyed by the recorder's own stamp names (rd_ts): a name repeated in a token sums, so every
-//! layer's "a:q" is one role and the split k and v stamps fold into one "a:kv"
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_sample {
     let want = length(g_rdq_names)

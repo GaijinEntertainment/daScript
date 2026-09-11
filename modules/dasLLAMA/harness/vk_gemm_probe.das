@@ -68,9 +68,7 @@ def private fill_fixture(var b : ShapeBufs; totblk, rows, nbb : int) {
     }
 }
 
-// ===== the s stamp's other-depth twins: the in-process alternate of the k-step race - the shipped stamp at
-// the depth the engine does not run for that format (64 where the engine's s stamp runs 32, 32 where it
-// runs 64) for the formats the race is read on =====
+// ===== the s stamp's other-depth twins: the shipped stamp at the k step the engine does not run for that format =====
 
 [vk_dispatch(name = "probe_iq2xxs_cm2s64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq2xxsCm2S64Probe : Iq2xxsCm2T {
@@ -516,8 +514,7 @@ def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; 
     return dv
 }
 
-//! one region of `cnt` rows for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4,
-//! in a device buffer, or in host memory as the prefill's per-role meta (`pf_meta`) keeps them
+//! one region of `cnt` rows for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4, in a device buffer or in host memory (the prefill's `pf_meta` form)
 def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
     var sched : array<uint>
     sched |> resize(4 + wgs)
@@ -590,11 +587,6 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; lonly :
 
 // ===== the decode head's small kernels in isolation (arg "dec") =====
 
-//! the f16 beta/alpha GEMV at ne rows over dim (one dispatch, the alpha half at a second base) and the fused deltanet
-//! step at nvh heads of ds, each a chain of DISPATCHES over the same buffers under one hazard set - the serial form
-//! the token command runs them in - so a figure past the reference exe's logger rows (its two f32 m=32 GEMVs ~5 us
-//! each, GATED_DELTA_NET 4.1 us + SSM_CONV 5.2 at n=1 on the RTX 5080) names the kernel, and a figure below them
-//! sends the reader to the chain around it
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measurement sweep
     verify(ensure_router_gemv_f16_cls() && ensure_dn_step_cls(), "dec probe pipelines must engage")
@@ -721,11 +713,6 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
 // ===== the m stamp on planes the L2 cannot hold (arg "cold:<fmt>") =====
 let private COLD_COPIES = 96   //! copies of a shape's planes, 67 MB and up at the shared expert's shapes: past a 64 MB L2, so every dispatch reads its planes from VRAM
 
-//! the l, m and s stamps at a shape over one copy of its planes (the L2 holds them across dispatches) and
-//! over a ring of `COLD_COPIES` copies (each dispatch's planes arrive from VRAM); the m stamp over the one
-//! copy with its schedule words in host memory (the prefill's meta); and the three stamps taking turns over
-//! the ring (each dispatch runs a pipeline the last one did not, as the window chain does) - the in-window
-//! cost of a small GEMM is its cold row, plus whatever the turns row reads past the three cold rows' mean
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {
     var dvs <- [for (_c in range(COLD_COPIES)); cm2_shape_upload(fmt, d, n, cnt)]
@@ -739,13 +726,9 @@ def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {
         scs[t] = one_region_sched(cnt, wgs[t])
     }
     let sch = one_region_sched(cnt, wgs[1], true)
-    //! the engine's forms: the weight planes at the far end of a 3 GB slab, and the feed and output planes sized to an 8192-row window
     let deep = cm2_shape_upload(fmt, d, n, cnt, int(3_000_000_000l / arena_block_bytes(fmt).wq))
     let scd = one_region_sched(cnt, wgs[1], false, deep.wblk0)
     let wide = cm2_shape_upload(fmt, d, n, cnt, 0, 8192)
-    //! the flush: the split-k reduce copying a 128 MB plane, so the next dispatch finds its code, descriptors and
-    //! planes out of every cache (the window chain streams that much weight between two uses of one stamp); its
-    //! write claims the feed's region, so the stamp after it waits on it and the flush after the stamp waits in turn
     verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
     let fl_bytes = 134_217_728l
     let fl1 = make_device_buf(fl_bytes)
@@ -788,12 +771,6 @@ def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {
 }
 
 // ===== a timestamp between two independent dispatches (arg "ts:<fmt>") =====
-//! two m stamps at the shared expert's shape, back to back into two output planes: the pair plain, with a
-//! bottom-of-pipe timestamp between them (the profile's stamp), with a barrier between them (the second
-//! writes the first's plane), and with the split-k reduce between them on that one plane (a barrier each
-//! side and a pipeline of another shape, as the window chain runs its GEMMs) - a driver that drains the
-//! queue at a timestamp reads the stamped pair at the barrier's time, and a pipeline change that costs
-//! the device a reconfiguration reads the reduce row past the barrier row by more than the reduce
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_ts_pair(fmt : int; d, n, cnt : int) {
     let dv = cm2_shape_upload(fmt, d, n, cnt)
@@ -1020,8 +997,6 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
         print("{name} {profile} ladder e+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
-        //! the alternates the two rows above are ranked against, in the same process: the ladder over the dense
-        //! 64-deep m stamp (the e column's predecessor), and the whole-s-tile form on the s stamp's other-depth twin
         var raw3 = alloc_cmd()
         vk_check(vkBeginCommandBuffer(raw3, begin), null)
         var s_ladder_dm_a = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
@@ -3375,8 +3350,6 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             return
         }
         if (only == "cm2w:") {
-            //! the wave sweep: the l stamp over one 256-token column at half-wave steps of the device's SM count, so the
-            //! cost of a second wave says how many of the stamp's workgroups an SM runs at once (a whole first wave: one)
             let sm = g_gpu.sm_count
             if (sm <= 0) {
                 print("cm2w:<fmt> needs the device's SM count (VK_NV_shader_sm_builtins)\n")
@@ -3404,7 +3377,6 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                     && kq_batch_cls_ensure(cm2_fmt, false), "cm2:<fmt> probe pipelines must engage")
                 let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
                 if (only == "cm2d:") {
-                    //! the 4096-wide dense hybrid's window (the Qwen3.5-9B): the FFN pair over K 4096 (192 l workgroups), its down over K 12288, the fused qkv, a z or out plane, and an attention k or v plane (16 l workgroups: the split-k shape)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down ", 4096, 12288, 512)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} qkv  ", 8192, 4096, 512)
@@ -3415,9 +3387,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
-                //! the s stamp's dense half: a 64-row window (the pick's s column) on the gate shape
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@64", 9728, 2560, 64)
-                //! the 35B's shared expert (512 rows over K 2048) and its down plane: the m column takes 16 and 64 workgroups on a 512-token window, one wave short of the device
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shexp", 512, 2048, 512)
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shdown", 2048, 512, 512)
             }

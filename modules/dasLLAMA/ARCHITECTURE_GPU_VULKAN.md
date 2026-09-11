@@ -237,11 +237,8 @@ computed once per workgroup into shared memory before the token loop, so the rec
 two shared words a token where it paid five transcendentals and a divide per lane (a third of
 the scan's time on the Linux RTX 5080; upstream's graph hands its scan the gates pre-activated).
 The tokens loop inside the kernel; each token costs two cluster reductions inside the dependency
-chain (a sixth of the scan's time there). The conv and smalls bindings are NonWritable, as every binding no kernel of a class writes
-is: the `[vk_dispatch]` lens stamps `readonly` on it from its access classification (a family
-shares one declaration, so the verdict is the family's; a written view protects its same-binding
-aliases; a declared `@readonly` on a written binding is refused) and the emitter decorates the
-variable. The decoration is load-bearing: without it the driver orders each token's k and q
+chain (a sixth of the scan's time there). The conv and smalls bindings are NonWritable, as every
+binding no kernel of a class writes is (sec.2.2aj). The decoration is load-bearing: without it the driver orders each token's k and q
 loads behind the previous token's o store (the two buffers may alias), and the same kernel ran
 2.35x slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged
 two-column form it replaced 8854). The raw o rows land in the per-op tier's workspace, for the
@@ -270,3 +267,14 @@ the arming's fields, so the two cannot disagree by construction only where the a
 same probe - the kernel file's roster cell holds the arming's fields to the roster's entries. The
 module gate keeps the roster complete: every extension name and every such probe the tier calls
 appears in it.
+
+### 2.2aj The `[vk_dispatch]` lens derives `readonly` from the class family's accesses {#vk-readonly-lens}
+
+Every `@ssbo` member on a binding no `[spirv_kernel]` method of the class writes gains
+`readonly`, which the emitter decorates NonWritable, so the driver orders no load of that
+binding behind a store. The verdict is the family's: a field is one declaration for every
+kernel of the class, so a binding one method writes is written for all of them, and a written
+view protects its same-binding aliases. A method body the access classifier refuses counts as
+writing every binding, so a body the classifier cannot read loses the decoration rather than
+carrying a false one. A declared `@readonly` on a binding a kernel writes is the one shape that
+yields a module the validator rejects, and the lens refuses it.

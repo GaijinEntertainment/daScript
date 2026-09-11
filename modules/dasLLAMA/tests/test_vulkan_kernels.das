@@ -26,6 +26,7 @@ require daslib/strings_boost   // join: the spawned fixture's source
 require daslib/math_bits   // float_bits_to_uint: the f16 GEMM cell reads its NaN sentinel by bit pattern
 
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: the s and m tiles load a partial column unclamped
+let private TILE_CELL_K = 768   //! every per-format tile cell's K: one 512-unrolled pass plus a 4-step tail crossing superblock bounds on a 64-deep stamp, three 256-unrolled passes and no tail on a 32-deep one (a K-quant width is a multiple of 256)
 
 //! a format cell's arms: the cm2 l, m and s tiles through their own builders, the KHR tile and the expert schedule's e column through the ladders
 let private ARM_CM2_L = 0
@@ -134,7 +135,6 @@ let private SPV_OP_DECORATE = 71u
 let private SPV_DECOR_NONWRITABLE = 24u
 let private SPV_DECOR_BINDING = 33u
 
-//! the bindings a module's words decorate NonWritable
 def private nonwritable_bindings(words : array<uint>) : table<int> {
     var binding_of : table<uint; int>
     var nonwritable : table<uint>
@@ -174,8 +174,7 @@ def test_vkd_readonly_stamp(t0 : T?) {
     }
 }
 
-//! spawns a compile of a one-class [vk_dispatch] program whose kernel writes its second binding; `ro`
-//! declares that binding @readonly - the shape the lens refuses, since the NonWritable would be a lie
+//! spawns a compile of a one-class [vk_dispatch] program whose kernel writes its second binding; `ro` declares that binding @readonly - the shape the lens refuses
 def private spawn_readonly_fixture(ro : bool; tag : string) : tuple<rc : int; out : string> {
     let roarg = ro ? "@readonly " : ""
     let src = join([
@@ -245,9 +244,6 @@ def test_vkd_lens_readonly_gate(t0 : T?) {
     }
 }
 
-//! one small f16 GEMM shape through the cm2 class, twice: the direct store into y at a base and stride, and the eight-chunk
-//! split into the partial planes with the reduce into y at the same base - both against the f32 dot of the same f16 values,
-//! the header under the base kept as the sentinel, the bar's poison an added value that must red it
 def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         {
@@ -363,7 +359,6 @@ def test_vkd_f16_gemm(t0 : T?) {
     }
 }
 
-//! the roster entry whose name starts with `prefix`, read as the route it decides: present and not held off
 def private roster_on(roster : array<VkExtEntry>; prefix : string) : bool {
     for (e in roster) {
         if (e.name |> starts_with(prefix)) {
@@ -392,8 +387,6 @@ def test_vkd_ext_roster(t0 : T?) {
                 t |> success(empty(e.knob) || (e.knob |> starts_with("DASLLAMA_VK_")), "a roster knob is a Vulkan-tier env knob: {e.name} -> '{e.knob}'")
                 t |> success(!e.off || !empty(e.knob), "a route is held off only by a named knob: {e.name}")
             }
-            // the arming's fields against the roster's entries - the roster re-queries the device, so a
-            // probe the arming reads and the roster does not would show here as a disagreement
             t |> equal(g_gpu.has_coopmat, roster_on(roster, "VK_KHR_cooperative_matrix"), "has_coopmat follows the VK_KHR_cooperative_matrix entry")
             t |> equal(g_gpu.has_coopmat2, roster_on(roster, "VK_NV_cooperative_matrix2 (workgroup"), "has_coopmat2 follows the VK_NV_cooperative_matrix2 entry")
             t |> equal(g_gpu.has_coopmat2_fa, roster_on(roster, "VK_NV_cooperative_matrix2 reductions"), "has_coopmat2_fa follows the cm2 flash-attention entry")
@@ -2380,7 +2373,7 @@ def test_vkd_k4_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k4_khr_cls(), "the k4 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2525,7 +2518,7 @@ def test_vkd_k5_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k5_khr_cls(), "the k5 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2664,7 +2657,7 @@ def test_vkd_q40_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_q40_khr_cls(), "the q40 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2802,7 +2795,7 @@ def test_vkd_k2_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k2_khr_cls(), "the k2 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -2939,7 +2932,7 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq4nl_khr_cls(), "the iq4nl KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3077,7 +3070,7 @@ def test_vkd_iq4xs_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq4xs_khr_cls(), "the iq4xs KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3212,7 +3205,7 @@ def test_vkd_k3_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k3_khr_cls(), "the k3 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3349,7 +3342,7 @@ def test_vkd_iq3s_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq3s_khr_cls(), "the iq3s KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3484,7 +3477,7 @@ def test_vkd_iq2s_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq2s_khr_cls(), "the iq2s KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3622,7 +3615,7 @@ def test_vkd_iq2xs_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq2xs_khr_cls(), "the iq2xs KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3760,7 +3753,7 @@ def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq2xxs_khr_cls(), "the iq2xxs KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -3895,7 +3888,7 @@ def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_iq3xxs_khr_cls(), "the iq3xxs KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -4030,7 +4023,7 @@ def test_vkd_k6_cm2_batch(t0 : T?) {
             if (khr_on) {
                 verify(ensure_kq_batch_k6_khr_cls(), "the k6 KHR class rail must engage on a coopmat device")
             }
-            let n = 768                // a 64-deep arm: one 512-unrolled pass + 4 tail steps crossing superblock bounds; a 32-deep arm (the grid-codebook formats' s and e stamps): three 256-unrolled passes and no tail (a K-quant width is a multiple of 256)
+            let n = TILE_CELL_K
             let nsb = n / 256
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300
@@ -5375,9 +5368,7 @@ def test_vkd_requant_family(t0 : T?) {
                 let bad = (mismatch_qbytes(q_cls, q_ref, 1) + mismatch_approx(s_cls, s_ref)
                     + mismatch_approx(x_cls, x_ref))
                 t |> success(bad == 0, "ar+requant fused matches the CPU oracle ({bad} elements off)")
-                //! the three stamps beside it over the same x, a, w (x re-uploaded: the add writes it in place): the
-                //! row-storing twin's Q8_0 bytes and scales equal the plain twin's bit for bit and its row the oracle's;
-                //! the Q8_K twin and its row-storing twin match the Q8_K oracle over the four superblocks; the row bar reds a poison
+                //! the three stamps beside it over the same x, a, w (x re-uploaded: the add writes it in place)
                 var q_ref_k : array<uint>
                 var s_ref_k : array<float>
                 requant_oracle(y_ref, 0, dim, true, q_ref_k, s_ref_k)
@@ -6321,7 +6312,7 @@ def test_vkd_dn_family(t0 : T?) {
             let taps = dconv - 1
             let eps = 0.00001
             let qscale = 1.25
-            // --- dn_conv: depthwise conv + SiLU + q/k L2-norm, 256 channels by 32 positions per wg; 37 rows = a second position block primed from window rows ---
+            // --- dn_conv: 37 rows = a second position block primed from window rows ---
             {
                 let npos = 37
                 let hist_mode = 1
@@ -7222,8 +7213,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             poison[obase] += 1.0 + 2.0 * abs(want[obase])
             t |> success(rel_mismatches(poison, want, obase, ne) > 0, "router_gemv_f16: the bar reds a poisoned output")
             delete poison
-            //! the two-base form (the decode's beta rows and alpha rows in one dispatch): the rows from ne1 on land at
-            //! obase2, four sentinel words between the halves untouched
+            //! the two-base form: the rows from ne1 on land at obase2, the four sentinel words between the halves untouched
             let ne1 = ne / 2
             let obase2 = obase + ne1 + 4
             var want2 : array<float>

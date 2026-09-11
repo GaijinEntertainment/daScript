@@ -172,7 +172,6 @@ def private moe_forced_feed(t : T?; n : int64; fx : Fixture) {   // nolint:STYLE
             //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer
             let topk = census("topk_cls_spv") - topk0
             t |> success(topk >= layers && topk % layers == 0l, "the token command recorded a top-k per MoE layer ({topk} over {layers} layers)")
-            //! the schedule's m pieces run the e column: the three expert planes dispatch it once per MoE layer per window (an all-sentinel map still dispatches)
             t |> equal(column_census("e") - e0, 3l * layers * windows, "the expert schedule's m pieces dispatched the e column on the three expert planes, once per MoE layer per window")
         }
         delete sg

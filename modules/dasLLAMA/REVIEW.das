@@ -545,7 +545,7 @@ let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 // in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 36
-let private IMAGE_LAYOUT_STAMP_HASH = 0xbadc54ac04cbcad1ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x9e7f93d158989fb1ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
@@ -741,7 +741,7 @@ def private check_image_layout_stamp {
     }
 }
 
-// ===== the Vulkan checklist's six mechanical checks (REVIEW_GPU_VULKAN.md) =====
+// ===== the Vulkan checklist's mechanical checks (REVIEW_GPU_VULKAN.md) =====
 
 let private VK_CLASSES = "modules/dasLLAMA/dasllama/dasllama_vulkan_classes.das"
 let private VK_PREFILL = "modules/dasLLAMA/dasllama/dasllama_vulkan_prefill.das"
@@ -843,7 +843,6 @@ def private check_ar_max_dim_triple {
 var private CM2_KHR_EXEMPT <- {"Q8Cm2T"}
 var private CM2_NO_EXEMPT : table<string>
 
-// the `<Fmt>Cm2T` format templates on the cm2 base, by name, less the ones `exempt` names
 def private cm2_format_templates(exempt : table<string>) : array<string> {
     var out : array<string>
     for (line in split(strip_line_comments(fread(VK_CLASSES)), "\n")) {
@@ -864,15 +863,10 @@ struct private LadderTrio {
     why : string        //! what a missing arm does at run time
 }
 
-// the stamp's dispatch name for a format prefix: q8 is no kq format, its stamps ride `q8_batch_*`
 def private cm2_dispatch_name(fmt, tail : string) : string {
     return fmt == "q8" ? "q8_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 }
 
-// Every format template on the cm2 base ships the trio's stamp and its arm in each of the trio's three
-// prefill ladders: the f16 feed admits every such format, so a format missing one panics inside the
-// ladder the first time the tier reaches it - a KHR-mode card for the KHR trio, the first resident
-// MoE window for the e trio.
 def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
     var inscope templates <- cm2_format_templates(exempt)
     if (empty(templates)) {
@@ -912,17 +906,15 @@ def private check_cm2_ladder_sets {
         why = "the e ladders panic on the first resident MoE window"), CM2_NO_EXEMPT)
 }
 
-//! one `[vk_dispatch]`-stamped class: its dispatch name, the class it stamps and its body (the lines joined)
 struct private VkStamp {
-    name : string
+    dispatch_name : string
     cls : string
     base : string
     line : int
     body : string
 }
 
-// every `[vk_dispatch]`-stamped class of `path`, in file order (the body ends at the first line
-// starting with `}`, the file's class convention)
+//! every `[vk_dispatch]`-stamped class of `path`, in file order (a body ends at the first line starting with `}`)
 def private vk_stamps(path : string) : array<VkStamp> {
     var out : array<VkStamp>
     var pending = ""
@@ -943,7 +935,7 @@ def private vk_stamps(path : string) : array<VkStamp> {
             pending = slice(line, from, find(line, "\"", from))
         } elif (!empty(pending) && line |> starts_with("class ")) {
             let colon = find(line, " : ")
-            out |> push(VkStamp(name = pending, line = line_no,
+            out |> push(VkStamp(dispatch_name = pending, line = line_no,
                 cls = ident_prefix(slice(line, length("class "))),
                 base = colon < 0 ? "" : ident_prefix(slice(line, colon + 3))))
             cur = length(out) - 1
@@ -966,10 +958,6 @@ def private ident_after(lines : array<string>; marker : string) : string {
     return ""
 }
 
-// Every stamp of a cm2 format template names tile types that follow its own BK and BN: the A tile
-// 128 x BK, the B tile BK x BN, both accumulators 128 x BN; and the e and s stamps' BN are the
-// expert schedule's two column widths. A stamp whose types disagree with its constants compiles
-// (the template reads the types, the loop reads the constants) and loads a tile of the wrong depth.
 def private check_cm2_stamp_tiles {
     var inscope templates <- cm2_format_templates(CM2_NO_EXEMPT)
     var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
@@ -997,10 +985,9 @@ def private check_cm2_stamp_tiles {
         let unr_over = literal_after(body, "override UNR = ")
         let bn = bn_over < 0 ? bn0 : bn_over
         let bk = bk_over < 0 ? bk0 : bk_over
-        //! the unrolled block is one superblock's 256 elements at either k step: 64 x 4, 32 x 2 in the copies the loop's decode inlines
         let unr = unr_over < 0 ? unr0 : unr_over
         if (bk * unr != bk0 * unr0) {
-            gate_finding(VK_CLASSES, st.line, "{st.name}: UNR {unr} at BK {bk} - a stamp's unrolled block is one superblock ({bk0 * unr0} elements: the template's BK x UNR), so a 32-deep stamp carries `override UNR = {bk0 * unr0 / 32}u` and a 64-deep one none")
+            gate_finding(VK_CLASSES, st.line, "{st.dispatch_name}: UNR {unr} at BK {bk} - a stamp's unrolled block is one superblock ({bk0 * unr0} elements: the template's BK x UNR), so a 32-deep stamp carries `override UNR = {bk0 * unr0 / 32}u` and a 64-deep one none")
         }
         let want <- fixed_array(
             (name = "AT", tile = "coopmatWgA_f16_128x{bk}", why = "a stamp's A tile is 128 rows by its k step"),
@@ -1010,14 +997,14 @@ def private check_cm2_stamp_tiles {
         for (w in want) {
             let got = ident_after(body, "typedef {w.name} = ")
             if (got != w.tile) {
-                gate_finding(VK_CLASSES, st.line, "{st.name}: `typedef {w.name} = {got}` at BK {bk} BN {bn} - {w.why} ({w.tile}); change the constants and the types together")
+                gate_finding(VK_CLASSES, st.line, "{st.dispatch_name}: `typedef {w.name} = {got}` at BK {bk} BN {bn} - {w.why} ({w.tile}); change the constants and the types together")
             }
         }
-        if (st.name |> ends_with("_cm2e_cls") && bn != m_rows) {
-            gate_finding(VK_CLASSES, st.line, "{st.name}: BN {bn} on an e stamp - the expert schedule's m pieces are SCHED_M_ROWS ({m_rows}) rows wide, the column the stamp serves")
+        if (st.dispatch_name |> ends_with("_cm2e_cls") && bn != m_rows) {
+            gate_finding(VK_CLASSES, st.line, "{st.dispatch_name}: BN {bn} on an e stamp - the expert schedule's m pieces are SCHED_M_ROWS ({m_rows}) rows wide, the column the stamp serves")
         }
-        if (st.name |> ends_with("_cm2s_cls") && bn != s_rows) {
-            gate_finding(VK_CLASSES, st.line, "{st.name}: BN {bn} on an s stamp - the expert schedule's s pieces are SCHED_S_ROWS ({s_rows}) rows wide, the column the stamp serves")
+        if (st.dispatch_name |> ends_with("_cm2s_cls") && bn != s_rows) {
+            gate_finding(VK_CLASSES, st.line, "{st.dispatch_name}: BN {bn} on an s stamp - the expert schedule's s pieces are SCHED_S_ROWS ({s_rows}) rows wide, the column the stamp serves")
         }
     }
     if (stamped == 0) {
@@ -1027,7 +1014,6 @@ def private check_cm2_stamp_tiles {
 
 let private VK_BOOST = "modules/dasVulkan/daslib/vulkan_boost.das"
 
-// the `*_supported` probes vulkan_boost declares public - the capability reads the roster rule keys on
 def private vk_boost_probes : array<string> {
     var out : array<string>
     for (line in split(strip_line_comments(fread(VK_BOOST)), "\n")) {
@@ -1061,9 +1047,6 @@ def private vk_ext_literals(text : string) : array<string> {
     return <- out
 }
 
-// Every Vulkan capability the tier keys a route on sits in the device-init roster: the extension names
-// the tier reads by string and the vulkan_boost probes it calls. A capability read elsewhere and missing
-// from the roster leaves a box's log silent about the route it decided.
 def private check_vk_extension_roster {
     if (!fexist(VK_BOOST)) {
         gate_finding(VK_COMMON, "no {VK_BOOST} - the extension roster rule has no probe list to read; keep the path or move this check with it")

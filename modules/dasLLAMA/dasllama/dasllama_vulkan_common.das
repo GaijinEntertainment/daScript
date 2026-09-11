@@ -167,7 +167,7 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
 
 //! workgroups a (d, cnt) GEMM takes at the token column `tc`
 def cm2_tiles_at(d, cnt, tc : int64) : int64 {
-    verify(tc >= 32l, "vk prefill: a tile count over a class key that is no column width")   //! the ladders' e key (`CM2_TC_E`) never reaches a tile count
+    verify(tc >= 32l, "vk prefill: a tile count over a class key that is no column width (CM2_TC_E)")
     return ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
 }
 
@@ -175,8 +175,7 @@ def cm2_tiles_at(d, cnt, tc : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tiles(d, cnt : int64) : int64 => cm2_tiles_at(d, cnt, cm2_tile_cols(d, cnt))
 
-//! Returns (chunks, 256-aligned chunk); (1, 0) = off. `sib_tiles` = the workgroups of the roles this one co-runs
-//! beside: the group decides whether a split engages, the role's own workgroups how many chunks it takes
+//! returns (chunks, 256-aligned chunk); (1, 0) = off
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_split_k(d, cnt, n, tc : int64; sib_tiles : int64 = 0l) : tuple<nsplit : int64; ksplit : int64> {
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
@@ -244,15 +243,13 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // with headroom — vk_moe_dn asserts them and the engine arm fail-closes on bigger models.
 let DN_MAX_DS = 128l
 
-//! The sequential scan's workgroup count for a head count and state width: four subgroups of 16-row lane clusters, one column each
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
 def dn_scan_wgs(nvh, ds : int64) : int64 {
     let cpg = 4l * (32l / (ds / 16l))
     return nvh * ((ds + cpg - 1l) / cpg)
 }
 
-let DN_CONV_PB = 32u   //! the conv's positions per workgroup: a thread's channel slides its window over them
-//! The conv's workgroup count for a channel width and a row count: 256-channel blocks by DN_CONV_PB-position blocks
+let DN_CONV_PB = 32u   //! the conv's positions per workgroup
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
 def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int64(DN_CONV_PB) - 1l) / int64(DN_CONV_PB))
 
@@ -1091,8 +1088,7 @@ def vk_arm_moltenvk_env {
     }
 }
 
-//! the ReBAR memory type - device-local, host-visible and host-coherent on a heap past the 256 MiB
-//! legacy window - or -1 where the device exposes none
+//! the ReBAR memory type - device-local, host-visible and host-coherent on a big heap - or -1 where the device exposes none
 def private rebar_memory_type(phys : VkPhysicalDevice) : int {
     var rmp : VkPhysicalDeviceMemoryProperties
     vkGetPhysicalDeviceMemoryProperties(phys, rmp)
@@ -1116,8 +1112,6 @@ struct public VkExtEntry {
     rides : string      //! what the tier does with it, and what serves without it
 }
 
-//! the roster of every Vulkan capability the tier reads - the device-init log prints one line per entry,
-//! so a box's log says which route each capability decided (`REVIEW_GPU_VULKAN.md` keeps it complete)
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-extension-roster")]
 def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
     let sp = subgroup_properties(phys)
@@ -1173,7 +1167,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             rides = "the MoltenVK instance opt-in; a native driver needs none")]
 }
 
-//! one log line per roster entry: `ext <name>: present | absent | present, off (knob X) - <what rides on it>`
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-extension-roster")]
 def private vk_log_ext_roster {
     var inscope roster <- vk_ext_roster(g_gpu.phys)
     for (e in roster) {

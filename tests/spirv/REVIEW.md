@@ -25,10 +25,10 @@ directly or through the file's own validate wrapper - that admits the version it
 `vulkan1.1` admits SPIR-V 1.3 and below, `vulkan1.2` up to 1.5, `vulkan1.3` up to 1.6.**
 `vulkan1.1` is the default.
 
-**A diff that adds a `*_words` fixture covering an engine kernel - the shipped kernel whose
-shapes the fixture mirrors, named in the comment above the fixture's kernel - that an existing
-`*_words` fixture already covers deletes that existing fixture, or reshapes it onto the shapes
-that engine kernel declares, in the same change.** Two fixtures over one engine kernel let one
+**A diff that adds a `*_words` fixture covering an engine kernel - the shipped kernel that
+declares the shapes the fixture mirrors - that an existing `*_words` fixture already covers
+deletes that existing fixture, or reshapes it onto the shapes that engine kernel declares, in
+the same change.** Two fixtures over one engine kernel let one
 keep shapes that kernel no longer declares and still report green.
 
 **A diff that adds or changes a fixture runs `tests/spirv` locally on a box that resolves
