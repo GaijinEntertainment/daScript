@@ -653,9 +653,19 @@ def activate_bonus(btype : int) {
             velocities |> push(b.vel)
         }
         for (p, v in positions, velocities) {
-            let speed = length(v)
-            let vel1 = normalize(float3(v.x + sin(0.5) * speed * 0.3, 0.0, v.z)) * speed
-            let vel2 = normalize(float3(v.x + sin(-0.5) * speed * 0.3, 0.0, v.z)) * speed
+            var speed = length(v)
+            var vel1 = float3(0.0)
+            var vel2 = float3(0.0)
+            if (speed < 0.001) {
+                // a ball sitting on the paddle: the extras leave now, 35 degrees either side, it stays put
+                speed = current_ball_speed()
+                let SPLIT = 35.0 * PI / 180.0
+                vel1 = float3(sin(SPLIT), 0.0, cos(SPLIT)) * speed
+                vel2 = float3(-sin(SPLIT), 0.0, cos(SPLIT)) * speed
+            } else {
+                vel1 = normalize(float3(v.x + sin(0.5) * speed * 0.3, 0.0, v.z)) * speed
+                vel2 = normalize(float3(v.x + sin(-0.5) * speed * 0.3, 0.0, v.z)) * speed
+            }
             create_entity() @(eid, cmp) {
                 apply_decs_template(cmp, Ball(pos = p, vel = vel1))
             }
@@ -714,9 +724,7 @@ def update_powerup_timers(dt : float) {
     if (was_sticky && sticky_timer <= 0.0) {
         query() $(var b : Ball) {
             if (b.stuck != 0) {
-                let offset = b.stuck_offset / (current_paddle_w() * 0.5)
-                let angle = clamp(offset, -1.0, 1.0) * 0.7
-                b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * current_ball_speed()
+                b.vel = stuck_launch_velocity(b.stuck_offset)
                 b.stuck = 0
                 b.stuck_offset = 0.0
             }
@@ -800,6 +808,17 @@ def spawn_ball_on_paddle() {
             stuck_offset = 0.0
         ))
     }
+}
+
+//! the velocity a stuck ball leaves the paddle with: the angle its offset gives, never straight
+//! up - a vertical ball on a centered paddle would bounce between the same two spots for good
+def stuck_launch_velocity(stuck_offset : float) : float3 {
+    var offset = stuck_offset / (current_paddle_w() * 0.5)
+    if (abs(offset) < 0.1) {
+        offset = 0.3
+    }
+    let angle = clamp(offset, -1.0, 1.0) * 0.7
+    return normalize(float3(sin(angle), 0.0, cos(angle))) * current_ball_speed()
 }
 
 def has_stuck_balls() : bool {
@@ -1439,10 +1458,7 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
         if (space_just) {
             query() $(var b : Ball) {
                 if (b.stuck != 0) {
-                    var offset = b.stuck_offset / (current_paddle_w() * 0.5)
-                    if (abs(offset) < 0.1) { offset = 0.3; }  // avoid straight-up launch
-                    let angle = offset * 0.7
-                    b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * current_ball_speed()
+                    b.vel = stuck_launch_velocity(b.stuck_offset)
                     b.stuck = 0
                     b.stuck_offset = 0.0
                 }
