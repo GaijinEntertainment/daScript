@@ -5106,6 +5106,8 @@ struct VkIq2xxsBlk {
     qs : int16[32]   // one IQ2_XXS superblock's 64B qs as 16-bit lanes: per block 4 grid byte indices + its aux32 (4 x 7-bit ksigns + per-32 ls nibble); scales (f16 d8 + 8 unsigned (1 + 2s) strips) live in ws
 }
 
+let SC_STRIDE = 130u   //! the cm2 scale cache's sub-block stride: the tile's 128 rows and two of pad
+
 // The cm2 tile: one class template over three stamp axes - the token column BN, the k step BK
 // and the weight format: BLK
 // the 16-bit-lane block struct, ST the scale plane's element, BLKW the block's element width, and
@@ -5144,6 +5146,10 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant KHR : bool = false                 //!< the KHR cooperative-matrix arm: hand-staged f16 tiles over the format's own decode, no cm2 API (a card without NV_coopmat2)
     @workgroup @template_gate = KHR khr_ao : uint[int(128u * KHR_STRIDE)]   //! the A stage: 128 weight rows of f16 pairs; then the edge tile's f32 store bounce, 8 subgroups x 256 words
     @workgroup @template_gate = KHR khr_b : uint[int(128u * KHR_STRIDE)]    //! the B stage: BN (128) token rows of f16 pairs
+    @template_constant SCACHE : bool = false              //!< the scale cache: the tile's 128 rows' eight sub-block scale pairs ((d x sc, dmin x mn); IQ4_XS (d x sc, 0)) staged per superblock, so the decode reads one word pair instead of the scale plane per element
+    @template_constant SCIQ4 : bool = false               //!< the cache's fill reads the IQ4_XS two-word scale row (d | the high scale bits, the low nibbles) instead of the K-quant five
+    @workgroup @template_gate = SCACHE sc_cache : float2[int(8u * SC_STRIDE)]   //! sub-block-major, row-minor, two rows of pad per sub-block against bank conflicts
+    @ssbo @binding = 1 @role = "alias" @template_gate = SCACHE wsw : array<uint>   //! the scale plane as words, the cache's source (K-quant: five per superblock - d | dmin, eight scale bytes, eight min bytes; IQ4_XS: two)
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
     def run {
@@ -5216,6 +5222,46 @@ class template KqCm2BatchT : MoeCmBase {
         }
     }
 
+    //! the scale cache for superblock column `sb` of the tile's rows from m0: two threads per row, four sub-blocks each, the pair
+    //! premultiplied (d x sc, dmin x mn) from the scale plane's five words; a row past the plane reads the last row (its entries unused)
+    def sc_fill(m0, wblk0, sb : uint) {
+        static_if (SCACHE) {
+            let t = gl_LocalInvocationID.x
+            let r = t >> 1u
+            let g0 = (t & 1u) * 4u
+            let row = min(m0 + r, pa.d - 1u)
+            static_if (SCIQ4) {
+                let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 2u
+                let w0 = wsw[srow]
+                let w1 = wsw[srow + 1u]
+                let d = unpackHalf2x16(w0).x
+                for [unroll] (i in range(4)) {
+                    sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(d * float(iq4xs_sc(w0, w1, g0 + uint(i))), 0.0)
+                }
+            } else {
+                let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 5u
+                let dm = unpackHalf2x16(wsw[srow])
+                let scw = wsw[srow + 1u + (g0 >> 2u)]
+                let mnw = wsw[srow + 3u + (g0 >> 2u)]
+                for [unroll] (i in range(4)) {
+                    let sh = uint(i) * 8u
+                    sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(dm.x * float((scw >> sh) & 0xFFu), dm.y * float((mnw >> sh) & 0xFFu))
+                }
+            }
+        }
+    }
+
+    //! the scale cache's refill at a superblock's first k step, fenced both ways
+    def sc_step(m0, wblk0, k : uint) {
+        static_if (SCACHE) {
+            if ((k & (BLKW - 1u)) == 0u) {
+                barrier()
+                sc_fill(m0, wblk0, k / BLKW)
+                barrier()
+            }
+        }
+    }
+
     def cm2_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
         var tv : tensorView2Dt
         tensorViewCreate(tv)
@@ -5246,6 +5292,7 @@ class template KqCm2BatchT : MoeCmBase {
             if (pa.ksplit == 0u) {
                 var k = 0u
                 for (_i in range(int(pa.n / (BK * UNR)))) {
+                    sc_step(m0, wblk0, k)
                     for [unroll] (_j in range(int(UNR))) {
                         static_if (DECV4) {
                             coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
@@ -5258,6 +5305,7 @@ class template KqCm2BatchT : MoeCmBase {
                     }
                 }
                 while (k < pa.n) {
+                    sc_step(m0, wblk0, k)
                     static_if (DECV4) {
                         coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                     } else {
@@ -5279,6 +5327,7 @@ class template KqCm2BatchT : MoeCmBase {
             }
             var k = k0
             for (_i in range(int((k1 - k0) / (BK * UNR)))) {
+                sc_step(m0, wblk0, k)
                 for [unroll] (_j in range(int(UNR))) {
                     static_if (DECV4) {
                         coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
@@ -5291,6 +5340,7 @@ class template KqCm2BatchT : MoeCmBase {
                 }
             }
             while (k < k1) {
+                sc_step(m0, wblk0, k)
                 static_if (DECV4) {
                     coopmatLoadTensorDecode(a, wq, wblk0, fla, m0, 128u, k, BK, self.decode, self.decode_v4)
                 } else {
@@ -5327,6 +5377,7 @@ class template KqCm2BatchT : MoeCmBase {
         if (pa.ksplit == 0u) {
             var k = 0u
             for (_i in range(int(pa.n / (BK * UNR)))) {
+                sc_step(m0, wblk0, k)
                 for [unroll] (_j in range(int(UNR))) {
                     coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
                     coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
@@ -5335,6 +5386,7 @@ class template KqCm2BatchT : MoeCmBase {
                 }
             }
             while (k < pa.n) {
+                sc_step(m0, wblk0, k)
                 coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
                 coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
                 acc = coopmatMulAdd(a, b, acc)
@@ -5348,6 +5400,7 @@ class template KqCm2BatchT : MoeCmBase {
         }
         var k = k0
         for (_i in range(int((k1 - k0) / (BK * UNR)))) {
+            sc_step(m0, wblk0, k)
             for [unroll] (_j in range(int(UNR))) {
                 coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
                 coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
@@ -5356,6 +5409,7 @@ class template KqCm2BatchT : MoeCmBase {
             }
         }
         while (k < k1) {
+            sc_step(m0, wblk0, k)
             coopmatLoadTensorDecode(a, wq, wblk0, tla, m0, 128u, k, BK, self.decode)
             coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, BK, tv)
             acc = coopmatMulAdd(a, b, acc)
@@ -5485,6 +5539,7 @@ class template K4Cm2T : KqCm2BatchT {
     typedef BLK = VkK4Blk
     typedef ST = uint
     override DECV4 = true
+    override SCACHE = true
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
@@ -5510,11 +5565,8 @@ class template K4Cm2T : KqCm2BatchT {
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let sc = (ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        let mn = (ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu
-        return float16(dm.x * float(sc) * float(q) - dm.y * float(mn))
+        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's (d x sc, dmin x mn) for the tile row, staged per superblock
+        return float16(v.x * float(q) - v.y)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5525,12 +5577,9 @@ class template K4Cm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        return half4(float4(ds * float((l0 >> sh) & 0xFu) - dmn, ds * float((l0 >> (sh + 8u)) & 0xFu) - dmn,
-            ds * float((l1 >> sh) & 0xFu) - dmn, ds * float((l1 >> (sh + 8u)) & 0xFu) - dmn))
+        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's (d x sc, dmin x mn) for the tile row, staged per superblock
+        return half4(float4(v.x * float((l0 >> sh) & 0xFu) - v.y, v.x * float((l0 >> (sh + 8u)) & 0xFu) - v.y,
+            v.x * float((l1 >> sh) & 0xFu) - v.y, v.x * float((l1 >> (sh + 8u)) & 0xFu) - v.y))
     }
 }
 
@@ -5616,6 +5665,7 @@ class template K5Cm2T : KqCm2BatchT {
     typedef BLK = VkK5Blk
     typedef ST = uint
     override DECV4 = true
+    override SCACHE = true
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
@@ -5654,11 +5704,8 @@ class template K5Cm2T : KqCm2BatchT {
         let hb = ((uint(int(blk.qh[int(hidx >> 1u)])) & 0xFFFFu) >> ((hidx & 1u) * 8u)) >> ((j & 3u) + h * 4u)
         let q0 = ((w >> (h * 4u)) & 0xFu) | ((hb & 1u) << 4u)
         let q1 = ((w >> (h * 4u + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let sc = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        let mn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        return float16((e & 1u) != 0u ? sc * float(q1) - mn : sc * float(q0) - mn)
+        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's (d x sc, dmin x mn) for the tile row, staged per superblock
+        return float16((e & 1u) != 0u ? v.x * float(q1) - v.y : v.x * float(q0) - v.y)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5677,11 +5724,8 @@ class template K5Cm2T : KqCm2BatchT {
         let q1 = ((l0 >> (sh + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
         let q2 = ((l1 >> sh) & 0xFu) | (((hb >> 2u) & 1u) << 4u)
         let q3 = ((l1 >> (sh + 8u)) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dm = unpackHalf2x16(ws[srow])
-        let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-        return half4(float4(ds * float(q0) - dmn, ds * float(q1) - dmn, ds * float(q2) - dmn, ds * float(q3) - dmn))
+        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's (d x sc, dmin x mn) for the tile row, staged per superblock
+        return half4(float4(v.x * float(q0) - v.y, v.x * float(q1) - v.y, v.x * float(q2) - v.y, v.x * float(q3) - v.y))
     }
 }
 
@@ -5741,6 +5785,8 @@ class template Iq4xsCm2T : KqCm2BatchT {
     typedef ST = uint
     override IQLUT = true
     override DECV4 = true
+    override SCACHE = true
+    override SCIQ4 = true
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
@@ -5765,11 +5811,8 @@ class template Iq4xsCm2T : KqCm2BatchT {
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let w0 = ws[srow]
-        let d = unpackHalf2x16(w0).x
-        let sc = iq4xs_sc(w0, ws[srow + 1u], g)
-        return float16(d * float(sc) * float(iq4lut[int(q)]))
+        let v = sc_cache[g * SC_STRIDE + (bc.x & 127u)]   //! the sub-block's d x sc for the tile row, staged per superblock
+        return float16(v.x * float(iq4lut[int(q)]))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -5780,11 +5823,7 @@ class template Iq4xsCm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
-        let w0 = ws[srow]
-        let d = unpackHalf2x16(w0).x
-        let sc = iq4xs_sc(w0, ws[srow + 1u], g)
-        let ds = d * float(sc)
+        let ds = sc_cache[g * SC_STRIDE + (bc.x & 127u)].x
         return half4(float4(ds * float(iq4lut[int((l0 >> sh) & 0xFu)]), ds * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
             ds * float(iq4lut[int((l1 >> sh) & 0xFu)]), ds * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
     }

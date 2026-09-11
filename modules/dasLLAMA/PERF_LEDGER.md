@@ -186,6 +186,25 @@ what it costs today and what the fix would change.
   reps (0.960x of 5217), tg32 132.5; the sanity argmax the same token, its logit 0.02 apart (the
   norm's sum in butterfly order) [direction-grade - one commit].
 
+- **LANDED (2026-09-10) - the k4, k5 and iq4xs cm2 tiles stage a scale cache: the tile's 128
+  rows' eight sub-block scales (the K-quants' (d x sc, dmin x mn) pairs, IQ4_XS's d x (ls - 32)),
+  filled once per superblock into shared memory, the decode reading one word pair where it read
+  the scale plane per element.** The reference exe's `shAscales` form (its Q4_K and Q5_K tiles
+  alone carry it; it has none for IQ4_XS). Linux RTX 5080, the scalar arm, `cm2:k5`: gate l 83.9
+  -> 116.2 TFLOP/s, m 62.7 -> 99.9, q/wo l 69.9 -> 95.9, m 54.0 -> 86.7, the shared expert's down
+  25 -> 17 us; `cm2:k4`: gate l 119.5, m 102.0, q/wo l 100.5, m 87.1 - past the reference exe's
+  own 93-96 on the gate shape; `cm2:iq4xs`: gate l 109.4, m 102.9, q/wo l 91.4. The 35B pp512
+  5010.1 +- 47.0 -> 5091.5 +- 51.9 (0.970x of the day's reference row 5246.7 +- 35.9; its q5_K
+  roles are the qkv, z, q and shared-expert planes), tg32 132.8; the Qwen3.5-9B UD-Q5_K_XL pp512
+  4369 +- 11 -> 5133 +- 8 (0.760x -> 0.892x of 5751), its profiled window 116 -> 99 ms (the q5_K
+  FFN roles 18.2 / 17.9 / 16.6 -> 13.9 / 13.7 / 13.9 ms, qkv 11.2 -> 9.6, the attention layers'
+  FFN 16.0 -> 13.4); the Qwen3.8-27B UD-IQ4_XS pp512 1496 -> 1708.5 +- 1.6 (0.892x -> 1.014x of
+  1684.9 +- 1.6), tg32 39.35; the Qwen3.8-27B UD-Q3_K_XL pp512 1469 -> 1596.3 +- 0.8 (0.883x ->
+  0.959x of 1665.2 +- 2.9; its q3_K roles stage no cache), tg32 41.3. RTX 5060 Ti, the four-wide
+  arm: the 9B 2570 +- 56 -> 2642 +- 17 (the twin already shared one scale extraction across four
+  elements), the 35B 2919 +- 66 (flat). The k4, k5 and iq4xs tile cells match the CPU oracle on
+  all five arms [direction-grade - one commit].
+
 - **OPEN (narrowed) - the gemma3v encode residual after the tower flash: ~0.92x vs the
   pair.** The slab road closed in three landings: the 96 head pad (guarded AV columns,
   668 -> 486 -> 452), then the LIFTED dk72 flash (MetalTowerFlash + the per-head-contiguous

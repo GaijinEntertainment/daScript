@@ -1165,7 +1165,17 @@ module) is independent and can land any time - it is pure structure.
     cost their floor - a decode arc of its own. Pod mechanics the rows needed: the Linux driver's
     memory-budget query counts a just-exited process's VRAM for a while, so a run right after another
     declines the resident driver (the 2048 MB headroom fallback) - `DASLLAMA_GPU_VRAM_MB=15500` pins the
-    cap and a 20 s pause clears it; the 27B Q4_K_M (16.6 GB) does not fit the 5080. Found on the way, not
+    cap and a 20 s pause clears it; the 27B Q4_K_M (16.6 GB) does not fit the 5080. The K-quant lever
+    landed as the reference exe's `shAscales` form: the k4, k5 and iq4xs tiles stage the sub-block scales
+    per superblock (GEMM companion sec.2.2k) - `cm2:k5` gate l 83.9 -> 116.2 TFLOP/s and m 62.7 -> 99.9,
+    `cm2:k4` gate l 119.5 - past the reference exe's 93-96 - and `cm2:iq4xs` gate l 109.4, m 102.9, q/wo
+    l 91.4 (upstream carries no cache for IQ4_XS); the 35B 5010 -> 5091 +- 52 (0.970x of the day's 5247),
+    the 9B 4369 -> 5133 +- 8 (0.892x; its window 116 -> 99 ms against the reference's 89 - what is left
+    there: the scan 8.2 ms, out 4.1, z 5.5, the q/k/v/wo 6.9), the 27B UD-IQ4_XS 1496 -> 1708.5 +- 1.6
+    (1.014x of 1684.9 +- 1.6; tg32 39.35, decode untouched), the 27B UD-Q3_K_XL 1469 -> 1596.3 +- 0.8
+    (0.959x of 1665.2 +- 2.9; tg32 41.3). Left for the dense files: the 9B's non-GEMM ms above, the 27B
+    UD-Q3_K_XL's q3_K roles (k3 reads a 6-bit split scale per element and stages no cache yet), then the
+    decode arc. Found on the way, not
     of this lever: the iq2xxs cm2 stamps' modules fail spirv-val's OpVariable placement check ("All
     OpVariable instructions in a function must be the first instructions in the first block") in a
     decode function - the emitter hoists a kernel body's locals to its entry block but not a
