@@ -400,7 +400,12 @@ extern "C" {
                 finfo->fields = (VarInfo **) code->allocate(sizeof(VarInfo *) * finfo->count);
                 memset(finfo->fields, 0, sizeof(VarInfo *) * finfo->count);
             }
-            finfo->fields[arg] = (VarInfo *) debugInfo;
+            // the emitter hands a TypeInfo; readers of fields[] expect a VarInfo (name, offset past it)
+            auto vi = (VarInfo *) code->allocate(sizeof(VarInfo));
+            memset(vi, 0, sizeof(VarInfo));
+            memcpy((TypeInfo *) vi, debugInfo, sizeof(TypeInfo));
+            vi->name = "";
+            finfo->fields[arg] = vi;
         }
 
         void initFunctionAddr ( uint64_t index, void * globPtr ) {
