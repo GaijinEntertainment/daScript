@@ -1,0 +1,8 @@
+# LeakSanitizer suppressions for the sanitizer CI lanes (DAS_USE_SANITIZER=asan).
+# The Uri handle is bound to daslang without auto-finalize, so a parsed Uri that the
+# script drops leaks by construction - tracked separately, the real fix is in the binding.
+leak:uriParseSingleUriA
+leak:uriMakeOwner
+
+# format_error is deliberately NOT suppressed: FMT_THROW destroys the exception before the
+# panic jump, and the linux64 lane is the regression canary for that.

@@ -49,7 +49,38 @@ if(NOT DAS_TOOLS_DISABLED)
         elseif(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
             set(_DAS_JIT_LINKER_STRING "--jit-linker-string=-fsanitize=thread")
         endif()
-        set(_DAS_JIT_FLAGS ${_DAS_JIT_LINKER_STRING} $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3>)
+        # A sanitizer build links its JIT dll with the compiler that built daslang: c++ is g++
+        # on Ubuntu, whose asan/tsan runtime the clang-built binary cannot load.
+        set(_DAS_JIT_PATH_TO_LINKER "")
+        if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+            set(_DAS_JIT_PATH_TO_LINKER "--jit-path-to-linker=${CMAKE_CXX_COMPILER}")
+        endif()
+        set(_DAS_JIT_FLAGS ${_DAS_JIT_LINKER_STRING} ${_DAS_JIT_PATH_TO_LINKER} $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3>)
+
+        # The sanitizer runtimes read these from the environment of the process under test, so
+        # the target carries them - otherwise every caller repeats them and they drift apart.
+        # detect_leaks=0 for the JIT sweep: it exits through exit(), running no destructors.
+        set(_DAS_SAN_ENV "")
+        if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+            set(_DAS_SAN_ENV ${CMAKE_COMMAND} -E env
+                "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/.github/lsan_suppressions.txt"
+                "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/.github/tsan_suppressions.txt"
+                "UBSAN_OPTIONS=print_stacktrace=1"
+                "ASAN_OPTIONS=detect_leaks=0")
+        endif()
+
+        # A sanitizer lane sweeps tests/language only: the whole suite under asan/tsan/ubsan
+        # costs ~10 minutes more without proportionate coverage.
+        set(_DAS_JIT_TEST_DIR ${_DAS_TEST_DIR})
+        if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+            set(_DAS_JIT_TEST_DIR ${_DAS_TEST_DIR}/language)
+        endif()
+        set(_DAS_JIT_COMMON --color --failures-only --test ${_DAS_JIT_TEST_DIR})
+
+        set(DAS_TEST_JIT_TIMEOUT 1800 CACHE STRING
+            "dastest global suite watchdog, seconds, for run_tests_jit")
+        set(DAS_TEST_JIT_TIMEOUT_ISOLATED 3600 CACHE STRING
+            "dastest global suite watchdog, seconds, for run_tests_jit_isolated")
         # Primary JIT sweep runs isolated-PARALLEL (2x-hw-thread worker
         # subprocesses, 4 files per batch): ~3x FASTER wall-clock than the sequential
         # sweep with an identical pass/fail set, and cold-cache parallel beats
@@ -59,14 +90,14 @@ if(NOT DAS_TOOLS_DISABLED)
         # exactly one batch. The _isolated retry stays batch-1 (one process per
         # test — max crash isolation, and a batch crash re-dispatches per-file).
         add_custom_target(run_tests_jit
-            COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_TEST_COMMON} --isolated-mode --batch 4 --timeout 1800
+            COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --batch 4 --timeout ${DAS_TEST_JIT_TIMEOUT}
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated-parallel)"
             USES_TERMINAL
         )
         add_custom_target(run_tests_jit_isolated
-            COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_TEST_COMMON} --isolated-mode --timeout 3600
+            COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --timeout ${DAS_TEST_JIT_TIMEOUT_ISOLATED}
             DEPENDS daslang
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
             COMMENT "Running tests (JIT, isolated retry)"
