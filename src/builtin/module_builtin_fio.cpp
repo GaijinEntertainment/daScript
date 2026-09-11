@@ -318,6 +318,8 @@ namespace das {
     DAS_API bool load_deferred_dynamic_module ( const char * ) GENERATE_IO_STUB_RET
     DAS_API size_t load_all_deferred_dynamic_modules () GENERATE_IO_STUB_RET
     DAS_API bool is_dynamic_module_deferred ( const char * ) GENERATE_IO_STUB_RET
+    DAS_API bool pending_dynamic_module_artifact_present () GENERATE_IO_STUB_RET
+    DAS_API string registered_dynamic_module_name ( const char *, const char * ) GENERATE_IO_STUB_RET
     DAS_API void clear_deferred_dynamic_modules () GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
@@ -2325,6 +2327,19 @@ namespace das {
         return on;
     }
 
+    // Debug builds produce _debug.shared_module; rewrite the path so that
+    // .das_module files don't need per-config conditional logic.
+    static string dynamic_module_actual_path ( const char * path ) {
+        string actualPath(path);
+#ifndef NDEBUG
+        auto pos = actualPath.rfind(".shared_module");
+        if ( pos != string::npos && pos + 14 == actualPath.size() ) {
+            actualPath.insert(pos, "_debug");
+        }
+#endif
+        return actualPath;
+    }
+
     // Returns DLL handle, nullptr on failure. on_error governs LOAD failures only:
     // Quiet defers a failed dlopen to retry_pending_dynamic_modules() (sibling-dep
     // ordering). A loadable-but-broken artifact (registrator missing, build-id
@@ -2340,15 +2355,7 @@ namespace das {
             row.on_error = on_error;
             g_manifest_rows.push_back(das::move(row));
         }
-        string actualPath(path);
-#ifndef NDEBUG
-        // Debug builds produce _debug.shared_module; rewrite the path so that
-        // .das_module files don't need per-config conditional logic.
-        auto pos = actualPath.rfind(".shared_module");
-        if ( pos != string::npos && pos + 14 == actualPath.size() ) {
-            actualPath.insert(pos, "_debug");
-        }
-#endif
+        string actualPath = dynamic_module_actual_path(path);
         auto lib = loadDynamicLibrary(actualPath.c_str());
         // Capture the dlopen error once, before anything else can clear it.
         string dlErr = lib ? string() : getDynamicLibraryError();
@@ -2418,6 +2425,15 @@ namespace das {
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {
         return register_dynamic_module(path, mod_name, static_cast<int>(RegisterOnError::Quiet), context, at);
+    }
+
+    // the das-visible name a registered module took, by the path and class its row carries; empty while it is not registered
+    DAS_API string registered_dynamic_module_name ( const char * path, const char * cpp_class ) {
+        if ( !path || !cpp_class ) return string();
+        for ( const auto & [p, c, n] : g_registered_dynamic_modules ) {
+            if ( p == path && c == cpp_class ) return n;
+        }
+        return string();
     }
 
     DAS_API void replay_dynamic_module ( const char * path, const char * cpp_class, int on_error ) {
@@ -2498,6 +2514,17 @@ namespace das {
                 }
             }
         }
+    }
+
+    // src/ast/ARCHITECTURE.md sec.2 - a pending row whose artifact is on disk failed on something
+    // other than a missing file: on a platform that resolves imports at load, a sibling the
+    // deferred set still holds
+    DAS_API bool pending_dynamic_module_artifact_present() {
+        for (auto & pr : g_pending_dynamic_modules) {
+            std::error_code ec;
+            if (std::filesystem::exists(das_to_path(dynamic_module_actual_path(get<0>(pr).c_str()).c_str()), ec) && !ec) return true;
+        }
+        return false;
     }
 
     // One line per still-pending (dlopen-failed) module: "  Module_Glfw <- <path> (<dlerror>)"
@@ -2819,7 +2846,7 @@ namespace das {
         std::ofstream ofs(p, std::ios::binary);
         if ( !ofs ) return nullptr;
         ofs.close();
-        auto s = p.string();
+        auto s = path_to_das(p);
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
@@ -2833,7 +2860,7 @@ namespace das {
             if ( ec ) error = ec_to_string(ec, ctx, at);
             return nullptr;
         }
-        auto s = p.string();
+        auto s = path_to_das(p);
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
@@ -2841,7 +2868,7 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
         std::error_code ec;
-        auto si = std::filesystem::space(path, ec);
+        auto si = std::filesystem::space(das_to_path(path), ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         info.capacity = si.capacity;
         info.free = si.free;

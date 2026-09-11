@@ -4,15 +4,22 @@
 `ARCHITECTURE.md`.
 
 - **Weakening `REVIEW.das` (beside this file) is a defect:** dropping its scan of the prints in
-  `trySerializeProgramModule` (`ast_parse.cpp`, `ARCHITECTURE.md` sec.1) or of the cache-read
-  lines elsewhere in that file, or a finding text that no longer names what failed. What the gate
-  enforces is read from the gate itself.
+  `trySerializeProgramModule` (`ast_parse.cpp`, `ARCHITECTURE.md` sec.1) or of the module-cache
+  read diagnostics elsewhere in that file, or a finding text that no longer names what failed.
+  What the gate enforces is read from the gate itself.
 
-- **A diff that adds a module-cache read diagnostic outside `trySerializeProgramModule`, or moves
-  one out of it - into a helper it calls, or another function - extends `REVIEW.das`'s scan to the
-  new home in the same change, and the line prints only when the user asked: the serializer's
-  `quietCache` off, or `log_module_compile_time` set.** A print the gate does not scan is a print
-  nobody checks, and an ungated line there is output every user of the default cache sees.
+- **A diff that adds a module-cache read diagnostic outside `trySerializeProgramModule`
+  (`ast_parse.cpp`), or moves one out of it - into a helper it calls, or another function -
+  extends `REVIEW.das`'s scan to the new home in the same change, and prints the line only when
+  the serializer's `quietCache` is off or `log_module_compile_time` is set.** A module-cache read
+  diagnostic is a line reporting one record read of the module cache, the kind
+  `trySerializeProgramModule` prints; the module scan's `[module]` trace is not one. A print the
+  gate does not scan is a print nobody checks, and an ungated line there is output every user of
+  the default cache sees.
+
+- **A diff that adds a `[module]` line to the module scan's trace (`dyn_modules.cpp`) prints it
+  only behind `trace_scan()`, the switch `DAS_TRACE_MODULE_LOAD` sets.** The scan runs on every
+  start, so a line outside the switch is output every user sees.
 
 - **A diff that changes what a manifest written by an earlier binary replays to - a field added,
   removed, reordered or re-typed in `read_manifest` or `write_manifest` (`dyn_modules.cpp`), a

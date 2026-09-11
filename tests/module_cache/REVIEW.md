@@ -3,12 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-- **Editing an assertion literal, or the helper that produces the text a test in this folder
-  compares a spawned child's output or the files it wrote against, so it accepts an output the
-  old text rejected is a defect; re-pinning a count or the fixed words of the scan-trace
-  `[module] descriptor ...` line or the cache's verdict line to the child's new true output is
-  not.** A child's output is the only instrument a human has for what the cache and the scan
-  served.
+- **A diff that changes an assertion literal, or the helper producing the text a test in this
+  folder compares a spawned child's output or the files it wrote against, so the compare accepts
+  text the child does not truly emit is a defect.** A child's output is the only instrument a
+  human has for what the cache and the module scan served.
 
 - **A helper that trims a child's line before the compare drops only its elapsed times - every
   other field on the line, a count included, stays in the compared text.** A dropped field is

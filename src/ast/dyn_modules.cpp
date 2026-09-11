@@ -108,9 +108,16 @@ static bool trace_scan() {
 
 enum class ManifestVerdict { Missing, Stale, Damaged, OptOut, Replay };
 
+struct DepStamp {
+    string path;
+    uint32_t size = 0;
+    uint64_t hash = 0;
+};
+
 struct ManifestRead {
     ManifestVerdict verdict = ManifestVerdict::Missing;
     das::vector<DynModuleManifestRow> rows;
+    das::vector<DepStamp> deps;     // the key's dependency stamps, verified against the files - a rewrite carries them
     string why;
 };
 
@@ -135,12 +142,6 @@ static string hex64(uint64_t v) {
     snprintf(buf, sizeof(buf), "%016llx", (unsigned long long) v);
     return buf;
 }
-
-struct DepStamp {
-    string path;
-    uint32_t size = 0;
-    uint64_t hash = 0;
-};
 
 // one hash per file per FileAccess, however many descriptors share it
 static bool dep_stamp(const smart_ptr<FileAccess> & fa, const string & path, uint32_t & size, uint64_t & hash) {
@@ -260,6 +261,7 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
             uint64_t hash = 0;
             if ( !dep_stamp(fa, fields[1], size, hash) ) return stale("dependency missing");
             if ( fields[2] != to_string(size) || fields[3] != hex64(hash) ) return stale("dependency changed");
+            res.deps.push_back(DepStamp{fields[1], size, hash});
         } else if ( kind == "np" ) {
             if ( fields.size() != 4 ) return damaged("np field count");
             DynModuleManifestRow row;
@@ -353,6 +355,38 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
 #endif
 }
 
+// src/ast/ARCHITECTURE.md sec.2 - a replayed manifest with a nameless dm row, kept until the scan ends
+struct NamelessRowsManifest {
+    string descriptor, file;
+    uint32_t descSize = 0;
+    uint64_t descHash = 0;
+    ManifestKey key;
+    das::vector<DepStamp> deps;
+    das::vector<DynModuleManifestRow> rows;
+};
+static das::vector<NamelessRowsManifest> g_nameless_manifests;
+
+static void name_replayed_rows() {
+    for ( auto & m : g_nameless_manifests ) {
+        size_t named = 0;
+        for ( auto & row : m.rows ) {
+            if ( !row.dynamic || !row.c.empty() ) continue;
+            auto name = registered_dynamic_module_name(row.a.c_str(), row.b.c_str());
+            if ( name.empty() ) continue;
+            row.c = name;
+            named ++;
+        }
+        if ( named == 0 ) continue;
+        string why;
+        const bool written = write_manifest(m.file, m.descSize, m.descHash, m.key, m.deps, m.rows, false, why);
+        if ( trace_scan() ) {
+            LOG(LogLevel::info) << "[module] descriptor " << m.descriptor
+                << (written ? ": manifest rewritten, " + to_string(named) + " row(s) named" : ": manifest not rewritten: " + why) << "\n";
+        }
+    }
+    g_nameless_manifests.clear();
+}
+
 static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter &tout, bool debug = false) {
     const auto mod_filename = path + "/" + MODULE_SUFFIX;
     if (debug) {
@@ -386,6 +420,13 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     if ( mr.verdict == ManifestVerdict::Replay ) {
         int64_t dllUsec = 0;
         size_t deferred = 0;
+        bool nameless = false;
+        for ( auto & row : mr.rows ) {
+            nameless |= row.dynamic && row.c.empty();
+        }
+        if ( nameless ) {   // src/ast/ARCHITECTURE.md sec.2 - named at the end of the scan once the module registered
+            g_nameless_manifests.push_back({mod_filename, manifest, len, stamp, key, mr.deps, mr.rows});
+        }
         for ( auto & row : mr.rows ) {
             if ( row.group ) {
                 replay_module_group(row.a.c_str(), row.b.c_str(), row.c.c_str());
@@ -645,6 +686,7 @@ bool require_dynamic_modules(FileAccessPtr file_access,
                              const das::vector<das::string> &disabled_modules,
                              das::TextWriter &tout) {
     clear_deferred_dynamic_modules();
+    g_nameless_manifests.clear();
     setDeferredModuleLoader(&load_deferred_module_for_require);
     // Explicitly-disabled modules (case-insensitive on every platform) are never
     // loaded/registered — keeps a native-only module out of a wasm cross-compile.
@@ -693,6 +735,14 @@ bool require_dynamic_modules(FileAccessPtr file_access,
     // before its dependency — its register_dynamic_module dlopen then fails and is
     // deferred. Retry the deferred set in fixed-point passes so order stops mattering.
     retry_pending_dynamic_modules();
+    // src/ast/ARCHITECTURE.md sec.2 - still pending with its artifact on disk: an import a deferred row holds
+    if ( pending_dynamic_module_artifact_present() ) {
+        if ( trace_scan() ) {
+            LOG(LogLevel::info) << "[module] a pending module's artifact exists - loading every deferred module\n";
+        }
+        load_all_deferred_dynamic_modules();
+    }
+    name_replayed_rows();
     return all_good;
 }
 

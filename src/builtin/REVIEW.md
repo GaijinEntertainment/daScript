@@ -64,6 +64,11 @@
   the cache-key paragraph of `ARCHITECTURE.md` in the same change.** The key is what stops a
   native-compiled module serving a cross compile, so a wrong description of it gets trusted.
 
+- **A diff that adds a `std::filesystem` call in `module_builtin_fio.cpp` passes every path into
+  it through `das_to_path` and every path out of it through `path_to_das`.** On Windows a path
+  built from a narrow string decodes through the ANSI codepage, so a UTF-8 name the codepage
+  cannot represent is misread on the way in and throws on the way out.
+
 - **A diff that changes C++ whose comment cites a section of an architecture document - this
   folder's (`// src/builtin/ARCHITECTURE.md sec.N`) or another's (`// src/ast/ARCHITECTURE.md
   sec.N`) - updates that section in the same change.** C++ carries no `[arch]` annotation, so
