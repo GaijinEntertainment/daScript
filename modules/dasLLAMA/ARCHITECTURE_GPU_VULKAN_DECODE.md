@@ -221,8 +221,12 @@ it writes the f32 row and the Q8_K requant - the attention head's wo twin - make
 feed, billed to the out role so the stamp count stands; the beta and alpha rows are q8 arena planes when
 the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
 recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
-base into the smalls. A hybrid takes the split activation rail (no fused add+rms+requant): the f32
-GEMVs read the normed row `xb`, which the fused twin never writes.
+base into the smalls. The fused add+rms+requant serves every site on every model: each site's
+stamp is picked once all layers are registered (`rd_fused_sets`, `rq_kind`) - Q8_0 or Q8_K by the
+consumer's block form (the layer's triple, a bare MoE layer's experts, the next layer's head, the
+classifier), and a stamp that also stores the normed row where a consumer reads it as floats (a
+recurrent head's beta/alpha GEMV, a MoE router); a MoE layer's residual step stays the combine,
+so the layer after it requants on its own.
 
 **Each recurrent layer owns a device state slot in the per-op step's shape** (`DnStep`: the
 state, the smalls with the parity-double-buffered conv ring, the owner's host addresses), and

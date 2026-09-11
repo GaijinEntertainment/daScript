@@ -141,13 +141,11 @@ or `override DECV4 = false` and `override DECVEC = false` together, which puts t
 on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
 `override DECVEC = false` alone leaves the hand-written twin running.
 
-**A diff that changes how many GPU timestamps the resident decode's token command records - the
-`pfq_ts` calls in `dasllama/dasllama_vulkan_decode.das` - updates the stamp count `rdq_sample`
-expects and, for every layer kind whose count moved, that file's role-name tables
-(`rdq_role_names`, `RDQ_DN_NAMES`, `rd_moe_tail_names`) and the matching accumulators in
-`dasllama/dasllama_vulkan_common.das` (`g_rdq_role`, `g_rdq_dn`, `g_rdq_moe`), in the same
-change.** `rdq_sample` indexes a fixed count per layer, so one extra or missing timestamp
-reports every later stamp under the wrong role name.
+**A GPU timestamp the resident decode's token command records goes through `rd_ts` with the name
+its interval bills - never a bare `pfq_ts` - in `dasllama/dasllama_vulkan_decode.das`.** The
+profiler (`rdq_sample`) sums intervals by the recorder's own names, so a bare stamp leaves the
+stamp count past the names and the token's roles unaggregated; a name's prefix (`a:` `d:` `m:` `p:`
+`t:`) picks its table, and a name shared by two stamps (`a:kv`) sums them on purpose.
 
 **A decode GEMV class - a `KqGemvBase` leaf in `dasllama/dasllama_vulkan_classes.das` - that
 stages a codebook into `@workgroup` memory reads it from the family's grid buffer (`gridb`,

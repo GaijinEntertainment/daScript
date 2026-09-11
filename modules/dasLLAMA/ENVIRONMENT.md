@@ -125,7 +125,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_COOPMAT` | text | auto | Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4); the flash-attention twin needs it even when the GEMM runs sdot4. |
 | `DASLLAMA_MM_SMALL` | text | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
 | `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
-| `DASLLAMA_VK_FUSE` | flag | on | Fused add+rms+requant: the decode tail (plus qk-norm+rope) AND the prefill batch ar+rq pairs; 0 pins the split dispatches for a same-build A/B. |
+| `DASLLAMA_VK_FUSE` | flag | on | Fused add+rms+requant: every site of the decode token command on every model (Q8_0 or Q8_K by the consumer, the normed row stored where a head or router reads it; plus qk-norm+rope) AND the prefill batch ar+rq pairs; 0 pins the split dispatches for a same-build A/B. |
 | `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail. |
 | `DASLLAMA_VK_DECVEC` | flag | on | Run the cm2 tiles' four-wide decode callback where the device has VK_NV_cooperative_matrix_decode_vector; 0 strips it and serves the scalar callback - the same-build A/B and the fallback probe. |
 | `DASLLAMA_VK_IMPORT` | flag | on | Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path. |

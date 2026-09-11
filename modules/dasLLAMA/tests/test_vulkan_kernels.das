@@ -5285,7 +5285,7 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
 def test_vkd_requant_family(t0 : T?) {
     t0 |> run("fused ar+requant + q8k requant class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_cls_ar_rq() && ensure_cls_q8k_rq())) {
+            if (!(ensure_cls_ar_rq() && ensure_cls_q8k_rq() && ensure_cls_ar_rqx() && ensure_cls_ar_rqk() && ensure_cls_ar_rqkx())) {
                 feint("no Vulkan device - skipping\n")
                 return
             }
@@ -5374,6 +5374,78 @@ def test_vkd_requant_family(t0 : T?) {
                 let bad = (mismatch_qbytes(q_cls, q_ref, 1) + mismatch_approx(s_cls, s_ref)
                     + mismatch_approx(x_cls, x_ref))
                 t |> success(bad == 0, "ar+requant fused matches the CPU oracle ({bad} elements off)")
+                //! the three stamps beside it over the same x, a, w (x re-uploaded: the add writes it in place): the
+                //! row-storing twin's Q8_0 bytes and scales equal the plain twin's bit for bit and its row the oracle's;
+                //! the Q8_K twin and its row-storing twin match the Q8_K oracle over the four superblocks; the row bar reds a poison
+                var q_ref_k : array<uint>
+                var s_ref_k : array<float>
+                requant_oracle(y_ref, 0, dim, true, q_ref_k, s_ref_k)
+                let sk_bytes = int64(dim / 256) * 4l
+                var host3 = make_host_buf(q_bytes + s_bytes + e_bytes, true, [cached = true])
+                for (kind in range(1, 4)) {
+                    let kform = kind >= 2
+                    let storex = kind == 1 || kind == 3
+                    let q3 = make_device_buf(q_bytes)
+                    let s3 = make_device_buf(s_bytes)
+                    let y3 = make_device_buf(e_bytes)
+                    let sb = kform ? sk_bytes : s_bytes
+                    var q_got : array<uint>
+                    var s_got : array<float>
+                    var y_got : array<float>
+                    q_got |> resize(dim / 4)
+                    s_got |> resize(kform ? dim / 256 : nblk)
+                    y_got |> resize(dim)
+                    unsafe {
+                        upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
+                        nan_sentinel_upload(y3, e_bytes)
+                        var raw3 = alloc_cmd()
+                        vk_check(vkBeginCommandBuffer(raw3, begin), null)
+                        var h3 : VkHaz
+                        var pc3 = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
+                        if (kind == 1) {
+                            var sc3 = set_cls_ar_rqx(fixed_array(x2, ad, wd, q3, s3, y3),
+                                fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, sb, e_bytes), fixed_array(1u, 2u, 4u, 16u, 8u, 32u))
+                            enc_cls_ar_rqx(raw3, h3, sc3, pc3, 1l)
+                        } elif (kind == 2) {
+                            var sc3 = set_cls_ar_rqk(fixed_array(x2, ad, wd, q3, s3),
+                                fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, sb), fixed_array(1u, 2u, 4u, 16u, 8u))
+                            enc_cls_ar_rqk(raw3, h3, sc3, pc3, 1l)
+                        } else {
+                            var sc3 = set_cls_ar_rqkx(fixed_array(x2, ad, wd, q3, s3, y3),
+                                fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, sb, e_bytes), fixed_array(1u, 2u, 4u, 16u, 8u, 32u))
+                            enc_cls_ar_rqkx(raw3, h3, sc3, pc3, 1l)
+                        }
+                        vhz_dep(raw3, h3, 1u | 8u | 16u | 32u, 0u, true)
+                        cmd_copy_range(raw3, q3, 0l, host3.buf, 0l, q_bytes)
+                        cmd_copy_range(raw3, s3, 0l, host3.buf, q_bytes, sb)
+                        cmd_copy_range(raw3, y3, 0l, host3.buf, q_bytes + s_bytes, e_bytes)
+                        vk_check(vkEndCommandBuffer(raw3), null)
+                        submit_wait(raw3)
+                        let hp3 = intptr(host3.mapped)
+                        memcpy(addr<void?>(q_got[0]), host3.mapped, q_bytes)
+                        memcpy(addr<void?>(s_got[0]), reinterpret<void?>(hp3 + uint64(q_bytes)), sb)
+                        memcpy(addr<void?>(y_got[0]), reinterpret<void?>(hp3 + uint64(q_bytes + s_bytes)), e_bytes)
+                    }
+                    var badk = 0
+                    if (kform) {
+                        badk = mismatch_qbytes(q_got, q_ref_k, 1) + mismatch_approx(s_got, s_ref_k)
+                    } else {
+                        badk = mismatch_qbytes(q_got, q_cls, 0) + mismatch_approx(s_got, s_cls)
+                    }
+                    if (storex) {
+                        badk += mismatch_approx(y_got, y_ref)
+                        var poison := y_got   // the row bar's control: one element pushed past it must red
+                        poison[7] += 1.0 + 2.0 * abs(y_ref[7])
+                        t |> success(mismatch_approx(poison, y_ref) > 0, "ar+requant stamp {kind}: the row bar reds a poisoned element")
+                        delete poison
+                    }
+                    t |> success(badk == 0, "ar+requant stamp {kind} (Q8_K {kform}, the row stored {storex}) matches ({badk} elements off)")
+                    delete q_got
+                    delete s_got
+                    delete y_got
+                }
+                delete q_ref_k
+                delete s_ref_k
                 delete x
                 delete a
                 delete w

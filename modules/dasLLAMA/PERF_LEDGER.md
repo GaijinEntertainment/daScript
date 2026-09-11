@@ -186,6 +186,22 @@ what it costs today and what the fix would change.
   reps (0.960x of 5217), tg32 132.5; the sanity argmax the same token, its logit 0.02 apart (the
   norm's sum in butterfly order) [direction-grade - one commit].
 
+- **LANDED (2026-09-11) - the token command's fused add+rms+requant serves every site on every model:
+  a Q8_K twin for the K-quant feeds and a row-storing twin for the consumers that read the normed row
+  as floats.** The fused twin (`cls_ar_rq`) quantized Q8_0 only and never stored the row, so
+  `rd_fuse_gates` kept it off any model with a K-quant consumer, off hybrids (the beta/alpha GEMV
+  reads the row) and off MoE (the router reads it) - two dispatches and a barrier per site where one
+  would do. Now `ArRqT` stamps `cls_ar_rqx` / `cls_ar_rqk` / `cls_ar_rqkx` beside it, each site's
+  stamp picked once every layer is registered (`rd_fused_sets`, `rq_kind`: the consumer's block form,
+  the row stored where a recurrent head or a router reads it), the layer after a MoE layer's combine
+  requanting on its own; the profiler keys on the stamps' recorded names (`rd_ts`) instead of a count
+  per layer kind. tg32 on the pod (Linux RTX 5080, -r 5, -r 10 on the 0.8B): the 0.8B 370.5 -> 381.2
+  +- 1.8 (0.79x of the reference exe's 480), the 9B 97.6 -> 100.8 +- 0.1 (0.894x of 112.8), the 35B
+  143.9 -> 146.6 +- 0.3 (1.009x of 145.2), the 27B UD-IQ4_XS 38.2 -> 41.7 +- 0.02 (0.88x of 47.4);
+  pp512 flat (27598, 5133, 4977 +- 248, 1709). The resident hybrid parity file holds (15 of 15); the
+  requant-family cell holds the three stamps to the plain twin (bit for bit) and the Q8_K oracle
+  [direction-grade - one commit].
+
 - **LANDED (2026-09-11) - the resident decode's qkv and z GEMVs co-run: the z half of the projection
   row rides its own hazard class (`VHZ_DNZ`, the prefill's z class) and the step waits on both.** Both
   halves wrote under `VHZ_DNP`, so the rail put a write-after-write barrier between two GEMVs that

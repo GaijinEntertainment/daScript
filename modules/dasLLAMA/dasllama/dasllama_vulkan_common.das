@@ -1831,15 +1831,8 @@ def vk_drop_model_state {
     g_rdq_count = 0l
     g_rdq_total = 0.0lf
     g_rdq_wall_us = 0.0lf
-    g_rdq_pro = 0.0lf
-    g_rdq_tail = 0.0lf
-    for (i in range(16)) {
-        g_rdq_role[i] = 0.0lf
-    }
-    for (i in range(13)) {
-        g_rdq_dn[i] = 0.0lf
-    }
-    g_rdq_moe |> clear()
+    g_rdq_by |> clear()
+    g_rdq_order |> clear()
     // host-visible buffers: host_mem tracks every make_host_buf result minus the exempt pair
     for (buf, mem in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
         unsafe {
@@ -2224,6 +2217,8 @@ struct RLayer {
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
+    rq_ffn_kind : int               //! the FFN site's fused stamp (rq_kind): the triple's or the experts' feed form, the row stored for a router
+    rq_next_kind : int              //! the next-layer site's: the following head's feed form, the row stored for a recurrent head
     // host-visible per-dispatch buffers: the class GEMV region pairs
     m_q, m_k, m_v, m_wo : HostBuf
     m_gate, m_up, m_down : HostBuf
@@ -2303,6 +2298,8 @@ struct RDec {
     dn_cd, dn_kd, dn_di, dn_nvh, dn_nkh, dn_ds, dn_dconv : int64
     dn_ba_f32 : bool              // beta/alpha rows come as f32 in the file (dn_ba_dev, f16 on the device) rather than q8 arena planes
     dn_proj_dev : uint64          // [cd + di] floats: the fused qkv row, the z row at cd
+    fused_sets_made : bool        //! the fused add+rms+requant sites' stamps and sets are picked once, at the first record
+    rq_pro_kind : int             //! the prologue site's stamp (rq_kind): layer 0's feed form, the row stored where its head reads floats
     dn_ba_dev : uint64            // f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer, f16
     dn_ba_bytes : int64
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
@@ -2444,11 +2441,9 @@ def fill_cvt_meta(hb : HostBuf; elems : int64) {
 var g_rdq_n = 0u
 var g_rdq_count = 0l
 var g_rdq_total = 0.0lf
-var g_rdq_pro = 0.0lf
-var g_rdq_tail = 0.0lf
-var g_rdq_role : double[16]
-var g_rdq_dn : double[13]   // a hybrid's recurrent-head roles (rdq_sample's second table)
-var g_rdq_moe : table<string; double>   //! an MoE layer's tail stamps by name (rdq_sample's third table)
+var g_rdq_names : array<string>        //! the recorded token command's stamp names in stamp order, the recorder's own account of what each interval bills
+var g_rdq_by : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
+var g_rdq_order : array<string>        //! the names in first-seen order, the tables' print order
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
 
 let PFQ_CAP = 2048u

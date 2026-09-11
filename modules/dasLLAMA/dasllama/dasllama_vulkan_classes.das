@@ -148,9 +148,14 @@ class ArRqBase : ArBase {
     // quantize the normed row instead of storing it: 8 lanes per 32-block, 32 blocks per pass
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def rq_row(rbase, qb0 : uint) {
-        let tid = gl_LocalInvocationID.x
         let ss = accum_row(rbase)
         let inv = rms_inv(ss)
+        quant32(qb0, inv)
+    }
+
+    //! the Q8_0 blocks of the stashed row at inv: 8 lanes a 32-block, 32 blocks a pass
+    def quant32(qb0 : uint; inv : float) {
+        let tid = gl_LocalInvocationID.x
         let nblk = pa.dim / 32u
         let lane8 = tid % 8u
         var b = tid / 8u
@@ -190,6 +195,79 @@ class ClsArAddRmsRqB : ArRqBase {
     def run {
         rq_row(gl_WorkGroupID.x * pa.dim, gl_WorkGroupID.x * (pa.dim / 32u))
     }
+}
+
+// the token command's fused add+rms+requant over one row on two axes: KBLK quantizes the Q8_K superblocks a
+// K-quant consumer reads (one subgroup a 256-block, the whole-subgroup amax fold of the requant class) in place
+// of the Q8_0 blocks, and STOREX also stores the normed row for a consumer that reads it as floats (the deltanet
+// head's beta/alpha GEMV, the MoE router)
+[ |> template_struct_instance]
+class template ArRqT : ArRqBase {
+    @template_constant KBLK : bool = false
+    @template_constant STOREX : bool = false
+    @ssbo @binding = 5 @template_gate = STOREX yo : array<float>   //! the normed row, for the consumers that read it as floats
+
+    //! the Q8_K superblocks of the stashed row at inv: a subgroup a 256-block, eight values a lane (the requant class's form)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def quant_k(inv : float) {
+        let nblk = pa.dim / 256u
+        let lane = gl_SubgroupInvocationID
+        var b = gl_SubgroupID
+        while (b < nblk) {
+            let base = b * 256u + lane
+            var vals : float[8]
+            var m = 0.0
+            for [unroll] (r in range(8)) {
+                let e = base + uint(r) * 32u
+                let v = wn[pa.woff + e] * (row[e] * inv)
+                vals[r] = v
+                m = max(m, abs(v))
+            }
+            let d = q8k_amax5(m) / 127.0
+            if (lane == 0u) {
+                outs[b] = d
+            }
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            for [unroll] (r in range(8)) {
+                outq[base + uint(r) * 32u] = q8_quant1(vals[r], id)
+            }
+            b += gl_NumSubgroups
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let ss = accum_row(0u)
+        let inv = rms_inv(ss)
+        static_if (STOREX) {
+            var k = gl_LocalInvocationID.x
+            while (k < pa.dim) {
+                yo[k] = wn[pa.woff + k] * (row[k] * inv)
+                k += 256u
+            }
+        }
+        static_if (KBLK) {
+            quant_k(inv)
+        } else {
+            quant32(0u, inv)
+        }
+    }
+}
+
+[vk_dispatch(name = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqX : ArRqT {
+    override STOREX = true
+}
+
+[vk_dispatch(name = "cls_ar_rqk", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqK : ArRqT {
+    override KBLK = true
+}
+
+[vk_dispatch(name = "cls_ar_rqkx", grid = "wgs", params = "wgs : int64")]
+class ArAddRmsRqKX : ArRqT {
+    override KBLK = true
+    override STOREX = true
 }
 
 class ArCombBase : ArBase {
