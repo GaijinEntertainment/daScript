@@ -121,7 +121,7 @@ def tokenize(input : string) : array<Token> { // nolint:STYLE038 — flat one-ar
                 i ++
             } elif (is_number(ch) || (ch == '-' && i + 1 < n && (is_number(int(data[i + 1])) || int(data[i + 1]) == '.'))) {
                 let start = i
-                i ++   // the first digit, or the sign of a negative number: `n("0 -2")`, `x(3,8,-1)`
+                i ++
                 while (i < n) {
                     let c = int(data[i])
                     if (is_number(c) || c == '.') {

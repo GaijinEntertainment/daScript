@@ -85,7 +85,7 @@ namespace das {
     }
 
     // the capture argument's type of a lambda body, null for any other function
-    void * das_get_function_capture_debug_info( const Context * ctx, int id ) {
+    void * das_get_lambda_capture_debug_info( const Context * ctx, int id ) {
         auto fn = ctx->getFunction(id);
         if ( !fn ) return nullptr;
         auto finfo = fn->debugInfo;
@@ -702,8 +702,8 @@ namespace das {
                 SideEffects::none, "das_get_global_variable_shared");
             addExternInline<DAS_BIND_FUN(das_get_context_total_functions)>(*this, lib, "get_context_total_functions",
                 SideEffects::none, "das_get_context_total_functions");
-            addExternInline<DAS_BIND_FUN(das_get_function_capture_debug_info)>(*this, lib, "get_function_capture_debug_info",
-                SideEffects::none, "das_get_function_capture_debug_info");
+            addExternInline<DAS_BIND_FUN(das_get_lambda_capture_debug_info)>(*this, lib, "get_lambda_capture_debug_info",
+                SideEffects::none, "das_get_lambda_capture_debug_info");
             addExternInline<DAS_BIND_FUN(das_get_context_globals_size)>(*this, lib, "get_context_globals_size",
                 SideEffects::none, "das_get_context_globals_size");
             addExternInline<DAS_BIND_FUN(das_get_context_shared_size)>(*this, lib, "get_context_shared_size",

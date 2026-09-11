@@ -192,10 +192,6 @@ def play_sfx(samples : array<float>) {
 
 // --- Music (daStrudel) ---
 
-// The beds are built where the engine runs (the worker thread, or here in the main-thread arm):
-// a Pattern is a lambda over this context's heap and cannot cross to the worker, so a state
-// change sends a `tune:<name>` command and the handler builds the tracks. Track names and their
-// gains live in these tables so a pause can duck every track and bring it back.
 var g_music_tracks : table<string; int>
 var g_music_gains : table<string; float>
 
@@ -278,6 +274,7 @@ def music_fade_all(factor, time : float) {
     }
 }
 
+//! a bed is built where the engine runs: a Pattern is a lambda over its context's heap and cannot cross to the worker
 def strudel_music_cmd(cmd : string) {
     let parts <- split(cmd, ":")
     if (length(parts) < 2) {
@@ -432,8 +429,7 @@ def fs_arcanoid {
     let k = saturate(-dot(LIGHT_DIRECTION, normal))
     f_FragColor.xyz = f_Color.xyz * (k * 0.8 + 0.2)
     f_FragColor.w = f_Color.w
-    // view-space normal in xy (z is recovered from them, every visible face points at the camera),
-    // linear depth split into a high and a low byte, so an 8-bit target still resolves 1/65535
+    //! normal-depth target: view normal in xy (z recovered, every visible face points at the camera), linear depth split hi/lo so RGBA8 resolves 1/65535
     let view_nrm = normalize(float3x3(v_view) * normal)
     let depth = saturate(-f_view_pos.z / f_ZFar)
     let hi = floor(depth * 255.0) / 255.0
@@ -1128,7 +1124,7 @@ let BONUS_POINTS = 30
 
 var g_levels <- level_defs()
 var @live level = 0
-var @live level_card_timer = 0.0   // the LEVEL card holds the board still while it shows
+var @live level_card_timer = 0.0
 let LEVEL_CARD_TIME = 2.2
 
 def level_count() : int {
@@ -1782,10 +1778,6 @@ def init() {
         init_audio_samples()
     }
     if (!music_initialized) {
-        // The worker arm needs a real audio thread to feed: any native build has one, and so
-        // does the standalone wasm card (pthread pool). The wasm playground's backend runs
-        // its device callback on the main thread, with no consumer for a worker, and takes
-        // the main-thread arm, whose heap the host collects every frame.
         music_threaded = !audio_is_single_threaded()
         if (music_threaded) {
             strudel_init(@@strudel_music_main)
@@ -1851,7 +1843,6 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     }
     f1_was_pressed = f1_pressed
     f2_was_pressed = f2_pressed
-    // Spectator: the menu left alone starts a bot round; a key, the round's end or the clock ends it
     if (spectator) {
         attract_timer += dt
         let round_over = game_state == GameState.game_over_state || game_state == GameState.win_state
@@ -1955,7 +1946,6 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
             if (hit_kind == int(BrickKind.metal)) {
                 play_sfx(snd_wall_bounce)
             } elif (hit_hp > 1 && !is_fireball) {
-                // a hard brick cracks first
                 query() $(eid : EntityId; var br : Brick) {
                     if (eid == hit_eid) {
                         br.hp--
@@ -1991,7 +1981,6 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
 
     glUseProgram(program)
     active_program = program
-    // opaque geometry writes colour and normal-depth; everything blended, and the HUD, colour only
     draw_ground()
     begin_color_only_span()
     draw_shadows()

@@ -392,8 +392,6 @@ extern "C" {
             gv.flags = shared ? 1u : 0u;
         }
 
-        // registerJitFunction leaves fields NULL; the exe-resident TypeInfo of a lambda's capture
-        // argument lands here so a job or thread lambda's block header can carry it.
         void setStandaloneFunctionArgInfo ( uint64_t index, uint32_t arg, void * debugInfo ) {
             DAS_ASSERT(index < (uint64_t) totalFunctions);
             auto finfo = functions[index].debugInfo;
@@ -620,7 +618,6 @@ extern "C" {
         auto ann = jit_find_handled_annotation(moduleName, typeName);
         if ( !ann ) { g_abi_types_skipped ++; return; } // not registered on target -> module not linked here
         g_abi_types_checked ++;
-        // a type only ever behind a pointer has no size contract: nothing das-side reserves it
         if ( !ann->isLocal() && !ann->canCopy() && !ann->canMove() ) return;
         uint32_t targetSize = uint32_t(ann->getSizeOf());
         if ( targetSize != hostSize ) {

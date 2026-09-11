@@ -1726,8 +1726,6 @@ namespace das
         // stores and re-validates them, so a changed input invalidates the cached record instead
         // of serving what a compile folded from the old value.
         vector<tuple<string,int64_t,uint64_t>> moduleCacheDependencies;
-        // after every das-visible field: a std::function's size differs per libc++ build, and a
-        // cross-compiled exe bakes the host's field offsets
         UpdateAliasMapCallback      updateAliasMapCallback;
     };
 

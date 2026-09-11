@@ -7,3 +7,12 @@
 drops a finding it used to report is a defect** - updating a constant so a check keeps
 matching the tree is not.
 
+- **A module a game in this folder requires is a plain sibling module, never `shared`** - a
+  shared module survives a live reload as the promoted copy, and the late-bound GL calls
+  inside it fail their second compile.
+
+- **A shader or post-process pass a diff adds to a game in this folder uses only GLSL ES 3.00
+  features, and probes any colour format above RGBA8 at creation with an RGBA8 fallback** -
+  the same file runs in the playground on WebGL2, which does not guarantee a float colour
+  attachment.
+

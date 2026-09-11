@@ -41,8 +41,6 @@ namespace das {
     typedef struct stat das_filestat;
 #endif
 
-    // the stat fields das reads, in a layout no platform's struct stat decides: a cross-compiled
-    // exe bakes the host's size and offsets of a by-value handled type
     struct FStat {
         bool        is_valid;
         uint32_t    mode;

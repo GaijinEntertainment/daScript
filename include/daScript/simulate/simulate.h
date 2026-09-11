@@ -922,8 +922,6 @@ namespace das
         JitContext deleteJITOnFinish = {};
         vector<FileInfo*>  deleteUponFinish;
     protected:
-        // after every das-visible field: a mutex's size differs per platform, and a cross-compiled
-        // exe bakes the host's field offsets
         vector<Context *>               forkContextPool;
         mutex                           forkContextPoolMutex;
     };

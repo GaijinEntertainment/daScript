@@ -19,6 +19,7 @@ require live/live_watch_boost
 require live/live_vars
 require live/audio_live
 require daslib/json_boost
+require levels
 require daslib/math_boost
 require daslib/archive
 require opengl/opengl_ttf
@@ -29,6 +30,7 @@ require strudel/strudel_live
 require daslib/strings_boost
 require daslib/strings_convert
 require live_host
+require arcanoid_postfx
 
 // --- Constants ---
 
@@ -191,15 +193,88 @@ def play_sfx(samples : array<float>) {
 // --- Music (daStrudel) ---
 
 var g_music_tracks : table<string; int>
+var g_music_gains : table<string; float>
 
-def setup_menu_music() {
-    // Title screen — mysterious, anticipatory, classic arcade title vibe
-    g_music_tracks["drums"] = strudel_add_track(s("<bd ~ [~ hh] ~> <bd ~ [~ hh] [hh?0.3 ~]> <bd ~ [~ hh] ~> <bd ~ [~ cp?0.4] [hh?0.3 ~]>"), 0.45)
-    g_music_tracks["bass"] = strudel_add_track(note_pattern("<[a2 a2] ~ [e2 e2] ~> <[a2 a2] ~ [f2 f2] ~> <[a2 a2] ~ [g2 g2] ~> <[a2 a2] ~ [e2 e2] [f2 e2]>", "sine"), 0.35)
-    g_music_tracks["lead"] = strudel_add_track(note_pattern("<a4 c5 e5 c5> <a4 b4 c5 e5> <f5 e5 c5 a4> <e5?0.7 d5 c5 b4>", "triangle"), 0.2)
-    g_music_tracks["arp"] = strudel_add_track(note_pattern("<[a4 c5 e5 a5]> <[a4 c5 e5 c5]> <[f4 a4 c5 f5?0.5]> <[e4 g4 b4 e5?0.5]>", "triangle"), 0.1)
+def music_replace_track(name : string; var pat : Pattern; gain : float) {
+    if (key_exists(g_music_tracks, name)) {
+        strudel_remove_track(g_music_tracks[name])
+    }
+    g_music_tracks[name] = strudel_add_track(pat, gain)
+    g_music_gains[name] = gain
 }
 
+// Title: a four-token phrase that harmonises itself at half and quarter speed, a three-voice canon
+// that breathes for as long as the menu sits there
+def tune_menu() {
+    strudel_set_bpm(120.0lf)
+    music_replace_track("flute", (note("c3 eb3(3,8) c4/2 g3*2", "triangle")
+        |> superimpose(@(var x : Pattern) => x |> slow(2) |> add(12))
+        |> superimpose(@(var x : Pattern) => x |> slow(4) |> sub(5))
+        |> add(n("<0 1>/16"))
+        |> release(0.1)
+        |> room(1.0)), 0.35)
+}
+
+// Stage: four on the floor in G minor, a plucked saw bass on a five-in-eight, square stabs under
+// a sixteen-cycle filter sweep, a lead that comes and goes every sixteen cycles; the masks and
+// sweeps are what keep it alive past the third minute
+def tune_play() {
+    strudel_set_bpm(132.0lf)
+    music_replace_track("drums", s("bd*2, ~ [cp,sd]"), 0.55)
+    music_replace_track("hats", (s("hh*4")
+        |> sometimes(@(var x : Pattern) => fast(x, 2))
+        |> rarely(@(var x : Pattern) => x |> speed(0.5) |> delay(0.5))
+        |> end_pos(perlin() |> range(0.02, 0.05) |> slow(8))
+        |> room(0.5)), 0.3)
+    music_replace_track("bass", (n("<0 2 5 3>") |> scale("G1:minor") |> struct_(s("x(5,8,-1)"))
+        |> set_sound("sawtooth") |> decay(0.1) |> sustain(0) |> lpf(800) |> lpq(8)), 0.45)
+    music_replace_track("stabs", (note("<G4 A4 Bb4 A4>,Bb3,D3") |> struct_(s("~ x*2")) |> set_sound("square")
+        |> lpf(sine() |> range(500, 4000) |> slow(16)) |> lpq(10)
+        |> decay(sine() |> slow(15) |> range(0.05, 0.2)) |> sustain(0)
+        |> room(0.5) |> delay(0.2) |> mask(s("<0 1 1 1>/8"))), 0.3)
+    music_replace_track("lead", (n("0 5 3 2") |> sometimes(@(var x : Pattern) => slow(x, 2))
+        |> off(0.125, @(var x : Pattern) => add(x, 5))
+        |> scale("G4:minor") |> set_sound("triangle")
+        |> decay(0.05) |> sustain(0) |> delay(0.2) |> degradeBy(0.5) |> mask(s("<0 1>/16"))), 0.25)
+}
+
+// Cleared: a C major fanfare - a rising triangle arpeggio that climbs an octave every two cycles,
+// square stabs on the I-IV-V-I turn, a driving saw bass, drums that fill on the fourth bar
+def tune_win() {
+    strudel_set_bpm(140.0lf)
+    music_replace_track("drums", s("<[bd*2 [~ cp] bd [sd sd]] [bd*2 [~ cp] bd [sd sd]] [bd*2 [~ cp] bd [sd sd]] [bd [cp cp] [bd bd] [sd sd sd sd]]>"), 0.5)
+    music_replace_track("bass", (n("<0 3 4 0>") |> scale("C2:major") |> struct_(s("x*8"))
+        |> set_sound("sawtooth") |> decay(0.08) |> sustain(0) |> lpf(700) |> lpq(6)), 0.4)
+    music_replace_track("stabs", (note("<[c4,e4,g4] [f4,a4,c5] [g4,b4,d5] [c5,e5,g5]>") |> struct_(s("x ~ x [~ x]"))
+        |> set_sound("square") |> lpf(2500) |> decay(0.15) |> sustain(0) |> room(0.4) |> delay(0.15)), 0.28)
+    music_replace_track("arp", (n("0 2 4 7 9 12 9 7") |> add(n("<0 12>/2")) |> scale("C4:major")
+        |> set_sound("triangle") |> decay(0.06) |> sustain(0) |> delay(0.25) |> room(0.6)), 0.3)
+    music_replace_track("lead", (note("<[c5 e5 g5 c6] [~ g5 e5 g5] [c6 ~ b5 g5] [c6 ~ ~ ~]>") |> set_sound("triangle")
+        |> superimpose(@(var x : Pattern) => x |> add(12) |> degradeBy(0.5))
+        |> release(0.15) |> room(0.8)), 0.22)
+}
+
+// Lost: a slow C minor lament - a sine bass sinking through the octave, a triangle sigh that
+// answers every other bar, a kick that comes and goes, reverb doing most of the talking
+def tune_gameover() {
+    strudel_set_bpm(80.0lf)
+    music_replace_track("drums", (s("bd ~ ~ ~") |> degradeBy(0.3) |> room(0.6)), 0.25)
+    music_replace_track("bass", (n("<0 -2 -4 -5> <0 -2 -4 -7>") |> scale("C3:minor") |> struct_(s("x ~ ~ x"))
+        |> set_sound("sine") |> release(0.8) |> room(0.9)), 0.35)
+    music_replace_track("sigh", (note("<[eb4 ~ d4 ~] [~ c4 ~ ~] [eb4 d4 c4 ~] [~ ~ b3 ~]>")
+        |> set_sound("triangle") |> release(0.6) |> lpf(1400) |> room(1.0) |> delay(0.3)), 0.2)
+    music_replace_track("pad", (note("<[c3,eb3,g3] [ab2,c3,eb3]>") |> slow(2) |> set_sound("sawtooth")
+        |> lpf(sine() |> range(300, 900) |> slow(8)) |> release(1.0) |> room(1.0)), 0.12)
+}
+
+//! every track ducked to `factor` of its gain over `time` - 0 fades the bed out, 1 brings it back
+def music_fade_all(factor, time : float) {
+    for (name, idx in keys(g_music_tracks), values(g_music_tracks)) {
+        strudel_fade_track(idx, g_music_gains[name] * factor, time)
+    }
+}
+
+//! a bed is built where the engine runs: a Pattern is a lambda over its context's heap and cannot cross to the worker
 def strudel_music_cmd(cmd : string) {
     let parts <- split(cmd, ":")
     if (length(parts) < 2) {
@@ -207,12 +282,25 @@ def strudel_music_cmd(cmd : string) {
     }
     let action = parts[0]
     let name = parts[1]
-    if (action == "play" && length(parts) >= 3) {
+    if (action == "tune") {
+        if (name == "menu") {
+            tune_menu()
+        } elif (name == "play") {
+            tune_play()
+        } elif (name == "win") {
+            tune_win()
+        } elif (name == "gameover") {
+            tune_gameover()
+        }
+    } elif (action == "fadeall" && length(parts) >= 3) {
+        music_fade_all(float(to_double(parts[1])), float(to_double(parts[2])))
+    } elif (action == "play" && length(parts) >= 3) {
         let gain = length(parts) >= 4 ? float(to_double(parts[3])) : 1.0
         if (key_exists(g_music_tracks, name)) {
             strudel_remove_track(g_music_tracks[name])
         }
         g_music_tracks[name] = strudel_add_track(s(parts[2]), gain)
+        g_music_gains[name] = gain
     } elif (action == "note" && length(parts) >= 4) {
         let synth = parts[3]
         let gain = length(parts) >= 5 ? float(to_double(parts[4])) : 0.4
@@ -220,6 +308,7 @@ def strudel_music_cmd(cmd : string) {
             strudel_remove_track(g_music_tracks[name])
         }
         g_music_tracks[name] = strudel_add_track(note_pattern(parts[2], synth), gain)
+        g_music_gains[name] = gain
     } elif (action == "stop") {
         if (key_exists(g_music_tracks, name)) {
             let fade_time = length(parts) >= 3 ? float(to_double(parts[2])) : 0.5
@@ -235,8 +324,7 @@ def strudel_music_cmd(cmd : string) {
 }
 
 def strudel_music_main() {
-    strudel_set_bpm(118.0lf)
-    setup_menu_music()
+    tune_menu()
     strudel_play(@@strudel_music_cmd)
 }
 
@@ -252,43 +340,23 @@ def music_dispatch(cmd : string) {
 }
 
 def stop_all_tracks(fade : float) {
-    music_dispatch("stop:drums:{fade}")
-    music_dispatch("stop:bass:{fade}")
-    music_dispatch("stop:lead:{fade}")
-    music_dispatch("stop:arp:{fade}")
+    music_dispatch("fadeall:0:{fade}")
 }
 
 def start_menu_music() {
-    strudel_set_bpm(118.0lf)
-    music_dispatch("play:drums:<bd ~ [~ hh] ~> <bd ~ [~ hh] [hh?0.3 ~]> <bd ~ [~ hh] ~> <bd ~ [~ cp?0.4] [hh?0.3 ~]>:0.45")
-    music_dispatch("note:bass:<[a2 a2] ~ [e2 e2] ~> <[a2 a2] ~ [f2 f2] ~> <[a2 a2] ~ [g2 g2] ~> <[a2 a2] ~ [e2 e2] [f2 e2]>:sine:0.35")
-    music_dispatch("note:lead:<a4 c5 e5 c5> <a4 b4 c5 e5> <f5 e5 c5 a4> <e5?0.7 d5 c5 b4>:triangle:0.2")
-    music_dispatch("note:arp:<[a4 c5 e5 a5]> <[a4 c5 e5 c5]> <[f4 a4 c5 f5?0.5]> <[e4 g4 b4 e5?0.5]>:triangle:0.1")
+    music_dispatch("tune:menu")
 }
 
 def start_play_music() {
-    // Stage theme — driving, energetic, classic arcade action in A minor
-    strudel_set_bpm(142.0lf)
-    music_dispatch("play:drums:<bd [hh hh] sd [hh hh]> <bd [hh hh] sd [hh cp]> <bd [hh hh] sd [hh hh]> <bd [hh hh] [sd sd] [hh hh]> <bd [hh hh] sd [hh hh]> <bd [hh cp?0.5] sd [hh hh]> <bd [hh hh] sd [hh?0.6 hh]> <bd [hh hh] [sd?0.4 sd] [cp?0.5 hh]>:0.6")
-    music_dispatch("note:bass:<[a2 a2] [a2 a2] [f2 f2] [g2 g2]> <[a2 a2] [a2 g2] [f2 f2] [e2 e2]> <[a2 a2] [a2 a2] [f2 f2] [g2 g2]> <[a2 a2] [c3 c3] [d3 d3] [e3 e3]> <[a2 a2] [a2 a2] [f2 f2] [g2 g2]> <[a2 a2] [g2 f2] [e2 e2] [e2 f2]> <[a2 a2] [a2 a2] [d3 d3] [c3 c3]> <[a2 a2] [f2?0.7 f2] [g2 g2] [a2 b2]>:square:0.3")
-    music_dispatch("note:lead:<a4 c5 e5 a5> <g5 e5 c5 ~> <a4 c5 e5 a5> <f5 e5 d5 c5> <a4 ~ [c5 d5] e5> <g5 e5 c5 a4> <[a4 b4] c5 e5 ~> <b4?0.7 c5 [d5 e5?0.8] a5>:sawtooth:0.25")
-    music_dispatch("note:arp:<[a4 c5 e5 a5 c6 a5 e5 c5]> <[e5 a5 c6 e6 c6 a5 e5 a4]> <[a4 c5 e5 a5?0.6 c6?0.6 a5 e5 c5]> <[f4 a4 c5 f5 c5 a4 f4 a4]> <[a4 c5 e5 a5 c6 a5 e5 c5]> <[e4 g4 b4 e5 b4 g4?0.7 e4 g4]> <[a4 e5?0.6 c5 a5?0.6 e5 c5?0.6 a4 e5]> <[f4 a4 c5 f5?0.5 c5 a4?0.7 f4 a4]>:triangle:0.12")
+    music_dispatch("tune:play")
 }
 
 def start_win_music() {
-    // Victory — triumphant C major fanfare, fast arpeggios
-    strudel_set_bpm(152.0lf)
-    music_dispatch("play:drums:<bd sd bd [sd sd]> <bd [sd cp] bd sd> <bd sd [bd bd] [sd cp]> <bd [cp cp] bd [sd?0.7 sd?0.7]>:0.6")
-    music_dispatch("note:bass:<[c3 c3] [e3 e3] [g3 g3] [c4 c4]> <[c3 c3] [d3 d3] [e3 e3] [g3 g3]> <[e3 e3] [g3 g3] [c4 c4] [e4 e4]> <[c4 c4] [g3 g3] [e3 e3] [c3 c3]>:square:0.3")
-    music_dispatch("note:lead:<c5 e5 g5 c6> <e5 g5 c6 e6> <g5 e5 c6 g5> <c6 b5 a5 g5>:sawtooth:0.3")
-    music_dispatch("note:arp:<[c5 e5 g5 c6 e6 c6 g5 e5]> <[e5 g5 c6 e6 g6?0.7 e6 c6 g5]> <[g5 c6 e6 g6 e6 c6 g5 c6]> <[c6 g5 e5 c5 e5 g5 c6?0.8 e6?0.8]>:triangle:0.18")
+    music_dispatch("tune:win")
 }
 
 def start_gameover_music() {
-    strudel_set_bpm(85.0lf)
-    music_dispatch("play:drums:<bd ~ ~ ~> <bd ~ [~ hh?0.3] ~> <bd ~ ~ [~ bd?0.3]> <bd ~ ~ ~>:0.25")
-    music_dispatch("note:bass:<c3 bb2 ab2 g2> <c3 ~ ab2 ~> <bb2 ab2 g2 f2> <g2 ~ ab2 ~>:sine:0.3")
-    music_dispatch("note:lead:<eb4 ~ d4 ~> <~ d4 ~ c4> <eb4 d4?0.5 c4 ~> <~ ~ d4?0.5 ~>:triangle:0.2")
+    music_dispatch("tune:gameover")
 }
 
 def update_music() {
@@ -303,19 +371,13 @@ def update_music() {
     let FADE_IN = 0.5
     // Pause: fade down existing tracks, keep them alive
     if (game_state == GameState.paused) {
-        music_dispatch("fade:drums:0.15:{FADE_OUT}")
-        music_dispatch("fade:bass:0.15:{FADE_OUT}")
-        music_dispatch("fade:lead:0.1:{FADE_OUT}")
-        music_dispatch("fade:arp:0.0:{FADE_OUT}")
+        music_dispatch("fadeall:0.25:{FADE_OUT}")
         prev_music_state = game_state
         return
     }
     // Unpause: fade tracks back up
     if (prev_music_state == GameState.paused && game_state == GameState.playing) {
-        music_dispatch("fade:drums:0.6:{FADE_IN}")
-        music_dispatch("fade:bass:0.3:{FADE_IN}")
-        music_dispatch("fade:lead:0.25:{FADE_IN}")
-        music_dispatch("fade:arp:0.15:{FADE_IN}")
+        music_dispatch("fadeall:1:{FADE_IN}")
         prev_music_state = game_state
         return
     }
@@ -343,15 +405,22 @@ var @uniform v_view : float4x4
 var @uniform v_projection : float4x4
 var @inout f_normal : float3
 var @inout f_position : float3
+var @inout f_view_pos : float3
 var @uniform f_Color : float4
-var @out f_FragColor : float4
+var @uniform f_ZFar : float
+var @out @location = 0 f_FragColor : float4
+var @out @location = 1 f_FragNormalDepth : float4     // view-space normal and linear depth, the occlusion pass's input
+
+let Z_FAR = 100.0
 
 [vertex_program]
 def vs_arcanoid {
     f_normal = normalize(float3x3(v_model) * v_normal)
     let tpos = v_model * float4(v_position, 1.0)
     f_position = tpos.xyz
-    gl_Position = v_projection * v_view * tpos
+    let vpos = v_view * tpos
+    f_view_pos = vpos.xyz
+    gl_Position = v_projection * vpos
 }
 
 [fragment_program]
@@ -360,6 +429,12 @@ def fs_arcanoid {
     let k = saturate(-dot(LIGHT_DIRECTION, normal))
     f_FragColor.xyz = f_Color.xyz * (k * 0.8 + 0.2)
     f_FragColor.w = f_Color.w
+    //! normal-depth target: view normal in xy (z recovered, every visible face points at the camera), linear depth split hi/lo so RGBA8 resolves 1/65535
+    let view_nrm = normalize(float3x3(v_view) * normal)
+    let depth = saturate(-f_view_pos.z / f_ZFar)
+    let hi = floor(depth * 255.0) / 255.0
+    let lo = (depth - hi) * 255.0
+    f_FragNormalDepth = float4(view_nrm.xy * 0.5 + float2(0.5), hi, lo)
 }
 
 let SHADOW_COLOR = float3(0.05, 0.03, 0.08)
@@ -434,15 +509,22 @@ var cube : OpenGLGeometryFragment
 var brick_geo : OpenGLGeometryFragment
 var ground_plane : OpenGLGeometryFragment
 var sphere : OpenGLGeometryFragment
+var capsule_shell : OpenGLGeometryFragment   // a cylinder along x: the capsule body
+var cone : OpenGLGeometryFragment            // axis along y: the badge that points
+var halo : OpenGLGeometryFragment            // a flat cylinder: the ring and the light pool
 var hud_font : Font?
 
 def create_gl_objects() {
     program = cache_shader_program(vs_arcanoid`shader_text, fs_arcanoid`shader_text)
     shadow_program = cache_shader_program(vs_arcanoid`shader_text, fs_shadow`shader_text)
+    create_postfx_programs()
     cube <- create_geometry_fragment <| gen_cube()
     brick_geo <- create_geometry_fragment <| gen_rounded_cube(0.2)
     ground_plane <- create_geometry_fragment <| gen_plane(GenDirection.xz)
     sphere <- create_geometry_fragment <| gen_sphere(16, 8, false)
+    capsule_shell <- create_geometry_fragment <| gen_cylinder(GenDirection.yz, 14)
+    cone <- create_geometry_fragment <| gen_cone(GenDirection.xz, 12)
+    halo <- create_geometry_fragment <| gen_cylinder(GenDirection.xz, 24)
     cache_ttf_objects()
     hud_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
 }
@@ -545,6 +627,8 @@ var @live lives = START_LIVES
 var @live game_state = GameState.menu
 var space_was_pressed = false
 var esc_was_pressed = false
+var f1_was_pressed = false
+var f2_was_pressed = false
 var @live god_mode = false
 var @live game_speed = 1.0
 var @live prev_music_state = GameState.menu
@@ -627,12 +711,13 @@ def current_paddle_w() : float {
 }
 
 def current_ball_speed() : float {
-    if (speed_mod_timer > 0.0) { return BALL_SPEED * speed_mod_factor; }
-    return BALL_SPEED
+    let base = BALL_SPEED * g_levels[clamp(level, 0, level_count() - 1)].speed
+    if (speed_mod_timer > 0.0) { return base * speed_mod_factor; }
+    return base
 }
 
-def spawn_bonus(pos : float3) {
-    if (game_random() > BONUS_DROP_CHANCE) { return ; }
+def spawn_bonus(pos : float3; always : bool) {
+    if (!always && game_random() > BONUS_DROP_CHANCE) { return ; }
     let btype = int(game_random() * float(NUM_BONUS_TYPES)) % NUM_BONUS_TYPES
     create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Bonus(
@@ -653,9 +738,19 @@ def activate_bonus(btype : int) {
             velocities |> push(b.vel)
         }
         for (p, v in positions, velocities) {
-            let speed = length(v)
-            let vel1 = normalize(float3(v.x + sin(0.5) * speed * 0.3, 0.0, v.z)) * speed
-            let vel2 = normalize(float3(v.x + sin(-0.5) * speed * 0.3, 0.0, v.z)) * speed
+            var speed = length(v)
+            var vel1 = float3(0.0)
+            var vel2 = float3(0.0)
+            if (speed < 0.001) {
+                // a ball sitting on the paddle: the extras leave now, 35 degrees either side, it stays put
+                speed = current_ball_speed()
+                let SPLIT = 35.0 * PI / 180.0
+                vel1 = float3(sin(SPLIT), 0.0, cos(SPLIT)) * speed
+                vel2 = float3(-sin(SPLIT), 0.0, cos(SPLIT)) * speed
+            } else {
+                vel1 = normalize(float3(v.x + sin(0.5) * speed * 0.3, 0.0, v.z)) * speed
+                vel2 = normalize(float3(v.x + sin(-0.5) * speed * 0.3, 0.0, v.z)) * speed
+            }
             create_entity() @(eid, cmp) {
                 apply_decs_template(cmp, Ball(pos = p, vel = vel1))
             }
@@ -714,9 +809,7 @@ def update_powerup_timers(dt : float) {
     if (was_sticky && sticky_timer <= 0.0) {
         query() $(var b : Ball) {
             if (b.stuck != 0) {
-                let offset = b.stuck_offset / (current_paddle_w() * 0.5)
-                let angle = clamp(offset, -1.0, 1.0) * 0.7
-                b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * current_ball_speed()
+                b.vel = stuck_launch_velocity(b.stuck_offset)
                 b.stuck = 0
                 b.stuck_offset = 0.0
             }
@@ -749,12 +842,111 @@ def reset_powerups() {
 
 var @live paddle_x = 0.0
 
-def update_paddle(dt : float) {
-    if (glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-        paddle_x += PADDLE_SPEED * dt
+// --- Spectator (attract) mode ---
+// The menu left alone for ATTRACT_IDLE seconds starts a round the bot plays, old-arcade style:
+// the paddle chases the lowest moving ball at its own speed and releases a held ball after a
+// short hold. Any key, the round's end, or ATTRACT_LENGTH seconds returns to the menu.
+
+let ATTRACT_IDLE = 30.0
+let ATTRACT_LENGTH = 45.0
+let BOT_RELEASE_HOLD = 0.6
+let BOT_DEADZONE = 0.05
+
+var @live spectator = false
+var @live idle_timer = 0.0
+var @live attract_timer = 0.0
+var @live bot_hold_timer = 0.0
+
+//! fresh bricks, score and lives on board `lv`; the caller sets the state
+def new_round(lv : int = 0) {
+    level = clamp(lv, 0, level_count() - 1)
+    decs::restart()
+    spawn_bricks()
+    commit()
+    score = 0
+    lives = START_LIVES
+    paddle_x = 0.0
+    level_card_timer = 0.0
+    reset_powerups()
+}
+
+//! the cleared board gives way to the next: score and lives carry, the ball waits on the paddle
+//! behind the LEVEL card
+def next_level() {
+    level++
+    query() $(eid : EntityId; _b : Ball) {
+        delete_entity(eid)
     }
-    if (glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-        paddle_x -= PADDLE_SPEED * dt
+    query() $(eid : EntityId; _bn : Bonus) {
+        delete_entity(eid)
+    }
+    commit()
+    spawn_bricks()
+    spawn_ball_on_paddle()
+    commit()
+    reset_powerups()
+    level_card_timer = LEVEL_CARD_TIME
+    play_sfx(snd_win)
+}
+
+def start_attract() {
+    new_round(int(game_random() * float(level_count())) % level_count())
+    spectator = true
+    attract_timer = 0.0
+    bot_hold_timer = 0.0
+    game_state = GameState.playing
+}
+
+def end_attract() {
+    spectator = false
+    idle_timer = 0.0
+    new_round()   // the menu shows a fresh board, not what the bot left
+    game_state = GameState.menu
+}
+
+//! the x the bot steers under: the moving ball nearest the paddle, or where the paddle already is
+def bot_target_x() : float {
+    var target = paddle_x
+    var best_z = FIELD_H * 2.0
+    query() $(b : Ball) {
+        if (b.stuck == 0 && b.pos.z < best_z) {
+            best_z = b.pos.z
+            target = b.pos.x
+        }
+    }
+    return target
+}
+
+def update_bot_paddle(dt : float) {
+    let diff = bot_target_x() - paddle_x
+    if (abs(diff) > BOT_DEADZONE) {
+        paddle_x += clamp(diff, -PADDLE_SPEED * dt, PADDLE_SPEED * dt)
+    }
+    if (has_stuck_balls()) {
+        bot_hold_timer += dt
+        if (bot_hold_timer >= BOT_RELEASE_HOLD) {
+            bot_hold_timer = 0.0
+            query() $(var b : Ball) {
+                if (b.stuck != 0) {
+                    b.vel = stuck_launch_velocity(b.stuck_offset)
+                    b.stuck = 0
+                    b.stuck_offset = 0.0
+                }
+            }
+        }
+    }
+}
+
+def update_paddle(dt : float) {
+    if (spectator) {
+        update_bot_paddle(dt)
+    } else {
+        if (glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+            paddle_x += PADDLE_SPEED * dt
+        }
+        if (glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+            paddle_x -= PADDLE_SPEED * dt
+        }
     }
     let pw = current_paddle_w()
     let limit = FIELD_W * 0.5 - pw * 0.5
@@ -800,6 +992,17 @@ def spawn_ball_on_paddle() {
             stuck_offset = 0.0
         ))
     }
+}
+
+//! the velocity a stuck ball leaves the paddle with: the angle its offset gives, never straight
+//! up - a vertical ball on a centered paddle would bounce between the same two spots for good
+def stuck_launch_velocity(stuck_offset : float) : float3 {
+    var offset = stuck_offset / (current_paddle_w() * 0.5)
+    if (abs(offset) < 0.1) {
+        offset = 0.3
+    }
+    let angle = clamp(offset, -1.0, 1.0) * 0.7
+    return normalize(float3(sin(angle), 0.0, cos(angle))) * current_ball_speed()
 }
 
 def has_stuck_balls() : bool {
@@ -898,28 +1101,90 @@ def draw_balls(b : Ball) {
 
 [decs_template]
 struct Brick {
-    pos   : float3
-    color : float3
-    row   : int
+    pos    : float3
+    color  : float3
+    row    : int      // colour row of a plain brick, the particle colour on a hit
+    kind   : int      // BrickKind as int
+    hp     : int
+    points : int
 }
 
+enum BrickKind {
+    plain
+    hard      // two hits, cracks after the first
+    metal     // never breaks, never counts toward the clear
+    bonus     // always drops a capsule
+}
+
+let HARD_COLOR = float3(0.9, 0.9, 0.94)
+let CRACKED_COLOR = float3(0.72, 0.66, 0.58)   // a chipped, dirty white: still a brick to break
+let METAL_COLOR = float3(0.3, 0.34, 0.44)      // dark steel, and drawn sharp-edged: the one that never goes
+let HARD_POINTS = 60
+let BONUS_POINTS = 30
+
+var g_levels <- level_defs()
+var @live level = 0
+var @live level_card_timer = 0.0
+let LEVEL_CARD_TIME = 2.2
+
+def level_count() : int {
+    return length(g_levels)
+}
+
+//! one brick per stencil cell of the current level, the rows centred on the field
 def spawn_bricks() {
-    let total_w = float(BRICK_COLS) * (BRICK_W + BRICK_GAP) - BRICK_GAP
+    let lv = clamp(level, 0, level_count() - 1)
+    var cells : array<tuple<col : int; row : int; ch : int>>
+    var width = 0
+    for (row, line in range(length(g_levels[lv].rows)), g_levels[lv].rows) {
+        width = max(width, length(line))
+        for (col, ch in range(length(line)), line) {
+            if (ch != '.') {
+                cells |> push((col = col, row = row, ch = ch))
+            }
+        }
+    }
+    let total_w = float(width) * (BRICK_W + BRICK_GAP) - BRICK_GAP
     let x_offset = -total_w * 0.5 + BRICK_W * 0.5
-    let total = BRICK_ROWS * BRICK_COLS
-    create_entities`Brick(total) $(_eid : EntityId; i : int; var b : Brick) {
-        let row = i / BRICK_COLS
-        let col = i % BRICK_COLS
-        b.pos = float3(x_offset + float(col) * (BRICK_W + BRICK_GAP), BRICK_H * 0.5, BRICK_START_Z + float(row) * (BRICK_D + BRICK_GAP))
-        b.color = BRICK_COLORS[row]
-        b.row = row
+    let last_row = length(g_levels[lv].rows) - 1   // the stencil's first line is the far edge
+    create_entities`Brick(length(cells)) $(_eid : EntityId; i : int; var b : Brick) {
+        let c = cells[i]
+        b.pos = float3(x_offset + float(c.col) * (BRICK_W + BRICK_GAP), BRICK_H * 0.5, BRICK_START_Z + float(last_row - c.row) * (BRICK_D + BRICK_GAP))
+        if (c.ch == '#') {
+            b.kind = int(BrickKind.hard)
+            b.hp = 2
+            b.points = HARD_POINTS
+            b.color = HARD_COLOR
+            b.row = 2
+        } elif (c.ch == 'X') {
+            b.kind = int(BrickKind.metal)
+            b.hp = 0
+            b.points = 0
+            b.color = METAL_COLOR
+            b.row = 2
+        } elif (c.ch == '?') {
+            b.kind = int(BrickKind.bonus)
+            b.hp = 1
+            b.points = BONUS_POINTS
+            b.row = 1
+            b.color = BRICK_COLORS[1]
+        } else {
+            b.kind = int(BrickKind.plain)
+            b.hp = 1
+            b.row = clamp(c.ch - '1', 0, BRICK_ROWS - 1)
+            b.points = BRICK_POINTS[b.row]
+            b.color = BRICK_COLORS[b.row]
+        }
     }
 }
 
+//! any brick that still has to go: metal never counts
 def has_bricks() : bool {
     var found = false
     query() $(br : Brick) {
-        found = true
+        if (br.kind != int(BrickKind.metal)) {
+            found = true
+        }
     }
     return found
 }
@@ -927,14 +1192,22 @@ def has_bricks() : bool {
 [decs(stage=draw)]
 def draw_bricks(br : Brick) {
     v_model = compose(br.pos, float4(0), float3(BRICK_W, BRICK_H, BRICK_D) * 0.5)
-    f_Color = float4(br.color, 1.0)
+    var color = br.color
+    if (br.kind == int(BrickKind.bonus)) {
+        color *= 0.75 + 0.35 * sin(get_uptime() * 5.0 + br.pos.x)   // a slow pulse marks the capsule brick
+    }
+    f_Color = float4(color, 1.0)
     vs_arcanoid_bind_uniform(active_program)
     if (active_program == shadow_program) {
         fs_shadow_bind_uniform(active_program)
     } else {
         fs_arcanoid_bind_uniform(active_program)
     }
-    brick_geo |> draw_geometry_fragment()
+    if (br.kind == int(BrickKind.metal)) {
+        cube |> draw_geometry_fragment()
+    } else {
+        brick_geo |> draw_geometry_fragment()
+    }
 }
 
 // --- Bonus entities ---
@@ -962,15 +1235,106 @@ def update_bonuses(eid : EntityId; var bn : Bonus) {
     }
 }
 
+def quat_axis(axis : float3; angle : float) : float4 {
+    let h = angle * 0.5
+    return float4(axis * sin(h), cos(h))
+}
+
+def quat_rotate(q : float4; v : float3) : float3 {
+    let u = q.xyz
+    return u * (2.0 * dot(u, v)) + v * (q.w * q.w - dot(u, u)) + cross(u, v) * (2.0 * q.w)
+}
+
+//! one part of a capsule, lit like the rest of the scene (the shadow pass takes the same call)
+def bonus_part(pos : float3; rot : float4; scale : float3; color : float3; geo : OpenGLGeometryFragment) {
+    v_model = compose(pos, rot, scale)
+    f_Color = float4(color, 1.0)
+    vs_arcanoid_bind_uniform(active_program)
+    if (active_program == shadow_program) {
+        fs_shadow_bind_uniform(active_program)
+    } else {
+        fs_arcanoid_bind_uniform(active_program)
+    }
+    geo |> draw_geometry_fragment()
+}
+
+//! the capsule's spin, phased by where it fell so a row of them does not turn in step
+def bonus_spin(phase : float) : float4 {
+    let t = get_uptime() + phase
+    return quat_mul(quat_axis(float3(0.0, 1.0, 0.0), t * 1.1), quat_axis(float3(1.0, 0.0, 0.0), t * 2.6))
+}
+
+def bonus_pulse(phase : float) : float {
+    return 0.9 + 0.1 * sin(get_uptime() * 4.0 + phase)
+}
+
+// A capsule is built in layers the way river_run's pickups are: a steel shell that takes the
+// scene light, end caps and a core in the capsule's own colour hot enough to bloom, and a badge
+// bolted to the middle whose silhouette says the type before the colour does.
 [decs(stage=draw)]
 def draw_bonuses(bn : Bonus) {
-    // Draw as small rotating cube
-    let angle = get_uptime() * 3.0
-    v_model = compose(bn.pos, float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5)), float3(BONUS_SIZE * 0.5))
-    f_Color = float4(bn.color, 1.0)
-    vs_arcanoid_bind_uniform(program)
-    fs_arcanoid_bind_uniform(program)
-    cube |> draw_geometry_fragment()
+    let rot = bonus_spin(bn.pos.x)
+    let pulse = bonus_pulse(bn.pos.x)
+    let p = bn.pos
+    let color = bn.color
+    let shell = float3(0.7, 0.72, 0.78)
+    bonus_part(p, rot, float3(0.30, 0.12, 0.12) * pulse, shell, capsule_shell)
+    for (side in fixed_array(-1.0, 1.0)) {
+        let cap = p + quat_rotate(rot, float3(side * 0.28, 0.0, 0.0)) * pulse
+        bonus_part(cap, rot, float3(0.05, 0.14, 0.14) * pulse, color * 1.5, capsule_shell)
+    }
+    let kind = bn.bonus_type
+    if (kind == int(BonusType.triple_ball)) {
+        for (i in range(3)) {
+            let a = get_uptime() * 2.6 + bn.pos.x + float(i) * (2.0 * PI / 3.0)
+            let off = quat_rotate(rot, float3(0.0, cos(a), sin(a)) * 0.2)
+            bonus_part(p + off, rot, float3(0.06), color * 1.3, sphere)
+        }
+    } elif (kind == int(BonusType.wide_paddle)) {
+        bonus_part(p, rot, float3(0.46, 0.035, 0.09), color * 1.2, cube)
+    } elif (kind == int(BonusType.narrow_paddle)) {
+        bonus_part(p, rot, float3(0.12, 0.035, 0.09), color * 1.2, cube)
+    } elif (kind == int(BonusType.sticky_paddle)) {
+        for (side in fixed_array(-1.0, 1.0)) {
+            let off = quat_rotate(rot, float3(side * 0.1, 0.13, 0.0))
+            bonus_part(p + off, rot, float3(0.08, 0.06, 0.08), color * 1.3, sphere)
+        }
+    } elif (kind == int(BonusType.fireball)) {
+        bonus_part(p + float3(0.0, 0.16, 0.0), float4(0.0, 0.0, 0.0, 1.0), float3(0.1, 0.16, 0.1) * pulse, color * 1.8, cone)
+    } elif (kind == int(BonusType.extra_life)) {
+        bonus_part(p, rot, float3(0.2, 0.05, 0.05), color * 1.4, cube)
+        bonus_part(p, rot, float3(0.05, 0.2, 0.05), color * 1.4, cube)
+    } elif (kind == int(BonusType.speed_up)) {
+        bonus_part(p + float3(0.0, 0.0, -0.16), quat_axis(float3(1.0, 0.0, 0.0), -PI * 0.5), float3(0.1, 0.14, 0.1), color * 1.6, cone)
+    } elif (kind == int(BonusType.speed_down)) {
+        bonus_part(p + float3(0.0, 0.0, 0.16), quat_axis(float3(1.0, 0.0, 0.0), PI * 0.5), float3(0.1, 0.14, 0.1), color * 1.6, cone)
+    } elif (kind == int(BonusType.shield)) {
+        bonus_part(p + float3(0.0, 0.0, -0.14), float4(0.0, 0.0, 0.0, 1.0), float3(0.2, 0.1, 0.02), color * 1.3, cube)
+    }
+    bonus_part(p, rot, float3(0.075) * pulse, color * 2.2, sphere)
+}
+
+// The blended layers: two tilted discs counter-rotating through the capsule, a containment field
+// rather than a decal, and a pool of its light on the board underneath.
+[decs(stage=draw_fx)]
+def draw_bonus_fx(bn : Bonus) {
+    let color = bn.color
+    let pulse = bonus_pulse(bn.pos.x)
+    let t = get_uptime() + bn.pos.x
+    let tilt_a = quat_mul(quat_axis(float3(0.0, 1.0, 0.0), t * 1.6), quat_axis(float3(1.0, 0.0, 0.0), 1.25))
+    let tilt_b = quat_mul(quat_axis(float3(0.0, 1.0, 0.0), -t * 1.1), quat_axis(float3(0.0, 0.0, 1.0), 1.4))
+    for (rot, radius in fixed_array(tilt_a, tilt_b), fixed_array(0.42, 0.34)) {
+        v_model = compose(bn.pos, rot, float3(radius * pulse, 0.006, radius * pulse))
+        f_Color = float4(color * 1.6, 0.28)
+        vs_arcanoid_bind_uniform(active_program)
+        fs_arcanoid_bind_uniform(active_program)
+        halo |> draw_geometry_fragment()
+    }
+    v_model = compose(float3(bn.pos.x, GROUND_Y + 0.012, bn.pos.z), float4(0.0, 0.0, 0.0, 1.0), float3(0.5 * pulse, 0.004, 0.5 * pulse))
+    f_Color = float4(color, 0.22)
+    vs_arcanoid_bind_uniform(active_program)
+    fs_arcanoid_bind_uniform(active_program)
+    halo |> draw_geometry_fragment()
 }
 
 // --- Particles ---
@@ -1031,7 +1395,7 @@ def update_particles(eid : EntityId; var p : Particle) {
     p.vel.y -= 6.0 * tick_dt  // gravity
 }
 
-[decs(stage=draw)]
+[decs(stage=draw_fx)]
 def draw_particles(p : Particle) {
     let frac = p.lifetime / p.max_life
     let alpha = frac
@@ -1074,7 +1438,7 @@ def update_trail(eid : EntityId; var t : Trail) {
     }
 }
 
-[decs(stage=draw)]
+[decs(stage=draw_fx)]
 def draw_trail(t : Trail) {
     let alpha = t.lifetime / 0.15
     var color = BALL_COLOR
@@ -1143,6 +1507,10 @@ struct CmdSpawnBallArgs {
     vx : float = 0.3
 }
 
+struct CmdLevelArgs {
+    level : int = 1
+}
+
 [live_command(description="Spawn a ball. Args: x, vx")]
 def cmd_spawn_ball(input : JsonValue?) : JsonValue? {
     var args = from_JV(input, type<CmdSpawnBallArgs>)
@@ -1160,6 +1528,8 @@ struct GameStatusResult {
     god_mode : bool
     speed : float
     paddle_x : float
+    spectator : bool
+    idle : float
 }
 
 [live_command(description="Show score, lives, ball/brick counts")]
@@ -1173,7 +1543,51 @@ def cmd_game_status(_input : JsonValue?) : JsonValue? {
     result.god_mode = god_mode
     result.speed = game_speed
     result.paddle_x = paddle_x
+    result.spectator = spectator
+    result.idle = idle_timer
     return JV(result)
+}
+
+[live_command(description="Start the spectator round now, as the idle menu would")]
+def cmd_attract(_input : JsonValue?) : JsonValue? {
+    start_attract()
+    return JV(true)
+}
+
+[live_command(description="One capsule of every type in a row across the field, for a look at them")]
+def cmd_bonus_row(_input : JsonValue?) : JsonValue? {
+    for (i in range(NUM_BONUS_TYPES)) {
+        let x = (float(i) - float(NUM_BONUS_TYPES - 1) * 0.5) * 1.05
+        create_entity() @(eid, cmp) {
+            apply_decs_template(cmp, Bonus(pos = float3(x, BONUS_SIZE * 0.5, 4.5), bonus_type = i, color = BONUS_COLORS[i]))
+        }
+    }
+    commit()
+    return JV(NUM_BONUS_TYPES)
+}
+
+[live_command(description="Clear the board as a win would: the next level's card, or the win on the last")]
+def cmd_next_level(_input : JsonValue?) : JsonValue? {
+    if (level + 1 < level_count()) {
+        next_level()
+    } else {
+        game_state = GameState.win_state
+    }
+    return JV((level = level + 1, state = "{game_state}"))
+}
+
+[live_command(description="Jump to a board: level (1-based)")]
+def cmd_level(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdLevelArgs>)
+    let lv = clamp(args.level - 1, 0, level_count() - 1)
+    query() $(eid : EntityId; _b : Brick) {
+        delete_entity(eid)
+    }
+    commit()
+    level = lv
+    spawn_bricks()
+    commit()
+    return JV((level = level + 1, name = g_levels[level].name))
 }
 
 [live_command(description="Spawn a new set of bricks")]
@@ -1228,14 +1642,9 @@ def cmd_powerup(input : JsonValue?) : JsonValue? {
 
 [live_command(description="Reset game to initial state")]
 def cmd_reset_game(_input : JsonValue?) : JsonValue? {
-    decs::restart()
-    spawn_bricks()
-    commit()
-    score = 0
-    lives = START_LIVES
-    paddle_x = 0.0
+    spectator = false
+    new_round()
     game_state = GameState.playing
-    reset_powerups()
     return JV(true)
 }
 
@@ -1286,6 +1695,7 @@ def draw_text(text : string; x, y : int; tint : float3 = float3(1.0)) {
     var quads <- (*hud_font) |> create_quads(text)
     (*hud_font) |> draw_quads_2d(quads, display_w, display_h, x, y, tint)
     delete quads
+    rebind_scene_target()
 }
 
 def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) {
@@ -1296,12 +1706,15 @@ def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) 
     let x = cx - tw / 2
     (*hud_font) |> draw_quads_2d(quads, display_w, display_h, x, y, tint)
     delete quads
+    rebind_scene_target()
 }
 
 def pulse_tint(base : float3) : float3 {
     let pulse = 0.5 + 0.5 * sin(get_uptime() * 4.5)
     return lerp(base * 0.86, base * 1.06, pulse)
 }
+
+let HUD_MARGIN = 48     // clear of the tube's curved corner
 
 def draw_hud() {
     let cx = display_w / 2
@@ -1311,13 +1724,24 @@ def draw_hud() {
         draw_text_centered("PRESS SPACE TO START", cx, cy + 10, pulse_tint(float3(0.7, 0.7, 0.7)))
         return
     }
-    draw_text("SCORE: {score}", 10, 35, float3(1.0, 1.0, 1.0))
+    draw_text("SCORE: {score}", HUD_MARGIN, 45, float3(1.0, 1.0, 1.0))
     var lives_color = float3(0.3, 0.8, 1.0)
     if (lives_blink_timer > 0.0) {
         let blink = sin(lives_blink_timer * 20.0) > 0.0 ? 1.0 : 0.3
         lives_color = float3(blink, 1.0, blink)
     }
-    draw_text("LIVES: {lives}", 10, 70, lives_color)
+    draw_text("LIVES: {lives}", HUD_MARGIN, 80, lives_color)
+    draw_text("LEVEL {level + 1}", display_w - HUD_MARGIN - 130, 45, float3(0.9, 0.9, 0.95))
+    if (level_card_timer > 0.0) {
+        let fade = min(level_card_timer / 0.4, 1.0)
+        draw_text_centered("LEVEL {level + 1}", cx, cy - 40, float3(1.0, 0.85, 0.3) * fade)
+        draw_text_centered(g_levels[clamp(level, 0, level_count() - 1)].name, cx, cy, float3(0.9, 0.9, 0.95) * fade)
+    }
+    if (spectator) {
+        draw_text_centered("DEMO", cx, 35, float3(1.0, 0.8, 0.2))
+        draw_text_centered("PRESS SPACE TO PLAY", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
+        return
+    }
     if (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.2, 0.2))
         draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
@@ -1354,21 +1778,12 @@ def init() {
         init_audio_samples()
     }
     if (!music_initialized) {
-        // The worker arm needs a real thread: any native build has one, and so
-        // does the standalone wasm card (pthread pool + a yielding main loop).
-        // The wasm playground interpreter does not -- spawning there parks the
-        // whole tab -- and a single-threaded audio backend has no consumer for
-        // a worker either. Everyone else falls back to the main-thread arm.
-        music_threaded = (
-            !audio_is_single_threaded() &&
-            (get_platform_name() != "emscripten" || is_standalone_exe())
-        )
+        music_threaded = !audio_is_single_threaded()
         if (music_threaded) {
             strudel_init(@@strudel_music_main)
         } else {
             strudel_create_channel()
-            strudel_set_bpm(118.0lf)
-            setup_menu_music()
+            tune_menu()
         }
         strudel_set_volume(0.4, 0.0)
         music_enabled = true
@@ -1387,15 +1802,13 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
         return
     }
     live_get_framebuffer_size(display_w, display_h)
-    glViewport(0, 0, display_w, display_h)
-    glClearColor(0.05, 0.02, 0.1, 1.0)
-    glClearDepthf(1.0)   // glClearDepth(double) is desktop-GL-only; glClearDepthf is WebGL2-safe (and exists on desktop GL too)
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    glEnable(GL_DEPTH_TEST)
+    ensure_render_targets(display_w, display_h)
+    begin_scene_pass(float3(0.05, 0.02, 0.1))
     glEnable(GL_CULL_FACE)
 
     let aspect = display_h != 0 ? float(display_w) / float(display_h) : 1.0
-    v_projection = perspective_rh_minus1_to_1(45.0 * PI / 180.0, aspect, 0.1, 100.0)
+    v_projection = perspective_rh_minus1_to_1(FOV_Y, aspect, 0.1, Z_FAR)
+    f_ZFar = Z_FAR
     v_view = look_at_rh(
         float3(0.0, 14.0, -4.0),
         float3(0.0, 0.0, 5.0),
@@ -1404,32 +1817,56 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
 
     let dt = get_dt()
     tick_dt = min(dt, 1.0 / 30.0) * game_speed
+    if (level_card_timer > 0.0) {
+        // the LEVEL card: the board holds still, the clock runs
+        level_card_timer -= dt
+        tick_dt = 0.0
+    }
     let space_pressed = glfwGetKey(live_window, GLFW_KEY_SPACE) == GLFW_PRESS
     let space_just = space_pressed && !space_was_pressed
     space_was_pressed = space_pressed
     let esc_pressed = glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS
     let esc_just = esc_pressed && !esc_was_pressed
     esc_was_pressed = esc_pressed
-    // Menu → start
+    let left_pressed = glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS
+    let right_pressed = glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS
+    let any_key = space_pressed || esc_pressed || left_pressed || right_pressed
+    idle_timer = any_key ? 0.0 : idle_timer + dt
+    // F1 and F2 toggle the CRT and the occlusion pass; they are looks, not play, so they leave a demo running
+    let f1_pressed = glfwGetKey(live_window, GLFW_KEY_F1) == GLFW_PRESS
+    let f2_pressed = glfwGetKey(live_window, GLFW_KEY_F2) == GLFW_PRESS
+    if (f1_pressed && !f1_was_pressed) {
+        crt_enabled = !crt_enabled
+    }
+    if (f2_pressed && !f2_was_pressed) {
+        ssao_enabled = !ssao_enabled
+    }
+    f1_was_pressed = f1_pressed
+    f2_was_pressed = f2_pressed
+    if (spectator) {
+        attract_timer += dt
+        let round_over = game_state == GameState.game_over_state || game_state == GameState.win_state
+        if (any_key || attract_timer > ATTRACT_LENGTH || (round_over && attract_timer > ATTRACT_LENGTH * 0.5)) {
+            end_attract()
+        }
+    } elif (game_state == GameState.menu && idle_timer >= ATTRACT_IDLE) {
+        start_attract()
+    }
+    // Menu → start: a fresh round whatever the menu board showed (the bot's, or a reload's)
     if (game_state == GameState.menu && space_just) {
+        new_round()
         game_state = GameState.playing
     }
     // Pause toggle
-    if (game_state == GameState.playing && esc_just) {
+    if (!spectator && game_state == GameState.playing && esc_just) {
         game_state = GameState.paused
     } elif (game_state == GameState.paused && (esc_just || space_just)) {
         game_state = GameState.playing
     }
     // Restart from game over / win
-    if ((game_state == GameState.game_over_state || game_state == GameState.win_state) && space_just) {
-        decs::restart()
-        spawn_bricks()
-        commit()
-        score = 0
-        lives = START_LIVES
-        paddle_x = 0.0
+    if (!spectator && (game_state == GameState.game_over_state || game_state == GameState.win_state) && space_just) {
+        new_round()
         game_state = GameState.playing
-        reset_powerups()
     }
     update_music()
     if (game_state == GameState.playing) {
@@ -1439,10 +1876,7 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
         if (space_just) {
             query() $(var b : Ball) {
                 if (b.stuck != 0) {
-                    var offset = b.stuck_offset / (current_paddle_w() * 0.5)
-                    if (abs(offset) < 0.1) { offset = 0.3; }  // avoid straight-up launch
-                    let angle = offset * 0.7
-                    b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * current_ball_speed()
+                    b.vel = stuck_launch_velocity(b.stuck_offset)
                     b.stuck = 0
                     b.stuck_offset = 0.0
                 }
@@ -1474,6 +1908,9 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
         var hit_ball_idx = -1
         var hit_side = false
         var hit_row = 0
+        var hit_kind = 0
+        var hit_hp = 0
+        var hit_points = 0
         var ball_idx = 0
         let is_fireball = fireball_timer > 0.0
         query() $(var b : Ball) {
@@ -1487,7 +1924,11 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
                         hit_ball_idx = ball_idx
                         hit_side = dx > dz
                         hit_row = br.row
-                        if (!is_fireball) {
+                        hit_kind = br.kind
+                        hit_hp = br.hp
+                        hit_points = br.points
+                        // a fireball goes through everything but metal
+                        if (!is_fireball || br.kind == int(BrickKind.metal)) {
                             if (hit_side) {
                                 b.vel.x = -b.vel.x
                             } else {
@@ -1502,16 +1943,38 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
             ball_idx++
         }
         if (hit_ball_idx >= 0) {
-            delete_entity(hit_eid)
-            commit()
-            score += BRICK_POINTS[hit_row]
-            play_sfx(snd_brick_break)
-            spawn_bonus(hit_pos)
-            spawn_particles(hit_pos, BRICK_COLORS[hit_row])
-            commit()
-            if (!has_bricks()) {
-                game_state = GameState.win_state
-                play_sfx(snd_win)
+            if (hit_kind == int(BrickKind.metal)) {
+                play_sfx(snd_wall_bounce)
+            } elif (hit_hp > 1 && !is_fireball) {
+                query() $(eid : EntityId; var br : Brick) {
+                    if (eid == hit_eid) {
+                        br.hp--
+                        br.color = CRACKED_COLOR
+                    }
+                }
+                play_sfx(snd_wall_bounce)
+                spawn_particles(hit_pos, HARD_COLOR, 4)
+                commit()
+            } else {
+                delete_entity(hit_eid)
+                commit()
+                score += hit_points
+                play_sfx(snd_brick_break)
+                if (hit_kind == int(BrickKind.bonus)) {
+                    spawn_bonus(hit_pos, true)
+                } else {
+                    spawn_bonus(hit_pos, false)
+                }
+                spawn_particles(hit_pos, hit_kind == int(BrickKind.hard) ? HARD_COLOR : BRICK_COLORS[hit_row])
+                commit()
+                if (!has_bricks()) {
+                    if (level + 1 < level_count()) {
+                        next_level()
+                    } else {
+                        game_state = GameState.win_state
+                        play_sfx(snd_win)
+                    }
+                }
             }
         }
     }
@@ -1519,19 +1982,63 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     glUseProgram(program)
     active_program = program
     draw_ground()
+    begin_color_only_span()
     draw_shadows()
+    end_color_only_span()
     draw_walls()
-    draw_shield()
     draw_paddle()
-    // Particles and trail need blending
+    decs_stage("draw")
+    begin_color_only_span()
+    draw_shield()
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    decs_stage("draw")
+    decs_stage("draw_fx")
     glDisable(GL_BLEND)
-
     glDisable(GL_CULL_FACE)
+    glActiveTexture(GL_TEXTURE0)      // the post chain leaves the active unit on its last sampler; the font binds on unit 0
     draw_hud()
+    run_postfx(post_settings(aspect))
     live_end_frame()
+}
+
+var @live crt_enabled = true
+var @live ssao_enabled = true
+var @live fx_debug_view = 0
+let FOV_Y = 45.0 * PI / 180.0
+
+def post_settings(aspect : float) : PostSettings {
+    var cfg = PostSettings()
+    cfg.crt = crt_enabled
+    cfg.ssao = ssao_enabled
+    cfg.debug_view = fx_debug_view
+    let t = tan(FOV_Y * 0.5)
+    cfg.tan_half_fov = float2(t * aspect, t)
+    cfg.z_far = Z_FAR
+    cfg.time = get_uptime()
+    return cfg
+}
+
+[live_command(description="Toggle the CRT present pass")]
+def cmd_toggle_crt(_input : JsonValue?) : JsonValue? {
+    crt_enabled = !crt_enabled
+    return JV(crt_enabled)
+}
+
+[live_command(description="Toggle screen-space ambient occlusion")]
+def cmd_toggle_ssao(_input : JsonValue?) : JsonValue? {
+    ssao_enabled = !ssao_enabled
+    return JV(ssao_enabled)
+}
+
+struct CmdFxDebugArgs {
+    view : int = 0
+}
+
+[live_command(description="Present a post buffer instead of the frame. Args: view (0 frame, 1 occlusion, 2 normal-depth)")]
+def cmd_fx_debug(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdFxDebugArgs>)
+    fx_debug_view = args.view
+    return JV(args)
 }
 
 [export]

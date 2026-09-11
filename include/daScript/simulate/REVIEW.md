@@ -64,3 +64,14 @@ C++ half never opens the daslib checklist on its own.
   `tests-cpp/small/test_debug_info_layout_pin.cpp` it makes false, and adds an `offsetof`
   pin for each field it adds** - a field that lands in tail padding leaves `sizeof`
   unchanged, so no other assertion in that file fails.
+
+- **In a C++ type das reads fields of (`addField` in its annotation - `Context`, `Program`,
+  `FStat`), a member whose size the host toolchain picks - a `mutex`, a `std::function`, a
+  platform struct such as `struct stat` - goes after every das-visible field, and a type das
+  holds by value (`isLocal`, `canCopy` or `canMove` true) is built from fixed-width members
+  only: copy what das needs out of a platform struct instead of embedding one.** A
+  cross-compiled exe bakes the host's `sizeof` and field offsets into the code it generates,
+  and the target's standard library sizes such a member differently (a mutex is 64 bytes on
+  darwin and 40 under emscripten, a `std::function` 48 under Linux libc++ and 32 elsewhere),
+  so every das-visible field behind one is read at the wrong address. `--jit-check-abi`
+  reports the mismatch at the bundle's first launch, for the types the bundle links.

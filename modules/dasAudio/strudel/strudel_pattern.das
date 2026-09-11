@@ -190,8 +190,7 @@ def cat(var pats : array<Pattern>) : Pattern {
             if (idx < 0) {
                 idx += cn
             }
-            // pattern `idx` sees its own k-th cycle at cycle idx + k*N, so an alternation nested
-            // in a sequence step still advances with the outer cycle instead of replaying cycle 0
+            //! pattern idx sees its own k-th cycle at cycle idx + k*N: a nested alternation advances with the outer clock
             let shift = cycle - double((int(cycle) - idx) / cn)
             let innerSpan = TimeSpan(start = sub.start - shift, stop = sub.stop - shift)
             var haps <- invoke(pats[idx], innerSpan)

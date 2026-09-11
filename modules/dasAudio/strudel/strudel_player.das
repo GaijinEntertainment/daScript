@@ -78,7 +78,7 @@ let private WORKER_EXIT_TIMEOUT_MS = 5000
 var public g_track_pcm : array<array<float>>
 //! Master mixed stereo PCM output for the most recent tick (main-thread mode only).
 var public g_master_pcm : array<float>
-//! The worker's mix buffer (threaded mode only): a global, since the worker collects its heap and a jitted frame's locals are not roots.
+//! the worker's mix buffer lives in a global: the worker collects its heap, and a jitted frame's locals are not roots
 var private g_worker_output : array<float>
 
 //! Rolling visualizer index — incremented by strudel_add_track, read by visualizer combinators.
@@ -86,7 +86,7 @@ var public g_vis_index : int = 0
 
 // --- Memory tracking ---
 let private LEAK_WARN_THRESHOLD = 1024l  // bytes; only warn on leaks strictly above this
-let private WORKER_GC_GROWTH = 2ul * 1024ul * 1024ul     // bytes over the worker's baseline before it collects
+let private WORKER_GC_GROWTH_BYTES = 2ul * 1024ul * 1024ul
 var private g_debug_memory : bool = false
 var private g_mem_heap_baseline : uint64 = 0ul
 var private g_mem_str_baseline : uint64 = 0ul
@@ -108,7 +108,7 @@ struct AudioChunk {
 struct private PlaybackTime {
     wall_time : double
     cps       : double
-    heap_bytes : uint64     //! the worker context's heap after its last tick
+    worker_heap_bytes : uint64     //! the worker context's heap after its last tick
 }
 
 def public strudel_get_worker_heap_bytes() : uint64 {
@@ -116,7 +116,7 @@ def public strudel_get_worker_heap_bytes() : uint64 {
     var bytes = 0ul
     if (g_playback_box != null) {
         g_playback_box |> read() $(pt : PlaybackTime) {
-            bytes = pt.heap_bytes
+            bytes = pt.worker_heap_bytes
         }
     }
     return bytes
@@ -719,9 +719,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     var mem_str_max = mem_str_base
     let mem_log_interval = max(int(1.0 / CHUNK_SEC), 1)
     var mem_tick_count = 0
-    // heap_collect throws in a context without `options gc` + `options persistent_heap`, and an
-    // AOT-compiled frame's locals are no roots at all, so an AOT host keeps its heap; otherwise one
-    // probe on the still-empty heap decides whether this worker may collect
+    //! one probe on the empty heap: heap_collect throws without options gc + persistent_heap, and an AOT frame's locals are no roots
     var gc_allowed = !aot_enabled()
     if (gc_allowed) {
         try {
@@ -797,7 +795,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         g_wall_samples += int64(chunkFrames)
         g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
         if (g_playback_box != null) {
-            g_playback_box |> publish(PlaybackTime(wall_time = g_wall_time, cps = g_cps, heap_bytes = heap_bytes_allocated()))
+            g_playback_box |> publish(PlaybackTime(wall_time = g_wall_time, cps = g_cps, worker_heap_bytes = heap_bytes_allocated()))
         }
         // buffer level feedback
         var que_len = 0
@@ -815,11 +813,8 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         mem_heap_max = max(mem_heap_max, mem_heap_cur)
         mem_str_max = max(mem_str_max, mem_str_cur)
         mem_tick_count ++
-        // this context is the worker's alone: nothing else ever collects it, and a pattern query's
-        // garbage grows it without bound (a megabyte a second on a four-track bed); a collect once
-        // the growth passes the threshold bounds it there, and the pause fits the chunk budget with
-        // the queue as slack
-        if (gc_allowed && mem_heap_cur > mem_heap_base + WORKER_GC_GROWTH) {
+        //! the worker's context is nobody else's to collect; a query's garbage grows it a megabyte a second on a four-track bed
+        if (gc_allowed && mem_heap_cur > mem_heap_base + WORKER_GC_GROWTH_BYTES) {
             unsafe(heap_collect(true, false))
         }
         if (g_debug_memory && mem_tick_count % mem_log_interval == 0) {
@@ -855,7 +850,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         let MAX_UTIL = int(max_chunk_usec / chunk_budget_usec * 1000.lf)
         // leak = heap after cleanup minus baseline; peak is just informational.
         if (gc_allowed) {
-            unsafe(heap_collect(true, false))   // garbage since the last collect is not a leak
+            unsafe(heap_collect(true, false))
         }
         let mem_heap_final = heap_bytes_allocated()
         let mem_str_final = string_heap_bytes_allocated()
