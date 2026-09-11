@@ -879,7 +879,7 @@ def private pf_moe_layer_sets(l : int64) {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
-    let dim = g_rd.dim   // nolint:LINT021 — composed into the plane offsets and the push words as int64
+    let dim = g_rd.dim
     let ne = g_rd.ne   // nolint:LINT021 — the push words take the int64 geometry narrowed
     let k = g_rd.k
     let nfe = g_rd.nfe

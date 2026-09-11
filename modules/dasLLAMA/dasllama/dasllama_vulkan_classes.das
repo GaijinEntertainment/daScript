@@ -1464,7 +1464,7 @@ class DnConv {
     }
 
     [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv")]
-    def run {   // nolint:STYLE038 — the conv's slide, the SiLU, the two-level norm and the store over one register-held position block
+    def run {
         let cblocks = (pa.cd + 255u) / 256u
         let p0 = (gl_WorkGroupID.x / cblocks) * DN_CONV_PB
         let ch = (gl_WorkGroupID.x % cblocks) * 256u + gl_LocalInvocationID.x

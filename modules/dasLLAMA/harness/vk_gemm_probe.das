@@ -727,7 +727,7 @@ let private COLD_COPIES = 96   //! copies of a shape's planes, 67 MB and up at t
 //! the ring (each dispatch runs a pipeline the last one did not, as the window chain does) - the in-window
 //! cost of a small GEMM is its cold row, plus whatever the turns row reads past the three cold rows' mean
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {
     var dvs <- [for (_c in range(COLD_COPIES)); cm2_shape_upload(fmt, d, n, cnt)]
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     let tiles = fixed_array(256, 128, 32)

@@ -248,7 +248,7 @@ def test_vkd_lens_readonly_gate(t0 : T?) {
 //! one small f16 GEMM shape through the cm2 class, twice: the direct store into y at a base and stride, and the eight-chunk
 //! split into the partial planes with the reduce into y at the same base - both against the f32 dot of the same f16 values,
 //! the header under the base kept as the sentinel, the bar's poison an added value that must red it
-def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {   // nolint:STYLE038 — one flat gate: fixture, two dispatch arms, compare
+def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         {
             let nsplit = 8
