@@ -430,6 +430,20 @@ jobs:
         done
       continue-on-error: true
 
+    - name: "Gate the benchmark records: every das lane on every board"
+      # A record that lost a das lane (an AOT module that never loaded, a runner started
+      # without -jit) renders as a board with no das column and nothing else notices;
+      # the deploy fails on it instead. A platform with no record at all is the fetch
+      # step's tolerance above - only the records that arrived are checked.
+      run: |
+        set -eu
+        records=$(ls site/files/profile_results_*.json 2>/dev/null || true)
+        if [ -z "$records" ]; then
+            echo "::error::no dasProfile record arrived at all"
+            exit 1
+        fi
+        python3 ci/check_profile_records.py $records
+
     - name: "Stage site for deployment"
       run: |
         set -eux
