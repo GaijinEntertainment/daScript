@@ -186,6 +186,27 @@ what it costs today and what the fix would change.
   reps (0.960x of 5217), tg32 132.5; the sanity argmax the same token, its logit 0.02 apart (the
   norm's sum in butterfly order) [direction-grade - one commit].
 
+- **LANDED (2026-09-11) - the fused deltanet decode step runs the delta rule with every thread owning
+  one state column's row part in registers, its norms and q.k by subgroup adds, and the beta and
+  alpha rows as one GEMV dispatch.** The step read the state column-per-thread in a rolled loop
+  (each load's latency exposed in turn) with three single-thread loops over the head's 128 values:
+  25 us a layer on every hybrid (Linux RTX 5080), the beta/alpha pair two 32-workgroup dispatches
+  with a hazard barrier between. Now: the 64 loads of a thread's row part issue straight-line
+  before a sum waits on one, the state held in registers from the k.S / q.S pass through the
+  update; the q and k squared sums, the raw q.k and the out-norm's sum by `subgroupAdd`;
+  `RouterGemvF16` reads its rows as half pairs and lands the alpha half at a second base
+  (`RouterArgs.ne1 / obase2`). Isolated (`harness/vk_gemm_probe.das dec`): the step 8.8 us at 32
+  or 16 heads of 128, the GEMV 4.6 / 3.0 / 4.7 us at the 9B's, 0.8B's and 27B's shapes; the
+  token profile's step role on the 0.8B 456 -> 222 us a token (25.3 -> 12.3 a layer), ba 380 ->
+  310. tg32 (pod, -r 5, -r 10 on the 0.8B): the 0.8B 336 -> 354.1 +- 1.2 (0.70x -> 0.74x of the
+  reference exe's 480), the 9B 91.7 -> 96.1 +- 0.1 (0.81x -> 0.85x of 112.8), the 35B 132.5 ->
+  141.5 +- 0.2 (0.91x -> 0.975x of 145.2); pp512 flat on all three (27494, 5129, 5150). A first
+  form with the load guarded inside the unrolled loop read SLOWER (the step 25 -> 38 us a layer,
+  the 0.8B 336 -> 309): a guard per copy puts each load in its own block, so the sums wait on
+  the loads one by one. RTX 5060 Ti four-wide arm, the 0.8B: 268.6 +- 0.8 -> 270.5 +- 3.0 (the
+  first form 252.9). The step and router GEMV cells match their CPU oracles, the GEMV cell gains
+  the two-base arm [direction-grade - one commit].
+
 - **LANDED (2026-09-10) - the k4, k5 and iq4xs cm2 tiles stage a scale cache: the tile's 128
   rows' eight sub-block scales (the K-quants' (d x sc, dmin x mn) pairs, IQ4_XS's d x (ls - 32)),
   filled once per superblock into shared memory, the decode reading one word pair where it read

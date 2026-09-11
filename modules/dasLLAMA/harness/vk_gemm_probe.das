@@ -588,6 +588,136 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; lonly :
     }
 }
 
+// ===== the decode head's small kernels in isolation (arg "dec") =====
+
+//! the f16 beta/alpha GEMV at ne rows over dim (one dispatch, the alpha half at a second base) and the fused deltanet
+//! step at nvh heads of ds, each a chain of DISPATCHES over the same buffers under one hazard set - the serial form
+//! the token command runs them in - so a figure past the reference exe's logger rows (its two f32 m=32 GEMVs ~5 us
+//! each, GATED_DELTA_NET 4.1 us + SSM_CONV 5.2 at n=1 on the RTX 5080) names the kernel, and a figure below them
+//! sends the reader to the chain around it
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measurement sweep
+    verify(ensure_router_gemv_f16_cls() && ensure_dn_step_cls(), "dec probe pipelines must engage")
+    for (shape in fixed_array(int2(64, 4096), int2(32, 1024), int2(64, 5120))) {   //! (rows, dim): the 9B's, the 0.8B's, the 27B's
+        let ne = shape.x
+        let dim = shape.y
+        let w_bytes = int64(ne * dim) * 2l
+        let x_bytes = int64(dim) * 4l
+        let o_bytes = 4096l
+        var wh : array<uint>
+        var xh : array<float>
+        wh |> resize(ne * dim / 2)
+        xh |> resize(dim)
+        for (i in range(length(wh))) {
+            wh[i] = cool_f16_pair(uint(i) + 11u)
+        }
+        for (i in range(dim)) {
+            xh[i] = float(hash_word(uint(i) + 5u) % 1000u) / 500.0 - 1.0
+        }
+        let wd = make_device_buf(w_bytes)
+        let xd = make_device_buf(x_bytes)
+        let od = make_device_buf(o_bytes)
+        unsafe {
+            upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+            upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
+        }
+        var s = set_router_gemv_f16_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne1 = uint(ne / 2), obase2 = uint(16 + ne))
+        for (_k in range(DISPATCHES)) {
+            enc_router_gemv_f16_cls(raw, hz, s, pc, int64(ne))
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        print("dec ba gemv f16 {ne}x{dim}: {us} us/dispatch  timing-only\n")
+        delete wh
+        delete xh
+    }
+    for (geo in fixed_array(int4(32, 16, 128, 4), int4(16, 8, 128, 4))) {   //! (nvh, nkh, ds, dconv): the 9B's heads, the 0.8B's
+        let nvh = geo.x
+        let nkh = geo.y
+        let ds = geo.z
+        let dconv = geo.w
+        let kd = nkh * ds
+        let di = nvh * ds
+        let cd = 2 * kd + di
+        let taps = dconv - 1
+        let beta_off = 16
+        let g_off = beta_off + nvh
+        let a_off = g_off + nvh
+        let dt_off = a_off + nvh
+        let taps_off = dt_off + nvh
+        let wnorm_off = taps_off + cd * dconv
+        let hist_off = wnorm_off + ds
+        let sm_n = hist_off + 2 * cd * taps
+        let nblk = di / 32
+        var projh : array<float>
+        var sth : array<float>
+        var smh : array<float>
+        projh |> resize(cd + di)
+        sth |> resize(nvh * ds * ds)
+        smh |> resize(sm_n)
+        for (i in range(length(projh))) {
+            projh[i] = float((i * 23) % 71) * 0.03 - 1.0
+        }
+        for (i in range(length(sth))) {
+            sth[i] = float((i * 13) % 53) * 0.02 - 0.5
+        }
+        for (i in range(sm_n)) {
+            smh[i] = float((i * 17) % 43) * 0.02 - 0.4
+        }
+        for (i in range(nvh)) {
+            smh[a_off + i] = -0.4 - float(i) * 0.1
+        }
+        let proj_bytes = long_length(projh) * 4l
+        let st_bytes = long_length(sth) * 4l
+        let sm_bytes = int64(sm_n) * 4l
+        let sc_bytes = int64(nblk) * 4l
+        let q_bytes = int64(nblk) * 32l
+        let of_bytes = int64(di) * 4l
+        let projd = make_device_buf(proj_bytes)
+        let std = make_device_buf(st_bytes)
+        let smd = make_device_buf(sm_bytes)
+        let scd = make_device_buf(sc_bytes)
+        let qd = make_device_buf(q_bytes)
+        let ofd = make_device_buf(of_bytes)
+        var tokb = make_host_buf(16l, true)
+        unsafe {
+            upload_region_at(projd, 0l, addr<uint8 const?>(projh[0]), proj_bytes)
+            upload_region_at(std, 0l, addr<uint8 const?>(sth[0]), st_bytes)
+            upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
+            var tm = reinterpret<TokMeta?>(tokb.mapped)
+            tm.parity = 1u
+        }
+        var s = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
+            fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, 16l, of_bytes),
+            fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
+        for (oform in range(2)) {
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var hz : VkHaz
+            var pc = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
+                beta_off = uint(beta_off), g_off = uint(g_off), taps_off = uint(taps_off), wnorm_off = uint(wnorm_off),
+                a_off = uint(a_off), dt_off = uint(dt_off), hist_off = uint(hist_off), eps = 1e-6, qscale = 1.0 / sqrt(float(ds)),
+                out_f32 = uint(oform))
+            for (_k in range(DISPATCHES)) {
+                enc_dn_step_cls(raw, hz, s, pc, int64(nvh))
+            }
+            vk_check(vkEndCommandBuffer(raw), null)
+            let us = usec_per_dispatch(raw)
+            let oname = oform == 0 ? "q8 row" : "f32 row"
+            print("dec step nvh {nvh} ds {ds} {oname}: {us} us/dispatch  timing-only\n")
+        }
+        delete projh
+        delete sth
+        delete smh
+    }
+}
+
 // ===== the m stamp on planes the L2 cannot hold (arg "cold:<fmt>") =====
 let private COLD_COPIES = 96   //! copies of a shape's planes, 67 MB and up at the shared expert's shapes: past a 64 MB L2, so every dispatch reads its planes from VRAM
 
@@ -3180,7 +3310,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -3226,6 +3356,11 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         }
     }
     g_probe_exit = 0
+    if (only == "dec") {
+        print("DECODE SMALL KERNELS dec: timing-only rows, no output compared\n")
+        run_dec_small_kernels()
+        return
+    }
     if (only == "cm2:" || only == "cm2d:" || only == "cm2w:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")

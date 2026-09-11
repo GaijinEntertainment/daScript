@@ -836,11 +836,10 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
     gemv_enc(L.fz, raw, h, L.s_dnz, pcz, di)
     pfq_ts(raw)
-    if (g_rd.dn_ba_f32) {
-        var pcb = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA))
-        enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcb, nvh)
-        var pcg = RouterArgs(ne = uint(nvh), dim = uint(dim), woff = uint(L.ba_off + nvh * dim), obase = uint(DN_SM_G))
-        enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcg, nvh)
+    if (g_rd.dn_ba_f32) {   //! the beta rows and the alpha rows behind them, one dispatch, each half to its own smalls base
+        var pcb = RouterArgs(ne = uint(2l * nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA),
+            ne1 = uint(nvh), obase2 = uint(DN_SM_G))
+        enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcb, 2l * nvh)
     } else {
         if (kq_sb(L.fqkv)) {   // the row above was requantized Q8_K for the kq GEMVs; the q8 beta/alpha GEMVs read it as Q8_0 (no stamp: the requant bills to the ba role)
             var pcr = RqArgs(inbase = 0u, nblk = uint(dim / 32l))

@@ -199,9 +199,15 @@ whole-model driver (`ARCHITECTURE_GPU.md` sec.1.5, `dasllama_gpu_resident.das`) 
 command per model whose per-layer body is one of two heads followed by the shared FFN tail: an
 attention head (q/k/v GEMVs, the fused qk-norm and rope storing the mirror row, decode attention
 over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
-GEMV into one projection row (z at offset `cd`), the beta and alpha GEMVs into the layer's smalls
-at the step's beta and g rows, the fused deltanet step (`dn_step_cls`, the same kernel the
-per-op tier's `vk_moe_dn_step` dispatches), and the out GEMV. Both heads leave the block output
+GEMV into one projection row (z at offset `cd`), the beta and alpha rows as ONE `RouterGemvF16`
+dispatch (the rows read as half pairs, the alpha half landing at the smalls' g rows through the
+push block's second base: a dispatch and a hazard barrier fewer a layer), the fused deltanet step
+(`dn_step_cls`, the same kernel the per-op tier's `vk_moe_dn_step` dispatches: one workgroup a
+head - the conv preamble over the head's channels, the q and k norms and the raw q.k by subgroup
+adds, then the delta rule with each of the 256 threads owning one state column's row part, 64
+rows at ds 128, held in registers from the k.S / q.S pass through the update so the state
+streams once each way with a row's loads coalesced across the columns, the out-norm's sum by a
+subgroup add, and the o row) and the out GEMV. Both heads leave the block output
 in `xb2`, so the residual add, the FFN and the next layer's norm never know which head ran. The
 deltanet qkv and z planes ride their file formats - the loader tags a dense hybrid's planes
 natively where this driver will be attempted or no GPU rail wants them (Metal off, the file not

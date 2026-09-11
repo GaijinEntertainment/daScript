@@ -7149,6 +7149,42 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             poison[obase] += 1.0 + 2.0 * abs(want[obase])
             t |> success(rel_mismatches(poison, want, obase, ne) > 0, "router_gemv_f16: the bar reds a poisoned output")
             delete poison
+            //! the two-base form (the decode's beta rows and alpha rows in one dispatch): the rows from ne1 on land at
+            //! obase2, four sentinel words between the halves untouched
+            let ne1 = ne / 2
+            let obase2 = obase + ne1 + 4
+            var want2 : array<float>
+            want2 |> resize(out_n)
+            for (e in range(ne)) {
+                want2[(e < ne1 ? obase : obase2 - ne1) + e] = want[obase + e]
+            }
+            var got2 : array<float>
+            got2 |> resize(out_n)
+            nan_sentinel_upload(od, o_bytes)
+            unsafe {
+                var sc2 = set_router_gemv_f16_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+                var raw2 = alloc_cmd()
+                let begin2 = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw2, begin2), null)
+                var h2 : VkHaz
+                var pc2 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), ne1 = uint(ne1), obase2 = uint(obase2))
+                enc_router_gemv_f16_cls(raw2, h2, sc2, pc2, int64(ne))
+                vhz_dep(raw2, h2, 2u, 0u, true)
+                cmd_copy_range(raw2, od, 0l, host.buf, 0l, o_bytes)
+                vk_check(vkEndCommandBuffer(raw2), null)
+                submit_wait(raw2)
+                memcpy(addr<void?>(got2[0]), host.mapped, o_bytes)
+            }
+            let bad2 = rel_mismatches(got2, want2, obase, ne1) + rel_mismatches(got2, want2, obase2, ne1)
+            var gap = 0
+            for (i in range(obase + ne1, obase2)) {
+                if (float_bits_to_uint(got2[i]) != 0x7fc00000u) {
+                    gap++
+                }
+            }
+            t |> success(bad2 == 0 && gap == 0, "router_gemv_f16 two bases: {bad2} of {ne} outputs off the CPU dot, {gap} of 4 gap words written")
+            delete want2
+            delete got2
             delete wh
             delete wh16
             delete xh

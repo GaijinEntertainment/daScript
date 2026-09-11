@@ -685,11 +685,15 @@ struct RouterArgs {
     dim : uint    // row width
     woff : uint   // this layer's row base in the span's router plane (elements)
     obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
+    ne1 : uint    //! rows from ne1 on land at obase2 (the deltanet beta and alpha rows in one dispatch); 0 = one base
+    obase2 : uint
 }
 
 [ |> template_struct_instance]
 class template RouterGemvT {
+    @template_constant PAIRS : bool = false   //!< the f16 stamp reads its row as half pairs, one word a step
     @ssbo @binding = 0 @role = "weight" w : array<KT>   // the rows, row-major [ne x dim] per layer
+    @ssbo @binding = 0 @role = "alias" @template_gate = PAIRS w2 : array<uint>   //! the same rows as half pairs
     @ssbo @binding = 1 x : array<float>       // the FFN-normed row
     @ssbo @binding = 2 logits : array<float>  // ne logits
     @push_constant pa : RouterArgs
@@ -701,9 +705,19 @@ class template RouterGemvT {
         let base = pa.woff + e * pa.dim
         var acc = 0.0
         var i = gl_LocalInvocationID.x
-        while (i < pa.dim) {
-            acc += float(w[base + i]) * x[i]   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
-            i += 256u
+        static_if (PAIRS) {
+            let hb = base >> 1u
+            let hd = pa.dim >> 1u
+            while (i < hd) {
+                let p = unpackHalf2x16(w2[hb + i])
+                acc += p.x * x[2u * i] + p.y * x[2u * i + 1u]
+                i += 256u
+            }
+        } else {
+            while (i < pa.dim) {
+                acc += float(w[base + i]) * x[i]   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
+                i += 256u
+            }
         }
         let s = subgroupAdd(acc)
         if (gl_SubgroupInvocationID == 0u) {
@@ -717,7 +731,11 @@ class template RouterGemvT {
                 tot += part[sgi]
                 sgi++
             }
-            logits[pa.obase + e] = tot
+            var o = pa.obase + e
+            if (pa.ne1 != 0u && e >= pa.ne1) {
+                o = pa.obase2 + (e - pa.ne1)
+            }
+            logits[o] = tot
         }
     }
 }
@@ -730,6 +748,7 @@ class RouterGemv : RouterGemvT {
 [vk_dispatch(name = "router_gemv_f16_cls", grid = "ne", params = "ne : int64")]
 class RouterGemvF16 : RouterGemvT {
     typedef KT = float16
+    override PAIRS = true
 }
 
 struct DnBaArgs {
@@ -1501,10 +1520,14 @@ class DnStepFused {
     @workgroup dv : float[128]
     @workgroup dvn : float[128]
     @workgroup dout : float[128]
+    @workgroup partk : float[256]   //! each row part's k.S column partials (part-major, ds wide: the thread's own slot)
+    @workgroup partq : float[256]   //! ... and q.S
+    @workgroup sga : float[16]      //! per-subgroup partial sums: the q and k squared sums, then the out-norm's
+    @workgroup sgb : float[16]      //! per-subgroup partials of the raw q.k
     @workgroup ds8 : float[8]
 
     [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv")]
-    def run {   // nolint:STYLE037,STYLE038 — the verbatim fused chain, parity-locked to the shipped kernel
+    def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
         let h = gl_WorkGroupID.x
         let ds = pa.ds
         let taps = pa.dconv - 1u
@@ -1544,69 +1567,117 @@ class DnStepFused {
             e += 256u
         }
         barrier()
-        // q/k L2 scales + the per-token beta/g transforms — tiny serial lanes (ds is 128-class)
-        if (tid < 2u) {
-            var sum = 0.0
-            var j = 0u
-            while (j < ds) {
-                let v = tid == 0u ? dq[j] : dk[j]
-                sum += v * v
-                j++
+        //! the q and k squared sums and the raw q.k by subgroup adds: the first half of the threads hold q, the second k
+        var pn = 0.0
+        var pq = 0.0
+        if (tid < ds) {
+            pn = dq[tid] * dq[tid]
+            pq = dq[tid] * dk[tid]
+        } elif (tid >= 128u && tid < 128u + ds) {
+            pn = dk[tid - 128u] * dk[tid - 128u]
+        }
+        let sn = subgroupAdd(pn)
+        let spq = subgroupAdd(pq)
+        if (gl_SubgroupInvocationID == 0u) {
+            sga[gl_SubgroupID] = sn
+            sgb[gl_SubgroupID] = spq
+        }
+        barrier()
+        if (tid == 0u) {   // the scales, the gates and q.k (the scales applied to the raw sum), the per-token beta/g transforms
+            var sumq = 0.0
+            var sumk = 0.0
+            var qkr = 0.0
+            let half = gl_NumSubgroups / 2u
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                if (sgi < half) {
+                    sumq += sga[sgi]
+                    qkr += sgb[sgi]
+                } else {
+                    sumk += sga[sgi]
+                }
+                sgi++
             }
-            ds8[tid] = (1.0 / max(sqrt(sum), pa.eps)) * (tid == 0u ? pa.qscale : 1.0)
-        } elif (tid == 2u) {
+            let sq = (1.0 / max(sqrt(sumq), pa.eps)) * pa.qscale
+            let sk = 1.0 / max(sqrt(sumk), pa.eps)
+            ds8[0u] = sq
+            ds8[1u] = sk
             let graw = smalls[pa.g_off + h] + smalls[pa.dt_off + h]
             ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
             ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + h]))
+            ds8[4u] = qkr * sq * sk
         }
         barrier()
-        e = tid
-        while (e < ds) {
-            dq[e] = dq[e] * ds8[0u]
-            dk[e] = dk[e] * ds8[1u]
-            e += 256u
-        }
-        barrier()
-        if (tid == 0u) {
-            var qk = 0.0
-            var j = 0u
-            while (j < ds) {
-                qk += dq[j] * dk[j]
-                j++
-            }
-            ds8[4u] = qk
-        }
-        barrier()
-        // the delta rule at chunk length 1, state in place
-        let sbase = h * ds * ds
+        //! the delta rule at chunk length 1, state in place: a thread owns one column's row part (64 rows at ds 128),
+        //! held in registers between the k.S / q.S pass and the update, the loads of a row coalesced across the columns
+        let sq = ds8[0u]
+        let sk = ds8[1u]
         let eg = ds8[2u]
         let bt = ds8[3u]
+        let qk = ds8[4u]
+        let rpp = min(ds, 64u)
+        let nparts = ds / rpp
+        let active = tid < ds * nparts
+        let c = tid % ds
+        let r0 = (tid / ds) * rpp
+        let sbase = h * ds * ds
+        var sreg : float[64]
+        var ksp = 0.0
+        var qsp = 0.0
+        if (active) {
+            //! the loads first, straight-line (a short part re-reads its last row), so all 64 issue before a sum waits on one
+            for [unroll] (j in range(64)) {
+                sreg[j] = state[sbase + (r0 + min(uint(j), rpp - 1u)) * ds + c]
+            }
+            for [unroll] (j in range(64)) {
+                if (uint(j) < rpp) {
+                    ksp += dk[r0 + uint(j)] * sreg[j]
+                    qsp += dq[r0 + uint(j)] * sreg[j]
+                }
+            }
+        }
+        if (tid < ds * nparts) {
+            partk[tid] = ksp
+            partq[tid] = qsp
+        }
+        barrier()
         if (tid < ds) {
             var ks = 0.0
             var qs = 0.0
-            var i = 0u
-            while (i < ds) {
-                let sv = state[sbase + i * ds + tid]
-                ks += dk[i] * sv
-                qs += dq[i] * sv
-                i++
+            var p = 0u
+            while (p < nparts) {
+                ks += partk[p * ds + tid]
+                qs += partq[p * ds + tid]
+                p++
             }
-            let vn = bt * (dv[tid] - eg * ks)
+            let vn = bt * (dv[tid] - eg * (sk * ks))
             dvn[tid] = vn
-            dout[tid] = eg * qs + ds8[4u] * vn
+            dout[tid] = eg * (sq * qs) + qk * vn
         }
         barrier()
-        e = tid
-        while (e < ds * ds) {
-            state[sbase + e] = state[sbase + e] * eg + dk[e / ds] * dvn[e % ds]
-            e += 256u
+        if (active) {
+            let vnc = dvn[c]
+            for [unroll] (j in range(64)) {
+                if (uint(j) < rpp) {
+                    state[sbase + (r0 + uint(j)) * ds + c] = sreg[j] * eg + (sk * dk[r0 + uint(j)]) * vnc
+                }
+            }
         }
+        var po = 0.0
+        if (tid < ds) {
+            po = dout[tid] * dout[tid]
+        }
+        let so = subgroupAdd(po)
+        if (gl_SubgroupInvocationID == 0u) {
+            sga[gl_SubgroupID] = so
+        }
+        barrier()
         if (tid == 0u) {
             var sum = 0.0
-            var j = 0u
-            while (j < ds) {
-                sum += dout[j] * dout[j]
-                j++
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                sum += sga[sgi]
+                sgi++
             }
             ds8[5u] = 1.0 / sqrt(sum / float(ds) + pa.eps)
         }

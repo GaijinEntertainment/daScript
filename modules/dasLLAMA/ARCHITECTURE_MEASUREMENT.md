@@ -106,6 +106,15 @@ sweep: the l stamp over one 256-token column (K 4096) at half-wave steps of the 
 from one wave to four, so the cost of a second wave says how many of the stamp's workgroups an SM
 runs at once; its alternate is the one-wave row (the RTX 5080 runs one: k5 at 84 workgroups
 0.170 ms, 126 0.333, 168 0.379, 252 0.562, 336 0.746 - a partial wave costs a whole one).
+`dec` times the decode head's two small kernels in isolation, each as a chain of dispatches
+over its own buffers under one hazard set (the serial form the token command runs them in): the
+f16 beta/alpha GEMV at the 9B's, 0.8B's and 27B's shapes (64 rows over 4096, 32 over 1024, 64
+over 5120) and the fused deltanet step at 32 and 16 heads of 128; its alternates are the
+reference exe's decode logger rows on the same models (its two f32 m=32 GEMVs ~5 us each,
+GATED_DELTA_NET 4.1 us + SSM_CONV 5.2 at one token, RTX 5080), and a whole-token profile role
+that reads past the isolated figure names the chain around the kernel, not the kernel (the RTX
+5080 reads the GEMV at 4.6 / 3.0 / 4.7 us and the step at 8.8 where the token profile bills the
+roles 17 and 25).
 The reference row is `test-backend-ops perf MUL_MAT_ID` at `n_mats=128,n_used=8,m=768,n=512,k=2048`.
 Two arms read the window chain's own overheads at those shapes rather than a tile: `ts:<fmt>`
 dispatches two m stamps back to back into two planes - plain, with the profile's bottom-of-pipe
