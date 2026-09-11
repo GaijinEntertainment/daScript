@@ -210,10 +210,11 @@ GPU-less boxes), and the flavor image round-trips the plan verbatim.
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
 under `DASLLAMA_PARITY_FULL=1` - the Qwen1.5-MoE Q8_0 and its `-local` Q4_K_M mint, the Qwen3-30B
-Q4_K_M and UD-IQ2_XXS: the resident MoE block's s and e stamps on the expert planes those files
-carry; an e stamp no stocked carrier reaches is a `VK_CENSUS_NEVER_DISPATCHED` entry naming its
-kernel-unit cell, and the list drains itself; every prefill tile family is reached through the
-qwen3 Q8_0 and Q4_K_M and the 1B llama requants, machine-local like the other fixtures - the `-local` ones are
+Q4_K_M and UD-IQ2_XXS: the resident MoE block's s stamps (the 32-row column) and e stamps (the
+128-row column) on the expert planes those files carry; an e stamp no stocked carrier reaches is a
+`VK_CENSUS_NEVER_DISPATCHED` entry in `test_kernel_coverage.das` naming its kernel-unit cell;
+every prefill tile family is reached through the qwen3 Q8_0 and Q4_K_M and the 1B llama
+requants, machine-local like the other fixtures - the `-local` ones are
 minted from the bartowski Q8_0 with `llama-quantize --allow-requantize <q8> <out> <type>` - each
 swept under the coopmat modes its planes have twins in: all five for q8 and q40, the box's mode,
 mm and sdot4 for the other kq formats) is the KERNEL COVERAGE census (the census-row obligation is
@@ -274,21 +275,24 @@ through its registry.
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
 the shared expert's call shape - one region over every position, the identity slot map at unit
 weight.
-`test_vulkan_kernels.das` - model-free (a Vulkan device, else skips): the per-class CPU-oracle
-units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
+`test_vulkan_kernels.das` - model-free (a Vulkan device, else skips; the two lens cells,
+`test_vkd_readonly_stamp` and `test_vkd_lens_readonly_gate`, need only the dasVulkan module): the
+per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
 which carry no KHR arm, and q51 carries no tile cell) run five arms: the cm2 l/m/s tiles and the
-expert schedule's e column (the m tile's 128-row column at the format's k step - 32 on the five
-grid-codebook formats, 64 elsewhere) in mode 4 on an
+expert schedule's e column (the format's own 128-row e stamp, whose k step is the stamp's - 32 on
+iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
 32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; the
 k4 cell dispatches two workgroups past its schedule over sentinel map words (`SCHED_NONE`), the
 device-written schedules' upper-bound shape, and every arm's rows still match;
-`test_vkd_ext_roster` holds the device-init roster (`vk_ext_roster`: every Vulkan capability the tier
-keys a route on, what rides on it) to the arming's own fields - a probe the arming reads and the
-roster does not shows as a disagreement. `test_vkd_direct_decode`
+`test_vkd_ext_roster` asserts, for every entry of the device-init roster (`vk_ext_roster`: every
+Vulkan capability the tier keys a route on, what rides on it), that the entry's presence reads the
+same as the arming field it decides, so the roster's log line and the tier's route cannot
+disagree; a probe the tier reads and the roster omits is caught by `check_vk_extension_roster`
+in `../REVIEW.das`. `test_vkd_direct_decode`
 proves a `[spirv_decode]` method called from a kernel body on the plane element (the KHR arm's
 staging form: the index travels, the callee chains through the plane) is an ordinary call on
 the device, against the same method run on the CPU. `test_vkd_moe_routing` holds the resident MoE
@@ -310,8 +314,15 @@ never writes and off the one it writes; `test_vkd_lens_readonly_gate` spawns two
 children (up to 180 s each) proving the lens refuses a `@readonly` binding a kernel writes, the
 plain twin as the must-compile control. `test_vkd_f16_gemm` holds the small f16 GEMM class (the
 router logits, the deltanet beta/alpha rows) to the f32 dot of the same f16 values at two padded
-shapes, the direct store at a base and the eight-chunk split with the reduce at the same base,
-the header under the base kept as the sentinel and every bar with its added-value poison.
+shapes and one off every 4-multiple (the reduce's element-guarded tail), the direct store at a
+base and the eight-chunk split with the reduce at the same base, the header under the base kept
+as the sentinel and every bar with its added-value poison; it skips on a device without the cm2
+tile family, the only tile the class rides. `test_vkd_dn_family` holds the deltanet conv, the
+fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the step's one-part
+and two-part state columns, the scan's four- and eight-lane clusters); `test_vkd_dn_scan_narrow`
+runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometry - 512 rows,
+one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate arrays' exact
+bound).
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -440,8 +451,9 @@ layer 1 on; a flipped near-tie on the 35B at two windows reads 0.155-0.16 of the
 under either of two summation orders, the one-step-off controls 0.42 and above; the bar's `//!`
 carries the reading) with the one-step-off control, at one window and
 two windows, plus the census witnesses: the device bucket schedule and the per-row select ran once
-per MoE layer per window, the token command's top-k count a whole multiple of the MoE layer count
-(the command records once and resubmits); the second
+per MoE layer per window, the expert schedule's m pieces dispatched the format's e column on the
+three expert planes once per MoE layer per window, the token command's top-k count a whole
+multiple of the MoE layer count (the command records once and resubmits); the second
 fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
 after the deltanet head, at the same two lengths; the third is the Qwen3-30B-A3B UD-IQ2_XXS,
 the MoE with no shared expert (the residual step with its add partner off, the FFN-norm requant

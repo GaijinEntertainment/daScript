@@ -59,7 +59,10 @@ axis to any kq superblock format: it drives the prefill's own (format, column) l
 l and m columns with the kq batch tile as the control row, over random block bytes at that
 format's device block size, and it runs the four-wide decode's two arms (the twin served, then
 stripped through `vkd_pipes_rebuild`) interleaved in one process, two rounds each, so a format's
-`DECVEC` verdict comes from one instrument. The `khrx` arm is the second axis for the KHR kq
+`DECVEC` verdict comes from one instrument; every arm of the sweep dispatches over two alternating
+output planes under a fresh hazard each, the form the served graph overlaps (the RTX 5080 rows the
+ledger carries read the one-plane form, which serialized a chain on the plane's write-after-write
+hazard). The `khrx` arm is the second axis for the KHR kq
 tile. It runs eight arms: a resync copy of the shipped k4 tile with no lever moved
 (`khrpx_ship`), five copies each with one lever moved back - the weight stage as a constant fill
 or as the four-wide callback on the plane element, f32 accumulators, a 16-row strip tiling, and

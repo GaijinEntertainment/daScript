@@ -2912,3 +2912,26 @@ def ray_query {
 def public ray_query_words : array<uint> {
     return clone_to_move(ray_query_spv)
 }
+
+//! a module's OpConstant value by result id (its third operand); 0 when no such constant
+def public spv_const_uint(words : array<uint>; id : uint) : uint {
+    var v = 0u
+    foreach_inst(words) $(opcode : uint; w : array<uint>; opStart : int; opCount : int) {
+        if (opcode == uint(SpvOp.Constant) && opCount >= 3 && w[opStart + 1] == id) {
+            v = w[opStart + 2]
+        }
+    }
+    return v
+}
+
+//! every OpTypeCooperativeMatrixKHR of a module as "rows x cols", sorted - the shape set a fixture declares, whatever the declaration order
+def public spv_coopmat_shapes(words : array<uint>) : array<string> {
+    var shapes : array<string>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; opStart : int; opCount : int) {
+        if (opcode == uint(SpvOp.TypeCooperativeMatrixKHR) && opCount >= 5) {
+            shapes |> push("{int(spv_const_uint(words, w[opStart + 3]))}x{int(spv_const_uint(words, w[opStart + 4]))}")
+        }
+    }
+    shapes |> sort()
+    return <- shapes
+}

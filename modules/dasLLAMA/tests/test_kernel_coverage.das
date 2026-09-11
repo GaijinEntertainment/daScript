@@ -614,7 +614,15 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the UD-IQ2_XXS 30B's iq2xxs / iq2xs / iq2s / iq3xxs / iq3s / iq4xs mix on the schedule. Their
     // coverage is the e arm of each format's cell in test_vulkan_kernels.das
     "kq_batch_k5_cm2e_cls_spv", "kq_batch_k6_cm2e_cls_spv", "kq_batch_q40_cm2e_cls_spv",
-    "kq_batch_k3_cm2e_cls_spv", "kq_batch_iq4nl_cm2e_cls_spv", "kq_batch_k2_cm2e_cls_spv"]
+    "kq_batch_k3_cm2e_cls_spv", "kq_batch_iq4nl_cm2e_cls_spv", "kq_batch_k2_cm2e_cls_spv",
+    // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
+    // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
+    // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
+    "router_gemm_cls_spv",
+    // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
+    // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
+    // test_vkd_dn_family in test_vulkan_kernels.das
+    "dn_ba_cls_spv"]
 
 [unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty
 def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
@@ -740,8 +748,8 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             // the MoE rows (expert FFN/qkv chains + heat cache) sit above the small tier
             vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe", none)
             vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe", none)
-            // the Q4_K_M twin fits a 16 GB card whole: the whole-model driver's MoE block (the router GEMM, the
-            // per-row select, the bucket schedule, the combine-folded residual step, the token command's routed block)
+            // the Q4_K_M twin fits a 16 GB card whole: the whole-model driver's MoE block (the router on the f16
+            // cm2 GEMM, the per-row select, the bucket schedule, the combine-folded residual step, the token command's routed block)
             vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"), "qwen2moe", none)
             // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over iq2xxs expert planes, whole on a 16 GB card
             vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "qwen3moe", none)

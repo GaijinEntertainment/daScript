@@ -198,16 +198,16 @@ class ClsArAddRmsRqB : ArRqBase {
 
 [ |> template_struct_instance]
 class template ArRqT : ArRqBase {
-    @template_constant KBLK : bool = false
-    @template_constant STOREX : bool = false
+    @template_constant KBLK : bool = false    //!< the quant form: Q8_K superblocks (a scale per 256) instead of Q8_0's 32-blocks
+    @template_constant STOREX : bool = false  //!< the normed row stored to binding 5 as floats beside the quants
     @ssbo @binding = 5 @template_gate = STOREX yo : array<float>   //! the normed row, for the consumers that read it as floats
 
-    //! the Q8_K superblocks of the stashed row at inv: a subgroup a 256-block, eight values a lane (the requant class's form)
+    //! the Q8_K superblocks of the stashed row at inv: a 32-lane block a 256-block, eight values a lane - the block by the invocation id, as the requant class maps it, so the amax fold's masks stay inside it on any subgroup width
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def quant_k(inv : float) {
         let nblk = pa.dim / 256u
-        let lane = gl_SubgroupInvocationID
-        var b = gl_SubgroupID
+        let lane = gl_LocalInvocationID.x & 31u
+        var b = gl_LocalInvocationID.x >> 5u
         while (b < nblk) {
             let base = b * 256u + lane
             var vals : float[8]
@@ -226,7 +226,7 @@ class template ArRqT : ArRqBase {
             for [unroll] (r in range(8)) {
                 outq[base + uint(r) * 32u] = q8_quant1(vals[r], id)
             }
-            b += gl_NumSubgroups
+            b += 8u   //! the 256-thread workgroup's eight blocks
         }
     }
 
@@ -758,15 +758,15 @@ struct RouterArgs {
     dim : uint    // row width
     woff : uint   // this layer's row base in the span's router plane (elements)
     obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
-    ne1 : uint    //! rows from ne1 on land at obase2 (the deltanet beta and alpha rows in one dispatch); 0 = one base
-    obase2 : uint
+    ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0 = one base
+    obase_split : uint
 }
 
 [ |> template_struct_instance]
 class template RouterGemvT {
     @template_constant PAIRS : bool = false   //!< the f16 stamp reads its row as half pairs, one word a step
     @ssbo @binding = 0 @role = "weight" w : array<KT>   // the rows, row-major [ne x dim] per layer
-    @ssbo @binding = 0 @role = "alias" @template_gate = PAIRS w2 : array<uint>   //! the same rows as half pairs
+    @ssbo @binding = 0 @role = "alias" @template_gate = PAIRS w_pairs : array<uint>   //! the same rows as half pairs
     @ssbo @binding = 1 x : array<float>       // the FFN-normed row
     @ssbo @binding = 2 logits : array<float>  // ne logits
     @push_constant pa : RouterArgs
@@ -782,7 +782,7 @@ class template RouterGemvT {
             let hb = base >> 1u
             let hd = pa.dim >> 1u
             while (i < hd) {
-                let p = unpackHalf2x16(w2[hb + i])
+                let p = unpackHalf2x16(w_pairs[hb + i])
                 acc += p.x * x[2u * i] + p.y * x[2u * i + 1u]
                 i += 256u
             }
@@ -805,8 +805,8 @@ class template RouterGemvT {
                 sgi++
             }
             var o = pa.obase + e
-            if (pa.ne1 != 0u && e >= pa.ne1) {
-                o = pa.obase2 + (e - pa.ne1)
+            if (pa.ne_split != 0u && e >= pa.ne_split) {
+                o = pa.obase_split + (e - pa.ne_split)
             }
             logits[o] = tot
         }
@@ -1440,7 +1440,7 @@ class DnConv {
     @ssbo @binding = 1 outr : array<float>     // conv output rows
     @ssbo @binding = 2 smalls : array<float>   // taps + history + any small planes (push offsets)
     @push_constant pa : DnConvArgs
-    @workgroup wsum : float[256]               // the eight warps' per-position sums of squares
+    @workgroup wsum : float[int(8u * DN_CONV_PB)]   //! the eight 32-lane blocks' per-position sums of squares
 
     //! channel ch's input at window row sp: a window row, or the history row sp + taps below the window in the layout hist_mode names
     def xrow(sp : int; ch, taps : uint) : float {
@@ -1472,9 +1472,9 @@ class DnConv {
         var x1 = xrow(int(p0) - 2, cch, taps)
         var x2 = xrow(int(p0) - 1, cch, taps)
         let normed = live && ch < 2u * pa.kd
-        var y : float[32]
-        var s : float[32]
-        for [unroll] (i in range(32)) {
+        var y : float[int(DN_CONV_PB)]
+        var s : float[int(DN_CONV_PB)]
+        for [unroll] (i in range(int(DN_CONV_PB))) {
             let p = p0 + uint(i)
             let x3 = p < pa.npos ? xrow(int(p), cch, taps) : 0.0
             let acc = w[0] * x0 + w[1] * x1 + w[2] * x2 + w[3] * x3
@@ -1482,7 +1482,7 @@ class DnConv {
             x0 = x1
             x1 = x2
             x2 = x3
-            // the head's sum of squares over this warp's lanes: ds lanes below a warp, the whole warp at ds >= 32
+            //! the head's sum of squares over an aligned 32-lane block (ds lanes below 32): the fold's masks stay inside the block on any subgroup width
             var v = normed ? y[i] * y[i] : 0.0
             if (pa.ds > 16u) {
                 v += subgroupShuffleXor(v, 16u)
@@ -1493,24 +1493,24 @@ class DnConv {
             v += subgroupShuffleXor(v, 1u)
             s[i] = v
         }
-        let warp = gl_SubgroupID
-        if (gl_SubgroupInvocationID == 0u) {
-            for [unroll] (i in range(32)) {
-                wsum[warp * 32u + uint(i)] = s[i]
+        let blk = gl_LocalInvocationID.x >> 5u   //! the lane block by the invocation id, never the subgroup: a 64-lane subgroup is two blocks
+        if ((gl_LocalInvocationID.x & 31u) == 0u) {
+            for [unroll] (i in range(int(DN_CONV_PB))) {
+                wsum[blk * DN_CONV_PB + uint(i)] = s[i]
             }
         }
         barrier()
-        let warps_per_head = pa.ds > 32u ? pa.ds / 32u : 1u
-        let wb = (warp / warps_per_head) * warps_per_head
+        let blocks_per_head = pa.ds > 32u ? pa.ds / 32u : 1u
+        let wb = (blk / blocks_per_head) * blocks_per_head
         let qs = ch < pa.kd ? pa.qscale : 1.0
-        for [unroll] (i in range(32)) {
+        for [unroll] (i in range(int(DN_CONV_PB))) {
             let p = p0 + uint(i)
             var tot = s[i]
-            if (warps_per_head > 1u) {
+            if (blocks_per_head > 1u) {
                 tot = 0.0
                 var ww = 0u
-                while (ww < warps_per_head) {
-                    tot += wsum[(wb + ww) * 32u + uint(i)]
+                while (ww < blocks_per_head) {
+                    tot += wsum[(wb + ww) * DN_CONV_PB + uint(i)]
                     ww++
                 }
             }
@@ -1591,8 +1591,8 @@ class DnStepFused {
     @workgroup dout : float[128]
     @workgroup partk : float[256]   //! each row part's k.S column partials (part-major, ds wide: the thread's own slot)
     @workgroup partq : float[256]   //! ... and q.S
-    @workgroup sga : float[16]      //! per-subgroup partial sums: the q and k squared sums, then the out-norm's
-    @workgroup sgb : float[16]      //! per-subgroup partials of the raw q.k
+    @workgroup sg_sumsq : float[16]   //! per-subgroup partial squared sums (q and k), re-used for the out-norm's after the second barrier
+    @workgroup sg_qk : float[16]      //! per-subgroup partials of the raw q.k
     @workgroup ds8 : float[8]
 
     [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
@@ -1648,11 +1648,11 @@ class DnStepFused {
         let sn = subgroupAdd(pn)
         let spq = subgroupAdd(pq)
         if (gl_SubgroupInvocationID == 0u) {
-            sga[gl_SubgroupID] = sn
-            sgb[gl_SubgroupID] = spq
+            sg_sumsq[gl_SubgroupID] = sn
+            sg_qk[gl_SubgroupID] = spq
         }
         barrier()
-        if (tid == 0u) {   // the scales, the gates and q.k (the scales applied to the raw sum), the per-token beta/g transforms
+        if (tid == 0u) {   //! q.k is summed raw; the q and k scales apply here
             var sumq = 0.0
             var sumk = 0.0
             var qkr = 0.0
@@ -1660,10 +1660,10 @@ class DnStepFused {
             var sgi = 0u
             while (sgi < gl_NumSubgroups) {
                 if (sgi < half) {
-                    sumq += sga[sgi]
-                    qkr += sgb[sgi]
+                    sumq += sg_sumsq[sgi]
+                    qkr += sg_qk[sgi]
                 } else {
-                    sumk += sga[sgi]
+                    sumk += sg_sumsq[sgi]
                 }
                 sgi++
             }
@@ -1682,11 +1682,11 @@ class DnStepFused {
         let eg = ds8[2u]
         let bt = ds8[3u]
         let qk = ds8[4u]
-        let rpp = min(ds, 64u)
-        let nparts = ds / rpp
+        let rows_per_part = min(ds, 64u)
+        let nparts = ds / rows_per_part
         let active = tid < ds * nparts
         let c = tid % ds
-        let r0 = (tid / ds) * rpp
+        let r0 = (tid / ds) * rows_per_part
         let sbase = h * ds * ds
         var sreg : float[64]
         var ksp = 0.0
@@ -1694,16 +1694,16 @@ class DnStepFused {
         if (active) {
             //! the loads first, straight-line (a short part re-reads its last row), so all 64 issue before a sum waits on one
             for [unroll] (j in range(64)) {
-                sreg[j] = state[sbase + (r0 + min(uint(j), rpp - 1u)) * ds + c]
+                sreg[j] = state[sbase + (r0 + min(uint(j), rows_per_part - 1u)) * ds + c]
             }
             for [unroll] (j in range(64)) {
-                if (uint(j) < rpp) {
+                if (uint(j) < rows_per_part) {
                     ksp += dk[r0 + uint(j)] * sreg[j]
                     qsp += dq[r0 + uint(j)] * sreg[j]
                 }
             }
         }
-        if (tid < ds * nparts) {
+        if (active) {
             partk[tid] = ksp
             partq[tid] = qsp
         }
@@ -1725,7 +1725,7 @@ class DnStepFused {
         if (active) {
             let vnc = dvn[c]
             for [unroll] (j in range(64)) {
-                if (uint(j) < rpp) {
+                if (uint(j) < rows_per_part) {
                     state[sbase + (r0 + uint(j)) * ds + c] = sreg[j] * eg + (sk * dk[r0 + uint(j)]) * vnc
                 }
             }
@@ -1736,14 +1736,14 @@ class DnStepFused {
         }
         let so = subgroupAdd(po)
         if (gl_SubgroupInvocationID == 0u) {
-            sga[gl_SubgroupID] = so
+            sg_sumsq[gl_SubgroupID] = so
         }
         barrier()
         if (tid == 0u) {
             var sum = 0.0
             var sgi = 0u
             while (sgi < gl_NumSubgroups) {
-                sum += sga[sgi]
+                sum += sg_sumsq[sgi]
                 sgi++
             }
             ds8[5u] = 1.0 / sqrt(sum / float(ds) + pa.eps)
@@ -1831,13 +1831,13 @@ class DnScan {
     def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of one column, written out
         let ds = pa.ds
         let lanes_per_col = ds / 16u           // 16 state rows each; ds % 16 == 0 host-side
-        let cols_per_subgroup = 32u / lanes_per_col
-        let cols_per_group = 4u * cols_per_subgroup
+        let cols_per_block = 32u / lanes_per_col   //! the 128-thread workgroup's four 32-lane blocks, by the invocation id: a cluster's shuffles (masks under 8) stay inside a block on any subgroup width
+        let cols_per_group = 4u * cols_per_block
         let cgroups = (ds + cols_per_group - 1u) / cols_per_group
         let h = gl_WorkGroupID.x / cgroups
-        let sl = gl_SubgroupInvocationID
+        let sl = gl_LocalInvocationID.x & 31u
         let lane = sl % lanes_per_col
-        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + gl_SubgroupID * cols_per_subgroup + sl / lanes_per_col
+        let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + (gl_LocalInvocationID.x >> 5u) * cols_per_block + sl / lanes_per_col
         let live = col < ds                    // a whole cluster shares col, so its shuffles stay uniform
         let kh = h % pa.nkh
         let q_elem0 = kh * ds + lane
@@ -1872,117 +1872,117 @@ class DnScan {
         s[13] = state[sb + 13u * row_stride]
         s[14] = state[sb + 14u * row_stride]
         s[15] = state[sb + 15u * row_stride]
-        //! the next token's k, q and v load while this token computes (the last token re-reads its own row)
-        var kn : float[16]
-        var qn : float[16]
-        var vn = conv[voff]
-        kn[0] = conv[k_elem0]
-        kn[1] = conv[k_elem0 + lanes_per_col]
-        kn[2] = conv[k_elem0 + 2u * lanes_per_col]
-        kn[3] = conv[k_elem0 + 3u * lanes_per_col]
-        kn[4] = conv[k_elem0 + 4u * lanes_per_col]
-        kn[5] = conv[k_elem0 + 5u * lanes_per_col]
-        kn[6] = conv[k_elem0 + 6u * lanes_per_col]
-        kn[7] = conv[k_elem0 + 7u * lanes_per_col]
-        kn[8] = conv[k_elem0 + 8u * lanes_per_col]
-        kn[9] = conv[k_elem0 + 9u * lanes_per_col]
-        kn[10] = conv[k_elem0 + 10u * lanes_per_col]
-        kn[11] = conv[k_elem0 + 11u * lanes_per_col]
-        kn[12] = conv[k_elem0 + 12u * lanes_per_col]
-        kn[13] = conv[k_elem0 + 13u * lanes_per_col]
-        kn[14] = conv[k_elem0 + 14u * lanes_per_col]
-        kn[15] = conv[k_elem0 + 15u * lanes_per_col]
-        qn[0] = conv[q_elem0]
-        qn[1] = conv[q_elem0 + lanes_per_col]
-        qn[2] = conv[q_elem0 + 2u * lanes_per_col]
-        qn[3] = conv[q_elem0 + 3u * lanes_per_col]
-        qn[4] = conv[q_elem0 + 4u * lanes_per_col]
-        qn[5] = conv[q_elem0 + 5u * lanes_per_col]
-        qn[6] = conv[q_elem0 + 6u * lanes_per_col]
-        qn[7] = conv[q_elem0 + 7u * lanes_per_col]
-        qn[8] = conv[q_elem0 + 8u * lanes_per_col]
-        qn[9] = conv[q_elem0 + 9u * lanes_per_col]
-        qn[10] = conv[q_elem0 + 10u * lanes_per_col]
-        qn[11] = conv[q_elem0 + 11u * lanes_per_col]
-        qn[12] = conv[q_elem0 + 12u * lanes_per_col]
-        qn[13] = conv[q_elem0 + 13u * lanes_per_col]
-        qn[14] = conv[q_elem0 + 14u * lanes_per_col]
-        qn[15] = conv[q_elem0 + 15u * lanes_per_col]
+        //! the last token re-reads its own row
+        var k_next : float[16]
+        var q_next : float[16]
+        var v_next = conv[voff]
+        k_next[0] = conv[k_elem0]
+        k_next[1] = conv[k_elem0 + lanes_per_col]
+        k_next[2] = conv[k_elem0 + 2u * lanes_per_col]
+        k_next[3] = conv[k_elem0 + 3u * lanes_per_col]
+        k_next[4] = conv[k_elem0 + 4u * lanes_per_col]
+        k_next[5] = conv[k_elem0 + 5u * lanes_per_col]
+        k_next[6] = conv[k_elem0 + 6u * lanes_per_col]
+        k_next[7] = conv[k_elem0 + 7u * lanes_per_col]
+        k_next[8] = conv[k_elem0 + 8u * lanes_per_col]
+        k_next[9] = conv[k_elem0 + 9u * lanes_per_col]
+        k_next[10] = conv[k_elem0 + 10u * lanes_per_col]
+        k_next[11] = conv[k_elem0 + 11u * lanes_per_col]
+        k_next[12] = conv[k_elem0 + 12u * lanes_per_col]
+        k_next[13] = conv[k_elem0 + 13u * lanes_per_col]
+        k_next[14] = conv[k_elem0 + 14u * lanes_per_col]
+        k_next[15] = conv[k_elem0 + 15u * lanes_per_col]
+        q_next[0] = conv[q_elem0]
+        q_next[1] = conv[q_elem0 + lanes_per_col]
+        q_next[2] = conv[q_elem0 + 2u * lanes_per_col]
+        q_next[3] = conv[q_elem0 + 3u * lanes_per_col]
+        q_next[4] = conv[q_elem0 + 4u * lanes_per_col]
+        q_next[5] = conv[q_elem0 + 5u * lanes_per_col]
+        q_next[6] = conv[q_elem0 + 6u * lanes_per_col]
+        q_next[7] = conv[q_elem0 + 7u * lanes_per_col]
+        q_next[8] = conv[q_elem0 + 8u * lanes_per_col]
+        q_next[9] = conv[q_elem0 + 9u * lanes_per_col]
+        q_next[10] = conv[q_elem0 + 10u * lanes_per_col]
+        q_next[11] = conv[q_elem0 + 11u * lanes_per_col]
+        q_next[12] = conv[q_elem0 + 12u * lanes_per_col]
+        q_next[13] = conv[q_elem0 + 13u * lanes_per_col]
+        q_next[14] = conv[q_elem0 + 14u * lanes_per_col]
+        q_next[15] = conv[q_elem0 + 15u * lanes_per_col]
         var t = 0u
         while (t < pa.npos) {
             let eg = egs[t]
             let bt = bts[t]
-            let v = vn
+            let v = v_next
             var k : float[16]
             var q : float[16]
-            k[0] = kn[0]
-            k[1] = kn[1]
-            k[2] = kn[2]
-            k[3] = kn[3]
-            k[4] = kn[4]
-            k[5] = kn[5]
-            k[6] = kn[6]
-            k[7] = kn[7]
-            k[8] = kn[8]
-            k[9] = kn[9]
-            k[10] = kn[10]
-            k[11] = kn[11]
-            k[12] = kn[12]
-            k[13] = kn[13]
-            k[14] = kn[14]
-            k[15] = kn[15]
-            q[0] = qn[0]
-            q[1] = qn[1]
-            q[2] = qn[2]
-            q[3] = qn[3]
-            q[4] = qn[4]
-            q[5] = qn[5]
-            q[6] = qn[6]
-            q[7] = qn[7]
-            q[8] = qn[8]
-            q[9] = qn[9]
-            q[10] = qn[10]
-            q[11] = qn[11]
-            q[12] = qn[12]
-            q[13] = qn[13]
-            q[14] = qn[14]
-            q[15] = qn[15]
-            let crown = min(t + 1u, pa.npos - 1u) * pa.cd
-            vn = conv[crown + voff]
-            let kbn = crown + k_elem0
-            kn[0] = conv[kbn]
-            kn[1] = conv[kbn + lanes_per_col]
-            kn[2] = conv[kbn + 2u * lanes_per_col]
-            kn[3] = conv[kbn + 3u * lanes_per_col]
-            kn[4] = conv[kbn + 4u * lanes_per_col]
-            kn[5] = conv[kbn + 5u * lanes_per_col]
-            kn[6] = conv[kbn + 6u * lanes_per_col]
-            kn[7] = conv[kbn + 7u * lanes_per_col]
-            kn[8] = conv[kbn + 8u * lanes_per_col]
-            kn[9] = conv[kbn + 9u * lanes_per_col]
-            kn[10] = conv[kbn + 10u * lanes_per_col]
-            kn[11] = conv[kbn + 11u * lanes_per_col]
-            kn[12] = conv[kbn + 12u * lanes_per_col]
-            kn[13] = conv[kbn + 13u * lanes_per_col]
-            kn[14] = conv[kbn + 14u * lanes_per_col]
-            kn[15] = conv[kbn + 15u * lanes_per_col]
-            let qbn = crown + q_elem0
-            qn[0] = conv[qbn]
-            qn[1] = conv[qbn + lanes_per_col]
-            qn[2] = conv[qbn + 2u * lanes_per_col]
-            qn[3] = conv[qbn + 3u * lanes_per_col]
-            qn[4] = conv[qbn + 4u * lanes_per_col]
-            qn[5] = conv[qbn + 5u * lanes_per_col]
-            qn[6] = conv[qbn + 6u * lanes_per_col]
-            qn[7] = conv[qbn + 7u * lanes_per_col]
-            qn[8] = conv[qbn + 8u * lanes_per_col]
-            qn[9] = conv[qbn + 9u * lanes_per_col]
-            qn[10] = conv[qbn + 10u * lanes_per_col]
-            qn[11] = conv[qbn + 11u * lanes_per_col]
-            qn[12] = conv[qbn + 12u * lanes_per_col]
-            qn[13] = conv[qbn + 13u * lanes_per_col]
-            qn[14] = conv[qbn + 14u * lanes_per_col]
-            qn[15] = conv[qbn + 15u * lanes_per_col]
+            k[0] = k_next[0]
+            k[1] = k_next[1]
+            k[2] = k_next[2]
+            k[3] = k_next[3]
+            k[4] = k_next[4]
+            k[5] = k_next[5]
+            k[6] = k_next[6]
+            k[7] = k_next[7]
+            k[8] = k_next[8]
+            k[9] = k_next[9]
+            k[10] = k_next[10]
+            k[11] = k_next[11]
+            k[12] = k_next[12]
+            k[13] = k_next[13]
+            k[14] = k_next[14]
+            k[15] = k_next[15]
+            q[0] = q_next[0]
+            q[1] = q_next[1]
+            q[2] = q_next[2]
+            q[3] = q_next[3]
+            q[4] = q_next[4]
+            q[5] = q_next[5]
+            q[6] = q_next[6]
+            q[7] = q_next[7]
+            q[8] = q_next[8]
+            q[9] = q_next[9]
+            q[10] = q_next[10]
+            q[11] = q_next[11]
+            q[12] = q_next[12]
+            q[13] = q_next[13]
+            q[14] = q_next[14]
+            q[15] = q_next[15]
+            let crow_next = min(t + 1u, pa.npos - 1u) * pa.cd
+            v_next = conv[crow_next + voff]
+            let kbn = crow_next + k_elem0
+            k_next[0] = conv[kbn]
+            k_next[1] = conv[kbn + lanes_per_col]
+            k_next[2] = conv[kbn + 2u * lanes_per_col]
+            k_next[3] = conv[kbn + 3u * lanes_per_col]
+            k_next[4] = conv[kbn + 4u * lanes_per_col]
+            k_next[5] = conv[kbn + 5u * lanes_per_col]
+            k_next[6] = conv[kbn + 6u * lanes_per_col]
+            k_next[7] = conv[kbn + 7u * lanes_per_col]
+            k_next[8] = conv[kbn + 8u * lanes_per_col]
+            k_next[9] = conv[kbn + 9u * lanes_per_col]
+            k_next[10] = conv[kbn + 10u * lanes_per_col]
+            k_next[11] = conv[kbn + 11u * lanes_per_col]
+            k_next[12] = conv[kbn + 12u * lanes_per_col]
+            k_next[13] = conv[kbn + 13u * lanes_per_col]
+            k_next[14] = conv[kbn + 14u * lanes_per_col]
+            k_next[15] = conv[kbn + 15u * lanes_per_col]
+            let qbn = crow_next + q_elem0
+            q_next[0] = conv[qbn]
+            q_next[1] = conv[qbn + lanes_per_col]
+            q_next[2] = conv[qbn + 2u * lanes_per_col]
+            q_next[3] = conv[qbn + 3u * lanes_per_col]
+            q_next[4] = conv[qbn + 4u * lanes_per_col]
+            q_next[5] = conv[qbn + 5u * lanes_per_col]
+            q_next[6] = conv[qbn + 6u * lanes_per_col]
+            q_next[7] = conv[qbn + 7u * lanes_per_col]
+            q_next[8] = conv[qbn + 8u * lanes_per_col]
+            q_next[9] = conv[qbn + 9u * lanes_per_col]
+            q_next[10] = conv[qbn + 10u * lanes_per_col]
+            q_next[11] = conv[qbn + 11u * lanes_per_col]
+            q_next[12] = conv[qbn + 12u * lanes_per_col]
+            q_next[13] = conv[qbn + 13u * lanes_per_col]
+            q_next[14] = conv[qbn + 14u * lanes_per_col]
+            q_next[15] = conv[qbn + 15u * lanes_per_col]
             var kv = k[0] * s[0]
             kv += k[1] * s[1]
             kv += k[2] * s[2]
@@ -5336,7 +5336,7 @@ let SC_STRIDE = 130u   //! the cm2 scale cache's sub-block stride: the tile's 12
 // and the weight format: BLK
 // the 16-bit-lane block struct, ST the scale plane's element, BLKW the block's element width, and
 // the format template's decode. 256 threads, one 128-weight x BN-token tile per wg, BK per
-// step, an 8x-unrolled k loop; the decode METHOD reads the separate scale plane by block index -
+// step, a k loop unrolled UNR steps (one superblock); the decode METHOD reads the separate scale plane by block index -
 // the reason the class-method decode form exists. Binding 4 unused (sparse)
 [ |> template_struct_instance]
 class template KqCm2BatchT : MoeCmBase {
@@ -5373,7 +5373,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant SCACHE : bool = false              //!< the scale cache: the tile's 128 rows' eight sub-block scale pairs staged per superblock
     @template_constant SCIQ4 : bool = false               //!< the cache's fill reads the IQ4_XS two-word scale row (d | the high scale bits, the low nibbles) instead of the K-quant five
     @workgroup @template_gate = SCACHE sc_cache : float2[int(8u * SC_STRIDE)]   //! sub-block-major, row-minor, two rows of pad per sub-block against bank conflicts
-    @ssbo @binding = 1 @role = "alias" @template_gate = SCACHE wsw : array<uint>   //! the scale plane as words, the cache's source (K-quant: five per superblock - d | dmin, eight scale bytes, eight min bytes; IQ4_XS: two)
+    @ssbo @binding = 1 @role = "alias" @template_gate = SCACHE ws_words : array<uint>   //! the scale plane as words, the cache's source (K-quant: five per superblock - d | dmin, eight scale bytes, eight min bytes; IQ4_XS: two)
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
     def run {
@@ -5455,17 +5455,17 @@ class template KqCm2BatchT : MoeCmBase {
             let row = min(m0 + r, pa.d - 1u)
             static_if (SCIQ4) {
                 let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 2u
-                let w0 = wsw[srow]
-                let w1 = wsw[srow + 1u]
+                let w0 = ws_words[srow]
+                let w1 = ws_words[srow + 1u]
                 let d = unpackHalf2x16(w0).x
                 for [unroll] (i in range(4)) {
                     sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(d * float(iq4xs_sc(w0, w1, g0 + uint(i))), 0.0)
                 }
             } else {
                 let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 5u
-                let dm = unpackHalf2x16(wsw[srow])
-                let scw = wsw[srow + 1u + (g0 >> 2u)]
-                let mnw = wsw[srow + 3u + (g0 >> 2u)]
+                let dm = unpackHalf2x16(ws_words[srow])
+                let scw = ws_words[srow + 1u + (g0 >> 2u)]
+                let mnw = ws_words[srow + 3u + (g0 >> 2u)]
                 for [unroll] (i in range(4)) {
                     let sh = uint(i) * 8u
                     sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(dm.x * float((scw >> sh) & 0xFFu), dm.y * float((mnw >> sh) & 0xFFu))
@@ -7364,7 +7364,7 @@ class Iq2xxsKhrBatch : Iq2xxsCm2T {
 }
 
 struct SkRedArgs {
-    nelem : uint   // one partial plane's float count (cnt x d; always a 4-multiple, d is 32-aligned)
+    nelem : uint   //! one partial plane's float count (rows x d): any count - the reduce guards its four-wide tail element by element
     k : uint       // planes
     ybase : uint   // the sum's element base in y (the smalls' beta or alpha rows; 0 for a plane of its own)
 }
@@ -7386,20 +7386,35 @@ class SplitKReduce {
             var s1 = 0.0
             var s2 = 0.0
             var s3 = 0.0
+            let n1 = e + 1u < pa.nelem
+            let n2 = e + 2u < pa.nelem
+            let n3 = e + 3u < pa.nelem
             var p = 0u
             while (p < pa.k) {
                 let b = p * pa.nelem + e
                 s0 += part[b]
-                s1 += part[b + 1u]
-                s2 += part[b + 2u]
-                s3 += part[b + 3u]
+                if (n1) {
+                    s1 += part[b + 1u]
+                }
+                if (n2) {
+                    s2 += part[b + 2u]
+                }
+                if (n3) {
+                    s3 += part[b + 3u]
+                }
                 p++
             }
             let o = pa.ybase + e
             y[o] = s0
-            y[o + 1u] = s1
-            y[o + 2u] = s2
-            y[o + 3u] = s3
+            if (n1) {
+                y[o + 1u] = s1
+            }
+            if (n2) {
+                y[o + 2u] = s2
+            }
+            if (n3) {
+                y[o + 3u] = s3
+            }
         }
     }
 }
@@ -7409,7 +7424,6 @@ struct F16GemmArgs {
     d : uint        //! M, the weight rows
     rows : uint     //! N, the positions
     woff : uint     //! the weight rows' element base
-    xoff : uint     //! the activation rows' element base
     ybase : uint    //! the output's element base: the sum's, or the first partial plane's
     ystride : uint  //! the output row stride (elements) when the GEMM stores whole
     ksplit : uint   //! the k chunk per workgroup; 0 = the whole K, one plane at ybase with ystride
@@ -7458,10 +7472,10 @@ class F16GemmCm2 {
         var acc : ACC
         var k = k0
         while (k < k1) {
-            coopmatLoadTensor(a, w, pa.woff, tla, m0, 128u, k, 64u)
-            coopmatLoadTensor(b, xf16, pa.xoff, tlb, t0, 128u, k, 64u, tv)
+            coopmatLoadTensor(a, w, pa.woff, tla, m0, 128u, k, F16G_BK)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, F16G_BK, tv)
             acc = coopmatMulAdd(a, b, acc)
-            k += 64u
+            k += F16G_BK
         }
         coopmatStoreTensor(acc, y, ybase, tlo, t0, 128u, m0, 128u, tv)
     }

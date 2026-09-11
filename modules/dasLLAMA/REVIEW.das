@@ -545,7 +545,7 @@ let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 // in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 36
-let private IMAGE_LAYOUT_STAMP_HASH = 0x9e7f93d158989fb1ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x4098e7f964aefc1ful
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
@@ -893,7 +893,7 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
             let ladder = ident_prefix(slice(f.body, length("def ")))
             let arm = "{slice(ladder, length(trio.ladder))}_{dispatch}("
             if (find(f.body, arm) < 0) {
-                gate_finding(VK_PREFILL, f.line, "{ladder} has no arm for {tpl} ({arm}) - the f16 feed admits the format and {trio.why}")
+                gate_finding(VK_PREFILL, f.line, "{ladder} has no arm for {tpl} ({arm}) - {trio.why}")
             }
         }
     }
@@ -901,9 +901,9 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
 
 def private check_cm2_ladder_sets {
     check_cm2_ladder_set(LadderTrio(suffix = "KhrBatch", tail = "khr_cls", ladder = "khr_cls_",
-        why = "the KHR ladders panic on a KHR-mode card"), CM2_KHR_EXEMPT)
+        why = "the f16 feed admits the format on a KHR-mode card, where the KHR ladders panic"), CM2_KHR_EXEMPT)
     check_cm2_ladder_set(LadderTrio(suffix = "Cm2EBatch", tail = "cm2e_cls", ladder = "cm2e_cls_",
-        why = "the e ladders panic on the first resident MoE window"), CM2_NO_EXEMPT)
+        why = "the expert schedule takes the format's planes, and the e ladders panic on the first resident MoE window"), CM2_NO_EXEMPT)
 }
 
 struct private VkStamp {
@@ -958,6 +958,52 @@ def private ident_after(lines : array<string>; marker : string) : string {
     return ""
 }
 
+//! the template's constants a stamp inherits where it overrides none, and the two schedule widths
+struct private StampDefaults {
+    bn, bk, unr, blkw, s_rows, m_rows : int
+}
+
+//! one stamp against the tile rule: its unrolled block one superblock, a scale-cache format's BLKW that block, its four tile typedefs at its BK and BN, an s or e stamp's BN the schedule's width
+def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults) {
+    var inscope body <- split(st.body, "\n")
+    let bn_over = literal_after(body, "override BN = ")
+    let bk_over = literal_after(body, "override BK = ")
+    let unr_over = literal_after(body, "override UNR = ")
+    let bn = bn_over < 0 ? d.bn : bn_over
+    let bk = bk_over < 0 ? d.bk : bk_over
+    let unr = unr_over < 0 ? d.unr : unr_over
+    if (bk * unr != d.bk * d.unr) {
+        gate_finding(path, st.line, "{st.dispatch_name}: UNR {unr} at BK {bk} - a stamp's unrolled block is one superblock ({d.bk * d.unr} elements: the template's BK x UNR), so a 32-deep stamp carries `override UNR = {d.bk * d.unr / 32}u` and a 64-deep one none")
+    }
+    var inscope tlines <- class_lines(VK_CLASSES, "class template {st.base}")
+    if (ident_after(tlines, "override SCACHE = ") == "true") {
+        let blkw_over = literal_after(tlines, "override BLKW = ")
+        let blkw = blkw_over < 0 ? d.blkw : blkw_over
+        if (blkw != bk * unr) {
+            gate_finding(path, st.line, "{st.dispatch_name}: a scale-cache stamp at BLKW {blkw} with an unrolled block of {bk * unr} - the cache refills once per superblock (`sc_step` keys on BLKW), so a SCACHE format's BLKW is its BK x UNR")
+        }
+    }
+    let want <- fixed_array(
+        (name = "AT", tile = "coopmatWgA_f16_128x{bk}", why = "a stamp's A tile is 128 rows by its k step"),
+        (name = "BT", tile = "coopmatWgB_f16_{bk}x{bn}", why = "a stamp's B tile is its k step by its token column"),
+        (name = "ACC", tile = "coopmatWgAcc_f16_128x{bn}", why = "a stamp's accumulator is 128 rows by its token column"),
+        (name = "ACCW", tile = "coopmatWgAcc_f32_128x{bn}", why = "a stamp's f32 accumulator is 128 rows by its token column"))
+    for (w in want) {
+        let got = ident_after(body, "typedef {w.name} = ")
+        if (empty(got)) {
+            gate_finding(path, st.line, "{st.dispatch_name}: no `typedef {w.name}` at BK {bk} BN {bn} - {w.why} ({w.tile}); a stamp declares all four tile types")
+        } elif (got != w.tile) {
+            gate_finding(path, st.line, "{st.dispatch_name}: `typedef {w.name} = {got}` at BK {bk} BN {bn} - {w.why} ({w.tile}); change the constants and the types together")
+        }
+    }
+    if (st.dispatch_name |> ends_with("_cm2e_cls") && bn != d.m_rows) {
+        gate_finding(path, st.line, "{st.dispatch_name}: BN {bn} on an e stamp - the expert schedule's m pieces are SCHED_M_ROWS ({d.m_rows}) rows wide, the column the stamp serves")
+    }
+    if (st.dispatch_name |> ends_with("_cm2s_cls") && bn != d.s_rows) {
+        gate_finding(path, st.line, "{st.dispatch_name}: BN {bn} on an s stamp - the expert schedule's s pieces are SCHED_S_ROWS ({d.s_rows}) rows wide, the column the stamp serves")
+    }
+}
+
 def private check_cm2_stamp_tiles {
     var inscope templates <- cm2_format_templates(CM2_NO_EXEMPT)
     var inscope base_lines <- class_lines(VK_CLASSES, "class template KqCm2BatchT")
@@ -974,37 +1020,17 @@ def private check_cm2_stamp_tiles {
         gate_finding(VK_CLASSES, "no `let SCHED_S_ROWS = N` / `let SCHED_M_ROWS = N` line - the stamp tile rule has no schedule widths to compare; keep the spelling or move this check with it")
     }
     return if (bn0 < 0 || bk0 < 0 || unr0 < 0 || s_rows < 0 || m_rows < 0)
+    let blkw0 = literal_after(base_lines, "@template_constant BLKW : uint = ")
+    let defaults = StampDefaults(bn = bn0, bk = bk0, unr = unr0, blkw = blkw0, s_rows = s_rows, m_rows = m_rows)
     var stamped = 0
-    var inscope stamps <- vk_stamps(VK_CLASSES)
-    for (st in stamps) {
-        continue if (find_index(templates, st.base) < 0)
-        stamped++
-        var inscope body <- split(st.body, "\n")
-        let bn_over = literal_after(body, "override BN = ")
-        let bk_over = literal_after(body, "override BK = ")
-        let unr_over = literal_after(body, "override UNR = ")
-        let bn = bn_over < 0 ? bn0 : bn_over
-        let bk = bk_over < 0 ? bk0 : bk_over
-        let unr = unr_over < 0 ? unr0 : unr_over
-        if (bk * unr != bk0 * unr0) {
-            gate_finding(VK_CLASSES, st.line, "{st.dispatch_name}: UNR {unr} at BK {bk} - a stamp's unrolled block is one superblock ({bk0 * unr0} elements: the template's BK x UNR), so a 32-deep stamp carries `override UNR = {bk0 * unr0 / 32}u` and a 64-deep one none")
-        }
-        let want <- fixed_array(
-            (name = "AT", tile = "coopmatWgA_f16_128x{bk}", why = "a stamp's A tile is 128 rows by its k step"),
-            (name = "BT", tile = "coopmatWgB_f16_{bk}x{bn}", why = "a stamp's B tile is its k step by its token column"),
-            (name = "ACC", tile = "coopmatWgAcc_f16_128x{bn}", why = "a stamp's accumulator is 128 rows by its token column"),
-            (name = "ACCW", tile = "coopmatWgAcc_f32_128x{bn}", why = "a stamp's f32 accumulator is 128 rows by its token column"))
-        for (w in want) {
-            let got = ident_after(body, "typedef {w.name} = ")
-            if (got != w.tile) {
-                gate_finding(VK_CLASSES, st.line, "{st.dispatch_name}: `typedef {w.name} = {got}` at BK {bk} BN {bn} - {w.why} ({w.tile}); change the constants and the types together")
-            }
-        }
-        if (st.dispatch_name |> ends_with("_cm2e_cls") && bn != m_rows) {
-            gate_finding(VK_CLASSES, st.line, "{st.dispatch_name}: BN {bn} on an e stamp - the expert schedule's m pieces are SCHED_M_ROWS ({m_rows}) rows wide, the column the stamp serves")
-        }
-        if (st.dispatch_name |> ends_with("_cm2s_cls") && bn != s_rows) {
-            gate_finding(VK_CLASSES, st.line, "{st.dispatch_name}: BN {bn} on an s stamp - the expert schedule's s pieces are SCHED_S_ROWS ({s_rows}) rows wide, the column the stamp serves")
+    //! every file that stamps a `<Fmt>Cm2T` template: the engine's classes, the probe's other-depth twins, the toy fixture (a walk fixture holds only the first)
+    for (path in fixed_array(VK_CLASSES, "modules/dasLLAMA/harness/vk_gemm_probe.das", "modules/dasLLAMA/tests/_vkd_toy.das")) {
+        continue if (!fexist(path))
+        var inscope stamps <- vk_stamps(path)
+        for (st in stamps) {
+            continue if (find_index(templates, st.base) < 0)
+            stamped++
+            check_cm2_stamp_tile(path, st, defaults)
         }
     }
     if (stamped == 0) {

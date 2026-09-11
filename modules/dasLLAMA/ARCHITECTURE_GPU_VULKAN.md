@@ -1,11 +1,12 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad and 2.2ai - the Vulkan resident driver's prefill
-chain, its byte stores, the tile probe's set layout and the device-init roster: the prefill
-window chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer, the tile
-probe's shared descriptor set layout, the recurrent block of the prefill window, and the roster of
-Vulkan capabilities the tier keys its routes on. The MoE block of that
+carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj - the Vulkan resident driver's
+prefill chain, its byte stores, the tile probe's set layout, the device-init roster and the
+lens's readonly derivation: the prefill window chain, the Q8 requant byte store, the decode GEMV
+family's grid codebook buffer, the tile probe's shared descriptor set layout, the recurrent block
+of the prefill window, the roster of Vulkan capabilities the tier keys its routes on, and how the
+`[vk_dispatch]` lens derives `readonly` from a class family's accesses. The MoE block of that
 window and the token command's routed twin are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s sections
 2.2af and 2.2ag. The cooperative-matrix
 tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and the coopmat mode
@@ -30,11 +31,14 @@ numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : K
 format, its cm2 tiles carry no KHR arm, and the KHR mode serves q8 through its own tile; for the
 e trio it requires `<Fmt>Cm2EBatch`, its `kq_batch_<fmt>_cm2e_cls` stamp (`q8_batch_cm2e_cls` for
 q8) and an arm in each of `cm2e_cls_ensure`, `cm2e_cls_set` and `cm2e_cls_enc`, licensing none.
-`check_cm2_stamp_tiles` reads every `[vk_dispatch]` stamp of those templates and requires its
-`AT`, `BT`, `ACC` and `ACCW` typedefs to follow its `BK` and `BN`, and an e or s stamp's `BN` to
-equal `SCHED_M_ROWS` or `SCHED_S_ROWS`. `check_vk_extension_roster` walks `dasllama/` for every
-`"VK_*"` extension name and every `*_supported` probe `modules/dasVulkan/daslib/vulkan_boost.das`
-declares, and requires each inside `vk_ext_roster` in `dasllama_vulkan_common.das`.
+`check_cm2_stamp_tiles` reads every `[vk_dispatch]` stamp of those templates - in
+`dasllama_vulkan_classes.das`, the probe's twins in `harness/vk_gemm_probe.das` and the bring-up
+fixture `tests/_vkd_toy.das` - and requires its `AT`, `BT`, `ACC` and `ACCW` typedefs to follow
+its `BK` and `BN`, an e or s stamp's `BN` to equal `SCHED_M_ROWS` or `SCHED_S_ROWS`, and a
+scale-caching stamp's `BLKW` to equal `BK x UNR`; it licenses no names. `check_vk_extension_roster`
+walks `dasllama/` for every `"VK_*"` extension name and every `*_supported` probe
+`modules/dasVulkan/daslib/vulkan_boost.das` declares, and requires each inside `vk_ext_roster` in
+`dasllama_vulkan_common.das`, licensing no names.
 `check_no_hand_pipelines` walks `dasllama/`, `harness/` and `tests/` for a
 `vkCreateComputePipelines(` call and licenses no names inside them; the two llama.cpp shader ports
 under `performance/` (`coopmat_mulmm_reference.das`, `coopmat_mulmm_port.das`) sit outside the
@@ -220,13 +224,13 @@ The conv is channel-major: a workgroup owns 256 channels over `DN_CONV_PB` posit
 (`dn_conv_wgs` sizes the grid), every thread slides one channel's window over them with the taps
 in registers and one new row read per position, and holds its outputs in registers for the SiLU
 and the per-head L2 norm - the head's sum of squares crosses the head's lanes by shuffles and its
-warps by one shared row, a head being `ds` consecutive channels with `ds` dividing 256. The
+32-lane blocks by one shared row, a head being `ds` consecutive channels with `ds` dividing 256. The
 position-major form it replaced (one workgroup per position, the row staged in 32 KB of shared
 memory) re-read every input row once per tap and the whole tap table once per position, all from
 L2.
 
 The scan is the plain per-token delta rule in upstream's shape: one column of a head's state per
-lane cluster, 16 state rows per lane in registers, four subgroups per workgroup, and every lane
+lane cluster, 16 state rows per lane in registers, four 32-lane blocks per workgroup, and every lane
 reads its own k and q elements from the conv plane a token AHEAD, into registers, while the
 current token computes (a row's loads never wait on the recurrence, whose per-token chain was
 latency-bound on them: the 9B's scan 342 -> 322 us a layer, the 0.8B's window a twentieth
@@ -237,7 +241,12 @@ computed once per workgroup into shared memory before the token loop, so the rec
 two shared words a token where it paid five transcendentals and a divide per lane (a third of
 the scan's time on the Linux RTX 5080; upstream's graph hands its scan the gates pre-activated).
 The tokens loop inside the kernel; each token costs two cluster reductions inside the dependency
-chain (a sixth of the scan's time there). The conv and smalls bindings are NonWritable, as every
+chain (a sixth of the scan's time there). The conv, the scan and the requant family's K-quant
+fold map their 32-lane blocks and clusters from the invocation id, never from the subgroup id:
+every shuffle in them carries an xor mask under 32, which stays inside such a block on any
+subgroup width the tier admits (32 or more), so the kernels hold on a 64-lane device as on a
+32-lane one; only the KHR tile keys on the width itself (`ARCHITECTURE_GPU_VULKAN_GEMM.md`
+sec.2.2ae). The conv and smalls bindings are NonWritable, as every
 binding no kernel of a class writes is (sec.2.2aj). The decoration is load-bearing: without it the driver orders each token's k and q
 loads behind the previous token's o store (the two buffers may alias), and the same kernel ran
 2.35x slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged

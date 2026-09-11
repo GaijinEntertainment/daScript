@@ -2,16 +2,22 @@ options gen2
 options stack = 524288
 options _dasllama_internal = true
 
-// ATTRIBUTION SWEEP - isolated per-shape rates of the prefill GEMM tiles.
+// ATTRIBUTION SWEEP - isolated per-shape rates of the prefill GEMM tiles (cm2:, cm2d:, k4|k6, the shape pins).
+// ATTRIBUTION SWEEP cm2w: - the l stamp's rate by wave count, the workgroups the device fills.
+// ATTRIBUTION SWEEP ts:|cold: - the stamp overheads: a timestamp or a barrier between two m stamps, a cold cache.
+// ATTRIBUTION SWEEP dec - the decode head's small kernels (the f16 GEMV, the deltanet step) in isolation.
+// ATTRIBUTION SWEEP moe:|moesk: - the expert schedule's s and e stamps by schedule form.
 // RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
-// k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m tiles, cm2d:<fmt> the same over the
-// 4096-wide dense hybrid's shapes, cm2w:<fmt> its l stamp's wave sweep; moe:<fmt> its s tile over the
-// MoE expert schedule; ts:<fmt> a timestamp between two of its m stamps; cold:<fmt> its m stamp
-// on planes the L2 cannot hold; cm2x|k6x|ref the bisect
-// and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
+// k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m/s stamps, its s stamp's other-depth twin
+// and the kq batch tile, cm2d:<fmt> the same over the 4096-wide dense hybrid's shapes, cm2w:<fmt>
+// its l stamp's wave sweep; dec the decode head's small kernels; moe:<fmt> its s and e stamps over
+// the MoE expert schedule (whole, the two ladders, the twin), moesk:<fmt> the same on the 30B's
+// skew; ts:<fmt> a timestamp or a barrier between two of its m stamps; cold:<fmt> its l, m and s
+// stamps warm and cold, the host schedule, the deep slab, the wide plan and the flush; cm2x|k6x|ref
+// the bisect and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
 // integer tile prototypes.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
@@ -105,6 +111,7 @@ class K4Cm2S32Probe : K4Cm2T {
     override BN = 32u
     override STILE = true
     override BK = 32u
+    override UNR = 8u
     typedef AT = coopmatWgA_f16_128x32
     typedef BT = coopmatWgB_f16_32x32
     typedef ACC = coopmatWgAcc_f16_128x32
@@ -128,6 +135,7 @@ def private probe_stwin_ensure(fmt : int) : bool {
 }
 
 def private probe_stwin_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    verify(probe_stwin_has(fmt), "vk_gemm_probe: the s stamp's other-depth twin exists for four formats alone")
     if (fmt == int(KqFmt.iq2xxs)) return set_probe_iq2xxs_cm2s64_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.iq3xxs)) return set_probe_iq3xxs_cm2s64_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.iq3s)) return set_probe_iq3s_cm2s64_cls(bufs, sizes, gbits)
@@ -443,9 +451,9 @@ def private cm2_fmt_names : string {
     }
 }
 
-//! a kq shape's synthetic planes on the device: the weight blocks and scales, the f16 and q8 feeds, one output plane
+//! a kq shape's synthetic planes on the device: the weight blocks and scales, the f16 and q8 feeds, two output planes (consecutive dispatches alternate them under fresh hazards, the served graph's shape - one plane serializes a chain on its write-after-write)
 struct private Cm2ShapeDev {
-    wqd, wsd, xfd, xqd, axsd, yd : uint64
+    wqd, wsd, xfd, xqd, axsd, yd, yd_b : uint64
     wq_bytes, ws_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes : int64
     wblk0 : int   //! the weight plane's first superblock in its buffer
 }
@@ -499,6 +507,7 @@ def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; 
     dv.xqd = make_device_buf(dv.xq_bytes)
     dv.axsd = make_device_buf(dv.axs_bytes)
     dv.yd = make_device_buf(dv.y_bytes)
+    dv.yd_b = make_device_buf(dv.y_bytes)
     unsafe {
         upload_region_at(dv.wqd, int64(blk0) * bb.wq, addr<uint8 const?>(wqh[0]), int64(totsb) * bb.wq)
         upload_region_at(dv.wsd, int64(blk0) * bb.ws, addr<uint8 const?>(wsuh[0]), long_length(wsuh) * 4l)
@@ -537,13 +546,13 @@ def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; lonly : bool = false) {
+def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp_only : bool = false) {
     let dv = cm2_shape_upload(fmt, d, n, cnt)
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     //! the l/m/s stamps, the s stamp's other-depth twin where the format has one, and the kq batch tile
     let vnames = fixed_array("cm2l", "cm2m", "cm2s", "s{probe_stwin_depth(fmt)} ", "kq  ")
     for (v in range(5)) {
-        if ((lonly && v != 0) || (v == 3 && !probe_stwin_has(fmt))) continue
+        if ((l_stamp_only && v != 0) || (v == 3 && !probe_stwin_has(fmt))) continue
         let ttile = v == 0 ? 256 : (v == 1 ? 128 : 32)
         if (cnt < ttile) continue   //! a column wider than the region: the pick never takes it, and the m stamp's unclamped load would read past the plane
         let wtile = v == 4 ? 32 : 128
@@ -552,30 +561,32 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; lonly :
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        //! every arm alike: the two output planes alternate across the dispatches, each under a fresh hazard rail
+        let sizes5 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes)
+        let gbits5 = fixed_array(1u, 2u, 0u, 4u, 16u)
         if (v == 4) {
-            var s = kq_batch_cls_set_for(fmt, false,
-                fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd),
-                fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
-            for (_k in range(DISPATCHES)) {
-                var hz2 : VkHaz
-                kq_batch_cls_enc_for(fmt, false, raw, hz2, s, pc, int64(wgs))
+            let sizes6 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes)
+            let gbits6 = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
+            var sa = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd), sizes6, gbits6)
+            var sb = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd_b), sizes6, gbits6)
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                kq_batch_cls_enc_for(fmt, false, raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
             }
         } elif (v == 3) {
-            var s = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd),
-                fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 16u))
-            for (_k in range(DISPATCHES)) {
-                probe_stwin_enc(fmt, raw, hz, s, pc, int64(wgs))
+            var sa = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
+            var sb = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                probe_stwin_enc(fmt, raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
             }
         } else {
-            var s = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd),
-                fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 16u))
-            for (_k in range(DISPATCHES)) {
-                cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+            var sa = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
+            var sb = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                cm2_cls_enc(fmt, int64(ttile), raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
             }
         }
         vk_check(vkEndCommandBuffer(raw), null)
@@ -618,7 +629,7 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var hz : VkHaz
-        var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne1 = uint(ne / 2), obase2 = uint(16 + ne))
+        var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne_split = uint(ne / 2), obase_split = uint(16 + ne))
         for (_k in range(DISPATCHES)) {
             enc_router_gemv_f16_cls(raw, hz, s, pc, int64(ne))
         }
@@ -3343,23 +3354,26 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         }
         if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
             print("{only}<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            g_probe_exit = 1
             return
         }
         if (g_gpu.coopmat_mode != COOPMAT_CM2) {
             print("{only}<fmt> reads the cm2 stamps; off cm2 mode the class ladders route to the KHR tile - run with DASLLAMA_COOPMAT=cm2\n")
+            g_probe_exit = 1
             return
         }
         if (only == "cm2w:") {
             let sm = g_gpu.sm_count
             if (sm <= 0) {
                 print("cm2w:<fmt> needs the device's SM count (VK_NV_shader_sm_builtins)\n")
+                g_probe_exit = 1
                 return
             }
             print("WAVE SWEEP cm2w:{cm2_fmt_names()}: the l stamp over one 256-token column, K 4096, {sm} workgroups a wave\n")
             verify(cm2_cls_ensure(cm2_fmt, 256l), "cm2w:<fmt> probe pipeline must engage")
-            for (h in range(2, 9)) {
-                let wgs = (h * sm) / 2
-                run_cm2_fmt_shape(cm2_fmt, "{wgs} wgs ({h}/2 waves)", wgs * 128, 4096, 256, true)
+            for (half_waves in range(2, 9)) {
+                let wgs = (half_waves * sm) / 2
+                run_cm2_fmt_shape(cm2_fmt, "{wgs} wgs ({half_waves}/2 waves)", wgs * 128, 4096, 256, [l_stamp_only = true])
             }
             return
         }
@@ -3374,7 +3388,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                 vkd_pipes_rebuild()
                 verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l)
                     && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
-                    && kq_batch_cls_ensure(cm2_fmt, false), "cm2:<fmt> probe pipelines must engage")
+                    && kq_batch_cls_ensure(cm2_fmt, false), "the cm2 sweeps' probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
                 let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
                 if (only == "cm2d:") {
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
@@ -3382,6 +3396,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} qkv  ", 8192, 4096, 512)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} z/out", 4096, 4096, 512)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v  ", 1024, 4096, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@500", 12288, 4096, 500)   //! a token count off every column: the stamps' partial-tile store path
                     continue
                 }
                 run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
@@ -3398,10 +3413,12 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     if (only == "ts:" || only == "cold:") {
         if (!g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
             print("{only}<fmt> reads the cm2 m stamp; run on a coopmat2 device with DASLLAMA_COOPMAT=cm2\n")
+            g_probe_exit = 1
             return
         }
         if (cm2_fmt < 0 || !kq_sb(cm2_fmt)) {
             print("{only}<fmt> needs a kq superblock format name ({cm2_fmt_names()})\n")
+            g_probe_exit = 1
             return
         }
         verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l), "the l, m and s stamps' probe pipelines must engage")
@@ -3418,10 +3435,12 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     if (only == "moe:" || only == "moesk:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
+            g_probe_exit = 1
             return
         }
         if (cm2_fmt < 0 || !(cm2_fmt == int(KqFmt.q8) || kq_sb(cm2_fmt))) {
             print("{only}<fmt> needs q8 or a kq superblock format name ({cm2_fmt_names()})\n")
+            g_probe_exit = 1
             return
         }
         if (g_gpu.coopmat_mode != COOPMAT_CM2) {

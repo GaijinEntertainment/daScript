@@ -479,9 +479,9 @@ def private resident_shexp_plane(t : Model; l : int64; kind : int) : tuple<f : K
     return (f = KqFmt.q8, off = t.wsh2_off + l * she)
 }
 
-//! the router plane: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated
+//! the router planes: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated, and the f16 mirror the cm2 route's window GEMM reads (counted whatever the route, the plan's other terms run high too)
 def private resident_router_bytes(c : Config; n_moe : int64) : int64 => (
-    n_moe * (c.n_expert + (c.n_ff_shexp > 0l && c.moe_shexp_gated ? 1l : 0l)) * c.dim * 4l)
+    n_moe * (c.n_expert + (c.n_ff_shexp > 0l && c.moe_shexp_gated ? 1l : 0l)) * c.dim * 6l)
 
 //! a recurrent layer's device bytes: the deltanet triple and the beta/alpha rows (f16 on the f32 arm, q8 planes otherwise); 0 on an attention layer
 def private resident_dn_layer_bytes(t : Model; l : int64) : int64 {

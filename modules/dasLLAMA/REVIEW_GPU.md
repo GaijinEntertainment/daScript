@@ -8,10 +8,12 @@ for Metal, `followup_vulkan.md` for Vulkan.
 it.**
 
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
-than to serve a call - or changing a property of a kernel class such an arm restates rather than
-reads (a binding number, the kargs layout, threadgroup memory, a staging shape, the grid or
-threadgroup geometry) - wherever the diff puts it - applies `REVIEW_GPU_RACE.md` too, and
-`tests/REVIEW_KERNEL_CELLS.md` for the gates that hand-dispatch or hand-bind the class.**
+than to serve a call - wherever the diff puts it, applies `REVIEW_GPU_RACE.md` too.**
+
+**A diff changing a property of a kernel class that a timing arm or a gate restates rather than
+reads - a binding number, the kargs layout, threadgroup memory, a staging shape, the grid or
+threadgroup geometry - applies `tests/REVIEW_KERNEL_CELLS.md` for the gates that hand-dispatch
+or hand-bind the class.**
 
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
 builder the tower dispatches, the `[metal_dispatch]` emission those builders are generated
@@ -49,10 +51,10 @@ steps a fixed-size chunk and never checks for a partial last chunk - gates each 
 of that kernel on that site's own K, the extent that site's loop steps along, never on one
 gate covering every site.**
 
-**A dispatch site's alignment gate whose divisor is not the chunk the kernel that site
-dispatches steps is a defect.** A kernel that steps 128 behind a gate that checks 256 never
-sees a shape it could serve; a kernel that steps 256 behind a gate that checks 128 silently
-drops a tail.
+**A dispatch site's alignment gate whose divisor is neither the chunk the kernel that site
+dispatches steps nor a multiple of that chunk the site forces by splitting its K extent across
+dispatches is a defect.** A gate that checks less than the kernel's chunk silently drops a tail;
+a gate that checks more than the site's own split forces never sees a shape the kernel could serve.
 
 **Weakening the MSL emitter's refusal to compile an unlicensed float `matmul2d` A operand -
 `[metal_kernel(float_a_ok=true)]` is the license - or its gate
@@ -115,7 +117,7 @@ its previous write is encoded - rotate through as many buffers as the chain has 
 flight between a write and its read.** One shared scratch serializes the whole chain through
 its write-after-read hazards.
 
-**A diff that adds dispatches to an encoder path to save bandwidth also gates that path on
+**A diff that turns one dispatch on an encoder path into two or more also gates that path on
 work size, in the same change.** The gate's threshold is measured at the smallest and the
 largest work size the path serves. The small-work regression hides behind the big-work win.
 
@@ -165,9 +167,9 @@ each encode - is a defect; a per-encode field either omits `@role` or names the 
 performs.** `weight` tells the generated builder the buffer needs no per-encode hazard tracking.
 
 **A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
-`[vk_dispatch]` declaration, or a new instance of a template carrying one - either adds a census
-row to `tests/test_kernel_coverage.das` that dispatches it, adding the census model too when no
-stocked model can, or names it in that file's blind-spot list for its backend -
+`[vk_dispatch]` declaration, or a new instance of a template carrying one - either shows a
+census row in `tests/test_kernel_coverage.das` that dispatches it, adding the row or the census
+model when none does, or names it in that file's blind-spot list for its backend -
 `CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
 stocked model reaches it and the model-less test cell that dispatches it.**
 

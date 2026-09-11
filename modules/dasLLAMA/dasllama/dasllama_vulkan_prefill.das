@@ -577,18 +577,18 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
     pfq_ts(raw)
 }
 
-let private PF_F16G_SPLIT = 8l   //! the small f16 GEMMs' k chunks
-
+//! the small f16 GEMM route serves: the shape admits it and the split-k scratch holds a whole window's partial planes at the widest row it takes (the router's, the beta/alpha pair's)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
-def private pf_f16g_on() : bool => g_rd.pf_splitk != 0ul && g_rd.dim % (64l * PF_F16G_SPLIT) == 0l
+def private pf_f16g_on() : bool => (g_rd.pf_splitk != 0ul && f16g_shape_ok(g_rd.dim)
+    && F16G_SPLIT * PF_WINDOW * max(g_rd.ner, 2l * g_rd.dn_nvh) * 4l <= g_rd.pf_splitk_bytes)
 
 //! one small f16 GEMM: y[rows x d] at ybase = x[rows x n] w[d x n]^T over the weight rows at woff, through the split-k planes
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : VkDescriptorSet; n, d, rows, woff, ybase : int64) {
-    verify(PF_F16G_SPLIT * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the f16 GEMM's partial planes exceed the split-k scratch")
-    var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = uint(woff), xoff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / PF_F16G_SPLIT))
-    enc_f16_gemm_cm2_cls(raw, h, gset, pc, ((rows + 127l) / 128l) * ((d + 127l) / 128l) * PF_F16G_SPLIT)
-    var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(PF_F16G_SPLIT), ybase = uint(ybase))
+    verify(F16G_SPLIT * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the f16 GEMM's partial planes exceed the split-k scratch")
+    var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = uint(woff), ybase = 0u, ystride = uint(d), ksplit = uint(n / F16G_SPLIT))
+    enc_f16_gemm_cm2_cls(raw, h, gset, pc, ((rows + 127l) / 128l) * ((d + 127l) / 128l) * F16G_SPLIT)
+    var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(F16G_SPLIT), ybase = uint(ybase))
     enc_splitk_reduce_cls(raw, h, rset, pcr, (rows * d + 1_023l) / 1_024l)
 }
 

@@ -6,8 +6,9 @@ doc: `CLAUDE.md` (repo root).
 A tool is a directory that owns the programs it ships - each one's entry point and the files
 only those programs use; a program joins a tool through `utils/CMakeLists.txt` (beside this
 file) or the repo root's `CMakeLists.txt` building or shipping it, or through the directory's
-`.das_package` declaring it with `release_program` - under `utils/`, or outside `utils/` when
-one of those two files builds or ships it. An arm is one `t |> run(...)` case of a `[test]` function. An arm's load-bearing
+`.das_package` declaring it with `release_main` (its own program) or `release_program` (a
+companion) - under `utils/`, or outside `utils/` when one of those two files builds or ships
+it. An arm is one `t |> run(...)` case of a `[test]` function. An arm's load-bearing
 assertions are the ones that prove the change, never a skip-path assertion. A CI row is a
 workflow step whose command reaches the arm. Load-bearing assertions no CI row executes - the
 arm returns or skips before them, or no suite a CI row runs includes the arm's file - are

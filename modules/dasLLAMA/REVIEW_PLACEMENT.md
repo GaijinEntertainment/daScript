@@ -1,9 +1,9 @@
 # dasLLAMA Code Review Checklist - placement
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md` - its sec.1 routing block names the companion that holds each file's
-charter line - `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`. Planned work:
-`followup_general.md`.
+doc: `ARCHITECTURE.md` - its sec.1 routing block names the companion that holds each file's
+charter line. Planned work: `followup_general.md`, `followup_vulkan.md` for Vulkan,
+`followup_metal.md` for Metal.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 it.**

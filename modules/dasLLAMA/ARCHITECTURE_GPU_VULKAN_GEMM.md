@@ -46,8 +46,8 @@ dmin x mn)` from their five-word scale row in place of three scale-plane loads, 
 and two multiplies per element; IQ4_XS (`SCIQ4`) caches `d x (ls - 32)` from its two-word row in
 place of two loads and the six-bit rebuild; k6's scale is a byte read directly and the grid
 formats' strips are read once per pair already. It is the reference exe's `shAscales`, which its
-Q4_K and Q5_K tiles alone carry; the refill keys on the k step (`sc_step`, `k % BLKW == 0`), so
-a split-k chunk boundary inside a superblock refills once more and reads right.
+Q4_K and Q5_K tiles alone carry; the refill keys on the k step (`sc_step`, `k % BLKW == 0`), and
+`cm2_split_k` cuts every chunk at a 256-aligned k, so no chunk boundary falls inside a superblock.
 
 Every kq format's four-wide twin is hand-written (`decode_v4`, the template's `DECV4` axis) in
 the same spelling, sharing what four consecutive elements share - a K-quant twin reads its four
@@ -295,6 +295,6 @@ noise sample than the one-row form, inside the same class. RTX 5060 Ti, DRAM-bou
 iq2xxs 142 / 233 / 351, k4 394 / 402 / 413, k6 386 / 414 / 407; K 1408 iq2s 198 / 299 / 368,
 k6 386 / 399 / 373, k4 394 / 394 / 382; K 2048 iq2s 311 / 384 / 388, k6 417 / 416 / 369; K
 4096 iq2s 376 / 408 / 344, k6 403 / 387 / 326, k4 400 / 404 / 406; K 5632 k4 411 / 399 / 386,
-k6 396 / 384 / 287, iq2s 377 / 393 / 296. llama.cpp's mat-vec splits K over 16 threads and
+k6 396 / 384 / 287, iq2s 377 / 393 / 296. Upstream's mat-vec splits K over 16 threads and
 blocks two to four rows per thread (`rm_kq`, `NUM_ROWS` in `mul_mat_vec_*.comp`): the same
 bytes in flight by the other axis.

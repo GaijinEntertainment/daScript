@@ -12,14 +12,15 @@ provenance line covers it.
 
 **A `PERF_LEDGER.md` entry states a served-turn figure of the engine this repository builds - a
 tok/s rate or a turn wall - only when the released `lcpp_bench` exe (`benchmarks/lcpp_bench.das`
-built by `daspkg release`) or a board cell produced it; a `-jit` A/B pair enters as its ratio,
-with the arms' absolute rates left in the run's report.** A served turn is one whole request an
-engine serves - a prefill-plus-decode run, or one synthesis; a turn wall is its wall. The `-jit`
-script is `benchmarks/lcpp_bench.das` run as a script under `-jit` rather than as the released
-exe.
+built by `daspkg release`) or a board cell produced it.** A served turn is one whole request an
+engine serves - a prefill-plus-decode run, or one synthesis; a turn wall is its wall.
 
-**A `PERF_LEDGER.md` entry tags a figure `external` when no cell, script, or exe of this
-repository spawned the run that produced it - and never when one did, whatever binary that run
+**A `-jit` A/B pair enters `PERF_LEDGER.md` as its ratio, with the arms' absolute rates left in
+the run's report.** The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under
+`-jit` rather than as the released exe.
+
+**A `PERF_LEDGER.md` entry stating a figure no cell, script, or exe of this repository produced
+tags it `external`; a figure one of them produced carries no such tag, whatever binary the run
 timed.**
 
 **A difference, ratio, or percentage of two measured walls, neither produced by the `-jit`
@@ -53,14 +54,13 @@ committed board row covers cites that row and marks the reading debug-jit.** A
 another project - it rests on a measurement a cell or instrument of this repository took.**
 
 **A diff that adds an entry to `PERF_LEDGER.md` never records a selection timing - a timing
-that picks a winner between candidate kernel forms.** That timing settles its adoption
-decision in the report of the run that took it and in the PR that lands the kernel. The
-winner enters the ledger only through a re-measured board cell.
+whose losing arm was never committed.** That timing settles its adoption decision in the report
+of the run that took it and in the PR that lands the kernel. The winner enters the ledger only
+through a re-measured board cell.
 
-**A diff that makes the engine run end to end - serving a client, or measuring - by a route no
-board cell exercises mints that cell in the same change.** A route is anything that changes
-which code runs a whole prefill-plus-decode pass end to end, including the path a run with no
-flags and no environment overrides takes.
+**A diff that routes a whole prefill-plus-decode pass onto a code path no board cell exercises
+mints that cell in the same change.** A route is the end-to-end code path such a pass takes,
+including the path a run with no flags and no environment overrides takes.
 
 **A change that owes a board cell for a route `performance/gen_bench_records.das` cannot mint a
 row for - no leg of it drives that route, or the author's box refuses or skips the leg that

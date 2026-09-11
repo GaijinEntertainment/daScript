@@ -109,11 +109,11 @@ initializer, and its null default is the declared "no hook".
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
 token-exact fixtures.
 
-**A diff that changes a predicate in `dasllama/` picking between kernel forms that both
-produce the right answer is based on timing that ran both forms interleaved in one process,
-under one instrument.** The same holds for a constant in `dasllama/` whose value was chosen by
-timing two candidates against each other. A reading taken across two processes, or across two
-commits, says which way the wall-clock time moved, not which implementation to adopt.
+**A diff that changes a predicate in `dasllama/` picking between kernel forms that both produce
+the right answer, or a constant there chosen by timing two candidates against each other, rests
+on timing that ran both forms interleaved in one process under one instrument, and puts that
+race's rows, each naming its arm, in the PR body.** A reading taken across two processes or two
+commits says which way the wall clock moved, not which implementation to adopt.
 
 **A change to an allocation reached from a load, bake, or convert path (judge a shared helper
 at each call site) that trades footprint against wall-clock, either way, ships the measured
@@ -186,16 +186,16 @@ the setter's name) and, for one that is on unless turned off, the spelling that 
 one with no off spelling says so. Per-site repeats are fine; a set-but-inert override is silent.
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
-left showing the old call, flag, or default after a change to user-facing API is a defect of
-the change, not of the docs.** User-facing means anything a consumer outside this repo can
-depend on - what it calls, types, requires, or parses (facade functions, CLI flags, environment
+outside this folder left showing the old call, flag, or default after a change to user-facing API
+is the change's defect, not the docs'.** User-facing is anything a consumer outside this repo can
+depend on - what it calls, types, requires or parses (facade functions, CLI flags, environment
 knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
 rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
 
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own
-checklist routed this diff here, updates that text in the same change** - no lint checks a section
-no `[arch]` cites; only the reviewer does.
+checklist routed this diff here, updates that text in the same change** - no lint reads text no
+`[arch]` cites; only the reviewer does.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's
@@ -224,10 +224,10 @@ finding text names the set as its extension point and the diff lands the paired 
 edit that text asks for. What the gate enforces is read from the gate itself; each check's
 finding text states its own rule.
 
-**A new `REVIEW.das` check ships its line on the checked file's sec.1 charter - in an
-`ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The line names
-the check and the names it licenses. A licensed name is one that check does not flag. When the
-check licenses no names, the line says so.
+**A new `REVIEW.das` check ships its line in the companion section that owns the mechanism the
+check guards - an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.**
+The line names the check and the names it licenses. A licensed name is one that check does not
+flag. When the check licenses no names, the line says so.
 
 **Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language -
 that describes a mechanism of the reference build, or names that build, its binaries or its

@@ -20,10 +20,10 @@ its result, printed or returned to a caller that prints it. Without the gate or 
 instrument measures fallback kernels silently.
 
 **A diff that adds or changes a race alternates its arms - one timed round per arm, best-of
-across rounds, each round printing its own row.** A race is a run that times two
-implementations of the same computation in one process; an arm is one implementation's timed
-run; a compared arm is one whose output the run reads back and measures against another arm's
-output or a CPU reference. An instrument is reviewed arm by arm.
+across rounds - and reports each arm's row on its own, never folded into a single ratio row.**
+A race is a run that times two implementations of the same computation in one process; an arm
+is one implementation's timed run; a compared arm is one whose output the run reads back and
+measures against another arm's output or a CPU reference. An instrument is reviewed arm by arm.
 
 **A diff that adds or changes a race arm that computes a comparable output proves that output
 on its report line:** an arm whose result is bit-identical to the baseline's prints the
@@ -57,11 +57,11 @@ cannot be compared to any row the board already carries.
 measures what that process can measure about itself; that measurement goes inside the process
 instead.**
 
-**A file holding a third-party wall - a wall-clock time measured for a binary this repository
-does not build - outside `../performance/records/` and `../PERF_LEDGER.md` is scratch:
-untracked, owned by exactly one instrument, re-derivable from a command in that instrument's
-header comment, and never an input to a board cell.** A tracked or shared copy of a third-party
-wall becomes a stale baseline nobody re-derives.
+**A data file an instrument reads or writes that holds a third-party wall - a wall-clock time
+measured for a binary this repository does not build - outside `../performance/records/` and
+`../PERF_LEDGER.md` is scratch: untracked, owned by exactly one instrument, re-derivable from a
+command in that instrument's header comment, and never an input to a board cell.** A tracked or
+shared copy of a third-party wall becomes a stale baseline nobody re-derives.
 
 **A diff that adds or changes an instrument that prints the difference of two walls also
 prints both of those walls on that report line.** A plain elapsed-time row - one clock pair,

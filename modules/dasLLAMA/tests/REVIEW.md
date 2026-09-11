@@ -8,11 +8,6 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 output - or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it,
 applies `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
 
-**A diff that changes a `[metal_dispatch]` or `[vk_dispatch]` class's dispatch geometry, its
-kernel-argument struct (`kargs`), that struct's fields, which branch the class takes on a kargs
-value or on a value in a buffer it binds, or the precision of any step it computes at -
-wherever the class lives - applies `REVIEW_KERNEL_CELLS.md` together with this list.**
-
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
 change reaches a test when it alters anything the test's result depends on - the test file, a
@@ -51,17 +46,18 @@ a run of skips is not the coverage the suite owes.
 `run.das` suite listing is the only registration these files get.**
 
 **A diff that changes what a file covers - a cell added, removed or moved, its suite, an axis or
-bar an existing cell asserts - corrects that file's `CLAUDE.md` census entry, numbers included,
-in the same change.** A `{a,b}` shorthand naming several files at once, or a suite roster,
-carries nothing to correct; a file with no census entry owes none, a file with one keeps it true.
+bar a cell the census entry names asserts - corrects that file's `CLAUDE.md` census entry,
+numbers included, in the same change.** A `{a,b}` shorthand naming several files at once, or a
+suite roster, carries nothing to correct; a file with no census entry owes none.
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
 
-**A diff that adds, changes, or drops a cell's skip condition updates the test file's own
-header - the top comment block carrying every fact a skip condition in the file keys on (model,
-tier, fixture, device, arm, knob) - in the same change, and adds or corrects the skip clause in
-that file's `CLAUDE.md` entry where `CLAUDE.md` carries one.**
+**A diff that adds, changes, or drops a cell's skip condition - a `t |> skip` or an early
+return - updates the test file's own header - the top comment block carrying every fact a skip
+condition in the file keys on (model, tier, fixture, device, arm, knob) - in the same change,
+and adds or corrects the skip clause in that file's `CLAUDE.md` entry where `CLAUDE.md` carries
+one.**
 
 **A diff that adds, moves, or removes a `[test]` file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -96,12 +92,16 @@ wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
 pages at `donate_stream`); `test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan
 matmul picks for a given width, row count and coopmat mode, and whether that dispatch splits its
-reduction across partial planes); `utils/dasllama-server/test_worker_dispatch.das` (repo root) -
-worker-local fork pools, shared queue policy.
+reduction across partial planes - the split's inputs being the width, the rows, the coopmat mode,
+the co-running group's workgroups and the device's SM count; added rows on those axes are not an
+axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries against the
+arming's fields); `utils/dasllama-server/test_worker_dispatch.das` (repo root) - worker-local
+fork pools, shared queue policy.
 
-**A diff that adds a gate whose failure means a documented contract changed, rather than a
-kernel regressing, adds it to the pinned set in the same change** - as a file when every
-cell of it pins, as a named cell otherwise.
+**A diff that adds a gate whose expected value is written down where a person edits it - a
+document, a checked-in table, a generated artifact's committed form, a roster - rather than
+computed by the code under test, adds it to the pinned set in the same change** - as a file
+when every cell of it pins, as a named cell otherwise.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting - whatever the reason - registers `t |> skip` there, and one whose

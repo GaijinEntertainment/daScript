@@ -26,7 +26,8 @@ require daslib/strings_boost   // join: the spawned fixture's source
 require daslib/math_bits   // float_bits_to_uint: the f16 GEMM cell reads its NaN sentinel by bit pattern
 
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: the s and m tiles load a partial column unclamped
-let private TILE_CELL_K = 768   //! every per-format tile cell's K: one 512-unrolled pass plus a 4-step tail crossing superblock bounds on a 64-deep stamp, three 256-unrolled passes and no tail on a 32-deep one (a K-quant width is a multiple of 256)
+let private TILE_CELL_K = 768   //! every per-format tile cell's K: three unrolled superblock passes on both depths (a K-quant width is a multiple of 256, so no K-quant stamp ever takes the k loop's tail; the q8 cm2 cells' Q8_CELL_K takes the edge path)
+let private Q8_CELL_K = 544     //! the q8 cm2 cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path
 
 //! a format cell's arms: the cm2 l, m and s tiles through their own builders, the KHR tile and the expert schedule's e column through the ladders
 let private ARM_CM2_L = 0
@@ -131,6 +132,8 @@ def test_vkd_class_dispatch(t0 : T?) {
 }
 
 //! SPIR-V's OpDecorate is opcode 71, three words (target, decoration) or four with the decoration's literal; Binding is 33, NonWritable 24
+let private NAN_SENTINEL_BITS = 0x7fc00000u   //! the output fill before a dispatch: a NaN, so a stale or unwritten element cannot sit inside any bar
+let private SPV_HEADER_WORDS = 5   //! the module header the instruction walk skips
 let private SPV_OP_DECORATE = 71u
 let private SPV_DECOR_NONWRITABLE = 24u
 let private SPV_DECOR_BINDING = 33u
@@ -138,7 +141,7 @@ let private SPV_DECOR_BINDING = 33u
 def private nonwritable_bindings(words : array<uint>) : table<int> {
     var binding_of : table<uint; int>
     var nonwritable : table<uint>
-    var i = 5   // past the five-word header
+    var i = SPV_HEADER_WORDS
     while (i < length(words)) {
         let wc = int(words[i] >> 16u)
         let op = words[i] & 0xFFFFu
@@ -162,14 +165,13 @@ def private nonwritable_bindings(words : array<uint>) : table<int> {
 def test_vkd_readonly_stamp(t0 : T?) {
     t0 |> run("the lens stamps NonWritable on every binding the kernel never writes, and on those alone") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            // the toy reads xs (binding 0) and writes ys (binding 1); neither declares a role or a qualifier
             var ro <- nonwritable_bindings(vkd_toy_spv)
             t |> success(key_exists(ro, 0), "binding 0, read only, is NonWritable")
             t |> success(!key_exists(ro, 1), "binding 1, written, is not")
             t |> equal(1, length(ro), "one binding of the two is NonWritable")
             delete ro
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -239,7 +241,7 @@ def test_vkd_lens_readonly_gate(t0 : T?) {
             let good = spawn_readonly_fixture(false, "ok")
             t |> equal(0, good.rc, "the twin without the qualifier compiles: {good.out}")
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -285,9 +287,9 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {
                 let begin = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw, begin), null)
                 var h : VkHaz
-                var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, xoff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
+                var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
                 enc_f16_gemm_cm2_cls(raw, h, sd, pc, tiles)
-                var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, xoff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / nsplit))
+                var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / nsplit))
                 enc_f16_gemm_cm2_cls(raw, h, sp, pc2, tiles * int64(nsplit))
                 var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit), ybase = uint(ybase))
                 enc_splitk_reduce_cls(raw, h, sr, pcr, int64(rows * d + 1023) / 1_024l)
@@ -311,14 +313,14 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {
                     amax = max(amax, abs(s))
                 }
             }
-            let tol = amax * 2e-5   // the tensor tile and the CPU sum the same f16 products in different orders
+            let tol = amax * 2e-5   //! both operands are f16-exact, so every product is exact in f32 and the arms differ by f32 reassociation over K alone; 2e-5 of the max holds the cell's shapes with the poison leg red
             let poison = tol * 4.0
             let arms = fixed_array("direct", "split-k")
             for (arm in range(2)) {
                 let base = arm * yn
                 var header_ok = true
                 for (i in range(ybase)) {
-                    header_ok = header_ok && float_bits_to_uint(got[base + i]) == 0x7fc00000u
+                    header_ok = header_ok && float_bits_to_uint(got[base + i]) == NAN_SENTINEL_BITS
                 }
                 var worst = 0.0
                 var worst_poisoned = 1.0e30
@@ -341,20 +343,21 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {
 
 [test]
 def test_vkd_f16_gemm(t0 : T?) {
-    t0 |> run("the small f16 GEMM on the cm2 tile (the router logits, the deltanet beta/alpha rows) == the f32 dot, direct and split-k") <| @(t : T?) {
+    t0 |> run("the small f16 GEMM on the cm2 tile (the router logits, the deltanet beta/alpha rows) == the f32 dot, direct and split-k [DASLLAMA_COOPMAT=cm2]") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
-                feint("no Vulkan device - skipping\n")
+                t |> skip("no Vulkan device")
                 return
             }
             if (g_gpu.coopmat_mode != COOPMAT_CM2 || !ensure_f16_gemm_cm2_cls() || !ensure_splitk_reduce_cls()) {
-                feint("no cm2 tile family on this device - skipping\n")
+                t |> skip("no cm2 tile family on this device (the small f16 GEMM rides the cm2 tile alone)")
                 return
             }
             f16_gemm_cell(t, "ba-like", 32, 512, 70)
             f16_gemm_cell(t, "router-like", 200, 1024, 130)
+            f16_gemm_cell(t, "odd router", 61, 512, 41)   //! rows x d off every 4-multiple: the reduce's element-guarded tail
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -398,7 +401,7 @@ def test_vkd_ext_roster(t0 : T?) {
             t |> equal(g_gpu.dn_shared_ok, roster_on(roster, "maxComputeSharedMemorySize"), "dn_shared_ok follows the shared-memory limit entry")
             t |> success(g_gpu.xfer_fam < 0 || roster_on(roster, "timelineSemaphore"), "an armed transfer queue rides the timelineSemaphore entry")
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -848,7 +851,7 @@ def private nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) {
     var s : array<uint>
     s |> resize(bytes / 4l)
     for (v in s) {
-        v = 0x7fc00000u
+        v = NAN_SENTINEL_BITS
     }
     unsafe {
         upload_region_at(dev, off, addr<uint8 const?>(s[0]), bytes)
@@ -2135,7 +2138,7 @@ def test_vkd_cm2l_batch(t0 : T?) {
                 return
             }
             verify(ensure_q8_batch_cm2l_cls(), "class rail must engage in cm2 mode")
-            let n = 576                // 512 through the 8x-unrolled main loop + a 64 tail step
+            let n = 576                // 512 through two unrolled superblock passes + a 64 tail step
             let nbb = n / 32
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300             // 256-token tiles with a 44-row edge
@@ -2297,7 +2300,7 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
             var y_sentinel : array<uint>
             y_sentinel |> resize(rows * d)
             for (i in range(rows * d)) {
-                y_sentinel[i] = 0x7fc00000u   // a NaN: a stale or unwritten output cannot sit inside any bar
+                y_sentinel[i] = NAN_SENTINEL_BITS
             }
             unsafe {
                 upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
@@ -4153,7 +4156,7 @@ def test_vkd_cm2m_batch(t0 : T?) {
                 return
             }
             verify(ensure_q8_batch_cm2m_cls(), "class rail must engage in cm2 mode")
-            let n = 576                // 512 through the 8x-unrolled main loop + a 64 tail step
+            let n = 576                // 512 through two unrolled superblock passes + a 64 tail step
             let nbb = n / 32
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300             // 128-token tiles: two full + a 44-row edge
@@ -4257,7 +4260,7 @@ def test_vkd_cm2e_batch(t0 : T?) {
                 return
             }
             verify(cm2_cls_ensure(int(KqFmt.q8), CM2_TC_E), "the q8 e-column class rail must engage in cm2 mode")
-            let n = 544                // 544 = 512 + 32: a width off the q8 stamp's 64-deep grid, so its tail step runs
+            let n = Q8_CELL_K
             let nbb = n / 32
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300             // 128-token columns: two full + a 44-row edge
@@ -4315,8 +4318,7 @@ def test_vkd_cm2e_batch(t0 : T?) {
                 let scd = make_device_buf(sc_bytes)
                 upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
                 nan_sentinel_upload(yd2, y_bytes)
-                // the class kernel through the ladders' e key: sparse bindings 0/1/2/3/5
-                var sc = cell_arm_set(ARM_CM2_E, int(KqFmt.q8), fixed_array(wqd, wsd, scd, xfd, yd2),
+                    var sc = cell_arm_set(ARM_CM2_E, int(KqFmt.q8), fixed_array(wqd, wsd, scd, xfd, yd2),
                     fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
                     fixed_array(1u, 2u, 0u, 4u, 16u))
                 var raw2 = alloc_cmd()
@@ -4366,7 +4368,7 @@ def test_vkd_cm2s_batch(t0 : T?) {
                 return
             }
             verify(ensure_q8_batch_cm2s_cls(), "class rail must engage in cm2 mode")
-            let n = 544                // 544 = 512 + 32: a width off the q8 stamp's 64-deep grid, so its tail step runs
+            let n = Q8_CELL_K
             let nbb = n / 32
             let d = 160                // one full 128-tile + a 32 edge
             let cnt0 = 300             // 32-token tiles: nine full + a 12-row edge
@@ -4476,7 +4478,7 @@ def test_vkd_cm2l_split(t0 : T?) {
             verify(ensure_q8_batch_cm2l_cls(), "class rail must engage in cm2 mode")
             verify(ensure_splitk_reduce_cls(), "reduce class rail must engage in cm2 mode")
             // single region (split-k's contract): K = 2816 splits as [0, 1536) + [1536, 2816) —
-            // plane 0 runs whole 512 steps, plane 1 runs 1024 + a 256 tail; d/rows keep edge tiles
+            // plane 0 runs six whole superblock passes, plane 1 five; d/rows keep edge tiles
             let n = 2816
             let nbb = n / 32
             let d = 160
@@ -5374,9 +5376,13 @@ def test_vkd_requant_family(t0 : T?) {
                 requant_oracle(y_ref, 0, dim, true, q_ref_k, s_ref_k)
                 let sk_bytes = int64(dim / 256) * 4l
                 var host3 = make_host_buf(q_bytes + s_bytes + e_bytes, true, [cached = true])
-                for (kind in range(1, 4)) {
-                    let kform = kind >= 2
-                    let storex = kind == 1 || kind == 3
+                let stamps <- fixed_array(
+                    (name = "cls_ar_rqx", kform = false, storex = true),
+                    (name = "cls_ar_rqk", kform = true, storex = false),
+                    (name = "cls_ar_rqkx", kform = true, storex = true))
+                for (stamp in stamps) {
+                    let kform = stamp.kform
+                    let storex = stamp.storex
                     let q3 = make_device_buf(q_bytes)
                     let s3 = make_device_buf(s_bytes)
                     let y3 = make_device_buf(e_bytes)
@@ -5389,16 +5395,18 @@ def test_vkd_requant_family(t0 : T?) {
                     y_got |> resize(dim)
                     unsafe {
                         upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
+                        nan_sentinel_upload(q3, q_bytes)
+                        nan_sentinel_upload(s3, s_bytes)
                         nan_sentinel_upload(y3, e_bytes)
                         var raw3 = alloc_cmd()
                         vk_check(vkBeginCommandBuffer(raw3, begin), null)
                         var h3 : VkHaz
                         var pc3 = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
-                        if (kind == 1) {
+                        if (stamp.name == "cls_ar_rqx") {
                             var sc3 = set_cls_ar_rqx(fixed_array(x2, ad, wd, q3, s3, y3),
                                 fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, sb, e_bytes), fixed_array(1u, 2u, 4u, 16u, 8u, 32u))
                             enc_cls_ar_rqx(raw3, h3, sc3, pc3, 1l)
-                        } elif (kind == 2) {
+                        } elif (stamp.name == "cls_ar_rqk") {
                             var sc3 = set_cls_ar_rqk(fixed_array(x2, ad, wd, q3, s3),
                                 fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, sb), fixed_array(1u, 2u, 4u, 16u, 8u))
                             enc_cls_ar_rqk(raw3, h3, sc3, pc3, 1l)
@@ -5421,6 +5429,15 @@ def test_vkd_requant_family(t0 : T?) {
                     var badk = 0
                     if (kform) {
                         badk = mismatch_qbytes(q_got, q_ref_k, 1) + mismatch_approx(s_got, s_ref_k)
+                        //! the Q8_K bars' control: one scale pushed past the relative bar, one quant byte two steps off
+                        var s_poison := s_ref_k
+                        s_poison[1] += 0.01 + 0.01 * abs(s_ref_k[1])
+                        var q_poison := q_ref_k
+                        q_poison[3] = q_poison[3] ^ 0x02020202u
+                        t |> success(mismatch_approx(s_got, s_poison) > 0 && mismatch_qbytes(q_got, q_poison, 1) > 0,
+                            "{stamp.name}: the Q8_K scale and quant bars red a poisoned expectation")
+                        delete s_poison
+                        delete q_poison
                     } else {
                         badk = mismatch_qbytes(q_got, q_cls, 0) + mismatch_approx(s_got, s_cls)
                     }
@@ -5428,10 +5445,10 @@ def test_vkd_requant_family(t0 : T?) {
                         badk += mismatch_approx(y_got, y_ref)
                         var poison := y_got   // the row bar's control: one element pushed past it must red
                         poison[7] += 1.0 + 2.0 * abs(y_ref[7])
-                        t |> success(mismatch_approx(poison, y_ref) > 0, "ar+requant stamp {kind}: the row bar reds a poisoned element")
+                        t |> success(mismatch_approx(poison, y_ref) > 0, "{stamp.name}: the row bar reds a poisoned element")
                         delete poison
                     }
-                    t |> success(badk == 0, "ar+requant stamp {kind} (Q8_K {kform}, the row stored {storex}) matches ({badk} elements off)")
+                    t |> success(badk == 0, "{stamp.name} (Q8_K {kform}, the row stored {storex}) matches ({badk} elements off)")
                     delete q_got
                     delete s_got
                     delete y_got
@@ -6303,7 +6320,7 @@ def test_vkd_dn_family(t0 : T?) {
             }
             verify(ensure_dn_conv_cls() && ensure_dn_step_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls(),
                 "the dn class rails must engage on a device over the shared cap")
-            let ds = 64
+            for (ds in fixed_array(64, 128)) {   //! ds 64 keeps a state column in one row part of the fused step; 128, the served hybrids' head size, splits it in two and takes the scan's eight-lane clusters
             let nkh = 2
             let nvh = 4
             let kd = nkh * ds
@@ -6312,9 +6329,9 @@ def test_vkd_dn_family(t0 : T?) {
             let taps = dconv - 1
             let eps = 0.00001
             let qscale = 1.25
-            // --- dn_conv: 37 rows = a second position block primed from window rows ---
+            // --- dn_conv: depthwise conv + SiLU + q/k L2-norm, channel-major over position blocks ---
             {
-                let npos = 37
+                let npos = 37   //! a second position block primed from window rows
                 let hist_mode = 1
                 let taps_off = 16
                 let hist_off = taps_off + cd * dconv
@@ -6391,7 +6408,7 @@ def test_vkd_dn_family(t0 : T?) {
                     }
                 }
                 let bad = mismatch_approx(o_cls, o_ref)
-                t |> success(bad == 0, "dn_conv matches the CPU oracle ({bad} of {npos * cd} off)")
+                t |> success(bad == 0, "dn_conv matches the CPU oracle at ds {ds} ({bad} of {npos * cd} off)")
                 delete srch
                 delete smh
                 delete o_ref
@@ -6580,7 +6597,7 @@ def test_vkd_dn_family(t0 : T?) {
                 requant_oracle(out_ref, 0, nvh * ds, false, q_ref, s_ref)
                 let bad = (mismatch_approx(st_cls, st_ref) + mismatch_approx(sm_cls, sm_ref)
                     + mismatch_approx(sc_cls, s_ref) + mismatch_qbytes(q_cls, q_ref, 1))
-                t |> success(bad == 0, "dn_step_fused matches the CPU oracle ({bad} elements off)")
+                t |> success(bad == 0, "dn_step_fused matches the CPU oracle at ds {ds} ({bad} elements off)")
                 //! the f32 arm (oform 1): the same step leaves the o row as floats - the pre-quant oracle row - and advances state and ring alike
                 var of_f32 : array<float>
                 var st_f32 : array<float>
@@ -6621,7 +6638,7 @@ def test_vkd_dn_family(t0 : T?) {
                     memcpy(addr<void?>(sm_f32[0]), reinterpret<void?>(intptr(hostf.mapped) + uint64(of_bytes + st_bytes)), sm_bytes)
                 }
                 let badf = mismatch_approx(of_f32, out_ref) + mismatch_approx(st_f32, st_ref) + mismatch_approx(sm_f32, sm_ref)
-                t |> success(badf == 0, "dn_step_fused's f32 o row (oform 1) matches the pre-quant oracle with state and ring advanced alike ({badf} elements off)")
+                t |> success(badf == 0, "dn_step_fused's f32 o row (oform 1) at ds {ds} matches the pre-quant oracle with state and ring advanced alike ({badf} elements off)")
                 delete of_f32
                 delete st_f32
                 delete sm_f32
@@ -6662,8 +6679,8 @@ def test_vkd_dn_family(t0 : T?) {
                 zh |> resize(npos * di)
                 sth |> resize(nvh * ds * ds)
                 smh |> resize(sm_n)
-                for (i in range(npos * cd)) {
-                    convh[i] = float((i * 19) % 79) * 0.025 - 0.9
+                for (i in range(npos * cd)) {   //! unit-scale q/k rows, the conv stage's L2-normed shape: on unnormed rows the delta rule's recurrence overflows float range within the window at ds 128
+                    convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
                 }
                 for (i in range(npos * di)) {
                     zh[i] = float((i * 29) % 61) * 0.05 - 1.5
@@ -6696,6 +6713,7 @@ def test_vkd_dn_family(t0 : T?) {
                 var o_cls : array<float>
                 let cmp_n = npos * di + nvh * ds * ds
                 o_cls |> resize(cmp_n)
+                nan_sentinel_upload(sl2, o_bytes, int64(o_off) * 4l)   //! the o rows under the sentinel: a row the scan or the out-norm skips reds
                 unsafe {
                     upload_region_at(convd, 0l, addr<uint8 const?>(convh[0]), conv_bytes)
                     upload_region_at(zd, 0l, addr<uint8 const?>(zh[0]), z_bytes)
@@ -6781,8 +6799,13 @@ def test_vkd_dn_family(t0 : T?) {
                     }
                     delete st_h
                 }
-                let bad = mismatch_bars(o_cls, o_ref, 1e-2, 1e-2 * max_abs(o_ref))
-                t |> success(bad == 0, "dn_scan + out-norm matches the CPU oracle ({bad} of {cmp_n} off)")
+                let floor = 1e-2 * max_abs(o_ref)
+                let bad = mismatch_bars(o_cls, o_ref, 1e-2, floor)
+                t |> success(bad == 0, "dn_scan + out-norm matches the CPU oracle at ds {ds} ({bad} of {cmp_n} off)")
+                var poison := o_cls   //! the bar's control: one normed o value pushed past both bars must red
+                poison[0] += 1.0 + 2.0 * max_abs(o_ref)
+                t |> success(mismatch_bars(poison, o_ref, 1e-2, floor) > 0, "dn_scan + out-norm at ds {ds}: the bar reds a poisoned value")
+                delete poison
                 delete convh
                 delete zh
                 delete sth
@@ -6790,8 +6813,9 @@ def test_vkd_dn_family(t0 : T?) {
                 delete o_ref
                 delete o_cls
             }
+            }
         } else {
-            feint("dasVulkan not present - skipping\n")
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -7029,6 +7053,8 @@ def test_vkd_dn_9b_scan(t0 : T?) {
             }
             verify(ensure_dn_scan_cls(), "the dn_scan class rail must engage on a live device")
             dn_scan_cell(t, "9B", 128, 16, 32, 512)
+            dn_scan_cell(t, "one token", 128, 16, 32, 1)   //! the prefetch's clamp fires on the first iteration
+            dn_scan_cell(t, "the whole window", 128, 16, 32, int(DN_WINDOW))   //! the gate arrays' exact bound
         } else {
             feint("dasVulkan not present - skipping\n")
         }
@@ -7230,7 +7256,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 let begin2 = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw2, begin2), null)
                 var h2 : VkHaz
-                var pc2 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), ne1 = uint(ne1), obase2 = uint(obase2))
+                var pc2 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), ne_split = uint(ne1), obase_split = uint(obase2))
                 enc_router_gemv_f16_cls(raw2, h2, sc2, pc2, int64(ne))
                 vhz_dep(raw2, h2, 2u, 0u, true)
                 cmd_copy_range(raw2, od, 0l, host.buf, 0l, o_bytes)
@@ -7241,7 +7267,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             let bad2 = rel_mismatches(got2, want2, obase, ne1) + rel_mismatches(got2, want2, obase2, ne1)
             var gap = 0
             for (i in range(obase + ne1, obase2)) {
-                if (float_bits_to_uint(got2[i]) != 0x7fc00000u) {
+                if (float_bits_to_uint(got2[i]) != NAN_SENTINEL_BITS) {
                     gap++
                 }
             }
@@ -8240,8 +8266,8 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_split_k(2048l, 512l, 2048l, 128l).nsplit, 1l)       // the 1B q shape: 64 workgroups, no split
             t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 1l)   // the 35B shexp gate beside up (32 in the group): whole, the pair co-runs
             g_gpu.sm_count = 84
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 4l)   // ... on 84 SMs the pair engages the split and the role's own 16 set the chunks: five, shed to four by the 256-aligned chunk
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 144l).nsplit, 1l)  // ... k beside q's 128 and v's 16: never
+            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 4l, "on 84 SMs the pair engages the split and the role's own 16 set the chunks: five, shed to four by the 256-aligned chunk")
+            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 144l).nsplit, 1l, "k beside q's 128 and v's 16 workgroups: never")
             g_gpu.sm_count = 36
             t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 0l, 0l).nsplit, 2l)     // the sliced down shape from row 0 would split in two
             t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 480l, 0l).nsplit, 1l)   // ... from row 480 it never splits

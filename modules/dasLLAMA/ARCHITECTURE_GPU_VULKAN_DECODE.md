@@ -222,9 +222,9 @@ feed, billed to the out role so the stamp count stands; the beta and alpha rows 
 the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
 recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
 base into the smalls. The fused add+rms+requant serves every site on every model: each site's
-stamp is picked once all layers are registered (`rd_fused_sets`, `rq_kind`) - Q8_0 or Q8_K by the
-consumer's block form (the layer's triple, a bare MoE layer's experts, the next layer's head, the
-classifier), and a stamp that also stores the normed row where a consumer reads it as floats (a
+stamp (`RqStamp`, picked by `rd_ensure_fused_sets` once all layers are registered) is Q8_0 or
+Q8_K by the consumer's block form (the layer's triple, a bare MoE layer's experts, the next
+layer's head, the classifier), storing the normed row too where a consumer reads it as floats (a
 recurrent head's beta/alpha GEMV, a MoE router); a MoE layer's residual step stays the combine,
 so the layer after it requants on its own.
 
@@ -260,16 +260,16 @@ decode block binds the layer's row to the same rope kernels (sec.2.2r), and the 
 v window - `AtPrep` with no rope and no norm is a copy plus bias, in place - so the attention and
 the v rows that come home both carry it (`ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op chain).
 
-**Gated attention and partial rotary ride the fused qk-norm+rope kernel and the decode
-attention kernel, not a detour.** On a gated model the q GEMV writes `2 x qd` rows in the
-loader's per-head `[q | gate]` layout; the fused kernel reads and writes q head-strided
-(`qstride = 2 x hs`) and leaves the gate half in place, and the attention kernel reads q by the
-same stride and multiplies each head's output by the sigmoid of its gate half before the store.
-On a partial-rope model the rotation half is `rot / 2`, the cos and sin row is built over `rot`
-(its frequencies are `rot`-based, the CPU form's), and the normed unrotated tail of a head is
-stored back in place (q) or into the mirror (k). The split qk-rms + rope pair carries neither
-arm, so a gated or partial-rope model takes the fused kernel whatever the fuse gate says; the
-two arms need qk-norm, and a model with either but without it declines by name.
+**Gated attention and partial rotary ride the fused qk-norm+rope kernel and the decode attention
+kernel, not a detour.** On a gated model the q GEMV writes `2 x qd` rows in the loader's per-head
+`[q | gate]` layout; the fused kernel reads and writes q head-strided (`qstride = 2 x hs`) and
+leaves the gate half in place, and the attention kernel reads q by the same stride and multiplies
+each head's output by the sigmoid of its gate half before the store. On a partial-rope model the
+rotation half is `rot / 2`, the cos and sin row is built over `rot` (the CPU form's frequencies),
+and the normed unrotated tail of a head is stored back in place (q) or into the mirror (k). The
+split qk-rms + rope pair carries neither arm, so a gated or partial-rope model takes the fused
+kernel whatever the lever says (`DASLLAMA_VK_FUSE=0` pins the split pair only on a plain qk-norm
+model); the two arms need qk-norm, and a model with either but without it declines by name.
 
 **The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md`
 sec.2.2ad): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha

@@ -432,11 +432,11 @@ struct coopmatWgAcc_f32_128x256 {}
 struct coopmatWgB_f16_64x128 {}
 struct coopmatWgAcc_f16_128x128 {}
 struct coopmatWgAcc_f32_128x128 {}
-// the s-tile accumulators (BN=32): the MoE expert-bucket shape, ~32 rows per region
+// the s-tile shapes (BN=32): the MoE expert-bucket shape, ~32 rows per region; the 32-deep A serves the s and e stamps' 32-deep k step (their B tiles are the 32-row ones under the flash-attention banner)
+struct coopmatWgA_f16_128x32 {}
 struct coopmatWgB_f16_64x32 {}
 struct coopmatWgAcc_f16_128x32 {}
 struct coopmatWgAcc_f32_128x32 {}
-struct coopmatWgA_f16_128x32 {}
 
 // flash-attention tiles (Br=64, head sizes 64 / 128): Q & O accumulators, Qf16/P as A, K^T/V/One
 // as B. h64 runs Bc=64; h128 runs Bc=32 (llama.cpp's big-head cut — the 64-wide KV tile set

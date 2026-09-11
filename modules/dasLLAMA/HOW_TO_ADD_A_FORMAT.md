@@ -225,7 +225,9 @@ element inside a decode callback. A format whose sub-block scale takes an unpack
 raises the `SCACHE` axis and reads its sub-block's premultiplied pair from `sc_cache` in the
 decode, as k4 and k5 (the five-word K-quant scale row) and iq4xs (`SCIQ4`, its two-word row)
 do; a third scale-row shape adds its fill arm to `sc_fill` (`ARCHITECTURE_GPU_VULKAN_GEMM.md`
-sec.2.2k). The four-wide decode twin is the format's own: a second
+sec.2.2k), and a scale-caching stamp keeps `BLKW` at `BK x UNR` so the cache refills once per
+unrolled block - the module gate holds it on the engine's stamps and on the probe's twins in
+`harness/vk_gemm_probe.das` alike. The four-wide decode twin is the format's own: a second
 `[spirv_decode] def decode_v4` returning `half4` under `override DECV4 = true`, computing the
 four consecutive elements in the scalar `decode`'s operation order and sharing what they share
 (two 16-bit lanes and one scale extraction for a K-quant, one grid word and its four sign bits

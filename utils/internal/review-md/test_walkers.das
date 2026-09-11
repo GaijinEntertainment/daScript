@@ -104,7 +104,7 @@ let DASLLAMA_META_GREEN = "options gen2\n\nstruct Thing \{\n    a : int\n    b :
 // which the pipe-form-only count missed
 let DASLLAMA_META_RED = "options gen2\n\nstruct Thing \{\n    a : int\n    b : array<int>\n\}\n\ndef private serialize_meta(var arch : Archive; var t : Thing) \{\n    serialize(arch, t.a)\n    serialize_pod_array(arch, t.b)\n\}\n"
 
-//! the green Vulkan surface: it carries one input for every Vulkan check the dasllama gate runs.
+//! the green class surface: one class-shaped input for every class check the gate runs (the ladder, roster and slab inputs are VK_PREFILL_TEXT / VK_COMMON_GREEN)
 let VK_CLASSES_GREEN = "options gen2\n\nlet SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\n\nclass ArBase : RmsWgBase \{\n    @workgroup row : float[8192]\n\}\n\nclass template KqCm2BatchT : MoeCmBase \{\n    @template_constant BN : uint = 256u\n    @template_constant BK : uint = 64u\n    @template_constant UNR : uint = 4u\n    def abstract khr_stage16(blk, e0, sbase : uint) : void\n\}\n\nclass template K4Cm2T : KqCm2BatchT \{\n\}\n\nclass template Q8Cm2T : KqCm2BatchT \{\n\}\n\n[vk_dispatch(name = \"kq_batch_k4_khr_cls\", kernel = \"run\")]\nclass K4KhrBatch : K4Cm2T \{\n    override BN = 128u\n    typedef AT = coopmatWgA_f16_128x64\n    typedef BT = coopmatWgB_f16_64x128\n    typedef ACC = coopmatWgAcc_f16_128x128\n    typedef ACCW = coopmatWgAcc_f32_128x128\n\}\n\n[vk_dispatch(name = \"kq_batch_k4_cm2e_cls\", kernel = \"run\")]\nclass K4Cm2EBatch : K4Cm2T \{\n    override BN = 128u\n    override BK = 32u\n    override UNR = 8u\n    typedef AT = coopmatWgA_f16_128x32\n    typedef BT = coopmatWgB_f16_32x128\n    typedef ACC = coopmatWgAcc_f16_128x128\n    typedef ACCW = coopmatWgAcc_f32_128x128\n\}\n\n[vk_dispatch(name = \"q8_batch_cm2e_cls\", kernel = \"run\")]\nclass Q8Cm2EBatch : Q8Cm2T \{\n    override BN = 128u\n    override BK = 32u\n    override UNR = 8u\n    typedef AT = coopmatWgA_f16_128x32\n    typedef BT = coopmatWgB_f16_32x128\n    typedef ACC = coopmatWgAcc_f16_128x128\n    typedef ACCW = coopmatWgAcc_f32_128x128\n\}\n"
 
 //! the red twin: a bodied KHR stage, a template with no KHR or e class, and a k4 e stamp whose A tile and unroll contradict its BK 32.
@@ -115,8 +115,9 @@ let VK_PREFILL_TEXT = "options gen2\n\ndef khr_cls_ensure(fmt : int) : bool \{\n
 
 let DASLLAMA_MODULE_LIST = "\"dasllama\", \"dasllama_audio_embedder\", \"dasllama_vision_embedder\", \"dasllama_toyfam\", \"dasllama_toyvis\", \"dasllama_image\", \"dasllama_meta\", \"dasllama_vulkan_common\", \"dasllama_vulkan_classes\", \"dasllama_vulkan_prefill\", \"dasllama_blocks\"\n"
 
-//! the one vulkan_boost probe the fixture's tier calls, and the roster that names it
+//! the one vulkan_boost probe the fixture's tier calls
 let VK_BOOST_TEXT = "options gen2\n\ndef public cooperative_matrix_supported(phys : int) : bool \{\n    return true\n\}\n"
+//! the green common slab: its roster names the probe the tier calls
 let VK_COMMON_GREEN = "options gen2\n\nlet AR_MAX_DIM = 8_192l\n\ndef public vk_ext_roster(phys : int) : array<int> \{\n    let has_cm = cooperative_matrix_supported(phys)\n    return <- [has_cm ? 1 : 0]\n\}\n"
 
 //! the slab constant off its slab, and a probe call plus an extension read outside the roster, which names neither

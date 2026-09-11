@@ -1037,12 +1037,12 @@ module) is independent and can land any time - it is pure structure.
     step doubles the loads and MMAs; its scalar decoders are pair-form (compute two, `ret[idx & 1]`)
     for q4_0, q8_0, q2_K, q5_K, q6_K and the grid formats, single-element for q3_K, q4_K and iq4_*, with
     a shared-scale cache (`shAscales`, refreshed per 256 k) for q4_K and q5_K alone - so a k step per
-    format is new ground, and on its scalar arm its q4_K experts run 32-deep too. Left on this axis:
-    the decode body's pair form (the tiles alone still read 1.2x behind at the matched scalar arm: our
-    uniform gate/up plane 0.99 ms against the 0.83 ms of the same `MUL_MAT_ID iq2_xxs` row above), a
-    shared-scale cache for the K-quants (we read the scale row per element on every format), and the
-    k step by arm - on the 5080's scalar arm the k4 s tile reads 0.471 ms at 32 against 0.499 at 64
-    (`moe:k4` there), the opposite of the four-wide arm, so a stamp per (format, arm) is the follow-on.
+    format is new ground, and on its scalar arm its q4_K experts run 32-deep too. The tiles alone
+    still read 1.2x behind at the matched scalar arm: our uniform gate/up plane 0.99 ms against the
+    0.83 ms of the same `MUL_MAT_ID iq2_xxs` row above. On the 5080's scalar arm the k4 s tile reads
+    0.471 ms at 32 against 0.499 at 64 (`moe:k4` there), the opposite of the four-wide arm. Left on
+    this axis: the decode body's pair form, a shared-scale cache for the K-quants (we read the scale
+    row per element on every format), and a stamp per (format, arm) for the k step.
     The tier warns at device init and prints its extension roster.
     (b) Three window roles stay flat on the wider card whatever the arm: the deltanet scan (13037 ->
     12654 us, a serial recurrence over chunks - 8.7% of the 5080's window), the shared expert's
@@ -1116,8 +1116,8 @@ module) is independent and can land any time - it is pure structure.
     pp512 21639 against the reference's 29957 (0.72x) and tg32 325 against 480, the 9B UD-Q5_K_XL
     ~3000 against 5666; the 0.8B's per-role window (22989 us against the reference's 16177) puts 5.4
     of the 6.8 ms in the deltanet scan alone (8854 us, 492 per layer, against `GATED_DELTA_NET` 17 x
-    202), conv 0.9 ms (93 per layer against 27-47), the out GEMM 0.8 (63 against 31), down 0.4 -
-    so the scan is the next lever, with the 0.8B as its ten-second loop. The scan then took upstream's
+    202), conv 0.9 ms (93 per layer against 27-47), the out GEMM 0.8 (63 against 31), down 0.4.
+    The scan is the next lever, with the 0.8B as its ten-second loop. The scan then took upstream's
     shape (one column per lane cluster, k and q per lane from the conv plane, no staging, no barrier):
     8854 -> 8084 us and pp512 21639 -> 22354 on the 0.8B, the 35B flat at 4217 +- 44; its first cut read
     19004 us until `conv` and `smalls` carried `@readonly` - the emitter decorates NonWritable from that
@@ -1182,13 +1182,15 @@ module) is independent and can land any time - it is pure structure.
     grid costs three waves; the reference exe co-runs gate and up in one barrier group (384 workgroups in
     five waves against three and three), which the hazard rail's co-run gives us only where the driver
     overlaps the two dispatches. Its other window terms: GATED_DELTA_NET 250 us a layer against our scan
-    342, ADD + RMS_NORM 49 us a layer against our ar1 + ar2 71; ours shorter: ba + conv 2.8 ms against 5.5,
-    act 1.2 against 2.0, the out-norm 0.5 against 1.9. DECODE (the reference exe's logger, one token): the
-    9B 8.40 ms against our 11.0 profiled, per recurrent layer 254 us against 321 - our step 23.5 us against
-    its GATED_DELTA_NET 4.1 + SSM_CONV 5.2 (one 256-thread workgroup a head with single-thread loops over the
-    128 columns, against 4096 32-lane workgroups, a state column each), ba 17 against ~10 (two `RouterGemvF16`
-    dispatches of 32 workgroups with a hazard barrier between them), out 30.7 against ~20, up 49.6 against 42,
-    ar1 + ar2 26 against 18; every GEMV over 12 MB runs at 700-820 GB/s on both. The same step and ba floors
+    342, ADD + RMS_NORM 49 us a layer against our ar1 + ar2 71; ours shorter: ba + conv 2.8 ms against its
+    MUL_MAT + SSM_CONV 5.5, act 1.2 against its GLU 2.0, the out-norm 0.5 against its RMS_NORM + MUL 1.9.
+    DECODE (the reference exe's logger, one token): the 9B 8.40 ms against our 11.0 profiled, per recurrent
+    layer 254 us against 321 - our step 23.5 us against its GATED_DELTA_NET 4.1 + SSM_CONV 5.2 (one
+    256-thread workgroup a head with single-thread loops over the 128 columns, against 4096 32-lane
+    workgroups, a state column each), ba 17 against its two MUL_MAT rows ~10 (two `RouterGemvF16` dispatches
+    of 32 workgroups with a hazard barrier between them), out 30.7 against its MUL_MAT ~20, up 49.6 against
+    its MUL_MAT 42, ar1 + ar2 26 against its ADD + RMS_NORM 18; every GEMV over 12 MB runs at 700-820 GB/s
+    on both. The same step and ba floors
     on every hybrid (step 23-25 us a layer, ba 12-26): 19% of the 0.8B's token, 9.5% of the 35B's, 6% of the
     9B's and 27B's - the decode arc's first lever, LANDED: the step's delta rule column-per-thread in registers
     with straight-line loads and subgroup-add norms (isolated 8.8 us; the 0.8B's step role 25.3 -> 12.3 us a
@@ -1213,10 +1215,11 @@ module) is independent and can land any time - it is pure structure.
     (they co-run already); a hazard barrier with this op's stage alone as its destination leaves the 4.5 us
     chained-dispatch floor where it is; the step computing its own beta/alpha dots reads slower (0.8B 382.7 ->
     373.7) - the GEMV co-runs under qkv and z, and a co-running role reads its neighbours' drain in the Linux
-    profile, so a decode lever is judged by tg32 rows alone. Next: one dispatch for the dense prefill's gate+up
-    pair (384 workgroups in five waves, as the reference exe runs them; the barrier A/B says our two grids recover
-    a third of that overlap), then the GEMV family on the 4096-wide planes (ours 500 GB/s in the token against the reference
-    exe's 610-780; its form: 2 rows a workgroup, 16 lanes a superblock, f32 x read as vec4, no shared memory). Left
+    profile, so a decode lever is judged by tg32 rows alone. The reference exe runs the dense prefill's gate+up
+    pair as one dispatch of 384 workgroups in five waves, and the barrier A/B says our two grids recover a
+    third of that overlap; its GEMV family reads the 4096-wide planes at 610-780 GB/s in the token where ours
+    reads 500 (its form: 2 rows a workgroup, 16 lanes a superblock, f32 x read as vec4, no shared memory).
+    Next: one dispatch for the dense prefill's gate+up pair, then the GEMV family on the 4096-wide planes. Left
     for the dense files' prefill: the scan (2.2 ms on the 9B), the 27B UD-Q3_K_XL's q3_K roles (k3 reads a 6-bit
     split scale per element and stages no cache yet). Found on the way, not
     of this lever: the iq2xxs cm2 stamps' modules fail spirv-val's OpVariable placement check ("All
@@ -1227,9 +1230,64 @@ module) is independent and can land any time - it is pure structure.
     validator run covers the kernel file. (2) The q5_K stamps run 0.74x of the reference's rate on the
     big shapes there (`cm2:k5 gate` l 70.6 TFLOP/s against its 93-96; k6 85.3 against its 72.7, so the
     q6_K stamp is already ahead): the reference's q5_K decoder beats its own q6_K by 1.18x through the
-    `shAscales` shared-scale cache, ours trails k6 by 1.2x - the K-quant shared-scale lever of (a),
+    `shAscales` shared-scale cache, ours trails k6 by 1.2x. The K-quant shared-scale lever of (a) is
     worth ~4 ms across the 35B's q5_K roles (qkv, z, the attention q, the shared expert's gate and
     up). (3) The rest of (b) as measured: the deltanet scan 13.2 ms against the reference's 7.5
     (`GATED_DELTA_NET` 30 x 250 us), conv 3.5 against 1.0, the expert down plane (iq2_s, K 512) 26.6
     against 19.6, the routed gate and up 30.5 against 31.5 profiled - under the drain, so the served
     figure is lower - and the host side of the window about 7 ms of the 134 (the 5060 Ti's is nil).
+    THE ROWS behind `PERF_LEDGER.md`'s ratios for this arc: the -jit script
+    (`benchmarks/lcpp_bench.das -jit --for-debug-purposes -p 512 -n 32 -t 8` under `DASLLAMA_GPU=1
+    DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1`, `-r 5` unless named) on the Linux RTX 5080 pod, the
+    scalar decode arm; pp512 / tg32 before -> after; the reference column is `llama-bench -p 512
+    -n 32 -r 5` on b10660 on the same pod (pp512 / tg32).
+
+    | lever | model | pp512 | tg32 | reference |
+    |---|---|---|---|---|
+    | split-k chunks by the role's own grid (-r 3) | 35B UD-IQ2_XXS | 3832.7 +- 36.0 and 3853.8 +- 46.5 -> 3906.6 +- 43.8 | 130.6 / 129.3 -> 129.3 | 5217.0 / 146.2 |
+    | one superblock per unrolled block | 35B | 3906.6 -> 3986.8 +- 34.2 (the 32-deep stamps at 2 copies 3940.9) | 129.3 -> 130.2 | 5217.0 |
+    | the same, RTX 5060 Ti (-r 5 -t 16) | 35B twin arm; scalar arm | 3201.0 +- 17.4 at eight copies against 3191.4 +- 24.8 and 3165.9 +- 40.8 at four (3236 the day before); 2391.5 -> 2389.6 +- 30.3 | | |
+    | the same, RTX 5060 Ti | Qwen1.5-MoE Q4_K_M twin | 5442.7 -> 5565.6 +- 12.1 | tg128 163.9 | |
+    | iq2xxs / iq2s pair-form decode | 35B | 3986.8 -> 4201.0 +- 39.5 | 130.2 -> 129.8 | 5217.0 |
+    | iq2xs / iq3s / iq3xxs / k5 / k6 pair form | 35B | 4201.0 (-r 3) -> 4235.8 +- 33.0 (the day's start 3833) | 129.9 | 5217.0 |
+    | the scan one column a lane cluster | 0.8B Q8_0 | 21639 +- 65 -> 22354 +- 67 (15132 without `@readonly`) | 325 -> 320 | 29957 / 480 |
+    | | 35B | 4236 +- 33 -> 4217 +- 44 | | |
+    | NonWritable from the lens | 35B | 4217.5 +- 43.7 -> 4673.0 +- 38.3 | 129.2 -> 132.8 | 5217.0 |
+    | | 0.8B | 22354 -> 23310 +- 70 (the float4 lane shards 20047, dropped) | 320 -> 338 | 29957 / 480 |
+    | the scan's gates once per workgroup | 0.8B | 23310 -> 26722 +- 68 | 338 -> 337 | 29957 |
+    | | 35B | 4673 -> 4775.7 +- 39.2 (4654 +- 91 at -r 3) | 132.8 -> 132.7 | 5217.0 |
+    | the router and beta/alpha rows as f16 GEMMs | 35B | 4775.7 -> 4960.8 +- 49.7 | 132.7 -> 133.6 | 5217.0 |
+    | | 0.8B | 26741 +- 81, unchanged | | |
+    | the conv channel-major | 0.8B | 26741 -> 27524 +- 88 | 340 -> 336 | 29957 |
+    | | 35B | 4960.8 -> 5010.1 +- 47.0 | 132.5 | 5217.0 |
+    | the K-quant scale cache | 35B | 5010.1 -> 5091.5 +- 51.9 | 132.8 | 5246.7 +- 35.9 (the day's row) |
+    | | 9B UD-Q5_K_XL | 4369 +- 11 -> 5133 +- 8 | | 5751 |
+    | | 27B UD-IQ4_XS | 1496 -> 1708.5 +- 1.6 | 39.35 | 1684.9 +- 1.6 |
+    | | 27B UD-Q3_K_XL | 1469 -> 1596.3 +- 0.8 | 41.3 | 1665.2 +- 2.9 |
+    | the same, RTX 5060 Ti four-wide arm | 9B; 35B | 2570 +- 56 -> 2642 +- 17; 2919 +- 66 flat | | |
+    | the fused deltanet step (-r 10 on the 0.8B) | 0.8B | 27494 flat | 336 -> 354.1 +- 1.2 (the guarded first form 309) | 480 |
+    | | 9B | 5129 flat | 91.7 -> 96.1 +- 0.1 | 112.8 |
+    | | 35B | 5150 flat | 132.5 -> 141.5 +- 0.2 | 145.2 |
+    | the same, RTX 5060 Ti four-wide arm | 0.8B | | 268.6 +- 0.8 -> 270.5 +- 3.0 (the first form 252.9) | |
+    | the z GEMV on its own hazard class | 0.8B; 9B; 35B | 27521; 5136; 5045 +- 193, all flat | 354.1 -> 370.5 +- 0.9; 96.1 -> 97.6 +- 0.1; 141.5 -> 143.9 +- 0.4 | 480; 112.8; 145.2 |
+    | the fused add+rms+requant on every site | 0.8B; 9B; 35B; 27B UD-IQ4_XS | 27598; 5133; 4977 +- 248; 1709, all flat | 370.5 -> 381.2 +- 1.8; 97.6 -> 100.8 +- 0.1; 143.9 -> 146.6 +- 0.3; 38.2 -> 41.7 +- 0.02 | 480; 112.8; 145.2; 47.4 |
+    | the GEMV block loop four blocks a lane | 9B; 0.8B; 35B; 27B UD-IQ4_XS | flat | 100.8 -> 102.9 +- 0.15; 381.2 -> 382.7 +- 4.0; 146.6 -> 146.7; 41.7 -> 41.5 +- 0.02 | 112.8 |
+    | the scan's prefetch | 0.8B; 9B; 35B | 27558 -> 29016 +- 90; 5133 -> 5145 +- 12; 5091 -> 5156 +- 54 | flat | 29957 |
+    | dead beside it: the step's own beta/alpha dots | 0.8B; 9B | | 382.7 -> 373.7; 102.9 -> 102.1 | |
+
+    FOLLOW-UPS out of the arc's review round: (1) nine of the fourteen `<Fmt>Cm2EBatch` classes are
+    byte-identical to their m twins (only the five grid formats' e stamps differ, in k step) - alias
+    the e ladder to the m stamp where they agree, moving the module gate, the census rows and the
+    docs together; (2) a MoE layer with a dense triple on the f16 feed converts `pf_xb` to `pf_xf`
+    twice a window - skip the second convert; (3) the module gate's image layout stamp closure hashes
+    every function named `*_prepare` under `dasllama/`, so an edit to the resident decode's
+    `vk_rdec_prepare*` moves the stamp though no image layout moved - narrow the match to the image
+    layout's own prepare functions; (4) `spawn_readonly_fixture`, the lens refusal gate's child
+    compile, passes no `-dasroot`, so the gate audits the binary's own tree rather than the tree under
+    test - pass the test's root; (5) no cell pins the f16 router route against the f32 router GEMM
+    (logits within an f16 bar, the top-k picks equal off near-ties) - an arm in
+    `tests/test_vkd_moe_routing` over router-shaped data at ner 61 and 129, dim 2048; (6) the f16
+    GEMM route has no work-size gate: a one-row window turns one router or beta/alpha dispatch into
+    the convert, the GEMM and the reduce under the drain, about ten times the 4.5 us chained-dispatch
+    floor a layer - gate the route on the window's rows; (7) the emitter gap above (the iq2xxs cm2
+    stamps' `OpVariable` placement) stands.

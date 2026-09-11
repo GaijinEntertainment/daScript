@@ -167,7 +167,7 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
 
 //! workgroups a (d, cnt) GEMM takes at the token column `tc`
 def cm2_tiles_at(d, cnt, tc : int64) : int64 {
-    verify(tc >= 32l, "vk prefill: a tile count over a class key that is no column width (CM2_TC_E)")
+    verify(tc >= 32l, "vk prefill: cm2_tiles_at got the e column's class key (CM2_TC_E), which is no column width")
     return ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
 }
 
@@ -175,7 +175,7 @@ def cm2_tiles_at(d, cnt, tc : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tiles(d, cnt : int64) : int64 => cm2_tiles_at(d, cnt, cm2_tile_cols(d, cnt))
 
-//! returns (chunks, 256-aligned chunk); (1, 0) = off
+//! returns (chunks, 256-aligned chunk); (1, 0) = off; `sib_tiles` = the workgroups of the roles this one co-runs beside - it decides whether to split, never how far
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_split_k(d, cnt, n, tc : int64; sib_tiles : int64 = 0l) : tuple<nsplit : int64; ksplit : int64> {
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
@@ -257,7 +257,7 @@ def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int
 def dn_ba_wgs(npos, nvh : int64) : int64 => ((npos + 15l) / 16l) * ((2l * nvh + 15l) / 16l)
 let DN_MAX_HEADS = 64l
 let DN_MAX_CD = 16_384l
-let DN_MAX_QK = 8_192l   //! the conv row's q + k region (2 kd): the part dn_conv stages in workgroup memory for the per-head norm
+let DN_MAX_QK = 8_192l   //! the conv row's q + k region (2 kd): the channels the conv's per-head norm covers
 let DN_MAX_DCONV = 4l
 let DN_WINDOW = 1_024l
 //! the scan workspace holds the raw o rows alone: position-major, di wide, rewritten in place by the out-norm
@@ -680,7 +680,7 @@ struct GpuState {
     dn_rq_set : VkDescriptorSet
     dn_cls_ready : bool                // the window chain's class sets (built by prefill)
     dn_ready : bool
-    dn_shared_ok : bool  // device shared-mem cap fits dn_conv's 33 KB tile (false on Apple/MoltenVK)
+    dn_shared_ok : bool  //! the device's shared-memory cap fits the 8192-float row slabs the deltanet token command (the add+rms family) and the attention prep stage (false on Apple/MoltenVK)
     max_wg_bytes : uint  // maxComputeSharedMemorySize — the per-class workgroup-footprint gate reads it
     // deltanet decode-step state (lazy — first npos == 1 DN dispatch creates it)
     dnd_bg : HostBuf              // per-token raw β/γ + ring-parity staging (copied into the layer smalls)
@@ -1088,7 +1088,7 @@ def vk_arm_moltenvk_env {
     }
 }
 
-//! the ReBAR memory type - device-local, host-visible and host-coherent on a big heap - or -1 where the device exposes none
+//! the ReBAR memory type - device-local, host-visible and host-coherent on a heap past the 256 MiB legacy BAR window (the 1 GiB test) - or -1 where the device exposes none
 def private rebar_memory_type(phys : VkPhysicalDevice) : int {
     var rmp : VkPhysicalDeviceMemoryProperties
     vkGetPhysicalDeviceMemoryProperties(phys, rmp)
@@ -1160,9 +1160,9 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
             rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
         VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
-            rides = "the deltanet and prefill-attention chains' row tile ({int(props.limits.maxComputeSharedMemorySize)} B here); without it those layers stay on the CPU rail"),
+            rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
-            rides = "enabled on the device; no kernel reads it yet - the decode GEMV's cooperative-vector arm is planned work in followup_vulkan.md"),
+            rides = "enabled on the device; no kernel reads it yet"),
         VkExtEntry(name = "VK_KHR_portability_enumeration (instance)", present = instance_extension_available("VK_KHR_portability_enumeration"),
             rides = "the MoltenVK instance opt-in; a native driver needs none")]
 }
@@ -1333,8 +1333,8 @@ def vk_moe_init : bool {
     desc_pool_grow()   // chunk 0 — the chain grows on demand from here
     g_pipe_access |> clear()
     // every kernel is a [vk_dispatch] class (own set/pipeline layouts, pipelines built lazily
-    // via ensure_*); only the shared-memory capability gates settle here (dn_conv/at_* stage
-    // 33024 B rows; Apple caps threadgroup memory at 32 KB and pipeline COMPILE fails)
+    // via ensure_*); only the shared-memory capability gates settle here (the add+rms family and
+    // at_* stage 8192-float rows: 33 KB; Apple caps threadgroup memory at 32 KB and pipeline COMPILE fails)
     var limits_props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, limits_props)
     g_gpu.max_wg_bytes = limits_props.limits.maxComputeSharedMemorySize
@@ -1343,7 +1343,7 @@ def vk_moe_init : bool {
         set_moe_gpu_dn_route(false)
         set_moe_gpu_dnd_route(false)
         set_moe_gpu_attn_route(false)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined - device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < the 33024 B row tile; those layers stay on the CPU rail\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined - device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < the 33024 B row slab of the add+rms family and the attention prep; those layers stay on the CPU rail\n")
     }
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
@@ -1821,12 +1821,7 @@ def vk_drop_model_state {
     g_gpu.kq_grid_dev = 0ul
     g_vk_upload_us = 0l   // per-model upload diagnostics — a reloaded model reports its own numbers
     g_vk_upload_bytes = 0l
-    g_rdq_n = 0u          // decode-role profiler likewise — averages must not span models
-    g_rdq_count = 0l
-    g_rdq_total = 0.0lf
-    g_rdq_wall_us = 0.0lf
-    g_rdq_by |> clear()
-    g_rdq_order |> clear()
+    rdq_reset()
     // host-visible buffers: host_mem tracks every make_host_buf result minus the exempt pair
     for (buf, mem in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
         unsafe {
@@ -2187,6 +2182,14 @@ let KV_READBACK_ROWS = 256l   // bulk mirror->host hydration chunk (rows per sub
 // One cb/token: residual + KV mirror stay device-side, host only uploads x + rope row, reads logits.
 // v1 re-records per token (still 1 submit). Activations quantized on-device before each GEMV.
 
+//! the fused add+rms+requant stamps, by the consumer's block form and whether the normed row is stored beside the quants
+enum RqStamp {
+    rq      //!< Q8_0 quants
+    rqx     //!< Q8_0 quants, the row stored (a Q8_0 recurrent head or a router reads it as floats)
+    rqk     //!< Q8_K superblocks (a K-quant consumer)
+    rqkx    //!< Q8_K superblocks, the row stored
+}
+
 struct RLayer {
     // arena block indices + formats for this layer's 7 planes
     bq, bk, bv, bo, b1, b3, b2 : int64
@@ -2211,8 +2214,8 @@ struct RLayer {
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
-    rq_ffn_kind : int               //! the FFN site's fused stamp (rq_kind): the triple's or the experts' feed form, the row stored for a router
-    rq_next_kind : int              //! the next-layer site's: the following head's feed form, the row stored for a recurrent head
+    rq_ffn_stamp : RqStamp          //! the FFN site's: the triple's or the experts' feed form, the row stored for a router
+    rq_next_stamp : RqStamp         //! the next-layer site's: the following head's feed form, the row stored for a recurrent head
     // host-visible per-dispatch buffers: the class GEMV region pairs
     m_q, m_k, m_v, m_wo : HostBuf
     m_gate, m_up, m_down : HostBuf
@@ -2293,7 +2296,7 @@ struct RDec {
     dn_ba_f32 : bool              // beta/alpha rows come as f32 in the file (dn_ba_dev, f16 on the device) rather than q8 arena planes
     dn_proj_dev : uint64          // [cd + di] floats: the fused qkv row, the z row at cd
     fused_sets_made : bool        //! the fused add+rms+requant sites' stamps and sets are picked once, at the first record
-    rq_pro_kind : int             //! the prologue site's stamp (rq_kind): layer 0's feed form, the row stored where its head reads floats
+    rq_pro_stamp : RqStamp        //! the prologue site's: layer 0's feed form, the row stored where its head reads floats
     dn_ba_dev : uint64            // f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer, f16
     dn_ba_bytes : int64
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
@@ -2382,6 +2385,11 @@ struct RDec {
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
+let F16G_BK = 64u      //! the small f16 GEMM's k step (the MoE router and the deltanet beta/alpha rows on the cm2 tile)
+let F16G_SPLIT = 8l    //! its k chunks into the split-k scratch
+
+//! the shape half of the small f16 GEMM route: the cm2 tile and a row width the eight 64-deep chunks divide (the scratch half is the prefill's)
+def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && dim % (int64(F16G_BK) * F16G_SPLIT) == 0l
 
 var g_rd : RDec?
 
@@ -2435,10 +2443,23 @@ def fill_cvt_meta(hb : HostBuf; elems : int64) {
 var g_rdq_n = 0u
 var g_rdq_count = 0l
 var g_rdq_total = 0.0lf
-var g_rdq_names : array<string>        //! the recorded token command's stamp names in stamp order, the recorder's own account of what each interval bills
-var g_rdq_by : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
-var g_rdq_order : array<string>        //! the names in first-seen order, the tables' print order
+var g_rdq_stamp_names : array<string>        //! the recorded token command's stamp names in stamp order, the recorder's own account of what each interval bills
+var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
+var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
+var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP): the recorded names and the pool saturate together, so the sampler reads this instead
+
+//! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
+def rdq_reset {
+    g_rdq_n = 0u
+    g_rdq_count = 0l
+    g_rdq_total = 0.0lf
+    g_rdq_wall_us = 0.0lf
+    g_rdq_overflow = false
+    g_rdq_us_by_name |> clear()
+    g_rdq_print_order |> clear()
+    g_rdq_stamp_names |> clear()
+}
 
 let PFQ_CAP = 2048u
 var g_pfq_pool : QueryPool
