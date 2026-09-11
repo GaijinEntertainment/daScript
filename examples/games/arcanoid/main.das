@@ -850,9 +850,7 @@ def start_attract() {
 def end_attract() {
     spectator = false
     idle_timer = 0.0
-    decs::restart()
-    commit()
-    reset_powerups()
+    new_round()   // the menu shows a fresh board, not what the bot left
     game_state = GameState.menu
 }
 
@@ -1597,8 +1595,9 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     } elif (game_state == GameState.menu && idle_timer >= ATTRACT_IDLE) {
         start_attract()
     }
-    // Menu → start
+    // Menu → start: a fresh round whatever the menu board showed (the bot's, or a reload's)
     if (game_state == GameState.menu && space_just) {
+        new_round()
         game_state = GameState.playing
     }
     // Pause toggle
