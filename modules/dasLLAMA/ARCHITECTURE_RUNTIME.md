@@ -193,7 +193,9 @@ measurements behind this section and each refuted attempt.
 
 ### 2.18 The CPU worker pool on a hybrid box {#hybrid-pool-policy}
 
-SMT siblings share the FMA and load ports, so the default pool is physical cores - 1 workers. A box
+SMT siblings share the FMA and load ports, so the default pool is (physical cores - 1) workers -
+a cap the engine's `[init]` sets on every platform but a browser, where the reported count can be
+a fingerprint cap of two and the runtime's own floor and cap size the pool (2.18a). A box
 with two core tiers splits on the SECOND tier's KIND: a compute tier (an M5's Super plus Performance
 cores) extends the pool to every core with GEMV capped to the fast tier, while an efficiency tier
 (M1, M4) makes batch barriers wait and gets no worker at all. A compute-grade second tier only
@@ -227,7 +229,12 @@ window and the renderer at 800% CPU, and at 1.4x with the workers parked at ~112
 text, three runs each; team dispatch keeps its small edge there, and the pool still pays (one
 worker reads 0.7x). The engine's `[init]` therefore sets the window to 0 when the platform is
 emscripten (`dasllama_jobque_spin_default`); a box profile's `jobque_spin_us` and the setter still
-override it, and a program reads the value in force through `get_jobque_spin_us`.
+override it, and a program reads the value in force through `get_jobque_spin_us`. The pool's size
+is the runtime's (`src/misc/job_que.cpp`): the browser's reported cores, capped and floored by
+`DAS_MAX_HW_JOBS` and `DAS_MIN_WEB_JOBS` (eight and four unless the build overrides them), minus
+one for the computing main thread - seven workers on a real box, the pool
+an eight-core desktop runs, and three under fingerprint protection, where a browser reports two
+cores whatever the box has; the floor is what keeps such a visitor off a one-worker pool.
 
 ### 2.19 The CPU MoE region list caps a region at 32 rows {#moe-region-split}
 
