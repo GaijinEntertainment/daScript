@@ -1151,7 +1151,21 @@ module) is independent and can land any time - it is pure structure.
     and one shared row): the 0.8B's conv 1351 -> 824 us, pp512 26741 -> 27524 +- 88 (0.919x), the 35B's
     conv 2740 -> 1660 and pp512 4961 -> 5010 +- 47 at five reps (0.960x). The scan at one warp per
     workgroup (upstream's shape) read the 0.8B +1% (scan 5258 -> 5084 us) but the 35B 5010 -> 4719 +- 40,
-    so the four-warp workgroup stays. Found on the way, not
+    so the four-warp workgroup stays. THE PICTURE on the pod at that state (five reps, ours / the reference
+    exe's, pp512 and tg32): Qwen3.6-35B-A3B UD-IQ2_XXS 5010 / 5217 (0.960x) and 132.5 tg32; Qwen3-30B-A3B
+    UD-IQ2_XXS 5926 / 6005 (0.987x), 173.6 / 219.1 (0.79x); Qwen3.8-27B UD-IQ4_XS 1496 / 1677 (0.892x),
+    39.3 / 47.4 (0.83x); Qwen3.8-27B UD-Q3_K_XL 1469 / 1663 (0.883x), 41.2 / 49.3 (0.835x); Qwen3.5-9B
+    UD-Q5_K_XL 4369 / 5751 (0.760x), 91.7 / 112.8 (0.81x); Qwen3.5-0.8B Q8_0 27524 / 29957 (0.919x), 336 /
+    480 (0.70x). The MoEs are at parity, the dense hybrids are not: the 9B's window (116 ms against 89) puts
+    69 of its ms in the FFN's K-quant tiles and 29 in the K-quant projections (q5_K/q6_K at 512 rows on the
+    scalar arm run ~70 TFLOP/s against the reference exe's 93-96 - the K-quant decode rate of (a), the whole
+    remaining prefill lever for the dense files), the 27B UD-IQ4_XS's (342 ms against 305) 207 of its ms in
+    the IQ4_XS FFN tiles; every tg32 sits at 0.7-0.84x: the GEMV family reads at ~820 GB/s where the
+    reference exe reads ~900, and the ~13 small dispatches a layer (the rq / ar / actrq / ba / step roles)
+    cost their floor - a decode arc of its own. Pod mechanics the rows needed: the Linux driver's
+    memory-budget query counts a just-exited process's VRAM for a while, so a run right after another
+    declines the resident driver (the 2048 MB headroom fallback) - `DASLLAMA_GPU_VRAM_MB=15500` pins the
+    cap and a 20 s pause clears it; the 27B Q4_K_M (16.6 GB) does not fit the 5080. Found on the way, not
     of this lever: the iq2xxs cm2 stamps' modules fail spirv-val's OpVariable placement check ("All
     OpVariable instructions in a function must be the first instructions in the first block") in a
     decode function - the emitter hoists a kernel body's locals to its entry block but not a
