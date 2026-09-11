@@ -857,9 +857,6 @@ namespace das
         // release on the worker thread, so the pool is mutex-guarded. Only safe for pure-data jobs.
         Context * acquireForkContext ( uint32_t category );
         void releaseForkContext ( Context * forkContext );
-    protected:
-        vector<Context *>               forkContextPool;
-        mutex                           forkContextPoolMutex;
     public:
         string                          name;
         Bitfield                        category = Bitfield(0u);
@@ -924,6 +921,11 @@ namespace das
         };
         JitContext deleteJITOnFinish = {};
         vector<FileInfo*>  deleteUponFinish;
+    protected:
+        // after every das-visible field: a mutex's size differs per platform, and a cross-compiled
+        // exe bakes the host's field offsets
+        vector<Context *>               forkContextPool;
+        mutex                           forkContextPoolMutex;
     };
 
     struct DebugAgentInstance {

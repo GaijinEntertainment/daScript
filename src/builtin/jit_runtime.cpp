@@ -620,6 +620,8 @@ extern "C" {
         auto ann = jit_find_handled_annotation(moduleName, typeName);
         if ( !ann ) { g_abi_types_skipped ++; return; } // not registered on target -> module not linked here
         g_abi_types_checked ++;
+        // a type only ever behind a pointer has no size contract: nothing das-side reserves it
+        if ( !ann->isLocal() && !ann->canCopy() && !ann->canMove() ) return;
         uint32_t targetSize = uint32_t(ann->getSizeOf());
         if ( targetSize != hostSize ) {
             char buf[256];
