@@ -23,6 +23,7 @@ time, a rate, or a constant of its code - names the kernel or symbol it was read
 sentence that states it.**
 
 **A sentence stating what WE will build or change next carries no reading of the reference
-build; the reading it sits beside gets its own sentence.** A sentence stating a
+build and no name belonging to it - symbol, header, constant, binary, project or organization;
+the reading it sits beside gets its own sentence.** A sentence stating a
 reference-build run we will make is reference-build work, not such a proposal, and carries
 that run's names, knobs and commands.

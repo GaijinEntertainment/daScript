@@ -1041,8 +1041,9 @@ module) is independent and can land any time - it is pure structure.
     still read 1.2x behind at the matched scalar arm: our uniform gate/up plane 0.99 ms against the
     0.83 ms of the same `MUL_MAT_ID iq2_xxs` row above. On the 5080's scalar arm the k4 s tile reads
     0.471 ms at 32 against 0.499 at 64 (`moe:k4` there), the opposite of the four-wide arm. Left on
-    this axis: the decode body's pair form, a shared-scale cache for the K-quants (we read the scale
-    row per element on every format), and a stamp per (format, arm) for the k step.
+    this axis after the pair form and the k4/k5/iq4xs scale cache landed (below): a scale cache for
+    the formats still reading the scale row per element (k2, k3, k6), and a stamp per (format, arm)
+    for the k step.
     The tier warns at device init and prints its extension roster.
     (b) Three window roles stay flat on the wider card whatever the arm: the deltanet scan (13037 ->
     12654 us, a serial recurrence over chunks - 8.7% of the 5080's window), the shared expert's
@@ -1156,7 +1157,8 @@ module) is independent and can land any time - it is pure structure.
     UD-IQ2_XXS 5926 / 6005 (0.987x), 173.6 / 219.1 (0.79x); Qwen3.8-27B UD-IQ4_XS 1496 / 1677 (0.892x),
     39.3 / 47.4 (0.83x); Qwen3.8-27B UD-Q3_K_XL 1469 / 1663 (0.883x), 41.2 / 49.3 (0.835x); Qwen3.5-9B
     UD-Q5_K_XL 4369 / 5751 (0.760x), 91.7 / 112.8 (0.81x); Qwen3.5-0.8B Q8_0 27524 / 29957 (0.919x), 336 /
-    480 (0.70x). The MoEs are at parity, the dense hybrids are not: the 9B's window (116 ms against 89) puts
+    480 (0.70x). On pp512 the MoEs are at parity and the dense hybrids are not, and tg32 lags on every
+    file: the 9B's window (116 ms against 89) puts
     69 of its ms in the FFN's K-quant tiles and 29 in the K-quant projections (q5_K/q6_K at 512 rows on the
     scalar arm run ~70 TFLOP/s against the reference exe's 93-96 - the K-quant decode rate of (a), the whole
     remaining prefill lever for the dense files), the 27B UD-IQ4_XS's (342 ms against 305) 207 of its ms in
@@ -1205,7 +1207,7 @@ module) is independent and can land any time - it is pure structure.
     hybrids (the beta/alpha GEMV reads the normed f32 row), MoE (the router reads it) and any Q8_K feed (it
     quantized Q8_0 only); the Q8_K and row-storing stamps of `ArRqT` lift all three (the profiler now keys on the
     stamps' recorded names): tg32 0.8B 370.5 -> 381.2, 9B 97.6 -> 100.8 (0.894x), 35B 143.9 -> 146.6 (1.009x of
-    145.2 - past the reference exe), 27B 38.2 -> 41.7 (0.88x). LANDED next: the GEMV block loop unrolled by four
+    145.2 - at the reference exe's rate), 27B 38.2 -> 41.7 (0.88x). LANDED next: the GEMV block loop unrolled by four
     (the loads of four blocks in flight a lane): the 9B 100.8 -> 102.9 (0.912x), the rest flat (their rows are
     one or two blocks a lane); the GEMV probe's `single` arm reads the chained-dispatch floor at 4.5 us on every
     format and the ring form ~900 GB/s at the 9B shape before and after - the token's remaining GEMV deficit is
@@ -1215,7 +1217,8 @@ module) is independent and can land any time - it is pure structure.
     (they co-run already); a hazard barrier with this op's stage alone as its destination leaves the 4.5 us
     chained-dispatch floor where it is; the step computing its own beta/alpha dots reads slower (0.8B 382.7 ->
     373.7) - the GEMV co-runs under qkv and z, and a co-running role reads its neighbours' drain in the Linux
-    profile, so a decode lever is judged by tg32 rows alone. The reference exe runs the dense prefill's gate+up
+    profile, so on a driver that drains at the stamp a decode lever is judged by tg32 rows alone. The
+    reference exe runs the dense prefill's gate+up
     pair as one dispatch of 384 workgroups in five waves, and the barrier A/B says our two grids recover a
     third of that overlap; its GEMV family reads the 4096-wide planes at 610-780 GB/s in the token where ours
     reads 500 (its form: 2 rows a workgroup, 16 lanes a superblock, f32 x read as vec4, no shared memory).
