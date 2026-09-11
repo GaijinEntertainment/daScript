@@ -3,7 +3,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // LINT018: narrowing the size/position argument of a call that has a 64-bit overload
 //
 // Problem: int(n) truncates above 2^31, so the copy, compare, resize, or erase
-// silently covers the wrong count. memcpy/memcmp carry uint / int64 / uint64
+// silently covers the wrong count. memcpy/memmove/memcmp carry uint / int64 / uint64
 // size overloads; array resize / resize_no_init / resize_and_init / reserve /
 // erase and table reserve carry int64 overloads - the value passes straight through.
 //

@@ -118,7 +118,7 @@ namespace das {
     }
 
     __forceinline bool isspaceE ( int ch ) {
-        return ch==' ' || (ch>=0x09 && ch<=0x0d); // tab, LF, VT, FF, CR
+        return ch==' ' || (ch>='\t' && ch<='\r');
     }
 
     struct ChainGuard {
