@@ -190,15 +190,16 @@ def cat(var pats : array<Pattern>) : Pattern {
             if (idx < 0) {
                 idx += cn
             }
-            let innerStart = cyclePos(sub.start)
-            let innerStop = innerStart + (sub.stop - sub.start)
-            let innerSpan = TimeSpan(start = innerStart, stop = innerStop)
+            // pattern `idx` sees its own k-th cycle at cycle idx + k*N, so an alternation nested
+            // in a sequence step still advances with the outer cycle instead of replaying cycle 0
+            let shift = cycle - double((int(cycle) - idx) / cn)
+            let innerSpan = TimeSpan(start = sub.start - shift, stop = sub.stop - shift)
             var haps <- invoke(pats[idx], innerSpan)
             result |> reserve(length(result) + length(haps))
             for (h in haps) {
                 result |> push(Hap(
-                    whole = TimeSpan(start = h.whole.start + cycle, stop = h.whole.stop + cycle),
-                    part = TimeSpan(start = h.part.start + cycle, stop = h.part.stop + cycle),
+                    whole = TimeSpan(start = h.whole.start + shift, stop = h.whole.stop + shift),
+                    part = TimeSpan(start = h.part.start + shift, stop = h.part.stop + shift),
                     has_whole = h.has_whole,
                     value = h.value
                 ))

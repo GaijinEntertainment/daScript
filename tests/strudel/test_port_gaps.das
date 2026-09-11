@@ -104,3 +104,48 @@ def test_add_sub_pattern(t : T?) {
         t |> equal(notes(pat, 1.0lf, 2.0lf), [57.0, 45.0])
     }
 }
+
+[test]
+def test_note_name_case(t : T?) {
+    t |> run("an upper-case note letter names the same note as the lower-case one") @(t : T?) {
+        t |> equal(notes(note("C4 Bb3 F#2 Eb5"), 0.0lf, 1.0lf), notes(note("c4 bb3 f#2 eb5"), 0.0lf, 1.0lf))
+        t |> equal(notes(note("C4 Bb3"), 0.0lf, 1.0lf), [60.0, 58.0])
+        t |> equal(notes(note("<G4 A4>,Bb3"), 1.0lf, 2.0lf), [69.0, 58.0])
+    }
+}
+
+[test]
+def test_negative_numbers(t : T?) {
+    t |> run("a negative numeric atom keeps its sign") @(t : T?) {
+        t |> equal(notes(n("0 -2 -4.5"), 0.0lf, 1.0lf), [0.0, -2.0, -4.5])
+        t |> equal(notes(n("<0 -2>"), 1.0lf, 2.0lf), [-2.0])
+        t |> equal(notes(n("0 -2") |> scale("C3:minor"), 0.0lf, 1.0lf), [48.0, 44.0])
+    }
+    t |> run("a negative euclid rotation turns the other way") @(t : T?) {
+        var back <- haps_of(s("x(3,8,-1)"), 0.0lf, 1.0lf)
+        let seven <- haps_of(s("x(3,8,7)"), 0.0lf, 1.0lf)
+        t |> equal(length(back), 3)
+        for (i in range(3)) {
+            t |> equal(back[i].whole.start, seven[i].whole.start)
+        }
+        t |> success(has_start(back, "x", 0.125lf), "x(3,8,-1) starts at 1/8, where x(3,8,1) starts at 1/4")
+    }
+}
+
+[test]
+def test_nested_alternation(t : T?) {
+    t |> run("an alternation inside a sequence step advances with the outer cycle") @(t : T?) {
+        let pat <- n("<0 1 2> <5 6 7>")
+        t |> equal(notes(pat, 0.0lf, 1.0lf), [0.0, 5.0])
+        t |> equal(notes(pat, 1.0lf, 2.0lf), [1.0, 6.0])
+        t |> equal(notes(pat, 2.0lf, 3.0lf), [2.0, 7.0])
+        t |> equal(notes(pat, 3.0lf, 4.0lf), [0.0, 5.0])
+    }
+    t |> run("an alternation inside an alternation runs at half the outer clock") @(t : T?) {
+        let pat <- n("<<0 1> 9>")
+        t |> equal(notes(pat, 0.0lf, 1.0lf), [0.0])
+        t |> equal(notes(pat, 1.0lf, 2.0lf), [9.0])
+        t |> equal(notes(pat, 2.0lf, 3.0lf), [1.0])
+        t |> equal(notes(pat, 3.0lf, 4.0lf), [9.0])
+    }
+}
