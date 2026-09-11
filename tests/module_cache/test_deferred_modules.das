@@ -311,6 +311,49 @@ def arm_fallback(t : T?; fx : Fixture) {
     }
 }
 
+//! the dm rows a recording start whose load failed leaves - nameless - and what the scan makes of them
+def arms_nameless_rows(t : T?; fx : Fixture) {
+    let utDir = path_join(path_join(fx.tmp, "modules"), UNIT_TEST_FOLDER)
+    t |> run("a replayed row whose artifact exists but does not load brings every deferred module in at the scan") @(t : T?) {
+        var warm : string
+        t |> success(run_child_reported(t, "rewarm", child_cmd(fx, fx.plain), warm, "PLAIN"), "a cold start rewrites the manifest")
+        let text = fread(fx.utManifest)
+        // a nameless dm row whose path is a file that exists and is no shared module
+        let descriptor = path_join(utDir, ".das_module")
+        let doctored = replace(text, "\nend\t1\n", "\ndm\t{descriptor}\tModule_Unloadable\t0\t\nend\t2\n")
+        t |> success(doctored != text, "the manifest carries its one row: {text}")
+        fwrite(fx.utManifest, doctored)
+        var out : string
+        t |> success(run_child_reported(t, "pending", child_cmd(fx, fx.plain), out, "PLAIN"), "the program runs")
+        t |> success(find(out, "Module_Unloadable <- {descriptor} : FAILED") >= 0, "the row's load fails at the scan:\n{out}")
+        t |> success(find(out, "[module] a pending module's artifact exists - loading every deferred module") >= 0, "the present artifact brings the deferred set in:\n{out}")
+        // the trace's path is the row's as recorded, so its separators are the descriptor's, not path_join's
+        let loaded = find(out, "{UNIT_TEST_ARTIFACT}.shared_module : loaded") >= 0 || find(out, "{UNIT_TEST_ARTIFACT}_debug.shared_module : loaded") >= 0
+        t |> success(find(out, "{UNIT_TEST_CLASS} <- ") >= 0 && loaded, "the deferred module loads on start:\n{out}")
+        t |> success(find(out, ": manifest rewritten, ") < 0, "a row that never loads stays nameless:\n{out}")
+        remove_result(fx.utManifest)
+    }
+    t |> run("a replayed nameless row whose module loads gets its name written back, and the next start defers it") @(t : T?) {
+        var warm : string
+        t |> success(run_child_reported(t, "rewarm", child_cmd(fx, fx.plain), warm, "PLAIN"), "a cold start rewrites the manifest")
+        let text = fread(fx.utManifest)
+        // the real dm row with its name blanked
+        let doctored = replace(text, "\t{UNIT_TEST_MODULE}\n", "\t\n")
+        t |> success(doctored != text, "the manifest carries the named row: {text}")
+        fwrite(fx.utManifest, doctored)
+        var eager : string
+        t |> success(run_child_reported(t, "eager", child_cmd(fx, fx.plain), eager, "PLAIN"), "the program runs")
+        let loaded = find(eager, "{UNIT_TEST_ARTIFACT}.shared_module : loaded") >= 0 || find(eager, "{UNIT_TEST_ARTIFACT}_debug.shared_module : loaded") >= 0
+        t |> success(find(eager, "{UNIT_TEST_CLASS} <- ") >= 0 && loaded, "the nameless row loads at the scan:\n{eager}")
+        // the trace joins the descriptor with "/" whatever the platform, as descriptor_line reads it
+        t |> success(find(eager, "{UNIT_TEST_FOLDER}/.das_module: manifest rewritten, 1 row(s) named") >= 0, "the scan writes the name back:\n{eager}")
+        t |> success(find(fread(fx.utManifest), "\t{UNIT_TEST_MODULE}\n") >= 0, "the manifest carries the name again")
+        var lazy : string
+        t |> success(run_child_reported(t, "lazy", child_cmd(fx, fx.plain), lazy, "PLAIN"), "the next start runs")
+        t |> equal(-1, find(lazy, "{UNIT_TEST_CLASS} <- "), "the next start defers the row and loads nothing:\n{lazy}")
+    }
+}
+
 //! the arms share one root and run in this order
 [test]
 def test_deferred_modules(t : T?) {
@@ -332,6 +375,7 @@ def test_deferred_modules(t : T?) {
     let fx = make_fixture(tmp, artifact)
     arms_deferred(t, fx)
     arms_guards_and_caches(t, fx)
+    arms_nameless_rows(t, fx)
     arm_fallback(t, fx)
     var err : string
     rmdir_rec(tmp, err)

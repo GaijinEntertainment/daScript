@@ -44,8 +44,13 @@ this document states what the folder is and why its tests take the shape they do
   the guard sits in a module walked earlier;
   `-ignore-manifest` compiles every descriptor, loads every C++ module on start and writes no
   manifest; a manifest row hand-edited to an absent artifact makes the require bring every
-  deferred module in and then fail on the missing prerequisite; a module cache an eager start
-  wrote serves a lazy start, with `-log-compile-time` printing the reads and the startup
+  deferred module in and then fail on the missing prerequisite; a nameless `dm` row added by
+  hand whose path is a file that exists and is no shared module fails at the scan and, its
+  artifact present, makes the scan bring every deferred module in before any require; the real
+  `dm` row with its name blanked loads at the scan, gets its name written back, and the next start
+  defers it; a module
+  cache an eager start wrote serves a lazy start, with `-log-compile-time` printing the reads
+  and the startup
   timeline; a dastest `--ser` stream of a test requiring the module is read by a `--deser`
   child that nothing made require it, and the reader loads it; and, where the tree holds dasImgui and dasGlfw, `require imgui_app` brings every
   deferred module in because its `initDependencies` asks for two more, and a half-warm tree -

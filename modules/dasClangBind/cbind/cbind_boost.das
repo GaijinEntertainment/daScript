@@ -980,7 +980,7 @@ class CppGenBind : AnyGenBind {
     nsst2st : table<string; string>
     st2nsst : table<string; string>
     require_modules : array<string>
-    require_load_modules : array<string>    //! required before this module initializes, but their types stay out of this module's library
+    require_load_modules : array<string>    //! initialized before this module when the build has them - a static link without one initializes as before - and their types stay out of this module's library
     alias2type : table<string; string>
     enums_with_flags : table<string; bool>
     abstract_class : array<bool>
@@ -1766,8 +1766,7 @@ class CppGenBind : AnyGenBind {
         }
         for (rm in require_load_modules) {
             module_cpp_file |> fwrite("\tauto mod_{rm} = Module::require(\"{rm}\");\n")
-            module_cpp_file |> fwrite("\tif ( !mod_{rm} ) return false;\n")
-            module_cpp_file |> fwrite("\tif ( !mod_{rm}->initDependencies() ) return false;\n")
+            module_cpp_file |> fwrite("\tif ( mod_{rm} && !mod_{rm}->initDependencies() ) return false;\n")
         }
         module_cpp_file |> fwrite("\tinitialized = true;\n")
         module_cpp_file |> fwrite("\tlib.addModule(this);\n")

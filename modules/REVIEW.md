@@ -16,4 +16,6 @@ its code runs, so an unrequired sibling fails the importer's next load.
 only the library import needs it - and the binder emits `initDependencies` from the lists; a hand
 edit of the generated file alone is a defect.** `require_modules` adds the other module to this
 module's type library, so a module that binds the same C++ types twice resolves the fields to
-the other's copies.
+the other's copies; a `require_load_modules` entry the build lacks - a static exe linking only
+what its program requires - is skipped, since without a library import there is no load order
+to keep.
