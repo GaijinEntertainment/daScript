@@ -693,9 +693,9 @@ def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     let asrc = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl)
     let aentry = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry)
     let afm = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath)
-    let bsrc = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl : MetalKqMulMmK6THDb128_metal_kq_mulmm_k6_db_msl)
-    let bentry = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_entry : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl_entry : MetalKqMulMmK6THDb128_metal_kq_mulmm_k6_db_msl_entry)
-    let bfm = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl_fastmath : MetalKqMulMmK6THDb128_metal_kq_mulmm_k6_db_msl_fastmath)
+    let bsrc = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl : MetalKqMulMmK6THDb128_metal_kq_mulmm_db_msl)
+    let bentry = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_entry : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl_entry : MetalKqMulMmK6THDb128_metal_kq_mulmm_db_msl_entry)
+    let bfm = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl_fastmath : MetalKqMulMmK6THDb128_metal_kq_mulmm_db_msl_fastmath)
     var pso_a = pipeline_from_source(dev, asrc, aentry, afm, err)
     var pso_b = pipeline_from_source(dev, bsrc, bentry, bfm, err)
     if ((pso_a == null || pso_b == null) && !metal4_tensor_available(dev)) {
