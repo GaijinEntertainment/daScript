@@ -124,7 +124,7 @@ def private metal_tower_init : bool {
 // the GPU buffers stay zero so the GEMM pins their outputs at 0; LN/posadd grids cover the
 // LOGICAL rows only. One command buffer, one wait, one readback.
 [hot_path]
-def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; npos, n_cols : int64; var out : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; npos, n_cols : int64; var out : array<float>) : bool {
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -144,14 +144,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     var bx1 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * d * 4l))
     var bout = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.proj_dim * 4l))
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(bx0))
-        memcpy(p, addr(s.x0[0]), npos * t.patch_dim * 4l)
-        if (mp > npos) {
-            var zp = reinterpret<float?>(p + npos * t.patch_dim * 4l)
-            for (i in range64((mp - npos) * t.patch_dim)) {
-                zp[i] = 0.0
-            }
-        }
+        upload_rows_padded(bx0, addr(s.x0[0]), npos, mp, t.patch_dim)
     }
     var u_pdim = uniform_u32(uint(t.patch_dim))   // also the patch GEMM's k
     var u_d = uniform_u32(uint(d))                // also the patch GEMM's n and the proj GEMM's k
@@ -258,21 +251,8 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-        memcpy(p, addr(s.x[0]), npos * d * 4l)
-        if (mp > npos) {
-            var zp = reinterpret<float?>(p + npos * d * 4l)
-            for (i in range64((mp - npos) * d)) {
-                zp[i] = 0.0
-            }
-        }
-        if (nk64 > npos) {
-            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
-            var zk = reinterpret<float?>(pk + npos * d * 4l)
-            for (i in range64((nk64 - npos) * d)) {
-                zk[i] = 0.0
-            }
-        }
+        upload_rows_padded(bx, addr(s.x[0]), npos, mp, d)
+        zero_rows(bk, npos, nk64, d)
     }
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
@@ -578,14 +558,7 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
     let d = t.d_model
     var c <- g4a_ctx_make(t, npos)
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(c.bx))
-        memcpy(p, addr(s.x[0]), npos * d * 4l)
-        if (c.mp > npos) {
-            var zp = reinterpret<float?>(p + npos * d * 4l)
-            for (i in range64((c.mp - npos) * d)) {
-                zp[i] = 0.0
-            }
-        }
+        upload_rows_padded(c.bx, addr(s.x[0]), npos, c.mp, d)
     }
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
@@ -785,14 +758,7 @@ def private metal_canary_blocks(t : CanaryEncoder; var st : CanaryState; npos, w
     let d = t.d_model
     var c <- cn_ctx_make(t, st, npos, ww)
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(c.bx))
-        memcpy(p, addr(st.x[0]), npos * d * 4l)
-        if (c.mp > npos) {
-            var zp = reinterpret<float?>(p + npos * d * 4l)
-            for (i in range64((c.mp - npos) * d)) {
-                zp[i] = 0.0
-            }
-        }
+        upload_rows_padded(c.bx, addr(st.x[0]), npos, c.mp, d)
     }
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
@@ -875,12 +841,7 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     var by1p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1p)
     unsafe {
         //! xw upload, pad rows zeroed (the DFT GEMM walks mpd rows)
-        var xp = reinterpret<uint8?>(metal_buffer_contents(bxw))
-        memcpy(xp, addr(s.xw[0]), n_len * n_fft * 4l)
-        var zp = reinterpret<float?>(xp + n_len * n_fft * 4l)
-        for (i in range64((mpd - n_len) * n_fft)) {
-            zp[i] = 0.0
-        }
+        upload_rows_padded(bxw, addr(s.xw[0]), n_len, mpd, n_fft)
         //! the transposed twiddle panel [dft_out_pad x n_fft]: W rows are output bins, zero-padded
         var tp = reinterpret<float?>(metal_buffer_contents(btw))
         let sp = plane_at(t.twiddles, 0l)
@@ -1070,21 +1031,8 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
     var btabs = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tabs)
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-        memcpy(p, addr(s.x[0]), npos * d * 4l)
-        if (mp > npos) {
-            var zp = reinterpret<float?>(p + npos * d * 4l)
-            for (i in range64((mp - npos) * d)) {
-                zp[i] = 0.0
-            }
-        }
-        if (nk64 > npos) {
-            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
-            var zk = reinterpret<float?>(pk + npos * d * 4l)
-            for (i in range64((nk64 - npos) * d)) {
-                zk[i] = 0.0
-            }
-        }
+        upload_rows_padded(bx, addr(s.x[0]), npos, mp, d)
+        zero_rows(bk, npos, nk64, d)
         // the rope tables, packed per row as [cx q | sx q | cy q | sy q] — the CPU's bits
         var tp = reinterpret<float?>(metal_buffer_contents(btabs))
         for (r in range64(npos)) {
@@ -1264,21 +1212,8 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
     unsafe {
-        memcpy(metal_buffer_contents(bx0), addr(s.x0[0]), npos * pd * 4l)
-        if (mp > npos) {
-            var p = reinterpret<uint8?>(metal_buffer_contents(bx0))
-            var zp = reinterpret<float?>(p + npos * pd * 4l)
-            for (i in range64((mp - npos) * pd)) {
-                zp[i] = 0.0
-            }
-        }
-        if (nk64 > npos) {
-            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
-            var zk = reinterpret<float?>(pk + npos * dp * 4l)
-            for (i in range64((nk64 - npos) * dp)) {
-                zk[i] = 0.0
-            }
-        }
+        upload_rows_padded(bx0, addr(s.x0[0]), npos, mp, pd)
+        zero_rows(bk, npos, nk64, dp)
     }
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
@@ -1418,7 +1353,7 @@ def private tw_mm(enc : MetalComputeEncoder?; f16w, bf16w : bool; bwh, bblob : M
 // fused qkv as three weight-offset GEMMs; tap chains encode inline over the live residual
 // (hazard-ordered), the tail merger follows, ONE readback lands proj outputs for the scatter.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
-def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE037,STYLE038 — the dispatch chain is the shape
+def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -1488,28 +1423,9 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     let pos_resized = qwen3v_pos_resized(t, s)
     var bposr = pos_resized ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(npos * d * 4l)) : null
     unsafe {
-        memcpy(metal_buffer_contents(bx0), addr(s.x0[0]), npos * t.patch_dim * 4l)
-        if (mp > npos) {
-            var p0 = reinterpret<uint8?>(metal_buffer_contents(bx0))
-            var z0 = reinterpret<float?>(p0 + npos * t.patch_dim * 4l)
-            for (i in range64((mp - npos) * t.patch_dim)) {
-                z0[i] = 0.0
-            }
-        }
-        if (nk64 > npos) {
-            var pk = reinterpret<uint8?>(metal_buffer_contents(bk))
-            var zk = reinterpret<float?>(pk + npos * dp * 4l)
-            for (i in range64((nk64 - npos) * dp)) {
-                zk[i] = 0.0
-            }
-        }
-        if (rows_ext > npos) {
-            var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-            var zp = reinterpret<float?>(p + npos * d * 4l)
-            for (i in range64((rows_ext - npos) * d)) {
-                zp[i] = 0.0
-            }
-        }
+        upload_rows_padded(bx0, addr(s.x0[0]), npos, mp, t.patch_dim)
+        zero_rows(bk, npos, nk64, dp)
+        zero_rows(bx, npos, rows_ext, d)
         if (bposr != null) {
             memcpy(metal_buffer_contents(bposr), addr(s.pos_rs[0]), npos * d * 4l)
         }
@@ -1761,13 +1677,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
         for (i in range64(nwin + 1l)) {
             wp[i] = uint(s.win_lo[i])
         }
-        if (rows_ext > npos) {
-            var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-            var zp = reinterpret<float?>(p + npos * d * 4l)
-            for (i in range64((rows_ext - npos) * d)) {
-                zp[i] = 0.0
-            }
-        }
+        zero_rows(bx, npos, rows_ext, d)
     }
     var bw_pl = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, t.post_ln_w))), uint64(d * 4l))
     var u_d = uniform_u32(uint(d))

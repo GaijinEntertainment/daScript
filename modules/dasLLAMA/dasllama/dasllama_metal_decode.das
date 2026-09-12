@@ -1076,13 +1076,8 @@ def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bo
         unsafe {
             let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
             let lb = mirror_lbase(t, s.kv_dtype_k, r.cap, l)
-            let prow = kv_phys_row(s, dpos)
-            var kmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.koff
-            var vmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.voff
-            memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                reinterpret<void?>(kmp + lb + dpos * rowb), rowb)
-            memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                reinterpret<void?>(vmp + lb + dpos * rowb), rowb)
+            mirror_row_writeback(s, c.seq_len, l, dpos, kv_phys_row(s, dpos), rowb, lb,
+                reinterpret<uint8?>(metal_buffer_contents(g_arena)), r.koff, r.voff)
             if (!seam) {
                 if (r.bnc == null) {
                     memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
@@ -1476,17 +1471,12 @@ def private finish_verify_step(t : Model; var s : Session; r : StepRes; pos : in
         let c = t.config
         let nr = r.nrows
         unsafe {
-            var kmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.koff
-            var vmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.voff
+            let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
             for (l in range64(c.n_layers + c.n_layer_nextn)) {   // + the warmed draft-slab rows
                 let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
                 let lb = mirror_lbase(t, s.kv_dtype_k, r.cap, l)
                 for (i in range64(nr)) {
-                    let prow = kv_phys_row(s, pos + i)
-                    memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                        reinterpret<void?>(kmp + lb + (pos + i) * rowb), rowb)
-                    memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                        reinterpret<void?>(vmp + lb + (pos + i) * rowb), rowb)
+                    mirror_row_writeback(s, c.seq_len, l, pos + i, kv_phys_row(s, pos + i), rowb, lb, ab, r.koff, r.voff)
                 }
             }
             let vb = c.vocab_size * 4l
@@ -1815,17 +1805,13 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
         let cap = r.cap
         unsafe {
             memcpy(addr < void? >(s.x[0]), metal_buffer_contents(r.bx), r.bytes_x)
-            var kmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.koff
-            var vmp = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + r.voff
+            let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
             let prow = kv_phys_row(s, pos)
             for (l in range64(c.n_layers)) {
                 continue if (kv_shared_layer(t, l))   // no rows of its own — the source's copy covers it
                 let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
                 let lb = mirror_lbase(t, s.kv_dtype_k, cap, l)
-                memcpy(reinterpret<void?>(kv_layer_kbase(s, l, c.seq_len) + prow * rowb),
-                    reinterpret<void?>(kmp + lb + pos * rowb), rowb)
-                memcpy(reinterpret<void?>(kv_layer_vbase(s, l, c.seq_len) + prow * rowb),
-                    reinterpret<void?>(vmp + lb + pos * rowb), rowb)
+                mirror_row_writeback(s, c.seq_len, l, pos, prow, rowb, lb, ab, r.koff, r.voff)
             }
             if (r.gpu_logits && r.bnc == null) {   // zero-copy steps: the GPU already wrote s.logits
                 memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)

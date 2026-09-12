@@ -511,6 +511,50 @@ def release_handle(var h : auto(HT)?&) {
     }
 }
 
+//! Zero rows [from, to) of `width` floats in `buf` - a pooled buffer keeps stale rows, and a pad
+//! row a kernel reads must be zero.
+def zero_rows(var buf : MetalBuffer?; from, to, width : int64) {
+    if (to <= from) {
+        return
+    }
+    unsafe {
+        var zp = reinterpret<float?>(reinterpret<uint8?>(metal_buffer_contents(buf)) + from * width * 4l)
+        for (i in range64((to - from) * width)) {
+            zp[i] = 0.0
+        }
+    }
+}
+
+//! Copy `rows` rows of `width` floats from `src` into `buf` and zero the pad rows up to `mp`.
+def upload_rows_padded(var buf : MetalBuffer?; src : void?; rows, mp, width : int64) {
+    unsafe {
+        memcpy(metal_buffer_contents(buf), src, rows * width * 4l)
+    }
+    zero_rows(buf, rows, mp, width)
+}
+
+//! One mirror row of layer `l` - K and V - copied from the arena back into the session's CPU KV.
+def mirror_row_writeback(var s : Session; seq_len, l, pos, prow, rowb, lb : int64; ab : uint8?; koff, voff : uint64) {
+    unsafe {
+        memcpy(reinterpret<void?>(kv_layer_kbase(s, l, seq_len) + prow * rowb), reinterpret<void?>(ab + koff + lb + pos * rowb), rowb)
+        memcpy(reinterpret<void?>(kv_layer_vbase(s, l, seq_len) + prow * rowb), reinterpret<void?>(ab + voff + lb + pos * rowb), rowb)
+    }
+}
+
+//! The least recently touched mirror in `tab` other than `keep`, skipping the pinned ones when
+//! `honor_pin`; 0 when nothing is evictable.
+def lru_victim(tab : table<uint64; auto(TM)>; keep : uint64; honor_pin : bool) : uint64 {
+    var victim = 0ul
+    var vtick = 0l
+    for (uid, mr in keys(tab), values(tab)) {
+        if (uid != keep && !(honor_pin && key_exists(g_pin, uid)) && (victim == 0ul || mr.tick < vtick)) {
+            victim = uid
+            vtick = mr.tick
+        }
+    }
+    return victim
+}
+
 // the stages the single-row and batch decode drivers honor as a knockout (g_skip != "<stage>")
 let DECODE_SKIP_STAGES <- ["gemv", "attn", "ew", "moe_rt", "moe_sh", "qkv", "wo"]
 
@@ -738,18 +782,23 @@ def private region_upload_new(key : uint64; src : void?; bytes : uint64) : Metal
     return buf
 }
 
-def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
-    let key = intptr(src)
-    if (key_exists(g_regions, key)) {
-        var cached = g_regions[key]
+//! The cached region at `key` when it covers `bytes`, else null - a shorter entry at the same
+//! base is retired first: the old buffer may be bound in an in-flight unretained cb.
+def private region_hit(@scratch var tab : table<uint64; RegionEntry>; key, bytes : uint64) : MetalBuffer? {
+    if (key_exists(tab, key)) {
+        var cached = tab[key]
         if (cached.bytes >= bytes) {
             return cached.buf
         }
-        // a wider span at a shorter entry's base: the old buffer may be bound in an in-flight
-        // unretained cb — retire it, re-upload the full span
         g_region_retire |> push(cached.buf)
     }
-    return region_upload_new(key, src, bytes)
+    return null
+}
+
+def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
+    let key = intptr(src)
+    var hit = region_hit(g_regions, key, bytes)
+    return hit != null ? hit : region_upload_new(key, src, bytes)
 }
 
 [cold_path]
@@ -774,14 +823,8 @@ def private region_upload_cat3_new(key : uint64; p0 : void?; b0 : uint64; p1 : v
 // indexing). Load-once-stable like upload_region; b2 == 0 makes it a two-piece concat.
 def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64) : MetalBuffer? {
     let key = intptr(p0)
-    if (key_exists(g_regions_cat3, key)) {
-        var cached = g_regions_cat3[key]
-        if (cached.bytes >= b0 + b1 + b2) {
-            return cached.buf
-        }
-        g_region_retire |> push(cached.buf)
-    }
-    return region_upload_cat3_new(key, p0, b0, p1, b1, p2, b2)
+    var hit = region_hit(g_regions_cat3, key, b0 + b1 + b2)
+    return hit != null ? hit : region_upload_cat3_new(key, p0, b0, p1, b1, p2, b2)
 }
 
 // ===== the whole-plane resident buffers (blob-only models) =====
@@ -790,12 +833,9 @@ def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : vo
 
 def plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mapped : bool) : MetalBuffer? {   // public: the tower driver wraps embedder planes too
     let key = intptr(base)
-    if (key_exists(g_regions, key)) {
-        var cached = g_regions[key]
-        if (cached.bytes >= bytes) {
-            return cached.buf
-        }
-        g_region_retire |> push(cached.buf)   // plane requests are whole-tensor constants — grow never fires in practice
+    var hit = region_hit(g_regions, key, bytes)
+    if (hit != null) {
+        return hit
     }
     var buf : MetalBuffer?
     if (mapped) {
@@ -962,14 +1002,7 @@ def uniform_f32(v : float) : MetalBuffer? => scalar_buffer(pool_acquire_untracke
 
 def mirror_evict_to_cap(cap_bytes : uint64; keep : uint64) {
     while (g_mirror_bytes > cap_bytes) {
-        var victim = 0ul
-        var vtick = 0l
-        for (uid, mr in keys(g_mirrors), values(g_mirrors)) {
-            if (uid != keep && !key_exists(g_pin, uid) && (victim == 0ul || mr.tick < vtick)) {
-                victim = uid
-                vtick = mr.tick
-            }
-        }
+        let victim = lru_victim(g_mirrors, keep, true)
         if (victim == 0ul) {   // only the live session's mirror remains
             return
         }
@@ -1123,14 +1156,7 @@ def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; k
         let vbytes = shp.vbytes
         var off = arena_alloc(kbytes + vbytes)
         while (off < 0l) {   // arena full — evict LRU until the slice fits (or nothing evictable)
-            var victim = 0ul
-            var vtick = 0l
-            for (uid, mr in keys(g_mirrors), values(g_mirrors)) {
-                if (uid != s.uid && !key_exists(g_pin, uid) && (victim == 0ul || mr.tick < vtick)) {
-                    victim = uid
-                    vtick = mr.tick
-                }
-            }
+            let victim = lru_victim(g_mirrors, s.uid, true)
             if (victim == 0ul) {
                 // nothing left to evict — grow toward the ceiling, unless a batch step holds
                 // pinned rows (the batch driver's mirror_reserve pre-grows for that case)
@@ -1243,14 +1269,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     }
     if (!have) {
         while (length(g_dn_mirrors) >= DN_MIRRORS_MAX) {
-            var victim = 0ul
-            var vtick = 0l
-            for (uid, mr in keys(g_dn_mirrors), values(g_dn_mirrors)) {
-                if (victim == 0ul || mr.tick < vtick) {
-                    victim = uid
-                    vtick = mr.tick
-                }
-            }
+            let victim = lru_victim(g_dn_mirrors, 0ul, false)
             dn_mirror_release(g_dn_mirrors[victim])
             g_dn_mirrors |> erase(victim)
         }

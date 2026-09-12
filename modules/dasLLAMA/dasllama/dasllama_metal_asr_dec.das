@@ -272,14 +272,7 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
     var bkx = pool_acquire(g_wd_pool, g_dev, bytes_x)
     var bvx = pool_acquire(g_wd_pool, g_dev, bytes_x)
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-        memcpy(p, addr(enc_out[0]), ta * d * 4l)
-        if (mp > ta) {   // DEFENSIVE pad zero (the pad outputs go unread): guards stale-Inf pool reuse
-            var zp = reinterpret<float?>(p + ta * d * 4l)
-            for (i in range64((mp - ta) * d)) {
-                zp[i] = 0.0
-            }
-        }
+        upload_rows_padded(bx, addr(enc_out[0]), ta, mp, d)   // the pad outputs go unread; the zero guards stale-Inf pool reuse
     }
     var u_d = uniform_u32(uint(d))
     var u_hs = uniform_u32(uint(hs))
