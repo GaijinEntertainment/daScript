@@ -353,9 +353,10 @@ def private g4a_rec(var bp : float?; idx : int64; c : Clamp) {
 }
 
 //! The gemma4a drivers' shared GPU context: the block loop's buffers, uniforms and dims.
-struct private G4aGpuCtx {
+// The tower context every encoder-family driver shares - the blob, the row / hidden /
+// position panels, the eight uniforms and the geometry; a family derives it with its extras.
+struct private TwGpuCtx {
     bblob : MetalBuffer?
-    bbounds : MetalBuffer?
     bx : MetalBuffer?
     bxb : MetalBuffer?
     bq : MetalBuffer?
@@ -364,10 +365,8 @@ struct private G4aGpuCtx {
     bao : MetalBuffer?
     bglu : MetalBuffer?
     bcvd : MetalBuffer?
-    bxc : MetalBuffer?
     bh : MetalBuffer?
     bpos : MetalBuffer?
-    bprpe : MetalBuffer?
     u_d : MetalBuffer?
     u_2d : MetalBuffer?
     u_ff : MetalBuffer?
@@ -375,16 +374,72 @@ struct private G4aGpuCtx {
     u_totd : MetalBuffer?
     u_tot2d : MetalBuffer?
     u_totff : MetalBuffer?
-    u_in : MetalBuffer?
-    u_out : MetalBuffer?
     u_half : MetalBuffer?
-    ka : G4aAttnArgs
     mp : int64
     np64 : int64
     npos : int64
     bytes_row : uint64
-    bytes_c : uint64
-    bytes_rpe : uint64
+    bytes_ff : uint64
+    bytes_pos : uint64
+}
+
+def private tw_ctx_make(var c : TwGpuCtx; blob : void?; blob_bytes : uint64; mapped : bool;
+                        npos, d, n_ff : int64; eps, half : float; bytes_pos : uint64) {
+    c.mp = (npos + 31l) / 32l * 32l
+    c.np64 = (npos + 63l) / 64l
+    c.npos = npos
+    c.bblob = plane_buffer(g_dev, blob, blob_bytes, mapped)
+    c.bytes_row = uint64(c.mp * d * 4l)
+    c.bytes_ff = uint64(c.mp * n_ff * 4l)
+    c.bytes_pos = bytes_pos
+    c.bx = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
+    c.bxb = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
+    c.bq = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
+    c.bk = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
+    c.bv = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
+    c.bao = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
+    c.bglu = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
+    c.bcvd = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
+    c.bh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_ff)
+    c.bpos = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
+    c.u_d = uniform_u32(uint(d))
+    c.u_2d = uniform_u32(uint(2l * d))
+    c.u_ff = uniform_u32(uint(n_ff))
+    c.u_eps = uniform_f32(eps)
+    c.u_totd = uniform_u32(uint(npos * d))
+    c.u_tot2d = uniform_u32(uint(npos * 2l * d))
+    c.u_totff = uniform_u32(uint(npos * n_ff))
+    c.u_half = uniform_f32(half)
+}
+
+def private tw_ctx_release(var c : TwGpuCtx) {
+    pool_release(g_tw_pool, c.bx, c.bytes_row)
+    pool_release(g_tw_pool, c.bxb, c.bytes_row)
+    pool_release(g_tw_pool, c.bq, c.bytes_row)
+    pool_release(g_tw_pool, c.bk, c.bytes_row)
+    pool_release(g_tw_pool, c.bv, c.bytes_row)
+    pool_release(g_tw_pool, c.bao, c.bytes_row)
+    pool_release(g_tw_pool, c.bglu, c.bytes_row)
+    pool_release(g_tw_pool, c.bcvd, c.bytes_row)
+    pool_release(g_tw_pool, c.bh, c.bytes_ff)
+    pool_release(g_tw_pool, c.bpos, c.bytes_pos)
+    pool_release(g_upool, c.u_d, 4ul)
+    pool_release(g_upool, c.u_2d, 4ul)
+    pool_release(g_upool, c.u_ff, 4ul)
+    pool_release(g_upool, c.u_eps, 4ul)
+    pool_release(g_upool, c.u_totd, 4ul)
+    pool_release(g_upool, c.u_tot2d, 4ul)
+    pool_release(g_upool, c.u_totff, 4ul)
+    pool_release(g_upool, c.u_half, 4ul)
+}
+
+struct private G4aGpuCtx : TwGpuCtx {
+    bbounds : MetalBuffer?
+    bxc : MetalBuffer?
+    bprpe : MetalBuffer?
+    u_in : MetalBuffer?
+    u_out : MetalBuffer?
+    ka : G4aAttnArgs
     bytes_rec : uint64
 }
 
@@ -397,25 +452,12 @@ def private g4a_shape_ok(t : Gemma4aEncoder) : bool {
 def private g4a_ctx_make(t : Gemma4aEncoder; npos : int64) : G4aGpuCtx {
     let d = t.d_model
     let past = gemma4a_attn_past()
-    let mapped = t.image_map != null
-    var c = G4aGpuCtx(mp = (npos + 31l) / 32l * 32l, np64 = (npos + 63l) / 64l, npos = npos)
-    c.bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
-    c.bytes_row = uint64(c.mp * d * 4l)
-    c.bytes_c = uint64(c.mp * t.n_ff * 4l)
-    c.bytes_rpe = uint64(32l * d * 4l)
+    var c : G4aGpuCtx
+    tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), t.image_map != null,
+        npos, d, t.n_ff, t.eps, gemma4a_res_w(), uint64(32l * d * 4l))
     c.bytes_rec = uint64(t.n_layer * 10l * 16l)
-    c.bx = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bxb = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bq = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bk = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bv = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bao = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bglu = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bcvd = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bxc = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_c)
-    c.bh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_c)
-    c.bpos = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_rpe)
-    c.bprpe = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_rpe)
+    c.bxc = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_ff)
+    c.bprpe = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
     c.bbounds = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_rec)
     unsafe {
         //! the RPE table, zero-padded to the GEMM's 32-row floor
@@ -443,16 +485,8 @@ def private g4a_ctx_make(t : Gemma4aEncoder; npos : int64) : G4aGpuCtx {
             g4a_rec(bp, l * 10l + 9l, lo.c_ff_down_1)
         }
     }
-    c.u_d = uniform_u32(uint(d))
-    c.u_2d = uniform_u32(uint(2l * d))
-    c.u_ff = uniform_u32(uint(t.n_ff))
-    c.u_eps = uniform_f32(t.eps)
-    c.u_totd = uniform_u32(uint(npos * d))
-    c.u_tot2d = uniform_u32(uint(npos * 2l * d))
-    c.u_totff = uniform_u32(uint(npos * t.n_ff))
     c.u_in = uniform_u32(0u)    //! the clamp record's input pair
     c.u_out = uniform_u32(1u)   //! its output pair
-    c.u_half = uniform_f32(gemma4a_res_w())
     c.ka = G4aAttnArgs(d = uint(d), hs = uint(t.d_head), npos = uint(npos), past = uint(past),
         qscale = (1.0 / sqrt(float(t.d_head))) / log(2.0), kscale = log(1.0 + exp(1.0)) / log(2.0),
         cap = gemma4a_softcap())
@@ -461,28 +495,11 @@ def private g4a_ctx_make(t : Gemma4aEncoder; npos : int64) : G4aGpuCtx {
 
 def private g4a_ctx_release(var c : G4aGpuCtx) {
     pool_release(g_tw_pool, c.bbounds, c.bytes_rec)
-    pool_release(g_tw_pool, c.bx, c.bytes_row)
-    pool_release(g_tw_pool, c.bxb, c.bytes_row)
-    pool_release(g_tw_pool, c.bq, c.bytes_row)
-    pool_release(g_tw_pool, c.bk, c.bytes_row)
-    pool_release(g_tw_pool, c.bv, c.bytes_row)
-    pool_release(g_tw_pool, c.bao, c.bytes_row)
-    pool_release(g_tw_pool, c.bglu, c.bytes_row)
-    pool_release(g_tw_pool, c.bcvd, c.bytes_row)
-    pool_release(g_tw_pool, c.bxc, c.bytes_c)
-    pool_release(g_tw_pool, c.bh, c.bytes_c)
-    pool_release(g_tw_pool, c.bpos, c.bytes_rpe)
-    pool_release(g_tw_pool, c.bprpe, c.bytes_rpe)
-    pool_release(g_upool, c.u_d, 4ul)
-    pool_release(g_upool, c.u_2d, 4ul)
-    pool_release(g_upool, c.u_ff, 4ul)
-    pool_release(g_upool, c.u_eps, 4ul)
-    pool_release(g_upool, c.u_totd, 4ul)
-    pool_release(g_upool, c.u_tot2d, 4ul)
-    pool_release(g_upool, c.u_totff, 4ul)
+    pool_release(g_tw_pool, c.bxc, c.bytes_ff)
+    pool_release(g_tw_pool, c.bprpe, c.bytes_pos)
     pool_release(g_upool, c.u_in, 4ul)
     pool_release(g_upool, c.u_out, 4ul)
-    pool_release(g_upool, c.u_half, 4ul)
+    tw_ctx_release(c)
 }
 
 //! The 12-block dispatch chain on an already-armed context - the blocks-only and whole-chunk drivers share it.
@@ -582,60 +599,21 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
 }
 
 //! The canary FastConformer driver's shared GPU context - g4a's shape with the rel table in place of the windowed RPE, and no clamp records.
-struct private CnGpuCtx {
-    bblob : MetalBuffer?
-    bx : MetalBuffer?
-    bxb : MetalBuffer?
-    bq : MetalBuffer?
-    bk : MetalBuffer?
-    bv : MetalBuffer?
-    bao : MetalBuffer?
-    bglu : MetalBuffer?
-    bcvd : MetalBuffer?
-    bh : MetalBuffer?
-    bpos : MetalBuffer?
+struct private CnGpuCtx : TwGpuCtx {
     bposl : MetalBuffer?
-    u_d : MetalBuffer?
-    u_2d : MetalBuffer?
-    u_ff : MetalBuffer?
-    u_eps : MetalBuffer?
-    u_totd : MetalBuffer?
-    u_tot2d : MetalBuffer?
-    u_totff : MetalBuffer?
-    u_half : MetalBuffer?
     u_nk : MetalBuffer?
     u_np : MetalBuffer?
     ka : CnAttnArgs
-    mp : int64
     wwp : int64
-    np64 : int64
-    npos : int64
     ww : int64
-    bytes_row : uint64
-    bytes_ff : uint64
-    bytes_pos : uint64
 }
 
 def private cn_ctx_make(t : CanaryEncoder; var st : CanaryState; npos, ww : int64) : CnGpuCtx {
     let d = t.d_model
     let dh = d / t.n_head
-    let mapped = t.image_map != null
-    var c = CnGpuCtx(mp = (npos + 31l) / 32l * 32l, wwp = (ww + 31l) / 32l * 32l,
-        np64 = (npos + 63l) / 64l, npos = npos, ww = ww)
-    c.bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
-    c.bytes_row = uint64(c.mp * d * 4l)
-    c.bytes_ff = uint64(c.mp * t.n_ff * 4l)
-    c.bytes_pos = uint64(c.wwp * d * 4l)
-    c.bx = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bxb = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bq = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bk = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bv = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bao = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bglu = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bcvd = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_row)
-    c.bh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_ff)
-    c.bpos = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
+    var c = CnGpuCtx(wwp = (ww + 31l) / 32l * 32l, ww = ww)
+    tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), t.image_map != null,
+        npos, d, t.n_ff, t.eps, 0.5, uint64(c.wwp * d * 4l))
     c.bposl = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
     unsafe {
         //! the sinusoidal rel table, zero-padded to the GEMM's row floor
@@ -645,14 +623,6 @@ def private cn_ctx_make(t : CanaryEncoder; var st : CanaryState; npos, ww : int6
             pp[i] = 0.0
         }
     }
-    c.u_d = uniform_u32(uint(d))
-    c.u_2d = uniform_u32(uint(2l * d))
-    c.u_ff = uniform_u32(uint(t.n_ff))
-    c.u_eps = uniform_f32(t.eps)
-    c.u_totd = uniform_u32(uint(npos * d))
-    c.u_tot2d = uniform_u32(uint(npos * 2l * d))
-    c.u_totff = uniform_u32(uint(npos * t.n_ff))
-    c.u_half = uniform_f32(0.5)
     c.u_nk = uniform_u32(uint(t.conv_kernel))
     c.u_np = uniform_u32(uint(npos))
     c.ka = CnAttnArgs(d = uint(d), hs = uint(dh), npos = uint(npos), scale = 1.0 / sqrt(float(dh)))
@@ -660,27 +630,10 @@ def private cn_ctx_make(t : CanaryEncoder; var st : CanaryState; npos, ww : int6
 }
 
 def private cn_ctx_release(var c : CnGpuCtx) {
-    pool_release(g_tw_pool, c.bx, c.bytes_row)
-    pool_release(g_tw_pool, c.bxb, c.bytes_row)
-    pool_release(g_tw_pool, c.bq, c.bytes_row)
-    pool_release(g_tw_pool, c.bk, c.bytes_row)
-    pool_release(g_tw_pool, c.bv, c.bytes_row)
-    pool_release(g_tw_pool, c.bao, c.bytes_row)
-    pool_release(g_tw_pool, c.bglu, c.bytes_row)
-    pool_release(g_tw_pool, c.bcvd, c.bytes_row)
-    pool_release(g_tw_pool, c.bh, c.bytes_ff)
-    pool_release(g_tw_pool, c.bpos, c.bytes_pos)
     pool_release(g_tw_pool, c.bposl, c.bytes_pos)
-    pool_release(g_upool, c.u_d, 4ul)
-    pool_release(g_upool, c.u_2d, 4ul)
-    pool_release(g_upool, c.u_ff, 4ul)
-    pool_release(g_upool, c.u_eps, 4ul)
-    pool_release(g_upool, c.u_totd, 4ul)
-    pool_release(g_upool, c.u_tot2d, 4ul)
-    pool_release(g_upool, c.u_totff, 4ul)
-    pool_release(g_upool, c.u_half, 4ul)
     pool_release(g_upool, c.u_nk, 4ul)
     pool_release(g_upool, c.u_np, 4ul)
+    tw_ctx_release(c)
 }
 
 [arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
