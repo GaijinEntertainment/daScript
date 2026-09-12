@@ -29,12 +29,11 @@ got there: &lt;a href=&quot;stories/2026-09-11-vulkan-and-the-qwen-family-fortun
      llama.cpp b10660 (build-vulkan-357) llama-bench -p 512 -n 128 -ngl 99 -fa 1 -t 16 on the same box
      the same day; both engines on NV_cooperative_matrix2 unless the row says KHR (ours DASLLAMA_COOPMAT=mm,
      theirs GGML_VK_DISABLE_COOPMAT2=1). Dense and hybrid rows: 2026-09-06/07 at the merge of PR #3954
-     (das 245481f64) [BORIS: confirm the sha the 9/6-9/7 board rows were taken at]; the KHR figures (the
+     (das 245481f64, the merge of PR #3954); the KHR figures (the
      27B 221 -&gt; 395 -&gt; 741 against 677 / 675, the 4B 3051 -&gt; 4764): 2026-09-08 at PR #3978 (das 536d9b15c);
      the three MoE rows: 2026-09-09 at das 469893890 on the MoE arc&#x27;s branch (PR #3988); the 30B-A3B Q4_K_M
      and Coder-Next rows are the expert-split form (llama.cpp -ot with the same experts on the CPU, its
-     -ngl 99 fails the load). The 3060 -&gt; 5060 Ti beat is Boris&#x27;s, August 2026 [BORIS: month, and whether
-     the 3060 ran cm2]. Stas&#x27;s report: PR #3988&#x27;s branch (debug-jit, the x86-vnni512 class profile, no box
+     -ngl 99 fails the load). The 3060 -&gt; 5060 Ti beat is Boris&#x27;s, July 2026. Stas&#x27;s report: PR #3988&#x27;s branch (debug-jit, the x86-vnni512 class profile, no box
      mint) on his RTX 5080 16 GB / Ryzen 9 9950X / Gentoo / GCC 16, -p 512 -n 128 -r 3 -t 16, flash
      attention both sides, the same 35B UD-IQ2_XXS file (10756586464 bytes): ours 3659.95 +- 169.56 /
      144.91 +- 8.90 with DASLLAMA_GPU_VRAM_MB=14000 (1471.53 / 68.46 unpinned, the resident driver
@@ -52,18 +51,17 @@ got there: &lt;a href=&quot;stories/2026-09-11-vulkan-and-the-qwen-family-fortun
      item 45 and PERF_LEDGER.md&#x27;s rows of 2026-09-10/11; the driver-death beat is item 45&#x27;s follow-up (8)
      (Windows LiveKernelEvent 141, nvlddmkm event 153, the stocked suite of 47 files on 2026-09-11).
      &quot;162 kernels, 98 stamped from a template&quot; is dasllama/dasllama_vulkan_classes.das at 1fced5114 (2026-09-11):
-     the `[vk_dispatch]` classes, and those of them whose base is a `...T` template. The first KHR tile&#x27;s
-     752 and the integer tile&#x27;s 1564 are Qwen3-4B Q4_K_M pp512 on the 5060 Ti under DASLLAMA_COOPMAT=mm,
-     2026-09-07, the arc&#x27;s board rows before and at the first tile (the 3051 -&gt; 4764 chain follows). --&gt;
+     the `[vk_dispatch]` classes, and those of them whose base is a `...T` template. The first tile&#x27;s &quot;half
+     the speed&quot; is Qwen3-4B Q4_K_M pp512 on the 5060 Ti under DASLLAMA_COOPMAT=mm, 2026-09-07: 752 against
+     the integer tile&#x27;s 1564, the arc&#x27;s board rows before and at the first tile (the 3051 -&gt; 4764 chain follows). --&gt;
 
-&lt;p&gt;Boris had an RTX 3060 in August, and things were working so well. Then he got an RTX 5060 Ti,
+&lt;p&gt;Boris had an RTX 3060 in July, and things were working so well. Then he got an RTX 5060 Ti,
 ran the same models, and everything was slower than llama.cpp. Nothing in the engine had
 changed. The card had. That is what Vulkan is like, and it is why the Qwen family got the
 first half of September.&lt;/p&gt;
 &lt;h2&gt;Two targets&lt;/h2&gt;
-&lt;p&gt;There were two targets from the start. The first was Vulkan itself: the CPU and Metal tiers had
-a year of work behind them and Vulkan had a summer, and Qwen was the biggest piece of what it
-did not have. The second was Qwen3.8-27B on a 16 GB
+&lt;p&gt;There were two targets from the start. The first was to catch up on Vulkan, where the engine
+lagged, and Qwen was the biggest piece of the lag. The second was Qwen3.8-27B on a 16 GB
 card: the model people want to run at home, and the one that did not fit.&lt;/p&gt;
 &lt;p&gt;People do run it there. How they run it is a zoo. Four bits, three bits, two bits, mixed so
 that the layers that matter keep more and the rest keep fewer, eight weight formats on one
@@ -159,8 +157,8 @@ against 815 / 24.1, and its 4-bit siblings read the same way. The End? Right???&
 None of those have cooperative matrix 2, the extension the 5060 Ti has. They have the older
 cooperative matrix, the one every card past a certain age can run. On that arm the K-quant
 formats, the zoo&#x27;s most common ones, had no matrix tile at all, and the 27B prefilled at a
-third of the rate: 221 tokens per second against 677. The first tile we wrote ran the 4B at
-752, half the 1564 of the integer kernel it replaced. What a nightmare.&lt;/p&gt;
+third of the rate: 221 tokens per second against 677. The first tile we wrote came in at half
+the speed of the integer kernel it replaced. What a nightmare.&lt;/p&gt;
 &lt;p&gt;Sometimes you resort to the sincerest form of flattery. We consulted the yardstick&#x27;s kernels
 and found that back in 2024 kernels were a different shape, and had never heard of the
 extensions the 5-series brought. The 27B went from 395 to 741. Who knew.&lt;/p&gt;
@@ -205,8 +203,8 @@ so, and most kernels had not said so, so the driver ordered every load behind ev
 any other buffer. Turns out the daslang compiler knows when a variable is read-only.
 Amazing. The 35B went from 4217 to 4673 on that alone.&lt;/p&gt;
 &lt;p&gt;One side note on measuring there. The profiler on the rental box lies about kernels that overlap:
-it makes them take turns while it watches. One lever it praised took the 0.8B&#x27;s token rate
-from 382.7 to 373.7, and after that we believed the token counter and nothing else.&lt;/p&gt;
+it makes them take turns while it watches. One lever it praised made the model slower, and
+after that we believed the token counter and nothing else.&lt;/p&gt;
 &lt;table&gt;
 &lt;thead&gt;
 &lt;tr&gt;
@@ -260,8 +258,8 @@ system, of course.&lt;/p&gt;
 Intel&#x27;s Arc, as far as we know. That arm was rebuilt this month and measured on the 5060 Ti
 with the mode forced, so it has to work. Not that we ever tried it on anything else.&lt;/p&gt;
 &lt;p&gt;Maybe, if it has neither. Below cooperative matrix we run an integer dot-product tile and the
-plain matrix-vector family. The tests dispatch that arm&#x27;s kernels on every format with the
-modes forced off, and nobody has ever run it on a card that really lacks them, never mind
+plain matrix-vector family. The tests dispatch every kernel of that arm on every format with
+the modes forced off, and nobody has ever run it on a card that really lacks them, never mind
 raced it. Below that - no 8- and 16-bit storage, no subgroup operations, no integer dot
 product - the tier switches itself off, says why once, and the CPU takes over.&lt;/p&gt;
 &lt;p&gt;For the CPU we have a tuner: the first start races every kernel&#x27;s spellings on your machine

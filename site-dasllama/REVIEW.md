@@ -19,10 +19,11 @@ that run: the live endpoint the page renders it from, the checked-in measurement
 comment or prose clause names, the box and date and what was measured, or the word
 placeholder.
 
-**A claim on any page that one engine, build, or way of running beats another on anything a run
-measures - speed, error rate, footprint, size - made in words rather than as side-by-side
-figures in the same sentence or in the table the sentence points at, is a defect** - the
-arithmetic a reader does over two figures is not the page's claim.
+**A claim on any page that this engine, or a build or way of running it, beats another on
+anything a run measures - speed, error rate, footprint, size - made in words rather than as
+side-by-side figures in the same sentence or in the table the sentence points at, is a
+defect** - the arithmetic a reader does over two figures is not the page's claim, and a claim
+that this engine is behind is not a promotion.
 
 **Copy or rendering that lets a row with no reference engine's figure imply parity is a
 defect - an empty ratio cell means the comparison was never run.**
