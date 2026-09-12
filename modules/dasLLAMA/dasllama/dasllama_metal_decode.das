@@ -1537,6 +1537,7 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
     e->encode(t, enc, l, dnli)
 }
 
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm"), arch(at="../ARCHITECTURE_GPU_MTP.md#verify-serial-encoder")]
 def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
     let c = t.config
     let dim = c.dim
