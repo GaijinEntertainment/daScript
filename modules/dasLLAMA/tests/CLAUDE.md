@@ -468,9 +468,15 @@ deep); the 12B Q4_K_M in the agreement form at eight and 300 tokens. The perplex
 because the 12B's logits sit within a few points of each other at whole stretches of positions
 (llama.cpp's own margins on the same text read 0.6 to 16), so a maxdiff bar at one position
 measures the model's flatness, not the driver; the CPU chain's own two paths land 13% to 44% of
-the max logit apart there. Arms: `g3` (the
+the max logit apart there. The E-series rows: gemma-4-E2B Q8_0 (stocked tier) in the forced-feed
+form at forty tokens, the perplexity form at 150 + 150 and at 520 + 80 (two windows, the 512
+sliding window engaged on the last eight) and the agreement form at eight tokens - the per-layer
+embedding branch after every FFN residual (the CPU pre-step's side rows ride the token command
+and the window chain), twenty layers attending over the K/V of the fifteen below them, and the two
+dense FFN widths; gemma-4-E4B Q8_0 (large tier) at forty tokens and 150 + 150. Arms: `g3` (the
 gemma-3 cells), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
-`g4q8` (the 12B Q8_0 cells) - the tokens share no substring, so one arm selects one file. Skips
+`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B) - the tokens share no substring, so one arm
+selects one file. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.

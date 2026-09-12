@@ -2233,6 +2233,15 @@ struct RLayer {
     vfk : bool                      //! no v plane: V is the raw k row at its own rms (the v GEMV and its set stay unused)
     vnorm : bool                    //! V scaled by its own rms, weightless
     out_scale : float               //! the FFN residual step's scale on the sum; 1.0 = none
+    kv_shared : bool                //! Q only: the K/V GEMVs, the k/v norms and the mirror store stay off; attention reads the donor's rows at mir_base
+    // the per-layer-embedding branch (gemma-4 E-series): gate [dim x ple] and proj [ple x dim] planes, their sets and metas
+    ple : bool
+    bpg, bpp : int64
+    fpg : int
+    s_ple_x : VkDescriptorSet       //! the residual row requantized as it is (the gate GEMV's feed)
+    s_ple_gate, s_ple_proj : VkDescriptorSet
+    s_ple_act : VkDescriptorSet     //! gelu(gate) x this layer's side-input row, requantized (the proj GEMV's feed)
+    m_pg, m_pp : HostBuf
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
     recurrent : bool
     mir_idx : int64 = -1l           // this attention layer's K/V mirror slot; -1 = recurrent (no KV)
@@ -2340,6 +2349,12 @@ struct RDec {
     cmd : VkCommandBuffer
     tok_recorded : bool           // cmd holds the whole-token chain, re-submittable as-is
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
+    // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
+    // row copied to ple_dev in-cmd, the gate GEMV's [ple] output, and the window chain's position-major rows
+    ple : int64
+    ple_host : HostBuf
+    ple_dev, pleg_dev : uint64
+    pf_ple : uint64
     tok_meta : HostBuf            // the shared TokMeta block (pos/cnt), host-poked per token
     // prefill batch buffers (lazy — sized MAX_NPOS x their width) + per-layer prefill sets
     pf_ready : bool
@@ -2417,6 +2432,7 @@ let RD_NORM_ATT = 0l
 let RD_NORM_FFN = 1l
 let RD_NORM_POST_ATT = 2l
 let RD_NORM_POST_FFN = 3l
+let RD_NORM_PLE_POST = 4l   //! the per-layer-embedding branch's post norm (gemma-4 E-series); a zero row elsewhere
 
 //! layer `l`'s norm row of `kind` in the norms plane, in floats
 def rd_norm_off(l, kind : int64) : int64 => (l * RD_NORM_ROWS + kind) * g_rd.dim

@@ -48,6 +48,9 @@ let private GEMMA3_FILE = "gemma-3-1b-it-Q8_0.gguf"
 //! takes the agreement cell alone - on it the CPU chain's own prefill and decode kernels land 12% of the max logit apart, so a
 //! CPU-referenced bar there measures the model's sensitivity to the K-quant activation rounding, not the driver
 let private GEMMA4_FILE = "gemma-4-12B-it-Q4_K_M.gguf"
+//! the gemma-4 E-series carrier: per-layer embeddings (ple 256 on 35 layers), twenty layers sharing the K/V of the fifteen below, two dense FFN widths, a 512 sliding window
+let private GEMMA4E_FILE = "gemma-4-E2B-it-Q8_0.gguf"
+let private GEMMA4E4_FILE = "gemma-4-E4B-it-Q8_0.gguf"   //! the larger E-series carrier (large tier): 42 layers, eighteen sharing K/V
 let private GEMMA4_Q8_FILE = "gemma-4-12B-it-Q8_0.gguf"
 
 def private window_pin(t : T?) {
@@ -357,6 +360,35 @@ def test_gpu_resident_gemma4_dense(t : T?) {
         if (!arm_on(t, "g4q8")) return
         window_pin(t)
         ppl_compare(t, PF_WINDOW_ROWS + 8l, 80l, GEMMA4_Q8_FILE)
+    }
+}
+
+[test]
+def test_gpu_resident_gemma4_eseries(t : T?) {
+    t |> run("gemma-4-E2B Q8_0: resident prefill + decode - the per-layer-embedding branch, twenty shared-KV layers, two FFN widths - vs the CPU chain, forty tokens") @(t : T?) {
+        if (!arm_on(t, "g4e")) return
+        gemma_forced_feed(t, 40l, GEMMA4E_FILE)
+    }
+    t |> run("gemma-4-E2B Q8_0: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
+        if (!arm_on(t, "g4e")) return
+        ppl_compare(t, 150l, 150l, GEMMA4E_FILE)
+    }
+    t |> run("gemma-4-E2B Q8_0: 520 ids prefilled - two windows, the 512 sliding window engaged on the last eight - then 80 teacher-forced") @(t : T?) {
+        if (!arm_on(t, "g4e")) return
+        window_pin(t)
+        ppl_compare(t, PF_WINDOW_ROWS + 8l, 80l, GEMMA4E_FILE)
+    }
+    t |> run("gemma-4-E2B Q8_0: eight tokens through the window chain against the token command, both arms") @(t : T?) {
+        if (!arm_on(t, "g4e")) return
+        prefill_vs_decode(t, 8l, GEMMA4E_FILE)
+    }
+    t |> run("gemma-4-E4B Q8_0: resident prefill + decode vs the CPU chain, forty tokens - the E-series arms on the larger carrier") @(t : T?) {
+        if (!arm_on(t, "g4f")) return
+        gemma_forced_feed(t, 40l, GEMMA4E4_FILE)
+    }
+    t |> run("gemma-4-E4B Q8_0: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
+        if (!arm_on(t, "g4f")) return
+        ppl_compare(t, 150l, 150l, GEMMA4E4_FILE)
     }
 }
 

@@ -444,7 +444,10 @@ def resident_dense_width(t : Model; l : int64) : int64 => layer_is_moe(t, l) ? t
 //! The dense planes' width the driver sizes at: the dense triple's, or the expert width where no
 //! layer carries a dense triple (nothing dispatches the dense planes then; they only exist).
 def private resident_hidden(t : Model) : int64 {
-    let w = resident_dense_width(t, 0l)
+    var w = 0l
+    for (l in range64(t.config.n_layers)) {   //! the widest dense triple sizes the FFN scratch (gemma-4 E2B: 6144 below layer 15, 12288 above)
+        w = max(w, resident_dense_width(t, l))
+    }
     return w > 0l ? w : t.config.n_ff_exp
 }
 
@@ -483,6 +486,10 @@ def private resident_shexp_plane(t : Model; l : int64; kind : int) : tuple<f : K
 //! the router planes: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated, and the f16 mirror the cm2 route's window GEMM reads (counted whatever the route, the plan's other terms run high too)
 def private resident_router_bytes(c : Config; n_moe : int64) : int64 => (
     n_moe * (c.n_expert + (c.n_ff_shexp > 0l && c.moe_shexp_gated ? 1l : 0l)) * c.dim * 6l)
+
+//! a layer's per-layer-embedding device bytes: the gate [dim x ple] and proj [ple x dim] planes on the q8 arena; 0 where the model has none
+def private resident_ple_layer_bytes(c : Config) : int64
+    => has_ple(c) ? 2l * moe_gpu_plane_bytes(c.dim, c.n_embd_per_layer, int(KqFmt.q8)) : 0l
 
 //! a recurrent layer's device bytes: the deltanet triple and the beta/alpha rows (f16 on the f32 arm, q8 planes otherwise); 0 on an attention layer
 def private resident_dn_layer_bytes(t : Model; l : int64) : int64 {
@@ -564,6 +571,19 @@ def resident_binding_ctx(c : Config; dt : KVDtype; bcap : int64) : int64 {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+//! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's)
+def private resident_kv_row_bytes(t : Model; kdt, vdt : KVDtype) : tuple<krow : int64; vrow : int64> {
+    let c = t.config
+    var krow = 0l
+    var vrow = 0l
+    for (l in range64(c.n_layers)) {
+        continue if (t.kv_src[l] != l)
+        krow += kv_row_bytes(kdt, layer_kv_dim(c, l))
+        vrow += kv_row_bytes(vdt, layer_kv_dim(c, l))
+    }
+    return (krow = krow, vrow = vrow)
+}
+
 def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {
     let c = t.config
     var p = ResidentPlan(budget_bytes = moe_gpu_weight_budget_())
@@ -575,12 +595,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
         p.reason = "MoE - the tier installed no MoE seats for the whole-model driver; the per-op offload tier serves routed experts"
         return p
     }
-    var krow = 0l
-    var vrow = 0l
-    for (l in range64(c.n_layers)) {
-        krow += kv_row_bytes(kdt, layer_kv_dim(c, l))
-        vrow += kv_row_bytes(vdt, layer_kv_dim(c, l))
-    }
+    let (krow, vrow) = resident_kv_row_bytes(t, kdt, vdt)
     p.kv_bytes = seq_cap * (krow + vrow)
     p.scratch_bytes = rdec_scratch_bytes(t)
     fill_plan_room(p)
@@ -611,6 +626,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
             p.weight_bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
         }
         p.weight_bytes += resident_dn_layer_bytes(t, l)
+        p.weight_bytes += resident_ple_layer_bytes(c)
     }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     p.weight_bytes += moe_gpu_plane_bytes(c.dim, c.vocab_size, int(cls_fmt))
@@ -757,7 +773,7 @@ def resident_unserved_features(c : Config) : string {
     name_list_add(names, c.attn_sinks, "attention sinks")
     name_list_add(names, c.moe_dense_shexp, "dense shared expert")
     name_list_add(names, c.attn_logit_softcap != 0.0, "attention logit softcap")
-    name_list_add(names, has_ple(c), "per-layer embeddings")
+    name_list_add(names, has_ple(c) && !rdec_ple_installed(), "per-layer embeddings")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
     name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
     if (c.n_expert > 0l) {
@@ -834,9 +850,10 @@ def resident_layer_decline(t : Model; l : int64) : string {
         if (!rdec_dn_installed()) return "layer {l} is recurrent and the tier installed no deltanet seats for the whole-model driver"
         return ""
     }
-    if (t.kv_src[l] != l) return "layer {l} shares layer {t.kv_src[l]}'s K/V"
-    if (t.wq_offs[l] < 0l || t.wk_offs[l] < 0l) return "layer {l} lacks a q/k plane"
-    if (t.wv_offs[l] < 0l && !resident_v_from_k(c, l)) return "layer {l} lacks a v plane"
+    let kvsh = t.kv_src[l] != l   //! a shared-KV layer projects Q only and reads its donor's rows (the donor sits below it)
+    if (kvsh && t.kv_src[l] > l) return "layer {l} shares layer {t.kv_src[l]}'s K/V, a layer above it"
+    if (t.wq_offs[l] < 0l || (!kvsh && t.wk_offs[l] < 0l)) return "layer {l} lacks a q/k plane"
+    if (!kvsh && t.wv_offs[l] < 0l && !resident_v_from_k(c, l)) return "layer {l} lacks a v plane"
     // the attention kernels stage a head in a 256-thread workgroup, 32 dims a lane, two elements a thread past 256
     let hs = layer_head_size(c, l)
     if (hs % 32l != 0l || hs > 512l) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 512)"
@@ -913,7 +930,8 @@ def private resident_layer_geom(t : Model; l, mir_base : int64) : RdecLayerGeom 
         cbase = swa_row ? resident_rot(c) : 0l, boff = resident_bias_off(c, l),
         pre_post = c.pre_post_norm, gelu = c.ffn_act == FfnAct.gelu,
         vfk = vfk, vnorm = c.v_norm && !vfk,
-        out_scale = c.layer_out_scale && !has_ple(c) ? t.fblob[t.out_scale_off + l] : 1.0)
+        out_scale = c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0,
+        kv_shared = t.kv_src[l] != l)
 }
 
 struct private ImageRow {
@@ -1002,7 +1020,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         hs = max(hs, layer_head_size(c, l))
         qd = max(qd, layer_qd(c, l))
         kvd = max(kvd, layer_kv_dim(c, l))
-        mir_elems += seq_cap * layer_kv_dim(c, l)
+        if (t.kv_src[l] == l) {   //! a shared-KV layer takes no mirror rows: it reads its donor's
+            mir_elems += seq_cap * layer_kv_dim(c, l)
+        }
     }
     let cos_elems = resident_cos_elems(c)
     var dng = RdecDnGeom()
@@ -1012,9 +1032,10 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     // tally arena blocks per format
     var need : table<int; int64>
-    let emb_q8_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
+    //! a per-layer-embedding model keeps the CPU embed: its pre-step reads the embedded rows on the host
+    let emb_q8_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && !has_ple(c)
         && c.shared_weights && t.cls_q8 && cls_fmt == KqFmt.q8)
-    let emb_f32_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed()
+    let emb_f32_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && !has_ple(c)
         && !t.emb_q8 && !cls_kq(t) && !t.planes_trimmed   // an untied q8 table has no f32 copy to upload: the CPU embed loop serves it
         && plan.emb_f32_bytes > 0l)   // the plan counted it at this context
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
@@ -1045,9 +1066,11 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             let qd_l = layer_qd(c, l)
             let kvd_l = layer_kv_dim(c, l)
             planes |> push((n = dim, rows = c.q_gated ? 2l * qd_l : qd_l, f = lf.fq))
-            planes |> push((n = dim, rows = kvd_l, f = lf.fk))
-            if (!resident_v_from_k(c, l)) {
-                planes |> push((n = dim, rows = kvd_l, f = lf.fv))
+            if (t.kv_src[l] == l) {   //! a shared-KV layer places no k/v planes
+                planes |> push((n = dim, rows = kvd_l, f = lf.fk))
+                if (!resident_v_from_k(c, l)) {
+                    planes |> push((n = dim, rows = kvd_l, f = lf.fv))
+                }
             }
             planes |> push((n = qd_l, rows = dim, f = lf.fo))
         }
@@ -1056,6 +1079,10 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             planes |> push((n = dim, rows = hid_l, f = lf.f1))
             planes |> push((n = dim, rows = hid_l, f = lf.f3))
             planes |> push((n = hid_l, rows = dim, f = lf.f2))
+        }
+        if (has_ple(c)) {   //! the per-layer-embedding gate and proj planes, q8 on every serving mode
+            planes |> push((n = dim, rows = c.n_embd_per_layer, f = KqFmt.q8))
+            planes |> push((n = c.n_embd_per_layer, rows = dim, f = KqFmt.q8))
         }
     }
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
@@ -1106,6 +1133,13 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     var mir_idx = 0l
     var mir_base = 0l
     var rec_idx = 0l
+    // per layer: its mirror base and slot (a shared-KV layer records its donor's), for the layers above it that share
+    var mir_bases : array<int64>
+    var mir_slots : array<int64>
+    mir_bases |> resize(c.n_layers)
+    mir_slots |> resize(c.n_layers)
+    let ple = has_ple(c) ? c.n_embd_per_layer : 0l
+    if (ple > 0l && !rdec_set_ple(ple)) return rdec_decline("the per-layer-embedding width {ple} is not a 32-multiple")
     var router_slot = 0l
     for (l in range64(c.n_layers)) {
         var lf = resident_layer_fmts(t, l)
@@ -1170,17 +1204,21 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             }
             continue
         }
-        let g = resident_layer_geom(t, l, mir_base)
+        //! a shared-KV layer attends over its donor's mirror rows: its record carries the donor's base and no mirror slot of its own
+        let kvsh = t.kv_src[l] != l
+        let g = resident_layer_geom(t, l, kvsh ? mir_bases[t.kv_src[l]] : mir_base)
+        mir_bases[l] = g.mir_base
+        mir_slots[l] = kvsh ? mir_slots[t.kv_src[l]] : mir_idx
         let cq = rdec_quant_class(lf.fq)
-        if (cq != rdec_quant_class(lf.fk) || (!g.vfk && cq != rdec_quant_class(lf.fv))) {
+        if (!kvsh && (cq != rdec_quant_class(lf.fk) || (!g.vfk && cq != rdec_quant_class(lf.fv)))) {
             return rdec_decline("layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)})")
         }
         let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, c.q_gated ? 2l * g.qd : g.qd, mr, kg, wb)
-        let bk = resident_place(t, lf.fk, t.wk_offs[l], dim, g.kvd, mr, kg, wb)
-        let bv = g.vfk ? -1l : resident_place(t, lf.fv, t.wv_offs[l], dim, g.kvd, mr, kg, wb)   //! a V-from-K layer has no v plane
+        let bk = kvsh ? -1l : resident_place(t, lf.fk, t.wk_offs[l], dim, g.kvd, mr, kg, wb)
+        let bv = (g.vfk || kvsh) ? -1l : resident_place(t, lf.fv, t.wv_offs[l], dim, g.kvd, mr, kg, wb)   //! a V-from-K layer has no v plane
         let bo = resident_place(t, lf.fo, t.wo_offs[l], g.qd, dim, mr, kg, wb)
         // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
-        if (bq < 0l || bk < 0l || (!g.vfk && bv < 0l) || bo < 0l) return rdec_decline("arena placement failed at layer {l}")
+        if (bq < 0l || (!kvsh && bk < 0l) || (!g.vfk && !kvsh && bv < 0l) || bo < 0l) return rdec_decline("arena placement failed at layer {l}")
         if (moe) {
             let eb = resident_place_experts(t, l, mr, kg, wb)
             if (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) return rdec_decline("arena placement failed at layer {l} (the expert stacks)")
@@ -1189,11 +1227,19 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)), g)
             router_slot++
         } else {
-            rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2,
+            rdec_set_layer(l, mir_slots[l], bq, bk, bv, bo, b1, b3, b2,
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), g)
         }
-        mir_idx++
-        mir_base += seq_cap * g.kvd
+        if (ple > 0l) {   //! the per-layer-embedding gate [dim x ple] and proj [ple x dim] planes, q8 on every serving mode
+            let bpg = resident_place(t, KqFmt.q8, t.ple_gate_off + l * dim * ple, dim, ple, mr, kg, wb)
+            let bpp = resident_place(t, KqFmt.q8, t.ple_proj_off + l * ple * dim, ple, dim, mr, kg, wb)
+            if (bpg < 0l || bpp < 0l) return rdec_decline("arena placement failed at layer {l} (the per-layer-embedding planes)")
+            rdec_set_ple_layer(l, bpg, bpp, int(KqFmt.q8))
+        }
+        if (!kvsh) {
+            mir_idx++
+            mir_base += seq_cap * g.kvd
+        }
     }
     let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
     if (bcls < 0l) return rdec_decline("classifier placement failed")
@@ -1233,6 +1279,11 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 norms[lb + 3l * dim + i] = t.fblob[t.rms_post_ffn_off + l * dim + i]
             }
         }
+        if (has_ple(c)) {
+            for (i in range64(dim)) {
+                norms[lb + 4l * dim + i] = t.fblob[t.ple_post_off + l * dim + i]
+            }
+        }
     }
     for (i in range64(dim)) {
         norms[c.n_layers * RDEC_NORM_ROWS * dim + i] = t.fblob[t.rms_final_off + i]
@@ -1243,7 +1294,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             continue if (layer_is_recurrent(c, l))   // no q/k norm rows on a recurrent layer; its slots stay zero
             for (i in range64(layer_head_size(c, l))) {
                 norms[qkw + l * 2l * hs + i] = t.fblob[t.rms_q_offs[l] + i]
-                norms[qkw + (l * 2l + 1l) * hs + i] = t.fblob[t.rms_k_offs[l] + i]
+                if (t.kv_src[l] == l) {   //! a shared-KV layer norms no K of its own; its k row stays zero
+                    norms[qkw + (l * 2l + 1l) * hs + i] = t.fblob[t.rms_k_offs[l] + i]
+                }
             }
         }
     }
@@ -1452,7 +1505,7 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     g_rdec_cossin |> resize(g_rdec_cos_elems)
     rdec_rope_rows(t, pos + s.rope_pos_delta, g_rdec_cossin, 0l)   // rope at the delta'd position; KV stays at pos
     let cnt = pos + 1l
-    rdec_token(g_rdec_x, g_rdec_cossin, pos, cnt, s.logits)
+    rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.logits)   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     g_rdec_cnt = pos + 1l   // mirror continuity: rows [0, pos] are now live
     s.rdec_host_current = false   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device
@@ -1508,7 +1561,7 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
         rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, s.logits)
         s.embed_gpu_pending = false
     } else {
-        rdec_prefill(s.x_b, cb, npos, s.logits)
+        rdec_prefill(s.x_b, cb, s.ple_inp, npos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
     }
     if (c.recr_mask != 0ul) {
         for (l in range64(c.n_layers)) {
@@ -1535,7 +1588,11 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
         return false
     }
     let c = t.config
+    if (has_ple(c)) {
+        return false   //! the batch rows carry no per-layer-embedding side input (the pre-step is per session); the per-session decode serves
+    }
     let dim = c.dim
+    let noside : array<float>
     // flat cache in the armed codec, every row within the mirror cap (sync has no bounds check past it)
     for (i in range64(nrows)) {
         var s = sessions[i]
@@ -1582,7 +1639,7 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
             g_rdec_x[int(k)] = ws.scr.x_b[i * dim + k]
         }
         rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cossin, 0l)   // rope at the delta'd position; KV stays at pos
-        rdec_token(g_rdec_x, g_rdec_cossin, pos, pos + 1l, g_rdec_tmp)
+        rdec_token(g_rdec_x, g_rdec_cossin, noside, pos, pos + 1l, g_rdec_tmp)
         // write the new token's K/V back to this session's cache at pos, then scatter logits
         for (l in range64(c.n_layers)) {
             continue if (layer_is_recurrent(c, l))

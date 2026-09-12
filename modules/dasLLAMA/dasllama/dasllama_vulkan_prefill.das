@@ -34,7 +34,7 @@ require math
 // Batch-kernel twin of vk_rdec_token; only the LAST row's logits are produced (reuses the decode
 // tail). PF_ROLES prefill sets/layer + the buffers are built once; metas fill per call (npos varies).
 
-let private PF_ROLES = 16l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn
+let private PF_ROLES = 20l   // quant_xb q k v rope attn quant_at wo addr_ffn quant_xb2 gate up actrq down addr_next qkn ple_x ple_gate ple_act ple_proj
 
 var private @scratch g_pf_ids_stage : array<uint>
 
@@ -934,6 +934,28 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
 
 //! the next layer's fused Q8 head skips its own requant, so this step encodes it.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+//! The per-layer-embedding branch over a window's rows: gelu(gate . x) x side[p][l] -> proj -> pf_ffnout (the next-norm step adds it under the ple post norm)
+def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen, np : int64) {
+    let dim = g_rd.dim
+    let ple = g_rd.ple
+    let all = uint(g_rd.n_layers * ple)   //! the side rows' position stride
+    let fmt = g_rd.layers[l].fpg
+    let pg = arena_planes(fmt, g_rd.layers[l].bpg)
+    let pp = arena_planes(fmt, g_rd.layers[l].bpp)
+    //! every step runs the whole window, the FFN's last-layer row slice included: the branch is 256 wide, and the sliced rows' results go unread
+    var pcx = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
+    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 16], pcx, (wlen * dim / 4l + 255l) / 256l)
+    pfq_ts(raw)
+    pf_gemm_enc(raw, h, b + 17, fmt, pg.wq, pg.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_gate,
+        pg.wqb, pg.wsb, np * dim, np * (dim / 32l) * 4l, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, g_rd.layers[l].bpg, wlen, false)
+    var pca = ActArgs(nelem = uint(wlen * ple), gelu = 1u, nblk = uint(wlen * ple / 32l),
+        ubase = uint(l * ple), ustride = all, ulen = uint(ple))
+    enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple / 4l + 255l) / 256l)
+    pfq_ts(raw)
+    pf_gemm_enc(raw, h, b + 19, fmt, pp.wq, pp.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_ffnout,
+        pp.wqb, pp.wsb, np * ple, np * (ple / 32l) * 4l, np * dim * 4l, VHZ_HQ, VHZ_FFO, ple, dim, g_rd.layers[l].bpp, wlen, false)
+}
+
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
@@ -985,6 +1007,9 @@ def private pf_setup {
     g_rd.pf_ffnout = make_device_buf(np * dim * 4l)
     g_rd.pf_xb2 = make_device_buf(np * dim * 4l)
     g_rd.pf_cos = make_device_buf(np * g_rd.cos_elems * 4l)
+    if (g_rd.ple > 0l) {   //! the window's per-layer-embedding side rows, position-major [np x (layers x ple)]
+        g_rd.pf_ple = make_device_buf(np * g_rd.n_layers * g_rd.ple * 4l)
+    }
     g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
     if (g_env_vulkan.vk_overlap) {
@@ -1227,6 +1252,16 @@ def private pf_setup {
                 fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, normbytes),
                 fixed_array(VHZ_Q, VHZ_KVK, 0u))
         }
+        // 16 ple_x: the stream rows as they are -> pf_xq/pf_xs; 18 ple_act: gelu(gate rows) x the side rows -> hq/hs (17 / 19 are GEMM roles: sets on the encode)
+        if (L.ple) {
+            let ple = g_rd.ple
+            g_rd.pf_sets[b + 16] = set_rq_cls(fixed_array(g_rd.pf_x, g_rd.pf_xq, g_rd.pf_xs),
+                fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
+                fixed_array(VHZ_X, VHZ_XQ, VHZ_XQ))
+            g_rd.pf_sets[b + 18] = set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_gpu.hq_dev, g_gpu.hs_dev),
+                fixed_array(np * ple * 4l, np * g_rd.n_layers * ple * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+                fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
+        }
     }
     let bp = int(g_rd.n_layers * PF_ROLES)
     // prologue: xb = rms_att[0](x), add off (the aa slot binds x itself — add_on 0 never reads it)
@@ -1243,10 +1278,10 @@ def private pf_setup {
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the KV mirror at positions [0, npos).
 [hot_path]   // the per-window resident prefill — encode + one submit per window
-def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; npos : int64; var logits : array<float>) {
     let noids : array<int64>
     vk_demotion_check("prefill")
-    pf_run(x_batch, noids, false, 1.0, cos_batch, npos, logits)
+    pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, npos, logits)
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
@@ -1254,7 +1289,7 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
     assert(g_rd != null && (g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul), "vk_rdec_prefill_ids without a placed embd plane")
     let nox : array<float>
     vk_demotion_check("prefill")
-    pf_run(nox, tokens, true, emb_scale, cos_batch, npos, logits)
+    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, npos, logits)   //! the ids form serves no per-layer-embedding model (its pre-step needs the embedded rows on the host)
 }
 
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
@@ -1309,8 +1344,9 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
-                   cos_batch : array<float>; npos : int64; var logits : array<float>) {
+                   cos_batch : array<float>; ple_rows : array<float>; npos : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
+    assert(g_rd.ple == 0l || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
     pf_setup()
     let dim = g_rd.dim
     let nlfin = rd_norm_final()
@@ -1344,6 +1380,10 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             }
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * cos_elems)]), wlen * cos_elems * 4l)
+            if (g_rd.ple > 0l) {   //! this window's side-input rows, position-major [wlen x (layers x ple)]
+                let all = g_rd.n_layers * g_rd.ple
+                upload_region_at(g_rd.pf_ple, 0l, addr<uint8 const?>(ple_rows[int(w0 * all)]), wlen * all * 4l)
+            }
             if (w0 == 0l && g_rd.hybrid) {
                 g_rd.dn_parity = 0
             }
@@ -1410,7 +1450,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let kvd = g_rd.layers[l].kvd
                 let kv_mul = uint(g_rd.layers[l].kv_mul)
                 let window = uint(g_rd.layers[l].window)
-                let pairs = int(qd / 2l + kvd / 2l)
+                let kvsh = g_rd.layers[l].kv_shared   //! Q only: no k/v GEMMs, no k/v norm groups, no mirror store; attention reads the donor's rows
+                let pairs = int(qd / 2l + (kvsh ? 0l : kvd / 2l))
                 let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
                 let fa128 = fa128s && hs == 128l
                 let wide = hs > 256l
@@ -1439,8 +1480,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
                 let pq = arena_planes(g_rd.layers[l].fq, g_rd.layers[l].bq)
-                let pk = arena_planes(g_rd.layers[l].fk, g_rd.layers[l].bk)
-                let pv = vfk ? pk : arena_planes(g_rd.layers[l].fv, g_rd.layers[l].bv)   //! no v plane: the qk-norm pass writes V off the k rows
+                let pk = kvsh ? pq : arena_planes(g_rd.layers[l].fk, g_rd.layers[l].bk)   //! a shared-KV layer has no k/v planes: the q planes fill the slots, unused
+                let pv = (vfk || kvsh) ? pk : arena_planes(g_rd.layers[l].fv, g_rd.layers[l].bv)   //! no v plane: the qk-norm pass writes V off the k rows
                 let xqb = fq6 ? g_rd.pf_xf : g_rd.pf_xq
                 let xsb = fq6 ? g_rd.dummy : g_rd.pf_xs
                 let xqn = fq6 ? np * dim * 2l : np * dim
@@ -1453,7 +1494,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pf_gemm_enc(raw, h, b + 1, g_rd.layers[l].fq, pq.wq, pq.ws, xqb, xsb, g_rd.pf_q,
                     pq.wqb, pq.wsb, xqn, xsn, np * qrow * 4l, VHZ_XQ, VHZ_Q, dim, qrow, g_rd.layers[l].bq, wlen, fq6,
                     kv_merged ? cm2_tiles(2l * kvd, wlen) : 2l * tkv)
-                if (kv_merged) {
+                if (kvsh) {   //! Q only: the donor layer's K/V rows already sit in the mirror
+                } elif (kv_merged) {
                     pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
                         pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK | VHZ_KVV, dim, 2l * kvd, g_rd.layers[l].bk, wlen, fq6, tq)
                     pfq_ts(raw)   // the v stamp: the merged GEMM's cost lands on k's delta
@@ -1469,7 +1511,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 let voff = uint(kv_merged ? kvd : wlen * kvd)   // the v rows' base in pf_kv, kstride apart
                 if (g_rd.qk_norm) {
-                    let nkvh = kvd / hs
+                    let nkvh = kvsh ? 0l : kvd / hs   //! no k/v norm groups on a shared-KV layer: nothing of its own to norm or store
                     let vgroups = vnorm && !vfk ? nkvh : 0l
                     var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkvh),
                         qstride = uint(qrow), kstride = uint(kv_merged ? 2l * kvd : kvd), kbase = 0u,
@@ -1632,8 +1674,16 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     pf_moe_block(raw, h, l, wlen)
                 }
                 let nxt = l + 1l < g_rd.n_layers ? rd_norm_off(l + 1l, RD_NORM_ATT) : nlfin
+                let lple = g_rd.layers[l].ple
+                if (lple) {
+                    // the FFN residual first (no scale, the normed rows unused); the branch leaves its projection in pf_ffnout for the step below
+                    var pc14a = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0, row0 = uint(ffn_row0),
+                        pre_on = pre_on, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
+                    enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14a, ffn_rows)
+                    pf_ple_block(raw, h, l, b, wlen, np)
+                }
                 var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = g_rd.layers[l].out_scale, row0 = uint(ffn_row0),
-                    pre_on = pre_on, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
+                    pre_on = (pre_on != 0u || lple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, lple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
                 let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
                 if (moe) {
                     pf_moe_addr_next(raw, h, l, wlen, nxt)

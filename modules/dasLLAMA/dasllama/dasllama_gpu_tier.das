@@ -134,7 +134,7 @@ struct RdecDnGeom {
 }
 //! the resident driver's norms plane carries this many rows per layer: the attention norm, the FFN norm,
 //! and a pre/post-norm model's post-attention and post-FFN norms (zero rows on any other model)
-let public RDEC_NORM_ROWS = 4l
+let public RDEC_NORM_ROWS = 5l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm (zero rows where a model lacks them)
 
 //! One attention layer's geometry for the resident driver - its attention class (gemma-4's sliding and
 //! global layers differ in head size, kv width and rope), its dense FFN width, and where its rows sit.
@@ -149,6 +149,7 @@ struct RdecLayerGeom {
     vfk : bool                      //! the layer has no v plane: V is the raw k row scaled by its own rms (gemma-4's global layers)
     vnorm : bool                    //! V is scaled by its own rms, no weight (gemma-4's v-norm on a layer with its own v plane)
     out_scale : float               //! the layer's output scale on its FFN residual step; 1.0 = none
+    kv_shared : bool                //! the layer projects Q only and attends over a donor layer's K/V rows (`mir_base` is the donor's; gemma-4 E-series)
 }
 //! qd / kv_dim / head_size / hidden / rot are the maxima over the layers (the scratch is sized to
 //! them); `mir_elems` is one mirror side's element count over every attention layer, `cos_elems`
@@ -163,8 +164,9 @@ typedef RdecDnOwnFn = function<(l : int64; stp : float?; histp : float?) : void>
 typedef RdecDnPrefillOwnFn = function<(l : int64; stp : float?; histp : float?) : void>
 //! the classifier plane, and the epilogue its logits take: the final softcap (0 = none) and the checkpoint's suppressed token ids
 typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) : void>
-typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; pos : int64; cnt : int64; var logits : array<float>) : void>
-typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) : void>
+//! `ple_row` / `ple_rows`: the per-layer-embedding side input the CPU pre-step built ([layers x ple] a token; position-major over a prompt); empty on a model without one
+typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; pos : int64; cnt : int64; var logits : array<float>) : void>
+typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; npos : int64; var logits : array<float>) : void>
 typedef RdecSyncKvFn = function<(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) : void>
 typedef RdecReadKvFn = function<(l : int64; pos : int64; var kp : uint8?; var vp : uint8?) : void>
 typedef RdecReadKvBulkFn = function<(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) : void>
@@ -189,12 +191,12 @@ def private rdec_unset_dn_own(l : int64; stp : float?; histp : float?) {}
 def private rdec_unset_dn_prefill_own(l : int64; stp : float?; histp : float?) {}
 [unused_argument(cls_block, cls_fmt, cap, supp)]
 def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {}
-[unused_argument(x, cossin, pos, cnt, logits)]
-def private rdec_unset_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) {
+[unused_argument(x, cossin, ple_row, pos, cnt, logits)]
+def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) {
     panic("dasLLAMA: resident decode token hit without an installed GPU driver")
 }
-[unused_argument(x_batch, cos_batch, npos, logits)]
-def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) {
+[unused_argument(x_batch, cos_batch, ple_rows, npos, logits)]
+def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; npos : int64; var logits : array<float>) {
     panic("dasLLAMA: resident prefill hit without an installed GPU driver")
 }
 [unused_argument(l, kp, vp, npos)]
@@ -381,6 +383,30 @@ def public rdec_set_emb(emb_block : int64) : bool => invoke(g_rdec_set_emb, emb_
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool => invoke(g_rdec_upload_emb_f32, fblob, off, vocab, dim)
 
+//! the per-layer-embedding seats (gemma-4 E-series): `set_ple` sizes the side-input rows at the model's ple width
+//! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes
+typedef RdecSetPleFn = function<(ple : int64) : bool>
+typedef RdecSetPleLayerFn = function<(l : int64; bgate : int64; bproj : int64; fmt : int) : void>
+[unused_argument(ple)]
+def private rdec_unset_set_ple(ple : int64) : bool => false
+[unused_argument(l, bgate, bproj, fmt)]
+def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fmt : int) {}
+
+var g_rdec_set_ple = @@rdec_unset_set_ple
+var g_rdec_set_ple_layer = @@rdec_unset_set_ple_layer
+var g_rdec_ple_installed = false
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public install_rdec_ple(set_ple : RdecSetPleFn; set_ple_layer : RdecSetPleLayerFn) {
+    g_rdec_set_ple = set_ple
+    g_rdec_set_ple_layer = set_ple_layer
+    g_rdec_ple_installed = true
+}
+
+def public rdec_ple_installed() : bool => g_rdec_ple_installed
+def public rdec_set_ple(ple : int64) : bool => invoke(g_rdec_set_ple, ple)
+def public rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) { invoke(g_rdec_set_ple_layer, l, bgate, bproj, fmt) }
+
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
 def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => invoke(g_rdec_place, wq, ws, n, rows, fmt)
@@ -388,8 +414,8 @@ def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, h
 def public rdec_upload_norms(norms : array<float>) { invoke(g_rdec_norms, norms) }
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
-def public rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) { invoke(g_rdec_token, x, cossin, pos, cnt, logits) }
-def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, npos, logits) }
+def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) { invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, logits) }
+def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, npos, logits) }
 def public rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) { invoke(g_rdec_sync_kv, l, kp, vp, npos) }
 def public rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_read_kv, l, pos, kp, vp) }
 def public rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) { invoke(g_rdec_read_kv_bulk, l, kp, vp, npos) }
@@ -1822,6 +1848,12 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_prefill_ids == null) {
         g_rdec_prefill_ids = @@rdec_unset_prefill_ids
+    }
+    if (g_rdec_set_ple == null) {
+        g_rdec_set_ple = @@rdec_unset_set_ple
+    }
+    if (g_rdec_set_ple_layer == null) {
+        g_rdec_set_ple_layer = @@rdec_unset_set_ple_layer
     }
     if (g_rdec_set_emb == null) {
         g_rdec_set_emb = @@rdec_unset_set_emb
