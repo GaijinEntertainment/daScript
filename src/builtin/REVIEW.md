@@ -28,6 +28,12 @@
   else. A C++ layout change to a handled type or an AST class is not a record byte: functions
   and annotations stream by module hash and name and re-resolve against the running binary.
 
+- **A diff that makes a record written before it wrong - the bytes still decode, but what they
+  encode is no longer what this build would write - bumps the version `getVersion()` returns
+  in `include/daScript/ast/ast_serializer.h`, in the same change** - the version is the only
+  thing that discards a cache a user already holds, so without the bump every later launch is
+  served the stale record.
+
 - **A diff that streams or compares a `CodeOfPolicies` field in `module_builtin_ast_serialize.cpp`
   outside `DAS_MODULE_CACHE_POLICY_FIELDS` is a defect - put the field on the list instead** - the
   list drives both the record's policy stream and the compare that refuses a record written under
@@ -55,10 +61,11 @@
   hash, never the module an extern lives in, so a cached DLL binds the old name and crashes on
   the hit.
 
-- **A diff that changes the wrapper tables, the `systemV_extra` list, the arm64 layout or the
-  `das_arm64_call` trampoline updates section 3 of `ARCHITECTURE.md` in the same change.** Two
-  comments in `module_builtin_dasbind.cpp` cite that section instead of restating it, so a
-  stale section is what the next reader trusts.
+- **A diff that changes how an `[extern]` call reaches its bind - the wrapper tables, the
+  `systemV_extra` list, the arm64 layout, the `das_arm64_call` trampoline, or when and from
+  what the `__dasbind__` proxy is registered and the call retargeted - updates section 3 of
+  `ARCHITECTURE.md` in the same change.** Comments in `module_builtin_dasbind.cpp` cite that
+  section instead of restating it, so a stale section is what the next reader trusts.
 
 - **A diff that changes what `ModuleFileCache::defaultPath` folds into the module-cache key -
   the binary, the command line, the environment names, or which script arguments count - updates
@@ -91,7 +98,7 @@
   embedding one.** The exe bakes the host's `sizeof` for such a type, so a target that sizes an
   embedded member differently gives every das local of it the wrong length.
 
-- **A diff that changes the member order or member set of a C++ type das binds through an
-  annotation states its `--jit-check-abi` result for a cross target in its own PR
+- **A diff that changes the data-member order or data-member set of a C++ type das binds
+  through an annotation states its `--jit-check-abi` result for a cross target in its own PR
   description.** The check reports a mismatch at the bundle's first launch, for the types the
   bundle links; nothing native can observe one.

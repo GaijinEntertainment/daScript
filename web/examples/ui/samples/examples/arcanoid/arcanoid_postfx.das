@@ -209,7 +209,13 @@ def fs_present_plain {
 //
 // p_params  = (curvature, scanline strength, mask strength, fringe)
 // p_params2 = (vignette, flicker, time, brightness)
-// p_params3 = (screen width, screen height, scanline count, corner rounding)
+// p_params3 = (screen width, screen height, scanline pitch in pixels, corner rounding)
+
+//! the box filter of one cosine cycle fraction: sin(pi x) / (pi x)
+def private sinc_pi(x : float) : float {
+    let px = abs(x) * 3.14159265
+    return px < 0.001 ? 1.0 : sin(px) / px
+}
 
 def private crt_warp(uv : float2; curvature : float) : float2 {
     let c = uv * 2.0 - float2(1.0)
@@ -236,11 +242,17 @@ def fs_present_crt {
     let g = texture(p_tex0, uv).y
     let b = texture(p_tex0, uv - radial * fringe).z
     var color = float3(r, g, b)
-    // scanlines follow the tube face (warped uv) at a count well under the pixel rows, so the
-    // beam profile is resolved rather than aliased into rings
-    let line = uv.y * p_params3.z
-    let scan = 0.5 + 0.5 * cos(line * 6.2831853)
-    color *= 1.0 - p_params.y * scan * scan
+    // scanlines follow the tube face (warped uv) at a fixed pitch in framebuffer pixels, so
+    // the beam reads the same at every window size; the beam profile scan^2 is
+    // 3/8 + cos/2 + cos(2x)/8, each harmonic box-filtered over the pixel row so a trough is
+    // never point-sampled into a black row where the pitch beats against the pixel grid
+    let lines = p_params3.y / p_params3.z
+    let c = p_uv * 2.0 - float2(1.0)
+    let dwarp = 1.0 + curvature * dot(c, c) + 2.0 * curvature * c.y * c.y
+    let cycles = dwarp / p_params3.z
+    let phase = uv.y * lines * 6.2831853
+    let scan2 = 0.375 + 0.5 * cos(phase) * sinc_pi(cycles) + 0.125 * cos(2.0 * phase) * sinc_pi(2.0 * cycles)
+    color *= 1.0 - p_params.y * scan2
     // aperture grille: three phosphor columns per triad, in screen pixels so it never moires
     let px = p_uv.x * p_params3.x
     let cell = floor(fract_local(px / 3.0) * 3.0)
@@ -480,7 +492,7 @@ struct PostSettings {
     vignette : float = 0.6
     flicker : float = 0.012
     brightness : float = 1.55
-    scanline_count : float = 480.0
+    scanline_pitch : float = 4.0     // framebuffer pixels per scanline
     corner : float = 0.04
     time : float = 0.0
     debug_view : int = 0            // 1: the occlusion buffer, 2: the normal-depth target
@@ -571,10 +583,9 @@ def run_postfx(cfg : PostSettings) {
     }
     if (cfg.crt && cfg.debug_view == 0) {
         glUseProgram(present_crt_program)
-        let lines = cfg.scanline_count
         p_params = float4(cfg.curvature, cfg.scanline, cfg.mask, cfg.fringe)
         p_params2 = float4(cfg.vignette, cfg.flicker, cfg.time, cfg.brightness)
-        p_params3 = float4(float(fx_width), float(fx_height), lines, cfg.corner)
+        p_params3 = float4(float(fx_width), float(fx_height), max(cfg.scanline_pitch, 1.0), cfg.corner)
         vs_post_bind_uniform(present_crt_program)
         fs_present_crt_bind_uniform(present_crt_program)
     } else {

@@ -21,7 +21,7 @@
             description: 'The classic block-breaker — paddle, ball, breakable rows, ' +
                 'rendered in 3D straight through the WebGL2 backend.',
             tags: ['game', 'opengl', 'wasm'],
-            controls: '← →  paddle · space launch',
+            controls: '← → or A D  paddle · space launch · F3 F4 scanline pitch',
             poster: 'files/examples/arcanoid-poster.png',
             aspect: 1024 / 768,           // native window — sizes the player so the game fills it
         },

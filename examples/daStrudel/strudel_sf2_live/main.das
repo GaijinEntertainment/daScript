@@ -103,9 +103,7 @@ var asch : AudioSystemChannels
 
 [export]
 def init() {
-    if (get_audio_command_stream() == null) {
-        asch = audio_system_create()
-    }
+    asch = audio_live_system()
     if (!strudel_has_sf2()) {
         let sf2_path = find_sf2()
         if (!empty(sf2_path) && strudel_load_sf2(sf2_path)) {
@@ -129,7 +127,7 @@ def update() {
 def shutdown() {
     print("Shutting down...\n")
     strudel_shutdown()
-    audio_system_finalize(asch.command, asch.next_sid)
+    audio_live_finalize(asch)
 }
 
 // --- standalone mode (daslang.exe): the same exported trio, bounded 30-second run ---

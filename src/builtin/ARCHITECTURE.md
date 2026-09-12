@@ -114,9 +114,25 @@ under distinct multipliers, so one argument in the wrong register or slot change
 `tests/dasbind/CMakeLists.txt` builds the probe on a 64-bit host that builds and dlopens a
 shared library at test time - not wasm, Android or iOS, none of which walks `tests/` - and
 `tests/.das_test` skips the suite only on a 32-bit host, where the probe is not built, and under
-dastest's `--ser`/`--deser` sweep, because a deserialized program never applies `[extern]` and
-so never manufactures the `__dasbind__` function it names in the `dasbind` module; a 64-bit
-desktop tree without the library fails the suite instead of skipping it.
+dastest's `--ser`/`--deser` sweep. A deserialized program never applies `[extern]`, while a
+deserialized call already names its `__dasbind__` function in the `dasbind` module - and only
+`apply` or a retarget manufactures that function. A 64-bit desktop tree without the library
+fails the suite instead of skipping it.
+
+The `__dasbind__` proxy - the `DasBindFunction` a call to an `[extern]` is retargeted to - is
+registered by the `[extern]` annotation's `apply` callback when the registrar - the module
+carrying the `[extern]` declarations - compiles, and on demand by `transformCall` when the
+`dasbind` module lacks it: the module cache serves a registrar in a process that already
+compiled it (a live reload - the same process, so the `dasbind` module's hash shows no drift and
+nothing reparses the registrar), or a fresh process reads a dependent's record before any
+compile applied the registrar. `transformCall` takes the bind name from the call target's own
+`[extern]` declaration every time (`bindNameOf`) - the one input every process has - rather than
+from a table keyed on the function object, which every deserialization mints anew and whose
+freed addresses a later compile reuses. The proxy's signature types are clones with no source
+location (`proxyType`): the declaration's types and file record belong to the registrar's
+compile, which a served registrar's program takes with it, while the proxy lives for the
+process. A failed bind on the on-demand path is the call's transform error, the diagnostic
+`apply` would have given.
 
 ## 4. A message that crosses the panic jump
 

@@ -87,10 +87,8 @@ var private g_audio_channels : AudioSystemChannels
 // --- Init / Play ---
 
 def init_audio() {
-    if (!audio_initialized) {
-        g_audio_channels = audio_system_create()
-        audio_initialized = true
-    }
+    g_audio_channels = audio_live_system()
+    audio_initialized = true
     // init_audio re-runs on every live reload; release the buffers the previous run left behind
     delete snd_card_play
     delete snd_chip_place
@@ -127,7 +125,7 @@ def public sfx_shutdown() {
     if (!audio_initialized) {
         return
     }
-    audio_system_finalize(g_audio_channels.command, g_audio_channels.next_sid)
+    audio_live_finalize(g_audio_channels)
     delete snd_chip_place
     delete snd_chip_remove
     delete snd_card_play

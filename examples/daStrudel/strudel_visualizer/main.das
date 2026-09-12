@@ -201,9 +201,7 @@ def init() { // nolint:STYLE038 — linear track-setup sequence
     }
     upload_font_texture(font)
     // audio
-    if (get_audio_command_stream() == null) {
-        asch = audio_system_create()
-    }
+    asch = audio_live_system()
     // load SF2 soundfont
     if (USE_SF2) {
         let sf2_path = find_sf2()
@@ -415,7 +413,7 @@ def update() { // nolint:STYLE037,STYLE038 — per-panel-kind dispatch over a GL
 def shutdown() {
     print("Shutting down...\n")
     strudel_shutdown()
-    audio_system_finalize(asch.command, asch.next_sid)
+    audio_live_finalize(asch)
     delete render_states
     delete audio_analyses
     delete drum_panel_states

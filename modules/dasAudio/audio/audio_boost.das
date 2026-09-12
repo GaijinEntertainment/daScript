@@ -1293,7 +1293,13 @@ def public audio_system_create : AudioSystemChannels {
 
 [unused_argument(next_sid)]
 def public audio_system_finalize(var s : Stream?&; var next_sid : Atomic64?) {
-    //! Low-level: shuts down the audio system.
+    //! Low-level: shuts down the audio system. A null stream in the caller's copy - a reload
+    //! zeroed it, or init never reached audio_system_create - shuts down whatever the module
+    //! holds, so nothing stays up past the real shutdown.
+    if (s == null) {
+        s = g_command_stream
+    }
+    return if (s == null)
     s |> push_archive(AudioCommand(shutdown = true))
     unsafe(invoke_in_context(mixer_context(), "command_processor"))
     sound_finalize()
@@ -1656,6 +1662,16 @@ def public set_audio_thread_command_stream(ch : void?) {
     if (g_command_stream != null) {
         g_command_stream |> add_ref
     }
+}
+
+[unsafe_operation]
+def public adopt_audio_thread_command_stream(ch : void?) {
+    //! A reload's restore: the reference the old context's global held on the stream passes to
+    //! this context's global, none is taken - the old context is gone without a release, so
+    //! `set_audio_thread_command_stream` here would leave one reference per reload behind and
+    //! the real finalize would refuse to delete the stream. Its caller is the restore of a fresh
+    //! context, whose global holds nothing yet.
+    g_command_stream = unsafe(reinterpret<Stream?>(ch))
 }
 
 def public get_sound_sid : void ? {
