@@ -3692,9 +3692,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mm_b5 = compile_pso(MetalKqMulMmK5_metal_kq_mulmm_msl, MetalKqMulMmK5_metal_kq_mulmm_msl_entry, MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_mm_b6 = compile_pso(MetalKqMulMmK6_metal_kq_mulmm_msl, MetalKqMulMmK6_metal_kq_mulmm_msl_entry, MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_iq4xs = compile_pso(MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl, MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl_entry, MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl_fastmath, ok)
-    g_pso_kq_mvb2_iq4xs = compile_pso(MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl, MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl_entry, MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl_fastmath, ok)
-    g_pso_kq_mvb4_iq4xs = compile_pso(MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl, MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl_entry, MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl_fastmath, ok)
-    g_pso_kq_mvb8_iq4xs = compile_pso(metal_kq_mvb8_iq4xs_msl, metal_kq_mvb8_iq4xs_msl_entry, metal_kq_mvb8_iq4xs_msl_fastmath, ok)
+    g_pso_kq_mvb2_iq4xs = compile_pso(MetalKqMvB2Iq4xs_metal_kq_mv_iq4_msl, MetalKqMvB2Iq4xs_metal_kq_mv_iq4_msl_entry, MetalKqMvB2Iq4xs_metal_kq_mv_iq4_msl_fastmath, ok)
+    g_pso_kq_mvb4_iq4xs = compile_pso(MetalKqMvB4Iq4xs_metal_kq_mv_iq4_msl, MetalKqMvB4Iq4xs_metal_kq_mv_iq4_msl_entry, MetalKqMvB4Iq4xs_metal_kq_mv_iq4_msl_fastmath, ok)
+    g_pso_kq_mvb8_iq4xs = compile_pso(MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl, MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_entry, MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_fastmath, ok)
     g_pso_kq_mm_b44 = compile_pso(MetalKqMulMmIq4xs_metal_kq_mulmm_msl, MetalKqMulMmIq4xs_metal_kq_mulmm_msl_entry, MetalKqMulMmIq4xs_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_k3 = compile_pso(metal_kq_gemv_k3_msl, metal_kq_gemv_k3_msl_entry, metal_kq_gemv_k3_msl_fastmath, ok)
     g_pso_kq_mvb2_k3 = compile_pso(MetalKqMvB2K3_metal_kq_mv_k3_msl, MetalKqMvB2K3_metal_kq_mv_k3_msl_entry, MetalKqMvB2K3_metal_kq_mv_k3_msl_fastmath, ok)
@@ -3712,9 +3712,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mvb8_iq3xxs = compile_pso(metal_kq_mvb8_iq3xxs_msl, metal_kq_mvb8_iq3xxs_msl_entry, metal_kq_mvb8_iq3xxs_msl_fastmath, ok)
     g_pso_kq_mm_b34 = compile_pso(MetalKqMulMmIq3xxs_metal_kq_mulmm_msl, MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_entry, MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_iq4nl = compile_pso(MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl, MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl_entry, MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl_fastmath, ok)
-    g_pso_kq_mvb2_iq4nl = compile_pso(MetalKqMvB2Iq4nl_metal_kq_mv_iq4nl_msl, MetalKqMvB2Iq4nl_metal_kq_mv_iq4nl_msl_entry, MetalKqMvB2Iq4nl_metal_kq_mv_iq4nl_msl_fastmath, ok)
-    g_pso_kq_mvb4_iq4nl = compile_pso(MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl, MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl_entry, MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl_fastmath, ok)
-    g_pso_kq_mvb8_iq4nl = compile_pso(metal_kq_mvb8_iq4nl_msl, metal_kq_mvb8_iq4nl_msl_entry, metal_kq_mvb8_iq4nl_msl_fastmath, ok)
+    g_pso_kq_mvb2_iq4nl = compile_pso(MetalKqMvB2Iq4nl_metal_kq_mv_iq4_msl, MetalKqMvB2Iq4nl_metal_kq_mv_iq4_msl_entry, MetalKqMvB2Iq4nl_metal_kq_mv_iq4_msl_fastmath, ok)
+    g_pso_kq_mvb4_iq4nl = compile_pso(MetalKqMvB4Iq4nl_metal_kq_mv_iq4_msl, MetalKqMvB4Iq4nl_metal_kq_mv_iq4_msl_entry, MetalKqMvB4Iq4nl_metal_kq_mv_iq4_msl_fastmath, ok)
+    g_pso_kq_mvb8_iq4nl = compile_pso(MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl, MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_entry, MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_fastmath, ok)
     g_pso_kq_iq2s = compile_pso(metal_kq_gemv_iq2s_msl, metal_kq_gemv_iq2s_msl_entry, metal_kq_gemv_iq2s_msl_fastmath, ok)
     g_pso_kq_mvb2_iq2s = compile_pso(MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl, MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl_entry, MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl_fastmath, ok)
     g_pso_kq_mvb4_iq2s = compile_pso(MetalKqMvB4Iq2s_metal_kq_mv_iq2s_msl, MetalKqMvB4Iq2s_metal_kq_mv_iq2s_msl_entry, MetalKqMvB4Iq2s_metal_kq_mv_iq2s_msl_fastmath, ok)
@@ -8123,11 +8123,41 @@ class MetalKqGemvK2 {
     }
 }
 
+
+// The mv shells' per-lane constants by block decomposition: a stamp names its map by LANES and the
+// shell's lane_setup lays the slots out once per family - the 2/3-bit map (k2, k3), the 4/5-bit map
+// (k4, k5) and the 6-bit map (k6); each mv_superblock reads the slots back by position.
+[ |> template_struct_instance]
+class template MetalKqLaneMapsT {
+    @template_constant LANES : int = 0   // 0 = no lane constants, 23, 45 or 6 = the map
+
+    def lane_setup(tx : uint; var lc : uint[8]) {
+        static_if (LANES == 23) {
+            lc[0] = tx / 2u             // s
+            lc[1] = (tx % 2u) * 4u      // o4
+            lc[2] = 2u * lc[0]          // shr
+        }
+        static_if (LANES == 45) {
+            lc[0] = tx / 4u                        // q4i
+            lc[1] = 2u * lc[0] + (tx % 4u) / 2u    // jl
+            lc[2] = (tx % 2u) * 4u                 // lo
+            lc[3] = (tx % 4u) < 2u ? 0u : 4u       // nsh
+        }
+        static_if (LANES == 6) {
+            lc[0] = tx / 2u                     // s
+            lc[1] = (tx % 2u) * 4u              // o4: 16B offset within the slot, in uints
+            lc[2] = (lc[0] % 2u) * 8u + lc[1]   // qoff: ql uint offset within the 128-half's 16 uints
+            lc[3] = lc[0] < 2u ? 0u : 4u        // shr
+            lc[4] = 2u * lc[0]                  // hsh
+        }
+    }
+}
+
 // The K-quant small-batch mv shell: a format's override decodes lane tx's weights of one superblock
 // and accumulates its x columns into sumf; the shell walks the row and reduces the eight lanes. TILED
 // branch-duplicates the writeback: a LIVE colbase on B2 costs +2% (k4) / +0.5% (k6) at cls (gemv bench).
 [ |> template_struct_instance]
-class template MetalKqMvShellT {
+class template MetalKqMvShellT : MetalKqLaneMapsT {
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
@@ -8137,7 +8167,6 @@ class template MetalKqMvShellT {
 
     //! the format's per-lane constants, computed once before the row walk (lc[] keeps them in the
     //! kernel's entry block, where a hand-written kernel has them)
-    def lane_setup(tx : uint; var lc : uint[8]) {}
 
     def abstract mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) : void
 
@@ -8194,11 +8223,7 @@ class template MetalKqMvK2T : MetalKqMvShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 2u             // s
-        lc[1] = (tx % 2u) * 4u      // o4
-        lc[2] = 2u * lc[0]          // shr
-    }
+    override LANES = 23
 
     def override mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) {
         let s = lc[0]
@@ -8265,14 +8290,13 @@ class MetalKqMvB4K2 : MetalKqMvK2T {
 // barriers, a format's override decodes lane tx's weights of the superblock and accumulates the
 // eight staged columns into acc, and the shell reduces the eight lanes.
 [ |> template_struct_instance]
-class template MetalKqMvB8ShellT {
+class template MetalKqMvB8ShellT : MetalKqLaneMapsT {
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
     @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     //! the format's per-lane constants, computed once before the row walk
-    def lane_setup(tx : uint; var lc : uint[8]) {}
 
     def abstract mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) : void
 
@@ -8322,11 +8346,7 @@ class MetalKqMvB8K2 : MetalKqMvB8ShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 2u             // s
-        lc[1] = (tx % 2u) * 4u      // o4
-        lc[2] = 2u * lc[0]          // shr
-    }
+    override LANES = 23
 
     def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
         let s = lc[0]
@@ -8438,11 +8458,7 @@ class template MetalKqMvK3T : MetalKqMvShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 2u             // s
-        lc[1] = (tx % 2u) * 4u      // o4
-        lc[2] = 2u * lc[0]          // shr
-    }
+    override LANES = 23
 
     def override mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) {
         let s = lc[0]
@@ -8520,11 +8536,7 @@ class MetalKqMvB8K3 : MetalKqMvB8ShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 2u             // s
-        lc[1] = (tx % 2u) * 4u      // o4
-        lc[2] = 2u * lc[0]          // shr
-    }
+    override LANES = 23
 
     def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
         let s = lc[0]
@@ -9627,21 +9639,28 @@ class MetalKqMvB8Iq2xxs : MetalKqMvB8ShellT {
     }
 }
 
-// The iq4xs B2/B4 pair: the K4T shell (row/colbase/TILED twins) over the per-32-block lane map of
-// the GEMV above — lane tx owns block tx of each superblock, 16 lo + 16 hi weights as float4s.
+// The iq4 B2/B4 pair: the K4T shell (row/colbase/TILED twins) over the GEMV's per-32-block lane
+// map - lane tx owns block tx of each superblock, 16 lo + 16 hi weights as float4s. The one axis
+// is the scale source: iq4xs the signed strip byte times the super d, iq4nl a per-32-block f16 d.
 [ |> template_struct_instance]
-class template MetalKqMvIq4xsT : MetalKqMvShellT {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4xs quant plane, uint view
+class template MetalKqMvIq4T : MetalKqMvShellT {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // iq4xs: the d plane — the scale buffer bound at byte nsb*16; iq4nl: the 16B/sb d plane, half view
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // iq4xs: 16B strips, 8 signed sub-scales + 8 pad (same buffer at 0); iq4nl: binding-shape twin (unused)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view
+    @template_constant IQ4NL : bool = false
 
     [metal_kernel]
-    def metal_kq_mv_iq4xs {
+    def metal_kq_mv_iq4 {
         run_shell()
     }
 
     def override mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) {
-        let dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
+        var dl : float
+        static_if (IQ4NL) {
+            dl = float(kdh[blk * 8u + tx])
+        } else {
+            dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
+        }
         let qb = blk * 32u + tx * 4u
         var wl : float4[4]
         var wh : float4[4]
@@ -9680,131 +9699,56 @@ class template MetalKqMvIq4xsT : MetalKqMvShellT {
 }
 
 [metal_dispatch(name = "enc_kq_mvb2_iq4xs_c", pso = "g_pso_kq_mvb2_iq4xs", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB2Iq4xs : MetalKqMvIq4xsT {
+class MetalKqMvB2Iq4xs : MetalKqMvIq4T {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
 [metal_dispatch(name = "enc_kq_mvb4_iq4xs_c", pso = "g_pso_kq_mvb4_iq4xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
-class MetalKqMvB4Iq4xs : MetalKqMvIq4xsT {
+class MetalKqMvB4Iq4xs : MetalKqMvIq4T {
     override NR = 4
     override NRU = 4u
     override TILED = true
-}
-
-// the iq4xs B8 twin: the K45 B8 shell (one superblock's X panel staged per threadgroup) over the
-// per-32-block lane map
-[metal_dispatch(name = "enc_kq_mvb8_iq4xs_c", pso = "g_pso_kq_mvb8_iq4xs", tgmem = "metal_kq_mvb8_iq4xs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq4xs : MetalKqMvB8ShellT {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4xs quant plane, uint view
-
-    [metal_kernel(name="metal_kq_mvb8_iq4xs_msl")]
-    def metal_kq_mvb8_iq4xs {
-        run_shell()
-    }
-
-    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
-        let dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
-        let qb = blk * 32u + tx * 4u
-        var wl : float4[4]
-        var wh : float4[4]
-        for [unroll_full] (u in range(4)) {
-            let qv = kqu[qb + uint(u)]
-            wl[u] = float4(iq4_lut(qv & 15u), iq4_lut((qv >> 8u) & 15u), iq4_lut((qv >> 16u) & 15u), iq4_lut((qv >> 24u) & 15u)) * dl
-            wh[u] = float4(iq4_lut((qv >> 4u) & 15u), iq4_lut((qv >> 12u) & 15u), iq4_lut((qv >> 20u) & 15u), iq4_lut(qv >> 28u)) * dl
-        }
-        let cxl = tx * 8u
-        for [unroll_full] (b in range(8)) {
-            for [unroll_full] (u in range(4)) {
-                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * wl[u] + txp[uint(b) * 64u + cxl + 4u + uint(u)] * wh[u]
-            }
-        }
-    }
-}
-
-// The iq4nl B2/B4 pair: the iq4xs shells with the per-32-block d fold (no strip byte).
-[ |> template_struct_instance]
-class template MetalKqMvIq4nlT : MetalKqMvShellT {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the 16B/sb d plane, half view
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // binding-shape twin (unused)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4nl quant plane, uint view
-
-    [metal_kernel]
-    def metal_kq_mv_iq4nl {
-        run_shell()
-    }
-
-    def override mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) {
-        let dl = float(kdh[blk * 8u + tx])
-        let qb = blk * 32u + tx * 4u
-        var wl : float4[4]
-        var wh : float4[4]
-        for [unroll_full] (u in range(4)) {
-            let qv = kqu[qb + uint(u)]
-            wl[u] = float4(iq4_lut(qv & 15u), iq4_lut((qv >> 8u) & 15u), iq4_lut((qv >> 16u) & 15u), iq4_lut((qv >> 24u) & 15u)) * dl
-            wh[u] = float4(iq4_lut((qv >> 4u) & 15u), iq4_lut((qv >> 12u) & 15u), iq4_lut((qv >> 20u) & 15u), iq4_lut(qv >> 28u)) * dl
-        }
-        let cx4 = sb * 64u + tx * 8u
-        static_if (TILED) {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = (colbase + uint(b)) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(4)) {
-                    let v = x[xb4 + uint(u)]
-                    let vh = x[xb4 + 4u + uint(u)]
-                    acc += v.x * wl[u].x + v.y * wl[u].y + v.z * wl[u].z + v.w * wl[u].w
-                    acc += vh.x * wh[u].x + vh.y * wh[u].y + vh.z * wh[u].z + vh.w * wh[u].w
-                }
-                sumf[b] += acc
-            }
-        } else {
-            for [unroll_full] (b in range(NR)) {
-                let xb4 = uint(b) * nb4 + cx4
-                var acc = 0.0
-                for [unroll_full] (u in range(4)) {
-                    let v = x[xb4 + uint(u)]
-                    let vh = x[xb4 + 4u + uint(u)]
-                    acc += v.x * wl[u].x + v.y * wl[u].y + v.z * wl[u].z + v.w * wl[u].w
-                    acc += vh.x * wh[u].x + vh.y * wh[u].y + vh.z * wh[u].z + vh.w * wh[u].w
-                }
-                sumf[b] += acc
-            }
-        }
-    }
 }
 
 [metal_dispatch(name = "enc_kq_mvb2_iq4nl_c", pso = "g_pso_kq_mvb2_iq4nl", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB2Iq4nl : MetalKqMvIq4nlT {
+class MetalKqMvB2Iq4nl : MetalKqMvIq4T {
     override NR = 2
     override NRU = 2u
     override TILED = false
+    override IQ4NL = true
 }
 
 [metal_dispatch(name = "enc_kq_mvb4_iq4nl_c", pso = "g_pso_kq_mvb4_iq4nl", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
-class MetalKqMvB4Iq4nl : MetalKqMvIq4nlT {
+class MetalKqMvB4Iq4nl : MetalKqMvIq4T {
     override NR = 4
     override NRU = 4u
     override TILED = true
+    override IQ4NL = true
 }
 
-// the iq4nl B8 twin: the iq4xs B8 shell (one superblock's X panel staged per threadgroup) with
-// the per-32-block d fold
-[metal_dispatch(name = "enc_kq_mvb8_iq4nl_c", pso = "g_pso_kq_mvb8_iq4nl", tgmem = "metal_kq_mvb8_iq4nl_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq4nl : MetalKqMvB8ShellT {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the 16B/sb d plane, half view
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // binding-shape twin (unused)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4nl quant plane, uint view
+// the iq4 B8 twin: the K45 B8 shell (one superblock's X panel staged per threadgroup) over the
+// per-32-block lane map, the same scale axis
+[ |> template_struct_instance]
+class template MetalKqMvB8Iq4T : MetalKqMvB8ShellT {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // iq4xs: the d plane — the scale buffer bound at byte nsb*16; iq4nl: the 16B/sb d plane, half view
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // iq4xs: 16B strips, 8 signed sub-scales + 8 pad (same buffer at 0); iq4nl: binding-shape twin (unused)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view
+    @template_constant IQ4NL : bool = false
 
-    [metal_kernel(name="metal_kq_mvb8_iq4nl_msl")]
-    def metal_kq_mvb8_iq4nl {
+    [metal_kernel]
+    def metal_kq_mvb8_iq4 {
         run_shell()
     }
 
     def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
-        let dl = float(kdh[blk * 8u + tx])
+        var dl : float
+        static_if (IQ4NL) {
+            dl = float(kdh[blk * 8u + tx])
+        } else {
+            dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
+        }
         let qb = blk * 32u + tx * 4u
         var wl : float4[4]
         var wh : float4[4]
@@ -9820,6 +9764,15 @@ class MetalKqMvB8Iq4nl : MetalKqMvB8ShellT {
             }
         }
     }
+}
+
+[metal_dispatch(name = "enc_kq_mvb8_iq4xs_c", pso = "g_pso_kq_mvb8_iq4xs", tgmem = "MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+class MetalKqMvB8Iq4xs : MetalKqMvB8Iq4T {
+}
+
+[metal_dispatch(name = "enc_kq_mvb8_iq4nl_c", pso = "g_pso_kq_mvb8_iq4nl", tgmem = "MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+class MetalKqMvB8Iq4nl : MetalKqMvB8Iq4T {
+    override IQ4NL = true
 }
 
 // The B2/B4 width pair as one template per format (the B8 trio below is a DIFFERENT algorithm and
@@ -9835,12 +9788,7 @@ class template MetalKqMvK4T : MetalKqMvShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 4u                        // q4i
-        lc[1] = 2u * lc[0] + (tx % 4u) / 2u    // jl
-        lc[2] = (tx % 2u) * 4u                 // lo
-        lc[3] = (tx % 4u) < 2u ? 0u : 4u       // nsh
-    }
+    override LANES = 45
 
     def override mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) {
         let q4i = lc[0]
@@ -10015,13 +9963,7 @@ class template MetalKqMvK6T : MetalKqMvShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 2u                     // s
-        lc[1] = (tx % 2u) * 4u              // o4: 16B offset within the slot, in uints
-        lc[2] = (lc[0] % 2u) * 8u + lc[1]   // qoff: ql uint offset within the 128-half's 16 uints
-        lc[3] = lc[0] < 2u ? 0u : 4u        // shr
-        lc[4] = 2u * lc[0]                  // hsh
-    }
+    override LANES = 6
 
     def override mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) {
         let s = lc[0]
@@ -10106,12 +10048,7 @@ class template MetalKqMvK5T : MetalKqMvShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 4u                        // q4i
-        lc[1] = 2u * lc[0] + (tx % 4u) / 2u    // jl
-        lc[2] = (tx % 2u) * 4u                 // lo
-        lc[3] = (tx % 4u) < 2u ? 0u : 4u       // nsh
-    }
+    override LANES = 45
 
     def override mv_superblock(sb, blk, tx, colbase, nb4 : uint; lc : uint[8]; var sumf : float[NR]) {
         let q4i = lc[0]
@@ -10189,12 +10126,7 @@ class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 4u                        // q4i
-        lc[1] = 2u * lc[0] + (tx % 4u) / 2u    // jl
-        lc[2] = (tx % 2u) * 4u                 // lo
-        lc[3] = (tx % 4u) < 2u ? 0u : 4u       // nsh
-    }
+    override LANES = 45
 
     def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
         let q4i = lc[0]
@@ -10281,13 +10213,7 @@ class MetalKqMvB8K6 : MetalKqMvB8ShellT {
         run_shell()
     }
 
-    def override lane_setup(tx : uint; var lc : uint[8]) {
-        lc[0] = tx / 2u                     // s
-        lc[1] = (tx % 2u) * 4u              // o4
-        lc[2] = (lc[0] % 2u) * 8u + lc[1]   // qoff
-        lc[3] = lc[0] < 2u ? 0u : 4u        // shr
-        lc[4] = 2u * lc[0]                  // hsh
-    }
+    override LANES = 6
 
     def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
         let s = lc[0]
