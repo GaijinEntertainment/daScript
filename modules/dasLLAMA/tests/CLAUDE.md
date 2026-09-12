@@ -484,9 +484,13 @@ the eight-token agreement form. The MoE row (large tier): gemma-4-26B-A4B UD-IQ3
 routed block in its gemma-4 form (the parallel dense shared expert as the layer's own FFN triple,
 the routed feed and the router off their own norms of x, the per-expert down scale folded into
 the routing weights, the combine norming both branches and their sum under the layer's output
-scale) in the forced-feed form at forty tokens and the perplexity form at 150 + 150; its file pins
-the mirror at 4096 positions (`set_gpu_ctx_max` in its own `[init]`) because the planes take most
-of a 16 GB card. Arms: `g2` (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
+scale) in the perplexity form at 150 + 150 and at 520 + 80 (two windows) with an argmax slack of
+eight: a router near-tie flips whole positions between the arms, and on this model the CPU chain
+sits farther from llama.cpp than the resident does (per-position log-probs against llama.cpp
+b10660 on the same prose: mean gap 0.36 for the CPU chain, 0.18 for the resident), so a
+forced-feed maxdiff against the CPU chain is no instrument here. Its planes alone pass a 16 GB
+card (the 704-wide down-expert rows demote to q8), so the cells skip there on the memory decline
+and run on a 32 GB card. Arms: `g2` (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
 (gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
 `g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B) - the tokens share no
 substring, so one arm selects one file. Skips
