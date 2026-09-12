@@ -1415,13 +1415,13 @@ namespace das {
         ScriptModuleCache ( const CodeOfPolicies & cop, const char * modName )
             : env(*daScriptEnvironment::getBound()), outerRead(env.serializer_read), outerWrite(env.serializer_write) {
             if ( !cop.module_cache ) return;
-            armed = true;
-            env.serializer_read = nullptr;
-            env.serializer_write = nullptr;
             char exePath[4096];
             size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
             path = ModuleFileCache::defaultPath(modName, exeLen ? string(exePath, exeLen) : string(),
                 ModuleFileCache::embeddedHostOptions(cop));
+            armed = true;
+            env.serializer_read = nullptr;
+            env.serializer_write = nullptr;
             cache.install(path, path, true);
         }
         ModuleFileCache::Result finish () {
