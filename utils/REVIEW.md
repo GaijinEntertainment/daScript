@@ -12,7 +12,9 @@ every tool that requires it. An arm is one `t |> run(...)` case of a `[test]` fu
 arm's load-bearing assertions are the ones that prove the change, never a skip-path assertion.
 A CI row is a workflow step whose command runs the arm, directly or through a process it
 spawns. An assertion no CI row can run is one no CI row would execute: either no CI row runs
-the arm, or the arm returns or skips before the assertion. One arm can hold both kinds.
+the arm, or the arm returns or skips before the assertion. An arm that skips unless a host
+tool is present is runnable when the pull-request lane's runner image carries that tool, and
+the change names that lane. One arm can hold both kinds.
 
 **A changed file that belongs to a tool, wherever the tool sits, is reviewed with that tool's
 own `REVIEW.md`, where one exists, as well as with this checklist.**

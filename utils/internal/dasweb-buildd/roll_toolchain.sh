@@ -30,6 +30,12 @@
 #                                       exit 0 when the Actions runs in the file
 #                                       make a commit green, 1 otherwise; touches
 #                                       nothing (the predicate's test seam)
+#   ./roll_toolchain.sh --dirty-check <worktree>
+#                                       settle that worktree the way a roll would
+#                                       before moving it - restore tracked files a
+#                                       build rewrote with the other line ending,
+#                                       exit 12 on any real edit - and stop (the
+#                                       guard's test seam)
 #   ./roll_toolchain.sh --dry-run       print the plan, touch nothing
 #   ./roll_toolchain.sh --skip-restart  build and warm, leave the service alone
 #
@@ -62,6 +68,7 @@ REF=""
 GREEN=0
 IF_CHANGED=0
 GREEN_CHECK=""
+DIRTY_CHECK=0
 DRY_RUN=0
 SKIP_RESTART=0
 
@@ -71,6 +78,7 @@ while [ $# -gt 0 ]; do
         --green)        GREEN=1; shift ;;
         --if-changed)   IF_CHANGED=1; shift ;;
         --green-check)  GREEN_CHECK="${2:?--green-check needs a runs.json path}"; shift 2 ;;
+        --dirty-check)  DIRTY_CHECK=1; WORKTREE="${2:?--dirty-check needs a worktree path}"; shift 2 ;;
         --dry-run)      DRY_RUN=1; shift ;;
         --skip-restart) SKIP_RESTART=1; shift ;;
         -h|--help)      awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
@@ -119,20 +127,41 @@ if [ -n "$GREEN_CHECK" ]; then
     exit $?
 fi
 
+# A tracked file that differs from HEAD only in its line endings was rewritten by
+# a build (a generated .das.inc committed with the other ending), and is put back.
+# Any other tracked-file change is a hand edit: rolling would silently discard or
+# preserve it, so the roll refuses. Untracked build dirs are expected and fine.
+settle_worktree() {
+    local f edits=""
+    while IFS= read -r -d '' f; do
+        if git diff --quiet --ignore-cr-at-eol -- "$f"; then
+            echo "restoring $f: it differs from HEAD in line endings only, a build rewrote it"
+            run git checkout -- "$f"
+        else
+            edits="$edits  $f"$'\n'
+        fi
+    done < <(git diff --name-only -z)
+    while IFS= read -r -d '' f; do
+        edits="$edits  $f (staged)"$'\n'
+    done < <(git diff --cached --name-only -z)
+    [ -z "$edits" ] && return 0
+    echo "worktree has modified tracked files — resolve before rolling:" >&2
+    printf '%s' "$edits" >&2
+    return 12
+}
+
 # .git is a FILE in a linked worktree (a gitdir pointer), so ask git itself.
 git -C "$WORKTREE" rev-parse --git-dir >/dev/null 2>&1 \
     || { echo "no git worktree at $WORKTREE" >&2; exit 10; }
+if [ "$DIRTY_CHECK" = 1 ]; then
+    cd "$WORKTREE"
+    settle_worktree
+    exit $?
+fi
 [ -f "$EMSDK_ROOT/emsdk_env.sh" ] || { echo "no emsdk at $EMSDK_ROOT" >&2; exit 11; }
 
 cd "$WORKTREE"
-
-# Tracked-file changes mean someone edited the toolchain by hand; rolling would
-# silently discard or preserve them. Untracked build dirs are expected and fine.
-if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-    echo "worktree has modified tracked files — resolve before rolling:" >&2
-    git status --short --untracked-files=no >&2
-    exit 12
-fi
+settle_worktree || exit $?
 
 OLD_ID="$(git rev-parse HEAD)"
 # Fetch even under --dry-run: it only moves remote-tracking refs, and without it

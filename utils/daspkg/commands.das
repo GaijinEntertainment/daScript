@@ -1050,7 +1050,7 @@ def cmd_build(root : string; is_global : bool = false) {
 // (default <das_root>/web/output64/lib). Requires an activated emscripten SDK
 // (emcc + cmake on PATH); CI activates emsdk_env before invoking.
 [arch(at="README.md#wasm-archive-staging")]
-def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:STYLE038 — the wasm build recipe: flat tool-invocation steps, one per stage
+def cmd_build_wasm(_root : string; lib_dir_override : string) : int {
     let das_root = get_das_root()
     let lib_dir = empty(lib_dir_override) ? "{das_root}/web/output64/lib" : lib_dir_override
     let build_dir = "{das_root}/web/build64"
@@ -1086,41 +1086,37 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
         return 1
     }
 
-    // Consolidate every produced archive into one canonical lib_dir so
-    // `release wasm` resolves them in one place. The web build splits outputs:
-    // the runtime lands in web/output64/lib (DAS_WEB_OUTPUT_DIR), the module
-    // archives in <das_root>/lib.
+    // The web build pins every archive - runtime and modules - into {out_dir}/lib
+    // (das_pin_wasm_archives in web/CMakeLists.txt); <das_root>/lib belongs to the
+    // desktop build and is never read here.
+    let copied = stage_wasm_archives("{out_dir}/lib", lib_dir)
+    if (copied < 0) return 1
+    if (copied == 0) {
+        to_log(LOG_ERROR, "build --wasm: build succeeded but no archives found under {out_dir}/lib\n")
+        return 1
+    }
+    log("build --wasm: {copied} archive(s) -> {lib_dir}\n")
+    return 0
+}
+
+//! Stages the runtime and module archives of `src_dir` into `lib_dir` and returns how many
+//! there are; the same directory counts without copying. -1 when one is not a wasm archive or
+//! a copy fails. Other archives beside them (freetype, the dasImgui bake) are left alone.
+def stage_wasm_archives(src_dir, lib_dir : string) : int {
     mkdir_rec(lib_dir)
     var copied = 0
-    var copy_failed = false
-    // Runtime archive (web/output64/lib via DAS_WEB_OUTPUT_DIR).
-    let rt_src = "{out_dir}/lib/liblibDaScript_runtime.a"
-    if (fexist(rt_src)) {
-        let rt_dst = path_join(lib_dir, "liblibDaScript_runtime.a")
-        if (get_full_file_name(rt_src) == get_full_file_name(rt_dst)) {
-            copied ++
-        } else {
-            var err : string
-            if (copy_file(rt_src, rt_dst, true, err)) {
-                copied ++
-                log("  staged liblibDaScript_runtime.a\n")
-            } else {
-                to_log(LOG_ERROR, "build --wasm: copy_file({rt_src} -> {rt_dst}) failed: {err}\n")
-                copy_failed = true
-            }
-        }
-    }
-    // Module archives (<das_root>/lib).
-    glob("{das_root}/lib", "**/liblibDasModule*.a") $(rel_path, is_dir) {
-        if (is_dir) return
+    var failed = false
+    glob(src_dir, "*.a") $(rel_path, is_dir) {
+        return if (is_dir)
         let base = base_name(rel_path)
-        let src = path_join("{das_root}/lib", rel_path)
-        let dst = path_join(lib_dir, base)
+        return if (base != "liblibDaScript_runtime.a" && !starts_with(base, "liblibDasModule"))
+        let src = path_join(src_dir, rel_path)
         if (!looks_like_wasm_archive(src)) {
-            to_log(LOG_ERROR, "build --wasm: {src} is not a wasm archive - this tree also has a desktop build; delete lib/liblibDasModule*.a and rerun\n")
-            copy_failed = true
+            to_log(LOG_ERROR, "build --wasm: {src} is not a wasm archive - the web build directory was configured for another target; delete it and rerun\n")
+            failed = true
             return
         }
+        let dst = path_join(lib_dir, base)
         if (get_full_file_name(src) == get_full_file_name(dst)) {
             copied ++
             return
@@ -1128,19 +1124,13 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int { // nolint:
         var err : string
         if (!copy_file(src, dst, true, err)) {
             to_log(LOG_ERROR, "build --wasm: copy_file({src} -> {dst}) failed: {err}\n")
-            copy_failed = true
+            failed = true
             return
         }
         copied ++
         log("  staged {base}\n")
     }
-    if (copy_failed) return 1
-    if (copied == 0) {
-        to_log(LOG_ERROR, "build --wasm: build succeeded but no archives found under {build_dir}\n")
-        return 1
-    }
-    log("build --wasm: {copied} archive(s) -> {lib_dir}\n")
-    return 0
+    return failed ? -1 : copied
 }
 
 //! the 8-byte wasm module magic ("\0asm" + version 1) at `at`

@@ -213,15 +213,14 @@ The **package runner** compiles `.das_package` scripts in-process using `compile
 
 ### Wasm archive staging {#wasm-archive-staging}
 
-The wasm build and a desktop build of the same tree write their module archives to the same
-`<das_root>/lib` names, and `build --wasm` stages them from there. Once a desktop build has
-written those names the wasm build stops replacing them - its build directory finds the outputs
-already up to date and skips the targets - so a plain stage copies native archives and
-`release wasm` then fails to link on every module symbol. Staging therefore identifies each
-module archive by content rather than by name - it walks the archive's members to the first
-object and asks for the wasm magic - and refuses a native one, naming the desktop build in the
-error. The runtime archive is staged from the web build's own output directory, which a desktop
-build never writes.
+The web build pins every archive it produces - the runtime and each module - into its own
+output directory, `web/output64/lib` (`das_pin_wasm_archives` in `web/CMakeLists.txt`), and
+`build --wasm` stages from there alone. `<das_root>/lib` belongs to the desktop build and is
+never read: an archive found there is stale by construction - a wasm archive an earlier web
+configure wrote, or a native one - and staging it over the fresh build ships old code under the
+new toolchain id. Staging still identifies each archive by content - it walks the archive's
+members to the first object and asks for the wasm magic - and refuses a native one, so a web
+build directory configured for another target is caught before `release wasm` fails to link.
 
 ## Tests
 

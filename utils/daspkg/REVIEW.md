@@ -64,6 +64,7 @@ in `test_daspkg_git.das`.
 a name a `.das_package` or the command line supplied, a CPU class, a companion's script path -
 outside `commands.das`, or without an `is_safe_pkg_name` check first - on the whole string,
 or on each `/`-separated segment when the string is a path declared to reach another tree,
-where a `..` segment passes - is a defect** - `is_safe_pkg_name` is private to `commands.das`,
-and a string carrying a space, a quote, a separator or `..` splits the command or reads
-outside the directory the path was built for.
+where a `..` segment passes - is a defect; a directory the command line names as an input or
+output root is not such a string** - `is_safe_pkg_name` is private to `commands.das`, and a
+string carrying a space, a quote, a separator or `..` splits the command or reads outside the
+directory the path was built for.
