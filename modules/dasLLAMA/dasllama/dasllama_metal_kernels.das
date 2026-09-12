@@ -8124,7 +8124,7 @@ class MetalKqGemvK2 {
 }
 
 
-//! LANES picks the map lane_setup lays into lc[] - 23 = k2/k3, 45 = k4/k5, 6 = k6, 0 = none; an mv_superblock reads the slots back by position
+// LANES picks the map lane_setup lays into lc[] - 23 = k2/k3, 45 = k4/k5, 6 = k6, 0 = none; an mv_superblock reads the slots back by position
 [ |> template_struct_instance]
 class template MetalKqLaneMapsT {
     @template_constant LANES : int = 0
@@ -9637,7 +9637,7 @@ class MetalKqMvB8Iq2xxs : MetalKqMvB8ShellT {
     }
 }
 
-//! the iq4 B2/B4 pair on the GEMV's per-32-block lane map; the one axis is the scale source: iq4xs a signed strip byte times the super d, iq4nl a per-32-block f16 d
+// the iq4 B2/B4 pair on the GEMV's per-32-block lane map; the one axis is the scale source: iq4xs a signed strip byte times the super d, iq4nl a per-32-block f16 d
 [ |> template_struct_instance]
 class template MetalKqMvIq4T : MetalKqMvShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
@@ -9724,7 +9724,7 @@ class MetalKqMvB4Iq4nl : MetalKqMvIq4T {
     override IQ4NL = true
 }
 
-//! the iq4 B8 twin on the K45 B8 shell, the same scale-source axis
+// the iq4 B8 twin on the K45 B8 shell, the same scale-source axis
 [ |> template_struct_instance]
 class template MetalKqMvB8Iq4T : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>

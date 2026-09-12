@@ -727,8 +727,8 @@ def test_metal_mtp_parity_qwen38_split_head(t : T?) {
 // A head-less fixture: only the batch-rail verify arm runs. gemma4's router amplifies any
 // float-class difference to ~2.5 logits/step (the support-matrix row's finding), so its bar is
 // the row's, not the 0.5 one.
-//! one row through the batch driver, plain and under the unfused add+rms pin - the row chains'
-//! shared adapter takes the add + rms pair instead of the fused kernel
+// one row through the batch driver, plain and under the unfused add+rms pin - the row chains'
+// shared adapter takes the add + rms pair instead of the fused kernel
 def private vff1_cells(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; must_serve : bool; expect_decline : string) {
     vff_cell(t, tr, trg, tag, prompt, tol, 1l, must_serve, expect_decline)
     static_if (typeinfo builtin_module_exists(das_metal)) {

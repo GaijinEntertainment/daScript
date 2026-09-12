@@ -1375,7 +1375,8 @@ def private total_rows(e : auto(ET); u : MetalBuffer?; n : int64) : tuple<b : Me
     }
     let bt = u == r.u_dim ? r.u_total_dim : (u == r.u_hidden ? r.u_total_h : (u == r.u_qd ? r.u_total_qd : r.u_moe_tot))
     if (bt == null) {
-        panic("row chain: the row-total twin of this uniform was not built for this step (the step gate declines the models that would ask)")
+        let slot = u == r.u_dim ? "u_dim" : (u == r.u_hidden ? "u_hidden" : (u == r.u_qd ? "u_qd" : "u_moe_knfe"))
+        panic("row chain: the row-total twin of {slot} was not built for this step (the step gate declines the models that would ask)")
     }
     return (b = bt, n = n * r.nrows)
 }
