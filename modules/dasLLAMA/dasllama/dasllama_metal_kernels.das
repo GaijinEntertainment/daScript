@@ -4168,9 +4168,9 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
         if (fmt == KqFmt.k6) {
             enc_moe_gemv_k6_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } elif (fmt == KqFmt.k4) {
-            enc_moe_gemv_k4_c(enc, bs.buf, bs.soff, bs.buf, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
+            enc_moe_gemv_k4_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } else {
-            enc_moe_gemv_k5_c(enc, bs.buf, bs.soff, bs.buf, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
+            enc_moe_gemv_k5_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         }
     }
 }
@@ -6455,76 +6455,6 @@ class MetalMoeSelect {
     }
 }
 
-// Expert-indexed q8 GEMV — MetalQ8Gemv's exact dot with the expert plane picked GPU-side:
-// the blob binds at the layer's expert STACK base, the kernel adds sel[slot] * eblk to the
-// block index, reads x at slot * xs (0 = shared activation), writes y at slot * ddim.
-[metal_dispatch(name = "enc_moe_gemv_q8_c", pso = "g_pso_moe_gemv_q8", tg = "g_gemv_rows*32", grid = "rows/g_gemv_rows, k, nst", params = "rows : int64, k : int64, nst : int64")]
-class MetalMoeGemvQ8 {
-    @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // the expert stack's blob slice, half-scale view
-    @ssbo @binding = 1 @role = "weight" @off = "boff" wqb : array<int8>    // the same blob buffer, byte view
-    @ssbo @binding = 2 @role = "read" x : array<float4>
-    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 4 ka : MoeGemvArgs
-    @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-
-    [metal_kernel(name="metal_moe_gemv_q8_msl")]
-    def metal_moe_gemv_q8 {
-        let ndim = ka.ndim
-        let ddim = ka.ddim
-        let eblk = ka.eplane
-        let xs = ka.xs
-        let ss = ka.ss
-        let bxs = ka.bxs
-        let bys = ka.bys
-        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (row >= ddim) {
-            return
-        }
-        let slot = gl_WorkGroupID.y
-        let st = gl_WorkGroupID.z
-        let eb = sel[st * ss + slot] * eblk
-        let lane = gl_SubgroupInvocationID
-        let nb = ndim / 32u
-        let nb4 = ndim / 4u
-        let x0e = (st * bxs + slot * xs) / 4u
-        var sp = unsafe(addr(wsh[(eb + row * nb + lane / 8u) * 17u]))
-        var qp = unsafe(addr(wqb[(eb + row * nb + lane / 8u) * 34u + 2u + (lane % 8u) * 4u]))
-        var x0 = unsafe(addr(x[x0e + lane]))
-        var acc = 0.0
-        var lw : float4[4]
-        var k = lane
-        while (k + 96u < nb4) {
-            for [unroll_full] (c in range(4)) {
-                let d = float(unsafe(sp[uint(c) * 68u]))
-                let qb = uint(c) * 136u
-                lw[c] = float4(float(unsafe(qp[qb])), float(unsafe(qp[qb + 1u])),
-                    float(unsafe(qp[qb + 2u])), float(unsafe(qp[qb + 3u]))) * d
-            }
-            for [unroll_full] (c in range(4)) {
-                let xv = unsafe(x0[uint(c) * 32u])
-                acc += lw[c].x * xv.x + lw[c].y * xv.y + lw[c].z * xv.z + lw[c].w * xv.w
-            }
-            sp = unsafe(sp + 272)
-            qp = unsafe(qp + 544)
-            x0 = unsafe(x0 + 128)
-            k += 128u
-        }
-        while (k < nb4) {
-            let bi = eb + row * nb + k / 8u
-            let d = float(wsh[bi * 17u])
-            let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let xv = x[x0e + k]
-            acc += (float(wqb[qb]) * xv.x + float(wqb[qb + 1u]) * xv.y +
-                float(wqb[qb + 2u]) * xv.z + float(wqb[qb + 3u]) * xv.w) * d
-            k += gl_SubgroupSize
-        }
-        acc = simd_sum(acc)
-        if (lane == 0u) {
-            y[st * bys + slot * ddim + row] = acc
-        }
-    }
-}
-
 // q4_K/q5_K kmask halfword-pair scale decode — sc/min byte pairs for both 32-halves of the
 // lane's superblock quadrant (x = sc lo-pair, y = min lo-pair, z = sc hi-pair, w = min hi-pair).
 def private kmask_scales(sv : uint4; iq : uint) : uint4 {
@@ -7135,279 +7065,6 @@ def public iq2s_gw(i : int) : uint {   // nolint:STYLE038 - a 2048-word data tab
     return tbl[i]
 }
 
-// Expert-indexed Q4_K GEMV — MetalKqGemvK4's dot; the superblock index shifts by sel[slot] * esb.
-// x rides a float4 view: the 32-scalar-x-load form was load-issue-bound at the routed expert
-// shapes (nfe-row planes) — the vector view is 2.25x there (lab: bench_metal_moe_lab, 142→321 wGB/s).
-[metal_dispatch(name = "enc_moe_gemv_k4_c", pso = "g_pso_moe_kq_k4", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
-class MetalMoeGemvK4 {
-    @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
-    @ssbo @binding = 3 @role = "read" x4 : array<float4>   // activations, float4 view (every x stride is % 4)
-    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-
-    [metal_kernel(name="metal_moe_gemv_k4_msl")]
-    def metal_moe_gemv_k4 {   // nolint:STYLE038 — MSL kernel body; the gathered GEMV phases share tgmem state
-        let ndim = ka.ndim
-        let ddim = ka.ddim
-        let esb = ka.eplane
-        let xs = ka.xs
-        let ss = ka.ss
-        let bxs = ka.bxs
-        let bys = ka.bys
-        let lane = gl_SubgroupInvocationID
-        let ix = lane / 8u
-        let it = lane % 8u
-        let iq = it / 4u
-        let ir = it % 4u
-        let nb = ndim / 256u
-        let slot = gl_WorkGroupID.y
-        let st = gl_WorkGroupID.z
-        let eb = sel[st * ss + slot] * esb
-        let xoff = st * bxs + slot * xs
-        let y0 = st * bys + slot * ddim
-        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
-        var sumf : float[2]
-        var ib = ix
-        while (ib < nb) {
-            let yb4 = (xoff + ib * 256u + iq * 64u + ir * 8u) / 4u
-            var sumy : float[4]
-            for [unroll_full] (h in range(4)) {   // h: yl lo/hi, yh lo/hi — float4 pairs at 0/8/32/40
-                let xi = yb4 + (h < 2 ? uint(h) * 8u : 16u + uint(h) * 8u)
-                let va = x4[xi]
-                let vb = x4[xi + 1u]
-                let o = (h % 2) * 8
-                if (h < 2) {   // constant under unroll_full — folds per iteration
-                    yl[o] = va.x
-                    yl[o + 1] = va.y
-                    yl[o + 2] = va.z
-                    yl[o + 3] = va.w
-                    yl[o + 4] = vb.x
-                    yl[o + 5] = vb.y
-                    yl[o + 6] = vb.z
-                    yl[o + 7] = vb.w
-                } else {
-                    yh[o] = va.x
-                    yh[o + 1] = va.y
-                    yh[o + 2] = va.z
-                    yh[o + 3] = va.w
-                    yh[o + 4] = vb.x
-                    yh[o + 5] = vb.y
-                    yh[o + 6] = vb.z
-                    yh[o + 7] = vb.w
-                }
-                sumy[h] = va.x + va.y + va.z + va.w + vb.x + vb.y + vb.z + vb.w
-            }
-            for [unroll_full] (r in range(2)) {
-                let blk = eb + (first_row + uint(r)) * nb + ib
-                let scs = kmask_scales(ks4[blk], iq)
-                let qb = blk * 32u + iq * 8u + ir * 2u
-                let q1a = kqu[qb]
-                let q1b = kqu[qb + 1u]
-                let q2a = kqu[qb + 16u]
-                let q2b = kqu[qb + 17u]
-                var acc1 : float[4]
-                var acc2 : float[4]
-                for [unroll_full] (i in range(4)) {
-                    let sh = 16u * (uint(i) & 1u)
-                    let q1 = ((i < 2 ? q1a : q1b) >> sh) & 0xFFFF
-                    let q2 = ((i < 2 ? q2a : q2b) >> sh) & 0xFFFF
-                    acc1[0] += yl[2 * i] * float(q1 & 0x000F)
-                    acc1[1] += yl[2 * i + 1] * float(q1 & 0x0F00)
-                    acc1[2] += yl[2 * i + 8] * float(q1 & 0x00F0)
-                    acc1[3] += yl[2 * i + 9] * float(q1 & 0xF000)
-                    acc2[0] += yh[2 * i] * float(q2 & 0x000F)
-                    acc2[1] += yh[2 * i + 1] * float(q2 & 0x0F00)
-                    acc2[2] += yh[2 * i + 8] * float(q2 & 0x00F0)
-                    acc2[3] += yh[2 * i + 9] * float(q2 & 0xF000)
-                }
-                let dd = float(ksh[blk * 8u])
-                let dm = float(ksh[blk * 8u + 1u])
-                sumf[r] += dd * ((acc1[0] + 0.00390625 * acc1[1]) * float(scs.x & 255u)
-                    + (acc1[2] + 0.00390625 * acc1[3]) * float(scs.x >> 8u) * 0.0625
-                    + (acc2[0] + 0.00390625 * acc2[1]) * float(scs.z & 255u)
-                    + (acc2[2] + 0.00390625 * acc2[3]) * float(scs.z >> 8u) * 0.0625)
-                sumf[r] -= dm * (sumy[0] * float(scs.y & 255u) + sumy[1] * float(scs.y >> 8u)
-                    + sumy[2] * float(scs.w & 255u) + sumy[3] * float(scs.w >> 8u))
-            }
-            ib += 4u
-        }
-        for [unroll_full] (r in range(2)) {
-            let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[y0 + first_row + uint(r)] = s
-            }
-        }
-    }
-}
-
-// Expert-indexed Q5_K GEMV — MetalKqGemvK5's dot with the expert superblock shift.
-[metal_dispatch(name = "enc_moe_gemv_k5_c", pso = "g_pso_moe_kq_k5", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
-class MetalMoeGemvK5 {
-    @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16> // 16B scale blocks, half view
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
-    @ssbo @binding = 3 @role = "read" x : array<float>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-
-    [metal_kernel(name="metal_moe_gemv_k5_msl")]
-    def metal_moe_gemv_k5 {
-        let ndim = ka.ndim
-        let ddim = ka.ddim
-        let esb = ka.eplane
-        let xs = ka.xs
-        let ss = ka.ss
-        let bxs = ka.bxs
-        let bys = ka.bys
-        let lane = gl_SubgroupInvocationID
-        let tid = lane / 4u
-        let ix = lane % 4u
-        let iq = tid / 4u
-        let ir = tid % 4u
-        let l0 = ir * 8u
-        let hb0 = 2u * iq
-        let nb = ndim / 256u
-        let slot = gl_WorkGroupID.y
-        let st = gl_WorkGroupID.z
-        let eb = sel[st * ss + slot] * esb
-        let xoff = st * bxs + slot * xs
-        let y0 = st * bys + slot * ddim
-        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
-        var sumf : float[2]
-        var ib = ix
-        while (ib < nb) {
-            let yb = xoff + ib * 256u + iq * 64u + l0
-            var sumy : float[4]
-            for [unroll_full] (l in range(8)) {
-                yl[l] = x[yb + uint(l)]
-                sumy[0] += yl[l]
-                yl[l + 8] = x[yb + 32u + uint(l)]
-                sumy[1] += yl[l + 8]
-                yh[l] = x[yb + 128u + uint(l)]
-                sumy[2] += yh[l]
-                yh[l + 8] = x[yb + 160u + uint(l)]
-                sumy[3] += yh[l + 8]
-            }
-            for [unroll_full] (r in range(2)) {
-                let blk = eb + (first_row + uint(r)) * nb + ib
-                let scs = kmask_scales(ks4[blk], iq)
-                let qs0 = blk * 160u + iq * 32u + l0
-                let qh0 = blk * 160u + 128u + l0
-                var acc : float[4]
-                for [unroll_full] (l in range(8)) {
-                    let q1 = uint(kqb[qs0 + uint(l)])
-                    let q2 = uint(kqb[qs0 + 64u + uint(l)])
-                    let h = uint(kqb[qh0 + uint(l)]) >> hb0
-                    acc[0] += yl[l] * float((q1 & 0x0F) | ((h & 1u) << 4u))
-                    acc[1] += yl[l + 8] * float((q1 >> 4u) | ((h & 2u) << 3u))
-                    acc[2] += yh[l] * float((q2 & 0x0F) | ((h & 16u) << 0u))
-                    acc[3] += yh[l + 8] * float((q2 >> 4u) | ((h & 32u) >> 1u))
-                }
-                let dd = float(ksh[blk * 8u])
-                let dm = float(ksh[blk * 8u + 1u])
-                sumf[r] += dd * (float(scs.x & 255u) * acc[0] + float(scs.x >> 8u) * acc[1]
-                    + float(scs.z & 255u) * acc[2] + float(scs.z >> 8u) * acc[3])
-                sumf[r] -= dm * (sumy[0] * float(scs.y & 255u) + sumy[1] * float(scs.y >> 8u)
-                    + sumy[2] * float(scs.w & 255u) + sumy[3] * float(scs.w >> 8u))
-            }
-            ib += 4u
-        }
-        for [unroll_full] (r in range(2)) {
-            let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[y0 + first_row + uint(r)] = s
-            }
-        }
-    }
-}
-
-// Expert-indexed Q6_K GEMV — MetalKqGemvK6's dot; the expert shift covers sub-scales AND the
-// trailing f16 d plane (both indexed by the same region-relative superblock).
-[metal_dispatch(name = "enc_moe_gemv_k6_c", pso = "g_pso_moe_kq_k6", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
-class MetalMoeGemvK6 {
-    @ssbo @binding = 0 @role = "weight" @off = "doff" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
-    @ssbo @binding = 3 @role = "read" x : array<float>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
-    @uniform @binding = 5 ka : MoeGemvArgs
-    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-
-    [metal_kernel(name="metal_moe_gemv_k6_msl")]
-    def metal_moe_gemv_k6 {
-        let ndim = ka.ndim
-        let ddim = ka.ddim
-        let esb = ka.eplane
-        let xs = ka.xs
-        let ss = ka.ss
-        let bxs = ka.bxs
-        let bys = ka.bys
-        let lane = gl_SubgroupInvocationID
-        let tid = lane / 2u
-        let ix = lane % 2u
-        let ip = tid / 8u
-        let il = tid % 8u
-        let l0 = il * 4u
-        let is0 = ip * 8u + l0 / 16u
-        let nb = ndim / 256u
-        let slot = gl_WorkGroupID.y
-        let st = gl_WorkGroupID.z
-        let eb = sel[st * ss + slot] * esb
-        let xoff = st * bxs + slot * xs
-        let y0 = st * bys + slot * ddim
-        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var sumf : float[2]
-        var ib = ix
-        while (ib < nb) {
-            let yb = xoff + ib * 256u + ip * 128u + l0
-            for [unroll_full] (l in range(4)) {
-                yl[4 * l] = x[yb + uint(l)]
-                yl[4 * l + 1] = x[yb + 32u + uint(l)]
-                yl[4 * l + 2] = x[yb + 64u + uint(l)]
-                yl[4 * l + 3] = x[yb + 96u + uint(l)]
-            }
-            for [unroll_full] (r in range(2)) {
-                let blk = eb + (first_row + uint(r)) * nb + ib
-                let ql0 = blk * 192u + ip * 64u + l0
-                let qh0 = blk * 192u + 128u + ip * 32u + l0
-                let sb = blk * 16u + is0
-                var sums : float[4]
-                for [unroll_full] (l in range(4)) {
-                    let q1 = uint(kqb[ql0 + uint(l)])
-                    let q2 = uint(kqb[ql0 + 32u + uint(l)])
-                    let h = uint(kqb[qh0 + uint(l)])
-                    sums[0] += yl[4 * l] * (float((q1 & 0x0F) | ((h & 0x03) << 4u)) - 32.0)
-                    sums[1] += yl[4 * l + 1] * (float((q2 & 0x0F) | ((h & 0x0C) << 2u)) - 32.0)
-                    sums[2] += yl[4 * l + 2] * (float((q1 >> 4u) | (h & 0x30)) - 32.0)
-                    sums[3] += yl[4 * l + 3] * (float((q2 >> 4u) | ((h & 0xC0) >> 2u)) - 32.0)
-                }
-                let s0 = float((int(kscb[sb]) ^ 128) - 128)
-                let s2 = float((int(kscb[sb + 2u]) ^ 128) - 128)
-                let s4 = float((int(kscb[sb + 4u]) ^ 128) - 128)
-                let s6 = float((int(kscb[sb + 6u]) ^ 128) - 128)
-                let dd = float(kdh[blk])
-                sumf[r] += dd * (sums[0] * s0 + sums[1] * s2 + sums[2] * s4 + sums[3] * s6)
-            }
-            ib += 2u
-        }
-        for [unroll_full] (r in range(2)) {
-            let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[y0 + first_row + uint(r)] = s
-            }
-        }
-    }
-}
-
 // Expert-indexed MXFP4 GEMV (gpt-oss): a 32-elem block = 16 nibble bytes (byte b holds elems
 // b LOW / b+16 HIGH — the split-half layout) + one E8M0 scale byte; value = doubled-e2m1
 // magnitude x halved scale (2^(e-128)). Optional per-expert bias rows — gpt-oss's biased MoE.
@@ -7700,31 +7357,53 @@ class MetalMoeWScale {
     }
 }
 
-// One simdgroup per output row over the 34B q8 blob (f16 scale + 32 int8 inline, dual-viewed),
-// 4 blocks in flight — now the DnBa narrow-projection form only (d = dt_rank 16..64, where the
-// 2-rows/tg MetalQ8Gemv would starve the grid); BATCHED adds the grid-y position axis.
+// The GEMV site hooks: a GEMV template's dot walks one weight row against the x row and writes
+// the y row a stamp's site_setup names, so the plain, position-batched and expert-indexed stamps
+// of one format share the dot and carry only their own x / y / uniform bindings.
 [ |> template_struct_instance]
-class template MetalQ8GemvT {
+class template MetalGemvSiteT {
+    //! g[0] = n, g[1] = the expert's superblock shift, g[2] = the x row, g[3] = the y row
+    def abstract site_setup(var g : uint[8]) : void
+    //! d, the y rows - read where the reduce guard reads it, so the uniform load stays there
+    def abstract y_rows : uint
+    def abstract x_at(i : uint) : float
+    def abstract y_put(i : uint; v : float) : void
+
+    //! the expert-indexed site (a MoeGemvArgs uniform's fields): the superblock shift from
+    //! sel[slot], x and y at the slot's rows
+    def moe_site_setup(ndim, ddim, eplane, xs, ss, bxs, bys : uint; sel : array<uint>; var g : uint[8]) {
+        g[0] = ndim
+        let slot = gl_WorkGroupID.y
+        let st = gl_WorkGroupID.z
+        g[1] = sel[st * ss + slot] * eplane
+        g[2] = st * bxs + slot * xs
+        g[3] = st * bys + slot * ddim
+    }
+}
+
+// One simdgroup per output row over the 34B q8 blob (f16 scale + 32 int8 inline, dual-viewed),
+// 4 blocks in flight: the DnBa narrow-projection form (d = dt_rank 16..64, where the 2-rows/tg
+// MetalQ8Gemv would starve the grid) and the expert-indexed MoE form; the site's x row is float4s.
+[ |> template_struct_instance]
+class template MetalQ8GemvT : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "boff" wsh : array<float16> // 34B-block W blob, half-scale view (block b at 17*b)
     @ssbo @binding = 1 @role = "weight" @off = "boff" wqb : array<int8>    // the same blob buffer, byte view (quants at 34*b + 2)
-    @ssbo @binding = 2 x : array<float4>    // [n] f32 vector, float4 view ([npos x n] when BATCHED)
-    @ssbo @binding = 3 @off = "yoff" @span = "d*np*4" y : array<float>     // [d] outputs ([np x d] when BATCHED; singles pass np = 1)
-    @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
-    @uniform @binding = 5 ddim : uint       // d (output rows)
-    @template_constant BATCHED : bool = false
 
-    [metal_kernel]
-    def metal_q8_gemv {
+    def abstract x4_at(i : uint) : float4
+
+    //! the dot over the site g; x0 = the x row's float4 at the lane (a pointer parameter, since
+    //! the emitter roots a pointer local at an addr(member[..]) of the kernel's own class)
+    def gemv_body(g : uint[8]; var x0 : float4 const?) {
         let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (row >= ddim) {
+        if (row >= y_rows()) {
             return
         }
         let lane = gl_SubgroupInvocationID
-        let nb = ndim / 32u
-        let nb4 = ndim / 4u
-        var sp = unsafe(addr(wsh[(row * nb + lane / 8u) * 17u]))
-        var qp = unsafe(addr(wqb[(row * nb + lane / 8u) * 34u + 2u + (lane % 8u) * 4u]))
-        var x0 = unsafe(addr(x[BATCHED ? gl_WorkGroupID.y * nb4 + lane : lane]))
+        let nb = g[0] / 32u
+        let nb4 = g[0] / 4u
+        let wrow = g[1] + row * nb
+        var sp = unsafe(addr(wsh[(wrow + lane / 8u) * 17u]))
+        var qp = unsafe(addr(wqb[(wrow + lane / 8u) * 34u + 2u + (lane % 8u) * 4u]))
         var acc = 0.0
         var lw : float4[4]
         var k = lane
@@ -7746,17 +7425,17 @@ class template MetalQ8GemvT {
             k += 128u
         }
         while (k < nb4) {
-            let bi = row * nb + k / 8u
+            let bi = wrow + k / 8u
             let d = float(wsh[bi * 17u])
             let qb = bi * 34u + 2u + (k % 8u) * 4u
-            let xv = x[BATCHED ? gl_WorkGroupID.y * nb4 + k : k]
+            let xv = x4_at(g[2] + k)
             acc += (float(wqb[qb]) * xv.x + float(wqb[qb + 1u]) * xv.y +
                 float(wqb[qb + 2u]) * xv.z + float(wqb[qb + 3u]) * xv.w) * d
             k += gl_SubgroupSize
         }
         acc = simd_sum(acc)
         if (lane == 0u) {
-            y[BATCHED ? gl_WorkGroupID.y * ddim + row : row] = acc
+            y_put(g[3] + row, acc)
         }
     }
 }
@@ -7821,53 +7500,137 @@ class MetalQ8Gemv {
     }
 }
 
-// Batched narrow projection twin (DeltaNet β/α: d = dt_rank, 16..64 — under every GEMM N tile):
+// Batched narrow projection (DeltaNet β/α: d = dt_rank, 16..64 — under every GEMM N tile):
 // one simdgroup per (output row, position); 256/tg = 8 rows per threadgroup.
 [metal_dispatch(name = "pf_enc_dn_ba", pso = "g_pso_dn_ba", tg = 256, grid = "d/8, np", params = "d : int64, np : int64")]
 class MetalDnBa : MetalQ8GemvT {
-    override BATCHED = true
+    @ssbo @binding = 2 x : array<float4>    // [npos x n] f32 rows, float4 view
+    @ssbo @binding = 3 @off = "yoff" @span = "d*np*4" y : array<float>     // [np x d] outputs
+    @uniform @binding = 4 ndim : uint       // n (reduction dim, % 32)
+    @uniform @binding = 5 ddim : uint       // d (output rows)
+
+    [metal_kernel]
+    def metal_q8_gemv {
+        var g : uint[8]
+        site_setup(g)
+        gemv_body(g, unsafe(addr(x[g[2] + gl_SubgroupInvocationID])))
+    }
+
+    def override site_setup(var g : uint[8]) {
+        g[0] = ndim
+        g[2] = gl_WorkGroupID.y * (ndim / 4u)
+        g[3] = gl_WorkGroupID.y * ddim
+    }
+    def override y_rows : uint => ddim
+    def override x4_at(i : uint) : float4 => x[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
+    }
+}
+
+// Expert-indexed q8 GEMV — MetalQ8GemvT's dot with the expert plane picked GPU-side: the blob
+// binds at the layer's expert STACK base, the kernel adds sel[slot] * eblk to the block index,
+// reads x at slot * xs (0 = shared activation), writes y at slot * ddim.
+[metal_dispatch(name = "enc_moe_gemv_q8_c", pso = "g_pso_moe_gemv_q8", tg = "g_gemv_rows*32", grid = "rows/g_gemv_rows, k, nst", params = "rows : int64, k : int64, nst : int64")]
+class MetalMoeGemvQ8 : MetalQ8GemvT {
+    @ssbo @binding = 2 @role = "read" x : array<float4>
+    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
+    @uniform @binding = 4 ka : MoeGemvArgs
+    @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+
+    [metal_kernel(name="metal_moe_gemv_q8_msl")]
+    def metal_moe_gemv_q8 {
+        var g : uint[8]
+        site_setup(g)
+        gemv_body(g, unsafe(addr(x[g[2] + gl_SubgroupInvocationID])))
+    }
+
+    def override site_setup(var g : uint[8]) {
+        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
+        g[2] /= 4u
+    }
+    def override y_rows : uint => ka.ddim
+    def override x4_at(i : uint) : float4 => x[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
+    }
 }
 
 // Q4_K: lane owns 32 elems of every 4th superblock; the kmask halfword scale decode +
-// nibble-mask acc folds (x16/x256 groups folded by pow2 constants).
-[metal_dispatch(name = "enc_kq_k4_c", pso = "g_pso_kq_k4", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
-class MetalKqGemvK4 {
+// nibble-mask acc folds (x16/x256 groups folded by pow2 constants). X4 reads x through a float4
+// view: the scalar form was load-issue-bound at the routed expert shapes, the vector view 2.25x.
+[ |> template_struct_instance]
+class template MetalKqGemvK4T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1)
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view (whole block at blk)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k4 quant plane, uint view (qs of blk at 32*blk)
-    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
+    @template_constant X4 : bool = false
 
-    [metal_kernel(name="metal_kq_gemv_k4_msl")]
-    def metal_kq_gemv_k4 {
+    //! the X4 stamp's activation read, a float4 at float4 index i
+    def abstract x4_at(i : uint) : float4
+
+    def gemv_body {   // nolint:STYLE038 — MSL kernel body; the gathered GEMV phases share tgmem state
+        var g : uint[8]
+        site_setup(g)
         let lane = gl_SubgroupInvocationID
         let ix = lane / 8u
         let it = lane % 8u
         let iq = it / 4u
         let ir = it % 4u
-        let nb = ndim / 256u
+        let nb = g[0] / 256u
+        let eb = g[1]
+        let xoff = g[2]
+        let y0 = g[3]
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
         var yl : float[16]
         var yh : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
-            let yb = ib * 256u + iq * 64u + ir * 8u
             var sumy : float[4]
-            for [unroll_full] (i in range(8)) {
-                yl[i] = x[yb + uint(i)]
-                sumy[0] += yl[i]
-                yl[i + 8] = x[yb + 32u + uint(i)]
-                sumy[1] += yl[i + 8]
-                yh[i] = x[yb + 128u + uint(i)]
-                sumy[2] += yh[i]
-                yh[i + 8] = x[yb + 160u + uint(i)]
-                sumy[3] += yh[i + 8]
+            static_if (X4) {
+                let yb4 = (xoff + ib * 256u + iq * 64u + ir * 8u) / 4u
+                for [unroll_full] (h in range(4)) {   // h: yl lo/hi, yh lo/hi — float4 pairs at 0/8/32/40
+                    let xi = yb4 + (h < 2 ? uint(h) * 8u : 16u + uint(h) * 8u)
+                    let va = x4_at(xi)
+                    let vb = x4_at(xi + 1u)
+                    let o = (h % 2) * 8
+                    if (h < 2) {   // constant under unroll_full — folds per iteration
+                        yl[o] = va.x
+                        yl[o + 1] = va.y
+                        yl[o + 2] = va.z
+                        yl[o + 3] = va.w
+                        yl[o + 4] = vb.x
+                        yl[o + 5] = vb.y
+                        yl[o + 6] = vb.z
+                        yl[o + 7] = vb.w
+                    } else {
+                        yh[o] = va.x
+                        yh[o + 1] = va.y
+                        yh[o + 2] = va.z
+                        yh[o + 3] = va.w
+                        yh[o + 4] = vb.x
+                        yh[o + 5] = vb.y
+                        yh[o + 6] = vb.z
+                        yh[o + 7] = vb.w
+                    }
+                    sumy[h] = va.x + va.y + va.z + va.w + vb.x + vb.y + vb.z + vb.w
+                }
+            } else {
+                let yb = xoff + ib * 256u + iq * 64u + ir * 8u
+                for [unroll_full] (i in range(8)) {
+                    yl[i] = x_at(yb + uint(i))
+                    sumy[0] += yl[i]
+                    yl[i + 8] = x_at(yb + 32u + uint(i))
+                    sumy[1] += yl[i + 8]
+                    yh[i] = x_at(yb + 128u + uint(i))
+                    sumy[2] += yh[i]
+                    yh[i + 8] = x_at(yb + 160u + uint(i))
+                    sumy[3] += yh[i + 8]
+                }
             }
             for [unroll_full] (r in range(2)) {
-                let blk = (first_row + uint(r)) * nb + ib
+                let blk = eb + (first_row + uint(r)) * nb + ib
                 let scs = kmask_scales(ks4[blk], iq)
                 let qb = blk * 32u + iq * 8u + ir * 2u
                 let q1a = kqu[qb]
@@ -7902,27 +7665,71 @@ class MetalKqGemvK4 {
         }
         for [unroll_full] (r in range(2)) {
             let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[first_row + uint(r)] = s
+            if (lane == 0u && first_row + uint(r) < y_rows()) {
+                y_put(y0 + first_row + uint(r), s)
             }
         }
     }
 }
 
-// Q5_K: int-composed q5 (nibble | qh bit << 4) — one fma per element; same kmask scale decode.
-// The quant plane is [qs 128][qh 32] per superblock, read through the byte view.
-[metal_dispatch(name = "enc_kq_k5_c", pso = "g_pso_kq_k5", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
-class MetalKqGemvK5 {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view
-    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+[metal_dispatch(name = "enc_kq_k4_c", pso = "g_pso_kq_k4", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+class MetalKqGemvK4 : MetalKqGemvK4T {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
 
-    [metal_kernel(name="metal_kq_gemv_k5_msl")]
-    def metal_kq_gemv_k5 {
+    [metal_kernel(name="metal_kq_gemv_k4_msl")]
+    def metal_kq_gemv_k4 {
+        gemv_body()
+    }
+
+    def override site_setup(var g : uint[8]) {
+        g[0] = ndim
+    }
+    def override y_rows : uint => ddim
+    def override x_at(i : uint) : float => x[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
+    }
+}
+
+// Expert-indexed Q4_K GEMV — MetalKqGemvK4T's dot with the expert superblock shift, x through
+// the float4 view.
+[metal_dispatch(name = "enc_moe_gemv_k4_c", pso = "g_pso_moe_kq_k4", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
+class MetalMoeGemvK4 : MetalKqGemvK4T {
+    @ssbo @binding = 3 @role = "read" x4 : array<float4>   // activations, float4 view (every x stride is % 4)
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
+    @uniform @binding = 5 ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    override X4 = true
+
+    [metal_kernel(name="metal_moe_gemv_k4_msl")]
+    def metal_moe_gemv_k4 {
+        gemv_body()
+    }
+
+    def override site_setup(var g : uint[8]) {
+        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
+    }
+    def override y_rows : uint => ka.ddim
+    def override x4_at(i : uint) : float4 => x4[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
+    }
+}
+
+// Q5_K: int-composed q5 (nibble | qh bit << 4) — one fma per element; same kmask scale decode.
+// The quant plane is [qs 128][qh 32] per superblock, read through the byte view.
+[ |> template_struct_instance]
+class template MetalKqGemvK5T : MetalGemvSiteT {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k5 quant plane, byte view (qs at 160*blk, qh at +128)
+
+    def gemv_body {
+        var g : uint[8]
+        site_setup(g)
         let lane = gl_SubgroupInvocationID
         let tid = lane / 4u
         let ix = lane % 4u
@@ -7930,27 +7737,30 @@ class MetalKqGemvK5 {
         let ir = tid % 4u
         let l0 = ir * 8u
         let hb0 = 2u * iq
-        let nb = ndim / 256u
+        let nb = g[0] / 256u
+        let eb = g[1]
+        let xoff = g[2]
+        let y0 = g[3]
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
         var yl : float[16]
         var yh : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
-            let yb = ib * 256u + iq * 64u + l0
+            let yb = xoff + ib * 256u + iq * 64u + l0
             var sumy : float[4]
             for [unroll_full] (l in range(8)) {
-                yl[l] = x[yb + uint(l)]
+                yl[l] = x_at(yb + uint(l))
                 sumy[0] += yl[l]
-                yl[l + 8] = x[yb + 32u + uint(l)]
+                yl[l + 8] = x_at(yb + 32u + uint(l))
                 sumy[1] += yl[l + 8]
-                yh[l] = x[yb + 128u + uint(l)]
+                yh[l] = x_at(yb + 128u + uint(l))
                 sumy[2] += yh[l]
-                yh[l + 8] = x[yb + 160u + uint(l)]
+                yh[l + 8] = x_at(yb + 160u + uint(l))
                 sumy[3] += yh[l + 8]
             }
             for [unroll_full] (r in range(2)) {
-                let blk = (first_row + uint(r)) * nb + ib
+                let blk = eb + (first_row + uint(r)) * nb + ib
                 let scs = kmask_scales(ks4[blk], iq)
                 let qs0 = blk * 160u + iq * 32u + l0
                 let qh0 = blk * 160u + 128u + l0
@@ -7975,10 +7785,55 @@ class MetalKqGemvK5 {
         }
         for [unroll_full] (r in range(2)) {
             let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[first_row + uint(r)] = s
+            if (lane == 0u && first_row + uint(r) < y_rows()) {
+                y_put(y0 + first_row + uint(r), s)
             }
         }
+    }
+}
+
+[metal_dispatch(name = "enc_kq_k5_c", pso = "g_pso_kq_k5", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+class MetalKqGemvK5 : MetalKqGemvK5T {
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="metal_kq_gemv_k5_msl")]
+    def metal_kq_gemv_k5 {
+        gemv_body()
+    }
+
+    def override site_setup(var g : uint[8]) {
+        g[0] = ndim
+    }
+    def override y_rows : uint => ddim
+    def override x_at(i : uint) : float => x[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
+    }
+}
+
+// Expert-indexed Q5_K GEMV — MetalKqGemvK5T's dot with the expert superblock shift.
+[metal_dispatch(name = "enc_moe_gemv_k5_c", pso = "g_pso_moe_kq_k5", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
+class MetalMoeGemvK5 : MetalKqGemvK5T {
+    @ssbo @binding = 3 @role = "read" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
+    @uniform @binding = 5 ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+
+    [metal_kernel(name="metal_moe_gemv_k5_msl")]
+    def metal_moe_gemv_k5 {
+        gemv_body()
+    }
+
+    def override site_setup(var g : uint[8]) {
+        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
+    }
+    def override y_rows : uint => ka.ddim
+    def override x_at(i : uint) : float => x[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
     }
 }
 
@@ -8064,18 +7919,15 @@ class MetalKqGemvK5C {
 
 // Q6_K: 6-bit q = nibble | 2 qh bits, minus 32; per-16-element SIGNED sub-scales as 4 scattered
 // byte loads (the uint4+select form costs 2 resident simdgroups); d off the trailing f16 plane.
-[metal_dispatch(name = "enc_kq_k6_c", pso = "g_pso_kq_k6", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
-class MetalKqGemvK6 {
+[ |> template_struct_instance]
+class template MetalKqGemvK6T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
-    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
 
-    [metal_kernel(name="metal_kq_gemv_k6_msl")]
-    def metal_kq_gemv_k6 {
+    def gemv_body {
+        var g : uint[8]
+        site_setup(g)
         let lane = gl_SubgroupInvocationID
         let tid = lane / 2u
         let ix = lane % 2u
@@ -8083,21 +7935,24 @@ class MetalKqGemvK6 {
         let il = tid % 8u
         let l0 = il * 4u
         let is0 = ip * 8u + l0 / 16u
-        let nb = ndim / 256u
+        let nb = g[0] / 256u
+        let eb = g[1]
+        let xoff = g[2]
+        let y0 = g[3]
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
         var yl : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
-            let yb = ib * 256u + ip * 128u + l0
+            let yb = xoff + ib * 256u + ip * 128u + l0
             for [unroll_full] (l in range(4)) {
-                yl[4 * l] = x[yb + uint(l)]
-                yl[4 * l + 1] = x[yb + 32u + uint(l)]
-                yl[4 * l + 2] = x[yb + 64u + uint(l)]
-                yl[4 * l + 3] = x[yb + 96u + uint(l)]
+                yl[4 * l] = x_at(yb + uint(l))
+                yl[4 * l + 1] = x_at(yb + 32u + uint(l))
+                yl[4 * l + 2] = x_at(yb + 64u + uint(l))
+                yl[4 * l + 3] = x_at(yb + 96u + uint(l))
             }
             for [unroll_full] (r in range(2)) {
-                let blk = (first_row + uint(r)) * nb + ib
+                let blk = eb + (first_row + uint(r)) * nb + ib
                 let ql0 = blk * 192u + ip * 64u + l0
                 let qh0 = blk * 192u + 128u + ip * 32u + l0
                 let sb = blk * 16u + is0
@@ -8122,10 +7977,56 @@ class MetalKqGemvK6 {
         }
         for [unroll_full] (r in range(2)) {
             let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[first_row + uint(r)] = s
+            if (lane == 0u && first_row + uint(r) < y_rows()) {
+                y_put(y0 + first_row + uint(r), s)
             }
         }
+    }
+}
+
+[metal_dispatch(name = "enc_kq_k6_c", pso = "g_pso_kq_k6", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+class MetalKqGemvK6 : MetalKqGemvK6T {
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
+    @uniform @binding = 5 ndim : uint
+    @uniform @binding = 6 ddim : uint
+
+    [metal_kernel(name="metal_kq_gemv_k6_msl")]
+    def metal_kq_gemv_k6 {
+        gemv_body()
+    }
+
+    def override site_setup(var g : uint[8]) {
+        g[0] = ndim
+    }
+    def override y_rows : uint => ddim
+    def override x_at(i : uint) : float => x[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
+    }
+}
+
+// Expert-indexed Q6_K GEMV — MetalKqGemvK6T's dot; the expert shift covers the sub-scales AND
+// the trailing f16 d plane (both indexed by the same region-relative superblock).
+[metal_dispatch(name = "enc_moe_gemv_k6_c", pso = "g_pso_moe_kq_k6", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
+class MetalMoeGemvK6 : MetalKqGemvK6T {
+    @ssbo @binding = 3 @role = "read" x : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
+    @uniform @binding = 5 ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+
+    [metal_kernel(name="metal_moe_gemv_k6_msl")]
+    def metal_moe_gemv_k6 {
+        gemv_body()
+    }
+
+    def override site_setup(var g : uint[8]) {
+        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
+    }
+    def override y_rows : uint => ka.ddim
+    def override x_at(i : uint) : float => x[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
     }
 }
 
