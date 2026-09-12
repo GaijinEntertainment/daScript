@@ -421,6 +421,7 @@ struct ResidentPlan {
     others_bytes : int64    //!< dedicated video memory every other process holds, when the OS answers (0 otherwise) - named in a decline
     emb_f32_bytes : int64   //!< the raw f32 embd table the gather would upload - counted only when it rides the headroom left after weights + KV (0 = the CPU embed serves)
     fits : bool
+    memory : bool         //!< the decline is the card's room at the session's context, not a feature the driver lacks
     reason : string       //!< "" when it fits; otherwise why, with a remedy where one exists
 }
 
@@ -622,6 +623,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     p.weight_bytes += p.emb_f32_bytes
     p.fits = total <= usable
     if (!p.fits) {
+        p.memory = true
         // a shorter context is the remedy that actually works — weights are fixed, KV is not
         let kv_fit = max(usable - p.weight_bytes - p.scratch_bytes, 0l)
         let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow) : 0l
@@ -717,11 +719,22 @@ def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : K
             f2 = fmt_at(t.w2_fmt, l))
 }
 
+var private g_rdec_decline_reason : string   //! the last decline's text, for a test that skips on a memory decline and fails on any other
+var private g_rdec_memory_decline = false
+
 //! The whole-model driver's decline line: the reason, and that the per-op rails serve instead.
 [cold_path]
-def rdec_decline_say(reason : string) {
+def rdec_decline_say(reason : string; memory : bool = false) {
+    g_rdec_decline_reason = reason
+    g_rdec_memory_decline = memory
     to_log(LOG_WARNING, "dasLLAMA: resident driver declined - {reason}; the per-op rails serve\n")
 }
+
+//! the last resident decline's text ("" when the driver armed or never planned); `moe_gpu_resident_memory_decline` says whether it was the card's room
+def moe_gpu_resident_decline() : string => g_rdec_decline_reason
+
+//! true when the last decline was the residency plan not fitting the card - the remedy is a shorter context or a smaller file, not a driver fix
+def moe_gpu_resident_memory_decline() : bool => g_rdec_memory_decline
 
 [cold_path]
 def private rdec_decline(reason : string) : bool {
@@ -741,12 +754,10 @@ def resident_unserved_features(c : Config) : string {
     var names = ""
     name_list_add(names, c.attn_qkv_bias && !rdec_bias_installed(), "attention qkv bias")
     name_list_add(names, c.attn_out_bias, "attention output bias")
-    name_list_add(names, c.v_norm, "v-norm")
     name_list_add(names, c.attn_sinks, "attention sinks")
     name_list_add(names, c.moe_dense_shexp, "dense shared expert")
     name_list_add(names, c.attn_logit_softcap != 0.0, "attention logit softcap")
-    name_list_add(names, c.final_logit_softcap != 0.0, "final logit softcap")
-    name_list_add(names, c.layer_out_scale, "a layer output scale")
+    name_list_add(names, has_ple(c), "per-layer embeddings")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
     name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
     if (c.n_expert > 0l) {
@@ -824,12 +835,16 @@ def resident_layer_decline(t : Model; l : int64) : string {
         return ""
     }
     if (t.kv_src[l] != l) return "layer {l} shares layer {t.kv_src[l]}'s K/V"
-    if (t.wq_offs[l] < 0l || t.wk_offs[l] < 0l || t.wv_offs[l] < 0l) return "layer {l} lacks a q/k/v plane"
-    // the attention kernels stage a head in a 256-thread workgroup, 32 dims a lane
+    if (t.wq_offs[l] < 0l || t.wk_offs[l] < 0l) return "layer {l} lacks a q/k plane"
+    if (t.wv_offs[l] < 0l && !resident_v_from_k(c, l)) return "layer {l} lacks a v plane"
+    // the attention kernels stage a head in a 256-thread workgroup, 32 dims a lane, two elements a thread past 256
     let hs = layer_head_size(c, l)
-    if (hs % 32l != 0l || hs > 256l) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 256)"
+    if (hs % 32l != 0l || hs > 512l) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 512)"
     return ""
 }
+
+//! layer `l` has no v plane and takes V off its k row (gemma-4's global layers)
+def resident_v_from_k(c : Config; l : int64) : bool => l < 64l && ((c.v_from_k_mask >> uint64(l)) & 1ul) != 0ul
 
 def private resident_upload_dn_ba(t : Model; n_recurrent : int64) {
     let c = t.config
@@ -876,23 +891,29 @@ def private resident_upload_bias(t : Model) {
     delete rows
 }
 
-//! the rotary width of a layer's rope class (a partial-rope model rotates rope_dim of the head)
-def private resident_rot(c : Config; l : int64) : int64 => c.rope_dim > 0l ? c.rope_dim : layer_head_size(c, l)
+//! the global rope class's rotary width: the config's head size (the global class's), or rope_dim on a partial-rope model
+def private resident_rot(c : Config) : int64 => c.rope_dim > 0l ? c.rope_dim : c.head_size
+
+//! the sliding class's rotary width: its own head size (a partial-rope model has one class)
+def private resident_rot_swa(c : Config) : int64 => c.head_size_swa > 0l ? c.head_size_swa : c.head_size
 
 //! a position's cos/sin plane for the resident kernels: the global class's row (cos[half] + sin[half]),
 //! then the sliding class's where the two rope differently (`has_dual_rope`); a layer reads its class's row at its `cbase`
-def private resident_cos_elems(c : Config) : int64 => resident_rot(c, 0l) + (has_dual_rope(c) ? (c.head_size_swa > 0l ? c.head_size_swa : c.head_size) : 0l)
+def private resident_cos_elems(c : Config) : int64 => resident_rot(c) + (has_dual_rope(c) ? resident_rot_swa(c) : 0l)
 
 //! one attention layer's geometry record for the driver; `mir_base` is the caller's running mirror element count
 def private resident_layer_geom(t : Model; l, mir_base : int64) : RdecLayerGeom {
     let c = t.config
     let sliding = layer_is_sliding(c, l)
     let swa_row = sliding && has_dual_rope(c)
+    let vfk = resident_v_from_k(c, l)
     return RdecLayerGeom(hs = layer_head_size(c, l), qd = layer_qd(c, l), kvd = layer_kv_dim(c, l),
-        hid = resident_dense_width(t, l), rot = swa_row ? (c.head_size_swa > 0l ? c.head_size_swa : c.head_size) : resident_rot(c, 0l),
+        hid = resident_dense_width(t, l), rot = swa_row ? resident_rot_swa(c) : resident_rot(c),
         window = sliding ? c.sliding_window : 0l, mir_base = mir_base,
-        cbase = swa_row ? resident_rot(c, 0l) : 0l, boff = resident_bias_off(c, l),
-        pre_post = c.pre_post_norm, gelu = c.ffn_act == FfnAct.gelu)
+        cbase = swa_row ? resident_rot(c) : 0l, boff = resident_bias_off(c, l),
+        pre_post = c.pre_post_norm, gelu = c.ffn_act == FfnAct.gelu,
+        vfk = vfk, vnorm = c.v_norm && !vfk,
+        out_scale = c.layer_out_scale && !has_ple(c) ? t.fblob[t.out_scale_off + l] : 1.0)
 }
 
 struct private ImageRow {
@@ -1025,7 +1046,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             let kvd_l = layer_kv_dim(c, l)
             planes |> push((n = dim, rows = c.q_gated ? 2l * qd_l : qd_l, f = lf.fq))
             planes |> push((n = dim, rows = kvd_l, f = lf.fk))
-            planes |> push((n = dim, rows = kvd_l, f = lf.fv))
+            if (!resident_v_from_k(c, l)) {
+                planes |> push((n = dim, rows = kvd_l, f = lf.fv))
+            }
             planes |> push((n = qd_l, rows = dim, f = lf.fo))
         }
         if (!layer_is_moe(t, l)) {
@@ -1061,7 +1084,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let mr = repacked ? active_q8_layout_mr() : 1l
     let kg = repacked ? active_q8_kgroup() : 4l
     let wb = repacked ? active_q8_wbias() : 0l
-    let rot = resident_rot(c, 0l)
+    let rot = resident_rot(c)
     if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
                       rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems)) {
@@ -1147,17 +1170,17 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             }
             continue
         }
+        let g = resident_layer_geom(t, l, mir_base)
         let cq = rdec_quant_class(lf.fq)
-        if (cq != rdec_quant_class(lf.fk) || cq != rdec_quant_class(lf.fv)) {
+        if (cq != rdec_quant_class(lf.fk) || (!g.vfk && cq != rdec_quant_class(lf.fv))) {
             return rdec_decline("layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)})")
         }
-        let g = resident_layer_geom(t, l, mir_base)
         let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, c.q_gated ? 2l * g.qd : g.qd, mr, kg, wb)
         let bk = resident_place(t, lf.fk, t.wk_offs[l], dim, g.kvd, mr, kg, wb)
-        let bv = resident_place(t, lf.fv, t.wv_offs[l], dim, g.kvd, mr, kg, wb)
+        let bv = g.vfk ? -1l : resident_place(t, lf.fv, t.wv_offs[l], dim, g.kvd, mr, kg, wb)   //! a V-from-K layer has no v plane
         let bo = resident_place(t, lf.fo, t.wo_offs[l], g.qd, dim, mr, kg, wb)
         // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
-        if (bq < 0l || bk < 0l || bv < 0l || bo < 0l) return rdec_decline("arena placement failed at layer {l}")
+        if (bq < 0l || bk < 0l || (!g.vfk && bv < 0l) || bo < 0l) return rdec_decline("arena placement failed at layer {l}")
         if (moe) {
             let eb = resident_place_experts(t, l, mr, kg, wb)
             if (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) return rdec_decline("arena placement failed at layer {l} (the expert stacks)")
@@ -1174,7 +1197,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
     if (bcls < 0l) return rdec_decline("classifier placement failed")
-    rdec_set_cls(bcls, int(cls_fmt))
+    rdec_set_cls(bcls, int(cls_fmt), c.final_logit_softcap, t.suppress)
     var emb_q8_placed = false
     var emb_f32_placed = false
     if (emb_q8_want) {
@@ -1227,6 +1250,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     rdec_upload_norms(norms)
     delete norms
     g_rdec_active = true
+    g_rdec_decline_reason = ""
+    g_rdec_memory_decline = false
     g_rdec_cnt = 0l
     g_rdec_cap = seq_cap
     g_rdec_cos_elems = cos_elems
@@ -1281,12 +1306,11 @@ def private resident_place_experts(t : Model; l : int64; mr, kg, wb : int64) : t
 //! the two rope differently - its own theta, position scale and head size; the p-RoPE factors only where the arch applies them
 def private rdec_rope_rows(t : Model; pos : int64; var dst : array<float>; base : int64) {
     let c = t.config
-    let rot = resident_rot(c, 0l)
+    let rot = resident_rot(c)
     build_rope_row_packed(dst, base, pos, rot, c.rope_freq_base, c.rope_freq_scale, c.rope_mscale, t.rope_freqs)
     if (has_dual_rope(c)) {
-        let swa_hs = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
         let noff : array<float>
-        build_rope_row_packed(dst, base + rot, pos, swa_hs, c.rope_freq_base_swa, c.rope_freq_scale_swa, c.rope_mscale,
+        build_rope_row_packed(dst, base + rot, pos, resident_rot_swa(c), c.rope_freq_base_swa, c.rope_freq_scale_swa, c.rope_mscale,
             c.rope_ff_global_only ? noff : t.rope_freqs)
     }
 }
@@ -1886,7 +1910,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 to_log(LOG_WARNING, "dasLLAMA: the per-op rails serve this MoE without the streamed slot or the decode mirrors the fitting plan forwent - layers the budget stops keep the CPU\n")
             }
         } else {
-            rdec_decline_say(empty(plan.reason) ? "the residency plan does not fit" : plan.reason)
+            rdec_decline_say(empty(plan.reason) ? "the residency plan does not fit" : plan.reason, plan.memory)
         }
     } elif (moe_gpu_resident_installed() && !gpu_want_resident()) {
         to_log(LOG_INFO, "dasLLAMA: resident driver not attempted - the per-op rails were asked for (DASLLAMA_GPU_RESIDENT=0, or set_gpu_resident_route(false) in process)\n")

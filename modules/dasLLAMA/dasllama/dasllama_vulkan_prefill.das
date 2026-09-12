@@ -1064,11 +1064,20 @@ def private pf_setup {
         }
     }
     let fa128s = !fa_dev && g_gpu.has_coopmat && vk_fa_on() && key_exists(chunked_hs, 128l)
-    let chunked_other = !fa128s ? long_length(chunked_hs) > 0l : long_length(chunked_hs) > 1l
+    var wide_hs = false   //! a head past 256 takes the wide chunked kernel
+    var narrow_hs = false
+    for (hsv in keys(chunked_hs)) {
+        if (hsv > 256l) {
+            wide_hs = true
+        } elif (!(fa128s && hsv == 128l)) {
+            narrow_hs = true
+        }
+    }
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b()
         && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
         && (!fa128s || (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()))
-        && (!chunked_other || (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+        && (!narrow_hs || (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+        && (!wide_hs || (kv16 ? ensure_da_attn_bw_f16_cls() : ensure_da_attn_bw_cls()))
         && (!key_exists(fa_hs, 64l) || (ensure_fa_cm2_h64_cls() && (!any_f16_feed || ensure_fa_cm2_h64_f16_cls())))
         && (!key_exists(fa_hs, 128l) || (ensure_fa_cm2_h128_cls() && (!any_f16_feed || ensure_fa_cm2_h128_f16_cls())))
         && (!key_exists(fa_hs, 256l) || (g_rd.q_gated
@@ -1160,7 +1169,9 @@ def private pf_setup {
             let agbits5 = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)
             g_rd.pf_sets[b + 5] = (fa128l
                 ? (kv16 ? set_da_attn_b_h128_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_h128_cls(abufs5, asizes5, agbits5))
-                : (kv16 ? set_da_attn_b_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_cls(abufs5, asizes5, agbits5)))
+                : (L.hs > 256l
+                    ? (kv16 ? set_da_attn_bw_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_bw_cls(abufs5, asizes5, agbits5))
+                    : (kv16 ? set_da_attn_b_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_cls(abufs5, asizes5, agbits5))))
         }
         // 6 quant_at: pf_attn -> pf_aq/pf_as (f16-fed: f16 convert -> pf_af)
         g_rd.pf_sets[b + 6] = (wo6
@@ -1402,7 +1413,10 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let pairs = int(qd / 2l + kvd / 2l)
                 let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
                 let fa128 = fa128s && hs == 128l
-                let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l)
+                let wide = hs > 256l
+                let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : (wide ? g_rd.n_heads * ((wlen + 3l) / 4l) : g_rd.n_heads * ((wlen + 7l) / 8l))
+                let vfk = g_rd.layers[l].vfk
+                let vnorm = g_rd.layers[l].vnorm
                 // f16-fed roles (mode 4's cm2 tiles): the f32->f16 convert feeds decode-in-load; the fill's tile rule keys off the same flag
                 let fq6 = pf_qkv6(l)
                 let fo6 = pf_f16_feed(g_rd.layers[l].fo)
@@ -1426,7 +1440,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
                 let pq = arena_planes(g_rd.layers[l].fq, g_rd.layers[l].bq)
                 let pk = arena_planes(g_rd.layers[l].fk, g_rd.layers[l].bk)
-                let pv = arena_planes(g_rd.layers[l].fv, g_rd.layers[l].bv)
+                let pv = vfk ? pk : arena_planes(g_rd.layers[l].fv, g_rd.layers[l].bv)   //! no v plane: the qk-norm pass writes V off the k rows
                 let xqb = fq6 ? g_rd.pf_xf : g_rd.pf_xq
                 let xsb = fq6 ? g_rd.dummy : g_rd.pf_xs
                 let xqn = fq6 ? np * dim * 2l : np * dim
@@ -1446,23 +1460,28 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 } else {
                     pf_gemm_enc(raw, h, b + 2, g_rd.layers[l].fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv,
                         pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK, dim, kvd, g_rd.layers[l].bk, wlen, fq6, tq + tkv)
-                    pf_gemm_enc(raw, h, b + 3, g_rd.layers[l].fv, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v,
-                        pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST, dim, kvd, g_rd.layers[l].bv, wlen, fq6, tq + tkv)
-                    vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
-                    cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
+                    if (!vfk) {
+                        pf_gemm_enc(raw, h, b + 3, g_rd.layers[l].fv, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v,
+                            pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST, dim, kvd, g_rd.layers[l].bv, wlen, fq6, tq + tkv)
+                        vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
+                        cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, wlen * kvd * 4l, wlen * kvd * 4l)   // v into pf_kv's v half
+                    }
                 }
+                let voff = uint(kv_merged ? kvd : wlen * kvd)   // the v rows' base in pf_kv, kstride apart
                 if (g_rd.qk_norm) {
-                    var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(kvd / hs),
+                    let nkvh = kvd / hs
+                    let vgroups = vnorm && !vfk ? nkvh : 0l
+                    var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkvh),
                         qstride = uint(qrow), kstride = uint(kv_merged ? 2l * kvd : kvd), kbase = 0u,
                         qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
-                        eps = g_rd.eps, qhs = uint(qhs))
-                    enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + kvd / hs))
+                        eps = g_rd.eps, qhs = uint(qhs), vfk = vfk ? 1u : 0u, vnorm = vnorm ? 1u : 0u, vbase = voff)
+                    enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + nkvh + vgroups))
                     pfq_ts(raw)
                 }
                 var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
                     layerbase = mirb, npos = uint(wlen), pos0 = uint(w0),
-                    voff = uint(kv_merged ? kvd : wlen * kvd), kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
+                    voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
                     boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
                     cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase))
                 if (g_rd.kv16) {
@@ -1511,6 +1530,12 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                             enc_da_attn_b_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
                         } else {
                             enc_da_attn_b_h128_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        }
+                    } elif (wide) {
+                        if (g_rd.kv16) {
+                            enc_da_attn_bw_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+                        } else {
+                            enc_da_attn_bw_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
                         }
                     } else {
                         if (g_rd.kv16) {
@@ -1607,7 +1632,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     pf_moe_block(raw, h, l, wlen)
                 }
                 let nxt = l + 1l < g_rd.n_layers ? rd_norm_off(l + 1l, RD_NORM_ATT) : nlfin
-                var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0, row0 = uint(ffn_row0),
+                var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = g_rd.layers[l].out_scale, row0 = uint(ffn_row0),
                     pre_on = pre_on, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
                 let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
                 if (moe) {
@@ -1634,6 +1659,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
                 var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
                 gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+                if (rd_cls_epi_on()) {
+                    rd_enc_cls_epi(raw, h)   // bills to the classifier's stamp
+                }
                 pfq_ts(raw)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)

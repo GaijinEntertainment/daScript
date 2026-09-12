@@ -981,15 +981,16 @@ def private requant_oracle(src : array<float>; base, nelem : int; q8k : bool;
 }
 
 // single-query causal attention oracle: one output row per (query row, head) — plain two-pass
-// softmax over [0, cnt); the device's online form reassociates, so approx bars
+// softmax over [kstart, cnt) (a sliding layer's window starts past 0); the device's online form
+// reassociates, so approx bars
 def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kbase0 : int;
                             vv : array<float>; vbase0 : int; kvd, hh, hs, kv_mul, cnt : int;
-                            scale : float; var out : array<float>; obase : int) {
+                            scale : float; var out : array<float>; obase : int; kstart : int = 0) {
     let khoff = (hh / kv_mul) * hs
     var sc : array<float>
     sc |> resize(cnt)
     var mm = -3.0e38
-    for (j in range(cnt)) {
+    for (j in range(kstart, cnt)) {
         var s = 0.0
         for (e in range(hs)) {
             s += q[qbase + e] * kk[kbase0 + j * kvd + khoff + e]
@@ -998,13 +999,13 @@ def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kb
         mm = max(mm, sc[j])
     }
     var tot = 0.0
-    for (j in range(cnt)) {
+    for (j in range(kstart, cnt)) {
         sc[j] = exp(sc[j] - mm)
         tot += sc[j]
     }
     for (e in range(hs)) {
         var acc = 0.0
-        for (j in range(cnt)) {
+        for (j in range(kstart, cnt)) {
             acc += sc[j] * vv[vbase0 + j * kvd + khoff + e]
         }
         out[obase + e] = acc / tot
@@ -5166,6 +5167,105 @@ def test_vkd_da_attn_b(t0 : T?) {
                 }
                 let bad = mismatch_approx(y_cls, y_ref)
                 t |> success(bad == 0, "da_attn_b hs {hs} matches the CPU oracle ({bad} of {npos * qd} off)")
+                delete qh
+                delete kh
+                delete vh
+                delete y_ref
+                delete y_cls
+            }
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
+// the wide-head twin (heads past 256): the 4-row q tile over 16-position K/V stages, at 384 (the
+// guarded eighth dim lane) and 512, with the window mask on the long arm
+[test]
+def test_vkd_da_attn_bw(t0 : T?) {
+    t0 |> run("wide-head batched decode attention class kernel == the CPU oracle (mirror offsets, the window)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            if (!ensure_da_attn_bw_cls()) {
+                feint("da_attn_bw class declined on this device (workgroup cap) - skipping\n")
+                return
+            }
+            let nheads = 4
+            let kv_mul = 4      // one kv head, the gemma-4 global layers' shape
+            let kbase = 64      // word offsets into the mirrors — the offset plumbing must survive the port
+            let vbase = 160
+            let scale = 1.0     // the gemma-4 score scale
+            for (arm in range(4)) {
+                let hs = arm == 0 ? 384 : 512
+                let npos = arm >= 2 ? 120 : 13    //! 13: a partial 4-tile and a stage crossing; 120: thirty 4-tiles over a 620-position mirror (the second prefill window's shape)
+                let w0 = arm >= 2 ? 500 : 32
+                let window = arm == 3 ? 24 : 0    //! the last arm slides: every row sees the 24 positions up to its own
+                let qd = nheads * hs
+                let kvd = (nheads / kv_mul) * hs
+                let kpos = w0 + npos
+                var qh : array<float>
+                var kh : array<float>
+                var vh : array<float>
+                qh |> resize(npos * qd)
+                kh |> resize(kbase + kpos * kvd)
+                vh |> resize(vbase + kpos * kvd)
+                for (i in range(npos * qd)) {
+                    qh[i] = float((i * 41) % 73) * 0.005 - 0.18
+                }
+                for (i in range(kbase + kpos * kvd)) {
+                    kh[i] = float((i * 17) % 97) * 0.003 - 0.14
+                }
+                for (i in range(vbase + kpos * kvd)) {
+                    vh[i] = float((i * 53) % 89) * 0.04 - 1.7
+                }
+                let q_bytes = int64(npos * qd) * 4l
+                let k_bytes = int64(kbase + kpos * kvd) * 4l
+                let v_bytes = int64(vbase + kpos * kvd) * 4l
+                let qdev = make_device_buf(q_bytes)
+                let kdev = make_device_buf(k_bytes)
+                let vdev = make_device_buf(v_bytes)
+                let yd2 = make_device_buf(q_bytes)
+                var host = make_host_buf(q_bytes, true, [cached = true])
+                var y_cls : array<float>
+                y_cls |> resize(npos * qd)
+                let wgs = nheads * ((npos + 3) / 4)
+                unsafe {
+                    upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
+                    upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), k_bytes)
+                    upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), v_bytes)
+                    var sc = set_da_attn_bw_cls(fixed_array(qdev, kdev, vdev, yd2),
+                        fixed_array(q_bytes, k_bytes, v_bytes, q_bytes),
+                        fixed_array(1u, 2u, 8u, 16u))
+                    var raw2 = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = DaAttnBArgs(npos = uint(npos), nh = uint(nheads), kvd = uint(kvd),
+                        hs = uint(hs), kv_mul = uint(kv_mul), kbase = uint(kbase),
+                        vbase = uint(vbase), w0 = uint(w0), scale = scale, window = uint(window))
+                    enc_da_attn_bw_cls(raw2, h2, sc, pc, int64(wgs))
+                    vhz_dep(raw2, h2, 16u, 0u, true)
+                    cmd_copy_whole(raw2, yd2, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+                }
+                // oracle: causal rows over the offset mirrors (row r attends [kstart, w0 + r]), kstart the window's start
+                var y_ref : array<float>
+                y_ref |> resize(npos * qd)
+                for (r in range(npos)) {
+                    let cnt = w0 + r + 1
+                    let kstart = window > 0 && cnt > window ? cnt - window : 0
+                    for (hh in range(nheads)) {
+                        attn_row_oracle(qh, r * qd + hh * hs, kh, kbase, vh, vbase, kvd, hh, hs,
+                            kv_mul, cnt, scale, y_ref, r * qd + hh * hs, kstart)
+                    }
+                }
+                let bad = mismatch_approx(y_cls, y_ref)
+                t |> success(bad == 0, "da_attn_bw hs {hs} npos {npos} window {window} matches the CPU oracle ({bad} of {npos * qd} off)")
                 delete qh
                 delete kh
                 delete vh

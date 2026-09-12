@@ -123,14 +123,21 @@ def test_resident_layer_decline(t : T?) {
         m.kv_src[2] = 1l
         t |> success(says(resident_layer_decline(m, 2l), "layer 2 shares layer 1's K/V"), "shared K/V named")
         m.wq_offs[0] = -1l
-        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a q/k/v plane"), "missing plane named")
+        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a q/k plane"), "missing plane named")
+        m.wq_offs[0] = 0l
+        m.wv_offs[0] = -1l
+        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a v plane"), "a missing v plane is named where the layer is not V-from-K")
+        m.config.v_from_k_mask = 1ul
+        t |> equal(resident_layer_decline(m, 0l), "", "a V-from-K layer needs no v plane: V is its k row at its own rms")
         m.ffn_w <- [64l, 96l, 64l]
         t |> equal(resident_layer_decline(m, 1l), "", "a layer's own dense FFN width is its registration's, not a decline")
         m.config.sliding_window = 128l
         m.config.swa_pattern = 2l
         t |> equal(resident_layer_decline(m, 1l), "", "a sliding layer is served (its window rides the attention push)")
-        m.config.head_size = 320l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 320"), "a head past the kernels' 256 is named by layer")
+        m.config.head_size = 512l
+        t |> equal(resident_layer_decline(m, 1l), "", "a 512 head is served (two elements a thread)")
+        m.config.head_size = 544l
+        t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 544"), "a head past the kernels' 512 is named by layer")
         m.config.head_size = 40l
         t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 40"), "a head off the 32-multiple is named by layer")
         delete m
@@ -181,11 +188,14 @@ def test_resident_unserved_moe_features(t : T?) {
         c.ffn_act = FfnAct.swiglu_oai
         c.layer_out_scale = true
         let e = resident_unserved_features(c)
-        t |> success(says(e, "biased expert stacks") && says(e, "the clamped swiglu expert activation") && says(e, "a layer output scale"),
-            "the expert stack's bias, the clamped activation and the layer output scale named together: {e}")
+        t |> success(says(e, "biased expert stacks") && says(e, "the clamped swiglu expert activation") && !says(e, "output scale"),
+            "the expert stack's bias and the clamped activation named together, the layer output scale served: {e}")
         var d = Config()
         d.moe_gate = MoeGate.sigmoid
         t |> equal(resident_unserved_features(d), "", "a dense model's router field is no feature")
+        var p = Config()
+        p.n_embd_per_layer = 256l
+        t |> equal(resident_unserved_features(p), "per-layer embeddings", "the E-series per-layer embeddings are named until their arm lands")
     }
 }
 

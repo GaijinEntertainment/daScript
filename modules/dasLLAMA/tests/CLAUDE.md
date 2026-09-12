@@ -454,8 +454,26 @@ f16 rows where the CPU quantizes Q8 blocks), with the one-step-off control (read
 window, eight tokens, 520 tokens (two windows, the window engaged on the last eight positions) and
 600 tokens (every sliding layer masking below its window on the prefill tiles and the decode
 chunks); plus the agreement cells - the window chain and the token command on the same eight and
-forty tokens, held within 6x of the CPU chain's own two paths' gap; skips without the model or
-the armed tier.
+forty tokens, held within 6x of the CPU chain's own two paths' gap. Every cell feeds ordinary
+prose through the model's own tokenizer (`prose_tokens`), never a synthetic id ramp: on a ramp
+gemma's logits saturate the softcap and the CPU chain's own prefill and decode land twenty points
+apart at 300 positions, so a bar on them measures nothing. The gemma-4 dense rows (large tier,
+`DASLLAMA_PARITY_FULL=1`): gemma-4-12B Q8_0 in the forced-feed form at forty tokens (the weightless
+v-norm, the V-from-K global layers at head 512 beside the sliding 256s, the per-layer output scale,
+the final softcap and the suppressed ids - the bar's max logit skips the pinned ids) and in the
+perplexity form (`ppl_compare`: `n` ids prefilled, `steps` teacher-forced, the resident's
+perplexity within 5% of the CPU chain's and its argmax hits within three, the one-position-off
+targets the control) at 150 + 150 and at 520 + 80 (two prefill windows, the second eight rows
+deep); the 12B Q4_K_M in the agreement form at eight and 300 tokens. The perplexity form exists
+because the 12B's logits sit within a few points of each other at whole stretches of positions
+(llama.cpp's own margins on the same text read 0.6 to 16), so a maxdiff bar at one position
+measures the model's flatness, not the driver; the CPU chain's own two paths land 13% to 44% of
+the max logit apart there. Arms: `g3` (the
+gemma-3 cells), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
+`g4q8` (the 12B Q8_0 cells) - the tokens share no substring, so one arm selects one file. Skips
+without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
+the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
+under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.
 `test_gpu_resident_moe.das` - stocked suite, `-jit` only; the whole-model resident driver on a MoE
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, `DASLLAMA_GPU=1`): the expert stacks in the arena, the window
 chain's routed block and the token command's routed block - the hybrid file's forced-feed

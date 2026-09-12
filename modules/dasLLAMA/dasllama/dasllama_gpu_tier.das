@@ -146,6 +146,9 @@ struct RdecLayerGeom {
     boff : int64                    //! its row base in the q/k/v bias plane
     pre_post : bool                 //! the residual steps norm their add partner first (a gemma's post-attention and post-FFN norms)
     gelu : bool                     //! the dense FFN's activation is the tanh gelu, else silu
+    vfk : bool                      //! the layer has no v plane: V is the raw k row scaled by its own rms (gemma-4's global layers)
+    vnorm : bool                    //! V is scaled by its own rms, no weight (gemma-4's v-norm on a layer with its own v plane)
+    out_scale : float               //! the layer's output scale on its FFN residual step; 1.0 = none
 }
 //! qd / kv_dim / head_size / hidden / rot are the maxima over the layers (the scratch is sized to
 //! them); `mir_elems` is one mirror side's element count over every attention layer, `cos_elems`
@@ -158,7 +161,8 @@ typedef RdecUploadDnBaFn = function<(rows : array<float>) : void>
 typedef RdecUploadBiasFn = function<(rows : array<float>) : void>
 typedef RdecDnOwnFn = function<(l : int64; stp : float?; histp : float?) : void>
 typedef RdecDnPrefillOwnFn = function<(l : int64; stp : float?; histp : float?) : void>
-typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int) : void>
+//! the classifier plane, and the epilogue its logits take: the final softcap (0 = none) and the checkpoint's suppressed token ids
+typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) : void>
 typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; pos : int64; cnt : int64; var logits : array<float>) : void>
 typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) : void>
 typedef RdecSyncKvFn = function<(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) : void>
@@ -183,8 +187,8 @@ def private rdec_unset_upload_dn_ba(rows : array<float>) {}
 def private rdec_unset_dn_own(l : int64; stp : float?; histp : float?) {}
 [unused_argument(l, stp, histp)]
 def private rdec_unset_dn_prefill_own(l : int64; stp : float?; histp : float?) {}
-[unused_argument(cls_block, cls_fmt)]
-def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int) {}
+[unused_argument(cls_block, cls_fmt, cap, supp)]
+def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {}
 [unused_argument(x, cossin, pos, cnt, logits)]
 def private rdec_unset_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) {
     panic("dasLLAMA: resident decode token hit without an installed GPU driver")
@@ -383,7 +387,7 @@ def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt
 def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems : int64) : bool => invoke(g_rdec_prepare, n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn, mir_elems, cos_elems)
 def public rdec_upload_norms(norms : array<float>) { invoke(g_rdec_norms, norms) }
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
-def public rdec_set_cls(cls_block : int64; cls_fmt : int) { invoke(g_rdec_set_cls, cls_block, cls_fmt) }
+def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
 def public rdec_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) { invoke(g_rdec_token, x, cossin, pos, cnt, logits) }
 def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, npos, logits) }
 def public rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) { invoke(g_rdec_sync_kv, l, kp, vp, npos) }
