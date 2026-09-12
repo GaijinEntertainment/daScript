@@ -1580,8 +1580,10 @@
     between the August 30 record and master's head, not in a branch. The short-clip bias (a
     larger loss the shorter the clip) points at per-call overhead - a wake, a prep, or a
     kernel winner that lost its small-shape arm - rather than a GEMM's steady-state rate.
-    Unquirked: bisect the CPU ASR cell (parakeet jfk.wav, 11 s) across the merges since
-    August 30 on a quiet box under one manifest, then re-record the board.
+    Unquirked: first replicate the August 30 numbers - a worktree at the recording commit
+    (013a151f4) beside master's head, the same cell on both, side by side on a quiet box - then
+    bisect the CPU ASR cell (parakeet jfk.wav, 11 s) across the merges between them under one
+    manifest, and re-record the board.
 141. **Four tower sites release a pool buffer under a byte count that is not its acquire's.** In
     `dasllama_metal_tower.das` the K panel `bk` is acquired at `bytes_rowk` (the 64-padded key
     rows) and released at `bytes_row` / `bytes_rowp` (the 32-padded rows) at four self-attention
@@ -1599,3 +1601,9 @@
     Nothing reaches it below `g_attn_single_max` rows of context. Unquirked: one chunk-count
     formula over the deepest row, used both to size `bpart` and to dispatch, with a cell that
     verifies at a context depth crossing a 64-row boundary.
+143. **The q8 mul_mm tensor and double-buffer kernels are one body one stage width apart.**
+    `MetalQ8MulMmTensorT` and `MetalQ8MulMmDbT` (`dasllama_metal_prefill.das`) carry the same
+    eight-line kernel; they differ in the chunk width `tmm2d_q8u_f32` takes (64 / 128), the
+    staging tile (`twb` 6144 / 9216 halves) and the default M tile (32 / 128). Unquirked: one
+    class template with the stage width as its constant, the stamps keeping their dispatch
+    names, gated by the emitted-kernel identity compare and the prefill kq arms.

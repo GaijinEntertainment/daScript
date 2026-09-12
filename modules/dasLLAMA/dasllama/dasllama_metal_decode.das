@@ -57,7 +57,6 @@ def public metal_decode_shutdown {
 }
 
 
-
 // ... plus the decode-specific gates (uniform f16/f32 KV, attention depth, a real session uid)
 [unused_argument(pos)]   // depth retired (M2.4) — pos stays in the gate signature for future clauses
 def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDecline {
@@ -1324,7 +1323,7 @@ def metal_mtp_seam_row(t : Model; var s : Session; token, pos : int64) : bool {
 var private @scratch g_vrt : array<uint>   // per-layer 2-row route entries: uint4(koff_el+lbase, voff_el+lbase, cap, cnt_i)
 
 // verify shape gate: f16 KV, silu FFN (dense or routed MoE ± shexp), no epilogue exotics.
-// Weight sites are fmt-generic (enc_verify_site / enc_moe_gemv — the load gate vets kernel
+// Weight sites are fmt-generic (enc_batch_site under rows_tier / enc_moe_gemv — the load gate vets kernel
 // coverage); a missing attn_v and the moe_with_dense/mx4 MoE forms have no verify arm yet
 def private metal_mtp_verify_ok(t : Model; s : Session) : bool {
     let c = t.config
@@ -1344,23 +1343,51 @@ def private metal_mtp_verify_ok(t : Model; s : Session) : bool {
     return true
 }
 
-// one verify-B=2 weight site: a q8 plane rides the batched q8 GEMV, a kq plane the small-batch
-// mvb twins (the batch rail's dispatch at nrows=2). ycol = flat element offset into by
-def private enc_verify_site(t : Model; enc : MetalComputeEncoder?; fmt : KqFmt;
-                            woff, rows, n, ys : int64; bx, by, bn, bd, bys : MetalBuffer?; ycol : int64 = 0l; nrows : int64 = 2l) {
-    if (fmt == KqFmt.q8) {
-        let bw = blob_of(g_dev, t, woff)
-        enc_gemv_rows(enc, nrows, bw.buf, bw.boff, bx, by, bn, bd, bys, n, rows, ys, uint64(ycol * 4l))
+
+def private rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bs : MetalBuffer?; soff : uint64; bw, bd : MetalBuffer?) {
+    enc_rms_b(enc, bs, soff, bw, bd, e.r.u_dim, e.r.u_eps, e.r.nrows)
+}
+
+def private add_rows(var e : auto(ET); enc : MetalComputeEncoder?; bg : MetalBuffer?; goff : uint64; bu : MetalBuffer?; uoff : uint64; dim : int64; bosc : MetalBuffer?) {
+    enc_add(enc, bg, goff, bu, uoff, e.r.u_total_dim, e.r.nrows * dim, bosc)
+}
+
+def private moe_args_rows(var e : auto(ET); ndim, ddim, eplane, xs, hasb : uint; down : bool) : MoeGemvArgs {
+    let r & = unsafe(*e.r)
+    return MoeGemvArgs(ndim = ndim, ddim = ddim, eplane = eplane, xs = xs, ss = r.k_moe_ss,
+        bxs = down ? r.k_moe_knfe : r.k_dim, bys = down ? r.k_moe_kdim : r.k_moe_knfe, hasb = hasb)
+}
+
+def private add_rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bx, ba, bw, by : MetalBuffer?; dim : int64; bosc : MetalBuffer?) {
+    let r & = unsafe(*e.r)
+    if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
+        enc_add_rms_b(enc, bx, ba, bw, by, r.u_dim, r.u_eps, r.nrows, bosc)
     } else {
-        enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, n, by, ys, ycol, bn, bd, bys, nrows, nrows)
+        enc_add(enc, bx, 0ul, ba, 0ul, r.u_total_dim, r.nrows * dim, bosc)
+        enc_rms_b(enc, bx, 0ul, bw, by, r.u_dim, r.u_eps, r.nrows)
     }
 }
 
-//! the verify rows' site: the batch-form sites at nrows over the same slab
+def private total_rows(e : auto(ET); u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> {
+    let r & = unsafe(*e.r)
+    if (u != r.u_dim && u != r.u_hidden && u != r.u_qd && u != r.u_moe_knfe) {
+        panic("row chain: a row-total is asked for a uniform with no nrows-scaled twin")
+    }
+    let bt = u == r.u_dim ? r.u_total_dim : (u == r.u_hidden ? r.u_total_h : (u == r.u_qd ? r.u_total_qd : r.u_moe_tot))
+    if (bt == null) {
+        let slot = u == r.u_dim ? "u_dim" : (u == r.u_hidden ? "u_hidden" : (u == r.u_qd ? "u_qd" : "u_moe_knfe"))
+        panic("row chain: the row-total twin of {slot} was not built for this step (the step gate declines the models that would ask)")
+    }
+    return (b = bt, n = n * r.nrows)
+}
+
+[arch(at="../ARCHITECTURE_GPU_MTP.md#metal-layer-enc")]
+def private rows_tier(nrows : int64) : BatchTier => BatchTier(use_mm = false, use_gemm = false, mp = nrows, nrows = nrows, bpsk = null)
+
 [unused_argument(kind)]
 def private site_verify(e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder?; kind : SiteKind; fmt : KqFmt;
                         woff, rows, n, ys : int64; bx, by, bn, bd, bys : MetalBuffer?; ycol : int64) {
-    enc_verify_site(t, enc, fmt, woff, rows, n, ys, bx, by, bn, bd, bys, [ycol = ycol, nrows = e.r.nrows])
+    enc_batch_site(enc, t, rows_tier(e.r.nrows), fmt, woff, rows, n, ys, bx, by, bn, bd, bys, ycol, false)
 }
 
 //! the verify rows' panels: the single row's, at nrows rows and with no gemma4 branch
@@ -1371,42 +1398,6 @@ def private panels_verify(var e : VerifyLayerEnc; moe_with_dense : bool; hid_l, 
         fg = r.bh12, fu = r.bh12, fu_col = r.nrows * hid_l)
 }
 
-//! the verify rows' totals: the per-row uniform's nrows-scaled twin
-def private total_verify(e : VerifyLayerEnc; u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> {
-    let r & = unsafe(*e.r)
-    if (u != r.u_dim && u != r.u_hidden && u != r.u_qd && u != r.u_moe_knfe) {
-        panic("verify layer: a row-total is asked for a uniform with no nrows-scaled twin")
-    }
-    let bt = u == r.u_dim ? r.u_total_dim : (u == r.u_hidden ? r.u_total_h : (u == r.u_qd ? r.u_total_qd : r.u_moe_tot))
-    return (b = bt, n = n * r.nrows)
-}
-
-//! add_rms over nrows: the fused kernel below its row slab, the add + rms pair past it
-def private add_rms_verify(var e : VerifyLayerEnc; enc : MetalComputeEncoder?; bx, ba, bw, by : MetalBuffer?; dim : int64; bosc : MetalBuffer?) {
-    let r & = unsafe(*e.r)
-    if (dim <= ADD_RMS_MAX_DIM) {
-        enc_add_rms_b(enc, bx, ba, bw, by, r.u_dim, r.u_eps, r.nrows, bosc)
-    } else {
-        enc_add(enc, bx, 0ul, ba, 0ul, r.u_total_dim, r.nrows * dim, bosc)
-        enc_rms_b(enc, bx, 0ul, bw, by, r.u_dim, r.u_eps, r.nrows)
-    }
-}
-
-def private rms_verify(var e : VerifyLayerEnc; enc : MetalComputeEncoder?; bs : MetalBuffer?; soff : uint64; bw, bd : MetalBuffer?) {
-    enc_rms_b(enc, bs, soff, bw, bd, e.r.u_dim, e.r.u_eps, e.r.nrows)
-}
-
-def private add_verify(var e : VerifyLayerEnc; enc : MetalComputeEncoder?; bg : MetalBuffer?; goff : uint64; bu : MetalBuffer?; uoff : uint64; dim : int64; bosc : MetalBuffer?) {
-    enc_add(enc, bg, goff, bu, uoff, e.r.u_total_dim, e.r.nrows * dim, bosc)
-}
-
-//! the verify rows' expert args: one stream per row - the up sites read x at the row's dim
-//! stride and write the row's k*nfe slot rows, the down site reads those and writes k*dim
-def private moe_args_verify(var e : VerifyLayerEnc; ndim, ddim, eplane, xs, hasb : uint; down : bool) : MoeGemvArgs {
-    let r & = unsafe(*e.r)
-    return MoeGemvArgs(ndim = ndim, ddim = ddim, eplane = eplane, xs = xs, ss = r.k_moe_ss,
-        bxs = down ? r.k_moe_knfe : r.k_dim, bys = down ? r.k_moe_kdim : r.k_moe_knfe, hasb = hasb)
-}
 
 //! the verify rows' fused gate+up dot over the rows form (w2 follows as a rows site)
 [unused_argument(geglu, u_hid_l)]
@@ -1521,11 +1512,11 @@ def private recurrent_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
 //! the MTP verify's layer encoder: k+1 rows over the same slab through the route table
 struct private VerifyLayerEnc : LayerEncT {
     override site = @@site_verify
-    override total = @@total_verify
-    override add_rms = @@add_rms_verify
-    override rms = @@rms_verify
-    override add = @@add_verify
-    override moe_args = @@moe_args_verify
+    override total = @@total_rows
+    override add_rms = @@add_rms_rows
+    override rms = @@rms_rows
+    override add = @@add_rows
+    override moe_args = @@moe_args_rows
     override rope_store = @@rope_store_verify
     override attention = @@attention_verify
     override recurrent = @@recurrent_verify
@@ -1598,8 +1589,8 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
         enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
     }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
-    enc_verify_site(t, enc, cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
-        r.bxf, r.blog, r.u_dim, r.u_vocab, r.u_vocab, [nrows = nr])
+    enc_batch_site(enc, t, rows_tier(nr), cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
+        r.bxf, r.blog, r.u_dim, r.u_vocab, r.u_vocab, 0l, false)
     unsafe {
         let rowb = uint64(dim * 4l)
         enc_copy_row(enc, r.bcat, uint64(nr) * rowb, r.bxb, 0ul, r.u_dim, dim)
@@ -1614,8 +1605,8 @@ def private encode_verify_step(t : Model; var r : StepRes; pos : int64) {
             enc_copy_row(enc, r.bh12, uint64(i) * rowb, r.bcat, uint64(2l * i) * rowb, r.u_dim, dim)
             enc_copy_row(enc, r.bxb2, uint64(i) * rowb, r.bcat, uint64(2l * i + 1l) * rowb, r.u_dim, dim)
         }
-        enc_verify_site(t, enc, t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, dim,
-            r.bcat, r.bx, r.u_dim2, r.u_dim, r.u_dim, [nrows = nr])
+        enc_batch_site(enc, t, rows_tier(nr), t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, dim,
+            r.bcat, r.bx, r.u_dim2, r.u_dim, r.u_dim, 0l, false)
         var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
         enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
     }
@@ -2511,42 +2502,6 @@ def private panels_batch(var e : BatchLayerEnc; moe_with_dense : bool; hid_l, kn
         fg = r.bh12, fu = r.bh12b, fu_col = 0l)
 }
 
-//! the batch rows' totals: the per-row uniform's nrows-scaled twin
-def private total_batch(e : BatchLayerEnc; u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> {
-    let r & = unsafe(*e.r)
-    if (u != r.u_dim && u != r.u_hidden && u != r.u_moe_knfe) {
-        panic("batch layer: a row-total is asked for a uniform with no nrows-scaled twin (the step gate declines the gated-Q and second-width models that would ask)")
-    }
-    let bt = u == r.u_dim ? r.u_total_dim : (u == r.u_hidden ? r.u_total_h : r.u_moe_tot)
-    return (b = bt, n = n * r.nrows)
-}
-
-//! add_rms over the batch rows: the fused kernel below its row slab (and unless the unfused pin
-//! is set), the add + rms pair past it
-def private add_rms_batch(var e : BatchLayerEnc; enc : MetalComputeEncoder?; bx, ba, bw, by : MetalBuffer?; dim : int64; bosc : MetalBuffer?) {
-    let r & = unsafe(*e.r)
-    if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
-        enc_add_rms_b(enc, bx, ba, bw, by, r.u_dim, r.u_eps, r.nrows, bosc)
-    } else {
-        enc_add(enc, bx, 0ul, ba, 0ul, r.u_total_dim, r.nrows * dim, bosc)
-        enc_rms_b(enc, bx, 0ul, bw, by, r.u_dim, r.u_eps, r.nrows)
-    }
-}
-
-def private rms_batch(var e : BatchLayerEnc; enc : MetalComputeEncoder?; bs : MetalBuffer?; soff : uint64; bw, bd : MetalBuffer?) {
-    enc_rms_b(enc, bs, soff, bw, bd, e.r.u_dim, e.r.u_eps, e.r.nrows)
-}
-
-def private add_batch(var e : BatchLayerEnc; enc : MetalComputeEncoder?; bg : MetalBuffer?; goff : uint64; bu : MetalBuffer?; uoff : uint64; dim : int64; bosc : MetalBuffer?) {
-    enc_add(enc, bg, goff, bu, uoff, e.r.u_total_dim, e.r.nrows * dim, bosc)
-}
-
-//! the batch rows' expert args: one stream per row (the verify's form)
-def private moe_args_batch(var e : BatchLayerEnc; ndim, ddim, eplane, xs, hasb : uint; down : bool) : MoeGemvArgs {
-    let r & = unsafe(*e.r)
-    return MoeGemvArgs(ndim = ndim, ddim = ddim, eplane = eplane, xs = xs, ss = r.k_moe_ss,
-        bxs = down ? r.k_moe_knfe : r.k_dim, bys = down ? r.k_moe_kdim : r.k_moe_knfe, hasb = hasb)
-}
 
 //! the batch rows' fused gate+up dot + swiglu straight into the gate panel (w2's input), where
 //! the step's tier chose it (fuse13: the row GEMV tier, a silu model, no knockout)
@@ -2644,11 +2599,11 @@ def private recurrent_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
 //! the batch step's layer encoder: B rows through the route table on the batch kernel family
 struct private BatchLayerEnc : LayerEncT {
     override site = @@site_batch
-    override total = @@total_batch
-    override add_rms = @@add_rms_batch
-    override rms = @@rms_batch
-    override add = @@add_batch
-    override moe_args = @@moe_args_batch
+    override total = @@total_rows
+    override add_rms = @@add_rms_rows
+    override rms = @@rms_rows
+    override add = @@add_rows
+    override moe_args = @@moe_args_rows
     override rope_store = @@rope_store_batch
     override attention = @@attention_batch
     override recurrent = @@recurrent_batch
@@ -3254,7 +3209,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     }
     return true
 }
-
 
 
 // Knobs resolved once at [init]. They were read per decode step, and get_env_variable allocates

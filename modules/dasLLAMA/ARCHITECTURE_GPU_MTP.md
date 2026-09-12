@@ -259,3 +259,11 @@ over one slab) and `BatchLayerEnc` (the batch step's B rows). `SINGLE` is the te
 f16 mirror, the fused pre-norm and PLE. What differs between row shapes is how a weight site
 dispatches and which kernel family serves a phase, never the phase order, so the order cannot drift
 between them.
+
+The row shapes share their adapters. `VerifyLayerEnc` and `BatchLayerEnc` bind one generic per
+slot - `rms_rows`, `add_rows`, `add_rms_rows`, `moe_args_rows` and `total_rows` - each written
+over `auto(ET)` and reading nothing but the stamp's `StepRes`, so a new row shape binds the set
+instead of copying it. Their weight site is the batch ladder under `rows_tier`, one `BatchTier`
+with every arm off (`use_mm` and `use_gemm` false, `mp = nrows`, no split-K buffer): a row chain
+takes the K-quant plane GEMV or the row GEMVs, never the batch's tensor, mv, split-K or tile
+forms.
