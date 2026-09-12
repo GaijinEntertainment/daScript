@@ -666,8 +666,9 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         // Forward --failures-only so workers suppress per-test PASS lines at the
         // source instead of streaming them all through the captured pipe.
         let failuresOnlyFlag = test_args.failures_only ? " --failures-only" : ""
+        let useAotFlag = test_args.use_aot ? " --use-aot" : ""
         let cmdPrefix = "{launchPrefix} {jitstr} {aotstr} --"
-        let cmdSuffix = " {benchstr}{log::useTtyColors ? " --color" : ""}{headlessFlag}{stackExcFlag}{failuresOnlyFlag}"
+        let cmdSuffix = " {benchstr}{log::useTtyColors ? " --color" : ""}{headlessFlag}{stackExcFlag}{failuresOnlyFlag}{useAotFlag}"
         let batchSize = max(1, test_args.batch)
         // Group files into batches of batchSize. Each batch is run by one worker
         // subprocess (batchCmd); per-file singleCmds are kept so a crash can be
