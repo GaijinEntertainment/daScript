@@ -627,14 +627,14 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
 
         // the proxy outlives the registrar's program: its types are clones, with no location
-        static TypeDeclPtr proxyType ( const TypeDeclPtr & type ) {
+        static TypeDeclPtr proxyType ( const TypeDeclPtr & type, const LineInfo & bindAt ) {
             if ( !type ) return nullptr;
             auto clone = new TypeDecl(*type);
-            clone->at = LineInfo();
-            clone->firstType = proxyType(type->firstType);
-            clone->secondType = proxyType(type->secondType);
+            clone->at = bindAt;
+            clone->firstType = proxyType(type->firstType, bindAt);
+            clone->secondType = proxyType(type->secondType, bindAt);
             for ( auto & argType : clone->argTypes ) {
-                argType = proxyType(argType);
+                argType = proxyType(argType, bindAt);
             }
             return clone;
         }
@@ -651,11 +651,13 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             auto wrp = computeWrapper(fun);
             uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
             auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp, computeArm64Layout(fun));
-            bif->result = proxyType(fun->result);
+            const LineInfo & bindAt = cppBindingLineInfo(bindName.c_str());
+            bif->at = bindAt;
+            bif->result = proxyType(fun->result, bindAt);
             for ( auto & a : fun->arguments ) {
-                auto newArg = new Variable();
+                auto newArg = new Variable(bindAt);
                 newArg->name = a->name;
-                newArg->type = proxyType(a->type);
+                newArg->type = proxyType(a->type, bindAt);
                 bif->arguments.push_back(newArg);
             }
             bif->noAot = true;
