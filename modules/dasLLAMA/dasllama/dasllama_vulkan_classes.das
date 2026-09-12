@@ -483,6 +483,9 @@ struct ActArgs {
     gelu : uint    // activation select: 0 = silu, else tanh-gelu
     nblk : uint    // 32-block / superblock count (the requant kernels' guard)
     elem0 : uint   // a 32-multiple; ActF16 only - the requant classes ignore it
+    ubase : uint   //! the u side's element base; with `ustride` the rows of `ulen` elements sit `ustride` apart (a side input stored position-major); 0/0/0 = u is laid out like gate
+    ustride : uint
+    ulen : uint
 }
 
 // the one activation formula (silu or tanh-gelu on v, times u) — the classes' act_mul
@@ -530,10 +533,11 @@ class Q8ActRq : ActRqMembers {
         let b = sg * 4u + lane / 8u
         if (b < pa.nblk) {
             let eb = sg * 128u + lane * 4u
-            let v0 = act_mul(gate[eb], up[eb])
-            let v1 = act_mul(gate[eb + 1u], up[eb + 1u])
-            let v2 = act_mul(gate[eb + 2u], up[eb + 2u])
-            let v3 = act_mul(gate[eb + 3u], up[eb + 3u])
+            let ub = pa.ustride != 0u ? pa.ubase + (eb / pa.ulen) * pa.ustride + eb % pa.ulen : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
+            let v0 = act_mul(gate[eb], up[ub])
+            let v1 = act_mul(gate[eb + 1u], up[ub + 1u])
+            let v2 = act_mul(gate[eb + 2u], up[ub + 2u])
+            let v3 = act_mul(gate[eb + 3u], up[ub + 3u])
             blk_store(b, lane % 8u, v0, v1, v2, v3)
         }
     }

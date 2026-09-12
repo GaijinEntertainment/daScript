@@ -121,7 +121,11 @@ def test_resident_layer_decline(t : T?) {
     t |> run("shared K/V, a missing plane and a head size off the kernels' shape each name the layer; a differing FFN width or a sliding window is served") @(t : T?) {
         var m <- shell(3l, 0ul)
         m.kv_src[2] = 1l
-        t |> success(says(resident_layer_decline(m, 2l), "layer 2 shares layer 1's K/V"), "shared K/V named")
+        t |> equal(resident_layer_decline(m, 2l), "", "a layer sharing the K/V of a layer below it is served (Q only, the donor's rows)")
+        m.kv_src[1] = 2l
+        t |> success(says(resident_layer_decline(m, 1l), "layer 1 shares layer 2's K/V, a layer above it"), "a donor above the sharing layer is named")
+        m.kv_src[1] = 1l
+        m.kv_src[2] = 2l
         m.wq_offs[0] = -1l
         t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a q/k plane"), "missing plane named")
         m.wq_offs[0] = 0l
@@ -195,7 +199,8 @@ def test_resident_unserved_moe_features(t : T?) {
         t |> equal(resident_unserved_features(d), "", "a dense model's router field is no feature")
         var p = Config()
         p.n_embd_per_layer = 256l
-        t |> equal(resident_unserved_features(p), "per-layer embeddings", "the E-series per-layer embeddings are named until their arm lands")
+        t |> equal(resident_unserved_features(p), rdec_ple_installed() ? "" : "per-layer embeddings",
+            "the E-series per-layer embeddings are served where a backend installed the ple seats, named where none did (installed here: {rdec_ple_installed()})")
     }
 }
 

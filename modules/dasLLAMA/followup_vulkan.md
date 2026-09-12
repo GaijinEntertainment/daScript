@@ -1323,3 +1323,16 @@ module) is independent and can land any time - it is pure structure.
     path sees the drift; the fix is a kernel cell in `tests/test_vulkan_kernels.das` at the 12B's
     widths against the CPU oracle, then the tile that misses. No test reads red today: the gemma
     file's cells skip on a memory decline (`moe_gpu_resident_memory_decline`).
+47. **The E-series' per-layer-embedding pre-step stays on the CPU.** The whole-model driver
+    takes gemma-4 E2B / E4B with the per-layer-embedding branch, the shared-KV layers and the two
+    dense widths on device, but the side input every layer multiplies in - the token's row of the
+    per-layer table, plus `model_proj` of the scaled embedding, normed and averaged - is built by
+    the CPU pre-step (`ple_pre_decode` / `ple_pre_prefill` in `dasllama_ple.das`) and rides the
+    token command as a copied [layers x ple] row and the window chain as a position-major upload
+    (E2B: 35 x 256 floats a token, 512 x 8960 floats a window). Metal has a GPU pre-step behind
+    `register_ple_gpu_gate`; the Vulkan twin is a gather of the q8 table rows plus a
+    [dim x layers*ple] GEMV / GEMM and a per-slice rms - three kernel classes and a norms row. The
+    batch decode override declines E-series models for the same reason (its rows carry no side
+    input). Also here: the driver's prefill GEMMs for the branch run the q8 batch tile on the cm2
+    route (the gate at 256 outputs, the proj at K 256) - a small f16 route for them is a perf
+    lever once the E-series rows have a baseline.
