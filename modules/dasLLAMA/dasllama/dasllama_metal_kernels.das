@@ -8124,12 +8124,10 @@ class MetalKqGemvK2 {
 }
 
 
-// The mv shells' per-lane constants by block decomposition: a stamp names its map by LANES and the
-// shell's lane_setup lays the slots out once per family - the 2/3-bit map (k2, k3), the 4/5-bit map
-// (k4, k5) and the 6-bit map (k6); each mv_superblock reads the slots back by position.
+//! LANES picks the map lane_setup lays into lc[] - 23 = k2/k3, 45 = k4/k5, 6 = k6, 0 = none; an mv_superblock reads the slots back by position
 [ |> template_struct_instance]
 class template MetalKqLaneMapsT {
-    @template_constant LANES : int = 0   // 0 = no lane constants, 23, 45 or 6 = the map
+    @template_constant LANES : int = 0
 
     def lane_setup(tx : uint; var lc : uint[8]) {
         static_if (LANES == 23) {
@@ -9639,14 +9637,12 @@ class MetalKqMvB8Iq2xxs : MetalKqMvB8ShellT {
     }
 }
 
-// The iq4 B2/B4 pair: the K4T shell (row/colbase/TILED twins) over the GEMV's per-32-block lane
-// map - lane tx owns block tx of each superblock, 16 lo + 16 hi weights as float4s. The one axis
-// is the scale source: iq4xs the signed strip byte times the super d, iq4nl a per-32-block f16 d.
+//! the iq4 B2/B4 pair on the GEMV's per-32-block lane map; the one axis is the scale source: iq4xs a signed strip byte times the super d, iq4nl a per-32-block f16 d
 [ |> template_struct_instance]
 class template MetalKqMvIq4T : MetalKqMvShellT {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // iq4xs: the d plane — the scale buffer bound at byte nsb*16; iq4nl: the 16B/sb d plane, half view
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // iq4xs: 16B strips, 8 signed sub-scales + 8 pad (same buffer at 0); iq4nl: binding-shape twin (unused)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  //!< the iq4nl stamp binds it unread, so both stamps share one set layout
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
     @template_constant IQ4NL : bool = false
 
     [metal_kernel]
@@ -9728,13 +9724,12 @@ class MetalKqMvB4Iq4nl : MetalKqMvIq4T {
     override IQ4NL = true
 }
 
-// the iq4 B8 twin: the K45 B8 shell (one superblock's X panel staged per threadgroup) over the
-// per-32-block lane map, the same scale axis
+//! the iq4 B8 twin on the K45 B8 shell, the same scale-source axis
 [ |> template_struct_instance]
 class template MetalKqMvB8Iq4T : MetalKqMvB8ShellT {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // iq4xs: the d plane — the scale buffer bound at byte nsb*16; iq4nl: the 16B/sb d plane, half view
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // iq4xs: 16B strips, 8 signed sub-scales + 8 pad (same buffer at 0); iq4nl: binding-shape twin (unused)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  //!< the iq4nl stamp binds it unread, so both stamps share one set layout
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
     @template_constant IQ4NL : bool = false
 
     [metal_kernel]

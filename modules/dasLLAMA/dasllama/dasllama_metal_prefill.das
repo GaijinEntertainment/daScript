@@ -572,8 +572,7 @@ class MetalKqMulMmK5TH128 : MetalKqMulMmK45TensorT {
     override MT = 128u
 }
 
-// The double-buffered dev-W mul_mm shell: two 64x72-half ping-pong tiles, a format's stage_chunk
-// decodes the next chunk into one tile while the tensor op consumes the other. MT is the M tile.
+// MT is the M tile
 [ |> template_struct_instance]
 class template MetalKqMulMmDbShellT {
     @template_constant MT : uint = 32u

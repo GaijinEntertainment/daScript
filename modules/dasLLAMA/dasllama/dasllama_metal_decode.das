@@ -1345,8 +1345,6 @@ def private metal_mtp_verify_ok(t : Model; s : Session) : bool {
 }
 
 
-//! the row-shaped chains' shared adapters (the verify's k+1 rows on one slab, the batch's B
-//! rows through the route table): each is generic over the stamp and reads only its StepRes
 def private rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bs : MetalBuffer?; soff : uint64; bw, bd : MetalBuffer?) {
     enc_rms_b(enc, bs, soff, bw, bd, e.r.u_dim, e.r.u_eps, e.r.nrows)
 }
@@ -1355,14 +1353,12 @@ def private add_rows(var e : auto(ET); enc : MetalComputeEncoder?; bg : MetalBuf
     enc_add(enc, bg, goff, bu, uoff, e.r.u_total_dim, e.r.nrows * dim, bosc)
 }
 
-//! one expert stream per row
 def private moe_args_rows(var e : auto(ET); ndim, ddim, eplane, xs, hasb : uint; down : bool) : MoeGemvArgs {
     let r & = unsafe(*e.r)
     return MoeGemvArgs(ndim = ndim, ddim = ddim, eplane = eplane, xs = xs, ss = r.k_moe_ss,
         bxs = down ? r.k_moe_knfe : r.k_dim, bys = down ? r.k_moe_kdim : r.k_moe_knfe, hasb = hasb)
 }
 
-//! the fused kernel below its row slab (and unless the unfused pin is set), the add + rms pair past it
 def private add_rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bx, ba, bw, by : MetalBuffer?; dim : int64; bosc : MetalBuffer?) {
     let r & = unsafe(*e.r)
     if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
@@ -1373,7 +1369,6 @@ def private add_rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bx, ba, b
     }
 }
 
-//! the per-row uniform's nrows-scaled twin; a twin the step never built is a panic, not a null bind
 def private total_rows(e : auto(ET); u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> {
     let r & = unsafe(*e.r)
     if (u != r.u_dim && u != r.u_hidden && u != r.u_qd && u != r.u_moe_knfe) {
@@ -1386,11 +1381,9 @@ def private total_rows(e : auto(ET); u : MetalBuffer?; n : int64) : tuple<b : Me
     return (b = bt, n = n * r.nrows)
 }
 
-//! the row-shaped tier with every arm off: the verify's k+1 rows take the K-quant plane GEMV or
-//! the row GEMVs, never the batch's tensor, mv, split-K or tile forms
+[arch(at="../ARCHITECTURE_GPU_MTP.md#metal-layer-enc")]
 def private rows_tier(nrows : int64) : BatchTier => BatchTier(use_mm = false, use_gemm = false, mp = nrows, nrows = nrows, bpsk = null)
 
-//! the verify rows' site: the batch ladder with every tier arm off, at nrows over the same slab
 [unused_argument(kind)]
 def private site_verify(e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder?; kind : SiteKind; fmt : KqFmt;
                         woff, rows, n, ys : int64; bx, by, bn, bd, bys : MetalBuffer?; ycol : int64) {
