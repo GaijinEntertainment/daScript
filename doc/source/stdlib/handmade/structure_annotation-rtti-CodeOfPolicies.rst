@@ -109,3 +109,4 @@ JIT optimization level for compiled code (0-3).
 JIT size optimization level for compiled code (0-3).
 Path to shared library, which is used in JIT.
 Path to linker, which is used in JIT.
+compile_file from a script reads and refreshes the default module cache around this compile (keyed by the file, the running binary, the host arguments and these policies).

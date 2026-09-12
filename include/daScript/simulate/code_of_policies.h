@@ -170,6 +170,7 @@ namespace das {
         vector<string> dll_search_paths;          // additional search paths for dll loading
     // one-liners
         /*option*/ bool temp_table_lint_warning = false;
+        bool module_cache = false;               // a script's compile_file runs under the default module cache; last: a cached JIT DLL binds earlier fields by offset
 
         // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context).
         // Low byte 0 keeps a pre-stamp libDaScript reading this word seeing aot == false -

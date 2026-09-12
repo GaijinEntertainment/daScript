@@ -1,6 +1,5 @@
 options gen2
 options debugger
-options optimize = false
 
 require daslib/fio
 

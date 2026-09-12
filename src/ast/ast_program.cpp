@@ -698,13 +698,12 @@ namespace das {
         vis.visitModule(thatModule);
     }
 
+    // three spellings of one switch; any that turns it off wins, the host policy is not a file's to override
     bool Program::getOptimize() const {
         if ( policies.no_optimizations ) return false;
-        auto arg = options.find("optimize",Type::tBool);
-        if ( arg ) return arg->bValue;
-        arg = options.find("no_optimization",Type::tBool);
-        if ( arg ) return !arg->bValue;
-        return true;
+        if ( options.getBoolOption("no_optimizations", false) ) return false;
+        if ( options.getBoolOption("no_optimization", false) ) return false;
+        return options.getBoolOption("optimize", true);
     }
 
     bool Program::getDebugger() const {

@@ -32,6 +32,12 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   `class` source line - both cursor paths skip synthesized functions.
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
   crash isolation). Same rationale as the MCP subtool pattern.
+- **Every subtool compile sets `cop.module_cache = true`** - the default module cache
+  (`ModuleFileCache::defaultPath`, keyed by file, binary, host argv and policies) serves
+  the unchanged modules; the overlay's bytes are what the edited file's record is
+  stamped against. Subtools inherit the supervisor's cwd (the workspace root), so the
+  cache is one `.jitted_scripts/module_cache/` there - never spawn them with a
+  per-file cwd, that scatters a cache directory beside every edited source.
 - **`--overlay <path>`**: the supervisor writes the document shadow to a temp
   file per request; subtools `set_file_source(access, file, text)` and
   position-map against that text, so unsaved buffers compile correctly.

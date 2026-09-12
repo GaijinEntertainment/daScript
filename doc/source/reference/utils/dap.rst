@@ -73,6 +73,12 @@ Instrumentation is the default launch mode.  Set
 breakpoints sent before ``configurationDone`` are retained and instrumented in
 contexts that already exist as well as contexts created later.
 
+The program compiles optimized by default, as a plain run does, so a call the
+optimizer evaluates at compile time never runs and a breakpoint inside it never
+hits.  Set ``optimize=false`` to launch with ``-no-optimization`` (or put
+``options optimize = false`` in the program): every statement and call the
+source has then survives, and the debugger stops where the source says.
+
 
 Attach workflow
 ===============

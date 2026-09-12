@@ -548,6 +548,7 @@ namespace das {
             addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );
             addProperty<DAS_BIND_MANAGED_PROP(getThisModule)>("getThisModule");
             addProperty<DAS_BIND_MANAGED_PROP(getDebugger)>("getDebugger");
+            addProperty<DAS_BIND_MANAGED_PROP(getOptimize)>("getOptimize");
             addField<DAS_BIND_MANAGED_FIELD(errors)>("errors");
             addField<DAS_BIND_MANAGED_FIELD(options)>("_options","options");
             addField<DAS_BIND_MANAGED_FIELD(policies)>("policies","policies");
@@ -1079,6 +1080,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(jit_output_path)>("jit_output_path");
             addField<DAS_BIND_MANAGED_FIELD(jit_path_to_shared_lib)>("jit_path_to_shared_lib");
             addField<DAS_BIND_MANAGED_FIELD(jit_path_to_linker)>("jit_path_to_linker");
+            addField<DAS_BIND_MANAGED_FIELD(module_cache)>("module_cache");
         }
         virtual bool isLocal() const override { return true; }
     };

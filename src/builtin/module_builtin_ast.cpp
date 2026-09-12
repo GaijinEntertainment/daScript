@@ -1,8 +1,7 @@
 #include "daScript/misc/platform.h"
 
-#if defined(_WIN32)
-    #include "daScript/misc/sysos.h"
-#else
+#include "daScript/misc/sysos.h"
+#if !defined(_WIN32)
     #include <unistd.h>
     #define das_dep_getcwd getcwd
 #endif
@@ -15,6 +14,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_simulate.h"
+#include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
@@ -1403,11 +1403,48 @@ namespace das {
 #endif
 
 #if !DAS_NO_FILEIO
+    // src/builtin/ARCHITECTURE.md sec.2
+    struct ScriptModuleCache {
+        daScriptEnvironment &   env;
+        AstSerializer *         outerRead;
+        AstSerializer *         outerWrite;
+        ModuleFileCache         cache;
+        string                  path;
+        bool                    armed = false;
+        bool                    finished = false;
+        ScriptModuleCache ( const CodeOfPolicies & cop, const char * modName )
+            : env(*daScriptEnvironment::getBound()), outerRead(env.serializer_read), outerWrite(env.serializer_write) {
+            if ( !cop.module_cache ) return;
+            char exePath[4096];
+            size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+            path = ModuleFileCache::defaultPath(modName, exeLen ? string(exePath, exeLen) : string(),
+                ModuleFileCache::embeddedHostOptions(cop));
+            armed = true;
+            env.serializer_read = nullptr;
+            env.serializer_write = nullptr;
+            cache.install(path, path, true);
+        }
+        ModuleFileCache::Result finish () {
+            ModuleFileCache::Result res;
+            if ( armed && !finished ) {
+                finished = true;
+                res = cache.finish();
+                env.serializer_read = outerRead;
+                env.serializer_write = outerWrite;
+            }
+            return res;
+        }
+        ~ScriptModuleCache () { finish(); }
+    };
+
     void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
+        ScriptModuleCache moduleCache(cop, modName);
         auto program = compileDaScript(modName, access, issues, *module_group, cop);
+        auto cres = moduleCache.finish();
+        if ( cres.saveFailed ) issues << "ser: cannot write '" << moduleCache.path << "'\n";
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {

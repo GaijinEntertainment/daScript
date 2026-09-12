@@ -8,7 +8,8 @@ a tool when `utils/CMakeLists.txt` (beside this file) or the repo root's `CMakeL
 builds or ships a program in it, wherever that directory sits; a directory under `utils/` is
 also a tool when its `.das_package` declares a program with `release_main` (its own) or
 `release_program` (a companion). A change under `common/` (beside this file) is a change to
-every tool that requires it. An arm is one `t |> run(...)` case of a `[test]` function. An
+every tool that requires it. An arm is one test case of a tool's suite - a `t |> run(...)` case
+of a `[test]` function, or one `def test_*` function of a `test_*.py` in the tool's directory. An
 arm's load-bearing assertions are the ones that prove the change, never a skip-path assertion.
 A CI row is a workflow step whose command runs the arm, directly or through a process it
 spawns. An assertion no CI row can run is one no CI row would execute: either no CI row runs
@@ -41,13 +42,13 @@ leaves a comment line beside the list naming the removed exe, in the same change
 assertions a CI row can run against the change, ships with a CI row that executes those
 assertions on every pull request, wherever the diff puts the arm, added in the same change if
 no existing row already executes them on every pull request.** A row that only compile-checks
-the arm (`dastest --compile-only`) does not execute them, and a nightly-only row runs them
+the arm (`dastest --compile-only`, `python3 -m py_compile`) does not execute them, and a nightly-only row runs them
 after the merge.
 
 **An arm the diff adds or changes that covers a change to a tool, whose load-bearing
 assertions no CI row can run, ships with a row that compile-checks it -
-`dastest --compile-only` - added in the same change if no row already compile-checks that
-file.**
+`dastest --compile-only`, or `python3 -m py_compile` for a `test_*.py` - added in the same
+change if no row already compile-checks that file.**
 
 **An arm the diff adds or changes that covers a change to a tool, whose load-bearing
 assertions no CI row can run, records in the PR description an executed run against the build

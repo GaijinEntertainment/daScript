@@ -28,9 +28,10 @@
   else. A C++ layout change to a handled type or an AST class is not a record byte: functions
   and annotations stream by module hash and name and re-resolve against the running binary.
 
-- **A diff that makes a record written before it wrong - the bytes still decode, but what they
-  encode is no longer what this build would write - bumps the version `getVersion()` returns
-  in `include/daScript/ast/ast_serializer.h`, in the same change** - the version is the only
+- **A diff that makes a record written before it wrong, wherever the edit lives - the bytes
+  still decode, but what they encode is no longer what this build would write - bumps the
+  version `getVersion()` returns in `include/daScript/ast/ast_serializer.h`, in the same
+  change** - the version is the only
   thing that discards a cache a user already holds, so without the bump every later launch is
   served the stale record.
 
@@ -40,10 +41,10 @@
   other policies, so a field handled outside it is written without being compared, or compared
   without being written.
 
-- **A diff that adds a diagnostic to `AstSerializer::serializeProgram` or
-  `AstSerializer::serializeProgramImpl` in `module_builtin_ast_serialize.cpp`, or drops the
-  `quietCache` gate from one already there, is a defect - gate every line those two functions
-  print on the serializer's `quietCache`** - the default cache is on unasked for an ordinary run,
+- **A diff that adds a diagnostic in `AstSerializer::serializeProgram`,
+  `AstSerializer::serializeProgramImpl` or `ModuleFileCache` (`module_builtin_ast_serialize.cpp`)
+  without the serializer's `quietCache` gate, or drops that gate from one already there, is a
+  defect** - the default cache is on unasked for an ordinary run,
   so an ungated line becomes output every user sees.
 
 - **A diff that adds a builtin a `.das_module` descriptor can call whose effect outlives the

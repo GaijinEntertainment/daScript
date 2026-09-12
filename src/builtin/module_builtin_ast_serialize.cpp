@@ -10,6 +10,7 @@
 #include "daScript/misc/anyhash.h"
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/env_cfg.h"
+#include "daScript/simulate/aot_builtin.h"
 #include <cstdarg>
 #include <cstdio>
 #include <sys/stat.h>
@@ -17,9 +18,11 @@
 #if !DAS_NO_FILEIO
 #ifdef _WIN32
 #include <io.h>
+#include <process.h>
 #include <sys/utime.h>
 #else
 #include <dirent.h>
+#include <unistd.h>
 #include <utime.h>
 #endif
 #endif
@@ -2718,7 +2721,7 @@ namespace das {
         X(report_private_functions) X(log_compile_time) X(log_total_compile_time) \
         X(log_module_compile_time) X(log_optimization) X(log_optimization_passes) X(force_escape_free) \
         X(force_allocate_on_stack) X(force_partial_escape_free) X(log_escape_analysis) X(log_gc_time) \
-        X(debug_infer_flag) X(temp_table_lint_warning)
+        X(debug_infer_flag) X(temp_table_lint_warning) X(module_cache)
 
     static bool cachedPoliciesMatch ( const CodeOfPolicies & a, const CodeOfPolicies & b ) {
     #define DAS_POLICY_FIELD_SAME(f) if ( !(a.f == b.f) ) return false;
@@ -3245,6 +3248,14 @@ namespace das {
 #endif
     }
 
+    static long long das_process_id () {
+#ifdef _WIN32
+        return (long long) _getpid();
+#else
+        return (long long) getpid();
+#endif
+    }
+
     static void touchFile ( const string & path ) {
 #ifdef _WIN32
         (void) _utime(path.c_str(), nullptr);
@@ -3304,6 +3315,33 @@ namespace das {
         char hex[17];
         snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_blockz64((const uint8_t *) key.c_str()));
         return string(".jitted_scripts/module_cache/") + stem + "-" + string(hex, 8) + ".dascache";
+    }
+
+    string ModuleFileCache::embeddedHostOptions ( const CodeOfPolicies & policies ) {
+        string key;
+        Array args;
+        getCommandLineArguments(args);
+        auto argv = (char **) args.data;
+        for ( uint32_t i=1; i<args.size; ++i ) {
+            const char * a = argv[i] ? argv[i] : "";
+            if ( strcmp(a, "--") == 0 ) break;
+            key += a;
+            key += '\n';
+        }
+        SerializationStorageVector storage;
+        AstSerializer ser(&storage, true);
+        CodeOfPolicies streamed = policies;
+        ser << streamed;
+        string jitTarget = commandLineArgumentOccurrences("--jit-target");   // NUL-separated; the key hashes as a C string
+        for ( auto & ch : jitTarget ) {
+            if ( ch == 0 ) ch = '\n';
+        }
+        key += jitTarget;
+        char hex[17];
+        snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_block64(storage.buffer.data(), storage.buffer.size()));
+        key += "policies:";
+        key += hex;
+        return key;
     }
 
     void ModuleFileCache::install ( const string & readFrom, const string & writeTo, bool quiet ) {
@@ -3386,7 +3424,8 @@ namespace das {
                 // complete old or a complete new stream, never a torn one. The CRT rename
                 // cannot replace on Windows, so there is a missing-file blink there - a
                 // reader in that window just takes the cold path
-                string tmpPath = writePath + ".tmp";
+                static atomic<uint64_t> writebackSeq { 0 };
+                string tmpPath = writePath + "." + to_string(das_process_id()) + "." + to_string(writebackSeq.fetch_add(1)) + ".tmp";
                 ensureParentDirectories(writePath);
                 if ( FILE * f = fopen(tmpPath.c_str(), "wb") ) {
                     res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));

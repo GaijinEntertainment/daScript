@@ -145,6 +145,18 @@ Four companions carry a concern each; a section number is unique across all five
   callback/pinvoke serialization from one thread, with no timing window and no thread started
   under a blocked hook.
 
+- **The stepping debugger is armed by an `[init]` that tells the debuggee's context apart from a
+  macro context by `is_compiling_macros()`, not by the macro-module test alone** - `Program::simulate`
+  binds the program while init scripts run, so `is_compiling_macros_in_module("debug")` answers
+  false in the debuggee's own init exactly as it does in another module's macro context; a
+  runtime init gated on that test alone never runs where it matters. The `[_macro]` functions
+  keep the bare test: they never run at simulate time.
+- **A folding context is never a debuggee thread** - the optimizer evaluates a pure call over
+  constants in a context of its own (`ContextCategory.folding_context`), during the compile;
+  `onCreateContext` skips it, so a breakpoint inside a folded call reports nothing rather than a
+  stop inside the compiler. The call itself is gone from the program: a debugger that must stop
+  there launches with `-no-optimization` (the DAP bridge's `optimize=false`).
+
 ### 24.2 Debugger worker startup {#debugger-worker-startup}
 
 - **The statement-debugger worker executes its lambda only after the source context reaches
