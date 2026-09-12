@@ -2322,7 +2322,7 @@ class template AtAttnTileT {
 
     // tile QK^T: lane (r, c) scores query r against position k0+c, masked into fp - causal, and
     // below the query's window on a sliding layer (win 0 = every position)
-    def qk_score(r, c, hs, k0, gq, q0, nrows, win : uint; scale : float) {
+    def qk_score(r, c, hs, k0, gq, q0, nrows, win : uint; scale, cap : float) {
         var s = 0.0
         var j = 0u
         while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
@@ -2334,7 +2334,7 @@ class template AtAttnTileT {
         }
         let gk = k0 + c
         let inwin = win == 0u || gk + win > gq
-        fp[r * 32u + c] = (gk <= gq && inwin && q0 + r < nrows) ? s * scale : -3.0e38
+        fp[r * 32u + c] = (gk <= gq && inwin && q0 + r < nrows) ? attn_softcap(s * scale, cap) : -3.0e38
     }
 
     //! the first K/V tile a window's queries can see: a sliding layer's tile below every query's window start skips whole
@@ -2398,7 +2398,7 @@ class template AtAttnTileT {
         while (k0 < kend) {
             load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs)
             barrier()
-            qk_score(r, c, pa.hs, k0, gq, q0, pa.npos, pa.window, pa.scale)
+            qk_score(r, c, pa.hs, k0, gq, q0, pa.npos, pa.window, pa.scale, pa.cap)
             barrier()
             softmax_update()
             barrier()
@@ -2494,7 +2494,7 @@ class AtAttn : AtAttnTileT {
         while (k0 < kend) {
             load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs)
             barrier()
-            qk_score(r, c, pa.hs, k0, gq, q0, pa.rows, 0u, pa.scale)
+            qk_score(r, c, pa.hs, k0, gq, q0, pa.rows, 0u, pa.scale, 0.0)   //! the per-op tile serves no softcap model
             barrier()
             softmax_update()
             barrier()
@@ -2787,6 +2787,10 @@ class FaCm2H256GF16 : FaCm2H256T {
     override GATED = true
 }
 
+//! gemma-2's attention logit softcap on a scaled score: cap * tanh(s / cap) in the exp form the CPU's softcap4 takes; 0 = none
+def private attn_softcap(s, cap : float) : float
+    => cap != 0.0 ? cap * (1.0 - 2.0 / (1.0 + exp(2.0 * s / cap))) : s
+
 struct DaAttnBArgs {
     npos : uint     // window query rows
     nh : uint
@@ -2800,6 +2804,7 @@ struct DaAttnBArgs {
     qhs : uint      // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head)
     gated : uint    // multiply each head's output by the sigmoid of its gate half
     window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
+    cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
 }
 
 // the wide-head twin of DaAttnB for heads past 256 (gemma-4's global layers, 512): a 4-row q tile and
@@ -2870,7 +2875,7 @@ class template DaAttnBWT {
                 let gq = pa.w0 + q0 + r
                 let gk = k0 + c
                 let inwin = pa.window == 0u || gk + pa.window > gq
-                fp[r * 16u + c] = (gk <= gq && inwin && q0 + r < pa.npos) ? s * pa.scale : -3.0e38
+                fp[r * 16u + c] = (gk <= gq && inwin && q0 + r < pa.npos) ? attn_softcap(s * pa.scale, pa.cap) : -3.0e38
             }
             barrier()
             if (tid < 4u) {   // per-row online softmax: max, rescale, exponentiate in place
@@ -3172,6 +3177,7 @@ struct DaAttnArgs {
     qstride : uint  // q head stride: 0 = hs; 2*hs on a gated-q model ([q | gate] per head)
     gated : uint    // 1 = multiply the head's output by sigmoid of its gate half before the store
     window : uint   //! a sliding layer attends the last `window` positions of the cnt; 0 = every position
+    cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
 }
 
 // decode attention (one query row): one wg per head, GQA, KT-typed K/V mirror. Online softmax
@@ -3226,7 +3232,7 @@ class template DaAttnT {
                     sv += qrow[d] * float(kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                     d++
                 }
-                s = sv * pa.scale
+                s = attn_softcap(sv * pa.scale, pa.cap)
             }
             let tmax = subgroupMax(s)
             if (gl_SubgroupInvocationID == 0u) {

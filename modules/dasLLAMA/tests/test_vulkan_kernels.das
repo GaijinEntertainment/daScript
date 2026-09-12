@@ -985,7 +985,7 @@ def private requant_oracle(src : array<float>; base, nelem : int; q8k : bool;
 // reassociates, so approx bars
 def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kbase0 : int;
                             vv : array<float>; vbase0 : int; kvd, hh, hs, kv_mul, cnt : int;
-                            scale : float; var out : array<float>; obase : int; kstart : int = 0) {
+                            scale : float; var out : array<float>; obase : int; kstart : int = 0; cap : float = 0.0) {
     let khoff = (hh / kv_mul) * hs
     var sc : array<float>
     sc |> resize(cnt)
@@ -996,6 +996,9 @@ def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kb
             s += q[qbase + e] * kk[kbase0 + j * kvd + khoff + e]
         }
         sc[j] = s * scale
+        if (cap != 0.0) {   // gemma-2's attention logit softcap: cap * tanh(s / cap), the exp form the kernels take
+            sc[j] = cap * (1.0 - 2.0 / (1.0 + exp(2.0 * sc[j] / cap)))
+        }
         mm = max(mm, sc[j])
     }
     var tot = 0.0
@@ -4643,6 +4646,35 @@ def test_vkd_da_attn(t0 : T?) {
             }
             let bad = mismatch_approx(y_cls, y_ref)
             t |> success(bad == 0, "da_attn matches the CPU oracle ({bad} of {nheads * hs} off)")
+            // the softcap arm (gemma-2): a cap the scaled scores overrun, the kernel's exp form against the oracle's
+            let cap = 4.0
+            unsafe {
+                var tokb2 = make_host_buf(16l, true)
+                var tmc2 = reinterpret<TokMeta?>(tokb2.mapped)
+                tmc2.cnt = uint(cnt)
+                var sc2 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb2.buf),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l),
+                    fixed_array(1u, 2u, 4u, 16u, 0u))
+                var raw3 = alloc_cmd()
+                let begin3 = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw3, begin3), null)
+                var h3 : VkHaz
+                var pc3 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
+                    kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, cap = cap)
+                enc_da_attn_cls(raw3, h3, sc2, pc3, int64(nheads))
+                vhz_dep(raw3, h3, 16u, 0u, true)
+                cmd_copy_whole(raw3, yd2, host.buf, q_bytes)
+                vk_check(vkEndCommandBuffer(raw3), null)
+                submit_wait(raw3)
+                memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+            }
+            let moved = mismatch_approx(y_cls, y_ref)
+            t |> success(moved > 0, "control: the {cap} cap moves the uncapped output ({moved} of {nheads * hs})")
+            for (hh in range(nheads)) {
+                attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_ref, hh * hs, 0, cap)
+            }
+            let badc = mismatch_approx(y_cls, y_ref)
+            t |> success(badc == 0, "da_attn under a {cap} softcap matches the CPU oracle ({badc} of {nheads * hs} off)")
             delete qh
             delete kh
             delete vh
@@ -5167,6 +5199,36 @@ def test_vkd_da_attn_b(t0 : T?) {
                 }
                 let bad = mismatch_approx(y_cls, y_ref)
                 t |> success(bad == 0, "da_attn_b hs {hs} matches the CPU oracle ({bad} of {npos * qd} off)")
+                // the softcap arm (gemma-2): the same tile under a cap the scaled scores overrun
+                let cap = 4.0
+                unsafe {
+                    var sc2 = set_da_attn_b_cls(fixed_array(qdev, kdev, vdev, yd2),
+                        fixed_array(q_bytes, k_bytes, v_bytes, q_bytes),
+                        fixed_array(1u, 2u, 8u, 16u))
+                    var raw3 = alloc_cmd()
+                    let begin3 = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw3, begin3), null)
+                    var h3 : VkHaz
+                    var pc3 = DaAttnBArgs(npos = uint(npos), nh = uint(nheads), kvd = uint(kvd),
+                        hs = uint(hs), kv_mul = uint(kv_mul), kbase = uint(kbase),
+                        vbase = uint(vbase), w0 = uint(w0), scale = scale, cap = cap)
+                    enc_da_attn_b_cls(raw3, h3, sc2, pc3, int64(wgs))
+                    vhz_dep(raw3, h3, 16u, 0u, true)
+                    cmd_copy_whole(raw3, yd2, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw3), null)
+                    submit_wait(raw3)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+                }
+                let moved = mismatch_approx(y_cls, y_ref)
+                t |> success(moved > 0, "control: the {cap} cap moves the uncapped rows ({moved} of {npos * qd})")
+                for (r in range(npos)) {
+                    for (hh in range(nheads)) {
+                        attn_row_oracle(qh, r * qd + hh * hs, kh, kbase, vh, vbase, kvd, hh, hs,
+                            kv_mul, w0 + r + 1, scale, y_ref, r * qd + hh * hs, 0, cap)
+                    }
+                }
+                let badc = mismatch_approx(y_cls, y_ref)
+                t |> success(badc == 0, "da_attn_b hs {hs} under a {cap} softcap matches the CPU oracle ({badc} of {npos * qd} off)")
                 delete qh
                 delete kh
                 delete vh

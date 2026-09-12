@@ -772,7 +772,6 @@ def resident_unserved_features(c : Config) : string {
     name_list_add(names, c.attn_out_bias, "attention output bias")
     name_list_add(names, c.attn_sinks, "attention sinks")
     name_list_add(names, c.moe_dense_shexp, "dense shared expert")
-    name_list_add(names, c.attn_logit_softcap != 0.0, "attention logit softcap")
     name_list_add(names, has_ple(c) && !rdec_ple_installed(), "per-layer embeddings")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
     name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
@@ -931,7 +930,7 @@ def private resident_layer_geom(t : Model; l, mir_base : int64) : RdecLayerGeom 
         pre_post = c.pre_post_norm, gelu = c.ffn_act == FfnAct.gelu,
         vfk = vfk, vnorm = c.v_norm && !vfk,
         out_scale = c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0,
-        kv_shared = t.kv_src[l] != l)
+        kv_shared = t.kv_src[l] != l, attn_cap = c.attn_logit_softcap)
 }
 
 struct private ImageRow {

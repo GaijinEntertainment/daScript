@@ -217,6 +217,7 @@ def private rd_layer_geom(var L : RLayer; g : RdecLayerGeom) {
     L.vnorm = g.vnorm
     L.out_scale = g.out_scale
     L.kv_shared = g.kv_shared
+    L.attn_cap = g.attn_cap
     L.window = g.window
     L.mir_base = g.mir_base
     L.cbase = g.cbase
@@ -1003,7 +1004,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     }
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
-        window = uint(L.window))
+        window = uint(L.window), cap = L.attn_cap)
     if (g_rd.kv16) {
         enc_da_attn_f16_cls(raw, h, L.s_attn, pca, g_rd.n_heads)
     } else {

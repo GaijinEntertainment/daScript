@@ -1080,7 +1080,8 @@ def private pf_setup {
     g_rd.pf_facm2 = false
     for (L in g_rd.layers) {
         continue if (L.recurrent)
-        L.pf_fa = fa_dev && (L.hs == 64l || L.hs == 128l || L.hs == 256l) && (!g_rd.q_gated || L.hs == 256l)
+        //! the cm2 flash tile scales its scores inside the matrix: no softcap arm, the 8-row tile serves a gemma-2
+        L.pf_fa = fa_dev && (L.hs == 64l || L.hs == 128l || L.hs == 256l) && (!g_rd.q_gated || L.hs == 256l) && L.attn_cap == 0.0
         g_rd.pf_facm2 = g_rd.pf_facm2 || L.pf_fa
         if (L.pf_fa) {
             fa_hs |> insert(L.hs)
@@ -1566,7 +1567,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 } else {
                     var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
                         hs = uint(hs), kv_mul = kv_mul, kbase = mirb, vbase = mirb,
-                        w0 = uint(w0), scale = g_rd.scale, qhs = uint(qhs), gated = g_rd.q_gated ? 1u : 0u, window = window)
+                        w0 = uint(w0), scale = g_rd.scale, qhs = uint(qhs), gated = g_rd.q_gated ? 1u : 0u, window = window,
+                        cap = g_rd.layers[l].attn_cap)
                     if (fa128) {
                         if (g_rd.kv16) {
                             enc_da_attn_b_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
