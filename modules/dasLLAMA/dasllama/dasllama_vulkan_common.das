@@ -2220,6 +2220,14 @@ struct RLayer {
     m_q, m_k, m_v, m_wo : HostBuf
     m_gate, m_up, m_down : HostBuf
     made : bool
+    // the layer's attention geometry (an attention layer's class: gemma-4's sliding and global layers differ in head size and kv width)
+    hs, qd, kvd, hid, rot : int64   //! head size, query width, kv width, dense FFN width, rotary width per head
+    kv_mul : int64                  //! query heads per kv head
+    window : int64                  //! positions a sliding layer attends over; 0 = every position
+    mir_base : int64                //! this layer's first element in each K/V mirror side (its rows are seq_cap x kvd from there)
+    cbase : int64                   //! its rope class's row base inside a position's cos/sin plane
+    boff : int64                    //! its row base in the q/k/v bias plane
+    pf_fa : bool                    //! the window chain takes the cm2 flash tile on this layer (its head size has a stamp)
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
     recurrent : bool
     mir_idx : int64 = -1l           // this attention layer's K/V mirror slot; -1 = recurrent (no KV)
@@ -2275,7 +2283,8 @@ struct RDec {
     norms_bytes : int64           // full norms buffer size (grows past the fixed layout under qk_norm)
     ar_scal_off : int64            // eps/ascale pair, appended to the norms buffer (float units) —
                                    // the fused ar+requant needs binding 4 for its scale output
-    cos_elems : int64              // the cos/sin row (head_size floats)
+    cos_elems : int64              //! a position's cos/sin plane: every rope class's row (cos[half] + sin[half]) end to end
+    mir_elems : int64              //! one K/V mirror side's elements over every attention layer (seq_cap x its kvd each)
     eps, scale : float
     // per-token device buffers
     x_dev, xb_dev : uint64        // residual, normed activation
@@ -2286,7 +2295,7 @@ struct RDec {
     gate_dev, up_dev : uint64
     ffnout_dev : uint64
     xb2_dev : uint64              // wo output
-    k_mirror, v_mirror : uint64   // [n_attn x seq_cap x kv_dim] elements of the kv16 codec (attention layers own rows; RLayer.mir_idx)
+    k_mirror, v_mirror : uint64   // mir_elems elements of the kv16 codec: each attention layer's [seq_cap x its kvd] rows from RLayer.mir_base
     n_attn : int64                // attention layers = mirror slots
     q_gated : bool                // the q GEMV writes [q | gate] per head (2*qd rows); rope/attention read q head-strided
     rot : int64                   // rotary width per head (hs, or the partial-rope width)
