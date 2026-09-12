@@ -65,10 +65,10 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // all-or-nothing: pre-flight the SAME prefill-attention pick pf_setup will make (fa tile,
     // h128 twin, or the chunked pair) so a declined kernel declines residency PRE-upload
     let will_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
-        && (head_size == 64l || head_size == 128l || head_size == 256l))
+        && (head_size == 64l || head_size == 128l || head_size == 256l || head_size == 512l))
     if (!(will_facm2
             ? (head_size == 64l ? ensure_fa_cm2_h64_cls() : (head_size == 128l ? ensure_fa_cm2_h128_cls()
-                : (q_gated ? ensure_fa_cm2_h256_g_cls() : ensure_fa_cm2_h256_cls())))
+                : (head_size == 512l ? ensure_fa_cm2_h512_cls() : (q_gated ? ensure_fa_cm2_h256_g_cls() : ensure_fa_cm2_h256_cls()))))
             : (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
                 ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
                 : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls())))) {
@@ -99,8 +99,13 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.xb2_dev = make_device_buf(dim * 4l)
     r.n_attn = n_attn
     r.mir_elems = mir_elems
-    r.k_mirror = make_device_buf(mir_elems * esz)
-    r.v_mirror = make_device_buf(mir_elems * esz)
+    // the two largest allocations of the load: a heap the last model fragmented can refuse them though the plan fit - decline, never die mid-upload
+    r.k_mirror = try_device_buf(mir_elems * esz)
+    r.v_mirror = try_device_buf(mir_elems * esz)
+    if (r.k_mirror == 0ul || r.v_mirror == 0ul) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * mir_elems * esz) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
+        return false
+    }
     r.hybrid = hybrid
     if (hybrid) {
         r.dn_cd = dn.cd; r.dn_kd = dn.kd; r.dn_di = dn.di; r.dn_nvh = dn.nvh; r.dn_nkh = dn.nkh; r.dn_ds = dn.ds; r.dn_dconv = dn.dconv

@@ -1323,16 +1323,15 @@ module) is independent and can land any time - it is pure structure.
     path sees the drift; the fix is a kernel cell in `tests/test_vulkan_kernels.das` at the 12B's
     widths against the CPU oracle, then the tile that misses. No test reads red today: the gemma
     file's cells skip on a memory decline (`moe_gpu_resident_memory_decline`).
-47. **The E-series' per-layer-embedding pre-step stays on the CPU.** The whole-model driver
+47. **The E-series' per-layer-embedding pre-step keeps two CPU halves.** The whole-model driver
     takes gemma-4 E2B / E4B with the per-layer-embedding branch, the shared-KV layers and the two
-    dense widths on device, but the side input every layer multiplies in - the token's row of the
-    per-layer table, plus `model_proj` of the scaled embedding, normed and averaged - is built by
-    the CPU pre-step (`ple_pre_decode` / `ple_pre_prefill` in `dasllama_ple.das`) and rides the
-    token command as a copied [layers x ple] row and the window chain as a position-major upload
-    (E2B: 35 x 256 floats a token, 512 x 8960 floats a window). Metal has a GPU pre-step behind
-    `register_ple_gpu_gate`; the Vulkan twin is a gather of the q8 table rows plus a
-    [dim x layers*ple] GEMV / GEMM and a per-slice rms - three kernel classes and a norms row. The
-    batch decode override declines E-series models for the same reason (its rows carry no side
-    input). Also here: the driver's prefill GEMMs for the branch run the q8 batch tile on the cm2
-    route (the gate at 256 outputs, the proj at K 256) - a small f16 route for them is a perf
-    lever once the E-series rows have a baseline.
+    dense widths on device, and the prefill's pre-step projection runs on device too (the f16
+    mirror of `per_layer_model_proj`, the `ple_raw` rows of `RdecPrefillFn`); what stays on the
+    CPU: the table gather a prefill (`ple_gather_rows`, across the job threads: 2.3 ms a 512-row
+    window on E2B - the q8 table is 2.35 GB, a device copy is the alternative), and the whole
+    decode pre-step (`ple_pre_decode`: the token's row plus a [dim x layers*ple] GEMV, normed and
+    averaged, copied to the token command as a [layers x ple] row - a GEMV over the f16 mirror and
+    a 35-row norm on device would take it). The batch decode override declines E-series models
+    (its rows carry no side input). Also here: the driver's prefill GEMMs for the branch run the
+    q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
+    route for them is a perf lever once the E-series rows have a baseline.

@@ -102,6 +102,10 @@ struct public GpuTierEnv {
     @clarg_doc = "Lower the context floor for arming the resident decode driver, for a short-context session on a small card."
     gpu_min_ctx : int64 = 0l
 
+    @clarg_default_doc = "the model's context"
+    @clarg_doc = "Cap the resident driver's KV mirror at this many positions (the card's room and the 4 GiB binding cap still bound it); 0 follows the model's context. The test rigs pin 32768 in process (set_gpu_ctx_max); a server keeps the model's."
+    gpu_ctx_max : int64 = 0l
+
     @clarg_doc = "The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever)."
     gpu_resident : bool = true
 

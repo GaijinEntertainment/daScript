@@ -312,6 +312,20 @@ def register_ple_pre_prefill_pad(fn : PlePrePrefillPadFn) {
     g_ple_pre_prefill_pad = fn
 }
 
+//! the gather half of the pre-step alone: every position's per-layer table row, scaled by sqrt(ple), position-major into `dst`
+//! (a device driver that finishes the pre-step on its side - the model_proj GEMM, the norm, the average - takes these rows)
+typedef PleGatherRowsFn = function<(t : Model; tokens : array<int64>; npos : int64; var dst : array<float>) : void>
+var private g_ple_gather_rows : PleGatherRowsFn
+
+def register_ple_gather_rows(fn : PleGatherRowsFn) {
+    g_ple_gather_rows = fn
+}
+
+def ple_gather_rows(t : Model; tokens : array<int64>; npos : int64; var dst : array<float>) {
+    if (g_ple_gather_rows == null) ple_rail_missing()
+    invoke(g_ple_gather_rows, t, tokens, npos, dst)
+}
+
 // Every call site is behind has_ple(config), so an unset rail means this program was built without
 // dasllama/dasllama_ple yet loaded a model that needs it — say which require is missing, loudly.
 def private ple_rail_missing() {
