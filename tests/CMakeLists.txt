@@ -115,3 +115,6 @@ if(TARGET test_llvm_aot)
         USES_TERMINAL
     )
 endif()
+
+# Two standalone sweeps over the test corpus, one per backend. Opt-in, out of CI.
+add_subdirectory(standalone-sweep)

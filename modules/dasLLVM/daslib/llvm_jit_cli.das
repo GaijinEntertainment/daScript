@@ -74,6 +74,22 @@ struct public JitCliOptions {
     @clarg_doc = "JIT: explicit linker binary (overrides default c++/clang/lld-link). Windows-MSVC builds a link.exe-flavored cmd (/DLL /OUT:) — pass a link.exe-compatible linker; elsewhere match the compiler daslang was built with to avoid sanitizer runtime mismatch."
     path_to_linker : Option<string>
 
+    @clarg_name = "jit-lib"
+    @clarg_doc = "JIT: emit a C-ABI native library plus its C header instead of running the program. Script-level pin: options jit_lib = true"
+    lib : Option<bool>
+
+    @clarg_name = "jit-lib-export-marked"
+    @clarg_doc = "JIT (-lib): export every function the program already marks [export], not only the [export_c] ones. Selection only - unlike -lib-export-all it marks nothing itself, so a non-representable signature is still a hard error. Script-level pin: options jit_lib_export_marked = true"
+    lib_export_marked : Option<bool>
+
+    @clarg_name = "jit-lib-static"
+    @clarg_doc = "JIT (-lib): produce a static archive (.a / .lib) instead of a shared library; the host then links libDaScript_runtime itself (the generated header records what). Under this flag --jit-path-to-linker names the ARCHIVER (llvm-ar / ar / lib), not a linker"
+    lib_static : Option<bool>
+
+    @clarg_name = "jit-lib-bindings"
+    @clarg_doc = "JIT (-lib): also write daslang `[extern]` bindings for the emitted library to this path, so a daslang host requires them instead of hand-writing the declarations or parsing the C header"
+    lib_bindings : Option<string>
+
     @clarg_name = "jit-register-all-modules"
     @clarg_doc = "JIT (-exe only): register all builtin native modules (math, fio, dasbind, ...) at exe startup, so a standalone compiler-driver exe can recompile arbitrary daslang at runtime"
     register_all_modules : Option<bool>

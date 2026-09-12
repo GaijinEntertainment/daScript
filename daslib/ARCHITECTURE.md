@@ -3,10 +3,11 @@
 Design rationale a maintainer cannot recover from the code alone. One numbered section per
 module; entries are anchored to symbols.
 
-Three companions carry a concern each; a section number is unique across all four files.
+Four companions carry a concern each; a section number is unique across all five files.
 
 - `ARCHITECTURE_LINT.md` - sec. 1-4: perf_lint, lint_config, lint, style_lint.
 - `ARCHITECTURE_EMIT.md` - sec. 5-7, 28-29: aot_cpp, aot_standalone, flatten, the shader rails.
+- `ARCHITECTURE_CAPI.md` - sec. 30: c_api_header, the C surface both backends emit.
 - `ARCHITECTURE_LINQ.md` - sec. 11-17, 33, 37: the linq family, sql_linq, sql_migrate.
 
 ## 8. ast_verify

@@ -40,7 +40,7 @@ int main(int, char * []) {
     // Instantiate the standalone context.
     // The constructor sets up all functions, globals, and type info
     // from pre-generated AOT data.
-    auto ctx = standalone_context::Standalone();
+    auto ctx = ctx_standalone_context::Standalone();
 
     // Call the test function directly — this is a normal C++ method call,
     // not a lookup + eval.  Maximum performance, minimum overhead.

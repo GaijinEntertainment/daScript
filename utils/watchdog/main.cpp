@@ -34,7 +34,7 @@ int main ( int argc, char * argv[] ) {
 #else
     const int32_t pid = (int32_t)getpid();
 #endif
-    main::Standalone ctx;
+    ctx_main::Standalone ctx;
     if ( !ctx.start(pid) ) return ctx.result();
     bool done = false;
     while ( !done ) {

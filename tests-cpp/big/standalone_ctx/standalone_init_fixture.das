@@ -2,6 +2,7 @@ options gen2
 options stack = 262144
 
 require standalone_init_dep
+require daslib/export_c
 
 var g_stamp = 0
 
@@ -85,6 +86,32 @@ def flip(m : Mode) : Mode {
     return m == Mode.on ? Mode.off : Mode.on
 }
 
+struct Outer {
+    inner : Inner
+    tag : int
+}
+
+struct Inner {
+    weight : int
+}
+
+[export]
+def outer_weight(o : Outer) : int {
+    return o.inner.weight + o.tag
+}
+
+struct Node {
+    value : int
+    next : Node?
+}
+
+var private g_node : Node?
+
+[export]
+def head_value : int {
+    return g_node?.value ?? 41
+}
+
 [export]
 def apply_lambda(x : int) : int {
     let add3 = @(v : int) : int => v + 3
@@ -114,4 +141,9 @@ def sum_generator(n : int) : int {
         s += v
     }
     return s
+}
+
+[export_c(name = "renamed_sum")]
+def sum_under_another_name(a, b : int) : int {
+    return a + b
 }

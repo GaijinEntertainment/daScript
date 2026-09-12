@@ -27,7 +27,7 @@ static void board_print ( const char * text ) {
 int main () {
     das_nano_set_print(&board_print);
 
-    blinker::Standalone ctx;
+    ctx_blinker::Standalone ctx;
 
     // One full sweep of the scanner: 1,2,4,8,4,2 then back to 1.
     static const unsigned expected[] = { 1, 2, 4, 8, 4, 2, 1, 2 };

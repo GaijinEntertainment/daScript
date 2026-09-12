@@ -128,9 +128,6 @@ namespace das {
     atomic<int> g_envTotal(0);
     atomic<bool> g_exitingNow(false);
 
-    // from module_builtin_fio.cpp — modules whose .shared_module dlopen failed (Quiet)
-    DAS_API string describe_pending_dynamic_modules();
-
     static void daslang_atexit_audit() {
         int n = g_envTotal.load();
         if ( n != 0 && !g_exitingNow.load() ) {

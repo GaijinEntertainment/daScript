@@ -132,6 +132,14 @@ namespace das {
                 return true;
             }, "*");
         }
+        void exportPublicFunctions( Module * thisModule ) {
+            for ( auto & fn : thisModule->functions.each() ) {
+                if ( fn->privateFunction || fn->builtIn || fn->generated || fn->isTemplate ) continue;
+                if ( fn->macroInit || fn->macroFunction || fn->init || fn->shutdown ) continue;
+                if ( fn->isClassMethod || fn->lambda || fn->generator || fn->fromGeneric ) continue;
+                fn->exports = true;
+            }
+        }
         void markModuleVarsUsed( ModuleLibrary &, Module * inWhichModule ) {
             for ( auto & var : inWhichModule->globals.each() ) {
                 program->setUsed(var, false);
@@ -346,6 +354,7 @@ namespace das {
         MarkSymbolUse vis(this, false);
         vis.tw = logs;
         visit(vis);
+        if ( policies.export_public_functions ) vis.exportPublicFunctions(thisModule.get());
         vis.markUsedFunctions(library, false, false, nullptr);
         vis.markVarsUsed(library, false);
     }

@@ -8,6 +8,8 @@ require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
 require llvm/daslib/llvm_jit_plan public
 require llvm/daslib/llvm_exe
+require llvm/daslib/jit_standalone
+require daslib/c_api_header
 require llvm/daslib/llvm_aot
 require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_common
@@ -35,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xae6b1b0afccbf65aul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xb00c43d357647160ul
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -310,8 +312,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         chain = fold_function_hints(buckets[pname], chain)
         let pkey = (chain ^ env_salt) * JIT_FNV_PRIME
         // cache off (incl. a pinned output path, where no GC may run): positional names, overwritten in place - key-named objs would accumulate without bound there
-        let obj = (obj_cache ? add_obj_extension("{dir_name(output_path)}/{pkey}.m_{ptag}")
-                             : add_obj_extension("{output_path}.p{pi}_{ptag}"))
+        let obj = (obj_cache ? artifact_path("{dir_name(output_path)}/{pkey}.m_{ptag}", JitArtifact.object)
+                             : artifact_path("{output_path}.p{pi}_{ptag}", JitArtifact.object))
         objs |> push(obj)   // link order = partition order, hit or miss
         if (obj_cache && stat(obj).is_valid) {
             cached++
@@ -448,6 +450,9 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     assume debug_info = plan.debug_info
     assume dump_ir = plan.dump_ir
     assume gen_exe = plan.gen_exe
+    assume gen_lib = plan.gen_lib
+    assume lib_static = plan.lib_static
+    assume lib_bindings = plan.lib_bindings
     assume exe_main = plan.exe_main
     assume compile_only = plan.compile_only
     assume emit_aot_object = plan.emit_aot_object
@@ -493,6 +498,8 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     init_jit_target_flags(target_triple, use_host_cpu)
     var funcs : array<FunctionPtr>
     var visitorDisabled = 0
+    var emit_failed = false
+    defer() { reset_codegen_accumulators(); }
     var disableJitVisitor = new DisableJitVisitor()
     make_visitor(*disableJitVisitor) $(disableJitVisitorAdapter) {
         for (fun in plan.candidates) {
@@ -515,7 +522,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     // emit_aot_object always writes an object even with no functions to emit (a fully-no_aot
     // module): an empty .o with just the fileinfo ctor, so the build always has the file it
     // expects and those functions interpret at load (as Program::linkCppAot skips them).
-    if (!empty(funcs) || emit_aot_object) {
+    if (!empty(funcs) || emit_aot_object || gen_lib) {
         // the plan's fold over the candidates - the first aot-hash per function lands there (cached after)
         let t_hash = get_time_usec(phase_tm)
         phase_tm = ref_time_ticks()
@@ -600,7 +607,18 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, lto_probe ? "" : dll_hash_basename, sres.objs)
         } elif (recompile_prog) {
             jit_has_externals = irgen_functions(ctx, uids, attrs, funcs, jit_flags, jit_mode, prog)
-            if (gen_exe) {
+            if (gen_lib) {
+                let export_marked = plan.lib_export_marked
+                let res = inject_lib(ctx, g_ctx, prog, g_mod, g_prim_t, uids, exe_strict,
+                    prog.policies.export_public_functions || export_marked, output_path,
+                    plan.register_all_modules)
+                LINK_WHOLE_LIB = res.link_whole_lib
+                if (res.fn == null) {
+                    finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
+                    to_log(LOG_ERROR, "LLVM LIB: no library written for {output_path}\n")
+                    return false
+                }
+            } elif (gen_exe) {
                 let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict,
                     plan.register_all_modules)
                 LINK_WHOLE_LIB = res.link_whole_lib
@@ -645,19 +663,36 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             if (compile_only) {
                 to_log(LOG_INFO, "LLVM JIT: compile-only - module built, optimized and verified; no artifact written, nothing installed\n")
             } elif (emit_aot_object) {
-                emit_object_only(g_mod, output_path, use_host_cpu)
+                emit_failed ||= !emit_object_only(g_mod, output_path, use_host_cpu)
+            } elif (gen_lib) {
+                mkdir_rec(dir_name(output_path))
+                emit_failed ||= !write_artifact(g_mod, output_path, lib_static ? JitArtifact.static_lib : JitArtifact.shared_lib,
+                    path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, exe_host_cpu,
+                    debug_info, log_jit_time)
+                let lib_names = CNames(prefix = lib_prefix_from_path(output_path), this_module = prog.getThisModule)
+                if (!emit_c_header(g_lib_exports, lib_names, string(prog.getThisModule.fileName),
+                        output_path, lib_link_note(lib_static, LINK_WHOLE_LIB))) {
+                    to_log(LOG_ERROR, "LLVM LIB: the library is written but its C header is not - {output_path}.h\n")
+                    emit_failed = true
+                }
+                if (!(lib_bindings |> empty())) {
+                    emit_failed ||= !write_das_bindings(g_lib_exports, lib_names, string(prog.getThisModule.fileName),
+                        output_path, lib_bindings, lib_static)
+                }
             } elif (gen_wasm) {
                 mkdir_rec(dir_name(output_path))
                 // path_to_linker is reused as the optional emcc override
                 // for the wasm link (mirrors how it's used for the host
                 // linker, lld-link/clang/c++, on the host path).
-                write_wasm(g_mod, output_path, target_triple, path_to_linker, jit_has_externals, runtime_lib_override, emit_object)
+                emit_failed ||= !write_wasm(g_mod, output_path, target_triple, path_to_linker, jit_has_externals, runtime_lib_override, emit_object)
             } elif (gen_exe) {
                 mkdir_rec(dir_name(output_path))
-                write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info)
+                emit_failed ||= !write_artifact(g_mod, output_path, JitArtifact.exe, path_to_shared_lib, path_to_linker,
+                    linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info)
             } elif (use_dll) {
                 mkdir_rec(dir_name(output_path))
-                write_dll(g_mod, output_path, path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, debug_info, log_jit_time, opt_level |> uint)
+                emit_failed ||= !write_artifact(g_mod, output_path, JitArtifact.jit_dll, path_to_shared_lib, path_to_linker,
+                    linker_string, LINK_WHOLE_LIB, true, debug_info, log_jit_time, opt_level |> uint)
                 let no_keep_objs : array<string>   // monolith artifacts all carry the dll-hash prefix
                 reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, dll_hash_basename, no_keep_objs)
             }
@@ -678,7 +713,7 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
             }
             jit_log_report(funcs, true, opt_level, true, false, 0, debug_info, log_jit_time, totalTime,
                 t_hash, t_init, t_declare, t_probe, t_irgen, t_opt, t_emit, 0, 0)
-            return true
+            return !emit_failed
         }
         if (use_dll) {
             assert(g_dynamic_lib_handle.handle != null)
@@ -721,5 +756,5 @@ def public run_jit(prog : Program?; var ctx : Context?) : bool {  // nolint:STYL
     } else {
         to_log(LOG_INFO, "LLVM JIT: 0 functions to jit ({length(disabled)} marked no_jit, {visitorDisabled} disabled by content) - the WHOLE program runs interpreted\n")
     }
-    return true
+    return !emit_failed
 }

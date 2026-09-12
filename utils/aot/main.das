@@ -189,9 +189,15 @@ def main() {
             }
         }
         updateCOP(cop, !gen1, gen2_make, false)
+        let bindings = find_argument_or(args, "-bindings", "")
+        let bindings_library = find_argument_or(args, "-bindings_library", "")
+        if (!bindings.empty() && length(ctx_files) != 1) {
+            panic("-bindings names one output, so it takes exactly one -ctx input")
+        }
         for ((ctx_in, ctx_out) in ctx_files) {
             ast_gc_guard() {
-                let is_ok = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
+                let is_ok = standalone_aot(ctx_in, ctx_out, bindings, bindings_library,
+                                           cross_platform, false, cop)
                 if (!is_ok && !quiet) {
                     to_log(LOG_ERROR, "Failed to compile `{ctx_in}` in standalone.\n")
                 }

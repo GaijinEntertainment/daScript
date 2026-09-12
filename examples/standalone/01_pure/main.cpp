@@ -37,18 +37,18 @@ int main () {
     // the context exists means even a panic during construction is visible.
     das_nano_set_print(&to_console);
 
-    pure_math::Standalone ctx;
+    ctx_pure_math::Standalone ctx;
 
-    pure_math::Vec3 a; a.x = 1.0f; a.y = 2.0f; a.z = 3.0f;
-    pure_math::Vec3 b; b.x = 4.0f; b.y = 5.0f; b.z = 6.0f;
+    ctx_pure_math::Vec3 a; a.x = 1.0f; a.y = 2.0f; a.z = 3.0f;
+    ctx_pure_math::Vec3 b; b.x = 4.0f; b.y = 5.0f; b.z = 6.0f;
 
     expect_float("dot(a,b)", ctx.dot(a, b), 32.0f);
 
-    pure_math::Vec3 s = ctx.scale(a, 2.0f);
+    ctx_pure_math::Vec3 s = ctx.scale(a, 2.0f);
     expect_float("scale(a,2).x", s.x, 2.0f);
     expect_float("scale(a,2).z", s.z, 6.0f);
 
-    expect_float("component(a,y)", ctx.component(a, pure_math::Axis::y), 2.0f);
+    expect_float("component(a,y)", ctx.component(a, ctx_pure_math::Axis::y), 2.0f);
     expect_float("weighted_sum(a)", ctx.weighted_sum(a), 1.0f*0.25f + 2.0f*0.5f + 3.0f*0.25f);
 
     expect_int("collatz_steps(27)", ctx.collatz_steps(27), 111);

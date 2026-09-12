@@ -26,7 +26,7 @@ static void to_console ( const char * text ) {
 int main () {
     das_nano_set_print(&to_console);
 
-    closures::Standalone ctx;
+    ctx_closures::Standalone ctx;
 
     expect_int("apply_twice(10)", ctx.apply_twice(10), 16);
     expect_int("call_through_pointer(21)", ctx.call_through_pointer(21), 42);

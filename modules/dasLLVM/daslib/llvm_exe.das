@@ -15,6 +15,8 @@ require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_dll_utils
+require llvm/daslib/jit_standalone
+require daslib/c_api_header
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
@@ -38,6 +40,7 @@ bitfield TabOperation {
 }
 
 
+var private g_lib_registration_once = false
 
 
 class public CollectExternVisitor : AstVisitor {
@@ -126,19 +129,19 @@ class public CollectExternVisitor : AstVisitor {
                 registered_modules[m] = true
             }
         } else {
-            // Register $ and strings unless inject_main's static sweep already emitted the (non-idempotent) call.
-            if (!(g_exe_emitted_reg |> key_exists("jit_register_Module_BuiltIn"))) {
-                g_exe_emitted_reg["jit_register_Module_BuiltIn"] = true
-                var reg_builtin = LLVMAddFunctionWithType(g_mod, "jit_register_Module_BuiltIn", register_mod_type)
-                LLVMBuildCall2(ib, register_mod_type, reg_builtin, array<LLVMValueRef>(), "")
+            let once_type = jit_fn_type($(name, reg : void?) : void? {})
+            var once = declare_extern_fn("jit_register_module_once", once_type)
+            for (pair in fixed_array(fixed_array("$", "jit_register_Module_BuiltIn"),
+                                     fixed_array("strings", "jit_register_Module_Strings"))) {
+                if (!(g_exe_emitted_reg |> key_exists(pair[1]))) {
+                    g_exe_emitted_reg[pair[1]] = true
+                    var reg_fn = declare_extern_fn(pair[1], register_mod_type)
+                    LLVMBuildCall2(ib, once_type, once,
+                        array(get_string_constant_ptr(ib, pair[0]),
+                            LLVMBuildPointerCast(ib, reg_fn, g_prim_t.LLVMVoidPtrType(), "")), "")
+                }
+                registered_modules[pair[0]] = true
             }
-            registered_modules["$"] = true
-            if (!(g_exe_emitted_reg |> key_exists("jit_register_Module_Strings"))) {
-                g_exe_emitted_reg["jit_register_Module_Strings"] = true
-                var reg_strings = LLVMAddFunctionWithType(g_mod, "jit_register_Module_Strings", register_mod_type)
-                LLVMBuildCall2(ib, register_mod_type, reg_strings, array<LLVMValueRef>(), "")
-            }
-            registered_modules["strings"] = true
         }
         return ib
     }
@@ -315,14 +318,23 @@ class public CollectExternVisitor : AstVisitor {
         if (mod_name == "ast_core" || mod_name == "ast" || mod_name == "network_core" || mod_name == "network") {
             needs_whole_lib = true
         }
-        // One call per thunk process-wide (not idempotent); get-or-add avoids a silent rename to an undefined symbol.
         return if (g_exe_emitted_reg |> key_exists(reg_fn_name))
         g_exe_emitted_reg[reg_fn_name] = true
         var reg_fn = LLVMGetNamedFunction(g_mod, reg_fn_name)
         if (reg_fn == null) {
             reg_fn = LLVMAddFunctionWithType(g_mod, reg_fn_name, register_mod_type)
         }
-        LLVMBuildCall2(init_builder, register_mod_type, reg_fn, array<LLVMValueRef>(), "")
+        if (!g_lib_registration_once) {
+            LLVMBuildCall2(init_builder, register_mod_type, reg_fn, array<LLVMValueRef>(), "")
+            return
+        }
+        let once_type = jit_fn_type($(name, reg : void?) : void? {})
+        var once = LLVMGetNamedFunction(g_mod, "jit_register_module_once")
+        if (once == null) {
+            once = LLVMAddFunctionWithType(g_mod, "jit_register_module_once", once_type)
+        }
+        LLVMBuildCall2(init_builder, once_type, once,
+            array(get_string_constant_ptr(init_builder, mod_name), reg_fn), "")
     }
 
     def make_call(expr : ExprCallFunc?) {
@@ -673,12 +685,14 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
         }
     }
     if (!empty(extern_resolver.registered_modules) || !empty(used_modules)) {
-        let init_done_type = LLVMFunctionType(t.t_void, array<LLVMTypeRef>())
+        let init_done_type = LLVMFunctionType(t.t_void, array(t.t_int32))
         var jit_init_done = LLVMGetNamedFunction(g_mod, "jit_initialize_modules_done")
         if (jit_init_done == null) {
             jit_init_done = LLVMAddFunctionWithType(g_mod, "jit_initialize_modules_done", init_done_type)
         }
-        LLVMBuildCall2(ib, init_done_type, jit_init_done, array<LLVMValueRef>(), "")
+        var lib_guard = LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL)
+        var guard_arg = lib_guard == null ? t.ConstI32(0ul) : LLVMBuildLoad2(ib, t.t_int32, lib_guard, "guard")
+        LLVMBuildCall2(ib, init_done_type, jit_init_done, array(guard_arg), "")
     }
     // Wasm: fill per-(handled-type, field) offset globals from the TARGET runtime's annotations (now registered) — each access reads a global, not a host-baked constant.
     if (!empty(g_handled_field_offset_globals)) {
@@ -1008,24 +1022,25 @@ def private emit_module_registration(m : Module?; dynamic_modules : table<string
     g_exe_emitted_reg[reg_fn_name] = true
     has_cpp_modules = true
     to_log(LOG_INFO, "LLVM EXE: NEED_MODULE({cpp_name}) for `{mod_name}`\n")
-    var reg_fn = LLVMGetNamedFunction(g_mod, reg_fn_name)
-    if (reg_fn == null) {
-        reg_fn = LLVMAddFunctionWithType(g_mod, reg_fn_name, register_mod_type)
-    }
-    LLVMBuildCall2(builder, register_mod_type, reg_fn, array<LLVMValueRef>(), "")
+    var reg_fn = declare_extern_fn(reg_fn_name, register_mod_type)
+    let once_type = jit_fn_type($(name, reg : void?) : void? {})
+    var once = declare_extern_fn("jit_register_module_once", once_type)
+    LLVMBuildCall2(builder, once_type, once,
+        array(get_string_constant_ptr(builder, mod_name),
+            reg_fn), "")
 }
 
 // Creates main function that initializes a standalone JIT context, registers
 // all compiled functions, runs init scripts, then calls the program entry point.
-def public inject_main(program_context : Context?; ctx : LLVMContextRef; // nolint:STYLE037,STYLE038 — the standalone-exe entry emitter: one emission block per runtime feature, in startup order
-                       prog : Program ?; entry_point : string; mod : LLVMOpaqueModule?;
-                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
-                       register_all_modules : bool = false) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
-    g_exe_emitted_reg |> clear()   // per-codegen-run: one registration call per module thunk
-    let builder = LLVMCreateBuilder()
-    defer() {
-        LLVMDisposeBuilder(builder)
-    }
+struct public StandaloneFunctions {
+    funcs : array<FunctionPtr>
+    used_modules : table<string; bool>
+    any_pinvoke : bool
+    ok : bool
+}
+
+
+def public collect_standalone_functions(prog : Program?; strict : bool) : StandaloneFunctions {
     // Collect ALL used functions from the program (not just JIT-compiled ones from `funcs`).
     // There shouldn't be any `das` functions in standalone_exe, otherwise it
     // will crash.
@@ -1051,56 +1066,39 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     }
     if (strict && has_no_jit) {
         to_log(LOG_ERROR, "Cannot build standalone exe: some functions are no_jit in strict mode\n")
-        return (fn = null, link_whole_lib = false)
+        return <- StandaloneFunctions(funcs <- funcs, used_modules <- used_modules, any_pinvoke = any_pinvoke)
     }
+    return <- StandaloneFunctions(funcs <- funcs, used_modules <- used_modules, any_pinvoke = any_pinvoke, ok = true)
+}
 
-    // --jit-register-all-modules: compiler-driver exes may recompile targets needing UnitTest at
-    // runtime. Force it only in main()'s dynamic-module loop below — NOT via used_modules, else
-    // initialize_modules() emits a second register call ("Module 'UnitTest' already created").
-    var force_dynamic_modules : table<string; bool>
-    if (register_all_modules) {
-        force_dynamic_modules["UnitTest"] = true
-    }
 
+def private find_exe_entry(var funcs : array<FunctionPtr>; var uids : UidNodes?; entry_point : string) : tuple<name : string; no_return : bool; bool_return : bool> {
     var start_fn_name = ""
     var no_return = true
     var bool_return = false
     for (fn in funcs) {
         if (fn.name == entry_point && fn.arguments.empty()) {
             assume fnmna = uids.get_dll_fn_name(fn).impl()
-            if (fn.result.isVoid) {
-                start_fn_name = fnmna
-                no_return = true
-            } elif (fn.result.baseType == Type.tInt) {
-                start_fn_name = fnmna
-                no_return = false
-            } elif (fn.result.baseType == Type.tBool) {
-                start_fn_name = fnmna
-                no_return = false
-                bool_return = true
-            }
+            let is_void = fn.result.isVoid
+            let is_bool = fn.result.baseType == Type.tBool
+            let takes_it = is_void || is_bool || fn.result.baseType == Type.tInt
+            start_fn_name = takes_it ? fnmna : start_fn_name
+            no_return = takes_it ? is_void : no_return
+            bool_return = takes_it ? is_bool : bool_return
         }
     }
-    if (start_fn_name |> empty()) {
-        to_log(LOG_ERROR, "entrypoint `{entry_point}()` not found in input file.\n")
-        return (fn = null, link_whole_lib = false)
-    }
 
-    let main_fn_type = LLVMFunctionType(types.t_int32,
-        fixed_array<LLVMTypeRef>(
-            types.t_int32,          // argc
-            types.LLVMVoidPtrType() // argv
-        )
-    )
-    // wasm32-emscripten: emcc's libstandalonewasm already defines `main`,
-    // emit `__main_argc_argv` instead and let crt1 chain through.
-    let main_sym = g_target_is_wasm ? "__main_argc_argv" : "main"
-    let main_fn = LLVMAddFunctionWithType(mod, main_sym, main_fn_type)
-    let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
-    LLVMPositionBuilderAtEnd(builder, entry)
+    return (name = start_fn_name, no_return = no_return, bool_return = bool_return)
+}
 
+
+def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program?; var types : PrimitiveTypes?;   // nolint:STYLE038 - one linear registration sequence, in startup order; a split would hide which step runs when
+                                        register_all_modules : bool; force_dynamic_modules : table<string; bool>;
+                                        var used_modules : table<string; bool>&;
+                                        var dynamic_modules : table<string; bool>&;
+                                        guest : bool = false) : bool {
+    g_exe_emitted_reg |> clear()   // per-codegen-run: one registration call per module thunk
     // Collect dynamic module names — used by CollectExternVisitor to skip dlopen'd modules
-    var dynamic_modules : table<string; bool>
     for_each_registered_dynamic_module() $(_path, _mod_name, das_name) {
         dynamic_modules[das_name] = true
     }
@@ -1199,30 +1197,19 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     LLVMBuildCall2(builder, init_modules_type, init_modules_fn, array<LLVMValueRef>(), "")
 
     // Dynamic modules load Quiet (sibling DT_NEEDED ordering): retry after the last registration
-    // and fatal on anything still unloadable, naming the module + dlopen error. Native only — on
-    // wasm those modules also register via static thunks, so the failed resolve is BY DESIGN.
     if (ships_dynamic && !g_target_is_wasm) {
         let fin_dyn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
-        var fin_dyn = LLVMAddFunctionWithType(g_mod, "jit_finalize_dynamic_modules", fin_dyn_type)
+        let fin_dyn_name = guest ? "jit_lib_finalize_dynamic_modules" : "jit_finalize_dynamic_modules"
+        var fin_dyn = LLVMAddFunctionWithType(g_mod, fin_dyn_name, fin_dyn_type)
         LLVMBuildCall2(builder, fin_dyn_type, fin_dyn, array<LLVMValueRef>(), "")
     }
 
-    // Init argc, argv
-    let set_cmd_args_type = LLVMFunctionType(types.t_void,
-        fixed_array<LLVMTypeRef>(
-            types.t_int32,          // argc
-            types.LLVMVoidPtrType() // argv
-        )
-    )
-    var jit_set_cmd_args = LLVMAddFunctionWithType(
-        g_mod, "jit_set_command_line_arguments", set_cmd_args_type
-    )
-    let argc = LLVMGetParam(main_fn, 0 |> uint);  // argc
-    let argv = LLVMGetParam(main_fn, 1 |> uint);  // argv
-    LLVMBuildCall2(builder, set_cmd_args_type,
-        jit_set_cmd_args, fixed_array(argc, argv), "")
+    return ships_dynamic
+}
 
 
+def public emit_create_standalone_ctx(builder : LLVMBuilderRef; program_context : Context?; prog : Program?;
+                                      var types : PrimitiveTypes?; any_pinvoke : bool) : LLVMOpaqueValue? {
     // Determine the context stack size from options (mirrors Program::getContextStackSize)
     var context_stack_size = uint64(prog.policies.stack)
     let stack_opt = find_arg(prog._options, "stack")
@@ -1257,7 +1244,17 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         types.ConstI64(context_stack_size)
     )
     let global_context = LLVMBuildCall2(builder, create_ctx_type, jit_create_context, params, "")
+    return global_context
+}
 
+
+def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder : LLVMBuilderRef;   // nolint:STYLE038 - one linear startup sequence sharing the context value; a split would hide which step runs when
+                                        program_context : Context ?; ctx : LLVMContextRef; prog : Program?;
+                                        mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; var uids : UidNodes?;
+                                        var funcs : array<FunctionPtr>; global_context : LLVMOpaqueValue?;
+                                        register_all_modules : bool; ships_dynamic : bool;
+                                        var used_modules : table<string; bool>&;
+                                        dynamic_modules : table<string; bool>) : bool {
     // Pre-build init_globals so its function-pointer globals exist before
     // collect_external_functions walks them (issue #2582). Actual init_globals(ctx)
     // call is emitted further down at its runtime position in main_fn.
@@ -1325,9 +1322,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     // Whole-compiler-lib link: register the fusion engine (needed by simulate). Skip on wasm —
     // cross-link only sees libDaScript_runtime.a (no jit_register_fusion), and exes never read it (#2805).
     if (needs_whole_lib && !g_target_is_wasm) {
-        let reg_fusion_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
-        let reg_fusion_fn = LLVMAddFunctionWithType(g_mod, "jit_register_fusion", reg_fusion_type)
-        LLVMBuildCall2(builder, reg_fusion_type, reg_fusion_fn, array<LLVMValueRef>(), "")
+        let reg_fusion_type = jit_fn_type($() : void {})
+        var reg_fusion_fn = declare_extern_fn("jit_register_fusion", reg_fusion_type)
+        LLVMBuildCall2(fusion_builder, reg_fusion_type, reg_fusion_fn, array<LLVMValueRef>(), "")
     }
 
     // void jit_register_standalone_variable ( Context * ctx, uint64_t index, const char * name, uint64_t mnh, uint64_t offset, int shared )
@@ -1357,10 +1354,14 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         LLVMBuildCall2(builder, init_global_var_type, init_global_var, var_params, "")
     }
     // the sealed lookups are adopted right after the context is created - before any registration
-    // call, so no JIT code can ever probe an unadopted table, however LLVM orders the calls
     {
         let resume_block = LLVMGetInsertBlock(builder)
-        LLVMPositionBuilderBefore(builder, LLVMGetNextInstruction(global_context))
+        if (LLVMIsAInstruction(global_context) != null) {
+            LLVMPositionBuilderBefore(builder, LLVMGetNextInstruction(global_context))
+        } else {
+            let entry = LLVMGetEntryBasicBlock(LLVMGetBasicBlockParent(resume_block))
+            LLVMPositionBuilder(builder, entry, LLVMGetFirstInstruction(entry))
+        }
         emit_exe_lookups(builder, ctx, types, global_context, collected.registered, program_context)
         LLVMPositionBuilderAtEnd(builder, resume_block)
     }
@@ -1421,6 +1422,72 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
             fixed_array(global_context, LLVMBuildPointerCast(builder, init_script_fn, types.LLVMVoidPtrType(), "")), "")
     }
 
+    return needs_whole_lib
+}
+def public inject_main(program_context : Context?; ctx : LLVMContextRef; // nolint:STYLE037,STYLE038 — the standalone-exe entry emitter: one emission block per runtime feature, in startup order
+                       prog : Program ?; entry_point : string; mod : LLVMOpaqueModule?;
+                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
+                       register_all_modules : bool = false) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+    let builder = LLVMCreateBuilder()
+    defer() {
+        LLVMDisposeBuilder(builder)
+    }
+    var std_fns <- collect_standalone_functions(prog, strict)
+    var funcs <- std_fns.funcs
+    var used_modules <- std_fns.used_modules
+    let any_pinvoke = std_fns.any_pinvoke
+    if (!std_fns.ok) {
+        return (fn = null, link_whole_lib = false)
+    }
+
+    var force_dynamic_modules : table<string; bool>
+    if (register_all_modules) {
+        force_dynamic_modules["UnitTest"] = true
+    }
+
+    let found = find_exe_entry(funcs, uids, entry_point)
+    let start_fn_name = found.name
+    let no_return = found.no_return
+    let bool_return = found.bool_return
+    if (start_fn_name |> empty()) {
+        to_log(LOG_ERROR, "entrypoint `{entry_point}()` not found in input file.\n")
+        return (fn = null, link_whole_lib = false)
+    }
+
+    let main_fn_type = LLVMFunctionType(types.t_int32,
+        fixed_array<LLVMTypeRef>(
+            types.t_int32,          // argc
+            types.LLVMVoidPtrType() // argv
+        )
+    )
+    let main_sym = g_target_is_wasm ? "__main_argc_argv" : "main"
+    let main_fn = LLVMAddFunctionWithType(mod, main_sym, main_fn_type)
+    let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
+    LLVMPositionBuilderAtEnd(builder, entry)
+
+    var dynamic_modules : table<string; bool>
+    let ships_dynamic = emit_standalone_runtime_init(builder, prog, types, register_all_modules,
+        force_dynamic_modules, used_modules, dynamic_modules)
+    let set_cmd_args_type = LLVMFunctionType(types.t_void,
+        fixed_array<LLVMTypeRef>(
+            types.t_int32,          // argc
+            types.LLVMVoidPtrType() // argv
+        )
+    )
+    var jit_set_cmd_args = LLVMAddFunctionWithType(
+        g_mod, "jit_set_command_line_arguments", set_cmd_args_type
+    )
+    let argc = LLVMGetParam(main_fn, 0 |> uint);  // argc
+    let argv = LLVMGetParam(main_fn, 1 |> uint);  // argv
+    LLVMBuildCall2(builder, set_cmd_args_type,
+        jit_set_cmd_args, fixed_array(argc, argv), "")
+
+
+    let global_context = emit_create_standalone_ctx(builder, program_context, prog, types, any_pinvoke)
+
+    let needs_whole_lib = emit_standalone_context_init(builder, builder, program_context, ctx, prog, mod,
+        types, uids, funcs, global_context, register_all_modules, ships_dynamic, used_modules, dynamic_modules)
+    var main_params = fixed_array<LLVMOpaqueValue?>(global_context)
     // Match the interpreter's WebLoop: on wasm a program exporting `update` runs as init() once +
     // update() per browser frame + shutdown() (the browser can't block in main's while-loop). `main`
     // stays the desktop driver, bypassed here — so the same .das cross-compiles unchanged for web.
@@ -1509,4 +1576,151 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     LLVMBuildRet(builder, main_ret)
     to_log(LOG_INFO, "LLVM JIT: standalone exe entry point generated '{start_fn_name}', {length(funcs)} functions\n")
     return (fn = main_fn, link_whole_lib = needs_whole_lib)
+}
+
+
+let private LIB_GUARD_GLOBAL = "__das_lib_init_guard"
+let private LIB_ENV_GLOBAL = "__das_lib_environment"
+let private LIB_ERROR_GLOBAL = "__das_lib_create_error"
+let private LIB_RUNTIME_INIT = "__das_lib_runtime_init"
+let private LIB_CTX_INIT = "__das_lib_ctx_init"
+var public g_lib_exports : array<CExport>
+
+
+def private emit_lib_globals(var types : PrimitiveTypes?) {
+    var guard = LLVMAddGlobal(g_mod, types.t_int32, LIB_GUARD_GLOBAL)
+    set_private_linkage(guard)
+    LLVMSetInitializer(guard, types.ConstI32(0ul))
+    for (name in [LIB_ENV_GLOBAL, LIB_ERROR_GLOBAL]) {
+        var slot = LLVMAddGlobal(g_mod, types.LLVMVoidPtrType(), name)
+        set_private_linkage(slot)
+        LLVMSetInitializer(slot, LLVMConstNull(types.LLVMVoidPtrType()))
+    }
+}
+
+
+def private emit_runtime_init(ctx : LLVMContextRef; prog : Program?; var types : PrimitiveTypes?;
+                              register_all_modules : bool; var used_modules : table<string; bool>&;
+                              var dynamic_modules : table<string; bool>&) : tuple<fn : LLVMOpaqueValue?; builder : LLVMBuilderRef; ships_dynamic : bool> {
+    emit_lib_globals(types)
+    let void_fn_type = jit_fn_type($() : void {})
+    let made = new_function(ctx, LIB_RUNTIME_INIT, void_fn_type, false)
+    let fresh_init_modules = LLVMGetNamedFunction(g_mod, "initialize_modules") == null
+    var init_modules = declare_extern_fn("initialize_modules", void_fn_type)
+    if (fresh_init_modules) {
+        set_private_linkage(init_modules)
+    }
+    var force_dynamic_modules : table<string; bool>
+    if (register_all_modules) {
+        force_dynamic_modules["UnitTest"] = true
+    }
+    let ships = emit_standalone_runtime_init(made.builder, prog, types, register_all_modules,
+        force_dynamic_modules, used_modules, dynamic_modules, true)
+    return (fn = made.fn, builder = made.builder, ships_dynamic = ships)
+}
+
+
+def private emit_create(ctx : LLVMContextRef; program_context : Context?; prog : Program?; mod : LLVMOpaqueModule?;
+                        var types : PrimitiveTypes?; var uids : UidNodes?; prefix : string;
+                        var sf : StandaloneFunctions; runtime_init : LLVMOpaqueValue?;
+                        runtime_builder : LLVMBuilderRef; register_all_modules : bool; ships_dynamic : bool;
+                        dynamic_modules : table<string; bool>) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+    let void_ptr = types.LLVMVoidPtrType()
+    var guard_global = LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL)
+    var env_global = LLVMGetNamedGlobal(g_mod, LIB_ENV_GLOBAL)
+    var error_global = LLVMGetNamedGlobal(g_mod, LIB_ERROR_GLOBAL)
+
+    let ctx_init = new_function(ctx, LIB_CTX_INIT, jit_fn_type($(ctx, frame : void?) : void {}), false)
+    let made = new_function(ctx, "{prefix}_create", jit_fn_type($() : void? {}), true)
+    let b = made.builder
+    defer() {
+        LLVMDisposeBuilder(b)
+        LLVMDisposeBuilder(ctx_init.builder)
+    }
+    let run_once_type = jit_fn_type($(guard, env, init : void?) : int {})
+    var run_once = declare_extern_fn("jit_lib_run_once", run_once_type)
+    var registered = LLVMBuildCall2(b, run_once_type, run_once,
+        array(LLVMBuildPointerCast(b, guard_global, void_ptr, ""),
+            LLVMBuildPointerCast(b, env_global, void_ptr, ""),
+            LLVMBuildPointerCast(b, runtime_init, void_ptr, "")), "registered")
+    let ready_bb = LLVMAppendBasicBlockInContext(ctx, made.fn, "ready")
+    let declined_bb = LLVMAppendBasicBlockInContext(ctx, made.fn, "declined")
+    var can_run = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntNE, registered, types.ConstI32(0ul), "can_run")
+    LLVMBuildCondBr(b, can_run, ready_bb, declined_bb)
+    LLVMPositionBuilderAtEnd(b, declined_bb)
+    LLVMBuildRet(b, LLVMConstNull(void_ptr))
+    LLVMPositionBuilderAtEnd(b, ready_bb)
+    var global_context = emit_create_standalone_ctx(b, program_context, prog, types, sf.any_pinvoke)
+    let guard_type = jit_fn_type($(ctx, tramp, frame : void?) : int {})
+    var guard = declare_extern_fn("jit_lib_invoke_guarded", guard_type)
+    var ok = LLVMBuildCall2(b, guard_type, guard,
+        array(global_context, LLVMBuildPointerCast(b, ctx_init.fn, void_ptr, ""), LLVMConstNull(void_ptr)), "ok")
+    let finish_type = jit_fn_type($(ctx : void?; ok : int; err : void?) : void? {})
+    var finish = declare_extern_fn("jit_lib_create_finish", finish_type)
+    LLVMBuildRet(b, LLVMBuildCall2(b, finish_type, finish,
+        array(global_context, ok, LLVMBuildPointerCast(b, error_global, void_ptr, "")), ""))
+
+    var ctx_param = LLVMGetParam(ctx_init.fn, 0u)
+    let whole = emit_standalone_context_init(ctx_init.builder, runtime_builder, program_context, ctx,
+        prog, mod, types, uids, sf.funcs, ctx_param, register_all_modules, ships_dynamic,
+        sf.used_modules, dynamic_modules)
+    LLVMBuildRetVoid(ctx_init.builder)
+    return (fn = made.fn, link_whole_lib = whole)
+}
+
+
+[arch(at="../ARCHITECTURE_LIB.md#lib-runtime-scope")]
+def public inject_lib(program_context : Context?; ctx : LLVMContextRef; prog : Program?;
+                      mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; var uids : UidNodes?;
+                      strict : bool; export_all : bool; output_path : string;
+                      register_all_modules : bool = false) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+    g_lib_registration_once = true
+    defer() {
+        g_lib_registration_once = false
+    }
+    g_lib_exports |> clear()
+    let prefix = lib_prefix_from_path(output_path)
+    if (prefix |> empty()) {
+        to_log(LOG_ERROR, "LLVM LIB: cannot derive a C symbol prefix from the output path `{output_path}` - name it after a C identifier\n")
+        return (fn = null, link_whole_lib = false)
+    }
+    let names = CNames(prefix = prefix, this_module = prog.getThisModule)
+    var selected <- collect_c_exports(prog, names, export_all)
+    for (r in selected.errors) {
+        failed(r.message)
+    }
+    if (!(selected.errors |> empty())) {
+        return (fn = null, link_whole_lib = false)
+    }
+    var exports <- selected.exports
+    if (exports |> empty()) {
+        to_log(LOG_ERROR, "LLVM LIB: nothing to export - annotate functions with [export_c], or pass -lib-export-all\n")
+        return (fn = null, link_whole_lib = false)
+    }
+    var sf <- collect_standalone_functions(prog, strict)
+    if (!sf.ok) {
+        return (fn = null, link_whole_lib = false)
+    }
+    var dynamic_modules : table<string; bool>
+    let rt = emit_runtime_init(ctx, prog, types, register_all_modules, sf.used_modules, dynamic_modules)
+    let created = emit_create(ctx, program_context, prog, mod, types, uids, prefix, sf, rt.fn,
+        rt.builder, register_all_modules, rt.ships_dynamic, dynamic_modules)
+    LLVMBuildRetVoid(rt.builder)
+    LLVMDisposeBuilder(rt.builder)
+    emit_fixed_entries(ctx, types, uids, sf.funcs, prefix,
+        LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL), LLVMGetNamedGlobal(g_mod, LIB_ERROR_GLOBAL))
+    var emitted : array<CExport>
+    for (e in exports) {
+        let thunk = emit_thunk(ctx, e, uids, types, export_all)
+        if (thunk |> is_none()) {
+            return (fn = null, link_whole_lib = false)
+        }
+        if (!(thunk |> unwrap())) {
+            emitted |> push_clone(e)
+        }
+    }
+    to_log(LOG_INFO, "LLVM LIB: C entry points generated: {prefix}_create/destroy/last_error plus {length(emitted)} exports, {length(sf.funcs)} functions\n")
+    g_lib_exports |> clear()
+    g_lib_exports |> push_clone_from(emitted)
+    return (fn = created.fn, link_whole_lib = created.link_whole_lib)
 }

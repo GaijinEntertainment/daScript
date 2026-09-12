@@ -392,8 +392,31 @@ namespace das {
         #endif
         return run_link_cmd(cmd.c_str(), libraryName, "Library", context);
     }
+
+    bool create_static_library ( const char * objFilePath, const char * libraryName, const char * customTool, Context * context ) {
+        if ( !check_file_present(objFilePath) ) {
+            LOG(LogLevel::error) << "File '" << objFilePath << "' , containing compiled definitions, does not exist\n";
+            return false;
+        }
+        remove(libraryName);
+        std::string cmd;
+        #if defined(_WIN32) || defined(_WIN64)
+            #if defined(_MSC_VER)
+                const auto tool = find_linker(customTool, "llvm-lib.exe", "lib");
+                cmd = fmt::format(FMT_STRING("\"\"{}\" /nologo /OUT:\"{}\" \"{}\" 2>&1\""), tool.c_str(), libraryName, objFilePath);
+            #else
+                const auto tool = find_linker(customTool, "llvm-ar.exe", "ar");
+                cmd = fmt::format(FMT_STRING("\"\"{}\" rcs \"{}\" \"{}\" 2>&1\""), tool.c_str(), libraryName, objFilePath);
+            #endif
+        #else
+            const auto tool = find_linker(customTool, "llvm-ar", "ar");
+            cmd = fmt::format(FMT_STRING("\"{}\" rcs \"{}\" \"{}\" 2>&1"), tool.c_str(), libraryName, objFilePath);
+        #endif
+        return run_link_cmd(cmd.c_str(), libraryName, "Archive", context);
+    }
 #else
     bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, bool debugInfo, Context *context ) { return true; }
+    bool create_static_library ( const char * objFilePath, const char * libraryName, const char * customTool, Context * context ) { return true; }
 #endif
 
     // ===== --jit-split-modules parallel optimize+emit =====
@@ -768,6 +791,9 @@ namespace das {
             addExternInline<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasLib","customLinker","extraLinkerArgs","isShared","linkWholeLib","debugInfo","context"});
+            addExternInline<DAS_BIND_FUN(create_static_library)>(*this, lib,  "create_static_library",
+                SideEffects::worstDefault, "create_static_library")
+                    ->args({"objFilePath","libraryName","customTool","context"});
             addExternInline<DAS_BIND_FUN(jit_par_emit_begin)>(*this, lib,  "jit_par_emit_begin",
                 SideEffects::worstDefault, "jit_par_emit_begin");
             addExternInline<DAS_BIND_FUN(jit_par_emit_add)>(*this, lib,  "jit_par_emit_add",

@@ -161,7 +161,6 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(a_pos < b_pos && b_pos < main_pos, "dependency-first order: dep_a, dep_b, entry module")
         t |> success(find(files.header, "static_assert(sizeof(DepSpan)") >= 0, "a required module's struct definition is in the header")
         t |> success(find(files.header, "struct _standalone_dep_a::DepSpan") >= 0, "the method spells the required module's struct by its public name")
-        t |> success(find(files.source, "static_assert(sizeof(DepSpan)") < 0, "the source does not redefine the required module's struct")
     }
 
     t |> run("a required module's used functions emit into the one translation unit, and link their externs' modules") @(t : T?) {
@@ -194,23 +193,26 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         let files = generate_standalone_files(t, "_standalone_struct_sig_fixture", out_dir)
         t |> success(find(files.header, "static_assert(sizeof(Pair)") >= 0, "the struct definition is in the header")
         t |> success(find(files.header, "enum class Mode") >= 0, "the enum definition is in the header")
-        t |> success(find(files.header, "-> struct _standalone_struct_sig_fixture::Pair") >= 0, "the method spells the struct by its public name")
-        t |> success(find(files.header, "DAS_COMMENT(enum) _standalone_struct_sig_fixture::Mode") >= 0, "the method spells the enum by its public name")
+        t |> success(find(files.header, "-> struct ctx__standalone_struct_sig_fixture::Pair") >= 0, "the method spells the struct by its public name")
+        t |> success(find(files.header, "DAS_COMMENT(enum) ctx__standalone_struct_sig_fixture::Mode") >= 0, "the method spells the enum by its public name")
         t |> success(find(files.header, "pair_sum") >= 0, "the struct-taking method is declared")
         t |> success(find(files.header, "namespace  \{") < 0, "no 'namespace  \{' (empty module name) in the header")
         t |> success(find(files.header, "#pragma once") >= 0, "the header guards against double inclusion")
         t |> success(find(files.header, "bin_serializer.h") >= 0, "required-module includes are in the header")
-        t |> success(find(files.source, "static_assert(sizeof(Pair)") < 0, "the source does not redefine the struct")
-        t |> success(find(files.source, "enum class Mode") < 0, "the source does not redefine the enum")
+        t |> success(find(files.source, "class Standalone") >= 0 && find(files.source, "static_assert(sizeof(Pair)") >= 0,
+            "the .cpp carries the header's text instead of including it, so one copy defines the types")
+        t |> success(find(files.source, "#pragma once") < 0, "no #pragma once in the .cpp - it is a main file")
+        t |> success(find(files.source, "#include \"_standalone_struct_sig_fixture.das.h\"") < 0,
+            "the .cpp does not include the header it inlined")
         t |> equal(brace_balance(files.header), 0, "unbalanced braces in the generated header")
         t |> equal(brace_balance(files.source), 0, "unbalanced braces in the generated C++")
     }
 
     t |> run("cross-platform debug info spells entry-module types by their public name") @(t : T?) {
         let files = generate_standalone_files(t, "_standalone_struct_sig_fixture", out_dir, true)
-        t |> success(find(files.source, "offsetof(_standalone_struct_sig_fixture::Pair,") >= 0, "offsetof names the qualified struct")
-        t |> success(find(files.source, "TypeSize<_standalone_struct_sig_fixture::Pair>") >= 0, "TypeSize names the qualified struct")
-        t |> success(find(files.source, "DAS_COMMENT(enum) _standalone_struct_sig_fixture::Mode>") >= 0, "TypeSize names the qualified enum")
+        t |> success(find(files.source, "offsetof(ctx__standalone_struct_sig_fixture::Pair,") >= 0, "offsetof names the qualified struct")
+        t |> success(find(files.source, "TypeSize<ctx__standalone_struct_sig_fixture::Pair>") >= 0, "TypeSize names the qualified struct")
+        t |> success(find(files.source, "DAS_COMMENT(enum) ctx__standalone_struct_sig_fixture::Mode>") >= 0, "TypeSize names the qualified enum")
         t |> success(find(files.source, "offsetof(Pair,") < 0, "no unqualified offsetof survives")
         t |> success(find(files.source, "TypeSize<Pair>") < 0, "no unqualified struct TypeSize survives")
         t |> equal(brace_balance(files.source), 0, "unbalanced braces in the generated C++")
@@ -222,7 +224,7 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         // [no_aot] check below then reported its visit() as an unemittable function.
         let source = generate_standalone_source(t, "_standalone_macro_fixture", out_dir)
         t |> success(find(source, "5050") >= 0, "the macro's compile-time sum is baked into the source")
-        t |> success(find(source, "BakeSum") < 0, "the macro class does not reach the generated source")
+        t |> success(find(source, "struct BakeSum") < 0, "the macro class is not emitted (a comment naming it is fine)")
         t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
     }
 

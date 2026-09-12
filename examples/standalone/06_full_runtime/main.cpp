@@ -24,7 +24,7 @@ int main ( int argc, char * argv[] ) {
         return 7;
     }
     const char * url = argc > 1 ? argv[1] : "http://127.0.0.1:1/";
-    service_probe::Standalone ctx;
+    ctx_service_probe::Standalone ctx;
     const int status = ctx.http_status((char *)url);
     printf("GET %s -> %d%s\n", url, status, status < 0 ? " (nobody answered)" : "");
     const bool status_is_sane = status == -1 || (status >= 100 && status <= 599);

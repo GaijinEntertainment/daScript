@@ -29,6 +29,8 @@ namespace das {
         RegisterAotFunctions regFn;
     };
 
+    DAS_API void aotLibraryEmplace ( AotLibrary & lib, uint64_t hash, const AotFactory & factory );
+
     DAS_API AotLibrary & getGlobalAotLibrary();
     DAS_API void clearGlobalAotLibrary();
 

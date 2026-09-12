@@ -513,7 +513,9 @@ extern "C" {
             if ( !jit_module_is_registered(moduleName) ) {
                 DAS_FATAL_ERROR("Failed to find %s: module %s is not registered (its .shared_module may have failed to load - see errors above).\n", funcMangledName, moduleName);
             }
-            DAS_FATAL_ERROR("Failed to find %s in module %s.\n", funcMangledName, moduleName);
+            das::string pending = describe_pending_dynamic_modules();
+            DAS_FATAL_ERROR("Failed to find %s in module %s.%s%s\n", funcMangledName, moduleName,
+                pending.empty() ? "" : " Dynamic modules still pending: ", pending.c_str());
         }
     }
 
@@ -1210,12 +1212,73 @@ DAS_API void das_ensure_environment () {
     das::daScriptEnvironment::ensure();
 }
 
+DAS_API void * jit_register_module_once ( const char * dasName, das::Module * (*reg)() ) {
+    das::daScriptEnvironment::ensure();
+    if ( das::Module * have = das::Module::require(dasName ? dasName : "") ) return have;
+    return reg();
+}
+
+DAS_API int32_t jit_lib_run_once ( int32_t * guard, void ** env, void (*fn)() ) {
+    static das::mutex once_mutex;
+    das::lock_guard<das::mutex> lock(once_mutex);
+    if ( *guard ) {
+        if ( *env && das::daScriptEnvironment::getBound()!=*env ) {
+            das::daScriptEnvironment::setBound((das::daScriptEnvironment *)*env);
+        }
+        return 1;
+    }
+    das::daScriptEnvironment::ensure();
+    *env = das::daScriptEnvironment::getBound();
+    *guard = das::daScriptEnvironment::getBound()->modules ? 2 : 1;
+    fn();
+    return 1;
+}
+
+DAS_API int32_t jit_lib_invoke_guarded ( das::Context * ctx, void (*tramp)(das::Context *, void *), void * frame ) {
+    if ( !ctx ) return 0;
+    ctx->clearException();
+    if ( ctx->contextMutex ) {
+        das::lock_guard<das::recursive_mutex> guard(*ctx->contextMutex);
+        return ctx->runWithCatch([&]() { tramp(ctx, frame); }) ? 1 : 0;
+    }
+    return ctx->runWithCatch([&]() { tramp(ctx, frame); }) ? 1 : 0;
+}
+
+DAS_API das::Context * jit_lib_create_finish ( das::Context * ctx, int32_t ok, char ** err ) {
+    if ( ok ) return ctx;
+    const char * why = ctx ? ( ctx->getException() ? ctx->getException() : "unknown exception" )
+                           : "out of memory";
+    if ( err ) {
+        free(*err);
+        const size_t len = strlen(why) + 1;
+        *err = (char *) malloc(len);
+        if ( *err ) memcpy(*err, why, len);
+    }
+    delete ctx;
+    return nullptr;
+}
+
+DAS_API const char * jit_lib_last_error ( das::Context * ctx ) {
+    return ctx ? ctx->getException() : nullptr;
+}
+
+DAS_API void jit_destroy_standalone_ctx ( das::Context * ctx ) {
+    delete ctx;
+}
+
 DAS_API void jit_initialize_modules () {
     // No need to initialize modules. JIT will generate required calls.
     das::daScriptEnvironment::ensure();
 }
 
-DAS_API void jit_initialize_modules_done () {
+DAS_API void jit_initialize_modules_done ( int32_t guard ) {
+    if ( guard==2 ) {
+        das::string notInitialized;
+        if ( !das::Module::InitializeDependencies(notInitialized) ) {
+            das::LOG(das::LogLevel::error) << "LLVM LIB: unable to initialize modules:" << notInitialized << "\n";
+        }
+        return;
+    }
     das::Module::Initialize();
 }
 
@@ -1224,6 +1287,11 @@ DAS_API void jit_initialize_modules_done () {
 // the static g_DebugAgents map dtor races ref_count_mutex during
 // __cxa_finalize_ranges and terminate() fires (issue #2583).
 DAS_API void jit_shutdown () {
+    das::Module::ShutdownStandalone();
+}
+
+DAS_API void jit_lib_shutdown ( int32_t guard ) {
+    if ( guard!=1 ) return;
     das::Module::ShutdownStandalone();
 }
 
@@ -1282,6 +1350,11 @@ DAS_API void jit_finalize_dynamic_modules () {
     if ( int failed = das::report_pending_dynamic_modules() ) {
         DAS_FATAL_ERROR("%d dynamic module(s) failed to load (see above).\n", failed);
     }
+}
+
+DAS_API void jit_lib_finalize_dynamic_modules () {
+    das::retry_pending_dynamic_modules();
+    das::report_pending_dynamic_modules();
 }
 
 // ABI shim: -exe binaries emitted before the resolving form link this runtime dynamically
