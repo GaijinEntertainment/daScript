@@ -308,7 +308,10 @@ reachable server - see `examples/benchmarks/sql/README.md`.
 The benchmark numbers come from the per-platform records in
 [borisbat/dasProfile](https://github.com/borisbat/dasProfile) -
 `profile_results_<platform>.json` for `darwin`, `linux` and `windows`. CI fetches the latest on
-every publish; a platform with no record upstream is dropped client-side. Local dev:
+every publish; a platform with no record upstream is dropped client-side. A record that arrived
+must carry every das lane on every test (`DAS INTERPRETER`; `DAS AOT` and `DAS JIT`; the three
+das startup launches) or the deploy fails - `ci/check_profile_records.py`, the same check to run
+on a fresh capture before publishing it upstream. Local dev:
 
 ```bash
 for plat in darwin linux windows; do
