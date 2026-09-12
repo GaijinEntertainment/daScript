@@ -4623,9 +4623,9 @@ def test_vkd_da_attn(t0 : T?) {
                 var tokb = make_host_buf(16l, true)
                 var tmc = reinterpret<TokMeta?>(tokb.mapped)
                 tmc.cnt = uint(cnt)
-                var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb.buf),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l),
-                    fixed_array(1u, 2u, 4u, 16u, 0u))
+                var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb.buf, yd2),   //! unsplit: the out rows fill the partials binding
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes),
+                    fixed_array(1u, 2u, 4u, 16u, 0u, 16u))
                 var raw2 = alloc_cmd()
                 let begin = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -4652,9 +4652,9 @@ def test_vkd_da_attn(t0 : T?) {
                 var tokb2 = make_host_buf(16l, true)
                 var tmc2 = reinterpret<TokMeta?>(tokb2.mapped)
                 tmc2.cnt = uint(cnt)
-                var sc2 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb2.buf),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l),
-                    fixed_array(1u, 2u, 4u, 16u, 0u))
+                var sc2 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb2.buf, yd2),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes),
+                    fixed_array(1u, 2u, 4u, 16u, 0u, 16u))
                 var raw3 = alloc_cmd()
                 let begin3 = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw3, begin3), null)
@@ -4675,6 +4675,41 @@ def test_vkd_da_attn(t0 : T?) {
             }
             let badc = mismatch_approx(y_cls, y_ref)
             t |> success(badc == 0, "da_attn under a {cap} softcap matches the CPU oracle ({badc} of {nheads * hs} off)")
+            //! the split arm: eight key splits of the 300 (64-key pieces, the last 44 keys wide, three pieces empty),
+            //! the partials combined by the second kernel, under the same cap against the same oracle
+            let nsplit = 8
+            let p_bytes = int64(nheads * nsplit * (hs + 2)) * 4l
+            let partd = make_device_buf(p_bytes)
+            verify(ensure_da_attn_comb_cls(), "the split attention's combine class rail must engage on a live device")
+            unsafe {
+                nan_sentinel_upload(partd, p_bytes)
+                nan_sentinel_upload(yd2, q_bytes)
+                var tokb4 = make_host_buf(16l, true)
+                var tmc4 = reinterpret<TokMeta?>(tokb4.mapped)
+                tmc4.cnt = uint(cnt)
+                var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tokb4.buf, partd),
+                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes),
+                    fixed_array(1u, 2u, 4u, 16u, 0u, 32u))
+                var sc4c = set_da_attn_comb_cls(fixed_array(qd, partd, yd2),
+                    fixed_array(q_bytes, p_bytes, q_bytes), fixed_array(1u, 32u, 16u))
+                var raw4 = alloc_cmd()
+                let begin4 = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw4, begin4), null)
+                var h4 : VkHaz
+                var pc4 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
+                    kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, cap = cap, nsplit = uint(nsplit))
+                enc_da_attn_cls(raw4, h4, sc4, pc4, int64(nheads * nsplit))
+                enc_da_attn_comb_cls(raw4, h4, sc4c, pc4, int64(nheads))
+                vhz_dep(raw4, h4, 16u, 0u, true)
+                cmd_copy_whole(raw4, yd2, host.buf, q_bytes)
+                vk_check(vkEndCommandBuffer(raw4), null)
+                submit_wait(raw4)
+                memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+            }
+            let bads = mismatch_approx(y_cls, y_ref)
+            t |> success(bads == 0, "da_attn split {nsplit} ways + the combine matches the CPU oracle under the cap ({bads} of {nheads * hs} off)")
+            y_ref[hs + 3] += 0.5
+            t |> success(mismatch_approx(y_cls, y_ref) == 1, "split attention control: the bar reds one poisoned element")
             delete qh
             delete kh
             delete vh
@@ -7950,9 +7985,9 @@ def test_vkd_kv16_readers(t0 : T?) {
                     var tokb = make_host_buf(16l, true)
                     var tmc = reinterpret<TokMeta?>(tokb.mapped)
                     tmc.cnt = uint(cnt)
-                    var sc = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tokb.buf),
-                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l),
-                        fixed_array(1u, 2u, 4u, 16u, 0u))
+                    var sc = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tokb.buf, yd2),
+                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, q_bytes),
+                        fixed_array(1u, 2u, 4u, 16u, 0u, 16u))
                     var raw2 = alloc_cmd()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz

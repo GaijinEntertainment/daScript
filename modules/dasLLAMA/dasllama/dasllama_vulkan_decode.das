@@ -91,6 +91,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.q_dev = make_device_buf((q_gated ? 2l * qd : qd) * 4l)
     r.kv_dev = make_device_buf((qd + 2l * kv_dim) * 4l)
     r.attn_dev = make_device_buf(qd * 4l)
+    r.attn_nsplit = da_nsplit(n_heads, int64(g_gpu.sm_count))
+    r.attn_part_dev = make_device_buf(n_heads * DA_NSPLIT_MAX * (head_size + 2l) * 4l)
     r.aq_dev = make_device_buf(qd)
     r.as_dev = make_device_buf((qd / 32l) * 4l)
     r.gate_dev = make_device_buf(hidden * 4l)
@@ -318,10 +320,16 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u)
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         // attn (class): per-token cnt rides TokMeta, the scale rides the push
-        let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf)
-        let asizes = fixed_array(qbytes, mirbytes, mirbytes, qd * 4l, 16l)
-        let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u)
+        let partbytes = g_rd.n_heads * DA_NSPLIT_MAX * (g_rd.head_size + 2l) * 4l
+        let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev)
+        let asizes = fixed_array(qbytes, mirbytes, mirbytes, qd * 4l, 16l, partbytes)
+        let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT)   //! the partials ride the attention-out bit: written by the pass, read by the combine that writes the row
         L.s_attn = kv16 ? set_da_attn_f16_cls(abufs, asizes, abits) : set_da_attn_cls(abufs, asizes, abits)
+        if (g_rd.attn_nsplit > 1l) {
+            verify(ensure_da_attn_comb_cls(), "vk decode: the split attention's combine class rail must engage on a live device")
+            L.s_attn_comb = set_da_attn_comb_cls(fixed_array(g_rd.q_dev, g_rd.attn_part_dev, g_rd.attn_dev),
+                fixed_array(qbytes, partbytes, qd * 4l), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT))
+        }
         // quantize attn -> aq/as
         L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
             fixed_array(qd * 4l, qd, (qd / 32l) * 4l),
@@ -1025,15 +1033,20 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
         rd_ts(raw, "a:rope")
     }
+    let nsplit = g_rd.attn_nsplit
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
-        window = uint(L.window), cap = L.attn_cap)
+        window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit))
     if (g_rd.kv16) {
-        enc_da_attn_f16_cls(raw, h, L.s_attn, pca, g_rd.n_heads)
+        enc_da_attn_f16_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
     } else {
-        enc_da_attn_cls(raw, h, L.s_attn, pca, g_rd.n_heads)
+        enc_da_attn_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
     }
     rd_ts(raw, "a:attn")
+    if (nsplit > 1l) {
+        enc_da_attn_comb_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads)
+        rd_ts(raw, "a:attc")
+    }
     if (kq_sb(L.fo)) {
         enc_cls_q8k_rq(raw, h, L.s_quant_at, pc_rq_qd_k, rqwg_qd_k)
     } else {
@@ -1461,6 +1474,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
         rd_encode_token()   // probe arm: pay the full re-encode every token
     }
     let ts0 = ref_time_ticks()
+    let prof = vk_prof()
     unsafe {
         memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
@@ -1472,8 +1486,22 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
         tm.pos = uint(pos)   // every carrier composes its mirror row as layerbase + pos * kvd
         tm.cnt = uint(cnt)
         tm.parity = uint(g_rd.dn_parity)
-        submit_wait(g_rd.cmd)
-        memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+        if (prof) {   //! the profiled form splits the wall into its pieces; the served form is one call
+            let t1 = ref_time_ticks()
+            submit_nowait(g_rd.cmd)
+            let t2 = ref_time_ticks()
+            wait_fence()
+            let t3 = ref_time_ticks()
+            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+            let t4 = ref_time_ticks()
+            g_rdq_host_us[0] += double(get_time_usec(ts0)) - double(get_time_usec(t1))
+            g_rdq_host_us[1] += double(get_time_usec(t1)) - double(get_time_usec(t2))
+            g_rdq_host_us[2] += double(get_time_usec(t2)) - double(get_time_usec(t3))
+            g_rdq_host_us[3] += double(get_time_usec(t3)) - double(get_time_usec(t4))
+        } else {
+            submit_wait(g_rd.cmd)
+            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+        }
     }
     g_rd.tokens_served++
     if (g_rd.tokens_served <= 4l || (g_rd.tokens_served & 255l) == 0l) {
@@ -1482,10 +1510,11 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     if (g_rd.tokens_served == 8l) {
         rd_warmup_check(int64(get_time_usec(ts0)))
     }
-    if (vk_prof()) {
+    if (prof) {
         g_rdq_wall_us += double(get_time_usec(ts0))
         if (g_rdq_count % 32l == 31l) {
-            to_log(LOG_INFO, "vk_rdec host wall/token over {g_rdq_count + 1l}: {int(g_rdq_wall_us / double(g_rdq_count + 1l))} us (memcpys + submit + fence + logits copy)\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
+            let n = double(g_rdq_count + 1l)
+            to_log(LOG_INFO, "vk_rdec host wall/token over {g_rdq_count + 1l}: {int(g_rdq_wall_us / n)} us (memcpys {int(g_rdq_host_us[0] / n)} + submit {int(g_rdq_host_us[1] / n)} + fence {int(g_rdq_host_us[2] / n)} + logits copy {int(g_rdq_host_us[3] / n)})\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
         }
     }
     if (g_rd.hybrid) {
@@ -2759,10 +2788,10 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
             fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 16l, bbytes),
             fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u))
     }
-    L.s_attn = set_da_attn_f16_cls(
-        fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf),
-        fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, 16l),
-        fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u))
+    L.s_attn = set_da_attn_f16_cls(   //! the unsplit pass: the out rows fill the partials binding, never read
+        fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf, g_gpu.dat_attn_dev),
+        fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, 16l, qd * 4l),
+        fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT))
     L.s_rq = set_rq_cls(fixed_array(g_gpu.dat_attn_dev, g_gpu.dat_aq_dev, g_gpu.dat_as_dev),
         fixed_array(qd * 4l, qd, (qd / 32l) * 4l),
         fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ))

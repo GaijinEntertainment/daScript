@@ -1540,5 +1540,10 @@
     this file where gemma-3-1b's land 3%. The suspects are the CPU prefill's Q8 activation blocks
     on the 12B's widths (the resident feeds f16 rows) and its blocked attention over the 512-wide
     V-from-K heads; the instrument is the perplexity cell's `forced_nll` against llama.cpp's
-    `--save-all-logits` file (a parser sits with the arc's notes). Unquirked: the CPU chain's chunk
-    perplexity within 2% of llama.cpp's on this file.
+    `--save-all-logits` file (a parser sits with the arc's notes). The 26B-A4B reads the same way
+    (2026-09-12, RunPod RTX PRO 4500 Blackwell, the UD-IQ3_XXS file, 150 + 150): against llama.cpp's
+    per-position log-probs the CPU chain's mean gap is 0.36 nats (worst 16.2) where the resident's
+    is 0.18 (worst 6.9) over the 130 positions llama.cpp is confident on, the chunk perplexities
+    llama.cpp 3.304 / CPU 3.357 / resident 2.579 (argmax hits 132 / 133 / 129); on this model the
+    routed near-ties add to the suspects. Unquirked: the CPU chain's chunk perplexity within 2% of
+    llama.cpp's on both files.

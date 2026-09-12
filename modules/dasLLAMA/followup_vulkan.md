@@ -1345,3 +1345,17 @@ module) is independent and can land any time - it is pure structure.
     decode attention already masks keys below the window, so the ring changes which row a key
     lives in, not which keys score. Worth its lever on every gemma and on the 26B (30 layers,
     25 sliding).
+49. **The gemma-4-26B-A4B passes a 16 GB card in every quant.** Its `ffn_down_exps` rows are 704
+    wide, a width llama.cpp quantizes only in the 32-block formats (IQ4_NL, Q5_0, Q5_1, Q8_0), and
+    the K-quant rails' 256-multiple rule (`kq_fmt_row_ok`: the Q8_K activation superblock) demotes
+    an IQ4_NL or Q5_0 down stack to q8 at load - the UD-IQ3_XXS file's 3947 MB of down planes
+    become 7456 MB, and the resident image reads 14905 MB against a 16 GB card's 12677 MB usable
+    (measured 2026-09-12 on the RTX 5060 Ti; the plan declines on memory and the cells skip). The
+    q51 format serves 32-wide rows but only on the CPU and per-op rails: the resident MoE block's
+    tile family (`vk_rdec_moe_ok`, the f16-fed cm2 tiles) does not admit it. Two levers, either
+    of which puts the 26B on 16 GB: an expert-stack rail for the 32-block formats at 32-wide
+    rows (Q8_0 activations in place of Q8_K - the CPU dot, the decode GEMV twin, the tune rows
+    and kernel cells; the cm2 e stamps are f16-fed and already step K by 64, which 704 divides),
+    or the streamed-experts form (attention and the dense triple resident, the expert planes
+    streamed a layer at a time - the 16 GB story for every MoE past the card). The block itself
+    holds on a 32 GB card (`test_gpu_resident_gemma4_26b.das`, the RunPod RTX PRO 4500 rows).
