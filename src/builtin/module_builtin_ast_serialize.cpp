@@ -3332,7 +3332,11 @@ namespace das {
         AstSerializer ser(&storage, true);
         CodeOfPolicies streamed = policies;
         ser << streamed;
-        key += commandLineArgumentOccurrences("--jit-target");
+        string jitTarget = commandLineArgumentOccurrences("--jit-target");   // NUL-separated; the key is hashed as a C string
+        for ( auto & ch : jitTarget ) {
+            if ( ch == 0 ) ch = '\n';
+        }
+        key += jitTarget;
         char hex[17];
         snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_block64(storage.buffer.data(), storage.buffer.size()));
         key += "policies:";

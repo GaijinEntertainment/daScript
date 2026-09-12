@@ -89,6 +89,18 @@ def test_compile_file_module_cache(t : T?) {
     hostOk = hostOk && !served(host, leafFile) && !served(host, rootFile)
     t |> success(hostOk, "other host arguments compile cold into a record of their own:\n{host}")
     t |> equal(cache_files(cacheDir, "mc_cf_root"), 3, "the host arguments key a third record")
+    //! a --jit-target after the separator is a compile input the key folds too - and folded as
+    //! text, not as the NUL-separated occurrence list, or every field after it would leave the key
+    var target : string
+    var targetOk = run_child_reported(t, "target", "{drv} cache --jit-target x86_64-pc-linux-gnu", target, "MC_CF_COMPILED")
+    targetOk = targetOk && !served(target, leafFile) && !served(target, rootFile)
+    t |> success(targetOk, "a --jit-target compiles cold into a record of its own:\n{target}")
+    t |> equal(cache_files(cacheDir, "mc_cf_root"), 4, "the jit target keys a fourth record")
+    var targetNoopt : string
+    var targetNooptOk = run_child_reported(t, "target noopt", "{drv} cache noopt --jit-target x86_64-pc-linux-gnu", targetNoopt, "MC_CF_COMPILED")
+    targetNooptOk = targetNooptOk && !served(targetNoopt, leafFile) && !served(targetNoopt, rootFile)
+    t |> success(targetNooptOk, "other policies beside a --jit-target still compile cold:\n{targetNoopt}")
+    t |> equal(cache_files(cacheDir, "mc_cf_root"), 5, "the policies hash survives the jit target in the key")
     var err : string
     rmdir_rec(tmp, err)
 }
