@@ -126,7 +126,7 @@ namespace das {
     }
 
     atomic<int> g_envTotal(0);
-    atomic<bool> g_exitingNow(false);   // set by fio::exit_now: the process ends on purpose with no shutdown, so the audit below stays quiet
+    atomic<bool> g_exitingNow(false);
 
     // from module_builtin_fio.cpp — modules whose .shared_module dlopen failed (Quiet)
     DAS_API string describe_pending_dynamic_modules();

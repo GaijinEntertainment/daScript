@@ -21,7 +21,7 @@ require dastest_clargs
 require worker_policy
 
 options multiple_contexts
-options threadlock_context = true   //! suite.das's sub_test_any_func / sub_test_any_lambda invoke back into this context from a test file's context
+options threadlock_context = true   // suite.das's sub_test_any_func / sub_test_any_lambda invoke back into this context from a test file's context
 
 // BBATKIN:
 //  temporary: disables persistent heap, because this crashes /tests/dastest
@@ -30,7 +30,7 @@ options persistent_heap = false
 
 let private jsonResultPrefix = "##dastest##\n"
 
-let TIMEOUT_EXIT_CODE = 124   //! the exit code of a suite that ran past --timeout, GNU timeout's convention
+let TIMEOUT_EXIT_CODE = 124   // the exit code of a suite that ran past --timeout, GNU timeout's convention
 
 struct FileTiming {
     uri : string
