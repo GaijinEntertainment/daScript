@@ -916,11 +916,11 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
         enc_f32_mm(enc, bfil, 0ul, bmag, bmel, 0ul, u_mag_k_pad, u_nmel, mpd, n_mel)
         enc_g4a_logmel(enc, bmel, u_totmel, u_floor, n_len * n_mel)
         //! subsample conv0 over the mel image [n_len x n_mel x 1]
-        enc_g4a_im2col(enc, bmel, bcol0, u_iw0, u_ih0, u_c1, u_ow0, u_conv0_k_pad, u_totc0, rows0 * conv0_k_pad)
+        enc_im2col2d(enc, bmel, 0ul, bcol0, u_iw0, u_ih0, u_c1, u_ow0, u_conv0_k_pad, u_c1, u_totc0, rows0 * conv0_k_pad)
         enc_f32_mm(enc, bw0, 0ul, bcol0, by0, 0ul, u_conv0_k_pad, u_ch0, mp0, t.sub_ch0)
         enc_g4a_lnrelu(enc, by0, by0, c.bblob, uint64(t.norm0_w * 4l), u_ch0, u_ch0, u_ch0, u_rows0, c.u_eps, rows0)
         //! subsample conv1 over the y0 image [t1 x w1 x sub_ch0], compact 32-wide out
-        enc_g4a_im2col(enc, by0, bcol1, u_iw1, u_ih1, u_ch0, u_ow1, u_kd1, u_totc1, rows1 * kd1)
+        enc_im2col2d(enc, by0, 0ul, bcol1, u_iw1, u_ih1, u_ch0, u_ow1, u_kd1, u_ch0, u_totc1, rows1 * kd1)
         enc_f32_mm(enc, bw1, 0ul, bcol1, by1p, 0ul, u_kd1, u_conv1_cout_pad, mp1, conv1_cout_pad)
         enc_g4a_lnrelu(enc, by1p, c.bxb, c.bblob, uint64(t.norm1_w * 4l), u_ch1, u_conv1_cout_pad, u_ch1, u_rows1, c.u_eps, rows1)
         //! input projection: [npos x feat] -> [npos x d]

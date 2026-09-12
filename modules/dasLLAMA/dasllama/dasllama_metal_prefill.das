@@ -240,15 +240,7 @@ class template MetalDequantK45T {
         let sv = ks4[blk]
         var sc = 0u
         var mn = 0u
-        if (js < 4u) {
-            sc = (sv.y >> (8u * js)) & 63u
-            mn = (sv.z >> (8u * js)) & 63u
-        } else {
-            let j2 = js - 4u
-            let hi = sv.w >> (8u * j2)
-            sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-            mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-        }
+        kmask_scmn(sv, js, sc, mn)
         let dsc = float(ksh[blk * 8u]) * float(sc)
         let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
         for (t in range(32)) {
@@ -506,15 +498,7 @@ class template MetalKqMulMmK45TensorT {
                 let sv = ks4[blk]
                 var sc = 0u
                 var mn = 0u
-                if (js < 4u) {
-                    sc = (sv.y >> (8u * js)) & 63u
-                    mn = (sv.z >> (8u * js)) & 63u
-                } else {
-                    let j2 = js - 4u
-                    let hi = sv.w >> (8u * j2)
-                    sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-                    mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-                }
+                kmask_scmn(sv, js, sc, mn)
                 let dsc = float(ksh[blk * 8u]) * float(sc)
                 let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
                 static_if (QH) {
@@ -615,15 +599,7 @@ class template MetalKqMulMmK45DbT {
             let sv = ks4[blk]
             var sc = 0u
             var mn = 0u
-            if (js < 4u) {
-                sc = (sv.y >> (8u * js)) & 63u
-                mn = (sv.z >> (8u * js)) & 63u
-            } else {
-                let j2 = js - 4u
-                let hi = sv.w >> (8u * j2)
-                sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-                mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-            }
+            kmask_scmn(sv, js, sc, mn)
             let dsc = float(ksh[blk * 8u]) * float(sc)
             let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
             static_if (QH) {
@@ -1686,15 +1662,7 @@ class template MetalMoeMulMmK45TensorT : MetalMoeMulMmKqTensorBase {
         let sv = ks4[blk]
         var sc = 0u
         var mn = 0u
-        if (js < 4u) {
-            sc = (sv.y >> (8u * js)) & 63u
-            mn = (sv.z >> (8u * js)) & 63u
-        } else {
-            let j2 = js - 4u
-            let hi = sv.w >> (8u * j2)
-            sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-            mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-        }
+        kmask_scmn(sv, js, sc, mn)
         let dsc = float(ksh[blk * 8u]) * float(sc)
         let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
         for [unroll_full] (t in range(16)) {
@@ -2003,15 +1971,7 @@ class MetalMoeMulMmK4 : MetalMoeMulMmBase {
         let sv = ks4[blk]
         var sc = 0u
         var mn = 0u
-        if (js < 4u) {
-            sc = (sv.y >> (8u * js)) & 63u
-            mn = (sv.z >> (8u * js)) & 63u
-        } else {
-            let j2 = js - 4u
-            let hi = sv.w >> (8u * j2)
-            sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-            mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-        }
+        kmask_scmn(sv, js, sc, mn)
         let dsc = float(ksh[blk * 8u]) * float(sc)
         let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
         let qb = blk * 32u + (js / 2u) * 8u + il0 * 4u
@@ -2051,15 +2011,7 @@ class MetalMoeMulMmK5 : MetalMoeMulMmBase {
         let sv = ks4[blk]
         var sc = 0u
         var mn = 0u
-        if (js < 4u) {
-            sc = (sv.y >> (8u * js)) & 63u
-            mn = (sv.z >> (8u * js)) & 63u
-        } else {
-            let j2 = js - 4u
-            let hi = sv.w >> (8u * j2)
-            sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-            mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-        }
+        kmask_scmn(sv, js, sc, mn)
         let dsc = float(ksh[blk * 8u]) * float(sc)
         let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
         let qb = blk * 40u + (js / 2u) * 8u + il0 * 4u
@@ -3437,19 +3389,19 @@ class MetalCnDw {
     }
 }
 
-//! Magnitude spectrum off the DFT GEMM's interleaved re/im rows: mag[i,k] = sqrt(re^2 + im^2)
-//! for k < nbins, 0 in the pad columns (the mel GEMM's k-pad reads them).
-[metal_dispatch(name = "enc_g4a_mag", pso = "g_pf_pso_g4a_mag", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalG4aMag {
+//! Spectrum off the DFT GEMM's interleaved re/im rows for k < nbins, 0 in the pad columns (the
+//! mel GEMM's k-pad reads them): the magnitude sqrt(re^2 + im^2) (SQRT) or the power re^2 + im^2.
+[ |> template_struct_instance]
+class template MetalSpectrumT {
     @ssbo @binding = 0 @role = "read" reim : array<float>   //!< [nrows x ldin] interleaved re/im
-    @ssbo @binding = 1 @role = "write" mag : array<float>   //!< [nrows x ldout]
+    @ssbo @binding = 1 @role = "write" spec : array<float>  //!< [nrows x ldout]
     @uniform @binding = 2 nbins : uint
     @uniform @binding = 3 ldin : uint
     @uniform @binding = 4 ldout : uint
     @uniform @binding = 5 total : uint      //!< grid guard: nrows * ldout
+    @template_constant SQRT : bool = false
 
-    [metal_kernel(name="metal_g4a_mag_msl")]
-    def metal_g4a_mag {
+    def spectrum_body {
         let gid = gl_GlobalInvocationID.x
         if (gid >= total) {
             return
@@ -3457,12 +3409,34 @@ class MetalG4aMag {
         let r = gid / ldout
         let k = gid % ldout
         if (k >= nbins) {
-            mag[gid] = 0.0
+            spec[gid] = 0.0
             return
         }
         let re = reim[r * ldin + k * 2u]
         let im = reim[r * ldin + k * 2u + 1u]
-        mag[gid] = sqrt(re * re + im * im)
+        static_if (SQRT) {
+            spec[gid] = sqrt(re * re + im * im)
+        } else {
+            spec[gid] = re * re + im * im
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_g4a_mag", pso = "g_pf_pso_g4a_mag", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalG4aMag : MetalSpectrumT {
+    override SQRT = true
+
+    [metal_kernel(name="metal_g4a_mag_msl")]
+    def metal_g4a_mag {
+        spectrum_body()
+    }
+}
+
+[metal_dispatch(name = "enc_q3a_pow", pso = "g_pf_pso_q3a_pow", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalQ3aPow : MetalSpectrumT {
+    [metal_kernel(name="metal_q3a_pow_msl")]
+    def metal_q3a_pow {
+        spectrum_body()
     }
 }
 
@@ -3526,46 +3500,6 @@ class MetalG4aLnRelu {
     }
 }
 
-//! im2col for the subsample convs (k3 s2 p1 over an [ih x iw x cin] image): one thread per
-//! col element; j >= cin*9 writes the k-pad zero.
-[metal_dispatch(name = "enc_g4a_im2col", pso = "g_pf_pso_g4a_im2col", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalG4aIm2col {
-    @ssbo @binding = 0 @role = "read" x : array<float>      //!< [ih x iw x cin]
-    @ssbo @binding = 1 @role = "write" col : array<float>   //!< [oh*ow x kp]
-    @uniform @binding = 2 iw : uint
-    @uniform @binding = 3 ih : uint
-    @uniform @binding = 4 cin : uint
-    @uniform @binding = 5 ow : uint
-    @uniform @binding = 6 kp : uint         //!< padded kdim (>= cin*9, %32)
-    @uniform @binding = 7 total : uint      //!< grid guard: oh*ow*kp
-
-    [metal_kernel(name="metal_g4a_im2col_msl")]
-    def metal_g4a_im2col {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let r = gid / kp
-        let j = gid % kp
-        if (j >= cin * 9u) {
-            col[gid] = 0.0
-            return
-        }
-        let oy = r / ow
-        let ox = r % ow
-        let ic = j / 9u
-        let kh = (j % 9u) / 3u
-        let kw = j % 3u
-        //! iy = oy*2 - 1 + kh, ix = ox*2 - 1 + kw in unsigned form
-        let iyp = oy * 2u + kh
-        let ixp = ox * 2u + kw
-        var vv = 0.0
-        if (iyp >= 1u && iyp <= ih && ixp >= 1u && ixp <= iw) {
-            vv = x[((iyp - 1u) * iw + ixp - 1u) * cin + ic]
-        }
-        col[gid] = vv
-    }
-}
 
 //! The qwen3a conv-frontend feature shuffle: feat[ci*13 + ow][h + 16*ch] = y3[ci-chunk row
 //! (h*13 + ow), channel ch] off the ncp-strided conv3 slab — one thread per feat element.
@@ -3595,34 +3529,6 @@ class MetalQ3aShuffle {
     }
 }
 
-//! Power spectrum off the DFT GEMM's interleaved re/im rows: pow[i,k] = re^2 + im^2 for
-//! k < nbins, 0 in the pad columns (the mel GEMM's k-pad reads them).
-[metal_dispatch(name = "enc_q3a_pow", pso = "g_pf_pso_q3a_pow", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalQ3aPow {
-    @ssbo @binding = 0 @role = "read" reim : array<float>   //!< [nrows x ldin] interleaved re/im
-    @ssbo @binding = 1 @role = "write" pw : array<float>    //!< [nrows x ldout]
-    @uniform @binding = 2 nbins : uint
-    @uniform @binding = 3 ldin : uint
-    @uniform @binding = 4 ldout : uint
-    @uniform @binding = 5 total : uint      //!< grid guard: nrows * ldout
-
-    [metal_kernel(name="metal_q3a_pow_msl")]
-    def metal_q3a_pow {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let r = gid / ldout
-        let k = gid % ldout
-        if (k >= nbins) {
-            pw[gid] = 0.0
-            return
-        }
-        let re = reim[r * ldin + k * 2u]
-        let im = reim[r * ldin + k * 2u + 1u]
-        pw[gid] = re * re + im * im
-    }
-}
 
 //! The whisper-shape mel finish, transposed into the mel-major plane:
 //! out[j*n_len + i] = log(max(raw[i*n_mel + j], floor)) * scale (scale = log10 e).
@@ -3762,7 +3668,6 @@ var private g_pf_pso_q3a_logmel_t : MetalComputePipeline? //!< the mel-major log
 var private g_pf_pso_g4a_mag : MetalComputePipeline?     //!< magnitude spectrum off the DFT rows
 var private g_pf_pso_g4a_logmel : MetalComputePipeline?  //!< the mel's log stage
 var private g_pf_pso_g4a_lnrelu : MetalComputePipeline?  //!< subsample LayerNorm(channels)+ReLU
-var private g_pf_pso_g4a_im2col : MetalComputePipeline?  //!< subsample conv im2col (k3 s2 p1)
 var private g_pf_pso_mm_t : MetalComputePipeline?  //!< the mul_mm TENSOR twin; the base is the shared g_pso_mm
 var private g_pf_pso_mm_th : MetalComputePipeline?  //!< its half-X stamp (the converted f16 activation panel)
 var private g_pf_pso_mm_t128 : MetalComputePipeline?
@@ -4154,7 +4059,6 @@ def public metal_prefill_shutdown {   // nolint:STYLE038 — flat one-release-pe
     release_handle(g_pf_pso_g4a_mag)
     release_handle(g_pf_pso_g4a_logmel)
     release_handle(g_pf_pso_g4a_lnrelu)
-    release_handle(g_pf_pso_g4a_im2col)
     release_handle(g_pf_pso_cvt_half)
     release_handle(g_pf_pso_dq_q8)
     release_handle(g_pf_pso_dq_k4)
@@ -4336,7 +4240,6 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_g4a_mag = compile_pso(metal_g4a_mag_msl, metal_g4a_mag_msl_entry, metal_g4a_mag_msl_fastmath, ok)
     g_pf_pso_g4a_logmel = compile_pso(metal_g4a_logmel_msl, metal_g4a_logmel_msl_entry, metal_g4a_logmel_msl_fastmath, ok)
     g_pf_pso_g4a_lnrelu = compile_pso(metal_g4a_lnrelu_msl, metal_g4a_lnrelu_msl_entry, metal_g4a_lnrelu_msl_fastmath, ok)
-    g_pf_pso_g4a_im2col = compile_pso(metal_g4a_im2col_msl, metal_g4a_im2col_msl_entry, metal_g4a_im2col_msl_fastmath, ok)
     g_pf_pso_avmm = compile_pso(MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_pso_avmm_p = compile_pso(MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, ok)
     g_pf_qkmm_tensor = metal_tensor_crowned("attn_qkmm")
@@ -4604,7 +4507,7 @@ def pf_g4a_ready() : bool {
 //! The gemma4a mel/front kernel set compiled — the whole-chunk driver's extra device gate.
 def pf_g4a_front_ready() : bool {
     return (g_pf_pso_g4a_mag != null && g_pf_pso_g4a_logmel != null
-        && g_pf_pso_g4a_lnrelu != null && g_pf_pso_g4a_im2col != null)
+        && g_pf_pso_g4a_lnrelu != null && g_pso_im2col2d != null)
 }
 
 //! The qwen3a conv-frontend tail kernels compiled — its front driver's extra device gate.

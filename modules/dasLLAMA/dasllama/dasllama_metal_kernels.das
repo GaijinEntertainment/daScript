@@ -6132,15 +6132,7 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                                 let sv = ks4[blk]
                                 var sc = 0u
                                 var mn = 0u
-                                if (js < 4u) {
-                                    sc = (sv.y >> (8u * js)) & 63u
-                                    mn = (sv.z >> (8u * js)) & 63u
-                                } else {
-                                    let j2 = js - 4u
-                                    let hi = sv.w >> (8u * j2)
-                                    sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
-                                    mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
-                                }
+                                kmask_scmn(sv, js, sc, mn)
                                 let dsc = float(ksh[blk * 8u]) * float(sc)
                                 let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
                                 let qb = blk * BLK + (js / 2u) * 8u + il0 * 4u
@@ -6452,6 +6444,21 @@ class MetalMoeSelect {
                 }
             }
         }
+    }
+}
+
+// q4_K/q5_K kmask scale decode for ONE 32-element sub-block js (0..7): the 6-bit sc and min -
+// the low four sub-blocks read their bytes whole, the high four assemble w's nibble with the
+// y/z byte's top bits. Reference outputs: a uint2 return leaves a vector phi + pack/unpack in the AIR.
+def public kmask_scmn(sv : uint4; js : uint; var sc, mn : uint&) {
+    if (js < 4u) {
+        sc = (sv.y >> (8u * js)) & 63u
+        mn = (sv.z >> (8u * js)) & 63u
+    } else {
+        let j2 = js - 4u
+        let hi = sv.w >> (8u * j2)
+        sc = (hi & 15u) | (((sv.y >> (8u * j2 + 6u)) & 3u) << 4u)
+        mn = ((hi >> 4u) & 15u) | (((sv.z >> (8u * j2 + 6u)) & 3u) << 4u)
     }
 }
 
