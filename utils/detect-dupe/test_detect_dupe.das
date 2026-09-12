@@ -1463,6 +1463,36 @@ def test_compile_failure_still_collects(t : T?) {
 }
 
 
+//! argv[0] is the running interpreter: dastest is spawned as `daslang dastest/dastest.das ...`
+def private das_exe() : string {
+    let args <- get_command_line_arguments()
+    return empty(args) ? "" : args[0]
+}
+
+
+//! --export-functions over a file that fails to compile exits 0 and writes the survivors - the
+//! sharding scripts read the file, not a partial-run exit code
+[test]
+def test_export_cli_survives_compile_failure(t : T?) {
+    let out = "{get_das_root()}/utils/detect-dupe/_export_broken_cases.json"
+    let argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/detect-dupe/main.das", "--",
+                 "-p", "{get_das_root()}/{BROKEN_FIXTURE}", "--export-functions", out]
+    var output = ""
+    let rc = unsafe(popen_argv(argv, 0.0, $(f) {
+        if (f != null) {
+            output = fread(f)
+        }
+    }))
+    t |> equal(rc, 0, "an export over a broken file exits 0 (the run is not partial-failed):\n{output}")
+    var records : array<FuncRecord>
+    var err = ""
+    let ok = read_import(out, records, false, 0, err, true)
+    t |> success(ok, "the export file is readable: {err}")
+    t |> success(!empty(find_canonical_by_name(records, "case_broken_survivor")),
+        "the function beside the compile error is in the export")
+    remove(out)
+}
+
 [test]
 def test_worker_count_auto_is_physical_cores(t : T?) {
     t |> equal(compute_worker_count(1000, 0), min(get_total_hw_cores(), MAX_AUTO_WORKERS),
