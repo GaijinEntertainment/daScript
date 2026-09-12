@@ -57,7 +57,6 @@ def public metal_decode_shutdown {
 }
 
 
-
 // ... plus the decode-specific gates (uniform f16/f32 KV, attention depth, a real session uid)
 [unused_argument(pos)]   // depth retired (M2.4) — pos stays in the gate signature for future clauses
 def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDecline {
@@ -1324,7 +1323,7 @@ def metal_mtp_seam_row(t : Model; var s : Session; token, pos : int64) : bool {
 var private @scratch g_vrt : array<uint>   // per-layer 2-row route entries: uint4(koff_el+lbase, voff_el+lbase, cap, cnt_i)
 
 // verify shape gate: f16 KV, silu FFN (dense or routed MoE ± shexp), no epilogue exotics.
-// Weight sites are fmt-generic (enc_verify_site / enc_moe_gemv — the load gate vets kernel
+// Weight sites are fmt-generic (enc_batch_site under rows_tier / enc_moe_gemv — the load gate vets kernel
 // coverage); a missing attn_v and the moe_with_dense/mx4 MoE forms have no verify arm yet
 def private metal_mtp_verify_ok(t : Model; s : Session) : bool {
     let c = t.config
@@ -1397,10 +1396,6 @@ def private panels_verify(var e : VerifyLayerEnc; moe_with_dense : bool; hid_l, 
     return FfnPanels(moe_in = r.bxb2, mg = r.bh12, mu = r.bh12, mu_col = r.nrows * knfe,
         fg = r.bh12, fu = r.bh12, fu_col = r.nrows * hid_l)
 }
-
-
-
-
 
 
 //! the verify rows' fused gate+up dot over the rows form (w2 follows as a rows site)
@@ -2507,10 +2502,6 @@ def private panels_batch(var e : BatchLayerEnc; moe_with_dense : bool; hid_l, kn
 }
 
 
-
-
-
-
 //! the batch rows' fused gate+up dot + swiglu straight into the gate panel (w2's input), where
 //! the step's tier chose it (fuse13: the row GEMV tier, a silu model, no knockout)
 [unused_argument(geglu)]
@@ -3217,7 +3208,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     }
     return true
 }
-
 
 
 // Knobs resolved once at [init]. They were read per decode step, and get_env_variable allocates

@@ -727,6 +727,17 @@ def test_metal_mtp_parity_qwen38_split_head(t : T?) {
 // A head-less fixture: only the batch-rail verify arm runs. gemma4's router amplifies any
 // float-class difference to ~2.5 logits/step (the support-matrix row's finding), so its bar is
 // the row's, not the 0.5 one.
+//! one row through the batch driver, plain and under the unfused add+rms pin - the row chains'
+//! shared adapter takes the add + rms pair instead of the fused kernel
+def private vff1_cells(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; must_serve : bool; expect_decline : string) {
+    vff_cell(t, tr, trg, tag, prompt, tol, 1l, must_serve, expect_decline)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_batch_addrms_unfused(true)
+        vff_cell(t, tr, trg, "{tag} unfused add+rms", prompt, tol, 1l, must_serve, expect_decline)
+        set_metal_batch_addrms_unfused(false)
+    }
+}
+
 def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_serve : bool = false; expect_decline : string = "") {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
@@ -759,7 +770,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
             vff_cell(t, tr, trg, tag, prose_a, tol, 4l, must_serve, expect_decline)
         }
         if (arm_on(t, "mtp-vff1-{tag}")) {   // one row through the batch driver: the encoder alone, no row mixing
-            vff_cell(t, tr, trg, tag, prose_a, tol, 1l, must_serve, expect_decline)
+            vff1_cells(t, tr, trg, tag, prose_a, tol, must_serve, expect_decline)
         }
         if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
             vff_cell(t, tr, trg, tag, prose_a, tol, 5l, must_serve, expect_decline)
