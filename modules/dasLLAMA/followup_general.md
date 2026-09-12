@@ -1610,3 +1610,15 @@
     Nothing reaches it below `g_attn_single_max` rows of context. Unquirked: one chunk-count
     formula over the deepest row, used both to size `bpart` and to dispatch, with a cell that
     verifies at a context depth crossing a 64-row boundary.
+143. **The CPU chain's gemma-4-12B perplexity trails the resident driver's, and more so past one
+    prefill window.** Measured 2026-09-12 on the RTX 5060 Ti box, gemma-4-12B Q8_0, ordinary
+    prose through the model's tokenizer, teacher-forced after a prefill (`test_gpu_resident_gemma.das`,
+    the perplexity cells): 150 prefilled + 150 scored reads CPU 1.516 (137 argmax hits) against
+    the resident 1.449 (139) and llama.cpp b10660 1.390 on the same split; 520 prefilled + 80 scored
+    reads CPU 2.784 (67 of 80) against the resident 2.006 (72). The CPU chain's own prefill-in-one
+    and teacher-forced decode also land 13% (8 positions) to 44% (300) of the max logit apart on
+    this file where gemma-3-1b's land 3%. The suspects are the CPU prefill's Q8 activation blocks
+    on the 12B's widths (the resident feeds f16 rows) and its blocked attention over the 512-wide
+    V-from-K heads; the instrument is the perplexity cell's `forced_nll` against llama.cpp's
+    `--save-all-logits` file (a parser sits with the arc's notes). Unquirked: the CPU chain's chunk
+    perplexity within 2% of llama.cpp's on this file.

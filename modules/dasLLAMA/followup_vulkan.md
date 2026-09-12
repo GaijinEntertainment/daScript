@@ -1303,3 +1303,23 @@ module) is independent and can land any time - it is pure structure.
     `VK_EXT_device_fault` read on a device-lost result and logged with the last recorded stamp
     names; and `VK_EXT_memory_priority` / pageable device-local memory pinning the weight planes so
     eviction takes other allocations first.
+46. **The per-op rail's Q8_0 batch GEMM drifts from the CPU chain with the model's width and the
+    prompt's length.** Measured 2026-09-12 on the RTX 5060 Ti with the whole-model driver declined
+    (`DASLLAMA_GPU_RESIDENT=0`, or a plan past the card's room), the gemma forced-feed cells' junk
+    prompt, logits maxdiff against the all-CPU chain: gemma-3-1b Q8_0 reads 0.68 at 40 tokens and
+    0.35 / 0.23 at 520 / 600; gemma-3-4b Q8_0 2.17 at 40 and 1.78 / 3.50 at 520 / 600; gemma-4-12B
+    Q8_0 1.89 at 40 and 11.7 / 13.9 / 8.8 at 300 / 520 / 600 with the argmax off by then - while the
+    eight-token prompt reads 5e-6 on every file (the GEMV rail, the CPU's own Q8 math) and the 12B
+    Q4_K_M file on the same rail at 300 tokens reads 3.7. The whole-model driver on the 12B Q4_K_M
+    file reads 4.5 at 300 tokens under a 4.77 bar, and its window chain and token command sit
+    closer together (0.66 of the max logit) than the CPU chain's own prefill and decode (0.84), so
+    the drift is the per-op rail's alone. The rail's dense planes at a count of 192 and up take the
+    mm L tile (`q8_batch_tile_for`), below it the sdot4 tile; the 40-token drift on the 4B and 12B
+    says the sdot4 tile is not exact either against the CPU's Q8 blocks on those widths (K 2560 and
+    3840 / 15360). Suspects, in order: the L tile's f16 accumulation over the widest K, the arena's
+    slab-local block base past 2 GiB (the 12B's Q8_0 arena is 12 GB; the 1B's never crosses it), and
+    the sdot4 tile's scale fold on a K that is not a 256-multiple. The rail is the fallback for a
+    file past the card's room (the 12B Q8_0 on 16 GB at the default context), so a user on that
+    path sees the drift; the fix is a kernel cell in `tests/test_vulkan_kernels.das` at the 12B's
+    widths against the CPU oracle, then the tile that misses. No test reads red today: the gemma
+    file's cells skip on a memory decline (`moe_gpu_resident_memory_decline`).

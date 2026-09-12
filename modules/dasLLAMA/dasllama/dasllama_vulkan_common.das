@@ -2230,6 +2230,9 @@ struct RLayer {
     pf_fa : bool                    //! the window chain takes the cm2 flash tile on this layer (its head size has a stamp)
     pre_post : bool                 //! the residual steps norm their add partner first (the post-attention and post-FFN norms of a gemma)
     gelu : bool                     //! the dense FFN's activation is the tanh gelu (GeGLU), else silu
+    vfk : bool                      //! no v plane: V is the raw k row at its own rms (the v GEMV and its set stay unused)
+    vnorm : bool                    //! V scaled by its own rms, weightless
+    out_scale : float               //! the FFN residual step's scale on the sum; 1.0 = none
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
     recurrent : bool
     mir_idx : int64 = -1l           // this attention layer's K/V mirror slot; -1 = recurrent (no KV)
@@ -2324,6 +2327,10 @@ struct RDec {
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
                                   // vocab-row dispatches read it from ~150K subgroups)
     cls_set : VkDescriptorSet
+    cls_cap : float               //! the final logit softcap the classifier epilogue applies; 0 = none
+    nsupp : int64                 //! suppressed token ids the epilogue pins (supp_dev holds them)
+    supp_dev : uint64
+    cls_epi_set : VkDescriptorSet
     s_prologue : VkDescriptorSet  // xb = rms_att[0](x)
     s_prologue_rq : VkDescriptorSet   // the fused twin (also does layer 0's activation quant)
     s_quant_final : VkDescriptorSet
