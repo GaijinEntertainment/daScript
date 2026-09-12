@@ -1076,7 +1076,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = fmt_at(t.we1_fmt, l)))
             planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = fmt_at(t.we3_fmt, l)))
             planes |> push((n = c.n_ff_exp, rows = c.n_expert * dim, f = fmt_at(t.we2_fmt, l)))
-            if (c.n_ff_shexp > 0l) {
+            if (c.moe_dense_shexp) {   //! gemma-4: the parallel dense shared expert is the layer's FFN triple
+                let hid_l = layer_hidden(t, l)
+                planes |> push((n = dim, rows = hid_l, f = lf.f1))
+                planes |> push((n = dim, rows = hid_l, f = lf.f3))
+                planes |> push((n = hid_l, rows = dim, f = lf.f2))
+            } elif (c.n_ff_shexp > 0l) {
                 planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 1).f))
                 planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 3).f))
                 planes |> push((n = c.n_ff_shexp, rows = dim, f = resident_shexp_plane(t, l, 2).f))

@@ -19,10 +19,14 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration (gemma3)
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 
+//! the rig's context: the resident mirror's cap and every session's KV cache - a model max of 131072 would take an
+//! 8 GB mirror on a 4B and a 30 GB CPU cache on the 26B for prompts of 600
+let GEMMA_RIG_CTX = 32768l
+
 [init]
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
-    set_gpu_ctx_max(32768l)   // the rig's mirror cap: a model max of 131072 would take an 8 GB mirror on a 4B for prompts of 600
+    set_gpu_ctx_max(GEMMA_RIG_CTX)
 }
 require math
 require daslib/jobque_boost
@@ -124,6 +128,7 @@ def private gemma_model(t : T?; file : string) : Model {
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
         "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")
+    tr.config.seq_len = min(tr.config.seq_len, GEMMA_RIG_CTX)   //! the sessions size their caches to the mirror's cap, not the model's max
     return <- tr
 }
 
@@ -278,10 +283,11 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
 
 //! the same prose through the resident driver and the CPU chain, scored as a perplexity over `steps`
 //! teacher-forced positions after an `n`-id prefill: the resident within the ratio of the CPU chain's,
-//! its argmax hits within three, and the one-off control at least three times the CPU chain's perplexity.
+//! its argmax hits within `hits_slack`, and the one-off control at least three times the CPU chain's perplexity.
 //! On the 12B the logits sit within a few points at whole stretches of positions (llama.cpp's own margins
-//! read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver.
-def ppl_compare(t : T?; n, steps : int64; file : string) {
+//! read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver;
+//! a routed model's near-tie flips move whole positions, so its slack is wider.
+def ppl_compare(t : T?; n, steps : int64; file : string; hits_slack : int64 = 3l) {
     var tr <- gemma_model(t, file)
     if (tr.config.n_layers == 0l) {
         delete tr
@@ -306,7 +312,7 @@ def ppl_compare(t : T?; n, steps : int64; file : string) {
         let ppl_off = exp(c.off / fsteps)
         to_log(LOG_INFO, "{n} prefilled + {steps} teacher-forced [{tile_arm_tag()}]: PPL resident {ppl_g} (hits {g.hits}/{steps}), cpu {ppl_c} (hits {c.hits}/{steps}), one-off control {ppl_off}\n")
         t |> success(ppl_g <= ppl_c * GEMMA_PPL_RATIO, "the resident perplexity {ppl_g} sits within {GEMMA_PPL_RATIO}x of the CPU chain's {ppl_c}")
-        t |> success(g.hits + 3l >= c.hits, "the resident argmax hits ({g.hits}) sit within three of the CPU chain's ({c.hits}) over {steps} positions")
+        t |> success(g.hits + hits_slack >= c.hits, "the resident argmax hits ({g.hits}) sit within {hits_slack} of the CPU chain's ({c.hits}) over {steps} positions")
         t |> success(ppl_off >= 3.0 * ppl_c, "control: the one-position-off targets read {ppl_off}, at least three times the CPU chain's {ppl_c}")
         delete ids
     }
