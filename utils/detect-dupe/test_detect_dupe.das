@@ -1463,18 +1463,19 @@ def test_compile_failure_still_collects(t : T?) {
 }
 
 
-//! argv[0] is the running interpreter: dastest is spawned as `daslang dastest/dastest.das ...`
+// argv[0] is the running interpreter: dastest is spawned as `daslang dastest/dastest.das ...`
 def private das_exe() : string {
     let args <- get_command_line_arguments()
     return empty(args) ? "" : args[0]
 }
 
 
-//! --export-functions over a file that fails to compile exits 0 and writes the survivors - the
-//! sharding scripts read the file, not a partial-run exit code
+// --export-functions over a file that fails to compile exits 0 and writes the survivors - the
+// sharding scripts read the file, not a partial-run exit code
 [test]
 def test_export_cli_survives_compile_failure(t : T?) {
-    let out = "{get_das_root()}/utils/detect-dupe/_export_broken_cases.json"
+    let out = make_temp_export_path(t)
+    if (empty(out)) return
     let argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/detect-dupe/main.das", "--",
                  "-p", "{get_das_root()}/{BROKEN_FIXTURE}", "--export-functions", out]
     var output = ""

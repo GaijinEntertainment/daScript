@@ -41,10 +41,10 @@ def public should_parallelize(n_items : int; workers_setting : int) : bool {
 }
 
 
-//! Auto ceiling: a worker is a whole daslang process compiling its own module graph - one per core costs memory, not time.
+// Auto ceiling: a worker is a whole daslang process compiling its own module graph - one per core costs memory, not time.
 let public MAX_AUTO_WORKERS = 16
 
-//! 0 means the box's physical cores capped at MAX_AUTO_WORKERS - get_total_hw_threads is the jobque's worker count, not the box.
+// 0 means the box's physical cores capped at MAX_AUTO_WORKERS - get_total_hw_threads is the jobque's worker count, not the box.
 def public compute_worker_count(n_items : int; workers_setting : int) : int {
     var w = workers_setting
     if (w == 0) {
