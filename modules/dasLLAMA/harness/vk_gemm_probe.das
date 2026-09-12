@@ -10,7 +10,8 @@ options _dasllama_internal = true
 // RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
-// Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
+// Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle); g3 the gemma-3-1b
+// role shapes with the down's split-k ladder;
 // k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m/s stamps, its s stamp's other-depth twin
 // and the kq batch tile, cm2d:<fmt> the same over the 4096-wide dense hybrid's shapes, cm2w:<fmt>
 // its l stamp's wave sweep; dec the decode head's small kernels; moe:<fmt> its s and e stamps over
@@ -2890,6 +2891,66 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
     delete b
 }
 
+//! the cm2 l and m stamps under a split-k of `nsplit` (the GEMM alone: the partial planes land, the reduce is not timed)
+def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
+    let nbb = n / 32
+    let rows = cnt
+    let totblk = d * nbb
+    var b : ShapeBufs
+    fill_fixture(b, totblk, rows, nbb)
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    let xf_bytes = int64(rows * nbb) * 64l
+    let y_bytes = int64(nsplit) * int64(rows * d) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xfd = make_device_buf(xf_bytes)
+    let yd = make_device_buf(y_bytes)
+    let lwgs = ((cnt + 255) / 256) * ((d + 127) / 128) * nsplit
+    let mwgs = ((cnt + 127) / 128) * ((d + 127) / 128) * nsplit
+    let ck = ((n + nsplit - 1) / nsplit + 255) & ~255   // the 256-aligned chunk the serving pick takes
+    var sched : array<uint>
+    sched |> resize(4 + lwgs)
+    sched[2] = uint(cnt)   // one region: [wblk0 = 0, row0 = 0, cnt, wg0 = 0], map all zeros; the tile reads its split plane and tile off its own workgroup id
+    var cm2l_us : double
+    var cm2m_us : double
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(b.wq[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(b.ws[0]), ws_bytes)
+        upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
+        let sc_bytes = int64(4 + lwgs) * 4l
+        let scd = make_device_buf(sc_bytes)
+        upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
+        let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
+        let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+        let begin = VkCommandBufferBeginInfo()
+        var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
+        var rawl = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(rawl, begin), null)
+        var hzl : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
+        }
+        vk_check(vkEndCommandBuffer(rawl), null)
+        cm2l_us = usec_per_dispatch(rawl)
+        var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
+        var rawm = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(rawm, begin), null)
+        var hzm : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
+        }
+        vk_check(vkEndCommandBuffer(rawm), null)
+        cm2m_us = usec_per_dispatch(rawm)
+    }
+    let flop = 2.0lf * double(rows) * double(d) * double(n)
+    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s  timing-only, no reduce\n")
+    delete sched
+    delete b
+}
+
 // the decode-cost bisect: the shipped cm2l against the three probe variants, one shape
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
@@ -3296,7 +3357,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -3519,6 +3580,19 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_shape("tl down", 2048, 5632, 512)
         run_shape("tl q/wo", 2048, 2048, 512)
         run_shape("tl k/v ", 256, 2048, 512)
+        return
+    }
+    if (only == "g3") {
+        // gemma-3-1b role shapes (dim 1152, hidden 6912, qd 1024, kvd 256): the skinny-output down and wo, and the down under the split-k ladder
+        run_shape("g3 gate", 6912, 1152, 512)
+        run_shape("g3 down", 1152, 6912, 512)
+        run_shape("g3 q   ", 1024, 1152, 512)
+        run_shape("g3 wo  ", 1152, 1024, 512)
+        run_shape("g3 k/v ", 256, 1152, 512)
+        for (sk in [2, 4, 8]) {
+            run_shape_split("g3 down", 1152, 6912, 512, sk)
+        }
+        run_shape_split("g3 wo  ", 1152, 1024, 512, 2)
         return
     }
     if (only == "mmqx") {

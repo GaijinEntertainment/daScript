@@ -2236,6 +2236,7 @@ struct RLayer {
     s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
     s_rope : VkDescriptorSet        // rope + KV store class set
     s_attn : VkDescriptorSet        // decode attention class set
+    s_attn_comb : VkDescriptorSet   //! the split attention's combine (a head's partials into its row)
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
     s_addr_ffn : VkDescriptorSet
@@ -2339,6 +2340,8 @@ struct RDec {
     xq_dev, xs_dev : uint64       // quantized activation (shared across the layer's GEMVs)
     q_dev, kv_dev : uint64        // roped q; the k/v projection buffer rope reads (k@qd, v@qd+kvd)
     attn_dev : uint64             // attention output
+    attn_part_dev : uint64        //! the split decode attention's partials [heads x DA_NSPLIT_MAX x (head_size + 2)]
+    attn_nsplit : int64           //! key splits a head the token command dispatches (1 = the unsplit pass; `da_nsplit`)
     aq_dev, as_dev : uint64       // quantized attn (wo input)
     gate_dev, up_dev : uint64
     ffnout_dev : uint64
@@ -2469,6 +2472,15 @@ def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && di
 
 var g_rd : RDec?
 
+let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
+
+//! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
+//! DA_NSPLIT_MAX; one where the card's SM count is unknown or the heads alone cover it
+def da_nsplit(n_heads, sm_count : int64) : int64 {
+    if (sm_count <= 0l || n_heads <= 0l || n_heads >= 2l * sm_count) return 1l
+    return min((2l * sm_count + n_heads - 1l) / n_heads, DA_NSPLIT_MAX)
+}
+
 //! the norms plane's rows per layer (`RDEC_NORM_ROWS`, the uploader's count): the attention norm, the FFN norm, the post-attention and post-FFN norms; the final norm follows the layers, the q/k norm rows follow it
 let RD_NORM_ROWS = RDEC_NORM_ROWS
 let RD_NORM_ATT = 0l
@@ -2543,6 +2555,7 @@ var g_rdq_stamp_names : array<string>        //! the recorded token command's st
 var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
 var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
+var g_rdq_host_us : double[4]   //! ... split into its pieces: the memcpys and meta, the submit, the fence spin, the logits copy
 var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP): the recorded names and the pool saturate together, so the sampler reads this instead
 
 //! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
@@ -2551,6 +2564,9 @@ def rdq_reset {
     g_rdq_count = 0l
     g_rdq_total = 0.0lf
     g_rdq_wall_us = 0.0lf
+    for (i in range(4)) {
+        g_rdq_host_us[i] = 0.0lf
+    }
     g_rdq_overflow = false
     g_rdq_us_by_name |> clear()
     g_rdq_print_order |> clear()

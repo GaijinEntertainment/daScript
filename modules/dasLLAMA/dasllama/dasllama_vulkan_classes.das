@@ -3327,11 +3327,18 @@ struct DaAttnArgs {
     gated : uint    // 1 = multiply the head's output by sigmoid of its gate half before the store
     window : uint   //! a sliding layer attends the last `window` positions of the cnt; 0 = every position
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
+    nsplit : uint   //! the key range split across this many workgroups a head, each leaving a (max, denom, acc) partial for `DaAttnComb`; 0 or 1 = one workgroup a head stores y itself
 }
 
-// decode attention (one query row): one wg per head, GQA, KT-typed K/V mirror. Online softmax
-// over 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works.
-// A head past 256 (gemma-4's global layers, 512) runs one V group with two dims a thread.
+//! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
+def da_attn_part_stride(hs : uint) : uint => hs + 2u
+
+// decode attention (one query row): a wg per (head, key split), GQA, KT-typed K/V mirror. Online softmax
+// over 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works. The
+// scores go a subgroup a key, the lanes across the head's dims (a K row read as one coalesced span;
+// the dot closes in a subgroup add); the V pass keeps a thread a dim. A head past 256 (gemma-4's
+// global layers, 512) runs one V group with two dims a thread. Split, the pass stores its unnormalized
+// partial and the combine kernel finishes the head; unsplit it stores the head's row.
 [ |> template_struct_instance]
 class template DaAttnT {
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
@@ -3339,17 +3346,20 @@ class template DaAttnT {
     @ssbo @binding = 2 vmir : array<KT>      // the V mirror plane
     @ssbo @binding = 3 y : array<float>      // attention out rows
     @ssbo @binding = 4 tok : array<TokMeta>  // the shared per-token block (element 0)
+    @ssbo @binding = 5 part : array<float>   //! the split form's partials [head x split x (hs + 2)]; unsplit, any buffer (unread)
     @push_constant pa : DaAttnArgs
     @workgroup qrow : float[512]   // this head's query row (hs <= 512)
     @workgroup sc : float[256]     // chunk scores, then the cross-group V partial reduce
-    @workgroup part : float[64]    // per-subgroup partials
+    @workgroup sgp : float[64]     // per-subgroup partials
     @workgroup ml : float[2]       // [0] = running max, [1] = running softmax denom
 
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
         let hs = pa.hs
         let cnt = tok[0u].cnt
-        let h = gl_WorkGroupID.x
+        let nsplit = max(pa.nsplit, 1u)
+        let h = gl_WorkGroupID.x / nsplit
+        let sp = gl_WorkGroupID.x % nsplit
         let kvh = h / pa.kv_mul
         let tid = gl_LocalInvocationID.x
         let wide = hs > 256u
@@ -3357,6 +3367,8 @@ class template DaAttnT {
         let g = wide ? 0u : tid / hs
         let c = wide ? tid : tid % hs
         let qstride = pa.qstride == 0u ? hs : pa.qstride
+        let dpl = hs / gl_SubgroupSize        // the score pass: a lane's dims of the K row
+        let lane = gl_SubgroupInvocationID
         var i = tid
         while (i < hs) {
             qrow[i] = q[h * qstride + i]
@@ -3369,30 +3381,41 @@ class template DaAttnT {
         var acc = 0.0             // this thread's V partial (group g's slice of dim c)
         var acc2 = 0.0            // the wide head's second dim, c + 256
         var mrun = -3.0e38        // running max — uniform, tracked in lockstep by every thread
-        var c0 = pa.window != 0u && cnt > pa.window ? cnt - pa.window : 0u
-        while (c0 < cnt) {
-            let clen = min(256u, cnt - c0)
-            // chunk scores: thread tid owns position c0 + tid
-            var s = -3.0e38
-            if (tid < clen) {
-                var sv = 0.0
-                var d = 0u
-                while (d < hs) {
-                    sv += qrow[d] * float(kmir[pa.kbase + (c0 + tid) * pa.kvd + kvh * hs + d])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
-                    d++
+        let cstart = pa.window != 0u && cnt > pa.window ? cnt - pa.window : 0u
+        // this workgroup's key range: the attended span cut in nsplit 32-aligned pieces (a piece past the end is empty)
+        let per = ((cnt - cstart + nsplit - 1u) / nsplit + 31u) & ~31u
+        var c0 = min(cnt, cstart + sp * per)
+        let cend = min(cnt, cstart + (sp + 1u) * per)
+        while (c0 < cend) {
+            let clen = min(256u, cend - c0)
+            // chunk scores: a subgroup a key, the lanes across the dims
+            var kk = gl_SubgroupID
+            while (kk < clen) {
+                let krow = pa.kbase + (c0 + kk) * pa.kvd + kvh * hs + lane * dpl
+                var pv = 0.0
+                var di = 0u
+                while (di < dpl) {
+                    pv += qrow[lane * dpl + di] * float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                    di++
                 }
-                s = attn_softcap(sv * pa.scale, pa.cap)
+                let sv = subgroupAdd(pv)
+                if (lane == 0u) {
+                    sc[kk] = attn_softcap(sv * pa.scale, pa.cap)
+                }
+                kk += gl_NumSubgroups
             }
+            barrier()
+            let s = tid < clen ? sc[tid] : -3.0e38
             let tmax = subgroupMax(s)
-            if (gl_SubgroupInvocationID == 0u) {
-                part[gl_SubgroupID] = tmax
+            if (lane == 0u) {
+                sgp[gl_SubgroupID] = tmax
             }
             barrier()
             if (tid == 0u) {
                 var m = mrun
                 var sgi = 0u
                 while (sgi < gl_NumSubgroups) {
-                    m = max(m, part[sgi])
+                    m = max(m, sgp[sgi])
                     sgi++
                 }
                 ml[0u] = m
@@ -3405,15 +3428,15 @@ class template DaAttnT {
             let e = tid < clen ? exp(s - mnew) : 0.0
             sc[tid] = e
             let tsum = subgroupAdd(e)
-            if (gl_SubgroupInvocationID == 0u) {
-                part[gl_SubgroupID] = tsum
+            if (lane == 0u) {
+                sgp[gl_SubgroupID] = tsum
             }
             barrier()
             if (tid == 0u) {
                 var lsum = 0.0
                 var sgi = 0u
                 while (sgi < gl_NumSubgroups) {
-                    lsum += part[sgi]
+                    lsum += sgp[sgi]
                     sgi++
                 }
                 ml[1u] = ml[1u] * alpha + lsum
@@ -3436,10 +3459,20 @@ class template DaAttnT {
                     jj += npart
                 }
             }
-            barrier()   // sc/part settle before the next chunk overwrites them
+            barrier()   // sc/sgp settle before the next chunk overwrites them
             c0 += 256u
         }
+        let pb = (h * nsplit + sp) * da_attn_part_stride(hs)   // this (head, split)'s partial
         if (wide) {   // one group: every thread holds two finished dims
+            if (nsplit > 1u) {
+                if (tid == 0u) {
+                    part[pb] = mrun
+                    part[pb + 1u] = ml[1u]
+                }
+                part[pb + 2u + tid] = acc
+                part[pb + 2u + tid + 256u] = acc2
+                return
+            }
             let linv = 1.0 / ml[1u]
             var o = acc * linv
             var o2 = acc2 * linv
@@ -3455,13 +3488,21 @@ class template DaAttnT {
         sc[tid] = acc
         barrier()
         if (tid < hs) {
-            let linv = 1.0 / ml[1u]
             var tot = 0.0
             var gg = 0u
             while (gg < npart) {
                 tot += sc[gg * hs + tid]
                 gg++
             }
+            if (nsplit > 1u) {
+                if (tid == 0u) {
+                    part[pb] = mrun
+                    part[pb + 1u] = ml[1u]
+                }
+                part[pb + 2u + tid] = tot
+                return
+            }
+            let linv = 1.0 / ml[1u]
             var o = tot * linv
             if (pa.gated != 0u) {
                 let gt = q[h * qstride + hs + tid]
@@ -3472,15 +3513,71 @@ class template DaAttnT {
     }
 }
 
-[vk_dispatch(name = "da_attn_cls", grid = "nheads", params = "nheads : int64")]
+[vk_dispatch(name = "da_attn_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttn : DaAttnT {
     typedef KT = float
 }
 
 // f16-mirror twin — convert-on-load, compute stays f32
-[vk_dispatch(name = "da_attn_f16_cls", grid = "nheads", params = "nheads : int64")]
+[vk_dispatch(name = "da_attn_f16_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttnF16 : DaAttnT {
     typedef KT = float16
+}
+
+//! the split decode attention's combine: one wg a head over its nsplit partials - the running maxes
+//! align the denoms and accumulators (weight e^(m_s - M)), the sum normalizes, the gate applies, y stores
+[vk_dispatch(name = "da_attn_comb_cls", grid = "nheads", params = "nheads : int64")]
+class DaAttnComb {
+    @ssbo @binding = 0 q : array<float>      //! the query rows, for the gate half of a gated head
+    @ssbo @binding = 1 part : array<float>   //! [head x split x (hs + 2)]
+    @ssbo @binding = 2 y : array<float>      //! attention out rows
+    @push_constant pa : DaAttnArgs
+    @workgroup wsum : float[2]   //! [0] = the aligned max, [1] = the aligned denom
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
+    def run {
+        let hs = pa.hs
+        let nsplit = max(pa.nsplit, 1u)
+        let h = gl_WorkGroupID.x
+        let tid = gl_LocalInvocationID.x
+        let stride = da_attn_part_stride(hs)
+        let hb = h * nsplit * stride
+        if (tid == 0u) {
+            var m = -3.0e38
+            var s = 0u
+            while (s < nsplit) {
+                m = max(m, part[hb + s * stride])
+                s++
+            }
+            var l = 0.0
+            s = 0u
+            while (s < nsplit) {
+                l += part[hb + s * stride + 1u] * exp(part[hb + s * stride] - m)
+                s++
+            }
+            wsum[0u] = m
+            wsum[1u] = l
+        }
+        barrier()
+        let m = wsum[0u]
+        let linv = 1.0 / wsum[1u]
+        let qstride = pa.qstride == 0u ? hs : pa.qstride
+        var d = tid
+        while (d < hs) {
+            var o = 0.0
+            var s = 0u
+            while (s < nsplit) {
+                o += part[hb + s * stride + 2u + d] * exp(part[hb + s * stride] - m)
+                s++
+            }
+            o *= linv
+            if (pa.gated != 0u) {
+                o = o / (1.0 + exp(-q[h * qstride + hs + d]))
+            }
+            y[h * hs + d] = o
+            d += 256u
+        }
+    }
 }
 
 // ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====

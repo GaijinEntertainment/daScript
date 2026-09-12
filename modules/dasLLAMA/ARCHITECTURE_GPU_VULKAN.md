@@ -1,12 +1,11 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj - the Vulkan resident driver's
-prefill chain, its byte stores, the tile probe's set layout, the device-init roster and the
-lens's readonly derivation: the prefill window chain, the Q8 requant byte store, the decode GEMV
-family's grid codebook buffer, the tile probe's shared descriptor set layout, the recurrent block
-of the prefill window, the roster of Vulkan capabilities the tier keys its routes on, and how the
-`[vk_dispatch]` lens derives `readonly` from a class family's accesses. The MoE block of that
+carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai, 2.2aj and 2.2al: the prefill window
+chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer, the tile probe's
+shared descriptor set layout, the recurrent block of the prefill window, the roster of Vulkan
+capabilities the tier keys its routes on, how the `[vk_dispatch]` lens derives `readonly` from a
+class family's accesses, and the token command's attention key split. The MoE block of that
 window and the token command's routed twin are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s sections
 2.2af and 2.2ag. The cooperative-matrix
 tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and the coopmat mode
@@ -287,3 +286,15 @@ view protects its same-binding aliases. A method body the access classifier refu
 writing every binding, so a body the classifier cannot read loses the decoration rather than
 carrying a false one. A declared `@readonly` on a binding a kernel writes is the one shape that
 yields a module the validator rejects, and the lens refuses it.
+
+### 2.2al The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
+
+**The decode attention (`DaAttnT`) dispatches a workgroup per (head, key split) and a combine per
+head.** One workgroup a head leaves a low-head model's attention on a few SMs (four heads of
+eighty-two), so the pass cuts the attended span into `nsplit` 32-aligned pieces (`da_nsplit`:
+enough (head, split) workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`; one where
+the count is unknown or the heads alone cover it), each workgroup running the online softmax over
+its piece into an unnormalized partial (max, denominator, accumulators; an empty piece's weighs
+nothing), and `DaAttnComb` aligning a head's partials by their maxes, normalizing, gating and
+storing the row; unsplit, the pass stores the row itself. The scores go a subgroup a key with the
+lanes across the dims - one coalesced K row, the dot closed in a subgroup add; the V pass keeps a thread a dim.

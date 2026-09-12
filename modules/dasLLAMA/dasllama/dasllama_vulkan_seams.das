@@ -135,11 +135,11 @@ def private ensure_da_state {
     g_gpu.da_q_dev = make_device_buf(RKS_MAX_QD * 4l)
     g_gpu.da_out_dev = make_device_buf(RKS_MAX_QD * 4l)
     g_gpu.da_out_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
-    g_gpu.da_set = set_da_attn_cls(
-        fixed_array(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.da_out_dev, g_gpu.rks_tok.buf),
+    g_gpu.da_set = set_da_attn_cls(   //! the unsplit pass: the out rows fill the partials binding, never read
+        fixed_array(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.da_out_dev, g_gpu.rks_tok.buf, g_gpu.da_out_dev),
         fixed_array(RKS_MAX_QD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l,
-            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_QD * 4l, 16l),
-        fixed_array(0u, 0u, 0u, VHG_YO, 0u))   // q/mirrors fill pre-cmd (fence-ordered)
+            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_QD * 4l, 16l, RKS_MAX_QD * 4l),
+        fixed_array(0u, 0u, 0u, VHG_YO, 0u, VHG_YO))   // q/mirrors fill pre-cmd (fence-ordered)
     g_gpu.da_ready = true
 }
 
