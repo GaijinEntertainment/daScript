@@ -74,6 +74,10 @@ Spawn in ONE message, all as `targeted-reviewer` instances unless named otherwis
   (`skills/tdd_audit.md`): every new or changed reachable branch has a test that fails
   without it, negative controls where reading cannot settle a branch, and the cheat check
   over the diff's own test edits.
+- **One `dupe-auditor` instance** over the whole diff (`skills/dupe_audit.md`): every
+  function the diff adds checked against daslib, the module daslibs, utils and the diff
+  itself for an existing implementation; every sibling set the diff adds or extends named
+  with its axis and its fold.
 - **The `style-hygiene-auditor`** over the diff's new code (rulebook:
   `skills/comment_style_hygiene.md`; one instance, or one per file cluster on a large
   diff). Its findings are never blocking - they enter the report as `suggestion` at
@@ -117,7 +121,9 @@ cited lines against the quoted rule); **UNPROVEN** verdicts bypass the gates - t
 requests for evidence (a suite run, a platform check, a stated claim), not hypotheses, and
 reach the report as their own section; **SELF-REVIEW** findings pass through as checklist
 defects. The tdd-auditor's **UNTESTED**, **RETUNED** and **WEAKENED** verdicts pass through
-as coverage defects, not hypotheses - they reach the report as their own section.
+as coverage defects, not hypotheses - they reach the report as their own section. The
+dupe-auditor's **DUPLICATE** verdicts take gate 2 (fresh-read both bodies against the claimed
+difference) and pass as defects; its **TEMPLATABLE** verdicts enter as `concern` hypotheses.
 
 ## Phase 4 - report, then fix
 
@@ -140,8 +146,8 @@ the batch, one cold re-read whose serious findings close the round without a thi
 - Grounding, the dimension surfacers, the general surfacer, and the prover are
   `targeted-reviewer` instances (the definition carries the model pin and the report
   contract). When the session's registry snapshot lacks the agent, fall back to
-  general-purpose with an explicit opus pin. The `review-md-auditor`, `tdd-auditor`, and
-  `style-hygiene-auditor` keep their own definitions.
+  general-purpose with an explicit opus pin. The `review-md-auditor`, `tdd-auditor`,
+  `dupe-auditor`, and `style-hygiene-auditor` keep their own definitions.
 - Spawn independent agents in a single message so they run in parallel; the prover waits for
   all surfacers and for the woodpecker harvest.
 - Agent definitions snapshot at session start - a freshly edited `.claude/agents/*.md` is live

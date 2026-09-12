@@ -1448,3 +1448,25 @@ def test_generics_called_and_uncalled_canonicalize_equal(t : T?) {
     let b = find_canonical_required(t, records, "case_generic_uncalled")
     t |> equal(a, b)
 }
+
+
+let BROKEN_FIXTURE = "utils/detect-dupe/fixture/_fixture_broken_cases.das"
+
+[test]
+def test_compile_failure_still_collects(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(BROKEN_FIXTURE, records, false, false)
+    t |> success(!ok, "broken_cases.das must fail to compile")
+    let canon = find_canonical_by_name(records, "case_broken_survivor")
+    t |> success(!empty(canon),
+        "a function beside a compile error is still collected - the AST survives the failed infer")
+}
+
+
+[test]
+def test_worker_count_auto_is_physical_cores(t : T?) {
+    t |> equal(compute_worker_count(1000, 0), min(get_total_hw_cores(), MAX_AUTO_WORKERS),
+        "0 = auto means the box's cores under the ceiling; get_total_hw_threads is the jobque's own lane count")
+    t |> equal(compute_worker_count(1000, MAX_AUTO_WORKERS * 4), MAX_AUTO_WORKERS * 4,
+        "an explicit count is not capped")
+}

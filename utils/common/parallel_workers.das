@@ -41,12 +41,17 @@ def public should_parallelize(n_items : int; workers_setting : int) : bool {
 }
 
 
-// Map `workers_setting` to an actual worker count. 0 => hardware
-// threads. Clamps to [1, n_items].
+//! Auto mode's ceiling: every worker is a daslang process compiling its own module graph,
+//! so a 128-core box at one worker per core is a memory event, not a speedup.
+let public MAX_AUTO_WORKERS = 16
+
+// Map `workers_setting` to an actual worker count. 0 => the box's physical cores, at most
+// MAX_AUTO_WORKERS (get_total_hw_threads is the jobque's own lane count - 5 on an 18-core M5 -
+// not the box). An explicit count is taken as given. Clamps to [1, n_items].
 def public compute_worker_count(n_items : int; workers_setting : int) : int {
     var w = workers_setting
     if (w == 0) {
-        w = get_total_hw_threads()
+        w = min(get_total_hw_cores(), MAX_AUTO_WORKERS)
         if (w < 1) {
             w = 1
         }

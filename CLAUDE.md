@@ -143,6 +143,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/internal/woodpecker.md` | Running the external codex reviewer on a branch/diff - every `make_pr` arc gets a round |
 | `skills/review_md.md` | Creating or editing any module `REVIEW.md`, or reviewing a diff to one |
 | `skills/tdd_audit.md` | Auditing any diff for test coverage - the branch-test rule |
+| `skills/dupe_audit.md` | Auditing a diff or a file set for duplicated or parameterizable code - the one-implementation rule; before claiming a helper is new |
 | `skills/internal/preflight.md` | Pushing a non-trivial branch or reproducing a red CI lane - each lane's local mirror command |
 | `skills/internal/abi_break_sweep.md` | Changing public C++ API, AST node layout, or daslib generic signatures external module repos compile against |
 | `skills/internal/wsl_ci_repro.md` | Reproducing a Linux-only CI failure in the WSL CI-mirror distro |
