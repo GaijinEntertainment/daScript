@@ -150,6 +150,7 @@ struct RdecLayerGeom {
     vnorm : bool                    //! V is scaled by its own rms, no weight (gemma-4's v-norm on a layer with its own v plane)
     out_scale : float               //! the layer's output scale on its FFN residual step; 1.0 = none
     kv_shared : bool                //! the layer projects Q only and attends over a donor layer's K/V rows (`mir_base` is the donor's; gemma-4 E-series)
+    attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
 }
 //! qd / kv_dim / head_size / hidden / rot are the maxima over the layers (the scratch is sized to
 //! them); `mir_elems` is one mirror side's element count over every attention layer, `cos_elems`

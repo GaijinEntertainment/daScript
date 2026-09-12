@@ -474,10 +474,13 @@ sliding window engaged on the last eight) and the agreement form at eight tokens
 embedding branch after every FFN residual (the CPU pre-step's side rows ride the token command
 and the window chain), twenty layers attending over the K/V of the fifteen below them, and the two
 dense FFN widths; gemma-4-E4B Q8_0 (large tier) at forty tokens and 150 + 150; gemma-3-4b Q8_0
-(the dense base at width 2560 and four kv heads) at forty tokens and 150 + 150. Arms: `g3` (the
-gemma-3-1b cells), `g3b` (gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M
-300-token agreement cell), `g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B) - the tokens
-share no substring, so one arm selects one file. Skips
+(the dense base at width 2560 and four kv heads) at forty tokens and 150 + 150; gemma-2-2b Q8_0
+(the attention logit softcap on every score - the 8-row prefill tile and the token command take
+it, the cm2 flash tile has no arm and stands down on that model) at forty tokens, 150 + 150 and
+the eight-token agreement form. Arms: `g2` (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
+(gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
+`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B) - the tokens share no substring, so one arm
+selects one file. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.
