@@ -65,7 +65,11 @@ read `errno` after a Winsock call would see 0 and treat a dead peer as "no error
 a disconnected client would retry forever while holding the debug-agent context lock, and the
 tick that notices the closed socket could never run. `REVIEW.das` beside this file fails a
 `network.cpp` that reads `errno` outside `last_socket_error()`, or names a would-block code
-outside `socket_would_block()`.
+outside `socket_would_block()`. A peer that closed never signals the process: the accepted
+socket carries `SO_NOSIGPIPE` on Apple and every send passes `MSG_NOSIGNAL` where the platform
+defines it, so a write after the client went away is the `EPIPE` that `send_msg`'s error path
+closes on, not a `SIGPIPE` that ends the debuggee - a disconnect request resumes every context
+and their exit events race the client's close.
 
 ## 6. The leak dump runs last, so a static dtor's free is not a leak
 
