@@ -3691,7 +3691,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mm_b4 = compile_pso(MetalKqMulMmK4_metal_kq_mulmm_msl, MetalKqMulMmK4_metal_kq_mulmm_msl_entry, MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_mm_b5 = compile_pso(MetalKqMulMmK5_metal_kq_mulmm_msl, MetalKqMulMmK5_metal_kq_mulmm_msl_entry, MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath, ok)
     g_pso_kq_mm_b6 = compile_pso(MetalKqMulMmK6_metal_kq_mulmm_msl, MetalKqMulMmK6_metal_kq_mulmm_msl_entry, MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath, ok)
-    g_pso_kq_iq4xs = compile_pso(metal_kq_gemv_iq4xs_msl, metal_kq_gemv_iq4xs_msl_entry, metal_kq_gemv_iq4xs_msl_fastmath, ok)
+    g_pso_kq_iq4xs = compile_pso(MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl, MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl_entry, MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl_fastmath, ok)
     g_pso_kq_mvb2_iq4xs = compile_pso(MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl, MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl_entry, MetalKqMvB2Iq4xs_metal_kq_mv_iq4xs_msl_fastmath, ok)
     g_pso_kq_mvb4_iq4xs = compile_pso(MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl, MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl_entry, MetalKqMvB4Iq4xs_metal_kq_mv_iq4xs_msl_fastmath, ok)
     g_pso_kq_mvb8_iq4xs = compile_pso(metal_kq_mvb8_iq4xs_msl, metal_kq_mvb8_iq4xs_msl_entry, metal_kq_mvb8_iq4xs_msl_fastmath, ok)
@@ -3711,7 +3711,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_mvb4_iq3xxs = compile_pso(MetalKqMvB4Iq3xxs_metal_kq_mv_iq3xxs_msl, MetalKqMvB4Iq3xxs_metal_kq_mv_iq3xxs_msl_entry, MetalKqMvB4Iq3xxs_metal_kq_mv_iq3xxs_msl_fastmath, ok)
     g_pso_kq_mvb8_iq3xxs = compile_pso(metal_kq_mvb8_iq3xxs_msl, metal_kq_mvb8_iq3xxs_msl_entry, metal_kq_mvb8_iq3xxs_msl_fastmath, ok)
     g_pso_kq_mm_b34 = compile_pso(MetalKqMulMmIq3xxs_metal_kq_mulmm_msl, MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_entry, MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_fastmath, ok)
-    g_pso_kq_iq4nl = compile_pso(metal_kq_gemv_iq4nl_msl, metal_kq_gemv_iq4nl_msl_entry, metal_kq_gemv_iq4nl_msl_fastmath, ok)
+    g_pso_kq_iq4nl = compile_pso(MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl, MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl_entry, MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl_fastmath, ok)
     g_pso_kq_mvb2_iq4nl = compile_pso(MetalKqMvB2Iq4nl_metal_kq_mv_iq4nl_msl, MetalKqMvB2Iq4nl_metal_kq_mv_iq4nl_msl_entry, MetalKqMvB2Iq4nl_metal_kq_mv_iq4nl_msl_fastmath, ok)
     g_pso_kq_mvb4_iq4nl = compile_pso(MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl, MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl_entry, MetalKqMvB4Iq4nl_metal_kq_mv_iq4nl_msl_fastmath, ok)
     g_pso_kq_mvb8_iq4nl = compile_pso(metal_kq_mvb8_iq4nl_msl, metal_kq_mvb8_iq4nl_msl_entry, metal_kq_mvb8_iq4nl_msl_fastmath, ok)
@@ -8647,22 +8647,23 @@ class MetalKqMvB8K3 {
     }
 }
 
-// IQ4_XS: w = d*sc*LUT[q], sc the SIGNED strip byte, no min plane; the codebook in threadgroup
-// floats, a 16-lane half-simdgroup per superblock, lane (bu, il) = block bu's 8-byte half il
-// (two uint loads, four float4 x loads; the q40 pairing). Scale plane = the k6 split form.
-[metal_dispatch(name = "enc_kq_iq4xs_c", pso = "g_pso_kq_iq4xs", tgmem = "metal_kq_gemv_iq4xs_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
-class MetalKqGemvIq4xs {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
+// IQ4_XS / IQ4_NL: w = d*sc*LUT[q], the codebook in threadgroup floats, a 16-lane half-simdgroup
+// per superblock (the q40 pairing). The one axis is the scale source: iq4xs the SIGNED strip byte
+// times the split-plane super d, iq4nl a PER-32-BLOCK f16 d (no strip bytes; kscb keeps the shape).
+[ |> template_struct_instance]
+class template MetalKqGemvIq4T {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // iq4xs: the d plane (the scale buffer at byte nsb*16, s0off = the caller's doff); iq4nl: the 16B/sb d plane, block bu's d at blk*8+bu
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4xs quant plane, uint view (block bu of blk at 32*blk + 4*bu)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view (block bu of blk at 32*blk + 4*bu; q40's 128B/sb nibble tiling)
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint
     @workgroup lut : float[64]   // kvalues_iq4nl as floats, one slot per thread of the 64-wide group
+    @template_constant IQ4NL : bool = false
 
-    [metal_kernel(name="metal_kq_gemv_iq4xs_msl")]
-    def metal_kq_gemv_iq4xs {
+    [metal_kernel]
+    def metal_kq_gemv_iq4 {
         let lid = gl_LocalInvocationID.x
         lut[lid] = iq4_lut(lid & 15u)
         barrier()
@@ -8690,8 +8691,12 @@ class MetalKqGemvIq4xs {
                 acc += y2 * float4(lut[(q0 >> 4u) & 15u], lut[(q0 >> 12u) & 15u], lut[(q0 >> 20u) & 15u], lut[q0 >> 28u])
                 acc += y1 * float4(lut[q1 & 15u], lut[(q1 >> 8u) & 15u], lut[(q1 >> 16u) & 15u], lut[(q1 >> 24u) & 15u])
                 acc += y3 * float4(lut[(q1 >> 4u) & 15u], lut[(q1 >> 12u) & 15u], lut[(q1 >> 20u) & 15u], lut[q1 >> 28u])
-                let sc = float((int(kscb[blk * 16u + bu]) ^ 128) - 128)
-                sumf[r] += float(kdh[blk]) * sc * (acc.x + acc.y + acc.z + acc.w)
+                static_if (IQ4NL) {
+                    sumf[r] += float(kdh[blk * 8u + bu]) * (acc.x + acc.y + acc.z + acc.w)
+                } else {
+                    let sc = float((int(kscb[blk * 16u + bu]) ^ 128) - 128)
+                    sumf[r] += float(kdh[blk]) * sc * (acc.x + acc.y + acc.z + acc.w)
+                }
             }
             ib += 2u
         }
@@ -8704,60 +8709,14 @@ class MetalKqGemvIq4xs {
     }
 }
 
-// IQ4_NL: w = d*LUT[q] with a PER-32-BLOCK f16 d (q40's 16B/sb scale plane verbatim, one bind,
-// no sub-scale, no split plane); the quant walk is the iq4xs GEMV's q40 pairing over the same
-// threadgroup codebook. kscb keeps the shared kq binding shape (iq4nl has no strip bytes).
-[metal_dispatch(name = "enc_kq_iq4nl_c", pso = "g_pso_kq_iq4nl", tgmem = "metal_kq_gemv_iq4nl_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
-class MetalKqGemvIq4nl {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the 16B/sb d plane, half view - block bu's d at blk*8+bu
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // the same plane, byte view (binding-shape twin; unused)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4nl quant plane, uint view (q40's 128B/sb nibble tiling)
-    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
-    @workgroup lut : float[64]   // kvalues_iq4nl as floats, one slot per thread of the 64-wide group
+[metal_dispatch(name = "enc_kq_iq4xs_c", pso = "g_pso_kq_iq4xs", tgmem = "MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+class MetalKqGemvIq4xs : MetalKqGemvIq4T {
+    override IQ4NL = false
+}
 
-    [metal_kernel(name="metal_kq_gemv_iq4nl_msl")]
-    def metal_kq_gemv_iq4nl {
-        let lid = gl_LocalInvocationID.x
-        lut[lid] = iq4_lut(lid & 15u)
-        barrier()
-        let lane = gl_SubgroupInvocationID
-        let ix = lane / 16u
-        let it = lane % 16u
-        let bu = it / 2u
-        let il = it % 2u
-        let nb = ndim / 256u
-        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var sumf : float[2]
-        var ib = ix
-        while (ib < nb) {
-            let yb4 = ib * 64u + bu * 8u + il * 2u
-            let y0 = x[yb4]
-            let y1 = x[yb4 + 1u]
-            let y2 = x[yb4 + 4u]
-            let y3 = x[yb4 + 5u]
-            for [unroll_full] (r in range(2)) {
-                let blk = (first_row + uint(r)) * nb + ib
-                let qb = blk * 32u + bu * 4u + il * 2u
-                let q0 = kqu[qb]
-                let q1 = kqu[qb + 1u]
-                var acc = y0 * float4(lut[q0 & 15u], lut[(q0 >> 8u) & 15u], lut[(q0 >> 16u) & 15u], lut[(q0 >> 24u) & 15u])
-                acc += y2 * float4(lut[(q0 >> 4u) & 15u], lut[(q0 >> 12u) & 15u], lut[(q0 >> 20u) & 15u], lut[q0 >> 28u])
-                acc += y1 * float4(lut[q1 & 15u], lut[(q1 >> 8u) & 15u], lut[(q1 >> 16u) & 15u], lut[(q1 >> 24u) & 15u])
-                acc += y3 * float4(lut[(q1 >> 4u) & 15u], lut[(q1 >> 12u) & 15u], lut[(q1 >> 20u) & 15u], lut[q1 >> 28u])
-                sumf[r] += float(kdh[blk * 8u + bu]) * (acc.x + acc.y + acc.z + acc.w)
-            }
-            ib += 2u
-        }
-        for [unroll_full] (r in range(2)) {
-            let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[first_row + uint(r)] = s
-            }
-        }
-    }
+[metal_dispatch(name = "enc_kq_iq4nl_c", pso = "g_pso_kq_iq4nl", tgmem = "MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
+class MetalKqGemvIq4nl : MetalKqGemvIq4T {
+    override IQ4NL = true
 }
 
 // IQ3_S: w = d*sc*(+-grid byte), the sign nibbles from the block's own sign plane;
