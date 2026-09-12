@@ -2288,8 +2288,9 @@ def private start_agent(force : bool = false) {
 [init]
 def init_stepping_debugger() {
     //! Initializes the stepping debugger by enabling single-step mode on the current context at module load time.
+    //! The gate skips another module's macro context, not the debuggee's own init (ARCHITECTURE.md sec.24.1).
     if (use_instruments() || !wait_debugger() || (is_in_aot() && loads_itself()) ||
-        is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) return
+        is_in_debug_agent_creation() || (is_compiling_macros() && !is_compiling_macros_in_module("debug")) || is_in_completion()) return
     let args <- get_command_line_arguments()
     if (has_value(args, "--no-das-debug")) return
     set_single_step(this_context(), true)
