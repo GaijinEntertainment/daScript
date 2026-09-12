@@ -126,13 +126,14 @@ namespace das {
     }
 
     atomic<int> g_envTotal(0);
+    atomic<bool> g_exitingNow(false);   // set by fio::exit_now: the process ends on purpose with no shutdown, so the audit below stays quiet
 
     // from module_builtin_fio.cpp — modules whose .shared_module dlopen failed (Quiet)
     DAS_API string describe_pending_dynamic_modules();
 
     static void daslang_atexit_audit() {
         int n = g_envTotal.load();
-        if ( n != 0 ) {
+        if ( n != 0 && !g_exitingNow.load() ) {
             fprintf(stderr, "[daslang atexit] FATAL: g_envTotal=%d at exit (Initialize/Shutdown not balanced)\n", n);
             _Exit(1);
         }

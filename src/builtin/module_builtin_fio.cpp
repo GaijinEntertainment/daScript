@@ -995,7 +995,10 @@ namespace das {
         exit(ec);
     }
 
+    extern atomic<bool> g_exitingNow;   // ast_module.cpp: silences the atexit balance audit, which the runtime DLL's CRT still runs on _exit
+
     void builtin_exit_now ( int32_t ec, Context *, LineInfoArg * ) {
+        g_exitingNow = true;
         fflush(stdout);
         fflush(stderr);
         _exit(ec);

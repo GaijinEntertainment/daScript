@@ -24,5 +24,7 @@ def test_timeout(tt : T?) {
             "expected the timeout message, got:\n{output}")
         t |> success(!(output |> contains("should have ended the process")),
             "the fixture's test ran to its end - the timeout did not end the process:\n{output}")
+        t |> success(!(output |> contains("CALL STACK")) && !(output |> contains("[daslang atexit]")),
+            "the timeout ended the process as a crash or an unbalanced shutdown, not a plain exit:\n{output}")
     }
 }

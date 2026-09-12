@@ -3,8 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 
-**Routed here by another checklist: a diff under `dasMetal/` or `dasSpirv/`, or to any kernel
-body or fixture either emitter compiles, applies this list together with its own folder's.**
+**This list is routed to - by `REVIEW.md` beside it and by the `dasMetal/` and `dasSpirv/`
+checklists - and is never reached by the folder walk on its own.**
 
 A device-side value is one whose storage exists only on the device: a tile or tensor, a layout
 or view over one, a sampler, an image. A struct that stands for one on the CPU is a marker

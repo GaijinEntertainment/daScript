@@ -6,7 +6,7 @@ lede: Twenty-seven Qwen files, a 16 GB card, a friend's bug report, a card rente
 ---
 
 <!-- figures: every first-card row is pp512 / tg128 tokens per second on Boris's RTX 5060 Ti 16 GB (Windows
-     11, driver 616.56), ours from benchmarks/lcpp_bench.das (-jit --for-debug-purposes -r 3 -p 512 -n 128
+     11, driver 616.56), ours from modules/dasLLAMA/benchmarks/lcpp_bench.das (-jit --for-debug-purposes -r 3 -p 512 -n 128
      -t 16 under DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048),
      llama.cpp b10660 (build-vulkan-357) llama-bench -p 512 -n 128 -ngl 99 -fa 1 -t 16 on the same box
      the same day; both engines on NV_cooperative_matrix2 unless the row says KHR (ours DASLLAMA_COOPMAT=mm,
@@ -32,7 +32,11 @@ lede: Twenty-seven Qwen files, a 16 GB card, a friend's bug report, a card rente
      4369 -> 5133; 35B tg 130.2 -> 146.7; the kernel 27 us alone / 56 in the model / 43 after the flush;
      4217 -> 4673 for NonWritable; the arm-matched 2049 against 2080 on the 5060 Ti) are followup_vulkan.md
      item 45 and PERF_LEDGER.md's rows of 2026-09-10/11; the driver-death beat is item 45's follow-up (8)
-     (Windows LiveKernelEvent 141, nvlddmkm event 153, the stocked suite of 47 files on 2026-09-11). -->
+     (Windows LiveKernelEvent 141, nvlddmkm event 153, the stocked suite of 47 files on 2026-09-11).
+     "162 kernels, 98 stamped from a template" is dasllama/dasllama_vulkan_classes.das at 1fced5114 (2026-09-11):
+     the `[vk_dispatch]` classes, and those of them whose base is a `...T` template. The first KHR tile's
+     752 and the integer tile's 1564 are Qwen3-4B Q4_K_M pp512 on the 5060 Ti under DASLLAMA_COOPMAT=mm,
+     2026-09-07, the arc's board rows before and at the first tile (the 3051 -> 4764 chain follows). -->
 
 Boris had an RTX 3060 in August, and things were working so well. Then he got an RTX 5060 Ti,
 ran the same models, and everything was slower than llama.cpp. Nothing in the engine had
@@ -41,8 +45,9 @@ first half of September.
 
 ## Two targets
 
-There were two targets from the start. The first was to catch up on Vulkan, where the engine
-lagged, and Qwen was the biggest piece of the lag. The second was Qwen3.8-27B on a 16 GB
+There were two targets from the start. The first was Vulkan itself: the CPU and Metal tiers had
+a year of work behind them and Vulkan had a summer, and Qwen was the biggest piece of what it
+did not have. The second was Qwen3.8-27B on a 16 GB
 card: the model people want to run at home, and the one that did not fit.
 
 People do run it there. How they run it is a zoo. Four bits, three bits, two bits, mixed so
@@ -111,8 +116,8 @@ What if it were not this card? What if someone ran a 4080, or an AMD, or, oh no,
 None of those have cooperative matrix 2, the extension the 5060 Ti has. They have the older
 cooperative matrix, the one every card past a certain age can run. On that arm the K-quant
 formats, the zoo's most common ones, had no matrix tile at all, and the 27B prefilled at a
-third of the rate: 221 tokens per second against 677. The first tile we wrote came in at half
-the speed of the integer kernel it replaced. What a nightmare.
+third of the rate: 221 tokens per second against 677. The first tile we wrote ran the 4B at
+752, half the 1564 of the integer kernel it replaced. What a nightmare.
 
 Sometimes you resort to the sincerest form of flattery. We consulted the yardstick's kernels
 and found that back in 2024 kernels were a different shape, and had never heard of the
@@ -168,8 +173,8 @@ any other buffer. Turns out the daslang compiler knows when a variable is read-o
 Amazing. The 35B went from 4217 to 4673 on that alone.
 
 One side note on measuring there. The profiler on the rental box lies about kernels that overlap:
-it makes them take turns while it watches. One lever it praised made the model slower, and
-after that we believed the token counter and nothing else.
+it makes them take turns while it watches. One lever it praised took the 0.8B's token rate
+from 382.7 to 373.7, and after that we believed the token counter and nothing else.
 
 | model | dasLLAMA (pp512 / tg32) | llama.cpp (pp512 / tg32) |
 |---|---|---|
@@ -197,8 +202,8 @@ Intel's Arc, as far as we know. That arm was rebuilt this month and measured on 
 with the mode forced, so it has to work. Not that we ever tried it on anything else.
 
 Maybe, if it has neither. Below cooperative matrix we run an integer dot-product tile and the
-plain matrix-vector family. The tests dispatch every kernel of that arm on every format with
-the modes forced off, and nobody has ever run it on a card that really lacks them, never mind
+plain matrix-vector family. The tests dispatch that arm's kernels on every format with the
+modes forced off, and nobody has ever run it on a card that really lacks them, never mind
 raced it. Below that - no 8- and 16-bit storage, no subgroup operations, no integer dot
 product - the tier switches itself off, says why once, and the CPU takes over.
 
@@ -234,8 +239,9 @@ the 11 percent above, for every kernel at once. And a loop that cannot be unroll
 compile error now, not a slow kernel.
 
 For a game developer this is all oddly familiar. Thirteen weight formats, three tile widths,
-two decode arms and the cooperative-matrix arm are one kernel template with a few knobs, 137
-kernels in all, 78 of them stamped from a template. A material by light by platform matrix is the same problem
+two decode arms and the cooperative-matrix arm are one kernel template with a few knobs, 162
+kernels in all, 98 of them stamped from a template. A material by light by platform matrix
+is the same problem
 with other nouns, and the same infrastructure now serves both.
 
 ## The door

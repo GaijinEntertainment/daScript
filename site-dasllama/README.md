@@ -82,7 +82,7 @@ Strictly factual, numbers-not-adjectives, no performance promo on the home page 
 promo scoreboard is daslang.io/dasllama.html. An empty ratio cell means "not raced",
 never implied parity.
 
-How a claim is checked (the checklist's truth rule reads this): a claim about what a shipped
+How a claim is checked: a claim about what a shipped
 tool does is checked against that tool's current code; a claim about what a page here renders
 against the page's markup and `files/dasllama-io.js`; a claim about what a linked download
 contains against the artifact reachable at that link when the site deploys.

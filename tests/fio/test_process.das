@@ -4,6 +4,7 @@ options no_aot
 require dastest/testing_boost public
 require math
 require daslib/fio
+require daslib/strings_boost
 
 // argv[0] is the running interpreter (dastest is launched as `daslang dastest/dastest.das ...`),
 // so it spawns the daslang we want the child to run. Same trick as popen_argv.das.
@@ -168,5 +169,17 @@ def test_process_terminate(t : T?) {
         unsafe(close_process(p))
         let cleanup = rmdir_rec_result(root_dir)
         t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
+def test_exit_now_carries_its_code(t : T?) {
+    t |> run("exit_now ends a child with the code it was given, and the line printed before it arrives") @(t : T?) {
+        let fixture = path_join(get_das_root(), "tests/fio/_fixture_exit_now_child.das")
+        var output : string
+        let rc = run_and_capture([das_exe(), "-dasroot", get_das_root(), fixture], output, guard(15.0))
+        t |> equal(rc, 7, "the child's exit code, got:\n{output}")
+        t |> success(output |> contains("before exit_now"), "the flushed line reached the parent, got:\n{output}")
+        t |> success(!(output |> contains("[daslang atexit]")), "the runtime's atexit audit must stay quiet on a deliberate exit, got:\n{output}")
     }
 }

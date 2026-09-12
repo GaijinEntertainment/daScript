@@ -3,7 +3,7 @@ options gen2
 require dastest/testing_boost public
 require daslib/fio
 
-//! a fixture for test_timeout.das: one test that outlives the one-second --timeout the parent passes
+//! a fixture for test_timeout.das: one test that outlives the --timeout the parent passes
 
 [test]
 def test_sleep(t : T?) {
