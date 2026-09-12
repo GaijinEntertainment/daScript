@@ -1,7 +1,7 @@
 # tests-cpp/small Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `skills/internal/writing_cpp_tests.md` (repo root).
+doc: `skills/internal/writing_cpp_tests.md`.
 
 **A diff that widens or removes a pin assertion also changes, in the same PR, what that
 assertion watches - the layout, offset, or file set the pin names.** A

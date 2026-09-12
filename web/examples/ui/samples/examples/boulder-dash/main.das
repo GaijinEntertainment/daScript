@@ -856,8 +856,8 @@ def setup_camera() {
 def init() {
     live_create_window("Boulder Dash", 1280, 720)
     create_gl_objects()
+    asch = audio_live_system()
     if (!audio_initialized) {
-        asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
     }
@@ -882,7 +882,8 @@ def init() {
         music_initialized = true
         start_music_for_state()
     }
-    if (!is_reload()) {
+    // a full reload or a reset leaves the @live cave at its default, cells and all: generate as on a cold start
+    if (!is_reload() || empty(g_cave.cells)) {
         var next <- generate_cave(world_seed, cave_index)
         adopt_cave(g_cave, next)
         g_cave.god = god_mode
@@ -949,9 +950,7 @@ def shutdown() {
         strudel_shutdown()
         music_initialized = false
     }
-    if (!is_reload()) {
-        audio_system_finalize(asch.command, asch.next_sid)
-    }
+    audio_live_finalize(asch)
     live_destroy_window()
 }
 

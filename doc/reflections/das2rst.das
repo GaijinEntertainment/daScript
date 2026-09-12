@@ -1687,7 +1687,7 @@ def document_module_audio_boost(_root : string) {
         group_by_regex("PCM stream", mod, %regex~(append_to_pcm|append_box_to_pcm)$%%),
         group_by_regex("Decoding", mod, %regex~(decode_audio)$%%),
         group_by_regex("Sound ID", mod, %regex~(generate_sound_sid)$%%),
-        group_by_regex("Internal stream management", mod, %regex~(get_audio_command_stream|set_audio_thread_command_stream|get_sound_sid|set_sound_sid)$%%)
+        group_by_regex("Internal stream management", mod, %regex~(get_audio_command_stream|set_audio_thread_command_stream|adopt_audio_thread_command_stream|get_sound_sid|set_sound_sid)$%%)
     )
     document("Audio playback, mixing, 3D spatial audio, and effects", mod, "audio_boost.rst", groups)
 }

@@ -643,6 +643,8 @@ var space_was_pressed = false
 var esc_was_pressed = false
 var f1_was_pressed = false
 var f2_was_pressed = false
+var f3_was_pressed = false
+var f4_was_pressed = false
 var @live god_mode = false
 var @live game_speed = 1.0
 var @live prev_music_state = GameState.menu
@@ -954,14 +956,23 @@ def update_bot_paddle(dt : float) {
     }
 }
 
+// the arrows and A / D both steer, for the left hand
+def paddle_left_pressed() : bool {
+    return glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_A) == GLFW_PRESS
+}
+
+def paddle_right_pressed() : bool {
+    return glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_D) == GLFW_PRESS
+}
+
 def update_paddle(dt : float) {
     if (spectator) {
         update_bot_paddle(dt)
     } else {
-        if (glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+        if (paddle_left_pressed()) {
             paddle_x += PADDLE_SPEED * dt
         }
-        if (glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+        if (paddle_right_pressed()) {
             paddle_x -= PADDLE_SPEED * dt
         }
     }
@@ -1749,6 +1760,9 @@ def draw_hud() {
     }
     draw_text("LIVES: {lives}", HUD_MARGIN, 80, lives_color)
     draw_text("LEVEL {level + 1}", display_w - HUD_MARGIN - 130, 45, float3(0.9, 0.9, 0.95))
+    if (crt_enabled) {
+        draw_text("PITCH {crt_pitch} F3/F4", display_w - HUD_MARGIN - 230, 80, float3(0.6, 0.6, 0.7))
+    }
     if (level_card_timer > 0.0) {
         let fade = min(level_card_timer / 0.4, 1.0)
         draw_text_centered("LEVEL {level + 1}", cx, cy - 40, float3(1.0, 0.85, 0.3) * fade)
@@ -1789,8 +1803,8 @@ var asch : AudioSystemChannels
 def init() {
     live_create_window("Arcanoid", 1024, 768)
     create_gl_objects()
+    asch = audio_live_system()
     if (!audio_initialized) {
-        asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
     }
@@ -1845,8 +1859,8 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     let esc_pressed = glfwGetKey(live_window, GLFW_KEY_ESCAPE) == GLFW_PRESS
     let esc_just = esc_pressed && !esc_was_pressed
     esc_was_pressed = esc_pressed
-    let left_pressed = glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS
-    let right_pressed = glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS
+    let left_pressed = paddle_left_pressed()
+    let right_pressed = paddle_right_pressed()
     let any_key = space_pressed || esc_pressed || left_pressed || right_pressed
     idle_timer = any_key ? 0.0 : idle_timer + dt
     // F1 and F2 toggle the CRT and the occlusion pass; they are looks, not play, so they leave a demo running
@@ -1858,8 +1872,19 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
     if (f2_pressed && !f2_was_pressed) {
         ssao_enabled = !ssao_enabled
     }
+    // F3 and F4 step the scanline pitch, a look knob for the CRT preview
+    let f3_pressed = glfwGetKey(live_window, GLFW_KEY_F3) == GLFW_PRESS
+    let f4_pressed = glfwGetKey(live_window, GLFW_KEY_F4) == GLFW_PRESS
+    if (f3_pressed && !f3_was_pressed) {
+        crt_pitch = max(crt_pitch - 0.5, 2.0)
+    }
+    if (f4_pressed && !f4_was_pressed) {
+        crt_pitch = min(crt_pitch + 0.5, 8.0)
+    }
     f1_was_pressed = f1_pressed
     f2_was_pressed = f2_pressed
+    f3_was_pressed = f3_pressed
+    f4_was_pressed = f4_pressed
     if (spectator) {
         attract_timer += dt
         let round_over = game_state == GameState.game_over_state || game_state == GameState.win_state
@@ -2021,12 +2046,14 @@ def update() {   // nolint:STYLE037,STYLE038 - one linear frame: input, simulati
 var @live crt_enabled = true
 var @live ssao_enabled = true
 var @live fx_debug_view = 0
+var @live crt_pitch = 4.0
 let FOV_Y = 45.0 * PI / 180.0
 
 def post_settings(aspect : float) : PostSettings {
     var cfg = PostSettings()
     cfg.crt = crt_enabled
     cfg.ssao = ssao_enabled
+    cfg.scanline_pitch = crt_pitch
     cfg.debug_view = fx_debug_view
     let t = tan(FOV_Y * 0.5)
     cfg.tan_half_fov = float2(t * aspect, t)
@@ -2065,7 +2092,7 @@ def shutdown() {
         strudel_shutdown()
         music_initialized = false
     }
-    audio_system_finalize(asch.command, asch.next_sid)
+    audio_live_finalize(asch)
     delete_gl_objects()
     live_destroy_window()
 }

@@ -883,8 +883,8 @@ def process_collisions() {
 def init() {
     live_create_window("Asteroids", 1024, 768)
     create_gl_objects()
+    asch = audio_live_system()
     if (!audio_initialized) {
-        asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
     }
@@ -1068,10 +1068,7 @@ def shutdown() {
         strudel_shutdown()
         music_initialized = false
     }
-    if (audio_initialized) {
-        audio_system_finalize(asch.command, asch.next_sid)
-        audio_initialized = false
-    }
+    audio_live_finalize(asch)
     live_destroy_window()
 }
 

@@ -548,7 +548,6 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
     struct ExternFunctionAnnotation : FunctionAnnotation {
         ExternFunctionAnnotation() : FunctionAnnotation("extern") { }
-        das_hash_map<const Function *, string> transformMap;
         virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err) override {
             err = "not supported for block";
             return false;
@@ -624,21 +623,39 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( !is_ok ) {
                 return false;
             }
+            return !registerProxy(fun, ba, err).empty();
+        }
+
+        // the proxy outlives the registrar's program: its types are clones, with no location
+        static TypeDeclPtr proxyType ( const TypeDeclPtr & type ) {
+            if ( !type ) return nullptr;
+            auto clone = new TypeDecl(*type);
+            clone->at = LineInfo();
+            clone->firstType = proxyType(type->firstType);
+            clone->secondType = proxyType(type->secondType);
+            for ( auto & argType : clone->argTypes ) {
+                argType = proxyType(argType);
+            }
+            return clone;
+        }
+
+        // registers the proxy a call to `fun` is retargeted to; the bind name, empty on failure
+        string registerProxy ( Function * fun, const ExternBindArgs & ba, string & err ) {
             // resolve DLL and create a BuiltInFunction proxy for JIT
             void * funptr = nullptr;
             string bindName = mangleFunction(ba.fn_name, ba.library, ba.api);
             if ( !ba.late && ba.api!=ApiType::api_opengl ) {
                 funptr = getDllAddress(ba.library, ba.fn_name, ba.api == ApiType::api_opengl, err);
-                if ( !funptr ) return false;
+                if ( !funptr ) return string();
             }
             auto wrp = computeWrapper(fun);
             uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
             auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp, computeArm64Layout(fun));
-            bif->result = fun->result;
+            bif->result = proxyType(fun->result);
             for ( auto & a : fun->arguments ) {
                 auto newArg = new Variable();
                 newArg->name = a->name;
-                newArg->type = a->type;
+                newArg->type = proxyType(a->type);
                 bif->arguments.push_back(newArg);
             }
             bif->noAot = true;
@@ -650,8 +667,37 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( !module->addFunction(bif, true) ) {
                 module->replaceFunction(bif);
             }
-            transformMap[fun] = bindName;
+            return bindName;
+        }
+
+        static bool sameSignature ( Function * proxy, Function * fun ) {
+            if ( proxy->arguments.size() != fun->arguments.size() ) return false;
+            if ( !proxy->result->isSameType(*fun->result, RefMatters::yes, ConstMatters::no, TemporaryMatters::no) ) return false;
+            for ( size_t i=0, is=fun->arguments.size(); i!=is; ++i ) {
+                if ( !proxy->arguments[i]->type->isSameType(*fun->arguments[i]->type, RefMatters::yes, ConstMatters::no, TemporaryMatters::no) ) return false;
+            }
             return true;
+        }
+
+        // the bind name from the call target's own [extern] declaration (a cache-served
+        // registrar never passed apply here), registering the proxy when the module lacks it;
+        // empty for a non-extern, empty with `err` set when the bind fails
+        string bindNameOf ( Function * fun, string & err ) {
+            for ( auto & decl : fun->annotations ) {
+                if ( decl->annotation != this ) continue;
+                auto [is_ok, ba] = parseExternArgs(decl->arguments, err);
+                if ( !is_ok ) return string();
+                string bindName = mangleFunction(ba.fn_name, ba.library, ba.api);
+                // one bind name per native symbol, one proxy per das signature
+                if ( auto proxies = module->functionsByName.find(hash64z(bindName.c_str())) ) {
+                    for ( auto * proxy : proxies->second ) {
+                        if ( sameSignature(proxy, fun) ) return bindName;
+                    }
+                }
+                if ( !verifyCallCorrect(fun, decl->arguments, err) ) return string();
+                return registerProxy(fun, ba, err);
+            }
+            return string();
         }
 
         static bool needWrapArg(ExpressionPtr arg) {
@@ -673,10 +719,11 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             return false;
         }
 
-        virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & ) override {
+        virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
             if ( !call->func ) return nullptr;
-            auto it = transformMap.find(call->func);
-            bool hasBindFunction = it != transformMap.end();
+            string bindName = bindNameOf(call->func, err);
+            if ( !err.empty() ) return nullptr;    // the inferer reports it
+            bool hasBindFunction = !bindName.empty();
             // check if any string args need wrapping
             auto needToTransform = any_of(call->arguments.begin(), call->arguments.end(), [](ExpressionPtr arg) {
                 return needWrapArg(arg);
@@ -684,8 +731,8 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( !needToTransform && !hasBindFunction ) return nullptr;
             // clone call, optionally retargeting to the DasBindFunction
             ExpressionPtr newCallExpr = nullptr;
-            DAS_ASSERTF(hasBindFunction, "All dasbind functions should have been mapped, %s is not mapped somehow.", call->func->name.c_str());
-            newCallExpr = new ExprCall(call->at, it->second);
+            DAS_ASSERTF(hasBindFunction, "an [extern] call's bind name must resolve, %s has none.", call->func->name.c_str());
+            newCallExpr = new ExprCall(call->at, bindName);
             for ( auto & arg : call->arguments ) {
                 static_cast<ExprCall*>(newCallExpr)->arguments.push_back(arg->clone());
             }
