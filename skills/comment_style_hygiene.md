@@ -61,6 +61,12 @@ fixture corpora (directories of files the code under test reads as input, not te
 execute) the prose carrying the lesson passes that test, and a comment that adds nothing
 to its line still goes.
 
+**A `//!` is a doc only where one attaches: the file's header block, the first lines inside a
+`def` / `struct` / `class` body, or trailing on a struct field.** Anywhere else - an `options`
+or `require` line, a statement mid-body, a lambda body - a `//!` documents nothing and answers
+to the deletion test like any `//`. The formatter keeps every comment spelled `//!` wherever it
+sits, so the spelling is no evidence the comment is a doc.
+
 **The header block - the comments above the first declaration - describes the FILE.** A
 comment there that describes the next declaration moves onto that declaration: as a `//!`
 doc when it states a contract a caller must know, otherwise it goes, like any other

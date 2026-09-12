@@ -21,6 +21,7 @@ require dastest_clargs
 require worker_policy
 
 options multiple_contexts
+options threadlock_context = true   // suite.das's sub_test_any_func / sub_test_any_lambda invoke back into this context from a test file's context
 
 // BBATKIN:
 //  temporary: disables persistent heap, because this crashes /tests/dastest
@@ -28,6 +29,8 @@ options multiple_contexts
 options persistent_heap = false
 
 let private jsonResultPrefix = "##dastest##\n"
+
+let TIMEOUT_EXIT_CODE = 124   // the exit code of a suite that ran past --timeout, GNU timeout's convention
 
 struct FileTiming {
     uri : string
@@ -53,7 +56,6 @@ struct FailedFile {
 
 var private fileTimings : array<FileTiming>
 var private failedFiles : array<FailedFile>
-var private currentTestFile : string
 var private timingOutliers : int = 0
 var private maxFileTime : float = 0.0
 var private jsonFilePath : string
@@ -452,7 +454,6 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
                     let program_module = program |> get_this_module()
                     let program_file = program_module != null ? string(program_module.fileName) : "<no module>"
                     log::info("deser {i + 1:d}/{count:d}: {program_file}")
-                    currentTestFile = program_file
                     simulate(program) $(sok, context, serrors) {
                         if (!sok) {
                             log::error("Failed to simulate program {i}\n{serrors}")
@@ -533,8 +534,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     let timeout = test_args.timeout
     if (timeout > 0.) {
         unsafe {
-            var mainCtx & = this_context()
-            new_thread <| @capture(& res, & mainCtx) {
+            new_thread() @() {
                 // Polled sleep: chunk into 100ms slices and watch for jobque
                 // shutdown so a clean main-return does not have to wait for
                 // the full timeout. ~Module_JobQue busy-waits on the thread
@@ -547,8 +547,11 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
                     slept += chunk
                 }
                 if (slept >= total_ms) {
+                    log::error("dastest: the suite ran past its --timeout of {timeout}s; the process ends here with exit code {TIMEOUT_EXIT_CODE} and no summary")
+                    // not fio::exit - it runs the job queue teardown, which busy-waits on this very thread;
+                    // and nothing here invokes into the main context, which the main thread is still running
                     unsafe {
-                        mainCtx |> invoke_in_context("timeout_tests", res, startTime, timeout)
+                        fio::exit_now(TIMEOUT_EXIT_CODE)
                     }
                 }
             }
@@ -601,7 +604,6 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         for (file in files) {
             let uri = ctx.uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()
-            currentTestFile = file
             fileIndex ++
             log::started("run {fileIndex}/{length(files)}: {uri}")
             let status = suite::test_file(file, ctx)
@@ -776,19 +778,6 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         }
     }
     return finish_tests(res, startTime)
-}
-
-
-[export, pinvoke]
-def timeout_tests(var res : SuiteResult; start_time : int64; timeout_sec : float) {
-    res.errors++
-    res.total++
-    log::error("Test timed out after {timeout_sec}s while running {currentTestFile}")
-    // timeout fires from a worker thread; fio::exit is the cross-thread
-    // cancellation mechanism (bypasses shutdown dump — acceptable for this path).
-    unsafe {
-        fio::exit(finish_tests(res, start_time))
-    }
 }
 
 

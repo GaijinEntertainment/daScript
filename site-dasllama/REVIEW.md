@@ -1,12 +1,11 @@
 # site-dasllama Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`.
+`README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo root).
 
 In this checklist "a page" means a served `.html` file under this directory, the generated news
 region inside index.html, `feed.xml`, and `sitemap.xml`. Publish time is the deploy that
-follows the merge of the change under review; copy about a linked download is judged against
-the artifact reachable at that link at that moment.
+follows the merge of the change under review.
 
 **A program name, flag, command line, or output line shown on a page must match what the
 download that page links accepts or emits, verbatim, for every platform that page offers.**
@@ -20,9 +19,11 @@ that run: the live endpoint the page renders it from, the checked-in measurement
 comment or prose clause names, the box and date and what was measured, or the word
 placeholder.
 
-**A claim on any page that one engine, build, or way of running beats another on anything a run
-measures - speed, error rate, footprint, size - made in words rather than as side-by-side
-figures, is a defect** - the arithmetic a reader does over two figures is not the page's claim.
+**A claim on any page that this engine, or a build or way of running it, beats another on
+anything a run measures - speed, error rate, footprint, size - made in words rather than as
+side-by-side figures in the same sentence or in the table the sentence points at, is a
+defect** - the arithmetic a reader does over two figures is not the page's claim, and a claim
+that this engine is behind is not a promotion.
 
 **Copy or rendering that lets a row with no reference engine's figure imply parity is a
 defect - an empty ratio cell means the comparison was never run.**
@@ -44,7 +45,8 @@ is a defect.**
 `_news/*.md` or `_stories/*.md` entry, `README.md`, a tool's docstring - that is not true at
 publish time is a defect.** A dated `_news` or `_stories` entry is read as a claim about its own
 date; standing page copy - a masthead, section prose, a meta tag - is read as a claim about
-now. `README.md`'s copy rules say how a claim is checked.
+now. A claim is checked against the thing it describes as it stands at publish time: the
+tool's current code, the page's markup and `files/dasllama-io.js`, the artifact at the link.
 
 **A diff that falsifies standing page copy - a masthead, section prose, a meta tag - or a
 `_news/*.md` / `_stories/*.md` entry dated on or after the publish day of this change, fixes it
@@ -52,8 +54,8 @@ in the same change.**
 
 **A PR whose copy describes what a linked download contains refreshes that artifact at its
 published location - a GitHub release, a Hugging Face repository - before the PR merges, or
-holds the copy until it does.** An artifact republishes on its own trigger, never on a page's
-merge.
+holds the copy until it does** - the copy is judged against the artifact reachable at that
+link at publish time, and an artifact republishes on its own trigger, never on a page's merge.
 
 **A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.** Shipped
 means a reader can have it at publish time: the code the entry describes is merged to this
@@ -64,9 +66,14 @@ it points.
 the PR body, the URL it fetched for each artifact the copy points at and what the fetch
 returned.**
 
-**A figure in a `_stories/*.md` entry that names no date and build sha for the run it came
-from - in the entry's own text or its `<!-- figures: ... -->` comment - is a defect** - a
+**A figure in a `_news/*.md` or `_stories/*.md` entry that does not name both the date and the
+build sha of the run it came from - in the entry's own text or its `<!-- figures: ... -->`
+comment - is a defect, and a sha the entry marks as unconfirmed does not count as named** - a
 number without its date reads as a standing claim.
+
+**An author's query or marker - `[NAME: ...]`, `TODO`, `FIXME` - in a page, or in a
+`_news/*.md` or `_stories/*.md` entry, its `<!-- figures: ... -->` comment included, is a
+defect** - the entry's text, comments and all, ships in the page source and in `feed.xml`.
 
 **A value `files/dasllama-io.js` takes from `/api/*` and puts into markup without the
 context-correct escape is a defect: `esc()` (which escapes `< > & " '`) for text and for

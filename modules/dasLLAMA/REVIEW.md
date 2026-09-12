@@ -56,11 +56,10 @@ a `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identi
 flavor (the backend-and-layout variant an image is baked for, one part of its identity) -
 applies `REVIEW_IMAGE.md`.**
 
-**A change to `dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_io.das`,
-`dasllama/dasllama_audio_embedder.das`, `dasllama/dasllama_asr.das`,
-`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR family file - one
-`dasllama/dasllama_<family>.das` holding a single speech-recognition family - applies
-`REVIEW_AUDIO.md`.**
+**A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`, `dasllama_audio_embedder.das`,
+`dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das` (all under `dasllama/`), or to
+an ASR family file - one `dasllama/dasllama_<family>.das` holding a single speech-recognition
+family - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file - one
@@ -256,8 +255,8 @@ that only names it (a comment, a passing reference) does not count.
 adds that file to `REVIEW.das`'s `FACADE_FILES` in the same change.**
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A struct
-the renderer never emits is absent from `ENVIRONMENT.md` and invisible to every test; a struct
-the renderer emits but the registry does not is caught by `tests/test_env_registry.das`.
+the renderer never emits is absent from `ENVIRONMENT.md` and every test; one it emits but the
+registry does not, `tests/test_env_registry.das` catches.
 
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
@@ -266,15 +265,17 @@ by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.*
 global in a file there, or gives a file a weight format, a serving lane (the quant form a
 tensor serves from) or a data structure its charter does not name, lands the sec.1 edit that
 keeps the charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the
-same change.** A diff that adds a file to any folder where another file has its own sec.1
-charter line lands the new file's charter line too; a module-root ledger has no charter line.
+same change.** A file added beside files with their own sec.1 charter lines gets one too; a
+module-root ledger has none.
+
+**A follow-up ledger row whose work landed in this change is deleted, and the rows below it
+keep their numbers** - checked-in text cites rows by number, and no lint follows the citations.
 
 **A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds
 or removes a companion, lands `ARCHITECTURE.md`'s index line and section range, the
 companion's own opening (its range and the sections it names), and every repointed prose
-`sec.N` / file citation of the moved sections, in the same change.** The `[arch]` citations are
-LINT026-gated; the prose ones are not, and a prose citation of a section that left its file
-sends the reader to nothing.
+`sec.N` / file citation of the moved sections, in the same change.** Prose citations are not
+LINT026-gated, so one naming a section that left its file sends the reader to nothing.
 
 **A diff that moves a family encode stage onto a GPU hook leaves the CPU form in place and
 changes none of its arithmetic.** The CPU form serves every box with no driver.
@@ -288,8 +289,7 @@ profile re-runs the tuning the profile was meant to save.
 **A value that a team-lane kernel reads - anything reachable from a `team_parallel_for` /
 `team_parallel_for_indexed` / `team_parallel_stages` body (`daslib/jobque_boost.das`, repo
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
-or `var`).** A team lane never runs global initializers, so the global reads zero there while
-every single-threaded run reads the right value.
+or `var`).** A team lane never runs global initializers, so the global reads zero there.
 
 **A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension (a
 count the model file sets: layers, dim, experts, vocab, positions) is preceded by a `reserve` of

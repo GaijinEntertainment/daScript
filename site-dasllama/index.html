@@ -63,8 +63,17 @@
 <div id="dio-feed-items">
 <!-- news:begin — everything between the markers is generated from _news/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
-<article class="dio-item dio-item--lead is-open" id="n-2026-09-10-storywish" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-09-10</span><span class="dio-item__tag">examples</span><h2 class="dio-item__title">Storywish - type the words, a story model trained to take requests writes the tale, in the browser.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<article class="dio-item dio-item--lead is-open" id="n-2026-09-11-vulkan-qwen-family" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-11</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">The Qwen family runs on Vulkan.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>Every Qwen text model in the zoo, 0.5B to 48 GB, dense and mixture-of-experts, runs on the
+Vulkan tier. Qwen3.8-27B UD-IQ4_XS runs whole on an RTX 5060 Ti 16 GB under Windows at
+865.4 / 23.5 tok/s (pp512 / tg128, measured 2026-09-07), Qwen3.6-35B-A3B UD-IQ2_XXS at
+2995.8 / 107.7 there (2026-09-09) and at 5156 / 146.7 (pp512 / tg32, 2026-09-11) on an RTX
+5080 under Linux. We have a story to tell about how we
+got there: <a href="stories/2026-09-11-vulkan-and-the-qwen-family-fortune.html">Vulkan and the Qwen family fortune</a>.</p></div>
+</article>
+<article class="dio-item" id="n-2026-09-10-storywish" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-09-10</span><span class="dio-item__tag">examples</span><h2 class="dio-item__title">Storywish - type the words, a story model trained to take requests writes the tale, in the browser.</h2><span class="dio-item__chev">▾</span></div>
 <div class="dio-item__body"><p>A second dasLLAMA example on the examples page. The published TinyStories-Instruct models are
 GPT-Neo, which no GGUF engine runs, so we trained our own: <code>tinystories-instruct-27M</code>, a
 27M-parameter llama on the TinyStoriesInstruct corpus with a 4K vocabulary, 15 minutes on one
