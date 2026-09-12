@@ -116,6 +116,7 @@ struct private BatchTier {
 struct private StepRes {
     valid : bool
     pos : int64
+    chain_pos : int64   // the position the layer chain's row 0 encodes at - the single row's own, the verify's step position (its StepRes sits one ahead), the batch's first row
     uid : uint64
     kdt : KVDtype         // the session/mirror KV codec (kdt == vdt gated)
     s16 : bool
@@ -352,7 +353,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     let h2 = max(2l * hid_mx, max(2l * knfe, 2l * nsh))   // moe: bh12 holds k gate rows | k up rows (+ the shexp pair)
     let rot = c.rope_dim > 0l ? c.rope_dim : head_size   // partial-rope tables are rot/2 wide
     let mp = nrows <= 1l ? 1l : ((nrows + 3l) / 4l) * 4l
-    var r = StepRes(valid = true, pos = pos, uid = s.uid, nrows = nrows,
+    var r = StepRes(valid = true, pos = pos, chain_pos = pos, uid = s.uid, nrows = nrows,
         kdt = s.kv_dtype_k, s16 = t.wscale_f16, hetero = hetero, moe = moe,
         dn = c.recr_mask != 0ul,
         koff = koff, voff = voff, cap = cap, arena_epoch = g_arena_epoch,
@@ -808,7 +809,7 @@ struct template LayerEncT {
         let n_heads = c.n_heads
         let hid_l = layer_hidden(t, l)   // per-layer (MatFormer E-series)
         let u_hid_l = (r.u_hidden2 == null || hid_l == r.hid0) ? r.u_hidden : r.u_hidden2
-        let pos = r.pos
+        let pos = r.chain_pos
         let cap = r.cap
         let f16v = r.kdt == KVDtype.f16
         let scalar_kv = r.kdt == KVDtype.f16 || r.kdt == KVDtype.f32   // block codecs take their own kernels
@@ -1372,6 +1373,9 @@ def private panels_verify(var e : VerifyLayerEnc; moe_with_dense : bool; hid_l, 
 //! the verify rows' totals: the per-row uniform's nrows-scaled twin
 def private total_verify(e : VerifyLayerEnc; u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> {
     let r & = unsafe(*e.r)
+    if (u != r.u_dim && u != r.u_hidden && u != r.u_qd && u != r.u_moe_knfe) {
+        panic("verify layer: a row-total is asked for a uniform with no nrows-scaled twin")
+    }
     let bt = u == r.u_dim ? r.u_total_dim : (u == r.u_hidden ? r.u_total_h : (u == r.u_qd ? r.u_total_qd : r.u_moe_tot))
     return (b = bt, n = n * r.nrows)
 }
@@ -1533,6 +1537,7 @@ struct private VerifyLayerEnc : LayerEncT {
 [unused_argument(pos)]
 def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?; var brt : MetalBuffer?; l, pos : int64; var dnli : int64&) {
     r.brt = brt
+    r.chain_pos = pos
     var e = VerifyLayerEnc(r = unsafe(addr(r)))
     e->encode(t, enc, l, dnli)
 }
@@ -2479,17 +2484,21 @@ def private site_batch(e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?;
     enc_batch_site(enc, t, r.bt, fmt, woff, rows, n, ys, bx, by, bn, bd, bys, ycol, mv_ok, sk, kind == SiteKind.cls && r.cls64)
 }
 
-//! the batch rows' panels: gate and up in two panels, gemma4's experts on their own pair so the
-//! dense branch's tiers run beside the expert chain
-[unused_argument(moe_with_dense, hid_l, knfe)]
+//! the batch rows' panels: gate and up in two panels; gemma4's experts take their own pair so the
+//! dense branch's tiers run beside the expert chain, a plain MoE's ride the row panels
+[unused_argument(hid_l, knfe)]
 def private panels_batch(var e : BatchLayerEnc; moe_with_dense : bool; hid_l, knfe : int64) : FfnPanels {
     var r & = unsafe(*e.r)
-    return FfnPanels(moe_in = r.bmg4x, mg = r.bmgh, mu = r.bmghb, mu_col = 0l, fg = r.bh12, fu = r.bh12b, fu_col = 0l)
+    return FfnPanels(moe_in = r.bmg4x, mg = moe_with_dense ? r.bmgh : r.bh12, mu = moe_with_dense ? r.bmghb : r.bh12b, mu_col = 0l,
+        fg = r.bh12, fu = r.bh12b, fu_col = 0l)
 }
 
 //! the batch rows' totals: the per-row uniform's nrows-scaled twin
 def private total_batch(e : BatchLayerEnc; u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> {
     let r & = unsafe(*e.r)
+    if (u != r.u_dim && u != r.u_hidden && u != r.u_moe_knfe) {
+        panic("batch layer: a row-total is asked for a uniform with no nrows-scaled twin (the step gate declines the gated-Q and second-width models that would ask)")
+    }
     let bt = u == r.u_dim ? r.u_total_dim : (u == r.u_hidden ? r.u_total_h : r.u_moe_tot)
     return (b = bt, n = n * r.nrows)
 }
@@ -2523,7 +2532,7 @@ def private moe_args_batch(var e : BatchLayerEnc; ndim, ddim, eplane, xs, hasb :
 
 //! the batch rows' fused gate+up dot + swiglu straight into the gate panel (w2's input), where
 //! the step's tier chose it (fuse13: the row GEMV tier, a silu model, no knockout)
-[unused_argument(geglu, u_hid_l)]
+[unused_argument(geglu)]
 def private w13_fused_batch(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; hid_l : int64; u_hid_l : MetalBuffer?; geglu : bool; fg : MetalBuffer?) : bool {
     let r & = unsafe(*e.r)
     if (!r.fuse13) {
@@ -2531,7 +2540,7 @@ def private w13_fused_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     }
     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
     let bw3 = blob_of(g_dev, t, t.w3_offs[l])
-    enc_gemv_w13sw_b(enc, r.nrows > 2l, bw1.buf, bw1.boff, bw3.boff, r.bxb, fg, r.u_dim, r.u_hidden, hid_l)
+    enc_gemv_w13sw_b(enc, r.nrows > 2l, bw1.buf, bw1.boff, bw3.boff, r.bxb, fg, r.u_dim, u_hid_l, hid_l)
     return true
 }
 
@@ -2990,7 +2999,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             enc_rms_b(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, nrows)
         }
     }
-    var r = StepRes(valid = true, pos = maxcnt - 1l, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
+    var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
         bx = bx, bxb = bxb, bxb2 = bxb2, bqkv = bqkv, bh12 = bhb, bh12b = bhb2, bpart = bpart,
         bcos = bcos, bsin = bsin, bcos_swa = bcos_swa, bsin_swa = bsin_swa, brt = brt,

@@ -7373,7 +7373,7 @@ class MetalMoeWScale {
 // of one format share the dot and carry only their own x / y / uniform bindings.
 [ |> template_struct_instance]
 class template MetalGemvSiteT {
-    //! g[0] = n, g[1] = the expert's superblock shift, g[2] = the x row, g[3] = the y row
+    //! g[0] = n, g[1] = the expert's superblock shift, g[2] = the x row in the unit the body's x view indexes (float4 for the q8 body, scalar for the K bodies), g[3] = the y row
     def abstract site_setup(var g : uint[8]) : void
     //! d, the y rows - read where the reduce guard reads it, so the uniform load stays there
     def abstract y_rows : uint

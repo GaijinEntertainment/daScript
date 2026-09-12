@@ -1582,3 +1582,20 @@
     kernel winner that lost its small-shape arm - rather than a GEMM's steady-state rate.
     Unquirked: bisect the CPU ASR cell (parakeet jfk.wav, 11 s) across the merges since
     August 30 on a quiet box under one manifest, then re-record the board.
+141. **Four tower sites release a pool buffer under a byte count that is not its acquire's.** In
+    `dasllama_metal_tower.das` the K panel `bk` is acquired at `bytes_rowk` (the 64-padded key
+    rows) and released at `bytes_row` / `bytes_rowp` (the 32-padded rows) at four self-attention
+    sites, where `pool_release` files by `pool_bucket(bytes)` and the pool's contract is that the
+    two counts match. Harmless today because `nk == npos` there, so the misfiled buffer is the
+    larger of the two; a shape where it is the smaller hands the next acquire a short buffer and
+    the GPU writes past it with no diagnostic. Unquirked: the four sites release under
+    `bytes_rowk`, and the tower context (`tw_ctx_make` / `tw_ctx_release`) carries the K panel
+    so the pair is written once.
+142. **The verify's chunk count and its partials buffer are sized by two formulas.** The MTP
+    verify's chunked attention dispatches `ceil((chain_pos + nrows) / 64)` chunks per row (the
+    pre-fold spelling, kept), while `acquire_step` sizes `bpart` for `ceil((pos + 1) / 64)`
+    chunks of its own (one-ahead) position - the two differ once `nrows > 2` crosses a 64-row
+    boundary, and the deepest verify row's true count is `ceil((chain_pos + nrows + 1) / 64)`.
+    Nothing reaches it below `g_attn_single_max` rows of context. Unquirked: one chunk-count
+    formula over the deepest row, used both to size `bpart` and to dispatch, with a cell that
+    verifies at a context depth crossing a 64-row boundary.

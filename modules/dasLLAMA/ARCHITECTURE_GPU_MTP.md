@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Metal speculative round and the decode layer encoder
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.28-2.40: the speculative round on Metal, the box knob that sets the depth a
+carries sections 2.28-2.39a: the speculative round on Metal, the box knob that sets the depth a
 round drafts, and the argument-alignment contract a kernel declares on its `[metal_dispatch]` -
 the contract the batch driver's fixed-B mul_mv forms carry. The GPU backend role table these
 sections build on, the assistant-drafter driver's role row included, stays in
@@ -245,7 +245,7 @@ concurrent rail buys nothing here: measured through the round's profiler section
 on the M5 Max), the two forms show the same GPU time and the concurrent one doubles the host
 encode, so the round keeps the serial encoder and pays no hazard-tracker work per dispatch.
 
-### 2.40 The decode driver's layer encoder {#metal-layer-enc}
+### 2.39a The decode driver's layer encoder {#metal-layer-enc}
 
 **A layer is one chain at every row shape, written once.** `LayerEncT`
 (`dasllama/dasllama_metal_decode.das`) carries the phase order - QKV, the norms, rope plus the KV

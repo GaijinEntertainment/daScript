@@ -6,7 +6,7 @@
 **Every change under this folder applies `modules/REVIEW_SHADER_EMITTERS.md` too.**
 
 **A CPU-oracle or host-side test file answers to `tests/metal/REVIEW.md` (repo root), wherever
-the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (repo root).
+the diff puts it.** An emitted-text or fail-closed fixture answers to `tests/msl/REVIEW.md` (repo root).
 
 - **A new emitter capability ships a text fixture under `tests/msl/` (repo root) and a census
   kind per emit shape, in the same change.** A new emitter capability is a new emit site or a
@@ -55,8 +55,9 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
   call leaves a rejection unpinned, and a call without its fixture is a rejection the emitter
   no longer makes.
 
-- **Never zero a cooperative tensor element by element before a `matmul2d` `run` accumulates
-  into it - `get_destination_cooperative_tensor` already hands it back zeroed.** That walk
+- **Never zero a cooperative tensor element by element, in a `[metal_kernel]` body or in emitted
+  MSL, before a `matmul2d` `run` accumulates into it - `get_destination_cooperative_tensor`
+  already hands it back zeroed.** The CPU-replay stubs in `metal/metal_builtins.das` are outside it. That walk
   forces every element into real storage before the accumulation loop, and that costs the op
   its fast path for the whole loop.
 
@@ -77,7 +78,8 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
   Nothing checks a fixture's allocation against the stride, so a one-sided change overruns
   it silently.
 
-- **Never merge two `metal/metal_builtins.das` builtins into one name to remove a duplicated
-  body - move the shared body into a private helper both call.** Those builtins are markers:
-  `metal/msl_emit.das` picks each one's emitted MSL by its das function name, so two flavors
-  under one name lose one flavor's lowering.
+- **A diff that removes a das function name, or an overload distinction, that
+  `metal/msl_emit.das` dispatches on is a defect - a duplicated body moves into a private helper
+  both builtins call.** Those builtins are markers: the emitter picks each one's emitted MSL by
+  its das function name and, for the tmm2d A stream, by the argument's pointee type, so a fold
+  that erases either loses one flavor's lowering.

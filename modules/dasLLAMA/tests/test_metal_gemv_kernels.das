@@ -864,6 +864,7 @@ def test_metal_kq_gemv_kernels(t : T?) {
                         kq_mvb_gate(t, dev, queue, fmt, 2, 768, 32, 2, 40, true)
                     }
                     kq_mvb_gate(t, dev, queue, fmt, 4, 768, 17, 3, 22)
+                    kq_mvb_gate(t, dev, queue, fmt, 4, 768, 17, 6, 22)   // two column groups: the reduce's colbase term
                     kq_mvb_gate(t, dev, queue, fmt, 8, 768, 17, 6, 22)
                 }
                 // expert-indexed: shared-x (gate/up) and per-slot (down) forms

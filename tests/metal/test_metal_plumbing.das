@@ -57,6 +57,14 @@ def test_host_plumbing(t : T?) {
                 ba = pool_acquire(pool, dev, uint64(N * 4))
                 bb = pool_acquire(pool, dev, uint64(N * 4))
                 t |> equal(metal_live_object_count(), after_bufs)       // both reused from the pool
+                // the untracked twin: its own pool, the same recycle
+                var upool : MetalBufferPool
+                var bu = pool_acquire_untracked(upool, dev, uint64(N * 4))
+                t |> success(bu != null, "pool_acquire_untracked hands out a buffer")
+                let after_untracked = metal_live_object_count()
+                pool_release(upool, bu, uint64(N * 4))
+                bu = pool_acquire_untracked(upool, dev, uint64(N * 4))
+                t |> equal(metal_live_object_count(), after_untracked)  // reused from its own pool
 
                 // multi-dispatch: three increments in ONE submit — hazard tracking orders them
                 var pu = unsafe(reinterpret<uint?>(metal_buffer_contents(ba)))
@@ -87,6 +95,8 @@ def test_host_plumbing(t : T?) {
                 pool_release(pool, ba, uint64(N * 4))
                 pool_release(pool, bb, uint64(N * 4))
                 pool_drain(pool)
+                pool_release(upool, bu, uint64(N * 4))
+                pool_drain(upool)
                 cache_drain(pc)
                 metal_release(queue)
                 t |> equal(metal_live_object_count(), base)
