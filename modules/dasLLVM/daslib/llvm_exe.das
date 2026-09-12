@@ -1253,7 +1253,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
         types.ConstI64(prog.globalStringHeapSize |> uint64),
         types.ConstI64(get_context_globals_size(program_context)),
         types.ConstI64(get_context_shared_size(program_context)),
-        types.ConstI1(any_pinvoke || prog.policies.threadlock_context || prog.policies.debugger),
+        types.ConstI1(any_pinvoke || prog.policies.threadlock_context || prog.policies.debugger || ((prog._options |> find_arg("threadlock_context")) ?as tBool ?? false)),
         types.ConstI64(context_stack_size)
     )
     let global_context = LLVMBuildCall2(builder, create_ctx_type, jit_create_context, params, "")
