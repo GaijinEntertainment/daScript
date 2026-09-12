@@ -1,0 +1,1 @@
+Property-like accessor that returns ``true`` when the optimizer runs for the given ``Program``: false under the host's ``no_optimizations`` policy or any of the program's ``options optimize = false``, ``options no_optimization``, ``options no_optimizations``.

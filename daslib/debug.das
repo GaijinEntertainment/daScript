@@ -1414,9 +1414,9 @@ class private DAgent : DapiDebugAgent {
         }
     }
 
+    [arch(at="ARCHITECTURE.md#debugger-readiness-query")]
     def override onCreateContext(var ctx : Context) : void {
         //! Handles new context creation by registering it and re-instrumenting breakpoints.
-        //! A folding context is the compiler's, evaluating a call over constants: never a thread to debug.
         if (ctx.category.folding_context) return
         addContext(ctx)
         invalidateBreakpoints(ctx)
@@ -2287,10 +2287,9 @@ def private start_agent(force : bool = false) {
     return true
 }
 
-[init]
+[init, arch(at="ARCHITECTURE.md#debugger-readiness-query")]
 def init_stepping_debugger() {
     //! Initializes the stepping debugger by enabling single-step mode on the current context at module load time.
-    //! The gate skips another module's macro context, not the debuggee's own init (ARCHITECTURE.md sec.24.1).
     if (use_instruments() || !wait_debugger() || (is_in_aot() && loads_itself()) ||
         is_in_debug_agent_creation() || (is_compiling_macros() && !is_compiling_macros_in_module("debug")) || is_in_completion()) return
     let args <- get_command_line_arguments()

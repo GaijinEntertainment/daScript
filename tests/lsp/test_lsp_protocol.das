@@ -286,8 +286,8 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     t |> failure("could not spawn LSP supervisor via {python}")
                     return
                 }
-                // initialize — the compiler override makes the run hermetic;
-                // absolute path because subtools spawn with per-request cwd
+                // initialize — the compiler override makes the run hermetic; absolute path,
+                // since the subtool argv must name the binary wherever it is run from
                 write_frame(w, sprint_json(InitializeMsg(id = 1, params = InitializeParams(
                     initializationOptions = InitializeOptions(
                         compiler = get_full_file_name(get_das_exe())))), false))
@@ -403,5 +403,13 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
             }
         }
         t |> equal(rc, 0, "supervisor exit code")
+        //! the subtools compile under the module cache, in the supervisor's cwd - this run's
+        var records = 0
+        fio::dir(".jitted_scripts/module_cache") $(name) {
+            if (name |> starts_with("_fixture_clean-") && name |> ends_with(".dascache")) {
+                records++
+            }
+        }
+        t |> success(records > 0, "the validated file's record sits in the workspace's module cache")
     }
 }

@@ -19,7 +19,9 @@ this document states what the folder is and why its tests take the shape they do
   parses and writes one record for the compiled file, the warm one serves the leaf and the root
   (read off the `cache read took` lines `log_module_compile_time` prints, matched on the file
   since the compiled file's own module has no name), an edited root reparses while the leaf
-  before it still serves, and the policy off parses from source beside the record.
+  before it still serves, the policy off parses from source beside the record, and other
+  policies or other host arguments compile cold into records of their own; the children run
+  inside the temp directory, so the default cache they write is under it.
 - `test_macro_dep_invalidate.das` - a compile-time input a macro pinned through
   `add_module_cache_dependency` is compared by content, not mtime: a byte-identical rewrite
   serves the record, a changed file re-parses from that module on and says so.

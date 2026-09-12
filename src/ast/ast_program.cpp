@@ -700,9 +700,11 @@ namespace das {
 
     // one switch, three accepted spellings: the policy field's own name (`no_optimizations`,
     // the /*option*/ marker registers it), and the two alias options `no_optimization` and
-    // `optimize`; any spelling that turns the optimizer off wins
+    // `optimize`; any spelling that turns the optimizer off wins, and the host's policy is
+    // not a file's to override
     bool Program::getOptimize() const {
-        if ( options.getBoolOption("no_optimizations", policies.no_optimizations) ) return false;
+        if ( policies.no_optimizations ) return false;
+        if ( options.getBoolOption("no_optimizations", false) ) return false;
         if ( options.getBoolOption("no_optimization", false) ) return false;
         return options.getBoolOption("optimize", true);
     }

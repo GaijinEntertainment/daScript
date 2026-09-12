@@ -1403,32 +1403,48 @@ namespace das {
 #endif
 
 #if !DAS_NO_FILEIO
+    // src/builtin/ARCHITECTURE.md sec.2
+    struct ScriptModuleCache {
+        daScriptEnvironment &   env;
+        AstSerializer *         outerRead;
+        AstSerializer *         outerWrite;
+        ModuleFileCache         cache;
+        string                  path;
+        bool                    armed = false;
+        bool                    finished = false;
+        ScriptModuleCache ( const CodeOfPolicies & cop, const char * modName )
+            : env(*daScriptEnvironment::getBound()), outerRead(env.serializer_read), outerWrite(env.serializer_write) {
+            if ( !cop.module_cache ) return;
+            armed = true;
+            env.serializer_read = nullptr;
+            env.serializer_write = nullptr;
+            char exePath[4096];
+            size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+            path = ModuleFileCache::defaultPath(modName, exeLen ? string(exePath, exeLen) : string(),
+                ModuleFileCache::embeddedHostOptions(cop));
+            cache.install(path, path, true);
+        }
+        ModuleFileCache::Result finish () {
+            ModuleFileCache::Result res;
+            if ( armed && !finished ) {
+                finished = true;
+                res = cache.finish();
+                env.serializer_read = outerRead;
+                env.serializer_write = outerWrite;
+            }
+            return res;
+        }
+        ~ScriptModuleCache () { finish(); }
+    };
+
     void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
-        // the cache owns deserialized-AST FileInfos, so it is declared before the program it feeds;
-        // the environment's serializer slots are the enclosing compile's (a compile_file from an
-        // [init] runs under the host's armed cache) and are put back once this one is finished
-        ModuleFileCache moduleCache;
-        auto & env = *daScriptEnvironment::getBound();
-        AstSerializer * outerRead = env.serializer_read;
-        AstSerializer * outerWrite = env.serializer_write;
-        string cachePath;
-        if ( cop.module_cache ) {
-            char exePath[4096];
-            size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
-            cachePath = ModuleFileCache::defaultPath(modName, exeLen ? string(exePath, exeLen) : string(),
-                ModuleFileCache::embeddedHostOptions(cop));
-            moduleCache.install(cachePath, cachePath, true);
-        }
+        ScriptModuleCache moduleCache(cop, modName);
         auto program = compileDaScript(modName, access, issues, *module_group, cop);
-        if ( cop.module_cache ) {
-            auto cres = moduleCache.finish();
-            if ( cres.saveFailed ) issues << "ser: cannot write '" << cachePath << "'\n";
-            env.serializer_read = outerRead;
-            env.serializer_write = outerWrite;
-        }
+        auto cres = moduleCache.finish();
+        if ( cres.saveFailed ) issues << "ser: cannot write '" << moduleCache.path << "'\n";
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {

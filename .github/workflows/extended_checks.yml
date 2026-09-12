@@ -540,7 +540,8 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/daspkg/test_daspkg.das --timeout 900
 
     - name: "Test DAP MCP bridge (python)"
-      if: matrix.target == 'linux'
+      # the per-PR core cell runs it too: nightly-only, a red in this suite stays unseen until the next night
+      if: matrix.target != 'windows' && matrix.role != 'modules'
       run: |
         set -eux
         PYTHONDONTWRITEBYTECODE=1 python3 utils/dap/test_mcp_bridge.py

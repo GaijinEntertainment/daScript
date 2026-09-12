@@ -63,12 +63,16 @@ of the run - the host rejects the command line instead of silently disabling the
 A script's own `compile_file` (`rtti_builtin_compile_file`, `module_builtin_ast.cpp`) installs
 the same default cache when its `CodeOfPolicies.module_cache` is set, with
 `ModuleFileCache::embeddedHostOptions` standing in for the host's command line: this process's
-arguments up to `--` (the host flags that shape the module registry) and a hash of the policies
-streamed as a record stamps them, so two tools compiling one file under different policies keep
-separate records instead of rewriting one. The environment's serializer slots belong to the
-enclosing compile - a `compile_file` from an `[init]` runs under the host's armed cache - and
-are put back once the nested cache is finished; the finish happens before the block runs, so a
-require the block issues is not this cache's.
+arguments up to `--`, a `--jit-target` after it, and a hash of the policies streamed as a record
+stamps them, so two tools compiling one file under different policies keep separate records
+instead of rewriting one. `ScriptModuleCache` is the guard around that compile: it empties the
+environment's serializer slots before installing - the enclosing compile's stream (a
+`compile_file` from an `[init]` runs under the host's armed cache) never feeds the nested one, a
+cold nested read included - finishes the cache and puts the slots back on every exit, an
+exception's included, and the finish happens before the block runs, so a require the block
+issues is not this cache's. The writeback's temporary file carries the process id and a per-process
+sequence number, since two subtools compiling one file at once key the same record, as do two
+threads of one process.
 
 Every variant is its own record and an engine root's record is 200 MB, so the default directory
 is capped: after a writeback `ModuleFileCache::finish` lists the directory's `.dascache` files

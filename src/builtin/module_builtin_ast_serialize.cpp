@@ -18,9 +18,11 @@
 #if !DAS_NO_FILEIO
 #ifdef _WIN32
 #include <io.h>
+#include <process.h>
 #include <sys/utime.h>
 #else
 #include <dirent.h>
+#include <unistd.h>
 #include <utime.h>
 #endif
 #endif
@@ -2719,7 +2721,7 @@ namespace das {
         X(report_private_functions) X(log_compile_time) X(log_total_compile_time) \
         X(log_module_compile_time) X(log_optimization) X(log_optimization_passes) X(force_escape_free) \
         X(force_allocate_on_stack) X(force_partial_escape_free) X(log_escape_analysis) X(log_gc_time) \
-        X(debug_infer_flag) X(temp_table_lint_warning)
+        X(debug_infer_flag) X(temp_table_lint_warning) X(module_cache)
 
     static bool cachedPoliciesMatch ( const CodeOfPolicies & a, const CodeOfPolicies & b ) {
     #define DAS_POLICY_FIELD_SAME(f) if ( !(a.f == b.f) ) return false;
@@ -3246,6 +3248,14 @@ namespace das {
 #endif
     }
 
+    static long long das_process_id () {
+#ifdef _WIN32
+        return (long long) _getpid();
+#else
+        return (long long) getpid();
+#endif
+    }
+
     static void touchFile ( const string & path ) {
 #ifdef _WIN32
         (void) _utime(path.c_str(), nullptr);
@@ -3322,6 +3332,7 @@ namespace das {
         AstSerializer ser(&storage, true);
         CodeOfPolicies streamed = policies;
         ser << streamed;
+        key += commandLineArgumentOccurrences("--jit-target");
         char hex[17];
         snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_block64(storage.buffer.data(), storage.buffer.size()));
         key += "policies:";
@@ -3409,7 +3420,8 @@ namespace das {
                 // complete old or a complete new stream, never a torn one. The CRT rename
                 // cannot replace on Windows, so there is a missing-file blink there - a
                 // reader in that window just takes the cold path
-                string tmpPath = writePath + ".tmp";
+                static atomic<uint64_t> writebackSeq { 0 };
+                string tmpPath = writePath + "." + to_string(das_process_id()) + "." + to_string(writebackSeq.fetch_add(1)) + ".tmp";
                 ensureParentDirectories(writePath);
                 if ( FILE * f = fopen(tmpPath.c_str(), "wb") ) {
                     res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));

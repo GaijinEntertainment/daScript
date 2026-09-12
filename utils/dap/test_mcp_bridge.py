@@ -301,6 +301,41 @@ def test_execution_command_mapping() -> None:
         assert recorder.commands[-1] == command, (tool, recorder.commands)
 
 
+def first_stop_line(client: McpClient, fixture: Path, lines: list[int], optimize: bool) -> int:
+    """Launches `fixture`, arms `lines`, and returns the line of the first stop."""
+    client.tool(
+        "debug_launch",
+        {"file": str(fixture), "timeout_sec": 20, "optimize": optimize, **stepping_arguments()},
+    )
+    client.tool("debug_set_breakpoints", {"file": str(fixture), "lines": lines})
+    client.tool("debug_threads", {})
+    client.tool("debug_configuration_done", {})
+    stopped = client.tool("debug_wait_event", {"event": "stopped", "timeout_sec": 20})
+    assert stopped["event"] == "stopped", stopped
+    thread_id = int(stopped["body"]["threadId"])
+    stack = response_body(
+        client.tool("debug_stack_trace", {"thread_id": thread_id, "levels": 1})
+    )["stackFrames"]
+    client.tool("debug_terminate", {})
+    client.tool("debug_wait_event", {"event": "terminated", "timeout_sec": 20})
+    return int(stack[0]["line"])
+
+
+def test_optimize_launch_argument(client: McpClient) -> None:
+    """The debugged program is the optimized one unless `optimize=false`: optimized, the call
+    into dap_add_one is evaluated at compile time, so the breakpoint inside it never stops and
+    the compiler's folding context is not a thread to stop in; unoptimized, it stops there."""
+    fixture = ROOT / "utils" / "dap" / "_fixture_optimized.das"
+    text = fixture.read_text(encoding="utf-8").splitlines()
+    callee_line = next(i for i, line in enumerate(text, start=1) if "var result = value + 1" in line)
+    loop_line = next(i for i, line in enumerate(text, start=1) if "guard++" in line)
+    lines = [callee_line, loop_line]
+    assert first_stop_line(client, fixture, lines, optimize=True) == loop_line
+    assert first_stop_line(client, fixture, lines, optimize=False) == callee_line
+    bad = client.tool_error("debug_launch", {"file": str(fixture), "optimize": "yes"})
+    assert "optimize must be a boolean" in bad, bad
+
+
 def main() -> int:
     test_dap_frame_limits()
     test_waiting_worker_shutdown()
@@ -381,7 +416,7 @@ def main() -> int:
         assert launch["initialized_event"]["event"] == "initialized", launch
 
         early_breakpoint_line = source_line("var result = value + 1")
-        breakpoint_line = source_line("guard += 1")
+        breakpoint_line = source_line("guard++")
         breakpoint_lines = [early_breakpoint_line, breakpoint_line]
         breakpoints = response_body(
             client.tool(
@@ -633,7 +668,7 @@ def main() -> int:
         auto_port = int(auto_launch["connection"]["port"])
         assert auto_port != 10000, auto_launch
 
-        breakpoint_line = source_line("guard += 1")
+        breakpoint_line = source_line("guard++")
         client.tool(
             "debug_set_breakpoints",
             {"file": str(FIXTURE), "lines": [breakpoint_line]},
@@ -683,6 +718,7 @@ def main() -> int:
         assert cleanup["session"]["return_code"] != 0, cleanup
         initialize_error = client.tool_error("debug_initialize", {})
         assert "not connected" in initialize_error, initialize_error
+        test_optimize_launch_argument(client)
     finally:
         for process in external_processes:
             if process.poll() is None:

@@ -42,7 +42,6 @@ namespace das {
         bool        no_init_check = false;              // skip the Module::Initialize() assert, most of the time should be false (except maybe dynamic-module discovery)
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time
-        bool        module_cache = false;               // compile_file from a script reads and refreshes the default module cache around this compile (keyed by the file, the running binary, this process's host arguments and these policies); the host's own cache is the host's flag
         bool        keep_alive = false;                 // produce keep-alive noodes
         /*option*/ bool        very_safe_context = false;          // context is very safe (does not release old memory from array or table grow, leaves it to GC)
     // error reporting
@@ -170,6 +169,10 @@ namespace das {
         vector<string> dll_search_paths;          // additional search paths for dll loading
     // one-liners
         /*option*/ bool temp_table_lint_warning = false;
+    // a script's compile_file reads and refreshes the default module cache around this compile (keyed by the
+    // file, the running binary, this process's host arguments and these policies); the host's own cache is the
+    // host's flag. Last on purpose: appended, it shifts no earlier field a cached JIT DLL binds by offset.
+        bool module_cache = false;
 
         // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context).
         // Low byte 0 keeps a pre-stamp libDaScript reading this word seeing aot == false -

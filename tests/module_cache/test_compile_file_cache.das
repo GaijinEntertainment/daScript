@@ -8,29 +8,15 @@ require daslib/fio
 require daslib/strings_boost
 require _mc_common
 
-let CACHE_DIR = ".jitted_scripts/module_cache"
-
-//! the cache files a child wrote for one stem: `<CACHE_DIR>/<stem>-<hash>.dascache`
-def cache_files(stem : string) : int {
+//! the cache files a child wrote under `dir` for one stem: `<dir>/<stem>-<hash>.dascache`
+def cache_files(dir, stem : string) : int {
     var n = 0
-    fio::dir(CACHE_DIR) $(name) {
+    fio::dir(dir) $(name) {
         if (name |> starts_with("{stem}-") && name |> ends_with(".dascache")) {
             n++
         }
     }
     return n
-}
-
-def remove_cache_files(stem : string) {
-    var victims : array<string>
-    fio::dir(CACHE_DIR) $(name) {
-        if (name |> starts_with("{stem}-") && name |> ends_with(".dascache")) {
-            victims |> push(path_join(CACHE_DIR, name))
-        }
-    }
-    for (v in victims) {
-        remove(v)
-    }
 }
 
 //! the per-module compile-time line a served module prints: `cache read took <t>, <module> (<file>)`
@@ -54,9 +40,8 @@ def aot_host_skips(t : T?) : bool {
 //! compile_file under `module_cache` reads and refreshes the default module cache the way the
 //! daslang host does for its own script: a cold compile writes the record, a warm one serves every
 //! module, an edit reparses the edited module while the modules before it still serve, and the
-//! policy off compiles from source with the record sitting right there. The child shares dastest's
-//! cwd (argv[0] is a cwd-relative interpreter path), so the cache lands in this tree's own
-//! .jitted_scripts/module_cache - the test removes what it wrote, the driver's own record included.
+//! policy off compiles from source with the record sitting right there. The children run inside
+//! the temp directory, so the default cache they write is under it and goes with it.
 [test]
 def test_compile_file_module_cache(t : T?) {
     if (aot_host_skips(t)) return
@@ -71,13 +56,14 @@ def test_compile_file_module_cache(t : T?) {
     let leafFile = path_join(tmp, "mc_cf_leaf.das")
     fwrite(leafFile, "options gen2\nmodule mc_cf_leaf\ndef leaf() : int \{\n    return 2\n\}\n")
     fwrite(rootFile, "options gen2\nrequire mc_cf_leaf\n[export]\ndef main \{\n    print(\"\{leaf()\}\\n\")\n\}\n")
-    remove_cache_files("mc_cf_root")
-    let drv = "{das_exe()} -dasroot {root} {root}/tests/module_cache/_fixtures/mc_cf_drv.das -- {rootFile}"
+    let enter = get_platform_name() == "windows" ? "cd /d {tmp} &&" : "cd {tmp} &&"
+    let drv = "{enter} {get_full_file_name(das_exe())} -dasroot {root} {root}/tests/module_cache/_fixtures/mc_cf_drv.das -- {rootFile}"
+    let cacheDir = path_join(tmp, ".jitted_scripts/module_cache")
     var cold : string
     var coldOk = run_child_reported(t, "cold", "{drv} cache", cold, "MC_CF_COMPILED")
     coldOk = coldOk && !served(cold, leafFile) && !served(cold, rootFile)
     t |> success(coldOk, "the cold compile parses every module from source:\n{cold}")
-    t |> equal(cache_files("mc_cf_root"), 1, "the cold compile wrote one record for the compiled file")
+    t |> equal(cache_files(cacheDir, "mc_cf_root"), 1, "the cold compile wrote one record for the compiled file")
     var warm : string
     var warmOk = run_child_reported(t, "warm", "{drv} cache", warm, "MC_CF_COMPILED")
     warmOk = warmOk && served(warm, leafFile) && served(warm, rootFile)
@@ -91,8 +77,18 @@ def test_compile_file_module_cache(t : T?) {
     var plainOk = run_child_reported(t, "plain", drv, plain, "MC_CF_COMPILED")
     plainOk = plainOk && !served(plain, leafFile) && !served(plain, rootFile)
     t |> success(plainOk, "with the policy off the compile parses from source beside the record:\n{plain}")
-    remove_cache_files("mc_cf_root")
-    remove_cache_files("mc_cf_drv")
+    //! the key's two halves: other policies and other host arguments are other records
+    var noopt : string
+    var nooptOk = run_child_reported(t, "noopt", "{drv} cache noopt", noopt, "MC_CF_COMPILED")
+    nooptOk = nooptOk && !served(noopt, leafFile) && !served(noopt, rootFile)
+    t |> success(nooptOk, "other policies compile cold into a record of their own:\n{noopt}")
+    t |> equal(cache_files(cacheDir, "mc_cf_root"), 2, "the policies hash keys a second record")
+    let hostArgs = "{enter} {get_full_file_name(das_exe())} -dasroot {root} -log-compile-time {root}/tests/module_cache/_fixtures/mc_cf_drv.das -- {rootFile} cache"
+    var host : string
+    var hostOk = run_child_reported(t, "host", hostArgs, host, "MC_CF_COMPILED")
+    hostOk = hostOk && !served(host, leafFile) && !served(host, rootFile)
+    t |> success(hostOk, "other host arguments compile cold into a record of their own:\n{host}")
+    t |> equal(cache_files(cacheDir, "mc_cf_root"), 3, "the host arguments key a third record")
     var err : string
     rmdir_rec(tmp, err)
 }
