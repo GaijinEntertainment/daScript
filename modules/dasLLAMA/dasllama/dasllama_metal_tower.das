@@ -352,9 +352,8 @@ def private g4a_rec(var bp : float?; idx : int64; c : Clamp) {
     }
 }
 
-//! The gemma4a drivers' shared GPU context: the block loop's buffers, uniforms and dims.
-// The tower context every encoder-family driver shares - the blob, the row / hidden /
-// position panels, the eight uniforms and the geometry; a family derives it with its extras.
+//! The tower context every encoder-family driver shares - the blob, the row / hidden /
+//! position panels, the eight uniforms and the geometry; a family derives it with its extras.
 struct private TwGpuCtx {
     bblob : MetalBuffer?
     bx : MetalBuffer?

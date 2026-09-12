@@ -149,8 +149,7 @@ def private pool_bucket(bytes : uint64) : uint64 {
     return b
 }
 
-// the bucket lookup, the free-list pop and the miss allocation, for both pools
-def private pool_acquire_(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64; untracked : bool) : MetalBuffer? {
+def private pool_acquire_common(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64; untracked : bool) : MetalBuffer? {
     let bucket = pool_bucket(bytes)
     var lst & = unsafe(pool.free_bufs[bucket])
     if (!empty(lst)) {
@@ -165,12 +164,12 @@ def private pool_acquire_(var pool : MetalBufferPool; dev : MetalDevice?; bytes 
     return nb
 }
 
-def public pool_acquire(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64) : MetalBuffer? => pool_acquire_(pool, dev, bytes, false)
+def public pool_acquire(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64) : MetalBuffer? => pool_acquire_common(pool, dev, bytes, false)
 
 //! The UNTRACKED-pool twin, for GPU-read-only pool data the CPU fills before commit (uniforms,
 //! lookup tables): skips the command-buffer scheduler's per-resource hazard analysis. Keep a
 //! SEPARATE MetalBufferPool for these — tracked and untracked buffers must not mix in one pool.
-def public pool_acquire_untracked(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64) : MetalBuffer? => pool_acquire_(pool, dev, bytes, true)
+def public pool_acquire_untracked(var pool : MetalBufferPool; dev : MetalDevice?; bytes : uint64) : MetalBuffer? => pool_acquire_common(pool, dev, bytes, true)
 
 def public pool_release(var pool : MetalBufferPool; var buf : MetalBuffer?; bytes : uint64) {
     if (buf == null) {

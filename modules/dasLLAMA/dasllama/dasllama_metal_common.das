@@ -957,8 +957,6 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
     var kq : array<uint8> const?
     var ks : array<uint8> const?
     kq_planes_of(t, fmt, kq, ks)
-    //! the compact 16B/sb planes bind once (doff unused); every split plane carries a 2B d tail
-    //! per superblock past its strips, k2 a 4B d+dmin tail
     let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl
     let tail = compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
     unsafe {
@@ -1664,7 +1662,6 @@ struct KSched {
 }
 
 var @scratch g_gr_scheds : table<uint64; KSched>
-// DASLLAMA_METAL_SCHED: 1 = leveled reorder (default), 0 = capture order
 def private sched_enabled : bool => g_env_metal.sched != 0
 
 // the shape-class key: pso sequence + per-node bind/range counts (pooled buffer identities and

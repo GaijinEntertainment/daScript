@@ -619,11 +619,11 @@ struct private FfnPanels {
 
 //! the single row's panels: gate and up share one panel at the row's width, the gemma4 dense
 //! branch its own, the expert input the pre-norm's scratch row
-[unused_argument(g4)]
-def private panels_single(var e : SingleLayerEnc; g4 : bool; hid_l, knfe : int64) : FfnPanels {
+[unused_argument(moe_with_dense)]
+def private panels_single(var e : SingleLayerEnc; moe_with_dense : bool; hid_l, knfe : int64) : FfnPanels {
     var r & = unsafe(*e.r)
     return FfnPanels(moe_in = r.bxb2, mg = r.bh12, mu = r.bh12, mu_col = knfe,
-        fg = g4 ? r.bh12s : r.bh12, fu = g4 ? r.bh12s : r.bh12, fu_col = hid_l)
+        fg = moe_with_dense ? r.bh12s : r.bh12, fu = moe_with_dense ? r.bh12s : r.bh12, fu_col = hid_l)
 }
 
 //! the single row's totals are the per-row uniforms
@@ -953,19 +953,18 @@ struct template LayerEncT {
                     add_rms(self, enc, r.bx, r.bxb2, bw_ffn, r.bxb, dim, null)
                 }
             }
-            let g4 = r.moe && c.moe_dense_shexp   // gemma4: the routed experts beside a dense shared branch
+            let moe_with_dense = r.moe && c.moe_dense_shexp
             let knfe = r.moe ? c.n_expert_used * c.n_ff_exp : 0l
-            var pan = panels(self, g4, hid_l, knfe)
+            var pan = panels(self, moe_with_dense, hid_l, knfe)
             if (r.moe) {
-                encode_moe(t, enc, l, pan, g4, knfe)
+                encode_moe(t, enc, l, pan, moe_with_dense, knfe)
             }
-            if (!r.moe || g4) {
-                dense_ffn(t, enc, l, pan, g4, geglu, hid_l, u_hid_l)
+            if (!r.moe || moe_with_dense) {
+                dense_ffn(t, enc, l, pan, moe_with_dense, geglu, hid_l, u_hid_l)
             }
-            if (g4 && g_skip != "ew") {
-                // the dense branch's post-norm, then routed + dense summed into bxb for the epilogue
-                var bw_pf1 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
-                rms(self, enc, r.bxb, 0ul, bw_pf1, r.bxb)
+            if (moe_with_dense && g_skip != "ew") {
+                                var bw_post_dense = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
+                rms(self, enc, r.bxb, 0ul, bw_post_dense, r.bxb)
                 add(self, enc, r.bxb, 0ul, r.bmoe_rt, 0ul, dim, null)
             }
             if (g_skip != "ew") {
@@ -997,15 +996,14 @@ struct template LayerEncT {
 
     //! the dense FFN: W1|W3 into the family's gate / up panels (fused where the family has the
     //! form) -> swiglu/geglu -> W2 into bxb; gemma4's shared branch runs it beside the experts
-    def dense_ffn(t : Model; enc : MetalComputeEncoder?; l : int64; var pan : FfnPanels; g4, geglu : bool; hid_l : int64; u_hid_l : MetalBuffer?) {
+    def dense_ffn(t : Model; enc : MetalComputeEncoder?; l : int64; var pan : FfnPanels; moe_with_dense, geglu : bool; hid_l : int64; u_hid_l : MetalBuffer?) {
         let c = t.config
         let dim = c.dim
         let f1 = fmt_at(t.w1_fmt, l)
         let f3 = fmt_at(t.w3_fmt, l)
         let w13_q8 = f1 == KqFmt.q8 && f3 == KqFmt.q8
         let th = total(self, u_hid_l, hid_l)
-        let sites_on = g_skip != "gemv" && !(g4 && g_skip == "moe_sh")
-        // the family's fused gate+up form serves the q8 pair; else the two sites and the act pass
+        let sites_on = g_skip != "gemv" && !(moe_with_dense && g_skip == "moe_sh")
         let fused13 = w13_q8 && sites_on && w13_fused(self, t, enc, l, hid_l, u_hid_l, geglu, pan.fg)
         if (sites_on && !fused13) {
             site(self, t, enc, SiteKind.w13, f1, t.w1_offs[l], hid_l, dim, hid_l, r.bxb, pan.fg, r.u_dim, u_hid_l, u_hid_l, 0l)
@@ -1023,8 +1021,8 @@ struct template LayerEncT {
         }
     }
 
-    //! the routed FFN: router -> select -> experts -> combine; g4 = gemma4's parallel-dense form
-    def encode_moe(t : Model; enc : MetalComputeEncoder?; l : int64; var pan : FfnPanels; g4 : bool; knfe : int64) {   // nolint:STYLE037,STYLE038 — one phase's dispatch chain
+    //! the routed FFN: router -> select -> experts -> combine; moe_with_dense = gemma4's parallel-dense form
+    def encode_moe(t : Model; enc : MetalComputeEncoder?; l : int64; var pan : FfnPanels; moe_with_dense : bool; knfe : int64) {   // nolint:STYLE037,STYLE038 — one phase's dispatch chain
         let c = t.config
         let dim = c.dim
         let fe1 = fmt_at(t.we1_fmt, l)
@@ -1034,8 +1032,8 @@ struct template LayerEncT {
         let tk = total(self, r.u_moe_knfe, knfe)
         let td = total(self, r.u_dim, dim)
         unsafe {
-            var bmx = r.bxb   // expert input: plain = the rms_ffn norm-out; g4 = pre_ffn2
-            if (g4 && g_skip != "ew") {
+            var bmx = r.bxb   // expert input: plain = the rms_ffn norm-out; moe_with_dense = pre_ffn2
+            if (moe_with_dense && g_skip != "ew") {
                 var bw_p2 = upload_region(addr < void? >(t.fblob[t.rms_pre_ffn2_off + l * dim]), uint64(dim * 4l))
                 rms(self, enc, r.bx, 0ul, bw_p2, pan.moe_in)
                 bmx = pan.moe_in
@@ -1048,7 +1046,7 @@ struct template LayerEncT {
                     brb = upload_region(addr < void? >(t.fblob[t.router_b_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                     bhrb = r.u_moe_gmode   // gpt-oss: gmode == 1 doubles as the has-bias flag
                 }
-                if (g4) {
+                if (moe_with_dense) {
                     var bw_rs = upload_region(addr < void? >(t.fblob[t.moe_router_scale_off + l * dim]), uint64(dim * 4l))
                     enc_g4_router_norm(enc, r.bx, bw_rs, r.bmoe_rt, r.u_dim, r.u_eps, r.u_moe_invd, nr)
                     enc_moe_router(enc, bw_rt, r.bmoe_rt, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, nr)
@@ -1056,7 +1054,7 @@ struct template LayerEncT {
                     enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, nr)
                 }
                 enc_moe_select(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, nr)
-                if (g4) {
+                if (moe_with_dense) {
                     var bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                     enc_moe_wscale(enc, r.bmoe_sel, r.bmoe_sel, bw_ds, r.u_moe_k, nr)
                 }
@@ -1087,7 +1085,7 @@ struct template LayerEncT {
             if (g_skip != "ew") {
                 if (c.ffn_act == FfnAct.swiglu_oai) {
                     enc_swiglu_oai(enc, pan.mg, 0ul, pan.mu, uint64(pan.mu_col * 4l), tk.b, tk.n)
-                } elif (g4) {
+                } elif (moe_with_dense) {
                     enc_geglu(enc, pan.mg, 0ul, pan.mu, uint64(pan.mu_col * 4l), tk.b, tk.n)
                 } else {
                     enc_swiglu(enc, pan.mg, 0ul, pan.mu, uint64(pan.mu_col * 4l), tk.b, tk.n)
@@ -1122,16 +1120,15 @@ struct template LayerEncT {
                         enc_gemv_rows(enc, nr, bwsh2.buf, bwsh2.boff, r.bh12, r.bxb2, r.u_moe_nsh, r.u_dim, r.u_dim, nsh, dim, dim)
                     }
                 }
-                enc_moe_combine(enc, r.bmoe_dn, r.bmoe_sel, g4 ? r.bmoe_rt : r.bxb, r.u_dim, r.u_moe_k, dim, nr)
+                enc_moe_combine(enc, r.bmoe_dn, r.bmoe_sel, moe_with_dense ? r.bmoe_rt : r.bxb, r.u_dim, r.u_moe_k, dim, nr)
                 if (r.u_moe_nsh != null && g_skip != "ew") {
                     // routed sum lands in bxb first — the shexp branch adds σ(gate)-scaled on top
                     enc_axpy_sig(enc, r.bxb, r.bxb2, r.bmoe_lg, td.b, r.u_dim, td.n)
                 }
             }
-            if (g4 && g_skip != "ew") {
-                // the routed branch's post-norm; the dense shared branch and the sum follow in encode
-                var bw_pf2 = upload_region(addr < void? >(t.fblob[t.rms_post_ffn2_off + l * dim]), uint64(dim * 4l))
-                rms(self, enc, r.bmoe_rt, 0ul, bw_pf2, r.bmoe_rt)
+            if (moe_with_dense && g_skip != "ew") {
+                                var bw_post_routed = upload_region(addr < void? >(t.fblob[t.rms_post_ffn2_off + l * dim]), uint64(dim * 4l))
+                rms(self, enc, r.bmoe_rt, 0ul, bw_post_routed, r.bmoe_rt)
             }
         }
     }
@@ -1169,6 +1166,7 @@ struct private SingleLayerEnc : LayerEncT {
 
 // one trunk-shaped fused layer (attention/deltanet + ffn/moe) — the decode step's loop body,
 // shared with the MTP draft arm (which runs it at l == n_layers); advances the recurrent cursor
+[arch(at="../ARCHITECTURE_GPU_MTP.md#metal-layer-enc")]
 def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
     var e = SingleLayerEnc(r = unsafe(addr(r)))
     e->encode(t, enc, l, dnli)
@@ -1325,7 +1323,7 @@ var private @scratch g_vrt : array<uint>   // per-layer 2-row route entries: uin
 
 // verify shape gate: f16 KV, silu FFN (dense or routed MoE ± shexp), no epilogue exotics.
 // Weight sites are fmt-generic (enc_verify_site / enc_moe_gemv — the load gate vets kernel
-// coverage); a missing attn_v and the g4/mx4 MoE forms have no verify arm yet
+// coverage); a missing attn_v and the moe_with_dense/mx4 MoE forms have no verify arm yet
 def private metal_mtp_verify_ok(t : Model; s : Session) : bool {
     let c = t.config
     if (s.kv_dtype_k != KVDtype.f16 || s.kv_dtype_v != KVDtype.f16 ||
@@ -1364,8 +1362,8 @@ def private site_verify(e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder
 }
 
 //! the verify rows' panels: the single row's, at nrows rows and with no gemma4 branch
-[unused_argument(g4)]
-def private panels_verify(var e : VerifyLayerEnc; g4 : bool; hid_l, knfe : int64) : FfnPanels {
+[unused_argument(moe_with_dense)]
+def private panels_verify(var e : VerifyLayerEnc; moe_with_dense : bool; hid_l, knfe : int64) : FfnPanels {
     var r & = unsafe(*e.r)
     return FfnPanels(moe_in = r.bxb2, mg = r.bh12, mu = r.bh12, mu_col = r.nrows * knfe,
         fg = r.bh12, fu = r.bh12, fu_col = r.nrows * hid_l)
@@ -1867,7 +1865,7 @@ def public set_metal_decode_concurrent(v : int) {
 }
 
 // DASLLAMA_METAL_FUSE (default ON): the R1 epilogue-fusion kernel MetalPreAddRms (post_attn_rms +
-// add_rms, the pre_post_norm path) — off restores the separate per-op dispatches for A/B. (The g4
+// add_rms, the pre_post_norm path) — off restores the separate per-op dispatches for A/B. (The moe_with_dense
 // post_ffn1_rms+add fusion was measured and REFUTED, −1.0% on the 26B — see the ledger.)
 var private g_dfuse = -1
 
@@ -2443,10 +2441,6 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
     return MetalDecodeDecline.none
 }
 
-//! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows
-//! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
-//! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
-[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab"), arch(at="../ARCHITECTURE_GPU_MTP.md#metal-dispatch-requires")]
 //! One batch-shaped weight site: a K-quant plane rides its per-stream GEMV, a q8 site the tier's
 //! form - tensor GEMM, the mv form where this site's k is aligned (mv_ok), split-K (sk > 0), the
 //! 64-wide or plain tile GEMM, or the row GEMVs. y lands at column ycol of a ys-wide row.
@@ -2486,8 +2480,8 @@ def private site_batch(e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?;
 
 //! the batch rows' panels: gate and up in two panels, gemma4's experts on their own pair so the
 //! dense branch's tiers run beside the expert chain
-[unused_argument(g4, hid_l, knfe)]
-def private panels_batch(var e : BatchLayerEnc; g4 : bool; hid_l, knfe : int64) : FfnPanels {
+[unused_argument(moe_with_dense, hid_l, knfe)]
+def private panels_batch(var e : BatchLayerEnc; moe_with_dense : bool; hid_l, knfe : int64) : FfnPanels {
     var r & = unsafe(*e.r)
     return FfnPanels(moe_in = r.bmg4x, mg = r.bmgh, mu = r.bmghb, mu_col = 0l, fg = r.bh12, fu = r.bh12b, fu_col = 0l)
 }
@@ -2550,7 +2544,7 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
     let lay_l = uint(blockc ? kv_row_bytes(r.kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l])
     let qkvd = uint(qd + 2l * kv_dim)
     let kvm_l = het ? r.k_kvm_sw : r.k_kvm
-    //! a partial-rope carrier (qwen35: rope 64 of head 256) rotates rot/2 pairs off rot/2-wide table rows, the rest identity
+    // 0 = full rope; a partial carrier (qwen35: rope 64 of head 256) rotates rot/2 pairs, the rest identity
     let rot_l = r.k_rot != 0u ? r.k_rot : uint(head_size)
     if (r.kdt == KVDtype.tq4) {
         var tka = RopeStoreBTq4Args(lay = lay_l, qd = uint(qd), head_size = uint(head_size),
@@ -2591,7 +2585,6 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     let window_l = lsl && c.sliding_window > 0l ? uint(c.sliding_window) : 0u
     let hass_u = c.attn_sinks ? 1u : 0u
     if (r.attn_d) {
-        // kstride is elements (f16/f32) or 32-blocks (q8/tq4) - the one field that follows the codec
         var dka = SqAttnDArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
             kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qkvd, nsgs = uint(r.d_nsgs))
         enc_attn_d(enc, r.kdt, r.bqkv, r.bpart, r.brt, dka, r.d_nsgs, r.nrows, n_heads)
@@ -2635,6 +2628,10 @@ struct private BatchLayerEnc : LayerEncT {
     override panels = @@panels_batch
 }
 
+//! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows
+//! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
+//! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
+[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab"), arch(at="../ARCHITECTURE_GPU_MTP.md#metal-dispatch-requires")]
 def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {   // nolint:STYLE037,STYLE038 — the batch step driver; encode/commit/stash share the whole step's state
     var why = batch_decode_decline(t, ws, sessions, nrows)
     if (why == MetalDecodeDecline.none && !metal_decode_init()) {
@@ -2967,7 +2964,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     let ncb = min(g_bncb, c.n_layers)
     let lay_per_cb = (c.n_layers + ncb - 1l) / ncb
     var cbs : array<MetalCommandBuffer?>   // two steps' cb lists are alive at once (this one + the pending g_lp_cbs), so a reused global cannot serve
-    cbs |> reserve(ncb)
+    cbs |> reserve(ncb)   // nolint:PERF026 — see the declaration above; bounded by ncb
     // concurrent-encode rail: a concurrent encoder + explicit barriers ONLY at real buffer hazards
     // (the serial encoder implicit-barriers every dispatch). Gated to a full pipeline — a knockout
     // (g_skip) run stays on the serial encoder so a skipped stage can't leave a dependent unbarriered.
@@ -2992,8 +2989,6 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             enc_rms_b(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, nrows)
         }
     }
-    // the layer encoder's view of this step - the panels, uniforms and kargs scalars the batch
-    // chain binds, plus the tier and forms the step decided
     var r = StepRes(valid = true, pos = maxcnt - 1l, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
         bx = bx, bxb = bxb, bxb2 = bxb2, bqkv = bqkv, bh12 = bhb, bh12b = bhb2, bpart = bpart,
@@ -3028,7 +3023,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             metal_end_encoding(enc)
             metal_release(enc)
             metal_commit(cb)
-            cbs |> push(cb)
+            cbs |> push(cb)   // nolint:PERF026 — see the cbs declaration
             cb = metal_new_command_buffer_unretained(g_queue)
             enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
             // fresh encoder + in-order queue serialize cross-cb hazards — start the tracker clean
@@ -3075,7 +3070,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
-    cbs |> push(cb)
+    cbs |> push(cb)   // nolint:PERF026 — see the cbs declaration
     hz_arm(false)   // disarm the oracle with the encoder — a leaked arm would eat the next CAPTURE's stage
     g_us_bencode += int64(get_time_usec(ts_enc))
     // optimistic watermark at commit: the in-order queue writes row pos before any later-committed

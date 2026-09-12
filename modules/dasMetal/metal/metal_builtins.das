@@ -12,7 +12,7 @@ module metal_builtins shared public
 
 require daslib/shader_lingua_franca public
 require daslib/math_bits   // uint_bits_to_float — the tensor-op CPU stubs decode bf16/f16 halfwords
-require daslib/f16_cvt     // f16_to_f32 — the q8 f16-scale stub's halfword decode
+require daslib/f16_cvt
 
 // ===== compute builtins =====
 // The subgroup IDs (gl_Subgroup* — KHR_shader_subgroup spellings) live in shader_lingua_franca
@@ -20,8 +20,7 @@ require daslib/f16_cvt     // f16_to_f32 — the q8 f16-scale stub's halfword de
 
 // ===== loop shaping =====
 // ===== simdgroup reductions + shuffles (Metal spellings — the Metal value-add) =====
-// simd_sum(v): sum of v across the simdgroup's active lanes. Every marker is `return v` over the
-// value's own type - the emitter lowers them by name, so one generic serves float/int/uint.
+// simd_sum(v): sum of v across the simdgroup's active lanes.
 [unused_argument(v), sideeffects] def public simd_sum(v : auto(TT)) : TT { return v }
 
 //! simd_max(v): maximum of v across the simdgroup's active lanes.
@@ -417,8 +416,6 @@ def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 
 // The op is built in multiply_accumulate mode, so each step's run() accumulates into that
 // persistent tensor directly (default-mode run() overwrites — that mode is not used here).
 
-//! lane 0 zeroes the m*n accumulator - every begin flavor's whole body (the names stay
-//! distinct because the emitter dispatches on them)
 def private tmm2d_zero_acc(var acc; m, n : uint) {
     if (gl_LocalInvocationID.x != 0u) {
         return

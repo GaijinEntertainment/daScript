@@ -76,3 +76,8 @@ the diff puts it.** An emitted-text fixture answers to `tests/msl/REVIEW.md` (re
   `tests/metal/` (repo root) fixture sizes for that stride, in the same change.**
   Nothing checks a fixture's allocation against the stride, so a one-sided change overruns
   it silently.
+
+- **Never merge two `metal/metal_builtins.das` builtins into one name to remove a duplicated
+  body - move the shared body into a private helper both call.** Those builtins are markers:
+  `metal/msl_emit.das` picks each one's emitted MSL by its das function name, so two flavors
+  under one name lose one flavor's lowering.
