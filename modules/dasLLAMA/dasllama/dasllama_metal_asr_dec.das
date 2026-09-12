@@ -71,19 +71,14 @@ var private g_wd_us_encode = 0l
 //! Engage/decline counters (the counts live in dasllama_metal_common, the counting home):
 //! `windows` = cross-KV windows served, `steps` = decode batches, `tokens` = rows across them.
 def metal_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; declines : int64> {
-    var dtot = 0l
-    for (k, v in keys(g_wdec_declines_by_reason), values(g_wdec_declines_by_reason)) {
-        // policy notes (small, step_knob) describe SERVED windows — only refusals count
-        if (k != "{MetalWdecDecline.small}" && k != "{MetalWdecDecline.step_knob}") {
-            dtot += v
-        }
-    }
-    return (windows = g_wdec_windows, steps = g_wdec_steps, tokens = g_wdec_tokens, declines = dtot)
+    // policy notes (small, step_knob) describe SERVED windows — only refusals count
+    let served_notes = (g_wdec_declines.by_reason?["{MetalWdecDecline.small}"] ?? 0l) + (g_wdec_declines.by_reason?["{MetalWdecDecline.step_knob}"] ?? 0l)
+    return (windows = g_wdec_windows, steps = g_wdec_steps, tokens = g_wdec_tokens, declines = g_wdec_declines.total - served_notes)
 }
 
 //! The declines-by-reason table (a copy), keyed by `MetalWdecDecline` value names.
 def metal_wdec_declines : table<string; int64> {
-    return <- clone_to_move(g_wdec_declines_by_reason)
+    return <- clone_to_move(g_wdec_declines.by_reason)
 }
 
 //! The step-time split across every served decode batch: GPU-busy vs host-encode microseconds.
@@ -110,11 +105,9 @@ def set_metal_wdec_step_min_d(n : int64) {
 
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private wd_decline(why : MetalWdecDecline) : bool {
-    note_wdec_decline("{why}")
     // knob/small/step_knob = policy (the enum documents them); capability declines honor required
-    if (why != MetalWdecDecline.knob && why != MetalWdecDecline.small && why != MetalWdecDecline.step_knob) {
-        require_or_panic("wdec", "{why}")
-    }
+    let policy = why == MetalWdecDecline.knob || why == MetalWdecDecline.small || why == MetalWdecDecline.step_knob
+    note_decline(g_wdec_declines, "wdec", "{why}", policy = policy)
     return false
 }
 

@@ -4046,7 +4046,7 @@ def public metal_prefill_stage_stats() : tuple<prefills : int64; setup_us : int6
 //! (gpu prefills served, declines to the CPU path) since load — diagnostics / tests. The decline
 //! machinery lives in dasllama_metal_common (W1 split), so the count reads from there.
 def public metal_prefill_stats() : tuple<prefills : int64; declines : int64> {
-    return (prefills = g_prefills, declines = g_prefill_declines)
+    return (prefills = g_prefills, declines = g_prefill_declines.total)
 }
 
 //! The tower driver's borrow seat: full prefill PSO bring-up, idempotent — the borrowed builders

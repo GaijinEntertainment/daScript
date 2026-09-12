@@ -55,8 +55,7 @@ var @scratch g_region_retire : array<MetalBuffer?>  // grown-out buffers: unreta
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
 var g_decodes = 0l
-var g_declines = 0l
-var g_declines_by_reason : table<string; int64>
+var g_decode_declines : DeclineCounter
 var g_logits_cpu = false
 var g_skip = ""                              // DASLLAMA_METAL_DECODE_SKIP=gemv|attn|ew|moe_rt|moe_sh|qkv|wo knockout rail
 
@@ -76,29 +75,18 @@ var g_tower_rows = 0l
 var g_tower_blocks = 0l
 var g_tower_convs = 0l                       // conv-frontend chunks served on the GPU
 var g_tower_f16_encodes = 0l                 // encodes whose GEMMs rode the f16-W shadow route
-var g_tower_declines_by_reason : table<string; int64>
-
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
-def note_tower_decline(key : string) {
-    g_tower_declines_by_reason[key] = (g_tower_declines_by_reason?[key] ?? 0l) + 1l
-}
+var g_tower_declines : DeclineCounter
 
 // the whisper ASR-decoder driver's counters (dasllama_metal_asr_dec; counting home here)
 var g_wdec_windows = 0l                      // cross-KV windows served
 var g_wdec_steps = 0l                        // decode batches served
 var g_wdec_tokens = 0l                       // token rows across the served batches
-var g_wdec_declines_by_reason : table<string; int64>
-
-[cold_path]
-def note_wdec_decline(key : string) {
-    g_wdec_declines_by_reason[key] = (g_wdec_declines_by_reason?[key] ?? 0l) + 1l
-}
+var g_wdec_declines : DeclineCounter
 
 // the batched-step twins (per eval_batch step, not per token)
 var g_batch_steps = 0l
 var g_batch_rows = 0l
-var g_batch_declines = 0l
-var g_batch_declines_by_reason : table<string; int64>
+var g_batch_declines : DeclineCounter
 var g_us_bsetup = 0l
 var g_us_bencode = 0l
 var g_us_bwait = 0l
@@ -408,56 +396,70 @@ def require_or_panic(kind : string; why : string) {
 [cold_path]
 def cb_error_text(cb : MetalCommandBuffer?) : string => metal_command_buffer_error(cb)
 
+//! One driver's decline bookkeeping: the count, the per-reason table, and the required-mode
+//! panic. A policy decline - the GPU could serve but chooses not to - counts but never panics.
+struct DeclineCounter {
+    total : int64
+    by_reason : table<string; int64>
+}
+
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
-def decline(why : MetalDecodeDecline) {
-    g_declines++
-    g_declines_by_reason["{why}"]++
-    require_or_panic("decode", "{why}")
+def note_decline(var c : DeclineCounter; kind, why : string; policy : bool = false) {
+    c.total++
+    c.by_reason[why]++
+    if (!policy) {
+        require_or_panic(kind, why)
+    }
 }
 
 // the `feature` flavor: records a need_* key per missing bit, and the required-mode panic names them
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
+def note_decline(var c : DeclineCounter; kind, why : string; missing : MetalNeed) {
+    c.total++
+    c.by_reason[why]++
+    record_needs(c.by_reason, missing)
+    require_or_panic(kind, "{why} {missing}")
+}
+
+[cold_path]
+def decline(why : MetalDecodeDecline) {
+    note_decline(g_decode_declines, "decode", "{why}")
+}
+
+[cold_path]
 def decline(why : MetalDecodeDecline; missing : MetalNeed) {
-    g_declines++
-    g_declines_by_reason["{why}"]++
-    record_needs(g_declines_by_reason, missing)
-    require_or_panic("decode", "{why} {missing}")
+    note_decline(g_decode_declines, "decode", "{why}", missing)
 }
 
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
 def batch_decline(why : MetalDecodeDecline) {
-    g_batch_declines++
-    g_batch_declines_by_reason["{why}"]++
-    require_or_panic("batch decode", "{why}")
+    note_decline(g_batch_declines, "batch decode", "{why}")
 }
 
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
 def batch_decline(why : MetalDecodeDecline; missing : MetalNeed) {
-    g_batch_declines++
-    g_batch_declines_by_reason["{why}"]++
-    record_needs(g_batch_declines_by_reason, missing)
-    require_or_panic("batch decode", "{why} {missing}")
+    note_decline(g_batch_declines, "batch decode", "{why}", missing)
 }
 
 //! (gpu decode steps served, declines to the CPU path) since load — diagnostics / tests.
 def public metal_decode_stats() : tuple<decodes : int64; declines : int64> {
-    return (decodes = g_decodes, declines = g_declines)
+    return (decodes = g_decodes, declines = g_decode_declines.total)
 }
 
 //! Single-stream declines-by-reason since load — reason name -> count (the first failing gate
 //! clause per declined step). The support-matrix test asserts WHY a config declined.
 def public metal_decode_declines() : table<string; int64> {
-    return clone_to_move(g_declines_by_reason)
+    return clone_to_move(g_decode_declines.by_reason)
 }
 
 //! (batched eval_batch steps served, total rows across them, batch declines) since load.
 def public metal_batch_decode_stats() : tuple<steps : int64; rows : int64; declines : int64> {
-    return (steps = g_batch_steps, rows = g_batch_rows, declines = g_batch_declines)
+    return (steps = g_batch_steps, rows = g_batch_rows, declines = g_batch_declines.total)
 }
 
 //! Batched-step declines-by-reason since load — reason name -> count.
 def public metal_batch_decode_declines() : table<string; int64> {
-    return clone_to_move(g_batch_declines_by_reason)
+    return clone_to_move(g_batch_declines.by_reason)
 }
 
 // speculative-chain state: the pre-encoded next step may open with GPU argmax + embed gather off
@@ -611,14 +613,14 @@ def public metal_decode_stage_report {
         let n = float(g_batch_steps)
         to_log(LOG_INFO, "dasLLAMA metal batch decode: {g_batch_steps} steps ({g_batch_rows} rows)  per-step setup={float(g_us_bsetup) / n}us encode={float(g_us_bencode) / n}us wait={float(g_us_bwait) / n}us (sched {g_sched_b_ms * 1000.0lf / double(g_batch_steps)}us handoff {g_handoff_b_ms * 1000.0lf / double(g_batch_steps)}us gpu {g_gpu_b_ms * 1000.0lf / double(g_batch_steps)}us) readback+writeback={float(g_us_breadback) / n}us\n")
     }
-    if (g_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal decode declines: {g_declines} -{declines_line(g_declines_by_reason)}\n")
+    if (g_decode_declines.total > 0l) {
+        to_log(LOG_INFO, "dasLLAMA metal decode declines: {g_decode_declines.total} -{declines_line(g_decode_declines.by_reason)}\n")
     }
-    if (g_batch_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal batch decode declines: {g_batch_declines} -{declines_line(g_batch_declines_by_reason)}\n")
+    if (g_batch_declines.total > 0l) {
+        to_log(LOG_INFO, "dasLLAMA metal batch decode declines: {g_batch_declines.total} -{declines_line(g_batch_declines.by_reason)}\n")
     }
-    if (g_prefill_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal prefill declines: {g_prefill_declines} -{declines_line(g_prefill_declines_by_reason)}\n")
+    if (g_prefill_declines.total > 0l) {
+        to_log(LOG_INFO, "dasLLAMA metal prefill declines: {g_prefill_declines.total} -{declines_line(g_prefill_declines.by_reason)}\n")
     }
 }
 
@@ -941,19 +943,18 @@ def q51_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : Met
     }
 }
 
-def uniform_u32(v : uint) : MetalBuffer? {
-    var buf = pool_acquire_untracked(g_upool, g_dev, 4ul)
-    var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
+//! A 4-byte buffer holding one scalar - the caller says where the bytes come from.
+def scalar_buffer(var buf : MetalBuffer?; v : auto(TT)) : MetalBuffer? {
+    unsafe {
+        var p = reinterpret<TT -const?>(metal_buffer_contents(buf))
+        p[0] = v
+    }
     return buf
 }
 
-def uniform_f32(v : float) : MetalBuffer? {
-    var buf = pool_acquire_untracked(g_upool, g_dev, 4ul)
-    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
+def uniform_u32(v : uint) : MetalBuffer? => scalar_buffer(pool_acquire_untracked(g_upool, g_dev, 4ul), v)
+
+def uniform_f32(v : float) : MetalBuffer? => scalar_buffer(pool_acquire_untracked(g_upool, g_dev, 4ul), v)
 
 // only the llama-family std shape is wired — the same decline set as prefill_decline minus the
 // npos window (the model/config half, shared by the single-stream and batched drivers). Returns
@@ -1644,19 +1645,8 @@ struct KSched {
 }
 
 var @scratch g_gr_scheds : table<uint64; KSched>
-var g_gr_sched_mode = -1   // DASLLAMA_METAL_SCHED: 1 = leveled reorder (default), 0 = capture order
-
-[cold_path]   // one-time env resolution; sched_enabled is a global test after the first call
-def private load_sched_mode() {
-    g_gr_sched_mode = g_env_metal.sched
-}
-
-def private sched_enabled : bool {
-    if (g_gr_sched_mode < 0) {
-        load_sched_mode()
-    }
-    return g_gr_sched_mode != 0
-}
+// DASLLAMA_METAL_SCHED: 1 = leveled reorder (default), 0 = capture order
+def private sched_enabled : bool => g_env_metal.sched != 0
 
 // the shape-class key: pso sequence + per-node bind/range counts (pooled buffer identities and
 // arena offsets vary per step, but the conflict STRUCTURE is role-determined within a class —
@@ -2146,31 +2136,23 @@ def metal_common_release {
 // The MetalPrefillDecline enum lives in dasllama_metal_shapes beside its decode twin (M5);
 // the counting machinery for both paths stays here (require_or_panic + the reason tables).
 
-var g_prefill_declines = 0l
-var g_prefill_declines_by_reason : table<string; int64>
+var g_prefill_declines : DeclineCounter
 
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
 def decline(why : MetalPrefillDecline) {
-    g_prefill_declines++
-    g_prefill_declines_by_reason["{why}"]++
-    if (why != MetalPrefillDecline.npos_window) {   // the one POLICY decline — see require_or_panic
-        require_or_panic("prefill", "{why}")
-    }
+    note_decline(g_prefill_declines, "prefill", "{why}", policy = why == MetalPrefillDecline.npos_window)
 }
 
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
 def decline(why : MetalPrefillDecline; missing : MetalNeed) {
-    g_prefill_declines++
-    g_prefill_declines_by_reason["{why}"]++
-    record_needs(g_prefill_declines_by_reason, missing)
-    require_or_panic("prefill", "{why} {missing}")
+    note_decline(g_prefill_declines, "prefill", "{why}", missing)
 }
 
 //! Declines-by-reason since load — reason name -> count (the first failing gate clause per
 //! declined prefill). The support-matrix test asserts WHY a config declined; the stage report
 //! prints it alongside the decode tables.
 def public metal_prefill_declines() : table<string; int64> {
-    return clone_to_move(g_prefill_declines_by_reason)
+    return clone_to_move(g_prefill_declines.by_reason)
 }
 
 //! The IQ4_XS codebook (kvalues_iq4nl) as four packed words, selected + byte-extracted - no
@@ -2201,14 +2183,7 @@ def race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
     return b
 }
 
-def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? {
-    var b = metal_new_buffer(dev, 4ul)
-    unsafe {
-        var p = reinterpret<uint?>(metal_buffer_contents(b))
-        p[0] = v
-    }
-    return b
-}
+def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer(dev, 4ul), v)
 
 // deterministic 34B-interleaved q8_0 W blob for the races: int quants, pow2 f16 scales
 def race_q8_blob(nblk : int) : array<int8> {

@@ -42,17 +42,13 @@ let private TW_ONES_DIM = 8192
 //! `blocks` = transformer blocks run (n_layer per whisper-class encode; 0 for gemma4uv).
 //! Model-level gates assert DELTAS on these.
 def metal_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; convs : int64; declines : int64> {
-    var dtot = 0l
-    for (v in values(g_tower_declines_by_reason)) {
-        dtot += v
-    }
     return (encodes = g_tower_encodes, rows = g_tower_rows, blocks = g_tower_blocks,
-        convs = g_tower_convs, declines = dtot)
+        convs = g_tower_convs, declines = g_tower_declines.total)
 }
 
 //! The declines-by-reason table (a copy), keyed by `MetalTowerDecline` value names.
 def metal_tower_declines : table<string; int64> {
-    return <- clone_to_move(g_tower_declines_by_reason)
+    return <- clone_to_move(g_tower_declines.by_reason)
 }
 
 //! Test A/B seat: pin the tower driver on/off in-process (the env knob's setter twin).
@@ -83,10 +79,7 @@ def metal_tower_f16_encodes() : int64 => g_tower_f16_encodes
 
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private tw_decline(why : MetalTowerDecline) : bool {
-    note_tower_decline("{why}")
-    if (why != MetalTowerDecline.knob) {   // knob = policy; capability declines honor required mode
-        require_or_panic("tower", "{why}")
-    }
+    note_decline(g_tower_declines, "tower", "{why}", policy = why == MetalTowerDecline.knob)
     return false
 }
 

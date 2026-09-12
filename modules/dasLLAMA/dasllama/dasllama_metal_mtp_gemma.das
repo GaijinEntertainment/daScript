@@ -67,19 +67,9 @@ var g_gemma_drafted = 0l
 var g_gemma_accepted = 0l
 var g_gemma_rounds = 0l
 
-def private ubuf_u32(v : uint) : MetalBuffer? {
-    var buf = metal_new_buffer_untracked(g_dev, 4ul)
-    var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
+def private ubuf_u32(v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
-def private ubuf_f32(v : float) : MetalBuffer? {
-    var buf = metal_new_buffer_untracked(g_dev, 4ul)
-    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
+def private ubuf_f32(v : float) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
 def private gemma_gpu_release(var g : GemmaDrafterGpu) {
     release_handle(g.bx)

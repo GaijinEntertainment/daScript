@@ -1721,12 +1721,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
 // knockouts force serial — skipped dispatches break the declared graph
 var private g_dconc = -1
 
-def private decode_concurrent : bool {
-    if (g_dconc < 0) {
-        load_decode_concurrent()
-    }
-    return g_dconc != 0
-}
+def private decode_concurrent : bool => g_dconc < 0 ? g_env_metal.decode_concurrent : g_dconc != 0
 
 //! Concurrent-encoder rail for the single-stream decode: 1 forces on, 0 forces serial,
 //! negative restores the env default (`DASLLAMA_METAL_DECODE_CONCURRENT`).
@@ -1739,12 +1734,7 @@ def public set_metal_decode_concurrent(v : int) {
 // post_ffn1_rms+add fusion was measured and REFUTED, −1.0% on the 26B — see the ledger.)
 var private g_dfuse = -1
 
-def private decode_fuse_pre : bool {
-    if (g_dfuse < 0) {
-        load_decode_fuse()
-    }
-    return g_dfuse != 0
-}
+def private decode_fuse_pre : bool => g_dfuse < 0 ? g_env_metal.fuse : g_dfuse != 0
 
 //! Epilogue-fusion rail for the single-stream decode: 1 forces on, 0 forces the separate
 //! per-op dispatches, negative restores the env default (`DASLLAMA_METAL_FUSE`).
@@ -3347,16 +3337,6 @@ def private load_batch_knobs() {
     g_bmv = g_env_metal.batch_mv
     g_bmv8 = g_env_metal.batch_mv8
     g_b_pipe = g_env_metal.batch_pipe
-}
-
-[cold_path]   // one-time env resolution; decode_concurrent is a global test after the first call
-def private load_decode_concurrent() {
-    g_dconc = g_env_metal.decode_concurrent ? 1 : 0
-}
-
-[cold_path]   // one-time env resolution; decode_fuse_pre is a global test after the first call
-def private load_decode_fuse() {
-    g_dfuse = g_env_metal.fuse ? 1 : 0
 }
 
 [init]

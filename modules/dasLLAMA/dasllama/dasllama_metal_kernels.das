@@ -3862,19 +3862,7 @@ def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff
 // K-quant small-batch mv (B = 2..8): R=4 column groups via grid.y, R=2 via the B2 PSO; B = 5..8
 // rides the single-pass B8 twin (requires the mp == 8 pad the driver guarantees at nlive >= 5;
 // DASLLAMA_METAL_KQ_B8=0 = the A/B rail).
-var private g_kq_b8_mode = -1
-
-[cold_path]   // one-time env resolution; kq_b8_on is a global test after the first call
-def private load_kq_b8_mode() {
-    g_kq_b8_mode = g_env_metal.kq_b8 ? 1 : 0
-}
-
-def private kq_b8_on : bool {
-    if (g_kq_b8_mode < 0) {
-        load_kq_b8_mode()
-    }
-    return g_kq_b8_mode == 1
-}
+def private kq_b8_on : bool => g_env_metal.kq_b8
 
 def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64;   // nolint:STYLE037,STYLE038 — the flat per-format ladder (one arm per kq format) is the honest shape
                bs : MetalBuffer ?; soff, doff : uint64; bx, by : MetalBuffer?; yoff : uint64;
