@@ -115,7 +115,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // norms layout: [rms_att[l], rms_ffn[l]] x L + rms_final (dim each), then under qk_norm the
     // per-head rows [rms_q[l], rms_k[l]] x L (head_size each) appended past the fixed layout,
     // then the eps/ascale pair the fused ar+requant reads (its binding 4 is the scale output)
-    r.ar_scal_off = n_layers * 2l * dim + dim + (qk_norm ? n_layers * 2l * head_size : 0l)
+    r.ar_scal_off = n_layers * RD_NORM_ROWS * dim + dim + (qk_norm ? n_layers * 2l * head_size : 0l)
     r.norms_bytes = (r.ar_scal_off + 2l) * 4l
     r.norms_dev = make_device_buf(r.norms_bytes)
     // cos layout: this token's cos[half]+sin[half] per rope class, one class's row after the other
@@ -211,6 +211,8 @@ def private rd_layer_slot(l : int64) {
 def private rd_layer_geom(var L : RLayer; g : RdecLayerGeom) {
     L.hs = g.hs; L.qd = g.qd; L.kvd = g.kvd; L.hid = g.hid; L.rot = g.rot
     L.kv_mul = g.kvd > 0l ? g_rd.n_heads / (g.kvd / g.hs) : 1l
+    L.pre_post = g.pre_post
+    L.gelu = g.gelu
     L.window = g.window
     L.mir_base = g.mir_base
     L.cbase = g.cbase
@@ -992,8 +994,9 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer) 
     let dim = g_rd.dim
     let hid = L.hid
     let pfx = rd_ffn_pfx(L)
-    var pc_act = ActArgs(nelem = uint(hid), gelu = 0u, nblk = uint(hid / 32l))
-    var pc_act_k = ActArgs(nelem = uint(hid), gelu = 0u, nblk = uint(hid / 256l))
+    let gelu = L.gelu ? 1u : 0u
+    var pc_act = ActArgs(nelem = uint(hid), gelu = gelu, nblk = uint(hid / 32l))
+    var pc_act_k = ActArgs(nelem = uint(hid), gelu = gelu, nblk = uint(hid / 256l))
     var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u)
     gemv_enc(L.f1, raw, h, L.s_gate, pcg, hid)
     rd_ts(raw, "{pfx}gate")
@@ -1065,7 +1068,7 @@ def rd_ar_comb_args(L : RLayer; woff : int64) : ArArgs {
 [cold_path]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
 def private rd_encode_token {
     let dim = g_rd.dim
-    let nlfin = g_rd.n_layers * 2l * dim   // rms_final offset in the norms buffer (dim units later)
+    let nlfin = rd_norm_final()   // rms_final offset in the norms buffer
     unsafe {
         var raw = g_rd.cmd
         let rf : VkCommandBufferResetFlags
@@ -1114,7 +1117,8 @@ def private rd_encode_token {
             } else {
                 rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin)
             }
-            var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((l * 2l + 1l) * dim), eps = g_rd.eps, ascale = 1.0)
+            var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
+                pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)))
             if (fuse) {
                 enc_ar_rq_stamp(L.rq_ffn_stamp, raw, h, L.s_addr_ffn_rq, pc8)
                 rd_ts(raw, "{tpfx}arrq_f")
@@ -1134,8 +1138,9 @@ def private rd_encode_token {
             if (L.moe) {
                 rd_encode_moe(raw, h, L, pc_rq_dim, pc_rq_dim_k, rqwg_dim, rqwg_dim_k)
             }
-            let nxt = l + 1l < g_rd.n_layers ? (l + 1l) * 2l * dim : nlfin   //! rms_att[l+1] | final
-            var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
+            let nxt = l + 1l < g_rd.n_layers ? rd_norm_off(l + 1l, RD_NORM_ATT) : nlfin   //! rms_att[l+1] | final
+            var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
+                pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
             if (L.moe) {
                 var pc14c = rd_ar_comb_args(L, nxt)
                 enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)

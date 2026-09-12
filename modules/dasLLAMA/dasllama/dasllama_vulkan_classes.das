@@ -42,6 +42,8 @@ struct ArArgs {
     slots : uint    //! the combine twins: routed slots per position
     lstride : uint  //! the combine twins: the logits row stride (the gate logit, when `gated`, is the row's last)
     gated : uint    //! the combine twins: the shared expert's gate scales its row
+    pre_on : uint   //! the add partner is rms-normed with the row at `pwoff` before the add (a gemma's post-attention / post-FFN norm)
+    pwoff : uint
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -103,12 +105,26 @@ class ArBase : RmsWgBase {
     @push_constant pa : ArArgs
     @workgroup row : float[8192]           // AR_MAX_DIM — staged so the post-reduce reread is local
 
-    // the residual add + row stash + sum-of-squares pass over one row at `base`
+    // the residual add + row stash + sum-of-squares pass over one row at `base`; under pre_on the add
+    // partner is normed first (its own reduce, the row stash holding it meanwhile)
     def accum_row(base : uint) : float {
+        var ainv = 0.0
+        if (pa.pre_on != 0u && pa.add_on != 0u) {
+            var sa = 0.0
+            var j = gl_LocalInvocationID.x
+            while (j < pa.dim) {
+                let a = aa[base + j]
+                row[j] = a
+                sa += a * a
+                j += 256u
+            }
+            ainv = wg_rms_inv(sa, pa.dim, pa.eps)
+        }
         var ss = 0.0
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            let vv = pa.add_on != 0u ? (xs[base + k] + aa[base + k]) * pa.ascale : xs[base + k]
+            let a = pa.pre_on != 0u ? wn[pa.pwoff + k] * (row[k] * ainv) : aa[base + k]
+            let vv = pa.add_on != 0u ? (xs[base + k] + a) * pa.ascale : xs[base + k]
             xs[base + k] = vv
             row[k] = vv
             ss += vv * vv

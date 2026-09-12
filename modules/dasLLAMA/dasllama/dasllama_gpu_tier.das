@@ -132,6 +132,10 @@ struct RdecDnGeom {
     cd, kd, di, nvh, nkh, ds, dconv : int64
     ba_f32 : bool
 }
+//! the resident driver's norms plane carries this many rows per layer: the attention norm, the FFN norm,
+//! and a pre/post-norm model's post-attention and post-FFN norms (zero rows on any other model)
+let public RDEC_NORM_ROWS = 4l
+
 //! One attention layer's geometry for the resident driver - its attention class (gemma-4's sliding and
 //! global layers differ in head size, kv width and rope), its dense FFN width, and where its rows sit.
 struct RdecLayerGeom {
@@ -140,6 +144,8 @@ struct RdecLayerGeom {
     mir_base : int64                //! its first element in each K/V mirror side
     cbase : int64                   //! its rope class's row inside a position's cos/sin plane
     boff : int64                    //! its row base in the q/k/v bias plane
+    pre_post : bool                 //! the residual steps norm their add partner first (a gemma's post-attention and post-FFN norms)
+    gelu : bool                     //! the dense FFN's activation is the tanh gelu, else silu
 }
 //! qd / kv_dim / head_size / hidden / rot are the maxima over the layers (the scratch is sized to
 //! them); `mir_elems` is one mirror side's element count over every attention layer, `cos_elems`

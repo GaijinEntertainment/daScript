@@ -444,6 +444,18 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
+`test_gpu_resident_gemma.das` - stocked suite, `-jit` only; the whole-model resident driver on the
+gemma dense base (gemma-3-1b-it-Q8_0, `DASLLAMA_GPU=1`): the sandwich norms (the residual steps
+norm their add partner first), the sliding-window layers beside the global ones with their own rope
+class, the GeGLU FFN and the sqrt(dim) embed scale - the hybrid file's forced-feed logits-tolerance
+form at the 16% bar this model's rounding sensitivity sets (its CPU chain's own prefill and decode
+kernels land 6-10% of the max logit apart on the same tokens; the resident prefill feeds the GEMMs
+f16 rows where the CPU quantizes Q8 blocks), with the one-step-off control (reads 5 to 19), at one
+window, eight tokens, 520 tokens (two windows, the window engaged on the last eight positions) and
+600 tokens (every sliding layer masking below its window on the prefill tiles and the decode
+chunks); plus the agreement cells - the window chain and the token command on the same eight and
+forty tokens, held within 6x of the CPU chain's own two paths' gap; skips without the model or
+the armed tier.
 `test_gpu_resident_moe.das` - stocked suite, `-jit` only; the whole-model resident driver on a MoE
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, `DASLLAMA_GPU=1`): the expert stacks in the arena, the window
 chain's routed block and the token command's routed block - the hybrid file's forced-feed

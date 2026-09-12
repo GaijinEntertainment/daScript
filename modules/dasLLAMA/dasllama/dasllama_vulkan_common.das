@@ -2228,6 +2228,8 @@ struct RLayer {
     cbase : int64                   //! its rope class's row base inside a position's cos/sin plane
     boff : int64                    //! its row base in the q/k/v bias plane
     pf_fa : bool                    //! the window chain takes the cm2 flash tile on this layer (its head size has a stamp)
+    pre_post : bool                 //! the residual steps norm their add partner first (the post-attention and post-FFN norms of a gemma)
+    gelu : bool                     //! the dense FFN's activation is the tanh gelu (GeGLU), else silu
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
     recurrent : bool
     mir_idx : int64 = -1l           // this attention layer's K/V mirror slot; -1 = recurrent (no KV)
@@ -2401,6 +2403,19 @@ let F16G_SPLIT = 8l    //! its k chunks into the split-k scratch
 def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && dim % (int64(F16G_BK) * F16G_SPLIT) == 0l
 
 var g_rd : RDec?
+
+//! the norms plane's rows per layer (`RDEC_NORM_ROWS`, the uploader's count): the attention norm, the FFN norm, the post-attention and post-FFN norms; the final norm follows the layers, the q/k norm rows follow it
+let RD_NORM_ROWS = RDEC_NORM_ROWS
+let RD_NORM_ATT = 0l
+let RD_NORM_FFN = 1l
+let RD_NORM_POST_ATT = 2l
+let RD_NORM_POST_FFN = 3l
+
+//! layer `l`'s norm row of `kind` in the norms plane, in floats
+def rd_norm_off(l, kind : int64) : int64 => (l * RD_NORM_ROWS + kind) * g_rd.dim
+
+//! the final norm's row in the norms plane, in floats
+def rd_norm_final : int64 => g_rd.n_layers * RD_NORM_ROWS * g_rd.dim
 
 // a small host-visible meta buffer (uint words), contents filled per token during recording
 def rd_meta() : HostBuf => make_host_buf(META_BYTES, true)
