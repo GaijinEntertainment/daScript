@@ -84,35 +84,8 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: bash utils/internal/docs-assets/fetch.sh
 
-    - name: "Check for // `stub` in handmade docs"
-      run: |
-        set -eux
-        if grep -rl '// stub' doc/source/stdlib/handmade/; then
-          echo "ERROR: Found // stub entries in handmade docs. Please provide proper documentation."
-          exit 1
-        fi
-
-    - name: "Check for Uncategorized sections"
-      run: |
-        set -eux
-        if grep -rl '^Uncategorized$' doc/source/stdlib/generated/; then
-          echo "ERROR: Found Uncategorized sections in generated docs."
-          echo "Add the function(s) to a group_by_regex() in the generator that owns"
-          echo "the page: doc/reflections/das2rst.das, modules/dasImgui/utils/imgui2rst.das,"
-          echo "or modules/dasVulkan/utils/vulkan2rst.das."
-          exit 1
-        fi
-
-    - name: "Check for new untracked RST files"
-      run: |
-        set -eux
-        UNTRACKED=$(git ls-files --others --exclude-standard doc/source/stdlib/)
-        if [ -n "$UNTRACKED" ]; then
-          echo "ERROR: das2rst generated new files not tracked in git:"
-          echo "$UNTRACKED"
-          echo "Run das2rst locally and commit the new files."
-          exit 1
-        fi
+    - name: "Check generated docs are fresh"
+      run: cmake --build ./build --target check_docs_fresh
 
     - name: "Build documentation (HTML)"
       run: cmake --build ./build --target build_doc

@@ -12,8 +12,10 @@ require _mc_common
 //! an AOT-consuming host (`test_aot --use-aot`) installs no default cache, and spawned as a child it
 //! runs the AOT'd program, not the script - no cache marker ever prints; the cell skips there
 def aot_host_skips(t : T?) : bool {
-    let hostArgs <- get_command_line_arguments()
-    if (find_index(hostArgs, "--use-aot") < 0) return false
+    //! is_in_aot, not the command line: a worker of an --isolated-mode sweep is launched with the
+    //! host-side `-use-aot`, never the `--use-aot` dastest itself reads, so scanning argv saw an
+    //! AOT host as an interpreted one and ran a child script that has no default cache to find
+    if (!is_in_aot()) return false
     t |> skip("an AOT-consuming host installs no default cache and runs no child script")
     return true
 }
