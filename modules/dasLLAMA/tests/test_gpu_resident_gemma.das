@@ -43,6 +43,7 @@ let private GEMMA_PATH_GAP_RATIO = 6.0
 let private GEMMA_PPL_RATIO = 1.05
 let private PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
 let private GEMMA3_FILE = "gemma-3-1b-it-Q8_0.gguf"
+let private GEMMA3_4B_FILE = "gemma-3-4b-it-Q8_0.gguf"   //! the dense base at width 2560, heads 8 x 256 over 4 kv heads, a 1024 sliding window
 //! the gemma-4 dense carriers (large tier): the weightless v-norm, the V-from-K global layers at head 512 beside the sliding 256s,
 //! the per-layer output scale, the final softcap and the suppressed ids. The Q8_0 file takes the forced-feed cells; the Q4_K_M file
 //! takes the agreement cell alone - on it the CPU chain's own prefill and decode kernels land 12% of the max logit apart, so a
@@ -343,6 +344,18 @@ def test_gpu_resident_gemma3_past_window(t : T?) {
         if (!arm_on(t, "g3")) return
         window_pin(t)
         gemma_forced_feed(t, PF_WINDOW_ROWS + 88l, GEMMA3_FILE)
+    }
+}
+
+[test]
+def test_gpu_resident_gemma3_4b(t : T?) {
+    t |> run("gemma-3-4b: resident prefill + decode vs the CPU chain, forty tokens - the dense base at its wider geometry") @(t : T?) {
+        if (!arm_on(t, "g3b")) return
+        gemma_forced_feed(t, 40l, GEMMA3_4B_FILE)
+    }
+    t |> run("gemma-3-4b: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
+        if (!arm_on(t, "g3b")) return
+        ppl_compare(t, 150l, 150l, GEMMA3_4B_FILE)
     }
 }
 
