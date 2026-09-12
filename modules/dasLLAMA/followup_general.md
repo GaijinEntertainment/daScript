@@ -1538,3 +1538,39 @@
     stages; a pairing rule in the folder's `REVIEW.md` is what keeps the two copies equal. The
     fix is one source, not a second check: the roll runs the package's own wasm build - a daspkg
     entry point that reads the manifest and bakes what it declares - and the copied list goes.
+138. **The records oracle's first read after an image prepare is cold.** In `--oracle --legs
+    metal` the first measure of a text cell whose image the batch just mapped or baked reads far
+    below its stored mean (gemma-4-12B tg128 -28% / pp512 -43%, gemma-4-26B tg128 -19%,
+    Qwen3.8-27B tg128 -41%), and the solo re-run after the 180 s settle lands within 1% every
+    time; cells whose prepare found a warm image read flat first time. The prepare pass and the
+    timed child are separate processes, so the suspect is residual state the prepare leaves
+    behind - a mapping still reclaiming asynchronously, the previous cell's GPU residency, or the
+    page cache not yet holding the fresh image - not the code under test; the residency thread
+    that keeps Metal buffers pinned across submissions is the second suspect (the prepare pass
+    ran it, the timed child starts one of its own against the same image). Unquirked: the oracle
+    reads a prepared cell's residual state before timing (or takes the warm-retry as the first
+    measure by design), so a cold first read never spends a FAIL and a retry slot.
+139. **The tuner's end-to-end confirm reads a stamp line a warm JIT does not print.** The
+    generator confirm (`gen_tune_probe.das`, confirm_e2e_prefill) scores each arm by the
+    `llvm_tune: q8q8_tile_gen <- <perm>` line of a verbose child, and a child that runs the
+    prefill and prints its `CONFIRM_PP` still scores 0 when the line is absent: under a
+    `daspkg release` on this box every arm's child loaded, ran the E4B prefill (pp 429) and
+    printed no stamp, so the confirm rejected, the tuner refused to ship, and the bundle kept
+    its unrenamed exe; the same child command by hand prints the stamp. Row 134 names the hole
+    from the cache side: a generator served from a cached compile is not re-stamped, so its
+    stamp line is not printed either. Unquirked: the confirm reads the served permutation from
+    the runtime (the sidecar apply's own report), not from a compile-time log line.
+140. **The CPU-side board is slower than its August 30 records at master's head.** On the M5
+    box, `gen_bench_records --oracle` at master e6eca7218 (the arcanoid-tune merge) reads every
+    CPU and Accelerate ASR row past its stored mean - parakeet v2/v3 +11..+17% on the short
+    clips and +4..+5% on the nine-minute one, gemma4a +8..+11%, canary +8..+16%, Qwen3-ASR
+    +8..+15%, Qwen3-Omni audio +5..+14%, whisper tiny/large-turbo +2..+5% - and the CPU image
+    rows' spliced prefill 15..21% slower (Qwen3VL-4B, Qwen2.5-Omni) with the Qwen2.5-Omni CPU
+    window-ViT encode +23%; every Metal text, image and ASR row holds within 1%. An A/B of the
+    same cells between master and a Metal-only refactor branch on identical winners (both trees
+    as -jit scripts on the shipped class defaults) reads within 2% both ways, so the drift sits
+    between the August 30 record and master's head, not in a branch. The short-clip bias (a
+    larger loss the shorter the clip) points at per-call overhead - a wake, a prep, or a
+    kernel winner that lost its small-shape arm - rather than a GEMM's steady-state rate.
+    Unquirked: bisect the CPU ASR cell (parakeet jfk.wav, 11 s) across the merges since
+    August 30 on a quiet box under one manifest, then re-record the board.
