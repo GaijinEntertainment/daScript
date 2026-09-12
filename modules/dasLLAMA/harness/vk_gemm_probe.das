@@ -11,7 +11,7 @@ options _dasllama_internal = true
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
 // Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle); g3 the gemma-3-1b
-// role shapes with the down's split-k ladder;
+// role shapes with the down's split-k ladder; small the token command's one-workgroup row kernels' floor;
 // k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m/s stamps, its s stamp's other-depth twin
 // and the kq batch tile, cm2d:<fmt> the same over the 4096-wide dense hybrid's shapes, cm2w:<fmt>
 // its l stamp's wave sweep; dec the decode head's small kernels; moe:<fmt> its s and e stamps over
@@ -2951,6 +2951,56 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
     delete b
 }
 
+//! the token command's small-kernel floor: the add+rms step (`cls_ar`) and its fused requant twin (`cls_ar_rq`) at
+//! a row width, 64 dispatches chained through the hazard rail (each reads what the last wrote, a barrier between)
+//! against the same 64 with no dependency declared - the per-dispatch cost of a one-workgroup row kernel, with
+//! and without the barrier
+def private run_small_kernels(dim : int) {
+    let nb = int64(dim) * 4l
+    let xd = make_device_buf(nb)
+    let ad = make_device_buf(nb)
+    let wnd = make_device_buf(nb)
+    let yd = make_device_buf(nb)
+    let xqd = make_device_buf(int64(dim))
+    let xsd = make_device_buf(int64(dim / 32) * 4l)
+    var ones : array<float>
+    ones |> resize(dim)
+    for (i in range(dim)) {
+        ones[i] = 0.001 * float(i % 17) + 0.5
+    }
+    unsafe {
+        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
+    }
+    verify(ensure_cls_ar() && ensure_cls_ar_rq(), "the add+rms class rails must engage")
+    var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    let begin = VkCommandBufferBeginInfo()
+    for (dep in range(2)) {
+        let bit = dep == 1 ? 1u : 0u   //! the dependency: x read and written by every dispatch, so the rail barriers between them
+        var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(bit, 0u, 0u, 2u * bit))
+        var raw = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_cls_ar(raw, hz, sc, pc, 1l)
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        var scq = set_cls_ar_rq(fixed_array(xd, ad, wnd, xqd, xsd), fixed_array(nb, nb, nb, int64(dim), int64(dim / 32) * 4l), fixed_array(bit, 0u, 0u, 2u * bit, 2u * bit))
+        var rawq = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(rawq, begin), null)
+        var hzq : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_cls_ar_rq(rawq, hzq, scq, pc, 1l)
+        }
+        vk_check(vkEndCommandBuffer(rawq), null)
+        let usq = usec_per_dispatch(rawq)
+        print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq {usq} us/dispatch\n")
+    }
+    delete ones
+}
+
 // the decode-cost bisect: the shipped cm2l against the three probe variants, one shape
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
@@ -3357,7 +3407,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "small" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -3593,6 +3643,12 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             run_shape_split("g3 down", 1152, 6912, 512, sk)
         }
         run_shape_split("g3 wo  ", 1152, 1024, 512, 2)
+        return
+    }
+    if (only == "small") {
+        for (dim in [1152, 2560, 3840]) {
+            run_small_kernels(dim)
+        }
         return
     }
     if (only == "mmqx") {
