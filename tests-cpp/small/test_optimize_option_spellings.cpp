@@ -1,4 +1,4 @@
-// Program::getOptimize - every options spelling the compiler accepts for "no optimizer" turns it off.
+// Program::getOptimize - every accepted "no optimizer" spelling turns it off
 #include <doctest/doctest.h>
 
 #include "daScript/daScript.h"
@@ -30,9 +30,7 @@ TEST_CASE("every accepted options spelling turns the optimizer off") {
     CHECK(optimizeOf(""));
     CHECK_FALSE(optimizeOf("options optimize = false"));
     CHECK_FALSE(optimizeOf("options no_optimization"));
-    // the CodeOfPolicies field's own name carries the /*option*/ marker, so the parser accepts it;
-    // getOptimize must read it, or the option is accepted and ignored
-    CHECK_FALSE(optimizeOf("options no_optimizations"));
+    CHECK_FALSE(optimizeOf("options no_optimizations"));   // the /*option*/-marked field name: accepted, so it must be read
     CHECK(optimizeOf("options no_optimizations = false"));
 }
 

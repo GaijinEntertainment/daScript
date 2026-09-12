@@ -72,7 +72,7 @@ static string deserFile = ""; // -deser <path>: read the AST module cache during
 static string moduleCacheFile = ""; // -module-cache <path>: both - read when present, refresh when the compile diverged
 static bool moduleCacheExplicit = false; // -module-cache given
 static bool noModuleCache = false;  // -no-module-cache: off, over -module-cache and the default alike
-static bool noOptimization = false; // -no-optimization: the whole program compiles unoptimized, as `options optimize = false` does per file
+static bool noOptimization = false; // -no-optimization: `options optimize = false` for the whole program
 static string hostBinary = "";      // argv[0]
 static string hostOptions = "";     // argv up to "--": the compile's own options key the default cache
 
