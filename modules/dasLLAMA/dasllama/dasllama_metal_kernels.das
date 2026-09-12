@@ -3551,14 +3551,6 @@ class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
 // [metal_dispatch]-generated builders can see the pipeline they dispatch); the compile_pso()
 // assignments below and the shutdown releases stay here.
 
-def release_pso(var pso : MetalComputePipeline?&) {
-    if (pso != null) {
-        metal_release(pso)
-        pso = null
-    }
-}
-
-
 def compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : MetalComputePipeline? {
     var err : string
     var pso = pipeline_from_source(g_dev, source, entry, fastmath, err)
@@ -4476,287 +4468,182 @@ def pf_enc_add_rms_bhx(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps, b
 
 //! Release every PSO the registry compiled (the PSO half of metal_decode_shutdown — runs
 //! before the shared device goes).
-def metal_kernels_release {   // nolint:STYLE037,STYLE038 — a flat release_pso per kernel; no seam to split on
-    if (g_pso_gemv != null) {
-        metal_release(g_pso_gemv)
-        g_pso_gemv = null
-    }
-    release_pso(g_pso_kq_k4)
-    release_pso(g_pso_kq_k5)
-    release_pso(g_pso_kq_k5c)
-    release_pso(g_pso_kq_k6)
-    release_pso(g_pso_kq_mvb2_k4)
-    release_pso(g_pso_kq_mvb2_k4r2)
-    release_pso(g_pso_kq_mvb4_k4)
-    release_pso(g_pso_kq_mvb2_k5)
-    release_pso(g_pso_kq_mvb4_k5)
-    release_pso(g_pso_kq_mvb2_k6)
-    release_pso(g_pso_kq_mvb4_k6)
-    release_pso(g_pso_kq_mvb8_k4)
-    release_pso(g_pso_kq_mvb8_k5)
-    release_pso(g_pso_kq_mvb8_k6)
-    release_pso(g_pso_kq_mm_b4)
-    release_pso(g_pso_kq_mm_b5)
-    release_pso(g_pso_kq_mm_b6)
-    release_pso(g_pso_kq_iq4xs)
-    release_pso(g_pso_kq_mvb2_iq4xs)
-    release_pso(g_pso_kq_mvb4_iq4xs)
-    release_pso(g_pso_kq_mvb8_iq4xs)
-    release_pso(g_pso_kq_mm_b44)
-    release_pso(g_pso_kq_k3)
-    release_pso(g_pso_kq_mvb2_k3)
-    release_pso(g_pso_kq_mvb4_k3)
-    release_pso(g_pso_kq_mvb8_k3)
-    release_pso(g_pso_kq_mm_b3)
-    release_pso(g_pso_kq_iq3s)
-    release_pso(g_pso_kq_mvb2_iq3s)
-    release_pso(g_pso_kq_mvb4_iq3s)
-    release_pso(g_pso_kq_mvb8_iq3s)
-    release_pso(g_pso_kq_mm_b33)
-    release_pso(g_pso_kq_iq3xxs)
-    release_pso(g_pso_kq_mvb2_iq3xxs)
-    release_pso(g_pso_kq_mvb4_iq3xxs)
-    release_pso(g_pso_kq_mvb8_iq3xxs)
-    release_pso(g_pso_kq_mm_b34)
-    release_pso(g_pso_kq_iq4nl)
-    release_pso(g_pso_kq_iq2s)
-    release_pso(g_pso_kq_mvb2_iq2s)
-    release_pso(g_pso_kq_mvb4_iq2s)
-    release_pso(g_pso_kq_mvb8_iq2s)
-    release_pso(g_pso_kq_mm_b23)
-    release_pso(g_pso_kq_iq2xs)
-    release_pso(g_pso_kq_mvb2_iq2xs)
-    release_pso(g_pso_kq_mvb4_iq2xs)
-    release_pso(g_pso_kq_mvb8_iq2xs)
-    release_pso(g_pso_kq_mm_b24)
-    release_pso(g_pso_kq_iq2xxs)
-    release_pso(g_pso_kq_iq2xxs_f4)
-    release_pso(g_pso_kq_iq3s_f4)
-    release_pso(g_pso_kq_iq3xxs_f4)
-    release_pso(g_pso_kq_mvb2_iq2xxs)
-    release_pso(g_pso_kq_mvb4_iq2xxs)
-    release_pso(g_pso_kq_mvb8_iq2xxs)
-    release_pso(g_pso_kq_mm_b25)
-    release_pso(g_pso_kq_mvb2_iq4nl)
-    release_pso(g_pso_kq_mvb4_iq4nl)
-    release_pso(g_pso_kq_mvb8_iq4nl)
-    release_pso(g_pso_kq_mm_b45)
-    release_pso(g_pso_kq_k2)
-    release_pso(g_pso_kq_mvb2_k2)
-    release_pso(g_pso_kq_mvb4_k2)
-    release_pso(g_pso_kq_mvb8_k2)
-    release_pso(g_pso_kq_mm_b2)
-    if (g_pso_rms != null) {
-        metal_release(g_pso_rms)
-        g_pso_rms = null
-    }
-    if (g_pso_rms_hx != null) {
-        metal_release(g_pso_rms_hx)
-        g_pso_rms_hx = null
-    }
-    release_pso(g_pso_dn_ba)
-    release_pso(g_pso_moe_router_b)
-    if (g_pso_add != null) {
-        metal_release(g_pso_add)
-        g_pso_add = null
-    }
-    if (g_pso_addrms_hx != null) {
-        metal_release(g_pso_addrms_hx)
-        g_pso_addrms_hx = null
-    }
-    if (g_pso_addrms != null) {
-        metal_release(g_pso_addrms)
-        g_pso_addrms = null
-    }
-    if (g_pso_preaddrms != null) {
-        metal_release(g_pso_preaddrms)
-        g_pso_preaddrms = null
-    }
-    if (g_one != null) {
-        metal_release(g_one)
-        g_one = null
-    }
-    if (g_zero != null) {
-        metal_release(g_zero)
-        g_zero = null
-    }
-    if (g_pso_geglu != null) {
-        metal_release(g_pso_geglu)
-        g_pso_geglu = null
-    }
-    if (g_pso_geglu_hx != null) {
-        metal_release(g_pso_geglu_hx)
-        g_pso_geglu_hx = null
-    }
-    if (g_pso_ln != null) {
-        metal_release(g_pso_ln)
-        g_pso_ln = null
-    }
-    if (g_pso_gelu_erf != null) {
-        metal_release(g_pso_gelu_erf)
-        g_pso_gelu_erf = null
-    }
-    if (g_pso_gelu_lut != null) {
-        metal_release(g_pso_gelu_lut)
-        g_pso_gelu_lut = null
-    }
-    if (g_pso_posadd != null) {
-        metal_release(g_pso_posadd)
-        g_pso_posadd = null
-    }
-    release_pso(g_pso_q3v_stem)
-    release_pso(g_pso_clamp)
-    release_pso(g_pso_rope2d)
-    release_pso(g_pso_head_restride)
-    release_pso(g_pso_geglu_quick)
-    release_pso(g_pso_cross_kx)
-    release_pso(g_pso_cross_vx)
-    release_pso(g_pso_cross_vx_h)
-    release_pso(g_pso_im2col3)
-    release_pso(g_pso_im2col2d)
-    release_pso(g_pso_wdec_attn_part)
-    release_pso(g_pso_wdec_attn_comb)
-    release_pso(g_pso_bias_add_res)
-    release_pso(g_pso_bias_gelu_lut)
-    if (g_pso_f32mm != null) {
-        metal_release(g_pso_f32mm)
-        g_pso_f32mm = null
-    }
-    if (g_pso_softcap != null) {
-        metal_release(g_pso_softcap)
-        g_pso_softcap = null
-    }
-    if (g_pso_suppress != null) {
-        metal_release(g_pso_suppress)
-        g_pso_suppress = null
-    }
-    if (g_pso_swiglu != null) {
-        metal_release(g_pso_swiglu)
-        g_pso_swiglu = null
-    }
-    if (g_pso_swiglu_hx != null) {
-        metal_release(g_pso_swiglu_hx)
-        g_pso_swiglu_hx = null
-    }
-    if (g_pso_attn16 != null) {
-        metal_release(g_pso_attn16)
-        g_pso_attn16 = null
-    }
-    if (g_pso_attn32 != null) {
-        metal_release(g_pso_attn32)
-        g_pso_attn32 = null
-    }
-    if (g_pso_attnp16 != null) {
-        metal_release(g_pso_attnp16)
-        g_pso_attnp16 = null
-    }
-    if (g_pso_attnp32 != null) {
-        metal_release(g_pso_attnp32)
-        g_pso_attnp32 = null
-    }
-    release_pso(g_pso_attn_q8)
-    release_pso(g_pso_attnp_q8)
-    release_pso(g_pso_rpst_q8)
-    release_pso(g_pso_attn_tq4)
-    release_pso(g_pso_attnp_tq4)
-    release_pso(g_pso_rpst_tq4)
-    release_pso(g_pso_unsign)
-    release_pso(g_pso_qknorm)
-    if (g_pso_attncomb != null) {
-        metal_release(g_pso_attncomb)
-        g_pso_attncomb = null
-    }
-    if (g_pso_rpst16 != null) {
-        metal_release(g_pso_rpst16)
-        g_pso_rpst16 = null
-    }
-    release_pso(g_pso_rpst_h16)
-    if (g_pso_rpst32 != null) {
-        metal_release(g_pso_rpst32)
-        g_pso_rpst32 = null
-    }
-    if (g_pso_argmax_rows != null) {
-        metal_release(g_pso_argmax_rows)
-        g_pso_argmax_rows = null
-    }
-    if (g_pso_argmax != null) {
-        metal_release(g_pso_argmax)
-        g_pso_argmax = null
-    }
-    if (g_pso_copy_row != null) {
-        metal_release(g_pso_copy_row)
-        g_pso_copy_row = null
-    }
-    if (g_pso_emb != null) {
-        metal_release(g_pso_emb)
-        g_pso_emb = null
-    }
-    release_pso(g_pso_emb_k6)
-    release_pso(g_pso_moe_router)
-    release_pso(g_pso_moe_select)
-    release_pso(g_pso_moe_gemv_q8)
-    release_pso(g_pso_moe_kq_k4)
-    release_pso(g_pso_moe_kq_k5)
-    release_pso(g_pso_moe_kq_k6)
-    release_pso(g_pso_moe_combine)
-    release_pso(g_pso_g4rnorm)
-    release_pso(g_pso_moe_wscale)
-    release_pso(g_pso_swiglu_oai)
-    release_pso(g_pso_moe_gemv_mx4)
-    release_pso(g_pso_moe_gemv_q51)
-    release_pso(g_pso_dn_conv)
-    release_pso(g_pso_dn_hist)
-    release_pso(g_pso_dn_l2)
-    release_pso(g_pso_dn_scan)
-    release_pso(g_pso_dn_gate)
-    release_pso(g_pso_dn_deint)
-    release_pso(g_pso_sigmul)
-    release_pso(g_pso_axpy_sig)
-    if (g_mx4_vtab != null) {
-        metal_release(g_mx4_vtab)
-        g_mx4_vtab = null
-    }
-    if (g_pso_qkvrs16 != null) {
-        metal_release(g_pso_qkvrs16)
-        g_pso_qkvrs16 = null
-    }
-    if (g_pso_qkvrs32 != null) {
-        metal_release(g_pso_qkvrs32)
-        g_pso_qkvrs32 = null
-    }
-    if (g_pso_w13sw != null) {
-        metal_release(g_pso_w13sw)
-        g_pso_w13sw = null
-    }
-    release_pso(g_pso_gemv_b2)
-    release_pso(g_pso_gemv_b4)
-    release_pso(g_pso_mv_b2)
-    release_pso(g_pso_mv_b4)
-    release_pso(g_pso_w13sw_b2)
-    release_pso(g_pso_w13sw_b4)
-    release_pso(g_pso_gemm_b)
-    release_pso(g_pso_gemm_b_sk)
-    release_pso(g_pso_skred)
-    release_pso(g_pso_gemm64_b)
-    release_pso(g_pso_mm)
-    release_pso(g_pso_attnb16)
-    release_pso(g_pso_attnb32)
-    release_pso(g_pso_attnb_q8)
-    release_pso(g_pso_attnb_tq4)
-    release_pso(g_pso_attnpb16)
-    release_pso(g_pso_attnpb32)
-    release_pso(g_pso_attnpb_q8)
-    release_pso(g_pso_attnpb_tq4)
-    release_pso(g_pso_attncombb)
-    release_pso(g_pso_attnd16)
-    release_pso(g_pso_attnd32)
-    release_pso(g_pso_attnd_q8)
-    release_pso(g_pso_attnd_tq4)
-    release_pso(g_pso_attncombd)
-    release_pso(g_pso_rpstb16)
-    release_pso(g_pso_rpstb32)
-    release_pso(g_pso_rpstb_q8)
-    release_pso(g_pso_rpstb_tq4)
+def metal_kernels_release {   // nolint:STYLE038 — a flat release_handle per kernel; no seam to split on
+    release_handle(g_pso_gemv)
+    release_handle(g_pso_kq_k4)
+    release_handle(g_pso_kq_k5)
+    release_handle(g_pso_kq_k5c)
+    release_handle(g_pso_kq_k6)
+    release_handle(g_pso_kq_mvb2_k4)
+    release_handle(g_pso_kq_mvb2_k4r2)
+    release_handle(g_pso_kq_mvb4_k4)
+    release_handle(g_pso_kq_mvb2_k5)
+    release_handle(g_pso_kq_mvb4_k5)
+    release_handle(g_pso_kq_mvb2_k6)
+    release_handle(g_pso_kq_mvb4_k6)
+    release_handle(g_pso_kq_mvb8_k4)
+    release_handle(g_pso_kq_mvb8_k5)
+    release_handle(g_pso_kq_mvb8_k6)
+    release_handle(g_pso_kq_mm_b4)
+    release_handle(g_pso_kq_mm_b5)
+    release_handle(g_pso_kq_mm_b6)
+    release_handle(g_pso_kq_iq4xs)
+    release_handle(g_pso_kq_mvb2_iq4xs)
+    release_handle(g_pso_kq_mvb4_iq4xs)
+    release_handle(g_pso_kq_mvb8_iq4xs)
+    release_handle(g_pso_kq_mm_b44)
+    release_handle(g_pso_kq_k3)
+    release_handle(g_pso_kq_mvb2_k3)
+    release_handle(g_pso_kq_mvb4_k3)
+    release_handle(g_pso_kq_mvb8_k3)
+    release_handle(g_pso_kq_mm_b3)
+    release_handle(g_pso_kq_iq3s)
+    release_handle(g_pso_kq_mvb2_iq3s)
+    release_handle(g_pso_kq_mvb4_iq3s)
+    release_handle(g_pso_kq_mvb8_iq3s)
+    release_handle(g_pso_kq_mm_b33)
+    release_handle(g_pso_kq_iq3xxs)
+    release_handle(g_pso_kq_mvb2_iq3xxs)
+    release_handle(g_pso_kq_mvb4_iq3xxs)
+    release_handle(g_pso_kq_mvb8_iq3xxs)
+    release_handle(g_pso_kq_mm_b34)
+    release_handle(g_pso_kq_iq4nl)
+    release_handle(g_pso_kq_iq2s)
+    release_handle(g_pso_kq_mvb2_iq2s)
+    release_handle(g_pso_kq_mvb4_iq2s)
+    release_handle(g_pso_kq_mvb8_iq2s)
+    release_handle(g_pso_kq_mm_b23)
+    release_handle(g_pso_kq_iq2xs)
+    release_handle(g_pso_kq_mvb2_iq2xs)
+    release_handle(g_pso_kq_mvb4_iq2xs)
+    release_handle(g_pso_kq_mvb8_iq2xs)
+    release_handle(g_pso_kq_mm_b24)
+    release_handle(g_pso_kq_iq2xxs)
+    release_handle(g_pso_kq_iq2xxs_f4)
+    release_handle(g_pso_kq_iq3s_f4)
+    release_handle(g_pso_kq_iq3xxs_f4)
+    release_handle(g_pso_kq_mvb2_iq2xxs)
+    release_handle(g_pso_kq_mvb4_iq2xxs)
+    release_handle(g_pso_kq_mvb8_iq2xxs)
+    release_handle(g_pso_kq_mm_b25)
+    release_handle(g_pso_kq_mvb2_iq4nl)
+    release_handle(g_pso_kq_mvb4_iq4nl)
+    release_handle(g_pso_kq_mvb8_iq4nl)
+    release_handle(g_pso_kq_mm_b45)
+    release_handle(g_pso_kq_k2)
+    release_handle(g_pso_kq_mvb2_k2)
+    release_handle(g_pso_kq_mvb4_k2)
+    release_handle(g_pso_kq_mvb8_k2)
+    release_handle(g_pso_kq_mm_b2)
+    release_handle(g_pso_rms)
+    release_handle(g_pso_rms_hx)
+    release_handle(g_pso_dn_ba)
+    release_handle(g_pso_moe_router_b)
+    release_handle(g_pso_add)
+    release_handle(g_pso_addrms_hx)
+    release_handle(g_pso_addrms)
+    release_handle(g_pso_preaddrms)
+    release_handle(g_one)
+    release_handle(g_zero)
+    release_handle(g_pso_geglu)
+    release_handle(g_pso_geglu_hx)
+    release_handle(g_pso_ln)
+    release_handle(g_pso_gelu_erf)
+    release_handle(g_pso_gelu_lut)
+    release_handle(g_pso_posadd)
+    release_handle(g_pso_q3v_stem)
+    release_handle(g_pso_clamp)
+    release_handle(g_pso_rope2d)
+    release_handle(g_pso_head_restride)
+    release_handle(g_pso_geglu_quick)
+    release_handle(g_pso_cross_kx)
+    release_handle(g_pso_cross_vx)
+    release_handle(g_pso_cross_vx_h)
+    release_handle(g_pso_im2col3)
+    release_handle(g_pso_im2col2d)
+    release_handle(g_pso_wdec_attn_part)
+    release_handle(g_pso_wdec_attn_comb)
+    release_handle(g_pso_bias_add_res)
+    release_handle(g_pso_bias_gelu_lut)
+    release_handle(g_pso_f32mm)
+    release_handle(g_pso_softcap)
+    release_handle(g_pso_suppress)
+    release_handle(g_pso_swiglu)
+    release_handle(g_pso_swiglu_hx)
+    release_handle(g_pso_attn16)
+    release_handle(g_pso_attn32)
+    release_handle(g_pso_attnp16)
+    release_handle(g_pso_attnp32)
+    release_handle(g_pso_attn_q8)
+    release_handle(g_pso_attnp_q8)
+    release_handle(g_pso_rpst_q8)
+    release_handle(g_pso_attn_tq4)
+    release_handle(g_pso_attnp_tq4)
+    release_handle(g_pso_rpst_tq4)
+    release_handle(g_pso_unsign)
+    release_handle(g_pso_qknorm)
+    release_handle(g_pso_attncomb)
+    release_handle(g_pso_rpst16)
+    release_handle(g_pso_rpst_h16)
+    release_handle(g_pso_rpst32)
+    release_handle(g_pso_argmax_rows)
+    release_handle(g_pso_argmax)
+    release_handle(g_pso_copy_row)
+    release_handle(g_pso_emb)
+    release_handle(g_pso_emb_k6)
+    release_handle(g_pso_moe_router)
+    release_handle(g_pso_moe_select)
+    release_handle(g_pso_moe_gemv_q8)
+    release_handle(g_pso_moe_kq_k4)
+    release_handle(g_pso_moe_kq_k5)
+    release_handle(g_pso_moe_kq_k6)
+    release_handle(g_pso_moe_combine)
+    release_handle(g_pso_g4rnorm)
+    release_handle(g_pso_moe_wscale)
+    release_handle(g_pso_swiglu_oai)
+    release_handle(g_pso_moe_gemv_mx4)
+    release_handle(g_pso_moe_gemv_q51)
+    release_handle(g_pso_dn_conv)
+    release_handle(g_pso_dn_hist)
+    release_handle(g_pso_dn_l2)
+    release_handle(g_pso_dn_scan)
+    release_handle(g_pso_dn_gate)
+    release_handle(g_pso_dn_deint)
+    release_handle(g_pso_sigmul)
+    release_handle(g_pso_axpy_sig)
+    release_handle(g_mx4_vtab)
+    release_handle(g_pso_qkvrs16)
+    release_handle(g_pso_qkvrs32)
+    release_handle(g_pso_w13sw)
+    release_handle(g_pso_gemv_b2)
+    release_handle(g_pso_gemv_b4)
+    release_handle(g_pso_mv_b2)
+    release_handle(g_pso_mv_b4)
+    release_handle(g_pso_w13sw_b2)
+    release_handle(g_pso_w13sw_b4)
+    release_handle(g_pso_gemm_b)
+    release_handle(g_pso_gemm_b_sk)
+    release_handle(g_pso_skred)
+    release_handle(g_pso_gemm64_b)
+    release_handle(g_pso_mm)
+    release_handle(g_pso_attnb16)
+    release_handle(g_pso_attnb32)
+    release_handle(g_pso_attnb_q8)
+    release_handle(g_pso_attnb_tq4)
+    release_handle(g_pso_attnpb16)
+    release_handle(g_pso_attnpb32)
+    release_handle(g_pso_attnpb_q8)
+    release_handle(g_pso_attnpb_tq4)
+    release_handle(g_pso_attncombb)
+    release_handle(g_pso_attnd16)
+    release_handle(g_pso_attnd32)
+    release_handle(g_pso_attnd_q8)
+    release_handle(g_pso_attnd_tq4)
+    release_handle(g_pso_attncombd)
+    release_handle(g_pso_rpstb16)
+    release_handle(g_pso_rpstb32)
+    release_handle(g_pso_rpstb_q8)
+    release_handle(g_pso_rpstb_tq4)
 }
 
 
@@ -4796,14 +4683,7 @@ def private race_gemmb_family(dev : MetalDevice?; queue : MetalCommandQueue?; fa
         kn_kargs(enc, ka, 5)
         kn_dispatch(enc, grid, tg)
     })
-    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-        res.note = "dispatch failed"
-    } elif (!race_envelope_ok(by_base, by_twin, out_n, res.note)) {
-        res.winner = "simdgroup"
-    } else {
-        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-    }
+    kq_race_verdict(res, by_base, by_twin, out_n)
     metal_release(bw)
     metal_release(bxa)
     metal_release(by_base)
@@ -4931,18 +4811,6 @@ def private release_kq_race_rig(var rig : KqRaceRig) {
     metal_release(rig.bn)
     metal_release(rig.bd)
     delete rig.xa
-}
-
-// both arms timed and within the envelope -> the faster wins; "tensor" is the second arm
-def private kq_race_verdict(var res : MetalTensorRaceResult; by_a, by_b : MetalBuffer?; count : int) {
-    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-        res.note = "dispatch failed"
-    } elif (!race_envelope_ok(by_a, by_b, count, res.note)) {
-        res.winner = "simdgroup"
-    } else {
-        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-    }
 }
 
 //! Decode-side tuner entry (the runtime.metal_tensor crown): the batch q8 GEMM families and the
@@ -5081,14 +4949,7 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
             kn_dispatch(enc, uint3(uint(ndim / twin_gdiv), 1u, 1u), tg)
         }
     })
-    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-        res.note = "dispatch failed"
-    } elif (!race_envelope_ok(by_base, by_twin, ndim, res.note)) {
-        res.winner = "simdgroup"
-    } else {
-        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-    }
+    kq_race_verdict(res, by_base, by_twin, ndim)
     metal_release(bq)
     metal_release(bs)
     metal_release(bxa)

@@ -7,7 +7,6 @@ module dasllama_metal_decode shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
-require strings   // build_string — the DASLLAMA_MTP_DEBUG=trace round line
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
@@ -1543,22 +1542,6 @@ def private encode_dn_replay(t : Model; var r : StepRes; nrun : int64) {
     metal_release(cb)
 }
 
-[cold_path]
-def private mtp_trace_round(s : Session; pos, k, nr, a, vocab : int64) {
-    let line : string = build_string() $(var w) {
-        w |> write("mtp round pos={pos} k={k} drafts=[")
-        for (i in range64(k)) {
-            w |> write("{s.mtp_vbatch[i + 1l]} ")
-        }
-        w |> write("] truths=[")
-        for (i in range64(nr)) {
-            w |> write("{argmax_row(s.mtp_logits_b, i, vocab)} ")
-        }
-        w |> write("] a={a}")
-    }
-    to_log(LOG_INFO, "{line}\n")
-}
-
 //! The speculative ROUND on the metal decode path: k chained drafts, ONE same-slab verify at k+1
 //! rows, the accept walk, the commit. Returns a (0..k); the accepted drafts are s.mtp_vbatch[1..a],
 //! `tok` is always committed; a refused round takes one plain GPU step and returns 0 undrafted.
@@ -1696,7 +1679,7 @@ def metal_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64)
         }
     }
     if (g_env_mtp_debug == "trace") {
-        mtp_trace_round(s, pos, k, nr, a, c.vocab_size)
+        mtp_round_trace("mtp", s, pos, k, nr, a, c.vocab_size)
     }
     unsafe {
         var hx = reinterpret<uint8?>(metal_buffer_contents(r.bxf))

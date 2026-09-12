@@ -500,22 +500,22 @@ def spec_armed() : bool {
     return true
 }
 
+//! Release a Metal object through its slot and null the slot - a PSO, a buffer, any handle
+//! `metal_release` takes.
+def release_handle(var h : auto(HT)?&) {
+    if (h != null) {
+        metal_release(h)
+        h = null
+    }
+}
+
 // the stages the single-row and batch decode drivers honor as a knockout (g_skip != "<stage>")
 let DECODE_SKIP_STAGES <- ["gemv", "attn", "ew", "moe_rt", "moe_sh", "qkv", "wo"]
-
-def decode_skip_known(v : string) : bool {
-    for (s in DECODE_SKIP_STAGES) {
-        if (s == v) {
-            return true
-        }
-    }
-    return false
-}
 
 //! The knockout rail as an in-process setter (timing attribution — served output is GARBAGE while
 //! non-empty; `""` restores full math). Same rail as `DASLLAMA_METAL_DECODE_SKIP`.
 def public set_metal_decode_skip(v : string) {
-    if (!empty(v) && !decode_skip_known(v)) {
+    if (!empty(v) && !has_value(DECODE_SKIP_STAGES, v)) {
         panic("dasLLAMA: unknown metal decode knockout '{v}' - the drivers read gemv, attn, ew, moe_rt, moe_sh, qkv, wo")
     }
     g_skip = v
@@ -896,54 +896,12 @@ def nc_logits_release {
 //! grp-repacked loads). Serves BOTH resident drivers (prefill passes its own device handle).
 def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; qoff : uint64> {
     assert(t.metal_blob)
-    let sb0 = off / 256l
+    var kq : array<uint8> const?
+    var ks : array<uint8> const?
+    kq_planes_of(t, fmt, kq, ks)
     unsafe {
-        if (fmt == KqFmt.k4) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k4q[0]), uint64(long_length(t.k4q)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.k5) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k5q[0]), uint64(long_length(t.k5q)), t.image_map != null),
-                    qoff = uint64(sb0 * 160l))
-        }
-        if (fmt == KqFmt.iq4xs) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq4xsq[0]), uint64(long_length(t.iq4xsq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.k3) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k3q[0]), uint64(long_length(t.k3q)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq3s) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq3sq[0]), uint64(long_length(t.iq3sq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq3xxs) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq3xxsq[0]), uint64(long_length(t.iq3xxsq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq4nl) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq4nlq[0]), uint64(long_length(t.iq4nlq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.k2) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k2q[0]), uint64(long_length(t.k2q)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq2s) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2sq[0]), uint64(long_length(t.iq2sq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq2xs) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2xsq[0]), uint64(long_length(t.iq2xsq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq2xxs) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2xxsq[0]), uint64(long_length(t.iq2xxsq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        return (buf = plane_buffer(dev, addr < void? >(t.k6q[0]), uint64(long_length(t.k6q)), t.image_map != null),
-                qoff = uint64(sb0 * 192l))
+        return (buf = plane_buffer(dev, addr<void?>((*kq)[0]), uint64(long_length(*kq)), t.image_map != null),
+                qoff = uint64((off / 256l) * kq_qsb(fmt)))
     }
 }
 
@@ -954,62 +912,18 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)
     let sb0 = off / 256l
+    var kq : array<uint8> const?
+    var ks : array<uint8> const?
+    kq_planes_of(t, fmt, kq, ks)
+    //! the compact 16B/sb planes bind once (doff unused); every split plane carries a 2B d tail
+    //! per superblock past its strips, k2 a 4B d+dmin tail
+    let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl
+    let tail = compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
     unsafe {
-        if (fmt == KqFmt.k6) {
-            let plane_sb = long_length(t.k6s) / 18l   // split form keeps the 18B/sb total
-            return (buf = plane_buffer(dev, addr < void? >(t.k6s[0]), uint64(long_length(t.k6s)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.k4) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k4s[0]), uint64(long_length(t.k4s)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = 0ul)
-        }
-        if (fmt == KqFmt.k3) {
-            let plane_sb = long_length(t.k3s) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.k3s[0]), uint64(long_length(t.k3s)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq3s) {
-            let plane_sb = long_length(t.iq3ss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq3ss[0]), uint64(long_length(t.iq3ss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq3xxs) {
-            let plane_sb = long_length(t.iq3xxss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq3xxss[0]), uint64(long_length(t.iq3xxss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq4xs) {
-            let plane_sb = long_length(t.iq4xss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq4xss[0]), uint64(long_length(t.iq4xss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq4nl) {   // q40's 16B/sb plane of 8 f16 d - verbatim, one bind (doff unused)
-            return (buf = plane_buffer(dev, addr < void? >(t.iq4nls[0]), uint64(long_length(t.iq4nls)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = 0ul)
-        }
-        if (fmt == KqFmt.k2) {   // the k6 split shape with a 4B d+dmin tail per superblock
-            let plane_sb = long_length(t.k2s) / 20l
-            return (buf = plane_buffer(dev, addr < void? >(t.k2s[0]), uint64(long_length(t.k2s)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 4l))
-        }
-        if (fmt == KqFmt.iq2s) {   // the k6 split form over the 18B/sb device plane (d8 tail)
-            let plane_sb = long_length(t.iq2ss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2ss[0]), uint64(long_length(t.iq2ss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq2xs) {
-            let plane_sb = long_length(t.iq2xss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2xss[0]), uint64(long_length(t.iq2xss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq2xxs) {
-            let plane_sb = long_length(t.iq2xxss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2xxss[0]), uint64(long_length(t.iq2xxss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        return (buf = plane_buffer(dev, addr < void? >(t.k5s[0]), uint64(long_length(t.k5s)), t.image_map != null),
-                soff = uint64(sb0 * 16l), doff = 0ul)
+        let plane_sb = long_length(*ks) / (16l + tail)
+        return (buf = plane_buffer(dev, addr<void?>((*ks)[0]), uint64(long_length(*ks)), t.image_map != null),
+                soff = uint64(sb0 * 16l),
+                doff = compact ? 0ul : uint64(plane_sb * 16l + sb0 * tail))
     }
 }
 
@@ -1908,16 +1822,26 @@ def sameslab_argmax(i : int64) : int64 => g_sameslab_arg[i]
 
 //! argmax of row `row` in a [rows x n] logits image; the lowest index wins a tie (the CPU sampler's rule)
 def argmax_row(v : array<float>; row, n : int64) : int64 {
-    let off = row * n
-    var best = 0l
-    var bv = v[off]
-    for (i in range64(1l, n)) {
-        if (v[off + i] > bv) {
-            bv = v[off + i]
-            best = i
-        }
+    unsafe {
+        return parallel_argmax(addr(v[row * n]), n)
     }
-    return best
+}
+
+//! One speculative round's drafts beside the verify's truths, for the trace arms.
+[cold_path]
+def mtp_round_trace(tag : string; s : Session; pos, k, nr, a, vocab : int64) {
+    let line : string = build_string() $(var w) {
+        w |> write("{tag} round pos={pos} k={k} drafts=[")
+        for (i in range64(k)) {
+            w |> write("{s.mtp_vbatch[i + 1l]} ")
+        }
+        w |> write("] truths=[")
+        for (i in range64(nr)) {
+            w |> write("{argmax_row(s.mtp_logits_b, i, vocab)} ")
+        }
+        w |> write("] a={a}")
+    }
+    to_log(LOG_INFO, "{line}\n")
 }
 var g_lp_xb : MetalBuffer?      // production sync + CPU-classifier path: x_b writeback
 var g_lp_xb_dst : void?         // ... into the caller's workspace (borrowed, sync-only)
@@ -2422,6 +2346,19 @@ def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : b
     }
     note = "twin within envelope: maxdiff={maxdiff} <= 5% of maxref={maxref}"
     return true
+}
+
+//! Both arms timed and within the envelope -> the faster wins; "tensor" is the second arm.
+//! `half` compares the two payloads as f16.
+def kq_race_verdict(var res : MetalTensorRaceResult; by_a, by_b : MetalBuffer?; count : int; half : bool = false) {
+    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+        res.note = "dispatch failed"
+    } elif (!(half ? race_envelope_ok_h(by_a, by_b, count, res.note) : race_envelope_ok(by_a, by_b, count, res.note))) {
+        res.winner = "simdgroup"
+    } else {
+        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+    }
 }
 
 // interleaved adjacent A/B pair — separate per-side blocks read the box's thermal/clock ramp

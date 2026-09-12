@@ -4058,256 +4058,118 @@ def public metal_prefill_pso_init : bool {
 //! Release every GPU object the driver holds — the tests' leak-gate rail (and the reset for
 //! refilled weight arrays, same contract as metal_gemm_shutdown). Lazily re-initializes on the
 //! next served prefill.
-def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-release-per-PSO list
+def public metal_prefill_shutdown {   // nolint:STYLE038 — flat one-release-per-PSO list
     kcov_fold()   //! PSO pointers recycle across re-init — counts fold into names first
     residency_reset()   //! the set references pooled buffers the drains below release
     pf_devw_res_release()   //! resident dev-W panels die with the driver (and any weight refill re-fills)
     pool_drain(g_pf_pool)
     pool_drain(g_pf_upool)
-    if (g_pf_pso_moe_mm_q8_t != null) {
-        metal_release(g_pf_pso_moe_mm_q8_t)
-        g_pf_pso_moe_mm_q8_t = null
-    }
-    if (g_pf_pso_moe_mm_q8_th != null) {
-        metal_release(g_pf_pso_moe_mm_q8_th)
-        g_pf_pso_moe_mm_q8_th = null
-    }
-    if (g_pf_pso_moe_mm_mx4_t != null) {
-        metal_release(g_pf_pso_moe_mm_mx4_t)
-        g_pf_pso_moe_mm_mx4_t = null
-    }
-    if (g_pf_pso_moe_gx != null) {
-        metal_release(g_pf_pso_moe_gx)
-        g_pf_pso_moe_gx = null
-    }
-    for (pp in [g_pf_pso_moe_mm_q8_th128, g_pf_pso_moe_mm_q8_thr, g_pf_pso_moe_mm_mx4_th128, g_pf_pso_moe_mm_mx4_thr,
-                g_pf_pso_moe_mm_k4_th128, g_pf_pso_moe_mm_k4_thr, g_pf_pso_moe_mm_k5_th128, g_pf_pso_moe_mm_k5_thr,
-                g_pf_pso_moe_mm_k6_th128, g_pf_pso_moe_mm_k6_thr,
-                g_pf_pso_kq_mm4_thdb, g_pf_pso_kq_mm4_thdb128, g_pf_pso_kq_mm5_thdb, g_pf_pso_kq_mm5_thdb128,
-                g_pf_pso_kq_mm6_thdb, g_pf_pso_kq_mm6_thdb128, g_pf_pso_mm_thdb]) {
-        if (pp != null) {
-            metal_release(pp)
-        }
-    }
-    g_pf_pso_kq_mm4_thdb = null
-    g_pf_pso_kq_mm4_thdb128 = null
-    g_pf_pso_kq_mm5_thdb = null
-    g_pf_pso_kq_mm5_thdb128 = null
-    g_pf_pso_kq_mm6_thdb = null
-    g_pf_pso_kq_mm6_thdb128 = null
-    g_pf_pso_mm_thdb = null
-    g_pf_pso_moe_mm_q8_th128 = null
-    g_pf_pso_moe_mm_q8_thr = null
-    g_pf_pso_moe_mm_mx4_th128 = null
-    g_pf_pso_moe_mm_mx4_thr = null
-    g_pf_pso_moe_mm_k4_th128 = null
-    g_pf_pso_moe_mm_k4_thr = null
-    g_pf_pso_moe_mm_k5_th128 = null
-    g_pf_pso_moe_mm_k5_thr = null
-    g_pf_pso_moe_mm_k6_th128 = null
-    g_pf_pso_moe_mm_k6_thr = null
-    for (pp in [g_pf_pso_moe_mm_k4_t, g_pf_pso_moe_mm_k4_th, g_pf_pso_moe_mm_k5_t, g_pf_pso_moe_mm_k5_th, g_pf_pso_moe_mm_k6_t, g_pf_pso_moe_mm_k6_th,
-                g_pf_pso_moe_mm_q51_t, g_pf_pso_moe_mm_q51_th, g_pf_pso_moe_mm_q51_th128, g_pf_pso_moe_mm_q51_thr]) {
-        if (pp != null) {
-            metal_release(pp)
-        }
-    }
-    g_pf_pso_moe_mm_k4_t = null
-    g_pf_pso_moe_mm_k4_th = null
-    g_pf_pso_moe_mm_k5_t = null
-    g_pf_pso_moe_mm_k5_th = null
-    g_pf_pso_moe_mm_k6_t = null
-    g_pf_pso_moe_mm_k6_th = null
-    g_pf_pso_moe_mm_q51_t = null
-    g_pf_pso_moe_mm_q51_th = null
-    g_pf_pso_moe_mm_q51_th128 = null
-    g_pf_pso_moe_mm_q51_thr = null
-    if (g_pf_pso_moe_mm_mx4_th != null) {
-        metal_release(g_pf_pso_moe_mm_mx4_th)
-        g_pf_pso_moe_mm_mx4_th = null
-    }
-    if (g_pf_pso_kq_mm4_t != null) {
-        metal_release(g_pf_pso_kq_mm4_t)
-        g_pf_pso_kq_mm4_t = null
-    }
-    if (g_pf_pso_kq_mm4_th != null) {
-        metal_release(g_pf_pso_kq_mm4_th)
-        g_pf_pso_kq_mm4_th = null
-    }
-    if (g_pf_pso_kq_mm4_th128 != null) {
-        metal_release(g_pf_pso_kq_mm4_th128)
-        g_pf_pso_kq_mm4_th128 = null
-    }
-    if (g_pf_pso_kq_mm5_t != null) {
-        metal_release(g_pf_pso_kq_mm5_t)
-        g_pf_pso_kq_mm5_t = null
-    }
-    if (g_pf_pso_kq_mm5_th != null) {
-        metal_release(g_pf_pso_kq_mm5_th)
-        g_pf_pso_kq_mm5_th = null
-    }
-    if (g_pf_pso_kq_mm5_th128 != null) {
-        metal_release(g_pf_pso_kq_mm5_th128)
-        g_pf_pso_kq_mm5_th128 = null
-    }
-    if (g_pf_pso_kq_mm6_t != null) {
-        metal_release(g_pf_pso_kq_mm6_t)
-        g_pf_pso_kq_mm6_t = null
-    }
-    if (g_pf_pso_kq_mm6_th != null) {
-        metal_release(g_pf_pso_kq_mm6_th)
-        g_pf_pso_kq_mm6_th = null
-    }
-    if (g_pf_pso_kq_mm6_th128 != null) {
-        metal_release(g_pf_pso_kq_mm6_th128)
-        g_pf_pso_kq_mm6_th128 = null
-    }
+    release_handle(g_pf_pso_moe_mm_q8_t)
+    release_handle(g_pf_pso_moe_mm_q8_th)
+    release_handle(g_pf_pso_moe_mm_mx4_t)
+    release_handle(g_pf_pso_moe_gx)
+    release_handle(g_pf_pso_moe_mm_q8_th128)
+    release_handle(g_pf_pso_moe_mm_q8_thr)
+    release_handle(g_pf_pso_moe_mm_mx4_th128)
+    release_handle(g_pf_pso_moe_mm_mx4_thr)
+    release_handle(g_pf_pso_moe_mm_k4_th128)
+    release_handle(g_pf_pso_moe_mm_k4_thr)
+    release_handle(g_pf_pso_moe_mm_k5_th128)
+    release_handle(g_pf_pso_moe_mm_k5_thr)
+    release_handle(g_pf_pso_moe_mm_k6_th128)
+    release_handle(g_pf_pso_moe_mm_k6_thr)
+    release_handle(g_pf_pso_kq_mm4_thdb)
+    release_handle(g_pf_pso_kq_mm4_thdb128)
+    release_handle(g_pf_pso_kq_mm5_thdb)
+    release_handle(g_pf_pso_kq_mm5_thdb128)
+    release_handle(g_pf_pso_kq_mm6_thdb)
+    release_handle(g_pf_pso_kq_mm6_thdb128)
+    release_handle(g_pf_pso_mm_thdb)
+    release_handle(g_pf_pso_moe_mm_k4_t)
+    release_handle(g_pf_pso_moe_mm_k4_th)
+    release_handle(g_pf_pso_moe_mm_k5_t)
+    release_handle(g_pf_pso_moe_mm_k5_th)
+    release_handle(g_pf_pso_moe_mm_k6_t)
+    release_handle(g_pf_pso_moe_mm_k6_th)
+    release_handle(g_pf_pso_moe_mm_q51_t)
+    release_handle(g_pf_pso_moe_mm_q51_th)
+    release_handle(g_pf_pso_moe_mm_q51_th128)
+    release_handle(g_pf_pso_moe_mm_q51_thr)
+    release_handle(g_pf_pso_moe_mm_mx4_th)
+    release_handle(g_pf_pso_kq_mm4_t)
+    release_handle(g_pf_pso_kq_mm4_th)
+    release_handle(g_pf_pso_kq_mm4_th128)
+    release_handle(g_pf_pso_kq_mm5_t)
+    release_handle(g_pf_pso_kq_mm5_th)
+    release_handle(g_pf_pso_kq_mm5_th128)
+    release_handle(g_pf_pso_kq_mm6_t)
+    release_handle(g_pf_pso_kq_mm6_th)
+    release_handle(g_pf_pso_kq_mm6_th128)
     g_pf_inited = false
-    if (g_pf_pso_rope != null) {
-        metal_release(g_pf_pso_rope)
-        g_pf_pso_rope = null
-    }
-    if (g_pf_pso_qkr != null) {
-        metal_release(g_pf_pso_qkr)
-        g_pf_pso_qkr = null
-    }
-    if (g_pf_pso_qkr_hx != null) {
-        metal_release(g_pf_pso_qkr_hx)
-        g_pf_pso_qkr_hx = null
-    }
-    if (g_pf_pso_addbias != null) {
-        metal_release(g_pf_pso_addbias)
-        g_pf_pso_addbias = null
-    }
-    if (g_pf_pso_qk != null) {
-        metal_release(g_pf_pso_qk)
-        g_pf_pso_qk = null
-    }
-    if (g_pf_pso_rowstat != null) {
-        metal_release(g_pf_pso_rowstat)
-        g_pf_pso_rowstat = null
-    }
-    if (g_pf_pso_av != null) {
-        metal_release(g_pf_pso_av)
-        g_pf_pso_av = null
-    }
-    if (g_pf_pso_cat2 != null) {
-        metal_release(g_pf_pso_cat2)
-        g_pf_pso_cat2 = null
-    }
-    if (g_pf_pso_mm_t != null) {
-        metal_release(g_pf_pso_mm_t)
-        g_pf_pso_mm_t = null
-    }
-    if (g_pf_pso_mm_th != null) {
-        metal_release(g_pf_pso_mm_th)
-        g_pf_pso_mm_th = null
-    }
-    if (g_pf_pso_mm_t128 != null) {
-        metal_release(g_pf_pso_mm_t128)
-        g_pf_pso_mm_t128 = null
-    }
-    if (g_pf_pso_mm_th128 != null) {
-        metal_release(g_pf_pso_mm_th128)
-        g_pf_pso_mm_th128 = null
-    }
-    release_pso(g_pf_pso_kq_mm44_t)
-    release_pso(g_pf_pso_kq_mm44_th)
-    release_pso(g_pf_pso_kq_mm45_t)
-    release_pso(g_pf_pso_kq_mm45_th)
-    release_pso(g_pf_pso_kq_mm3_t)
-    release_pso(g_pf_pso_kq_mm3_th)
-    release_pso(g_pf_pso_kq_mm33_t)
-    release_pso(g_pf_pso_kq_mm33_th)
-    release_pso(g_pf_pso_kq_mm34_t)
-    release_pso(g_pf_pso_kq_mm34_th)
-    release_pso(g_pf_pso_kq_mm2_t)
-    release_pso(g_pf_pso_kq_mm2_th)
-    release_pso(g_pf_pso_kq_mm23_t)
-    release_pso(g_pf_pso_kq_mm23_th)
-    release_pso(g_pf_pso_kq_mm24_t)
-    release_pso(g_pf_pso_kq_mm24_th)
-    release_pso(g_pf_pso_kq_mm25_t)
-    release_pso(g_pf_pso_kq_mm25_th)
-    release_pso(g_pf_pso_twr_flash)
-    release_pso(g_pf_pso_twr_kvhc)
-    release_pso(g_pf_pso_twr_win)
-    release_pso(g_pf_pso_twr_gather)
-    release_pso(g_pf_pso_cn_attn)
-    release_pso(g_pf_pso_cn_dw)
-    release_pso(g_pf_pso_g4a_attn)
-    release_pso(g_pf_pso_g4a_glu)
-    release_pso(g_pf_pso_g4a_dw)
-    release_pso(g_pf_pso_g4a_silu)
-    release_pso(g_pf_pso_g4a_axpy)
-    release_pso(g_pf_pso_q3a_shuffle)
-    release_pso(g_pf_pso_q3a_finish)
-    release_pso(g_pf_pso_q3a_pow)
-    release_pso(g_pf_pso_q3a_logmel_t)
-    release_pso(g_pf_pso_g4a_mag)
-    release_pso(g_pf_pso_g4a_logmel)
-    release_pso(g_pf_pso_g4a_lnrelu)
-    release_pso(g_pf_pso_g4a_im2col)
-    if (g_pf_pso_cvt_half != null) {
-        metal_release(g_pf_pso_cvt_half)
-        g_pf_pso_cvt_half = null
-    }
-    if (g_pf_pso_dq_q8 != null) {
-        metal_release(g_pf_pso_dq_q8)
-        g_pf_pso_dq_q8 = null
-    }
-    if (g_pf_pso_dq_k4 != null) {
-        metal_release(g_pf_pso_dq_k4)
-        g_pf_pso_dq_k4 = null
-    }
-    if (g_pf_pso_dq_k5 != null) {
-        metal_release(g_pf_pso_dq_k5)
-        g_pf_pso_dq_k5 = null
-    }
-    if (g_pf_pso_dq_k6 != null) {
-        metal_release(g_pf_pso_dq_k6)
-        g_pf_pso_dq_k6 = null
-    }
-    if (g_pf_pso_hmm_th != null) {
-        metal_release(g_pf_pso_hmm_th)
-        g_pf_pso_hmm_th = null
-    }
-    if (g_pf_pso_hmm_th128 != null) {
-        metal_release(g_pf_pso_hmm_th128)
-        g_pf_pso_hmm_th128 = null
-    }
-    if (g_pf_pso_hmm_th128_l1 != null) {
-        metal_release(g_pf_pso_hmm_th128_l1)
-        g_pf_pso_hmm_th128_l1 = null
-    }
-    if (g_pf_pso_mm_thdb128 != null) {
-        metal_release(g_pf_pso_mm_thdb128)
-        g_pf_pso_mm_thdb128 = null
-    }
-    if (g_pf_pso_bf16_mm != null) {
-        metal_release(g_pf_pso_bf16_mm)
-        g_pf_pso_bf16_mm = null
-    }
-    if (g_pf_pso_bf16_mm_th != null) {
-        metal_release(g_pf_pso_bf16_mm_th)
-        g_pf_pso_bf16_mm_th = null
-    }
-    if (g_pf_pso_bf16_mm_t128 != null) {
-        metal_release(g_pf_pso_bf16_mm_t128)
-        g_pf_pso_bf16_mm_t128 = null
-    }
-    if (g_pf_pso_bf16_mm_th128 != null) {
-        metal_release(g_pf_pso_bf16_mm_th128)
-        g_pf_pso_bf16_mm_th128 = null
-    }
-    if (g_pf_pso_ple_gather != null) {
-        metal_release(g_pf_pso_ple_gather)
-        g_pf_pso_ple_gather = null
-    }
-    if (g_pf_pso_ple_finish != null) {
-        metal_release(g_pf_pso_ple_finish)
-        g_pf_pso_ple_finish = null
-    }
+    release_handle(g_pf_pso_rope)
+    release_handle(g_pf_pso_qkr)
+    release_handle(g_pf_pso_qkr_hx)
+    release_handle(g_pf_pso_addbias)
+    release_handle(g_pf_pso_qk)
+    release_handle(g_pf_pso_rowstat)
+    release_handle(g_pf_pso_av)
+    release_handle(g_pf_pso_cat2)
+    release_handle(g_pf_pso_mm_t)
+    release_handle(g_pf_pso_mm_th)
+    release_handle(g_pf_pso_mm_t128)
+    release_handle(g_pf_pso_mm_th128)
+    release_handle(g_pf_pso_kq_mm44_t)
+    release_handle(g_pf_pso_kq_mm44_th)
+    release_handle(g_pf_pso_kq_mm45_t)
+    release_handle(g_pf_pso_kq_mm45_th)
+    release_handle(g_pf_pso_kq_mm3_t)
+    release_handle(g_pf_pso_kq_mm3_th)
+    release_handle(g_pf_pso_kq_mm33_t)
+    release_handle(g_pf_pso_kq_mm33_th)
+    release_handle(g_pf_pso_kq_mm34_t)
+    release_handle(g_pf_pso_kq_mm34_th)
+    release_handle(g_pf_pso_kq_mm2_t)
+    release_handle(g_pf_pso_kq_mm2_th)
+    release_handle(g_pf_pso_kq_mm23_t)
+    release_handle(g_pf_pso_kq_mm23_th)
+    release_handle(g_pf_pso_kq_mm24_t)
+    release_handle(g_pf_pso_kq_mm24_th)
+    release_handle(g_pf_pso_kq_mm25_t)
+    release_handle(g_pf_pso_kq_mm25_th)
+    release_handle(g_pf_pso_twr_flash)
+    release_handle(g_pf_pso_twr_kvhc)
+    release_handle(g_pf_pso_twr_win)
+    release_handle(g_pf_pso_twr_gather)
+    release_handle(g_pf_pso_cn_attn)
+    release_handle(g_pf_pso_cn_dw)
+    release_handle(g_pf_pso_g4a_attn)
+    release_handle(g_pf_pso_g4a_glu)
+    release_handle(g_pf_pso_g4a_dw)
+    release_handle(g_pf_pso_g4a_silu)
+    release_handle(g_pf_pso_g4a_axpy)
+    release_handle(g_pf_pso_q3a_shuffle)
+    release_handle(g_pf_pso_q3a_finish)
+    release_handle(g_pf_pso_q3a_pow)
+    release_handle(g_pf_pso_q3a_logmel_t)
+    release_handle(g_pf_pso_g4a_mag)
+    release_handle(g_pf_pso_g4a_logmel)
+    release_handle(g_pf_pso_g4a_lnrelu)
+    release_handle(g_pf_pso_g4a_im2col)
+    release_handle(g_pf_pso_cvt_half)
+    release_handle(g_pf_pso_dq_q8)
+    release_handle(g_pf_pso_dq_k4)
+    release_handle(g_pf_pso_dq_k5)
+    release_handle(g_pf_pso_dq_k6)
+    release_handle(g_pf_pso_hmm_th)
+    release_handle(g_pf_pso_hmm_th128)
+    release_handle(g_pf_pso_hmm_th128_l1)
+    release_handle(g_pf_pso_mm_thdb128)
+    release_handle(g_pf_pso_bf16_mm)
+    release_handle(g_pf_pso_bf16_mm_th)
+    release_handle(g_pf_pso_bf16_mm_t128)
+    release_handle(g_pf_pso_bf16_mm_th128)
+    release_handle(g_pf_pso_ple_gather)
+    release_handle(g_pf_pso_ple_finish)
     for (pso in [g_pf_pso_moe_count,
                  g_pf_pso_moe_bucket, g_pf_pso_moe_reduce, g_pf_pso_moe_mm_q8, g_pf_pso_moe_mm_k4,
                  g_pf_pso_moe_mm_k5, g_pf_pso_moe_mm_k6, g_pf_pso_swiglu_oai,
@@ -4326,34 +4188,13 @@ def public metal_prefill_shutdown {   // nolint:STYLE037,STYLE038 — flat one-r
     g_pf_pso_swiglu_oai = null
     g_pf_pso_moe_mm_mx4 = null
     g_pf_pso_moe_mm_q51 = null
-    if (g_pf_pso_qkmm != null) {
-        metal_release(g_pf_pso_qkmm)
-        g_pf_pso_qkmm = null
-    }
-    if (g_pf_pso_qkmm_t != null) {
-        metal_release(g_pf_pso_qkmm_t)
-        g_pf_pso_qkmm_t = null
-    }
-    if (g_pf_pso_qkmm_th != null) {
-        metal_release(g_pf_pso_qkmm_th)
-        g_pf_pso_qkmm_th = null
-    }
-    if (g_pf_pso_avmm_t != null) {
-        metal_release(g_pf_pso_avmm_t)
-        g_pf_pso_avmm_t = null
-    }
-    if (g_pf_pso_avmm_tp != null) {
-        metal_release(g_pf_pso_avmm_tp)
-        g_pf_pso_avmm_tp = null
-    }
-    if (g_pf_pso_avmm != null) {
-        metal_release(g_pf_pso_avmm)
-        g_pf_pso_avmm = null
-    }
-    if (g_pf_pso_avmm_p != null) {
-        metal_release(g_pf_pso_avmm_p)
-        g_pf_pso_avmm_p = null
-    }
+    release_handle(g_pf_pso_qkmm)
+    release_handle(g_pf_pso_qkmm_t)
+    release_handle(g_pf_pso_qkmm_th)
+    release_handle(g_pf_pso_avmm_t)
+    release_handle(g_pf_pso_avmm_tp)
+    release_handle(g_pf_pso_avmm)
+    release_handle(g_pf_pso_avmm_p)
     g_pf_failed = false
 }
 
@@ -7027,14 +6868,7 @@ def private race_mulmm_bf16(dev : MetalDevice?; queue : MetalCommandQueue?) : Me
         kn_buffer(enc, bn, 0ul, 5)
         kn_dispatch(enc, grid, tg)
     })
-    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-        res.note = "dispatch failed"
-    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
-        res.winner = "simdgroup"
-    } else {
-        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-    }
+    kq_race_verdict(res, by_base, by_twin, m * ndim)
     metal_release(bxa)
     metal_release(bwb)
     metal_release(by_base)
@@ -7096,14 +6930,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
         kn_buffer(enc, bn, 0ul, 5)
         kn_dispatch(enc, grid, tg)
     })
-    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-        res.note = "dispatch failed"
-    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
-        res.winner = "simdgroup"
-    } else {
-        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-    }
+    kq_race_verdict(res, by_base, by_twin, m * ndim)
     metal_release(bw)
     metal_release(bxa)
     metal_release(by_base)
@@ -7115,7 +6942,7 @@ def private race_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
     return res
 }
 
-def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
+def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = "moe_mulmm_q8", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let ne = 4
     let rows_per = 32
@@ -7182,14 +7009,7 @@ def private race_moe_mulmm_q8(dev : MetalDevice?; queue : MetalCommandQueue?) : 
         kn_buffer(enc, bbase, 0ul, 7)
         kn_dispatch(enc, grid, tg)
     })
-    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-        res.note = "dispatch failed"
-    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
-        res.winner = "simdgroup"
-    } else {
-        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-    }
+    kq_race_verdict(res, by_base, by_twin, m * ndim)
     metal_release(bw)
     metal_release(bxa)
     metal_release(by_base)
@@ -7293,14 +7113,7 @@ def private race_moe_mulmm_mx4(dev : MetalDevice?; queue : MetalCommandQueue?) :
         kn_buffer(enc, bvt, 0ul, 13)
         kn_dispatch(enc, grid, tg)
     })
-    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-        res.note = "dispatch failed"
-    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
-        res.winner = "simdgroup"
-    } else {
-        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-    }
+    kq_race_verdict(res, by_base, by_twin, m * ndim)
     metal_release(bnq)
     metal_release(bee)
     metal_release(bvt)
@@ -7376,14 +7189,7 @@ def private race_kq_mulmm(dev : MetalDevice?; queue : MetalCommandQueue?; family
         kn_buffer(enc, bn, 0ul, 6)
         kn_dispatch(enc, grid, tg)
     })
-    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-        res.note = "dispatch failed"
-    } elif (!race_envelope_ok(by_base, by_twin, m * ndim, res.note)) {
-        res.winner = "simdgroup"
-    } else {
-        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-    }
+    kq_race_verdict(res, by_base, by_twin, m * ndim)
     metal_release(bq)
     metal_release(bs)
     metal_release(bxa)
@@ -7453,14 +7259,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_kargs(enc, rka, 3)
             kn_dispatch(enc, qgrid, tg)
         })
-        if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
-            res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
-            res.note = "dispatch failed"
-        } elif (!race_envelope_ok_h(batt_b, batt_t, heads * mp * np32, res.note)) {
-            res.winner = "simdgroup"
-        } else {
-            res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
-        }
+        kq_race_verdict(res, batt_b, batt_t, heads * mp * np32, half = true)
         out |> emplace(res)
         var res2 = MetalTensorRaceResult(family = "attn_avmm", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
         race_pair_ms(queue, 5, res2.base_ms, res2.twin_ms, $(enc) {
@@ -7482,14 +7281,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
             kn_kargs(enc, rka, 3)
             kn_dispatch(enc, agrid, tg)
         })
-        if (res2.base_ms < 0.0lf || res2.twin_ms < 0.0lf) {
-            res2.winner = res2.base_ms < 0.0lf ? "" : "simdgroup"
-            res2.note = "dispatch failed"
-        } elif (!race_envelope_ok(bxb_b, bxb_t, mp * qd, res2.note)) {
-            res2.winner = "simdgroup"
-        } else {
-            res2.winner = res2.twin_ms < res2.base_ms ? "tensor" : "simdgroup"
-        }
+        kq_race_verdict(res2, bxb_b, bxb_t, mp * qd)
         out |> emplace(res2)
         metal_release(bq)
         metal_release(bkk)

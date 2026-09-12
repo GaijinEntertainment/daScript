@@ -6,7 +6,6 @@ module dasllama_metal_mtp_gemma shared private
 
 require dasllama/dasllama_lint public
 require math
-require strings   // build_string - the trace line
 require das_metal
 require metal/das_metal_boost
 require dasllama/dasllama_common
@@ -82,41 +81,34 @@ def private ubuf_f32(v : float) : MetalBuffer? {
     return buf
 }
 
-def private rel(var b : MetalBuffer?&) {
-    if (b != null) {
-        metal_release(b)
-        b = null
-    }
-}
-
 def private gemma_gpu_release(var g : GemmaDrafterGpu) {
-    rel(g.bx)
-    rel(g.bxin)
-    rel(g.bxn)
-    rel(g.bo)
-    rel(g.bq)
-    rel(g.battn)
-    rel(g.bg)
-    rel(g.bu)
-    rel(g.bhn)
-    rel(g.blog)
-    rel(g.bhnext)
-    rel(g.btok)
-    rel(g.btok_out)
-    rel(g.bvtok)
-    rel(g.u_one1)
-    rel(g.bpart)
-    rel(g.bcos)
-    rel(g.bsin)
-    rel(g.bcos_sw)
-    rel(g.bsin_sw)
-    rel(g.u_dim)
-    rel(g.u_tdim)
-    rel(g.u_cat)
-    rel(g.u_hidden)
-    rel(g.u_vocab)
-    rel(g.u_eps)
-    rel(g.u_escale)
+    release_handle(g.bx)
+    release_handle(g.bxin)
+    release_handle(g.bxn)
+    release_handle(g.bo)
+    release_handle(g.bq)
+    release_handle(g.battn)
+    release_handle(g.bg)
+    release_handle(g.bu)
+    release_handle(g.bhn)
+    release_handle(g.blog)
+    release_handle(g.bhnext)
+    release_handle(g.btok)
+    release_handle(g.btok_out)
+    release_handle(g.bvtok)
+    release_handle(g.u_one1)
+    release_handle(g.bpart)
+    release_handle(g.bcos)
+    release_handle(g.bsin)
+    release_handle(g.bcos_sw)
+    release_handle(g.bsin_sw)
+    release_handle(g.u_dim)
+    release_handle(g.u_tdim)
+    release_handle(g.u_cat)
+    release_handle(g.u_hidden)
+    release_handle(g.u_vocab)
+    release_handle(g.u_eps)
+    release_handle(g.u_escale)
     for (u in g.u_qd) {
         metal_release(u)
     }
@@ -301,7 +293,7 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
             let nchunks = (cnt + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
             let need = uint64(dr.n_heads * nchunks * (hs + 2l)) * 4ul
             if (g.bpart_bytes < need) {
-                rel(g.bpart)
+                release_handle(g.bpart)
                 g.bpart = metal_new_buffer(g_dev, need)
                 g.bpart_bytes = need
             }
@@ -500,21 +492,6 @@ def private gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; h 
     return true
 }
 
-[cold_path]
-def private gemma_trace_round(s : Session; pos, drafted, a, vocab : int64) {
-    let line = build_string() $(var w) {
-        w |> write("gemma round pos={pos} drafts=[")
-        for (i in range64(drafted)) {
-            w |> write(" {s.mtp_vbatch[i + 1l]}")
-        }
-        w |> write(" ] truth=[")
-        for (i in range64(drafted)) {
-            w |> write(" {argmax_row(s.mtp_logits_b, i, vocab)}")
-        }
-        w |> write(" ] a={a}")
-    }
-    to_log(LOG_INFO, "{line}\n")
-}
 
 def private gemma_accept_walk(var s : Session; drafted, vocab : int64) : int64 {
     if (mtp_walk_samples(s)) {
@@ -601,7 +578,7 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     g_gemma_rounds++
     let a = gemma_accept_walk(s, drafted, c.vocab_size)
     if (g_gemma_trace) {
-        gemma_trace_round(s, pos, drafted, a, c.vocab_size)
+        mtp_round_trace("gemma", s, pos, drafted, drafted, a, c.vocab_size)
     }
     unsafe {
         memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits_b[a * c.vocab_size]), uint64(c.vocab_size) * 4ul)

@@ -118,29 +118,22 @@ def private wd_decline(why : MetalWdecDecline) : bool {
     return false
 }
 
-def private wd_release_one(var b : MetalBuffer?&) {
-    if (b != null) {
-        metal_release(b)
-        b = null
-    }
-}
-
 def private wd_release_all {
-    wd_release_one(g_wd_mblob)
-    wd_release_one(g_wd_bkxr)
-    wd_release_one(g_wd_bvxr)
-    wd_release_one(g_wd_bkc)
-    wd_release_one(g_wd_bvc)
-    wd_release_one(g_wd_sx)
-    wd_release_one(g_wd_sxb)
-    wd_release_one(g_wd_sxb2)
-    wd_release_one(g_wd_sq)
-    wd_release_one(g_wd_sk)
-    wd_release_one(g_wd_sv)
-    wd_release_one(g_wd_sh)
-    wd_release_one(g_wd_slog)
-    wd_release_one(g_wd_bpms)
-    wd_release_one(g_wd_bpy)
+    release_handle(g_wd_mblob)
+    release_handle(g_wd_bkxr)
+    release_handle(g_wd_bvxr)
+    release_handle(g_wd_bkc)
+    release_handle(g_wd_bvc)
+    release_handle(g_wd_sx)
+    release_handle(g_wd_sxb)
+    release_handle(g_wd_sxb2)
+    release_handle(g_wd_sq)
+    release_handle(g_wd_sk)
+    release_handle(g_wd_sv)
+    release_handle(g_wd_sh)
+    release_handle(g_wd_slog)
+    release_handle(g_wd_bpms)
+    release_handle(g_wd_bpy)
     g_wd_key = 0ul
     g_wd_len = 0l
     g_wd_window_key = 0ul

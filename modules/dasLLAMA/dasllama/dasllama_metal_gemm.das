@@ -431,14 +431,11 @@ def private metal_no_group3(var y0p : float?; var y1p : float?; var y2p : float?
     panic("dasLLAMA metal backend is batch-only - pin it via DASLLAMA_PIN_BATCH_BACKEND=metal, never as the whole backend")
 }
 
-[unused_argument(wp, sp, n, d)]
-def private metal_repack_noop(var wp : int8?; var sp : float?; n, d : int64) {}
-
 [init]
 def dasllama_metal_gemm_register() {
     // priority -1: never wins auto- or load-select (even registering first); reachable only by
     // name — select_batch_backend("metal") — with the device probe as the availability witness
     register_kernel_backend(KernelBackend(name = "metal", mm = @@metal_no_gemv, batch = @@metal_q8q8_batch,
-        group3 = @@metal_no_group3, repack = @@metal_repack_noop,
+        group3 = @@metal_no_group3, repack = @@repack_q8q8_identity,
         needs_repack = false, priority = -1, available = @@metal_backend_available))
 }
