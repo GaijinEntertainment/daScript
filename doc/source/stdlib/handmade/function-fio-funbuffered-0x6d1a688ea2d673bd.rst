@@ -1,0 +1,1 @@
+Turns off the C stream buffer on the stream, so every read goes to the descriptor and ``fpoll`` sees every byte the stream holds: nothing waits in a stdio buffer the poll cannot see. A read that needs more bytes than the descriptor has still blocks for them.

@@ -42,6 +42,41 @@ add_test(NAME standalone_ctx COMMAND test_standalone_ctx
 set_tests_properties(standalone_ctx PROPERTIES LABELS "big")
 add_dependencies(test-big test_standalone_ctx)
 
+# A standalone context that spawns a thread: new_thread clones the context, so the clone path
+# and the jobque_boost macro expansion both have to survive the -ctx emission.
+add_custom_command(
+    OUTPUT "${STANDALONE_CTX_GEN}/standalone_thread_fixture.das.cpp"
+           "${STANDALONE_CTX_GEN}/standalone_thread_fixture.das.h"
+    COMMAND $<TARGET_FILE:daslang>
+        "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
+        -- -ctx "${CMAKE_CURRENT_SOURCE_DIR}/standalone_thread_fixture.das"
+        "${STANDALONE_CTX_GEN}/"
+    DEPENDS daslang
+        "${CMAKE_CURRENT_SOURCE_DIR}/standalone_thread_fixture.das"
+        "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
+        "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
+        "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
+        "${PROJECT_SOURCE_DIR}/daslib/c_api_header.das"
+        "${PROJECT_SOURCE_DIR}/daslib/jobque_boost.das"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    COMMENT "Standalone AOT: standalone_thread_fixture.das"
+    VERBATIM
+)
+
+add_executable(test_standalone_thread
+    test_standalone_thread.cpp
+    "${STANDALONE_CTX_GEN}/standalone_thread_fixture.das.cpp")
+target_link_libraries(test_standalone_thread PRIVATE
+    libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
+target_include_directories(test_standalone_thread PRIVATE "${STANDALONE_CTX_GEN}" ${NEED_MODULES_PATH})
+SETUP_CPP11(test_standalone_thread)
+set_target_properties(test_standalone_thread PROPERTIES FOLDER "tests-cpp/big")
+
+add_test(NAME standalone_thread COMMAND test_standalone_thread
+         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(standalone_thread PROPERTIES LABELS "big")
+add_dependencies(test-big test_standalone_thread)
+
 # The same fixture driven through its C API, with the C half of the generated header compiled by
 # a C compiler: a header that is not valid C, a layout that disagrees with das, or a thunk that
 # loses a value fails here. The C++ twin above shares the generated source, so both APIs are

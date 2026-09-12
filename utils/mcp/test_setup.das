@@ -52,6 +52,25 @@ def private no_leftovers(t : T?; root : string) {
 let private SEEDED = "\{\"mcpServers\":\{\"github\":\{\"command\":\"gh\"\},\"daslang\":\{\"command\":\"python3\",\"args\":[\"x\"],\"defer_loading\":true\}\}\}\n"
 
 [test]
+def test_emit_dap_entry(t : T?) {
+    t |> run("the DAP bridge gets its own entry over this root's binary") @(t : T?) {
+        let root = make_root(t)
+        return if (empty(root))
+        t |> success(emit_mcp_config(root, "bin/daslang"), "emit_mcp_config reports success")
+        var doc = read_doc(path_join(root, ".mcp.json"))
+        let dap = doc?["mcpServers"]?["daslang-dap"]
+        t |> success(dap != null, "the daslang-dap entry is written")
+        t |> equal(string_of(dap?["command"]), "python3", "the DAP bridge is the python one")
+        t |> success(json_array_has(dap?["args"], path_join(root, "utils/dap/mcp_bridge.py")), "it runs the bridge from this root")
+        t |> success(json_array_has(dap?["args"], path_join(root, "bin/daslang")), "--executable names this root's binary")
+        unsafe {
+            delete doc
+        }
+        no_leftovers(t, root)
+    }
+}
+
+[test]
 def test_emit_mcp_config(t : T?) {
     t |> run("a root with no .mcp.json gets the front over its own binary") @(t : T?) {
         let root = make_root(t)

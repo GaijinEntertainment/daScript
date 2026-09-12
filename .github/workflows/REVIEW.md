@@ -6,10 +6,11 @@ matrix cell, or a workflow trigger whose failure turns a branch or a published a
 before a human merges or ships it - a `pull_request` lane's step and a branch-push lane's
 smoke alike.
 
-**A diff that weakens a per-PR check is a defect: deleting it, stopping its failure from
-failing the lane (`continue-on-error`, a trailing `|| true`, a swallowed exit code), shrinking
-what it checks, or narrowing its condition to anything but a `matrix.role` condition that
-still runs it on every pull request or the nightly cron.**
+**A diff that weakens a per-PR check is a defect: deleting it while no per-PR lane still
+runs its cases, stopping its failure from failing the lane (`continue-on-error`, a trailing
+`|| true`, a swallowed exit code), shrinking what it checks, or narrowing its condition to
+anything but a `matrix.role` condition that still runs it on every pull request or the
+nightly cron.**
 
 **A per-PR check the diff adds fails the lane when it finds a defect.**
 

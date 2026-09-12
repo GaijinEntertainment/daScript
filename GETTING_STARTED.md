@@ -90,8 +90,8 @@ directory, register it explicitly:
 claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin
 ```
 
-Any stdio LSP client can spawn `python3 utils/lsp/lsp_supervisor.py`
-directly. Details: `utils/lsp/README.md`.
+Any stdio LSP client can spawn `bin/watchdog --lsp` directly.
+Details: `utils/lsp/README.md`.
 
 ## AI assistants: the language skill
 
