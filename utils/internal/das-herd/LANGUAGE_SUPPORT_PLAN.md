@@ -38,8 +38,8 @@ explain llm what to keep."
   you.
 - The "no resident daslang" architecture is LOCKED (`skills/internal/daslang_lsp.md`)
   for macro-state, lock, and crash-isolation reasons. dasHerd inherits that
-  decision by spawning subtools per request; it does NOT need
-  `lsp_supervisor.py` (that layer exists to speak LSP framing to editors —
+  decision by spawning subtools per request; it does NOT need the
+  `watchdog --lsp` front (that layer exists to speak LSP framing to editors —
   dasHerd is not an editor, it wants argv→JSON).
 - Coordinates: daslang LineInfo is 1-based lines / 0-based BYTE columns;
   LSP-side is 0-based lines / UTF-16 code units. `subtools/lsp_common.das`
@@ -223,7 +223,7 @@ of, not instead of, compiler-truth completion.
 
 ## Non-goals (v1 = steps 1–3)
 
-- No resident LSP process, no lsp_supervisor.py dependency, no LSP framing.
+- No resident LSP process, no `watchdog --lsp` dependency, no LSP framing.
 - No .cpp semantics (clangd is a different animal; .cpp keeps tree-sitter
   colors only).
 - No rename, no formatting-on-edit. Completion is NOT a non-goal — it is

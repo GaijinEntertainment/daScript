@@ -96,7 +96,7 @@ endif()
 
 # Entries are paths relative to utils/; the exe/target name is the basename.
 # mcp/lsp never build as exe: their development runs interpreted under a supervisor
-# (the watchdog front, lsp_supervisor.py), so an exe form would never be dogfooded.
+# (the watchdog's --stdio and --lsp fronts), so an exe form would never be dogfooded.
 set(DAS_UTILS
     aot
     dascov

@@ -275,9 +275,16 @@ def private replace_server(var servers : table<string; JsonValue?>&; name, comma
     servers[name] = JV(entry)
 }
 
+//! the DAP bridge's command line for this tree: the python bridge over this tree's own binary,
+//! rooted at the tree
+def dap_command(root, binary : string) : tuple<command : string; args : array<string>> {
+    return <- (command = "python3", args <- [path_join(root, "utils/dap/mcp_bridge.py"), "--repo-root", root, "--executable", path_join(root, binary)])
+}
+
 //! .mcp.json: the daslang entry spawns the watchdog's stdio front over this tree's own binary,
-//! every other server stays as it is, the entry's own defer_loading survives, and the das-herd
-//! shim rides along where the tree carries it. An unparseable file is left alone.
+//! the daslang-dap entry the DAP bridge over the same binary, every other server stays as it
+//! is, each entry's own defer_loading survives, and the das-herd shim rides along where the
+//! tree carries it. An unparseable file is left alone.
 def emit_mcp_config(root, binary : string) : bool {
     let path = path_join(root, ".mcp.json")
     var config : JsonValue?
@@ -306,6 +313,8 @@ def emit_mcp_config(root, binary : string) : bool {
     }
     let front = front_command(root, binary)
     replace_server(servers_node.value as _object, "daslang", front.command, front.args)
+    let dap = dap_command(root, binary)
+    replace_server(servers_node.value as _object, "daslang-dap", dap.command, dap.args)
     if (fexist(path_join(root, "utils/internal/das-herd/mcp_main.das"))) {
         replace_server(servers_node.value as _object, "dasherd", path_join(root, binary), ["-ignore-manifest", "utils/internal/das-herd/mcp_main.das"])
     }
@@ -342,6 +351,7 @@ def emit_mcp_config(root, binary : string) : bool {
         remove(kept)
     }
     print("wrote {path}: daslang -> {front.command} {join(front.args, " ")}\n")
+    print("  daslang-dap -> {dap.command} {join(dap.args, " ")}\n")
     return true
 }
 
@@ -415,11 +425,12 @@ def main() : int {
         return 1
     }
 
-    print("\nDone. Restart the Claude Code session in {root} to pick up the daslang MCP server.\n")
+    print("\nDone. Restart the Claude Code session in {root} to pick up the daslang MCP and DAP servers.\n")
     print("Claude Code spawns the watchdog's stdio front, which spawns the server on the first tool call\n")
     print("and respawns it after a kill or a rebuild; no persistent process to keep running.\n")
+    print("The DAP bridge (daslang-dap) is the python one for now: it needs python3 on PATH.\n")
     print("The daslang LSP plugin (.claude/skills/daslang-lsp, checked in) also loads automatically\n")
-    print("when the session starts at the worktree root — it uses the binary built above (needs python3 on PATH).\n")
+    print("when the session starts at the worktree root — it is the watchdog exe built above.\n")
     print("NOTE: the parse-aware tools (grep_usage/outline/cpp_*) also need the ast-grep `sg` CLI on PATH.\n")
     return 0
 }

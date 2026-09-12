@@ -99,6 +99,8 @@ namespace das {
     DAS_API char* builtin_fgets(const FILE* _f, Context* context, LineInfoArg * at );
     DAS_API void builtin_fwrite(const FILE * _f, char * str, Context * context, LineInfoArg * at );
     DAS_API bool builtin_feof(const FILE* _f);
+    DAS_API bool builtin_fpoll(const FILE* _f, int timeout_ms);
+    DAS_API void builtin_funbuffered(const FILE* _f);
     DAS_API int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at );
     DAS_API int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at );
     DAS_API vec4f builtin_read ( Context &, SimNode_CallBase * call, vec4f * args );

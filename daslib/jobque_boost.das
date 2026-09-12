@@ -1,6 +1,5 @@
 options gen2
 options indenting = 4
-options no_aot = true
 options strict_smart_pointers = true
 
 module jobque_boost shared public

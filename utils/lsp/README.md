@@ -4,16 +4,16 @@ An LSP server for `.das` files. What it buys over the MCP tools: **push
 diagnostics** - the compiler and lint report after *every* edit with no
 explicit tool call - plus native go-to-definition / references / hover /
 document & workspace symbols / call hierarchy / go-to-implementation. Zero
-setup beyond a daslang binary and python; no sgconfig, no tree-sitter, no
+setup beyond a daslang build; no python, no sgconfig, no tree-sitter, no
 MCP server.
 
 ## Requirements
 
+- The watchdog exe, `bin/watchdog` (`bin/Release/watchdog.exe` in a Visual Studio
+  tree) - the endpoint is its `--lsp` front. The manifest names the single-config
+  path; in a Visual Studio tree edit its `command` locally.
 - A daslang binary (`bin/daslang`, `bin/Release/daslang[.exe]`, `build/daslang`,
-  or anywhere - see the lookup order below).
-- Python 3 on `PATH`. The plugin manifest spawns `python3`; on Windows, python.org
-  installs typically ship only `python.exe` - either create a `python3` alias or
-  edit the manifest's `command` locally. (The protocol tests probe both spellings.)
+  or anywhere - see the lookup order below) for the subtools.
 
 ## Registering with Claude Code
 
@@ -33,8 +33,8 @@ claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin
 ```
 
 Other repos adopt the same way: copy the manifest into their
-`.claude/skills/daslang-lsp/.claude-plugin/plugin.json`, point `args` at this
-repo's `lsp_supervisor.py`, and set `initializationOptions` (below) for module
+`.claude/skills/daslang-lsp/.claude-plugin/plugin.json`, point `command` at this
+repo's `bin/watchdog`, and set `initializationOptions` (below) for module
 resolution.
 
 Diagnostics then attach automatically to the next tool result after any edit
@@ -42,8 +42,9 @@ of a `.das` file, and the LSP tool exposes definition / references / hover /
 documentSymbol / workspaceSymbol / implementation / call hierarchy
 (prepare + incoming + outgoing).
 
-Any other stdio LSP client works too - point it at
-`python3 utils/lsp/lsp_supervisor.py`.
+Any other stdio LSP client works too - point it at `bin/watchdog --lsp`, or
+from a tree with no static exe built, at the same front under the
+interpreter: `bin/daslang utils/watchdog/main.das -- --lsp`.
 
 ## Configuration
 
@@ -73,9 +74,11 @@ system temp dir).
 Two processes, hard split - full rationale and wave history in
 [ROADMAP.md](ROADMAP.md):
 
-- **`lsp_supervisor.py`** - the endpoint the client spawns. Owns all session
-  state: framing, handshake, `{uri -> text}` document shadow, debounce,
-  dispatch. Zero language knowledge.
+- **`watchdog --lsp`** (`utils/watchdog/lsp_front.das`, in the static watchdog
+  exe) - the endpoint the client spawns. Owns all session state: framing,
+  handshake, `{uri -> text}` document shadow, debounce, dispatch. Zero language
+  knowledge; it compiles nothing at run time, so it holds no lock a build
+  replaces.
 - **`subtools/*.das`** - stateless batch tools (`validate.das`, `nav.das`).
   One fresh `daslang` process per request; argv in, LSP-shaped JSON out, exit.
   The document shadow rides along as a `--overlay` temp file, so compiles see
@@ -114,7 +117,8 @@ intentional errors.
 
 ## Tests
 
-`tests/lsp/test_lsp_protocol.das` drives the supervisor over a stdio pipe:
+`tests/lsp/test_lsp_protocol.das` drives the front over a stdio pipe, through
+the interpreter host and through the static exe where it is built:
 initialize -> didOpen with broken buffer text against a clean disk file
 (proves the overlay) -> didChange back to clean -> definition -> the
 call-hierarchy loop (prepare -> incomingCalls with the item's `data` echoed
@@ -125,4 +129,5 @@ verbatim -> outgoingCalls from the returned caller item) -> implementation
 bin/daslang dastest/dastest.das -- --test tests/lsp
 ```
 
-Skips with a log notice when python is not on `PATH`.
+`tests/watchdog/test_lsp_front.das` covers the cross-tree guard over throwaway
+git-style trees.

@@ -1,0 +1,1 @@
+Waits up to ``timeout_ms`` milliseconds for the stream to become readable, and returns true when a read would not block: data is available, or the stream is at its end (a closed pipe reads empty). A regular file is always readable. A negative timeout waits without limit; zero answers at once. On Windows a pipe is peeked and re-checked every millisecond until the deadline.

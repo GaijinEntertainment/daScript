@@ -286,6 +286,8 @@ namespace das {
     bool builtin_is_terminal ( int32_t ) GENERATE_IO_STUB_RET
     int32_t builtin_terminal_width () GENERATE_IO_STUB_RET
     bool builtin_feof(const FILE*) GENERATE_IO_STUB_RET
+    bool builtin_fpoll(const FILE*, int) GENERATE_IO_STUB_RET
+    void builtin_funbuffered(const FILE*) GENERATE_IO_STUB
     const FILE * builtin_fopen  ( const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     vec4f builtin_read ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
     vec4f builtin_write ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
@@ -341,6 +343,7 @@ namespace das {
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>         // isatty, STDOUT_FILENO
@@ -503,6 +506,39 @@ namespace das {
     bool builtin_feof(const FILE* _f) {
         FILE* f = (FILE*)_f;
         return feof(f);
+    }
+
+    bool builtin_fpoll(const FILE* _f, int timeout_ms) {
+        FILE* f = (FILE*)_f;
+        if ( !f ) return false;
+#ifdef _WIN32
+        intptr_t raw = _get_osfhandle(fileno(f));
+        if ( raw == -1 || raw == -2 ) return true;
+        HANDLE h = (HANDLE) raw;
+        const bool forever = timeout_ms < 0;
+        DWORD type = GetFileType(h);
+        if ( type == FILE_TYPE_CHAR ) return WaitForSingleObject(h, forever ? INFINITE : (DWORD) timeout_ms) == WAIT_OBJECT_0;
+        if ( type != FILE_TYPE_PIPE ) return true;
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(forever ? 0 : timeout_ms);
+        for ( ;; ) {
+            DWORD avail = 0;
+            if ( !PeekNamedPipe(h, nullptr, 0, nullptr, &avail, nullptr) ) return true;
+            if ( avail > 0 ) return true;
+            if ( !forever && std::chrono::steady_clock::now() >= deadline ) return false;
+            Sleep(1);
+        }
+#else
+        struct pollfd pfd;
+        pfd.fd = fileno(f);
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        return poll(&pfd, 1, timeout_ms) > 0;
+#endif
+    }
+
+    void builtin_funbuffered(const FILE* _f) {
+        if ( !_f ) return;
+        setvbuf((FILE*)_f, nullptr, _IONBF, 0);
     }
 
     // 64-bit-size stat/fstat (see das_filestat in aot_builtin_fio.h): on Windows the plain
@@ -3112,6 +3148,12 @@ namespace das {
                     ->args({"file","text","context","line"});
             addExtern<DAS_BIND_FUN(builtin_feof)>(*this, lib, "feof",
                 SideEffects::modifyExternal, "builtin_feof")
+                    ->arg("file");
+            addExtern<DAS_BIND_FUN(builtin_fpoll)>(*this, lib, "fpoll",
+                SideEffects::modifyExternal, "builtin_fpoll")
+                    ->args({"file","timeout_ms"});
+            addExtern<DAS_BIND_FUN(builtin_funbuffered)>(*this, lib, "funbuffered",
+                SideEffects::modifyExternal, "builtin_funbuffered")
                     ->arg("file");
             addExtern<DAS_BIND_FUN(builtin_fseek)>(*this, lib, "fseek",
                 SideEffects::modifyExternal, "builtin_fseek")
