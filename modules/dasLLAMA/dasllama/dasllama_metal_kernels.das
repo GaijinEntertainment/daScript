@@ -8349,28 +8349,30 @@ class MetalKqMvB4K2 : MetalKqMvK2T {
     override TILED = true
 }
 
-// the k2 B8 twin: the k3 B8 shell minus the hmask, per-element w = q*d*sc - dmin*mn
-[metal_dispatch(name = "enc_kq_mvb8_k2_c", pso = "g_pso_kq_mvb8_k2", tgmem = "metal_kq_mvb8_k2_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8K2 {
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d+dmin tail - the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B pair-byte strips, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k2 quant plane, uint view
+// The K-quant eight-column mv shell: one superblock's X panel staged per threadgroup between two
+// barriers, a format's override decodes lane tx's weights of the superblock and accumulates the
+// eight staged columns into acc, and the shell reduces the eight lanes.
+[ |> template_struct_instance]
+class template MetalKqMvB8ShellT {
     @ssbo @binding = 3 @role = "read" x : array<float4>
     @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
     @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]
+    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
-    [metal_kernel(name="metal_kq_mvb8_k2_msl")]
-    def metal_kq_mvb8_k2 {
+    //! the format's per-lane constants, computed once before the row walk
+    def lane_setup(tx : uint; var lc : uint[8]) {}
+
+    def abstract mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) : void
+
+    def run_shell {
         let lid = gl_LocalInvocationID.x
         let lane = gl_SubgroupInvocationID
         let tx = lane % 8u
         let ty = lane / 8u
         let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
         let nb = ka.ndim / 256u
-        let s = tx / 2u
-        let o4 = (tx % 2u) * 4u
-        let shr = 2u * s
+        var lc : uint[8]
+        lane_setup(tx, lc)
         let nb4 = ka.ndim / 4u
         var acc : float4[8]
         var sb = 0u
@@ -8381,29 +8383,7 @@ class MetalKqMvB8K2 {
                 txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
             }
             barrier()
-            let blk = row * nb + sb
-            let dd = float(kdh[blk * 2u])
-            let dmn = float(kdh[blk * 2u + 1u])
-            for [unroll_full] (ch in range(2)) {
-                let ip = uint(ch)
-                let qb = blk * 16u + ip * 8u + o4
-                let g = ip * 8u + s * 2u + (tx % 2u)
-                let pb = uint(kscb[blk * 16u + g])
-                let dl = dd * float(pb & 15u)
-                let ml = dmn * float(pb >> 4u)
-                var w4 : float4[4]
-                for [unroll_full] (u in range(4)) {
-                    let qvc = (kqu[qb + uint(u)] >> shr) & 0x03030303
-                    w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
-                        float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
-                }
-                let cxl = ip * 32u + s * 8u + o4
-                for [unroll_full] (b in range(8)) {
-                    for [unroll_full] (u in range(4)) {
-                        acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                    }
-                }
-            }
+            mvb8_superblock(row * nb + sb, tx, lc, acc)
             sb++
         }
         for [unroll_full] (b in range(8)) {
@@ -8413,6 +8393,53 @@ class MetalKqMvB8K2 {
             sm += simd_shuffle_down(sm, 1u)
             if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
                 y[uint(b) * ka.ys + row] = sm
+            }
+        }
+    }
+}
+
+// the k2 B8 twin: the k3 B8 shell minus the hmask, per-element w = q*d*sc - dmin*mn
+[metal_dispatch(name = "enc_kq_mvb8_k2_c", pso = "g_pso_kq_mvb8_k2", tgmem = "metal_kq_mvb8_k2_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+class MetalKqMvB8K2 : MetalKqMvB8ShellT {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d+dmin tail - the scale buffer bound at byte nsb*16
+    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B pair-byte strips, byte view (same buffer at 0)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k2 quant plane, uint view
+
+    [metal_kernel(name="metal_kq_mvb8_k2_msl")]
+    def metal_kq_mvb8_k2 {
+        run_shell()
+    }
+
+    def override lane_setup(tx : uint; var lc : uint[8]) {
+        lc[0] = tx / 2u             // s
+        lc[1] = (tx % 2u) * 4u      // o4
+        lc[2] = 2u * lc[0]          // shr
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let s = lc[0]
+        let o4 = lc[1]
+        let shr = lc[2]
+        let dd = float(kdh[blk * 2u])
+        let dmn = float(kdh[blk * 2u + 1u])
+        for [unroll_full] (ch in range(2)) {
+            let ip = uint(ch)
+            let qb = blk * 16u + ip * 8u + o4
+            let g = ip * 8u + s * 2u + (tx % 2u)
+            let pb = uint(kscb[blk * 16u + g])
+            let dl = dd * float(pb & 15u)
+            let ml = dmn * float(pb >> 4u)
+            var w4 : float4[4]
+            for [unroll_full] (u in range(4)) {
+                let qvc = (kqu[qb + uint(u)] >> shr) & 0x03030303
+                w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
+                    float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
+            }
+            let cxl = ip * 32u + s * 8u + o4
+            for [unroll_full] (b in range(8)) {
+                for [unroll_full] (u in range(4)) {
+                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
+                }
             }
         }
     }
@@ -8571,75 +8598,53 @@ class MetalKqMvB4K3 : MetalKqMvK3T {
 // the k3 B8 twin: the k6 B8 shell (one superblock's X panel staged per threadgroup) with the
 // lane + mask compose
 [metal_dispatch(name = "enc_kq_mvb8_k3_c", pso = "g_pso_kq_mvb8_k3", tgmem = "metal_kq_mvb8_k3_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8K3 {
+class MetalKqMvB8K3 : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale strips, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k3 quant plane, uint view (qs at 24*blk, hmask at 24*blk+16)
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]
 
     [metal_kernel(name="metal_kq_mvb8_k3_msl")]
     def metal_kq_mvb8_k3 {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let s = tx / 2u
-        let o4 = (tx % 2u) * 4u
-        let shr = 2u * s
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
+        run_shell()
+    }
+
+    def override lane_setup(tx : uint; var lc : uint[8]) {
+        lc[0] = tx / 2u             // s
+        lc[1] = (tx % 2u) * 4u      // o4
+        lc[2] = 2u * lc[0]          // shr
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let s = lc[0]
+        let o4 = lc[1]
+        let shr = lc[2]
+        let dd = float(kdh[blk])
+        for [unroll_full] (ch in range(2)) {
+            let ip = uint(ch)
+            let qb = blk * 24u + ip * 8u + o4
+            let hb = blk * 24u + 16u + o4
+            let hsh = ip * 4u + s
+            var qu : uint[4]
+            var hu : uint[4]
+            for [unroll_full] (u in range(4)) {
+                qu[u] = kqu[qb + uint(u)]
+                hu[u] = kqu[hb + uint(u)]
             }
-            barrier()
-            let blk = row * nb + sb
-            let dd = float(kdh[blk])
-            for [unroll_full] (ch in range(2)) {
-                let ip = uint(ch)
-                let qb = blk * 24u + ip * 8u + o4
-                let hb = blk * 24u + 16u + o4
-                let hsh = ip * 4u + s
-                var qu : uint[4]
-                var hu : uint[4]
-                for [unroll_full] (u in range(4)) {
-                    qu[u] = kqu[qb + uint(u)]
-                    hu[u] = kqu[hb + uint(u)]
-                }
-                let g = ip * 8u + s * 2u + (tx % 2u)
-                let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
-                let dl = dd * sc
-                let ml = dl * 4.0
-                var w4 : float4[4]
-                for [unroll_full] (u in range(4)) {
-                    let qvc = ((qu[u] >> shr) & 0x03030303) | (((hu[u] >> hsh) & 0x01010101) << 2u)
-                    w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
-                        float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
-                }
-                let cxl = ip * 32u + s * 8u + o4
-                for [unroll_full] (b in range(8)) {
-                    for [unroll_full] (u in range(4)) {
-                        acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                    }
-                }
+            let g = ip * 8u + s * 2u + (tx % 2u)
+            let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
+            let dl = dd * sc
+            let ml = dl * 4.0
+            var w4 : float4[4]
+            for [unroll_full] (u in range(4)) {
+                let qvc = ((qu[u] >> shr) & 0x03030303) | (((hu[u] >> hsh) & 0x01010101) << 2u)
+                w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
+                    float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
             }
-            sb++
-        }
-        for [unroll_full] (b in range(8)) {
-            var sm = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            sm += simd_shuffle_down(sm, 4u)
-            sm += simd_shuffle_down(sm, 2u)
-            sm += simd_shuffle_down(sm, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = sm
+            let cxl = ip * 32u + s * 8u + o4
+            for [unroll_full] (b in range(8)) {
+                for [unroll_full] (u in range(4)) {
+                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
+                }
             }
         }
     }
@@ -9256,64 +9261,36 @@ class MetalKqMvB4Iq3xxs : MetalKqMvIq3xxsT {
 // the iq3xxs B8 twin: the iq3s B8 shell (one superblock's X panel staged per threadgroup)
 // over the 24-word rows; the grid read direct.
 [metal_dispatch(name = "enc_kq_mvb8_iq3xxs_c", pso = "g_pso_kq_mvb8_iq3xxs", tgmem = "metal_kq_mvb8_iq3xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq3xxs {
+class MetalKqMvB8Iq3xxs : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 sub-scale bytes (2ls+1) + 8 pad (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq3xxs quant plane, uint view
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     [metal_kernel(name="metal_kq_mvb8_iq3xxs_msl")]
     def metal_kq_mvb8_iq3xxs {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
+        run_shell()
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
+        let aux = kqu[blk * 24u + 16u + tx]
+        var w : float4[8]
+        for [unroll_full] (h in range(2)) {
+            let qsw = kqu[blk * 24u + tx * 2u + uint(h)]
+            for [unroll_full] (wi in range(4)) {
+                let q3 = uint(h) * 2u + uint(wi) / 2u
+                let sgb = ksign7m((aux >> (7u * q3)) & 127u)
+                let nib = uint(wi) % 2u == 0u ? sgb & 15u : sgb >> 4u
+                let gw = iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u))
+                let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
+                                 (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
             }
-            barrier()
-            let blk = row * nb + sb
-            let dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
-            let aux = kqu[blk * 24u + 16u + tx]
-            var w : float4[8]
-            for [unroll_full] (h in range(2)) {
-                let qsw = kqu[blk * 24u + tx * 2u + uint(h)]
-                for [unroll_full] (wi in range(4)) {
-                    let q3 = uint(h) * 2u + uint(wi) / 2u
-                    let sgb = ksign7m((aux >> (7u * q3)) & 127u)
-                    let nib = uint(wi) % 2u == 0u ? sgb & 15u : sgb >> 4u
-                    let gw = iq3xxs_gw(int((qsw >> (8u * uint(wi))) & 255u))
-                    let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
-                                     (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
-                    w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
-                }
-            }
-            let cxl = tx * 8u
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(8)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-                }
-            }
-            sb++
         }
+        let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
-            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
+            for [unroll_full] (u in range(8)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
             }
         }
     }
@@ -9391,65 +9368,37 @@ class MetalKqMvB4Iq3s : MetalKqMvIq3sT {
 // the iq3s B8 twin: the iq4xs B8 shell (one superblock's X panel staged per threadgroup) over
 // the per-32-block lane map; the grid read direct.
 [metal_dispatch(name = "enc_kq_mvb8_iq3s_c", pso = "g_pso_kq_mvb8_iq3s", tgmem = "metal_kq_mvb8_iq3s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq3s {
+class MetalKqMvB8Iq3s : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq3s quant plane, uint view
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     [metal_kernel(name="metal_kq_mvb8_iq3s_msl")]
     def metal_kq_mvb8_iq3s {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
+        run_shell()
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
+        let qh = (kqu[blk * 26u + 16u + tx / 4u] >> ((tx % 4u) * 8u)) & 255u
+        let sgw = kqu[blk * 26u + 18u + tx]
+        var w : float4[8]
+        for [unroll_full] (h in range(2)) {
+            let qsw = kqu[blk * 26u + tx * 2u + uint(h)]
+            for [unroll_full] (wi in range(4)) {
+                let b = uint(h) * 4u + uint(wi)
+                let idx = ((qsw >> (8u * uint(wi))) & 255u) | ((qh << (8u - b)) & 256u)
+                let nib = (sgw >> ((b / 2u) * 8u + (b % 2u) * 4u)) & 15u
+                let gw = iq3s_gw(int(idx))
+                let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
+                                 (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
+                w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
             }
-            barrier()
-            let blk = row * nb + sb
-            let dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
-            let qh = (kqu[blk * 26u + 16u + tx / 4u] >> ((tx % 4u) * 8u)) & 255u
-            let sgw = kqu[blk * 26u + 18u + tx]
-            var w : float4[8]
-            for [unroll_full] (h in range(2)) {
-                let qsw = kqu[blk * 26u + tx * 2u + uint(h)]
-                for [unroll_full] (wi in range(4)) {
-                    let b = uint(h) * 4u + uint(wi)
-                    let idx = ((qsw >> (8u * uint(wi))) & 255u) | ((qh << (8u - b)) & 256u)
-                    let nib = (sgw >> ((b / 2u) * 8u + (b % 2u) * 4u)) & 15u
-                    let gw = iq3s_gw(int(idx))
-                    let fsd = float4((nib & 1u) != 0u ? -dl : dl, (nib & 2u) != 0u ? -dl : dl,
-                                     (nib & 4u) != 0u ? -dl : dl, (nib & 8u) != 0u ? -dl : dl)
-                    w[h * 4 + wi] = float4(float(gw & 255u), float((gw >> 8u) & 255u), float((gw >> 16u) & 255u), float(gw >> 24u)) * fsd
-                }
-            }
-            let cxl = tx * 8u
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(8)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-                }
-            }
-            sb++
         }
+        let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
-            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
+            for [unroll_full] (u in range(8)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
             }
         }
     }
@@ -9533,71 +9482,43 @@ class MetalKqMvB4Iq2s : MetalKqMvIq2sT {
 // the iq2s B8 twin: the iq3s B8 shell (one superblock's X panel staged per threadgroup) with
 // the u64 two-word compose; the grid read direct.
 [metal_dispatch(name = "enc_kq_mvb8_iq2s_c", pso = "g_pso_kq_mvb8_iq2s", tgmem = "metal_kq_mvb8_iq2s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq2s {
+class MetalKqMvB8Iq2s : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 16 UNSIGNED per-16 sub-scales (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2s quant plane, uint view
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     [metal_kernel(name="metal_kq_mvb8_iq2s_msl")]
     def metal_kq_mvb8_iq2s {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
-            }
-            barrier()
-            let blk = row * nb + sb
-            let dl0 = float(kdh[blk]) * float(kscb[blk * 16u + tx * 2u])
-            let dl1 = float(kdh[blk]) * float(kscb[blk * 16u + tx * 2u + 1u])
-            let qw = kqu[blk * 18u + tx]
-            let sgw = kqu[blk * 18u + 8u + tx]
-            let qh = (kqu[blk * 18u + 16u + tx / 4u] >> ((tx % 4u) * 8u)) & 255u
-            var w : float4[8]
-            for [unroll_full] (l in range(4)) {
-                let lu = uint(l)
-                let idx2 = (((qw >> (8u * lu)) & 255u) | ((qh << (8u - 2u * lu)) & 0x300u)) * 2u
-                let sgn = (sgw >> (8u * lu)) & 255u
-                let dl = l < 2 ? dl0 : dl1
-                let s0 = sgn & 15u
-                let s1 = sgn >> 4u
-                let w0 = iq2s_gw(int(idx2))
-                let w1 = iq2s_gw(int(idx2 + 1u))
-                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
-            }
-            let cxl = tx * 8u
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(8)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-                }
-            }
-            sb++
+        run_shell()
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let dl0 = float(kdh[blk]) * float(kscb[blk * 16u + tx * 2u])
+        let dl1 = float(kdh[blk]) * float(kscb[blk * 16u + tx * 2u + 1u])
+        let qw = kqu[blk * 18u + tx]
+        let sgw = kqu[blk * 18u + 8u + tx]
+        let qh = (kqu[blk * 18u + 16u + tx / 4u] >> ((tx % 4u) * 8u)) & 255u
+        var w : float4[8]
+        for [unroll_full] (l in range(4)) {
+            let lu = uint(l)
+            let idx2 = (((qw >> (8u * lu)) & 255u) | ((qh << (8u - 2u * lu)) & 0x300u)) * 2u
+            let sgn = (sgw >> (8u * lu)) & 255u
+            let dl = l < 2 ? dl0 : dl1
+            let s0 = sgn & 15u
+            let s1 = sgn >> 4u
+            let w0 = iq2s_gw(int(idx2))
+            let w1 = iq2s_gw(int(idx2 + 1u))
+            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
         }
+        let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
-            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
+            for [unroll_full] (u in range(8)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
             }
         }
     }
@@ -9681,71 +9602,43 @@ class MetalKqMvB4Iq2xs : MetalKqMvIq2xsT {
 // the iq2xs B8 twin: the iq2s B8 shell (one superblock's X panel staged per threadgroup) with
 // the parity-signed u16 compose; the grid read direct.
 [metal_dispatch(name = "enc_kq_mvb8_iq2xs_c", pso = "g_pso_kq_mvb8_iq2xs", tgmem = "metal_kq_mvb8_iq2xs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq2xs {
+class MetalKqMvB8Iq2xs : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 16 UNSIGNED per-16 sub-scales (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xs quant plane, uint view
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     [metal_kernel(name="metal_kq_mvb8_iq2xs_msl")]
     def metal_kq_mvb8_iq2xs {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
-            }
-            barrier()
-            let blk = row * nb + sb
-            let dl0 = float(kdh[blk]) * float(kscb[blk * 16u + tx * 2u])
-            let dl1 = float(kdh[blk]) * float(kscb[blk * 16u + tx * 2u + 1u])
-            let qw0 = kqu[blk * 16u + tx * 2u]
-            let qw1 = kqu[blk * 16u + tx * 2u + 1u]
-            var w : float4[8]
-            for [unroll_full] (l in range(4)) {
-                let lu = uint(l)
-                let w16 = ((l < 2 ? qw0 : qw1) >> (16u * (lu & 1u))) & 0xFFFFu
-                let idx2 = (w16 & 511u) * 2u
-                let sgn = ksign7m(w16 >> 9u)
-                let dl = l < 2 ? dl0 : dl1
-                let s0 = sgn & 15u
-                let s1 = sgn >> 4u
-                let w0 = iq2xs_gw(int(idx2))
-                let w1 = iq2xs_gw(int(idx2 + 1u))
-                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
-            }
-            let cxl = tx * 8u
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(8)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-                }
-            }
-            sb++
+        run_shell()
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let dl0 = float(kdh[blk]) * float(kscb[blk * 16u + tx * 2u])
+        let dl1 = float(kdh[blk]) * float(kscb[blk * 16u + tx * 2u + 1u])
+        let qw0 = kqu[blk * 16u + tx * 2u]
+        let qw1 = kqu[blk * 16u + tx * 2u + 1u]
+        var w : float4[8]
+        for [unroll_full] (l in range(4)) {
+            let lu = uint(l)
+            let w16 = ((l < 2 ? qw0 : qw1) >> (16u * (lu & 1u))) & 0xFFFFu
+            let idx2 = (w16 & 511u) * 2u
+            let sgn = ksign7m(w16 >> 9u)
+            let dl = l < 2 ? dl0 : dl1
+            let s0 = sgn & 15u
+            let s1 = sgn >> 4u
+            let w0 = iq2xs_gw(int(idx2))
+            let w1 = iq2xs_gw(int(idx2 + 1u))
+            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
         }
+        let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
-            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
+            for [unroll_full] (u in range(8)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
             }
         }
     }
@@ -9826,68 +9719,40 @@ class MetalKqMvB4Iq2xxs : MetalKqMvIq2xxsT {
 // the iq2xxs B8 twin: the iq2xs B8 shell (one superblock's X panel staged per threadgroup)
 // with the aux32 compose; the grid read direct.
 [metal_dispatch(name = "enc_kq_mvb8_iq2xxs_c", pso = "g_pso_kq_mvb8_iq2xxs", tgmem = "metal_kq_mvb8_iq2xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq2xxs {
+class MetalKqMvB8Iq2xxs : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // strip region: 8 UNSIGNED per-32 sub-scales + 8 pad (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq2xxs quant plane, uint view
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     [metal_kernel(name="metal_kq_mvb8_iq2xxs_msl")]
     def metal_kq_mvb8_iq2xxs {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
-            }
-            barrier()
-            let blk = row * nb + sb
-            let dl = float(kdh[blk]) * float(kscb[blk * 16u + tx])
-            let gw = kqu[blk * 16u + tx * 2u]
-            let aux = kqu[blk * 16u + tx * 2u + 1u]
-            var w : float4[8]
-            for [unroll_full] (l in range(4)) {
-                let lu = uint(l)
-                let bidx = (gw >> (8u * lu)) & 255u
-                let sgn = ksign7m((aux >> (7u * lu)) & 127u)
-                let s0 = sgn & 15u
-                let s1 = sgn >> 4u
-                let w0 = iq2xxs_gw(int(bidx * 2u))
-                let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
-                let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
-                let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
-                w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
-                    (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
-                w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
-                    (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
-            }
-            let cxl = tx * 8u
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(8)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
-                }
-            }
-            sb++
+        run_shell()
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let dl = float(kdh[blk]) * float(kscb[blk * 16u + tx])
+        let gw = kqu[blk * 16u + tx * 2u]
+        let aux = kqu[blk * 16u + tx * 2u + 1u]
+        var w : float4[8]
+        for [unroll_full] (l in range(4)) {
+            let lu = uint(l)
+            let bidx = (gw >> (8u * lu)) & 255u
+            let sgn = ksign7m((aux >> (7u * lu)) & 127u)
+            let s0 = sgn & 15u
+            let s1 = sgn >> 4u
+            let w0 = iq2xxs_gw(int(bidx * 2u))
+            let w1 = iq2xxs_gw(int(bidx * 2u + 1u))
+            let m0 = float4(float(w0 & 255u), float((w0 >> 8u) & 255u), float((w0 >> 16u) & 255u), float(w0 >> 24u))
+            let m1 = float4(float(w1 & 255u), float((w1 >> 8u) & 255u), float((w1 >> 16u) & 255u), float(w1 >> 24u))
+            w[l * 2] = float4((s0 & 1u) != 0u ? -m0.x : m0.x, (s0 & 2u) != 0u ? -m0.y : m0.y,
+                (s0 & 4u) != 0u ? -m0.z : m0.z, (s0 & 8u) != 0u ? -m0.w : m0.w) * dl
+            w[l * 2 + 1] = float4((s1 & 1u) != 0u ? -m1.x : m1.x, (s1 & 2u) != 0u ? -m1.y : m1.y,
+                (s1 & 4u) != 0u ? -m1.z : m1.z, (s1 & 8u) != 0u ? -m1.w : m1.w) * dl
         }
+        let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
-            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
+            for [unroll_full] (u in range(8)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w[u]
             }
         }
     }
@@ -9962,58 +9827,30 @@ class MetalKqMvB4Iq4xs : MetalKqMvIq4xsT {
 // the iq4xs B8 twin: the K45 B8 shell (one superblock's X panel staged per threadgroup) over the
 // per-32-block lane map
 [metal_dispatch(name = "enc_kq_mvb8_iq4xs_c", pso = "g_pso_kq_mvb8_iq4xs", tgmem = "metal_kq_mvb8_iq4xs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq4xs {
+class MetalKqMvB8Iq4xs : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales + 8 pad (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4xs quant plane, uint view
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     [metal_kernel(name="metal_kq_mvb8_iq4xs_msl")]
     def metal_kq_mvb8_iq4xs {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
-            }
-            barrier()
-            let blk = row * nb + sb
-            let dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
-            let qb = blk * 32u + tx * 4u
-            var wl : float4[4]
-            var wh : float4[4]
-            for [unroll_full] (u in range(4)) {
-                let qv = kqu[qb + uint(u)]
-                wl[u] = float4(iq4_lut(qv & 15u), iq4_lut((qv >> 8u) & 15u), iq4_lut((qv >> 16u) & 15u), iq4_lut((qv >> 24u) & 15u)) * dl
-                wh[u] = float4(iq4_lut((qv >> 4u) & 15u), iq4_lut((qv >> 12u) & 15u), iq4_lut((qv >> 20u) & 15u), iq4_lut(qv >> 28u)) * dl
-            }
-            let cxl = tx * 8u
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(4)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * wl[u] + txp[uint(b) * 64u + cxl + 4u + uint(u)] * wh[u]
-                }
-            }
-            sb++
+        run_shell()
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let dl = float(kdh[blk]) * float((int(kscb[blk * 16u + tx]) ^ 128) - 128)
+        let qb = blk * 32u + tx * 4u
+        var wl : float4[4]
+        var wh : float4[4]
+        for [unroll_full] (u in range(4)) {
+            let qv = kqu[qb + uint(u)]
+            wl[u] = float4(iq4_lut(qv & 15u), iq4_lut((qv >> 8u) & 15u), iq4_lut((qv >> 16u) & 15u), iq4_lut((qv >> 24u) & 15u)) * dl
+            wh[u] = float4(iq4_lut((qv >> 4u) & 15u), iq4_lut((qv >> 12u) & 15u), iq4_lut((qv >> 20u) & 15u), iq4_lut(qv >> 28u)) * dl
         }
+        let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
-            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
+            for [unroll_full] (u in range(4)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * wl[u] + txp[uint(b) * 64u + cxl + 4u + uint(u)] * wh[u]
             }
         }
     }
@@ -10087,58 +9924,30 @@ class MetalKqMvB4Iq4nl : MetalKqMvIq4nlT {
 // the iq4nl B8 twin: the iq4xs B8 shell (one superblock's X panel staged per threadgroup) with
 // the per-32-block d fold
 [metal_dispatch(name = "enc_kq_mvb8_iq4nl_c", pso = "g_pso_kq_mvb8_iq4nl", tgmem = "metal_kq_mvb8_iq4nl_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8Iq4nl {
+class MetalKqMvB8Iq4nl : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the 16B/sb d plane, half view
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // binding-shape twin (unused)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // iq4nl quant plane, uint view
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
 
     [metal_kernel(name="metal_kq_mvb8_iq4nl_msl")]
     def metal_kq_mvb8_iq4nl {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
-            }
-            barrier()
-            let blk = row * nb + sb
-            let dl = float(kdh[blk * 8u + tx])
-            let qb = blk * 32u + tx * 4u
-            var wl : float4[4]
-            var wh : float4[4]
-            for [unroll_full] (u in range(4)) {
-                let qv = kqu[qb + uint(u)]
-                wl[u] = float4(iq4_lut(qv & 15u), iq4_lut((qv >> 8u) & 15u), iq4_lut((qv >> 16u) & 15u), iq4_lut((qv >> 24u) & 15u)) * dl
-                wh[u] = float4(iq4_lut((qv >> 4u) & 15u), iq4_lut((qv >> 12u) & 15u), iq4_lut((qv >> 20u) & 15u), iq4_lut(qv >> 28u)) * dl
-            }
-            let cxl = tx * 8u
-            for [unroll_full] (b in range(8)) {
-                for [unroll_full] (u in range(4)) {
-                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * wl[u] + txp[uint(b) * 64u + cxl + 4u + uint(u)] * wh[u]
-                }
-            }
-            sb++
+        run_shell()
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let dl = float(kdh[blk * 8u + tx])
+        let qb = blk * 32u + tx * 4u
+        var wl : float4[4]
+        var wh : float4[4]
+        for [unroll_full] (u in range(4)) {
+            let qv = kqu[qb + uint(u)]
+            wl[u] = float4(iq4_lut(qv & 15u), iq4_lut((qv >> 8u) & 15u), iq4_lut((qv >> 16u) & 15u), iq4_lut((qv >> 24u) & 15u)) * dl
+            wh[u] = float4(iq4_lut((qv >> 4u) & 15u), iq4_lut((qv >> 12u) & 15u), iq4_lut((qv >> 20u) & 15u), iq4_lut(qv >> 28u)) * dl
         }
+        let cxl = tx * 8u
         for [unroll_full] (b in range(8)) {
-            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
+            for [unroll_full] (u in range(4)) {
+                acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * wl[u] + txp[uint(b) * 64u + cxl + 4u + uint(u)] * wh[u]
             }
         }
     }
@@ -10499,104 +10308,82 @@ class MetalKqMvB4K5 : MetalKqMvK5T {
 // arm-scoped; K4's stamp carries one dead hq decl, below the measured-free bar). K6 stays forked
 // on the weight-decode axis (its 48B superblock walk shares no BLK/QH shape with these).
 [ |> template_struct_instance]
-class template MetalKqMvB8K45T {
+class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16> // 16B scale blocks, half view (d at 8*blk, dmin at +1)
     @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>   // the same buffer, uint4 view
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view (qs at BLK*blk; k5 qh at BLK*blk+32)
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]            // [8 streams x 64 float4] one superblock's X panel
     @template_constant BLK : uint = 32u  // superblock quant-plane stride in uints
     @template_constant QH : bool = false // q5_K: the 5th-bit overlay plane rides after the nibbles
 
     [metal_kernel]
-    def metal_kq_mvb8 {   // nolint:STYLE038 — the QH twin arms are byte-identity-driven, not splittable
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let q4i = tx / 4u
-        let hp = (tx % 4u) / 2u
-        let lo = (tx % 2u) * 4u
-        let jl = 2u * q4i + hp
+    def metal_kq_mvb8 {
+        run_shell()
+    }
+
+    def override lane_setup(tx : uint; var lc : uint[8]) {
+        lc[0] = tx / 4u                        // q4i
+        lc[1] = 2u * lc[0] + (tx % 4u) / 2u    // jl
+        lc[2] = (tx % 2u) * 4u                 // lo
+        lc[3] = (tx % 4u) < 2u ? 0u : 4u       // nsh
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let q4i = lc[0]
+        let jl = lc[1]
+        let lo = lc[2]
+        let nsh = lc[3]
         let nib = (tx % 4u) < 2u
-        let nsh = nib ? 0u : 4u
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
+        let sv = ks4[blk]
+        let dd = float(ksh[blk * 8u])
+        let dm = float(ksh[blk * 8u + 1u])
+        let qb = blk * BLK + q4i * 8u + lo
+        var qv : uint[8]
+        var hq : uint[4]   // nolint:LINT002 dead in the QH=false stamp — no init, no dataflow
+        for [unroll_full] (u in range(4)) {
+            qv[u] = kqu[qb + uint(u)]
+            qv[4 + u] = kqu[qb + 16u + uint(u)]
+            static_if (QH) {
+                hq[u] = kqu[blk * BLK + 32u + lo + uint(u)]
             }
-            barrier()
-            let blk = row * nb + sb
-            let sv = ks4[blk]
-            let dd = float(ksh[blk * 8u])
-            let dm = float(ksh[blk * 8u + 1u])
-            let qb = blk * BLK + q4i * 8u + lo
-            var qv : uint[8]
-            var hq : uint[4]   // nolint:LINT002 dead in the QH=false stamp — no init, no dataflow
-            for [unroll_full] (u in range(4)) {
-                qv[u] = kqu[qb + uint(u)]
-                qv[4 + u] = kqu[qb + 16u + uint(u)]
-                static_if (QH) {
-                    hq[u] = kqu[blk * BLK + 32u + lo + uint(u)]
-                }
-            }
-            for [unroll_full] (ch in range(2)) {
-                let sy = (sv.y >> (8u * jl)) & 255u
-                let szv = (sv.z >> (8u * jl)) & 255u
-                let sw = (sv.w >> (8u * jl)) & 255u
-                let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
-                let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
-                let dl = dd * float(sc)
-                let ml = dm * float(mn)
-                static_if (QH) {
-                    let hsh = jl + 4u * uint(ch)
-                    var w4 : float4[4]
-                    for [unroll_full] (u in range(4)) {
-                        let qvv = qv[4 * ch + u]
-                        let hv = hq[u] >> hsh
-                        w4[u] = float4(float(((qvv >> nsh) & 15u) | ((hv & 1u) << 4u)),
-                            float(((qvv >> (8u + nsh)) & 15u) | (((hv >> 8u) & 1u) << 4u)),
-                            float(((qvv >> (16u + nsh)) & 15u) | (((hv >> 16u) & 1u) << 4u)),
-                            float(((qvv >> (24u + nsh)) & 15u) | (((hv >> 24u) & 1u) << 4u))) * dl - float4(ml)
-                    }
-                    let cxl = (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
-                    for [unroll_full] (b in range(8)) {
-                        for [unroll_full] (u in range(4)) {
-                            acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                        }
-                    }
-                } else {
-                    var w4 : float4[4]
-                    for [unroll_full] (u in range(4)) {
-                        let qvv = qv[4 * ch + u]
-                        w4[u] = float4(float((qvv >> nsh) & 15u), float((qvv >> (8u + nsh)) & 15u),
-                            float((qvv >> (16u + nsh)) & 15u), float((qvv >> (24u + nsh)) & 15u)) * dl - float4(ml)
-                    }
-                    let cxl = (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
-                    for [unroll_full] (b in range(8)) {
-                        for [unroll_full] (u in range(4)) {
-                            acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                        }
-                    }
-                }
-            }
-            sb++
         }
-        for [unroll_full] (b in range(8)) {
-            var s = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            s += simd_shuffle_down(s, 4u)
-            s += simd_shuffle_down(s, 2u)
-            s += simd_shuffle_down(s, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = s
+        for [unroll_full] (ch in range(2)) {
+            let sy = (sv.y >> (8u * jl)) & 255u
+            let szv = (sv.z >> (8u * jl)) & 255u
+            let sw = (sv.w >> (8u * jl)) & 255u
+            let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
+            let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
+            let dl = dd * float(sc)
+            let ml = dm * float(mn)
+            static_if (QH) {
+                let hsh = jl + 4u * uint(ch)
+                var w4 : float4[4]
+                for [unroll_full] (u in range(4)) {
+                    let qvv = qv[4 * ch + u]
+                    let hv = hq[u] >> hsh
+                    w4[u] = float4(float(((qvv >> nsh) & 15u) | ((hv & 1u) << 4u)),
+                        float(((qvv >> (8u + nsh)) & 15u) | (((hv >> 8u) & 1u) << 4u)),
+                        float(((qvv >> (16u + nsh)) & 15u) | (((hv >> 16u) & 1u) << 4u)),
+                        float(((qvv >> (24u + nsh)) & 15u) | (((hv >> 24u) & 1u) << 4u))) * dl - float4(ml)
+                }
+                let cxl = (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
+                for [unroll_full] (b in range(8)) {
+                    for [unroll_full] (u in range(4)) {
+                        acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
+                    }
+                }
+            } else {
+                var w4 : float4[4]
+                for [unroll_full] (u in range(4)) {
+                    let qvv = qv[4 * ch + u]
+                    w4[u] = float4(float((qvv >> nsh) & 15u), float((qvv >> (8u + nsh)) & 15u),
+                        float((qvv >> (16u + nsh)) & 15u), float((qvv >> (24u + nsh)) & 15u)) * dl - float4(ml)
+                }
+                let cxl = (q4i + uint(ch) * 2u) * 16u + (nib ? 0u : 8u) + lo
+                for [unroll_full] (b in range(8)) {
+                    for [unroll_full] (u in range(4)) {
+                        acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
+                    }
+                }
             }
         }
     }
@@ -10615,76 +10402,56 @@ class MetalKqMvB8K5 : MetalKqMvB8K45T {
 }
 
 [metal_dispatch(name = "enc_kq_mvb8_k6_c", pso = "g_pso_kq_mvb8_k6", tgmem = "metal_kq_mvb8_k6_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
-class MetalKqMvB8K6 {
+class MetalKqMvB8K6 : MetalKqMvB8ShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // k6 quant plane, uint view (ql at 48*blk, qh at 48*blk+32)
-    @ssbo @binding = 3 @role = "read" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : KqMvArgs
-    @workgroup txp : float4[512]
 
     [metal_kernel(name="metal_kq_mvb8_k6_msl")]
     def metal_kq_mvb8_k6 {
-        let lid = gl_LocalInvocationID.x
-        let lane = gl_SubgroupInvocationID
-        let tx = lane % 8u
-        let ty = lane / 8u
-        let row = gl_WorkGroupID.x * 8u + gl_SubgroupID * 4u + ty
-        let nb = ka.ndim / 256u
-        let s = tx / 2u
-        let o4 = (tx % 2u) * 4u
-        let qoff = (s % 2u) * 8u + o4
-        let shr = s < 2u ? 0u : 4u
-        let hsh = 2u * s
-        let nb4 = ka.ndim / 4u
-        var acc : float4[8]
-        var sb = 0u
-        while (sb < nb) {
-            barrier()
-            for [unroll_full] (j in range(8)) {
-                let slot = uint(j) * 64u + lid
-                txp[slot] = x[(slot / 64u) * nb4 + sb * 64u + (slot % 64u)]
+        run_shell()
+    }
+
+    def override lane_setup(tx : uint; var lc : uint[8]) {
+        lc[0] = tx / 2u                     // s
+        lc[1] = (tx % 2u) * 4u              // o4
+        lc[2] = (lc[0] % 2u) * 8u + lc[1]   // qoff
+        lc[3] = lc[0] < 2u ? 0u : 4u        // shr
+        lc[4] = 2u * lc[0]                  // hsh
+    }
+
+    def override mvb8_superblock(blk, tx : uint; lc : uint[8]; var acc : float4[8]) {
+        let s = lc[0]
+        let o4 = lc[1]
+        let qoff = lc[2]
+        let shr = lc[3]
+        let hsh = lc[4]
+        let dd = float(kdh[blk])
+        for [unroll_full] (ch in range(2)) {
+            let ip = uint(ch)
+            let qb = blk * 48u + ip * 16u + qoff
+            let hb = blk * 48u + 32u + ip * 8u + o4
+            var qu : uint[4]
+            var hu : uint[4]
+            for [unroll_full] (u in range(4)) {
+                qu[u] = kqu[qb + uint(u)]
+                hu[u] = kqu[hb + uint(u)]
             }
-            barrier()
-            let blk = row * nb + sb
-            let dd = float(kdh[blk])
-            for [unroll_full] (ch in range(2)) {
-                let ip = uint(ch)
-                let qb = blk * 48u + ip * 16u + qoff
-                let hb = blk * 48u + 32u + ip * 8u + o4
-                var qu : uint[4]
-                var hu : uint[4]
-                for [unroll_full] (u in range(4)) {
-                    qu[u] = kqu[qb + uint(u)]
-                    hu[u] = kqu[hb + uint(u)]
-                }
-                let g = ip * 8u + s * 2u + (tx % 2u)
-                let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
-                let dl = dd * sc
-                let ml = dl * 32.0
-                var w4 : float4[4]
-                for [unroll_full] (u in range(4)) {
-                    let qvc = ((qu[u] >> shr) & 0x0F0F0F0F) | (((hu[u] >> hsh) & 0x03030303) << 4u)
-                    w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
-                        float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
-                }
-                let cxl = ip * 32u + s * 8u + o4
-                for [unroll_full] (b in range(8)) {
-                    for [unroll_full] (u in range(4)) {
-                        acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
-                    }
-                }
+            let g = ip * 8u + s * 2u + (tx % 2u)
+            let sc = float((int(kscb[blk * 16u + g]) ^ 128) - 128)
+            let dl = dd * sc
+            let ml = dl * 32.0
+            var w4 : float4[4]
+            for [unroll_full] (u in range(4)) {
+                let qvc = ((qu[u] >> shr) & 0x0F0F0F0F) | (((hu[u] >> hsh) & 0x03030303) << 4u)
+                w4[u] = float4(float(qvc & 255u), float((qvc >> 8u) & 255u),
+                    float((qvc >> 16u) & 255u), float((qvc >> 24u) & 255u)) * dl - float4(ml)
             }
-            sb++
-        }
-        for [unroll_full] (b in range(8)) {
-            var sm = acc[b].x + acc[b].y + acc[b].z + acc[b].w
-            sm += simd_shuffle_down(sm, 4u)
-            sm += simd_shuffle_down(sm, 2u)
-            sm += simd_shuffle_down(sm, 1u)
-            if (tx == 0u && row < ka.ddim && uint(b) < ka.nr) {
-                y[uint(b) * ka.ys + row] = sm
+            let cxl = ip * 32u + s * 8u + o4
+            for [unroll_full] (b in range(8)) {
+                for [unroll_full] (u in range(4)) {
+                    acc[b] += txp[uint(b) * 64u + cxl + uint(u)] * w4[u]
+                }
             }
         }
     }
