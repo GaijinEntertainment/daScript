@@ -851,8 +851,8 @@ def private pf_moe_layer_sets(l : int64) {
         L.pf_f16g_router_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, g_rd.pf_mlog),
             fixed_array(g_rd.pf_splitk_bytes, np * ner * 4l), fixed_array(VHZ_SK, VHZ_MRT))
     }
-    L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw),
-        fixed_array(np * ner * 4l, nk * 4l, nk * 4l), fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT))
+    L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw, g_rd.moe_ds_dev),
+        fixed_array(np * ner * 4l, nk * 4l, nk * 4l, g_rd.moe_ds_bytes), fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u))
     L.pf_sched_set = set_moe_sched_cls(fixed_array(g_rd.pf_midx, g_rd.pf_minv, g_rd.pf_msch1, g_rd.pf_msch3, g_rd.pf_msch2),
         fixed_array(nk * 4l, nk * 4l, BATCH_META_BYTES, BATCH_META_BYTES, BATCH_META_BYTES),
         fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT))
@@ -872,6 +872,16 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
     L.pf_e2m_set = cm2_cls_set(L.fe2, tce, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
         fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN_M))
+    if (L.moe_g4) {
+        verify(ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b(), "vk prefill: the gemma-4 combine class rails must engage on a live device")
+        L.pf_arcomb_set = set_cls_ar_comb_g4(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn),
+            fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, nk * 4l, nk * 4l, dn_bytes),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M))
+        L.pf_arcomb_f16_set = set_cls_ar_comb_g4_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn),
+            fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, nk * 4l, nk * 4l, dn_bytes),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M))
+        return
+    }
     L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
         fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
@@ -889,6 +899,12 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let nfe = g_rd.nfe
     let ner = g_rd.ner
     let nk = wlen * k
+    let bar = int(l * PF_ROLES) + 8   //! the layer's add+rms set: x -> xb under a push-named norm row, the add off
+    if (L.moe_g4) {   //! the router's input: a weightless rms of x under the router scale over sqrt(dim)
+        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
+        enc_cls_ar(raw, h, g_rd.pf_sets[bar], pcn, wlen)
+        pfq_ts(raw)
+    }
     if (pf_f16g_on()) {
         var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
@@ -898,9 +914,15 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
         enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
     }
     pfq_ts(raw)
-    var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale)
+    var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale,
+        dsoff = L.moe_g4 ? uint(L.router_slot * ne) : NO_DSCALE)
     enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)
     pfq_ts(raw)
+    if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm, the rows the gather reads
+        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+        enc_cls_ar(raw, h, g_rd.pf_sets[bar], pcn, wlen)
+        pfq_ts(raw)
+    }
     let bounds = pf_moe_bounds(nk)
     let tcs = int64(SCHED_S_ROWS)
     let tce = CM2_TC_E
@@ -962,14 +984,21 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
-    var pcc = ArArgs(dim = uint(dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
-        slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u)
+    var pcc = rd_ar_comb_args(L, l, nxt)
     let next_fused = l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)
     if (next_fused && pf_qkv6(l + 1l)) {
-        enc_cls_ar_comb_f16_b(raw, h, L.pf_arcomb_f16_set, pcc, wlen)
+        if (L.moe_g4) {
+            enc_cls_ar_comb_g4_f16_b(raw, h, L.pf_arcomb_f16_set, pcc, wlen)
+        } else {
+            enc_cls_ar_comb_f16_b(raw, h, L.pf_arcomb_f16_set, pcc, wlen)
+        }
         return
     }
-    enc_cls_ar_comb(raw, h, L.pf_arcomb_set, pcc, wlen)
+    if (L.moe_g4) {
+        enc_cls_ar_comb_g4(raw, h, L.pf_arcomb_set, pcc, wlen)
+    } else {
+        enc_cls_ar_comb(raw, h, L.pf_arcomb_set, pcc, wlen)
+    }
     if (next_fused) {   //! the Q8 feed's requant, the next layer's own quant_xb set
         let nb = int((l + 1l) * PF_ROLES)
         if (kq_sb(g_rd.layers[l + 1l].fq)) {

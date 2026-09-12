@@ -2313,6 +2313,7 @@ struct RLayer {
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   //! ... and the m column's, over the same planes
     pf_eact_set : VkDescriptorSet
     pf_arcomb_set, pf_arcomb_f16_set : VkDescriptorSet   //! the residual step with the combine folded in: the f32 and f16 normed-row forms
+    moe_g4 : bool                   //! the gemma-4 form: the dense triple is a parallel shared expert, the routed feed and the router take their own norms of x, the combine norms both branches (`ClsArCombG4`)
 }
 
 //! the layer's dense FFN triple is placed: its own FFN, or an MoE layer's shared expert (an MoE layer without one has none)
@@ -2441,6 +2442,8 @@ struct RDec {
     router_bytes : int64
     router16_dev : uint64         //! the same rows as f16: the window chain's router GEMM on the cm2 tile
     router16_bytes : int64
+    moe_ds_dev : uint64           //! [n_moe x ne] the per-expert down scales the top-k folds into its weights (gemma-4); the filler when the model has none
+    moe_ds_bytes : int64
     moe_ident_dev : uint64        //! 0..MAX_ROUTED_SLOTS-1: the decode combine's identity slot map
     moe_dlog_dev : uint64         //! the decode's logits row (ner floats)
     moe_dw_dev : uint64           //! the decode's k routing weights
@@ -2473,6 +2476,12 @@ let RD_NORM_FFN = 1l
 let RD_NORM_POST_ATT = 2l
 let RD_NORM_POST_FFN = 3l
 let RD_NORM_PLE_POST = 4l   //! the per-layer-embedding branch's post norm (gemma-4 E-series); a zero row elsewhere
+//! the gemma-4 MoE layer's four rows (zero rows elsewhere): the router's input scale over sqrt(dim) (a weightless rms of x
+//! takes it as its weight), the routed branch's pre norm, the dense shared expert's post norm, the routed sum's post norm
+let RD_NORM_ROUTER = 5l
+let RD_NORM_PRE_FFN2 = 6l
+let RD_NORM_POST_FFN1 = 7l
+let RD_NORM_POST_FFN2 = 8l
 
 //! layer `l`'s norm row of `kind` in the norms plane, in floats
 def rd_norm_off(l, kind : int64) : int64 => (l * RD_NORM_ROWS + kind) * g_rd.dim

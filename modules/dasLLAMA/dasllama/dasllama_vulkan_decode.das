@@ -223,6 +223,7 @@ def private rd_layer_geom(var L : RLayer; g : RdecLayerGeom) {
     L.out_scale = g.out_scale
     L.kv_shared = g.kv_shared
     L.attn_cap = g.attn_cap
+    L.moe_g4 = g.moe_g4
     L.window = g.window
     L.mir_base = g.mir_base
     L.cbase = g.cbase
@@ -337,7 +338,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
 let private MOE_MAX_EXPERTS = 256l   //! the select kernels' one-workgroup reach: one thread per expert
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
-def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>) : bool {
+def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>; dscale : array<float>) : bool {
     let ner = ne + (nsh > 0l && sh_gated ? 1l : 0l)
     let reach = ne <= MOE_MAX_EXPERTS && k <= MAX_ROUTED_SLOTS && nfe % 32l == 0l
     if (g_gpu != null && g_gpu.dry) {
@@ -386,6 +387,15 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         upload_region_at(r.router16_dev, 0l, unsafe(addr<uint8 const?>(half[0])), r.router16_bytes)
         delete half
     }
+    if (empty(dscale)) {
+        r.moe_ds_dev = r.dummy
+        r.moe_ds_bytes = 256l
+    } else {
+        assert(long_length(dscale) == n_moe * ne, "vk_rdec_prepare_moe: the down-scale plane is not [n_moe x ne]")
+        r.moe_ds_bytes = long_length(dscale) * 4l
+        r.moe_ds_dev = make_device_buf(r.moe_ds_bytes)
+        upload_region_at(r.moe_ds_dev, 0l, unsafe(addr<uint8 const?>(dscale[0])), r.moe_ds_bytes)
+    }
     r.moe_ident_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     unsafe {
         var mp = reinterpret<uint?>(g_gpu.staging.mapped)
@@ -419,7 +429,7 @@ def private rd_moe_sets(var L : RLayer) {
         && (kq_sb(L.fe1) ? ensure_cls_q8k_rq() : ensure_cls_dn_rq())
         && (kq_sb(L.fe2) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()),
         "vk decode: the expert class rails must engage on a live device")
-    L.xe_own = has_dense_triple(L) && kq_sb(L.fe1) != kq_sb(L.f1)
+    L.xe_own = has_dense_triple(L) && (kq_sb(L.fe1) != kq_sb(L.f1) || L.moe_g4)   //! the gemma-4 routed feed is its own norm of x
     let xqb = L.xe_own ? g_rd.moe_xq_dev : g_rd.xq_dev
     let xsb = L.xe_own ? g_rd.moe_xs_dev : g_rd.xs_dev
     if (L.xe_own) {
@@ -428,9 +438,9 @@ def private rd_moe_sets(var L : RLayer) {
     }
     L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, g_rd.xb_dev, g_rd.moe_dlog_dev),
         fixed_array(g_rd.router_bytes, dim * 4l, g_rd.ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
-    L.s_topk = set_topk_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev),
-        fixed_array(g_rd.ner * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l),
-        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT))
+    L.s_topk = set_topk_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev),
+        fixed_array(g_rd.ner * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l, g_rd.moe_ds_bytes),
+        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u))
     L.s_egate = gemv_cls_set(L.fe1, fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev),
         fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE))
@@ -443,6 +453,14 @@ def private rd_moe_sets(var L : RLayer) {
     L.s_edown = gemv_cls_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev),
         fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
+    if (L.moe_g4) {
+        verify(ensure_cls_ar_comb_g4(), "vk decode: the gemma-4 combine-folded residual class rail must engage on a live device")
+        L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
+                g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev),
+            fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, k * dim * 4l),
+            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN))
+        return
+    }
     verify(ensure_cls_ar_comb(), "vk decode: the combine-folded residual class rail must engage on a live device")
     L.s_addr_next = set_cls_ar_comb(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
             g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev),
@@ -1143,11 +1161,16 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
-def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
+def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64;
                           var pc_rq_dim : RqArgs; var pc_rq_dim_k : RqArgs; rqwg_dim, rqwg_dim_k : int64) {
     let dim = g_rd.dim
     let nfe = g_rd.nfe
     let k = g_rd.k
+    if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm into xb (the dense triple's requant took the FFN-normed row already)
+        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+        enc_cls_ar(raw, h, L.s_addr_ffn, pcn, 1l)
+        rd_ts(raw, "m:pre2")
+    }
     if (L.xe_own) {
         if (kq_sb(L.fe1)) {
             enc_cls_q8k_rq(raw, h, L.s_quant_xe, pc_rq_dim_k, rqwg_dim_k)
@@ -1156,10 +1179,16 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
         }
         rd_ts(raw, "m:rq_e")
     }
+    if (L.moe_g4) {   //! the router's input: a weightless rms of x under the router scale over sqrt(dim), into xb
+        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
+        enc_cls_ar(raw, h, L.s_addr_ffn, pcn, 1l)
+        rd_ts(raw, "m:rtn")
+    }
     var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u)
     enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
     rd_ts(raw, "m:router")
     var pct = TopkArgs(ne = uint(g_rd.ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, wscale = g_rd.wscale,
+        dsoff = L.moe_g4 ? uint(L.router_slot * g_rd.ne) : NO_DSCALE,
         base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / fmt_unit(L.fe1)),
         base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / fmt_unit(L.fe3)),
         base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / fmt_unit(L.fe2)),
@@ -1187,7 +1216,12 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
 
 //! The residual step's push block over a MoE layer's combine: the shared row at its gate when the layer has
 //! one, the k routed rows through the slot map, then the norm at `woff`.
-def rd_ar_comb_args(L : RLayer; woff : int64) : ArArgs {
+def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
+    if (L.moe_g4) {   //! both branches normed, their sum normed, the step scaled: the gemma-4 form's rows
+        return ArArgs(dim = uint(g_rd.dim), add_on = 1u, woff = uint(woff), eps = g_rd.eps, ascale = L.out_scale,
+            slots = uint(g_rd.k), pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
+            p2off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), p3off = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
+    }
     return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
         slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u)
 }
@@ -1268,7 +1302,7 @@ def private rd_encode_token {
                 rd_encode_ffn(raw, h, L)
             }
             if (L.moe) {
-                rd_encode_moe(raw, h, L, pc_rq_dim, pc_rq_dim_k, rqwg_dim, rqwg_dim_k)
+                rd_encode_moe(raw, h, L, l, pc_rq_dim, pc_rq_dim_k, rqwg_dim, rqwg_dim_k)
             }
             let nxt = l + 1l < g_rd.n_layers ? rd_norm_off(l + 1l, RD_NORM_ATT) : nlfin   //! rms_att[l+1] | final
             if (L.ple) {
@@ -1282,8 +1316,12 @@ def private rd_encode_token {
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,
                 pre_on = (L.pre_post || L.ple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, L.ple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
             if (L.moe) {
-                var pc14c = rd_ar_comb_args(L, nxt)
-                enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)
+                var pc14c = rd_ar_comb_args(L, l, nxt)
+                if (L.moe_g4) {
+                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pc14c, 1l)
+                } else {
+                    enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)
+                }
                 rd_ts(raw, "m:ar2")
             } elif (fuse) {
                 enc_ar_rq_stamp(L.rq_next_stamp, raw, h, L.s_addr_next_rq, pc14)
@@ -2085,10 +2123,10 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
         fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
     SL.s_router = set_router_gemv_cls(fixed_array(g_gpu.span_router_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev),
         fixed_array(nl * a.ne * nb, nb, MOE_MAX_EXPERTS * 4l), fixed_array(0u, VHS_XB, VHS_LOG))
-    SL.s_topk = set_topk_cls(
-        fixed_array(g_gpu.span_logits_dev, g_gpu.stacks[SL.s1].meta.buf, g_gpu.stacks[SL.s3].meta.buf, g_gpu.stacks[SL.s2].meta.buf, g_gpu.span_w_dev),
-        fixed_array(MOE_MAX_EXPERTS * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l),
-        fixed_array(VHS_LOG, VHS_META, VHS_META, VHS_META, VHS_META))
+    SL.s_topk = set_topk_cls(   //! the span folds no down scale: the logits row fills the ds binding, never read at NO_DSCALE
+        fixed_array(g_gpu.span_logits_dev, g_gpu.stacks[SL.s1].meta.buf, g_gpu.stacks[SL.s3].meta.buf, g_gpu.stacks[SL.s2].meta.buf, g_gpu.span_w_dev, g_gpu.span_logits_dev),
+        fixed_array(MOE_MAX_EXPERTS * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l, MOE_MAX_EXPERTS * 4l),
+        fixed_array(VHS_LOG, VHS_META, VHS_META, VHS_META, VHS_META, VHS_LOG))
     SL.s_comb = set_dec_combine_cls(fixed_array(g_gpu.span_x_dev, g_gpu.span_w_dev, g_gpu.stacks[SL.s2].y_dev, g_gpu.span_x_dev),
         fixed_array(nb, MAX_ROUTED_SLOTS * 4l, Y_BYTES, nb), fixed_array(VHS_X, VHS_META, VHG_YO, VHS_X))
     if (a.nsh > 0l) {
@@ -2177,7 +2215,7 @@ def private span_record(a : MoeSpanDec) {
         vhz_dep(raw, h, VHS_GACTS, 0u)
         var pcro = RouterArgs(ne = uint(a.ne), dim = uint(dim), woff = uint(li * a.ne * dim), obase = 0u)
         enc_router_gemv_cls(raw, h, SL.s_router, pcro, a.ne)
-        var pct = TopkArgs(ne = uint(a.ne), k = uint(a.k), norm = a.norm_topk ? 1u : 0u, wscale = a.wscale,
+        var pct = TopkArgs(ne = uint(a.ne), k = uint(a.k), norm = a.norm_topk ? 1u : 0u, wscale = a.wscale, dsoff = NO_DSCALE,
             base1 = span_meta_base(a.we1[li], SL.s1, a.f1[li]), stride1 = uint(a.nfe * dim / fmt_unit(a.f1[li])),
             base3 = span_meta_base(a.we3[li], SL.s3, a.f3[li]), stride3 = uint(a.nfe * dim / fmt_unit(a.f3[li])),
             base2 = span_meta_base(a.we2[li], SL.s2, a.f2[li]), stride2 = uint(a.nfe * dim / fmt_unit(a.f2[li])),

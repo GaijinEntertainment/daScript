@@ -438,8 +438,9 @@ def layer_is_moe(t : Model; l : int64) : bool => (t.config.n_expert > 0l && l >=
     && l < long_length(t.we1_offs) && t.we1_offs[l] >= 0l && t.we3_offs[l] >= 0l && t.we2_offs[l] >= 0l)
 
 //! The width of layer `l`'s dense FFN triple on the resident driver: the shared expert's on an
-//! MoE layer (0 = the layer has none), the layer's FFN width otherwise.
-def resident_dense_width(t : Model; l : int64) : int64 => layer_is_moe(t, l) ? t.config.n_ff_shexp : layer_hidden(t, l)
+//! MoE layer (0 = the layer has none; gemma-4's parallel dense shared expert is the layer's own FFN
+//! triple at the FFN width), the layer's FFN width otherwise.
+def resident_dense_width(t : Model; l : int64) : int64 => (layer_is_moe(t, l) && !t.config.moe_dense_shexp) ? t.config.n_ff_shexp : layer_hidden(t, l)
 
 //! The dense planes' width the driver sizes at: the dense triple's, or the expert width where no
 //! layer carries a dense triple (nothing dispatches the dense planes then; they only exist).
@@ -459,7 +460,12 @@ def private resident_moe_layer_bytes(t : Model; l : int64) : int64 {
     var bytes = moe_gpu_plane_bytes(c.dim, ne * nfe, int(fmt_at(t.we1_fmt, l)))
     bytes += moe_gpu_plane_bytes(c.dim, ne * nfe, int(fmt_at(t.we3_fmt, l)))
     bytes += moe_gpu_plane_bytes(nfe, ne * c.dim, int(fmt_at(t.we2_fmt, l)))
-    if (c.n_ff_shexp > 0l) {
+    if (c.moe_dense_shexp) {   //! gemma-4: the parallel dense shared expert is the layer's FFN triple
+        let hid = layer_hidden(t, l)
+        bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
+        bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
+        bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
+    } elif (c.n_ff_shexp > 0l) {
         bytes += moe_gpu_plane_bytes(c.dim, c.n_ff_shexp, int(resident_shexp_plane(t, l, 1).f))
         bytes += moe_gpu_plane_bytes(c.dim, c.n_ff_shexp, int(resident_shexp_plane(t, l, 3).f))
         bytes += moe_gpu_plane_bytes(c.n_ff_shexp, c.dim, int(resident_shexp_plane(t, l, 2).f))
@@ -780,7 +786,7 @@ def resident_unserved_features(c : Config) : string {
     name_list_add(names, c.attn_qkv_bias && !rdec_bias_installed(), "attention qkv bias")
     name_list_add(names, c.attn_out_bias, "attention output bias")
     name_list_add(names, c.attn_sinks, "attention sinks")
-    name_list_add(names, c.moe_dense_shexp, "dense shared expert")
+    name_list_add(names, c.moe_dense_shexp && !rdec_moe_installed(), "dense shared expert")
     name_list_add(names, has_ple(c) && !rdec_ple_installed(), "per-layer embeddings")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
     name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
@@ -800,6 +806,19 @@ def resident_unserved_features(c : Config) : string {
 //! feed form for gate and up, the down plane's block multiple - or "" when the driver serves it.
 def private resident_shexp_decline(t : Model; l : int64) : string {
     let c = t.config
+    if (c.moe_dense_shexp) {   //! gemma-4: the dense shared expert is the layer's own FFN triple on the dense rail
+        let lf = resident_layer_fmts(t, l)
+        if (l >= long_length(t.w1_offs) || t.w1_offs[l] < 0l || t.w3_offs[l] < 0l || t.w2_offs[l] < 0l) {
+            return "layer {l} lacks its dense shared expert's planes"
+        }
+        if (!dense_plane_ok(t, lf.f1) || !dense_plane_ok(t, lf.f3) || !dense_plane_ok(t, lf.f2)) {
+            return "layer {l}'s dense shared expert carries a format ({int(lf.f1)}/{int(lf.f3)}/{int(lf.f2)}) the dense rail does not serve"
+        }
+        if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
+            return "layer {l}'s dense shared expert mixes activation-quant forms ({int(lf.f1)}/{int(lf.f3)})"
+        }
+        return ""
+    }
     if (c.n_ff_shexp <= 0l) return ""
     let s1 = resident_shexp_plane(t, l, 1).f
     let s3 = resident_shexp_plane(t, l, 3).f
@@ -939,7 +958,8 @@ def private resident_layer_geom(t : Model; l, mir_base : int64) : RdecLayerGeom 
         pre_post = c.pre_post_norm, gelu = c.ffn_act == FfnAct.gelu,
         vfk = vfk, vnorm = c.v_norm && !vfk,
         out_scale = c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0,
-        kv_shared = t.kv_src[l] != l, attn_cap = c.attn_logit_softcap)
+        kv_shared = t.kv_src[l] != l, attn_cap = c.attn_logit_softcap,
+        moe_g4 = c.moe_dense_shexp && layer_is_moe(t, l))
 }
 
 struct private ImageRow {
@@ -1159,7 +1179,15 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         var b2 = -1l
         if (moe) {
             //! a layer with no shared expert keeps -1 dense blocks and takes the experts' feed form
-            if (c.n_ff_shexp > 0l) {
+            if (c.moe_dense_shexp) {   //! gemma-4: the parallel dense shared expert is the layer's FFN triple
+                if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
+                    return rdec_decline("layer {l} mixes activation-quant forms (the dense shared expert {int(lf.f1)}/{int(lf.f3)})")
+                }
+                b1 = resident_place(t, lf.f1, t.w1_offs[l], dim, hid0, mr, kg, wb)
+                b3 = resident_place(t, lf.f3, t.w3_offs[l], dim, hid0, mr, kg, wb)
+                b2 = resident_place(t, lf.f2, t.w2_offs[l], hid0, dim, mr, kg, wb)
+                if (b1 < 0l || b3 < 0l || b2 < 0l) return rdec_decline("arena placement failed at layer {l} (the dense shared expert)")
+            } elif (c.n_ff_shexp > 0l) {
                 let p1 = resident_shexp_plane(t, l, 1)
                 let p3 = resident_shexp_plane(t, l, 3)
                 let p2 = resident_shexp_plane(t, l, 2)
@@ -1313,6 +1341,15 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 norms[lb + 4l * dim + i] = t.fblob[t.ple_post_off + l * dim + i]
             }
         }
+        if (c.moe_dense_shexp && layer_is_moe(t, l)) {   //! the gemma-4 MoE rows: the router's scale over sqrt(dim) as a norm weight, the routed pre norm, the two post norms
+            let inv_d = 1.0 / sqrt(float(dim))
+            for (i in range64(dim)) {
+                norms[lb + 5l * dim + i] = t.fblob[t.moe_router_scale_off + l * dim + i] * inv_d
+                norms[lb + 6l * dim + i] = t.fblob[t.rms_pre_ffn2_off + l * dim + i]
+                norms[lb + 7l * dim + i] = t.fblob[t.rms_post_ffn1_off + l * dim + i]
+                norms[lb + 8l * dim + i] = t.fblob[t.rms_post_ffn2_off + l * dim + i]
+            }
+        }
     }
     for (i in range64(dim)) {
         norms[c.n_layers * RDEC_NORM_ROWS * dim + i] = t.fblob[t.rms_final_off + i]
@@ -1366,9 +1403,20 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
         }
         li++
     }
+    var dscale : array<float>   //! gemma-4: every MoE layer's per-expert down scales, folded into the routing weights on device
+    if (c.moe_dense_shexp) {
+        dscale |> reserve_resize(n_moe * ne)
+        var di = 0l
+        for (l in range64(c.n_layers)) {
+            continue if (!layer_is_moe(t, l))
+            copy_floats(t.fblob, t.moe_down_scale_off + l * ne, dscale, di * ne, ne)
+            di++
+        }
+    }
     let ok = rdec_prepare_moe(ne, c.n_expert_used, c.n_ff_exp, c.n_ff_shexp, n_moe, sh_gated, c.norm_topk_prob,
-        c.ffn_act == FfnAct.gelu, c.expert_weights_scale, router)
+        c.ffn_act == FfnAct.gelu, c.expert_weights_scale, router, dscale)
     delete router
+    delete dscale
     return ok
 }
 
