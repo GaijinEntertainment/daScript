@@ -117,6 +117,10 @@ namespace das {
         return (ch>='0' && ch<='9') || (ch>='a' && ch<='z') || (ch>='A' && ch<='Z');
     }
 
+    __forceinline bool isspaceE ( int ch ) {
+        return ch==' ' || (ch>='\t' && ch<='\r');
+    }
+
     struct ChainGuard {
         ChainGuard ( vector<FileInfo *> & c, FileInfo * fi ) : chain(c) {
             chain.push_back(fi);
@@ -219,8 +223,8 @@ namespace das {
                     bool isMod = !isReq && !isInc && (memcmp(src, "module", 6)==0);
                     if ( isReq || isInc ) {
                         src += 7;
-                        if ( isspace(src[0]) || (isReq && src[0]=='[') ) {
-                            while ( src < src_end && isspace(src[0]) ) {
+                        if ( isspaceE(src[0]) || (isReq && src[0]=='[') ) {
+                            while ( src < src_end && isspaceE(src[0]) ) {
                                 src ++;
                             }
                             if ( src >= src_end ) {
@@ -260,7 +264,7 @@ namespace das {
                                 return !hasReqGuard || guardAvailable(reqGuard);
                             };
                             auto publicFollows = [&]() {
-                                while ( src < src_end && isspace(src[0]) ) {    // the parser reads tokens: any whitespace before `public`
+                                while ( src < src_end && isspaceE(src[0]) ) {    // the parser reads tokens: any whitespace before `public`
                                     src ++;
                                 }
                                 return src + 6 < src_end && memcmp(src, "public", 6) == 0;
@@ -268,14 +272,14 @@ namespace das {
                             if ( isReq && src[0]=='[' ) {
                                 // ARCHITECTURE.md sec.2
                                 src ++;
-                                while ( src < src_end && isspace(src[0]) ) {    // the parser reads tokens, so a newline inside the brackets is nothing
+                                while ( src < src_end && isspaceE(src[0]) ) {    // the parser reads tokens, so a newline inside the brackets is nothing
                                     src ++;
                                 }
                                 string group;
                                 while ( src < src_end && (isalnumE(src[0]) || src[0]=='_') ) {
                                     group += *src ++;
                                 }
-                                while ( src < src_end && isspace(src[0]) ) {
+                                while ( src < src_end && isspaceE(src[0]) ) {
                                     src ++;
                                 }
                                 if ( src < src_end && src[0]==']' && !group.empty() && guardTaken() ) {
@@ -324,8 +328,8 @@ namespace das {
                             goto nextChar;
                         }
                         src += 6;
-                        if ( isspace(src[0]) ) {
-                            while ( src < src_end && isspace(src[0]) ) {
+                        if ( isspaceE(src[0]) ) {
+                            while ( src < src_end && isspaceE(src[0]) ) {
                                 if ( src[0]=='\n' )
                                     line ++;
                                 src ++;
@@ -359,7 +363,7 @@ namespace das {
             }
         nextChar:
             wb = src[0]!='_' && (wb ? !isalnumE(src[0]) : !isalphaE(src[0]));
-            if ( !isspace(static_cast<unsigned char>(src[0])) ) lastSig = src[0];
+            if ( !isspaceE(src[0]) ) lastSig = src[0];
             src ++;
         }
     }

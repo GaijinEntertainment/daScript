@@ -881,7 +881,7 @@ fires in an untagged folder — the tags are folder properties with no cascade.
 LINT018 — narrowed size argument of a call with a 64-bit overload
 ==================================================================
 
-``memcpy`` and ``memcmp`` carry ``uint``, ``int64`` and ``uint64`` size
+``memcpy``, ``memmove`` and ``memcmp`` carry ``uint``, ``int64`` and ``uint64`` size
 overloads; array ``resize``, ``resize_no_init``, ``resize_and_init``,
 ``reserve`` and ``erase`` (both forms) and table ``reserve`` carry ``int64``
 overloads. An ``int(...)`` cast on the size or position argument of any of
@@ -1271,8 +1271,8 @@ out of the parameter's memory is a load, and a write through it is not a write
 through the parameter. Reassigning a local copy of the pointer writes nothing
 the parameter owns, and taking the parameter's address to read through it is
 not a write. A call slot counts as a write when the callee's own body writes
-through that parameter, judged the same way; ``memcpy`` and the ``memset``
-family write their first argument. A parameter declared ``implicit`` waives the
+through that parameter, judged the same way; ``memcpy``, ``memmove`` and the
+``memset`` family write their first argument. A parameter declared ``implicit`` waives the
 const contract and is not judged.
 
 .. das-doc: alt
