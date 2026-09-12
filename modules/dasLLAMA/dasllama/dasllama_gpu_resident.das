@@ -746,7 +746,7 @@ def resident_unserved_features(c : Config) : string {
     name_list_add(names, c.moe_dense_shexp, "dense shared expert")
     name_list_add(names, c.attn_logit_softcap != 0.0, "attention logit softcap")
     name_list_add(names, c.final_logit_softcap != 0.0, "final logit softcap")
-    name_list_add(names, c.pre_post_norm, "pre/post norms")
+    name_list_add(names, c.layer_out_scale, "a layer output scale")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
     name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
     if (c.n_expert > 0l) {
@@ -757,7 +757,6 @@ def resident_unserved_features(c : Config) : string {
         name_list_add(names, c.ffn_act == FfnAct.swiglu_oai, "the clamped swiglu expert activation")
         name_list_add(names, c.n_expert > 256l, "{c.n_expert} experts (the select kernels reach 256)")
         name_list_add(names, c.n_expert_used > 64l, "{c.n_expert_used} routed experts (the slot metas hold 64)")
-        name_list_add(names, c.layer_out_scale, "a layer output scale")
     }
     return names
 }
@@ -892,7 +891,8 @@ def private resident_layer_geom(t : Model; l, mir_base : int64) : RdecLayerGeom 
     return RdecLayerGeom(hs = layer_head_size(c, l), qd = layer_qd(c, l), kvd = layer_kv_dim(c, l),
         hid = resident_dense_width(t, l), rot = swa_row ? (c.head_size_swa > 0l ? c.head_size_swa : c.head_size) : resident_rot(c, 0l),
         window = sliding ? c.sliding_window : 0l, mir_base = mir_base,
-        cbase = swa_row ? resident_rot(c, 0l) : 0l, boff = resident_bias_off(c, l))
+        cbase = swa_row ? resident_rot(c, 0l) : 0l, boff = resident_bias_off(c, l),
+        pre_post = c.pre_post_norm, gelu = c.ffn_act == FfnAct.gelu)
 }
 
 struct private ImageRow {
@@ -1193,21 +1193,29 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
     }
     g_rdec_emb_gpu = emb_q8_placed || emb_f32_placed
-    // upload the norm rows: [rms_att[l], rms_ffn[l]] x L, then rms_final; qk_norm appends the
-    // per-head [rms_q[l], rms_k[l]] x L rows past the fixed layout, at the widest class's stride
+    // upload the norm rows: [rms_att[l], rms_ffn[l], rms_post_att[l], rms_post_ffn[l]] x L (the post
+    // rows zero off a pre/post-norm model), then rms_final; qk_norm appends the per-head
+    // [rms_q[l], rms_k[l]] x L rows past the fixed layout, at the widest class's stride
     var norms : array<float>
-    norms |> resize(c.n_layers * 2l * dim + dim + (c.qk_norm ? c.n_layers * 2l * hs : 0l))
+    norms |> resize(c.n_layers * RDEC_NORM_ROWS * dim + dim + (c.qk_norm ? c.n_layers * 2l * hs : 0l))
     for (l in range64(c.n_layers)) {
+        let lb = l * RDEC_NORM_ROWS * dim
         for (i in range64(dim)) {
-            norms[l * 2l * dim + i] = t.fblob[t.rms_att_off + l * dim + i]
-            norms[(l * 2l + 1l) * dim + i] = t.fblob[t.rms_ffn_off + l * dim + i]
+            norms[lb + i] = t.fblob[t.rms_att_off + l * dim + i]
+            norms[lb + dim + i] = t.fblob[t.rms_ffn_off + l * dim + i]
+        }
+        if (c.pre_post_norm) {
+            for (i in range64(dim)) {
+                norms[lb + 2l * dim + i] = t.fblob[t.rms_post_att_off + l * dim + i]
+                norms[lb + 3l * dim + i] = t.fblob[t.rms_post_ffn_off + l * dim + i]
+            }
         }
     }
     for (i in range64(dim)) {
-        norms[c.n_layers * 2l * dim + i] = t.fblob[t.rms_final_off + i]
+        norms[c.n_layers * RDEC_NORM_ROWS * dim + i] = t.fblob[t.rms_final_off + i]
     }
     if (c.qk_norm) {
-        let qkw = c.n_layers * 2l * dim + dim
+        let qkw = c.n_layers * RDEC_NORM_ROWS * dim + dim
         for (l in range64(c.n_layers)) {
             continue if (layer_is_recurrent(c, l))   // no q/k norm rows on a recurrent layer; its slots stay zero
             for (i in range64(layer_head_size(c, l))) {
