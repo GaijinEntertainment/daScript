@@ -9,7 +9,8 @@ diff and for a whole folder; only the scope differs.
 **One idea has one implementation.** A change that adds a function whose job an existing
 function already does is a defect. Two or more functions whose bodies differ only on an axis -
 a type, a constant, a shape, a format tag, a called helper - are one parameterized
-implementation written N times; the set is a concern, and the report names the fold.
+implementation written N times; the set is a concern, and the report names the fold - the
+single parameterized form the set collapses into.
 
 The structural sweep (detect-dupe) is one tool in the audit's kit. It orders the reading; it
 never replaces it. A function it does not pair can still be a duplicate, and a pair it reports
@@ -106,8 +107,8 @@ count with one line each. A clean audit names the inventory it built and the cor
 
 ## The structural sweep - commands
 
-The engine is `utils/detect-dupe/main.das`; the corpus is a JSON of every function's canonical
-token stream. Build it once per audit over the bodies of code the scope is compared against,
+The engine is `utils/detect-dupe/main.das`; the corpus is a JSON of every function's token
+stream with names and literals normalized. Build it once per audit over the bodies of code the scope is compared against,
 then query the scope against it. Excluding tests from the corpus keeps fixture shapes out of
 the pairs; excluding the scope's own files from a directory corpus is automatic in the
 `--against` form.
@@ -129,6 +130,7 @@ git diff --name-only <base>..<head> | grep '\.das$' | \
 still scanned from the AST the failed compile left; a `missing prerequisite` module is skipped
 loudly. Pattern-filtered boilerplate is dropped by default; `--keep all` shows it when a
 candidate count reads zero.
+
 The MCP tools `export_corpus` / `detect_duplicates` wrap the same two steps.
 
 ## Where this runs in the daslang repo (repo-only)
@@ -144,3 +146,6 @@ The MCP tools `export_corpus` / `detect_duplicates` wrap the same two steps.
 - The sweep's flags, modes, and pattern filter: `skills/internal/detect_dupe.md` and
   `skills/internal/detect_dupe_reference.md`. The Claude-judged triage (`find_dupe`) is not part
   of this audit - the auditor is the judge.
+- A flag or behavior change in `utils/detect-dupe/main.das` updates the command block above,
+  `skills/internal/detect_dupe.md`, and `skills/internal/detect_dupe_reference.md` in the same
+  change.

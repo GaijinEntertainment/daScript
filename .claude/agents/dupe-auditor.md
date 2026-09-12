@@ -54,7 +54,7 @@ function - the diff's edit produced the sibling.
 
 The skill's reporting shape: per finding `DUPLICATE` / `TEMPLATABLE` / `LOCAL` /
 `SEPARATE BY RULING` with `MEMBERS`, `AXIS`, `EXISTING`, `FOLD`, `CALLERS`, `RULING` as the
-tier requires; then the summary line `N functions audited: D duplicates, T templatable sets
+tier requires; then the summary line `N functions read: D duplicates, T templatable sets
 (M members), L local blocks, R ruled separate`. DUPLICATE and TEMPLATABLE in full; the rest by
 count with one line each. Cite `file:line`, do not narrate. A clean audit names every
 function it checked and the corpus it swept.

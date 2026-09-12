@@ -233,8 +233,8 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 ## Metal kernel gates
 
 The `kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - model-less
-per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) has no arms - the
-runner still demands an `--arm` token (`--suite kernels --arm kernels`), and every cell runs. The
+per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) takes one arm
+token, `kernels` (`--suite kernels --arm kernels`), which runs every cell. The
 hand-bound-gate sync obligation is `REVIEW_KERNEL_CELLS.md`'s. The misc file also
 carries `test_lens_tgmem_gate` - not a CPU-oracle unit: it spawns two `daslang -compile-only`
 child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` class with

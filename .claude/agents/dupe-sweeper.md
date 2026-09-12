@@ -35,7 +35,7 @@ Return two things:
 ## MERGE role
 
 The prompt hands you the shards' inventories and findings, and the sweep report. You do not
-re-read the shards' files by default - you read the inventories for same-job lines and
+re-read the shards' files - you read the inventories for same-job lines and
 same-skeleton lines across shards, then open the exact functions a candidate names to
 fresh-read both bodies before any verdict. Return the cross-shard DUPLICATE and TEMPLATABLE
 sets in the skill's shape, and the merged summary line over every shard's count.

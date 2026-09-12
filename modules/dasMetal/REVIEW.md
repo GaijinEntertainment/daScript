@@ -6,7 +6,8 @@
 **Every change under this folder applies `modules/REVIEW_SHADER_EMITTERS.md` too.**
 
 **A CPU-oracle or host-side test file answers to `tests/metal/REVIEW.md` (repo root), wherever
-the diff puts it.** An emitted-text or fail-closed fixture answers to `tests/msl/REVIEW.md` (repo root).
+the diff puts it.** An emitted-text or fail-closed fixture answers to `tests/msl/REVIEW.md` (repo
+root).
 
 - **A new emitter capability ships a text fixture under `tests/msl/` (repo root) and a census
   kind per emit shape, in the same change.** A new emitter capability is a new emit site or a
@@ -57,9 +58,8 @@ the diff puts it.** An emitted-text or fail-closed fixture answers to `tests/msl
 
 - **Never zero a cooperative tensor element by element, in a `[metal_kernel]` body or in emitted
   MSL, before a `matmul2d` `run` accumulates into it - `get_destination_cooperative_tensor`
-  already hands it back zeroed.** That walk
-  forces every element into real storage before the accumulation loop, and that costs the op
-  its fast path for the whole loop.
+  already hands it back zeroed.** That walk forces every element into real storage before the
+  accumulation loop, and that costs the op its fast path for the whole loop.
 
 - **A diff that changes `emit_tmm2d_tg_step_deva`'s `ldb` extent (`metal/msl_emit.das`) also
   changes `ldb` in `tmm2d_tg_step_deva` (`metal/metal_builtins.das`), in the same change.** That
@@ -78,9 +78,8 @@ the diff puts it.** An emitted-text or fail-closed fixture answers to `tests/msl
   Nothing checks a fixture's allocation against the stride, so a one-sided change overruns
   it silently.
 
-- **A diff that removes a key `metal/msl_emit.das` selects a lowering with - a das function name,
-  or the operand type it reads - is a defect; a builtin that binds a wider type than its
-  lowering covers ships the emitter refusal that names the operand.** Those builtins are
-  markers: the emitter picks each one's emitted MSL by the das function name and, for the tmm2d
-  A stream, by the argument's pointee, and the das front end no longer rejects what a generic
-  stub binds.
+- **Never take the das function name, or the operand's pointee type, out of how
+  `metal/msl_emit.das` picks a lowering.** The emitter reads those two properties to choose the
+  emitted MSL for each builtin - the tmm2d A stream is the pointee case - and nothing else
+  distinguishes them; the das front end accepts whatever a generic stub binds, so the emitter is
+  the only place a wrong operand is caught.
