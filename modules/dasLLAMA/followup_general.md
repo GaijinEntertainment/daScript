@@ -1547,9 +1547,17 @@
     behind - a mapping still reclaiming asynchronously, the previous cell's GPU residency, or the
     page cache not yet holding the fresh image - not the code under test; the residency thread
     that keeps Metal buffers pinned across submissions is the second suspect (the prepare pass
-    ran it, the timed child starts one of its own against the same image). Unquirked: the oracle
-    reads a prepared cell's residual state before timing (or takes the warm-retry as the first
-    measure by design), so a cold first read never spends a FAIL and a retry slot.
+    ran it, the timed child starts one of its own against the same image). A second board on the
+    same box reads cold on different cells (gemma-4-E4B tg128 -21%, Qwen3.6-27B pp512 -32% /
+    tg128 -13%, Qwen3.6-35B-A3B pp512 -33% / tg128 -20%, each retry within 2%) - the pp512
+    shortfall is bandwidth, so the pages not being resident is the leading reading. The
+    experiments that split the suspects, cheapest first: one failing cell with `--settle 60`
+    (OS reclaim of the prepare child's map), the same cell under `DASLLAMA_METAL_RESIDENCY=0`
+    and `DASLLAMA_METAL_HEARTBEAT_S=0` (the residency thread), the cell JSON's five reps (a slow
+    rep 1 is page-in warmup, five slow reps is the box), `vm_stat` / `powermetrics` sampled
+    between prepare exit and cell start, and the LENS for per-dispatch timing. Unquirked: the
+    oracle reads a prepared cell's residual state before timing (or takes the warm-retry as the
+    first measure by design), so a cold first read never spends a FAIL and a retry slot.
 139. **The tuner's end-to-end confirm reads a stamp line a warm JIT does not print.** The
     generator confirm (`gen_tune_probe.das`, confirm_e2e_prefill) scores each arm by the
     `llvm_tune: q8q8_tile_gen <- <perm>` line of a verbose child, and a child that runs the
