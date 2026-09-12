@@ -57,6 +57,13 @@ instruments later contexts when they are created, before their code runs.
 Statement stepping remains available with `stepping_debugger=true`; it stays
 opt-in so callers choose between statement stepping and instrumentation.
 
+The program compiles optimized by default, the same code a plain run executes,
+so a call the optimizer evaluates at compile time never runs and a breakpoint
+inside it never hits. `optimize=false` launches with `-no-optimization` (the
+program-side spelling is `options optimize = false`): every source statement
+and call survives and the debugger stops where the source says. The compiler's
+own folding contexts are never reported as threads.
+
 ## Custom debugger state
 
 daScript debug-agent modules can add application-specific state to a paused

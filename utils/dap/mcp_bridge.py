@@ -470,6 +470,14 @@ TOOLS = [
                         "debugger; defaults to false so callers choose the debugging mode explicitly."
                     ),
                 },
+                "optimize": {
+                    "type": "boolean",
+                    "description": (
+                        "Compile the program optimized (the default, what a plain run executes) or "
+                        "not (-no-optimization: every source statement and call survives, so the "
+                        "debugger stops where the source says; constant-folded calls otherwise never run)."
+                    ),
+                },
                 "project": {"type": "string"},
                 "project_root": {"type": "string"},
                 "load_modules": {"type": "array", "items": {"type": "string"}},
@@ -910,6 +918,11 @@ class DapBridge:
             self._ensure_local_port_available(host, port)
         cwd = self._path(arguments.get("cwd", str(self.repo_root)))
         command = [str(executable), "--das-wait-debugger"]
+        optimize = arguments.get("optimize", True)
+        if not isinstance(optimize, bool):
+            raise BridgeError("optimize must be a boolean")
+        if not optimize:
+            command.append("-no-optimization")
         if "project" in arguments:
             command.extend(["-project", str(self._path(arguments["project"]))])
         if "project_root" in arguments:

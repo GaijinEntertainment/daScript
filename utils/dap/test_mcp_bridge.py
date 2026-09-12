@@ -406,15 +406,20 @@ def main() -> int:
         early_stack = response_body(
             client.tool("debug_stack_trace", {"thread_id": thread_id, "levels": 1})
         )["stackFrames"]
-        expected_first_line = breakpoint_line if STEPPING_DEBUGGER else early_breakpoint_line
+        # the fixture compiles unoptimized, so the call into dap_add_one survives and both
+        # debugging modes stop there first, in the program's own thread
+        expected_first_line = early_breakpoint_line
         assert early_stack and early_stack[0]["line"] == expected_first_line, early_stack
-        if not STEPPING_DEBUGGER:
-            client.tool("debug_continue", {"thread_id": thread_id})
-            stopped = client.tool(
-                "debug_wait_event", {"event": "stopped", "timeout_sec": 20}
-            )
-            assert stopped["event"] == "stopped", stopped
-            thread_id = int(stopped["body"]["threadId"])
+        client.tool("debug_continue", {"thread_id": thread_id})
+        stopped = client.tool(
+            "debug_wait_event", {"event": "stopped", "timeout_sec": 20}
+        )
+        assert stopped["event"] == "stopped", stopped
+        assert int(stopped["body"]["threadId"]) == thread_id, stopped
+        second_stack = response_body(
+            client.tool("debug_stack_trace", {"thread_id": thread_id, "levels": 1})
+        )["stackFrames"]
+        assert second_stack and second_stack[0]["line"] == breakpoint_line, second_stack
 
         changed_breakpoints = response_body(
             client.tool(

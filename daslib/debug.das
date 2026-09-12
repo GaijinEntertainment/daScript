@@ -1416,6 +1416,8 @@ class private DAgent : DapiDebugAgent {
 
     def override onCreateContext(var ctx : Context) : void {
         //! Handles new context creation by registering it and re-instrumenting breakpoints.
+        //! A folding context is the compiler's, evaluating a call over constants: never a thread to debug.
+        if (ctx.category.folding_context) return
         addContext(ctx)
         invalidateBreakpoints(ctx)
     }

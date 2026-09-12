@@ -698,13 +698,13 @@ namespace das {
         vis.visitModule(thatModule);
     }
 
+    // one switch, three accepted spellings: the policy field's own name (`no_optimizations`,
+    // the /*option*/ marker registers it), and the two alias options `no_optimization` and
+    // `optimize`; any spelling that turns the optimizer off wins
     bool Program::getOptimize() const {
-        if ( policies.no_optimizations ) return false;
-        auto arg = options.find("optimize",Type::tBool);
-        if ( arg ) return arg->bValue;
-        arg = options.find("no_optimization",Type::tBool);
-        if ( arg ) return !arg->bValue;
-        return true;
+        if ( options.getBoolOption("no_optimizations", policies.no_optimizations) ) return false;
+        if ( options.getBoolOption("no_optimization", false) ) return false;
+        return options.getBoolOption("optimize", true);
     }
 
     bool Program::getDebugger() const {

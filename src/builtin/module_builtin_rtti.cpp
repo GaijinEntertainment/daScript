@@ -548,6 +548,7 @@ namespace das {
             addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );
             addProperty<DAS_BIND_MANAGED_PROP(getThisModule)>("getThisModule");
             addProperty<DAS_BIND_MANAGED_PROP(getDebugger)>("getDebugger");
+            addProperty<DAS_BIND_MANAGED_PROP(getOptimize)>("getOptimize");
             addField<DAS_BIND_MANAGED_FIELD(errors)>("errors");
             addField<DAS_BIND_MANAGED_FIELD(options)>("_options","options");
             addField<DAS_BIND_MANAGED_FIELD(policies)>("policies","policies");

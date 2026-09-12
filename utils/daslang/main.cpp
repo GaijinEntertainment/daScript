@@ -72,6 +72,7 @@ static string deserFile = ""; // -deser <path>: read the AST module cache during
 static string moduleCacheFile = ""; // -module-cache <path>: both - read when present, refresh when the compile diverged
 static bool moduleCacheExplicit = false; // -module-cache given
 static bool noModuleCache = false;  // -no-module-cache: off, over -module-cache and the default alike
+static bool noOptimization = false; // -no-optimization: the whole program compiles unoptimized, as `options optimize = false` does per file
 static string hostBinary = "";      // argv[0]
 static string hostOptions = "";     // argv up to "--": the compile's own options key the default cache
 
@@ -112,6 +113,7 @@ static CodeOfPolicies getPolicies() {
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
     policies.no_lint = noLint;
+    policies.no_optimizations = noOptimization;
     policies.log_module_compile_time = logModuleCompileTime;
     policies.building_documentation = buildingDocumentation;
     return policies;
@@ -511,6 +513,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
     policies.no_lint = noLint;
+    policies.no_optimizations = noOptimization;
     policies.log_module_compile_time = logModuleCompileTime;
     policies.building_documentation = buildingDocumentation;
     policies.persistent_heap = true;
@@ -738,6 +741,7 @@ void print_help() {
         << "                silently, at .jitted_scripts/module_cache/<script>-<hash>.dascache for a run that\n"
         << "                executes; off under -exe (one-unit codegen is the faster binary), -compile-only, -documentation, -use-aot\n"
         << "    -no-module-cache  no AST module cache at all\n"
+        << "    -no-optimization  compile every module unoptimized (a debugger then stops on every statement the source has)\n"
         << "    -ser <path> write the compiled AST module cache to <path> after compile (explicit write half)\n"
         << "    -deser <path> read the AST module cache from <path> during compile instead of parsing;\n"
         << "                prints 'deser: clean' when every module came from the cache, 'deser: FALLBACK' otherwise\n"
@@ -960,6 +964,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="no-module-cache" ) {
                 noModuleCache = true;
+            } else if ( cmd=="no-optimization" ) {
+                noOptimization = true;
             } else if ( cmd=="-list-shared-modules" ) {
                 // script will pick up next argument by itself (read from llvm_exe.das via get_command_line_arguments())
                 if ( i+1 >= argc ) {
