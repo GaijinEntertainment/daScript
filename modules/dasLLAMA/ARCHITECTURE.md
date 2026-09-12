@@ -66,9 +66,9 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   whole-token decode span, the deltanet decode step's per-session resident state, and the
   whole-model driver's hybrid token command and prefill (recurrent layers, gated attention,
   partial rotary, the prefill-to-decode state handoff).
-- `ARCHITECTURE_GPU_VULKAN_MOE.md` - sec.2.2af, 2.2ag: the resident driver's routed block in its
+- `ARCHITECTURE_GPU_VULKAN_MOE.md` - sec.2.2af, 2.2ag, 2.2ak: the resident driver's routed block in its
   two eras - the MoE block of the prefill window, and the whole-model driver's MoE token
-  command.
+  command - and the gemma-4 form both eras take.
 - `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39: the Metal speculative round over the batch driver's
   same-slab verify, the box knob that sets the depth a round drafts, and the kernel
   argument-alignment contract enforced at every dispatch.

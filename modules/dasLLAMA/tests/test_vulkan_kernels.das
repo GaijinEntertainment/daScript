@@ -8814,12 +8814,12 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
             upload_region_at(ld, 0l, addr<uint8 const?>(lh[0]), l_bytes)
             nan_sentinel_upload(idxd, s_bytes)
             nan_sentinel_upload(wd, s_bytes)
-            var sc = set_topk_rows_cls(fixed_array(ld, idxd, wd), fixed_array(l_bytes, s_bytes, s_bytes), fixed_array(1u, 2u, 4u))
+            var sc = set_topk_rows_cls(fixed_array(ld, idxd, wd, ld), fixed_array(l_bytes, s_bytes, s_bytes, l_bytes), fixed_array(1u, 2u, 4u, 1u))   //! no down scale: the logits fill the ds binding, never read at NO_DSCALE
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
-            var pc = TopkRowsArgs(npos = uint(MR_NPOS), ne = uint(MR_NE), k = uint(MR_K), norm = norm ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale)
+            var pc = TopkRowsArgs(npos = uint(MR_NPOS), ne = uint(MR_NE), k = uint(MR_K), norm = norm ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = NO_DSCALE)
             enc_topk_rows_cls(raw, h, sc, pc, int64(MR_NPOS))
             vhz_dep(raw, h, 2u | 4u, 0u, true)
             cmd_copy_whole(raw, idxd, hosti.buf, s_bytes)
@@ -9137,11 +9137,181 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
     }
 }
 
+//! the gemma-4 combine: x = (x + post(post2(sum_j w_j d_j) + post1(dense))) * ascale, then the next norm -
+//! the routed sum and the dense row each under their own post norm, their sum under the layer's, the step
+//! scaled by the output scale; the f32 and f16 normed-row forms against one CPU oracle
+def private moe_ar_comb_g4_arm(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let n = 64
+        let k = 3
+        let npos = 5
+        let nrows = npos * k
+        let eps = 1.0e-6
+        let ascale = 0.75
+        var sidx : array<uint>
+        var sw : array<float>
+        var rows : array<float>
+        var xs : array<float>
+        var sh : array<float>
+        var wn : array<float>   //! four norm rows: the next norm, the dense post norm, the routed post norm, the layer's post norm
+        sidx |> resize(nrows)
+        sw |> resize(nrows)
+        rows |> resize(nrows * n)
+        xs |> resize(npos * n)
+        sh |> resize(npos * n)
+        wn |> resize(4 * n)
+        for (i in range(nrows)) {
+            sidx[i] = uint((i * 7) % nrows)
+            sw[i] = 0.125 + float(i % 5) * 0.25
+        }
+        for (i in range(nrows * n)) {
+            rows[i] = float((i * 7) % 93) * 0.13 - 5.5
+        }
+        for (i in range(npos * n)) {
+            xs[i] = float((i * 11) % 37) * 0.1 - 1.7
+            sh[i] = float((i * 5) % 41) * 0.2 - 3.0
+        }
+        for (i in range(4 * n)) {
+            wn[i] = 0.5 + float((i * 3) % 7) * 0.125
+        }
+        let si_bytes = int64(nrows) * 4l
+        let x_bytes = int64(npos * n) * 4l
+        let ro_bytes = int64(nrows * n) * 4l
+        let wn_bytes = int64(4 * n) * 4l
+        let sid = make_device_buf(si_bytes)
+        let swd = make_device_buf(si_bytes)
+        let rod = make_device_buf(ro_bytes)
+        let xd = make_device_buf(x_bytes)
+        let shd = make_device_buf(x_bytes)
+        let wnd = make_device_buf(wn_bytes)
+        let yod = make_device_buf(x_bytes)
+        let yhd = make_device_buf(x_bytes / 2l)
+        var host = make_host_buf(3l * x_bytes, true, [cached = true])
+        var got_x : array<float>
+        var got_y : array<float>
+        var got_h : array<uint>
+        got_x |> resize(npos * n)
+        got_y |> resize(npos * n)
+        got_h |> resize(npos * n / 2)
+        var pc = ArArgs(dim = uint(n), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, row0 = 0u,
+            slots = uint(k), pwoff = uint(n), p2off = uint(2 * n), p3off = uint(3 * n))
+        unsafe {
+            upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
+            upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
+            upload_region_at(rod, 0l, addr<uint8 const?>(rows[0]), ro_bytes)
+            upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
+            upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), wn_bytes)
+            nan_sentinel_upload(yod, x_bytes)
+            nan_sentinel_upload(yhd, x_bytes / 2l)
+            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
+            var sc = set_cls_ar_comb_g4(fixed_array(xd, shd, wnd, yod, sid, swd, rod),
+                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes, si_bytes, si_bytes, ro_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u))
+            var raw = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h : VkHaz
+            enc_cls_ar_comb_g4(raw, h, sc, pc, int64(npos))
+            vhz_dep(raw, h, 1u | 4u, 0u, true)
+            cmd_copy_range(raw, xd, 0l, host.buf, 0l, x_bytes)
+            cmd_copy_range(raw, yod, 0l, host.buf, x_bytes, x_bytes)
+            vk_check(vkEndCommandBuffer(raw), null)
+            submit_wait(raw)
+            memcpy(addr<void?>(got_x[0]), host.mapped, x_bytes)
+            memcpy(addr<void?>(got_y[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
+            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
+            var sc16 = set_cls_ar_comb_g4_f16_b(fixed_array(xd, shd, wnd, yhd, sid, swd, rod),
+                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes / 2l, si_bytes, si_bytes, ro_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u))
+            var raw2 = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(raw2, begin), null)
+            var h2 : VkHaz
+            enc_cls_ar_comb_g4_f16_b(raw2, h2, sc16, pc, int64(npos))
+            vkd_run_copy(raw2, h2, yhd, host, x_bytes / 2l, 4u)
+            memcpy(addr<void?>(got_h[0]), host.mapped, x_bytes / 2l)
+        }
+        var want_x : array<float>
+        var want_y : array<float>
+        var r : array<float>
+        var c : array<float>
+        want_x |> resize(npos * n)
+        want_y |> resize(npos * n)
+        r |> resize(n)
+        c |> resize(n)
+        for (p in range(npos)) {
+            var sr = 0.0
+            var sd = 0.0
+            for (i in range(n)) {
+                var v = 0.0
+                for (j in range(k)) {
+                    v += sw[p * k + j] * rows[int(sidx[p * k + j]) * n + i]
+                }
+                r[i] = v
+                sr += v * v
+                sd += sh[p * n + i] * sh[p * n + i]
+            }
+            let inv_r = 1.0 / sqrt(sr / float(n) + eps)
+            let inv_d = 1.0 / sqrt(sd / float(n) + eps)
+            var sc = 0.0
+            for (i in range(n)) {
+                c[i] = wn[2 * n + i] * (r[i] * inv_r) + wn[n + i] * (sh[p * n + i] * inv_d)
+                sc += c[i] * c[i]
+            }
+            let inv_c = 1.0 / sqrt(sc / float(n) + eps)
+            var ss = 0.0
+            for (i in range(n)) {
+                let v = (xs[p * n + i] + wn[3 * n + i] * (c[i] * inv_c)) * ascale
+                want_x[p * n + i] = v
+                ss += v * v
+            }
+            let inv = 1.0 / sqrt(ss / float(n) + eps)
+            for (i in range(n)) {
+                want_y[p * n + i] = wn[i] * (want_x[p * n + i] * inv)
+            }
+        }
+        t |> success(mismatch_approx(got_x, xs) > 0, "the gemma-4 combine step: the in-place residual rows moved off their input")
+        let bad_x = mismatch_approx(got_x, want_x)
+        t |> success(bad_x == 0, "the gemma-4 combine step: the residual rows match the CPU oracle ({bad_x} of {npos * n} off)")
+        let bad_y = mismatch_approx(got_y, want_y)
+        t |> success(bad_y == 0, "the gemma-4 combine step: the f32 normed rows match the CPU oracle ({bad_y} of {npos * n} off)")
+        var got_yf : array<float>
+        got_yf |> resize(npos * n)
+        for (i in range(npos * n / 2)) {
+            let pr = unpackHalf2x16(got_h[i])
+            got_yf[2 * i] = pr.x
+            got_yf[2 * i + 1] = pr.y
+        }
+        let f16_bar = 2.0e-3
+        let bad_h = mismatch_bars(got_yf, want_y, f16_bar, f16_bar * max_abs(want_y))
+        t |> success(bad_h == 0, "the gemma-4 combine step: the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
+        want_x[2 * n + 9] += 0.5
+        t |> success(mismatch_approx(got_x, want_x) == 1, "gemma-4 combine control: the residual bar reds one poisoned element")
+        want_y[3 * n + 5] += 0.5
+        t |> success(mismatch_approx(got_y, want_y) == 1, "gemma-4 combine control: the f32 normed-row bar reds one poisoned element")
+        t |> success(mismatch_bars(got_yf, want_y, f16_bar, f16_bar * max_abs(want_y)) == 1, "gemma-4 combine control: the f16 normed-row bar reds one poisoned element")
+        delete sidx
+        delete sw
+        delete rows
+        delete xs
+        delete sh
+        delete wn
+        delete got_x
+        delete got_y
+        delete got_h
+        delete got_yf
+        delete want_x
+        delete want_y
+        delete r
+        delete c
+    }
+}
+
 [test]
 def test_vkd_moe_routing(t0 : T?) {
     t0 |> run("the resident MoE block's routing kernels == the CPU oracles: router GEMM, per-row top-k, the bucket schedule, the combine-folded residual step") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b())) {
+            if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b()
+                    && ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b())) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -9153,6 +9323,7 @@ def test_vkd_moe_routing(t0 : T?) {
             moe_ar_comb_arm(t, true, true)
             moe_ar_comb_arm(t, false, true)
             moe_ar_comb_arm(t, false, false)
+            moe_ar_comb_g4_arm(t)
         } else {
             t |> skip("dasVulkan not present")
         }

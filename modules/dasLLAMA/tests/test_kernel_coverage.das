@@ -615,6 +615,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // coverage is the e arm of each format's cell in test_vulkan_kernels.das
     "kq_batch_k5_cm2e_cls_spv", "kq_batch_k6_cm2e_cls_spv", "kq_batch_q40_cm2e_cls_spv",
     "kq_batch_k3_cm2e_cls_spv", "kq_batch_iq4nl_cm2e_cls_spv", "kq_batch_k2_cm2e_cls_spv",
+    // the gemma-4 MoE combine (the two normed branches' residual step, f32 and f16 normed-row forms):
+    // its carrier is the 26B-A4B, above the zoo's tier; its coverage is test_vkd_moe_routing's gemma-4
+    // combine arm in test_vulkan_kernels.das
+    "cls_ar_comb_g4_spv", "cls_ar_comb_g4_f16_b_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das

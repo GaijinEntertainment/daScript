@@ -44,6 +44,8 @@ struct ArArgs {
     gated : uint    //! the combine twins: the shared expert's gate scales its row
     pre_on : uint   //! the add partner is rms-normed with the row at `pwoff` before the add (a gemma's post-attention / post-FFN norm)
     pwoff : uint
+    p2off : uint     //! the gemma-4 MoE combine: the routed sum's post norm row (`pwoff` is the dense branch's)
+    p3off : uint     //! ... and the post norm over the two branches' sum
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -368,6 +370,112 @@ class ClsArCombF16B : ArCombBase {
     @ssbo @binding = 3 outh : array<float16>   //! the normed rows, f16
 
     [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+    def run {
+        let rbase = gl_WorkGroupID.x * pa.dim
+        let ss = accum_row(rbase)
+        let inv = rms_inv(ss)
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            outh[rbase + k] = float16(wn[pa.woff + k] * (row[k] * inv))
+            k += 256u
+        }
+    }
+}
+
+//! the gemma-4 MoE combine: x = (x + post(post2(sum_j w_j d_j) + post1(dense))) * ascale - the routed sum
+//! under its own post norm (`p2off`), the dense shared expert's row under its (`pwoff`), the two summed
+//! under the layer's post-FFN norm (`p3off`), the residual step scaled by the layer's output scale; the
+//! dense row is always on, ungated
+class ArCombG4Base : ArBase {
+    @ssbo @binding = 4 slot_idx : array<uint>    //! position -> its k slot rows
+    @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights (the per-expert down scale folded in)
+    @ssbo @binding = 6 down_rows : array<float>  //! the routed down-GEMM output rows
+
+    //! the position's k weighted routed rows at element k
+    def routed_sum(pk, k : uint) : float {
+        var f = 0.0
+        var j = 0u
+        while (j + 4u <= pa.slots) {
+            let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
+            let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
+            let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
+            let d3 = down_rows[slot_idx[pk + j + 3u] * pa.dim + k]
+            f += slot_w[pk + j] * d0
+            f += slot_w[pk + j + 1u] * d1
+            f += slot_w[pk + j + 2u] * d2
+            f += slot_w[pk + j + 3u] * d3
+            j += 4u
+        }
+        while (j < pa.slots) {
+            f += slot_w[pk + j] * down_rows[slot_idx[pk + j] * pa.dim + k]
+            j++
+        }
+        return f
+    }
+
+    def override accum_row(base : uint) : float {
+        let pk = (base / pa.dim) * pa.slots
+        var sr = 0.0
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            let r = routed_sum(pk, k)
+            row[k] = r
+            sr += r * r
+            k += 256u
+        }
+        let inv_r = wg_rms_inv(sr, pa.dim, pa.eps)
+        var sd = 0.0
+        k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            let a = aa[base + k]
+            sd += a * a
+            k += 256u
+        }
+        let inv_d = wg_rms_inv(sd, pa.dim, pa.eps)
+        var sc = 0.0
+        k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            let c = wn[pa.p2off + k] * (row[k] * inv_r) + wn[pa.pwoff + k] * (aa[base + k] * inv_d)
+            row[k] = c
+            sc += c * c
+            k += 256u
+        }
+        let inv_c = wg_rms_inv(sc, pa.dim, pa.eps)
+        var ss = 0.0
+        k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            let vv = (xs[base + k] + wn[pa.p3off + k] * (row[k] * inv_c)) * pa.ascale
+            xs[base + k] = vv
+            row[k] = vv
+            ss += vv * vv
+            k += 256u
+        }
+        return ss
+    }
+}
+
+[vk_dispatch(name = "cls_ar_comb_g4", grid = "nrows", params = "nrows : int64")]
+class ClsArCombG4 : ArCombG4Base {
+    @ssbo @binding = 3 yo : array<float>   //! the normed output rows
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+    def run {
+        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
+        let ss = accum_row(base)
+        let inv = rms_inv(ss)
+        var k = gl_LocalInvocationID.x
+        while (k < pa.dim) {
+            yo[base + k] = wn[pa.woff + k] * (row[k] * inv)
+            k += 256u
+        }
+    }
+}
+
+[vk_dispatch(name = "cls_ar_comb_g4_f16_b", grid = "nrows", params = "nrows : int64")]
+class ClsArCombG4F16B : ArCombG4Base {
+    @ssbo @binding = 3 outh : array<float16>   //! the normed rows, f16
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
     def run {
         let rbase = gl_WorkGroupID.x * pa.dim
         let ss = accum_row(rbase)
@@ -966,7 +1074,10 @@ struct TopkArgs {
     base2 : uint
     stride2 : uint
     xnb2 : uint      // the down feed's blocks per hidden row: slot j reads row j (gate/up read the one feed row)
+    dsoff : uint     //! this layer's row base in the per-expert down-scale plane (gemma-4: ffn_down_exps.scale folds into the routing weight); NO_DSCALE = none
 }
+
+let NO_DSCALE = 0xFFFFFFFFu   //! the top-k forms' "no per-expert down scale" sentinel
 
 //! the select over one logit row, shared by the decode's single-row and the window's per-row
 //! classes: thread tid holds logit lg, live = tid < ne, the picks land in pick / pickw for the
@@ -1075,6 +1186,7 @@ class TopK : TopKCore {
     @ssbo @binding = 2 meta3 : array<uint>
     @ssbo @binding = 3 meta2 : array<uint>
     @ssbo @binding = 4 w : array<float>      //! the k routing weights
+    @ssbo @binding = 5 ds : array<float>     //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
     @push_constant pa : TopkArgs
 
     [spirv_kernel(local_size_x = 256, name = "topk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
@@ -1091,8 +1203,12 @@ class TopK : TopKCore {
     def write_picks {
         var jj = 0u
         while (jj < pa.k) {
-            w[jj] = pick_weight(jj, pa.k, pa.norm, pa.wscale)
             let ex = min(pick[jj], pa.ne - 1u)   // a NaN row leaves the sentinel: never a wild weight block
+            var wj = pick_weight(jj, pa.k, pa.norm, pa.wscale)
+            if (pa.dsoff != NO_DSCALE) {
+                wj *= ds[pa.dsoff + ex]
+            }
+            w[jj] = wj
             meta1[jj * 2u] = pa.base1 + ex * pa.stride1
             meta1[jj * 2u + 1u] = 0u
             meta3[jj * 2u] = pa.base3 + ex * pa.stride3
@@ -1111,6 +1227,7 @@ struct TopkRowsArgs {
     norm : uint      //! renormalize the selected weights to sum 1
     lstride : uint   //! the logits row stride (elements)
     wscale : float   //! 0 or 1 = none
+    dsoff : uint     //! this layer's row base in the per-expert down-scale plane; NO_DSCALE = none
 }
 
 [vk_dispatch(name = "topk_rows_cls", grid = "npos", params = "npos : int64")]
@@ -1118,6 +1235,7 @@ class TopKRows : TopKCore {
     @ssbo @binding = 0 logits : array<float>   //! [npos x lstride]
     @ssbo @binding = 1 idx : array<uint>       //! [npos x k] the picked expert per slot
     @ssbo @binding = 2 w : array<float>        //! ... and its routing weight
+    @ssbo @binding = 3 ds : array<float>       //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
     @push_constant pa : TopkRowsArgs
 
     [spirv_kernel(local_size_x = 256, name = "topk_rows_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
@@ -1130,8 +1248,13 @@ class TopKRows : TopKCore {
         if (tid == 0u) {
             var jj = 0u
             while (jj < pa.k) {
-                w[p * pa.k + jj] = pick_weight(jj, pa.k, pa.norm, pa.wscale)
-                idx[p * pa.k + jj] = min(pick[jj], pa.ne - 1u)
+                let ex = min(pick[jj], pa.ne - 1u)
+                var wj = pick_weight(jj, pa.k, pa.norm, pa.wscale)
+                if (pa.dsoff != NO_DSCALE) {
+                    wj *= ds[pa.dsoff + ex]
+                }
+                w[p * pa.k + jj] = wj
+                idx[p * pa.k + jj] = ex
                 jj++
             }
         }

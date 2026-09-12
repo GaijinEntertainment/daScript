@@ -194,6 +194,11 @@ def test_resident_unserved_moe_features(t : T?) {
         let e = resident_unserved_features(c)
         t |> success(says(e, "biased expert stacks") && says(e, "the clamped swiglu expert activation") && !says(e, "output scale"),
             "the expert stack's bias and the clamped activation named together, the layer output scale served: {e}")
+        c.moe_exps_bias = false
+        c.ffn_act = FfnAct.gelu
+        c.moe_dense_shexp = true
+        t |> equal(resident_unserved_features(c), rdec_moe_installed() ? "" : "dense shared expert",
+            "gemma-4's parallel dense shared expert is served where a backend installed the MoE seats, named where none did (installed here: {rdec_moe_installed()})")
         var d = Config()
         d.moe_gate = MoeGate.sigmoid
         t |> equal(resident_unserved_features(d), "", "a dense model's router field is no feature")

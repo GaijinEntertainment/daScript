@@ -445,8 +445,8 @@ stage on the device - the hybrid file's forced-feed logits-tolerance form (its K
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
-`gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b` -
-a process loads one carrier, so no cell inherits another model's device state, and a GPU run
+`gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
+`gemma4_26b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
 loads ONE model at a time, never a chain) - stocked suite, `-jit` only; the whole-model resident
 driver on the gemma dense base (gemma-3-1b-it-Q8_0, `DASLLAMA_GPU=1`): the sandwich norms (the residual steps
 norm their add partner first), the sliding-window layers beside the global ones with their own rope
@@ -480,10 +480,16 @@ dense FFN widths; gemma-4-E4B Q8_0 (large tier) at forty tokens and 150 + 150; g
 (the dense base at width 2560 and four kv heads) at forty tokens and 150 + 150; gemma-2-2b Q8_0
 (the attention logit softcap on every score - the 8-row prefill tile and the token command take
 it, the cm2 flash tile has no arm and stands down on that model) at forty tokens, 150 + 150 and
-the eight-token agreement form. Arms: `g2` (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
+the eight-token agreement form. The MoE row (large tier): gemma-4-26B-A4B UD-IQ3_XXS - the
+routed block in its gemma-4 form (the parallel dense shared expert as the layer's own FFN triple,
+the routed feed and the router off their own norms of x, the per-expert down scale folded into
+the routing weights, the combine norming both branches and their sum under the layer's output
+scale) in the forced-feed form at forty tokens and the perplexity form at 150 + 150; its file pins
+the mirror at 4096 positions (`set_gpu_ctx_max` in its own `[init]`) because the planes take most
+of a 16 GB card. Arms: `g2` (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
 (gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
-`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B) - the tokens share no substring, so one arm
-selects one file. Skips
+`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B) - the tokens share no
+substring, so one arm selects one file. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.
