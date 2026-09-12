@@ -1335,3 +1335,13 @@ module) is independent and can land any time - it is pure structure.
     (its rows carry no side input). Also here: the driver's prefill GEMMs for the branch run the
     q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
     route for them is a perf lever once the E-series rows have a baseline.
+48. **The KV mirror keeps every sliding layer's rows at the full context.** llama.cpp's iSWA cache
+    sizes a sliding layer's rows to its window (gemma-3: 1024 on 28 of 34 layers of the 4b, 512 on
+    the 1b; gemma-4: 1024 / 512 on five of six); the mirror sizes every layer to the context, so a
+    gemma-3-4b mirror at 32768 positions holds 4.3 GB where a ringed one holds about 1 GB (the six
+    global layers at the context, the rest at 1024). The ring is a position-modulo on the sliding
+    layers' mirror row (`layerbase + (pos mod window) * kvd`) in the rope store, the attention
+    kernels' key index and the prefill's K/V writes, plus the plan's row count per layer; the
+    decode attention already masks keys below the window, so the ring changes which row a key
+    lives in, not which keys score. Worth its lever on every gemma and on the 26B (30 layers,
+    25 sliding).
