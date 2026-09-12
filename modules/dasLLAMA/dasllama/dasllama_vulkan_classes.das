@@ -2265,8 +2265,9 @@ class template AtAttnTileT {
         }
     }
 
-    // tile QK^T: lane (r, c) scores query r against position k0+c, causal-masked into fp
-    def qk_score(r, c, hs, k0, gq, q0, nrows : uint; scale : float) {
+    // tile QK^T: lane (r, c) scores query r against position k0+c, masked into fp - causal, and
+    // below the query's window on a sliding layer (win 0 = every position)
+    def qk_score(r, c, hs, k0, gq, q0, nrows, win : uint; scale : float) {
         var s = 0.0
         var j = 0u
         while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
@@ -2277,8 +2278,12 @@ class template AtAttnTileT {
             j += 4u
         }
         let gk = k0 + c
-        fp[r * 32u + c] = (gk <= gq && q0 + r < nrows) ? s * scale : -3.0e38
+        let inwin = win == 0u || gk + win > gq
+        fp[r * 32u + c] = (gk <= gq && inwin && q0 + r < nrows) ? s * scale : -3.0e38
     }
+
+    //! the first K/V tile a window's queries can see: a sliding layer's tile below every query's window start skips whole
+    def k_first(w0, q0, win : uint) : uint => (win != 0u && w0 + q0 > win) ? ((w0 + q0 - win) / 32u) * 32u : 0u
 
     // per-row online-softmax update: max, rescale, exponentiate in place
     def softmax_update {
@@ -2334,11 +2339,11 @@ class template AtAttnTileT {
         barrier()
         let gq = pa.w0 + q0 + r
         let kend = pa.w0 + min(q0 + 8u, pa.npos)   // causal bound (exclusive) of the tile's last row
-        var k0 = 0u
+        var k0 = k_first(pa.w0, q0, pa.window)
         while (k0 < kend) {
             load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs)
             barrier()
-            qk_score(r, c, pa.hs, k0, gq, q0, pa.npos, pa.scale)
+            qk_score(r, c, pa.hs, k0, gq, q0, pa.npos, pa.window, pa.scale)
             barrier()
             softmax_update()
             barrier()
@@ -2434,7 +2439,7 @@ class AtAttn : AtAttnTileT {
         while (k0 < kend) {
             load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs)
             barrier()
-            qk_score(r, c, pa.hs, k0, gq, q0, pa.rows, pa.scale)
+            qk_score(r, c, pa.hs, k0, gq, q0, pa.rows, 0u, pa.scale)
             barrier()
             softmax_update()
             barrier()
@@ -2507,10 +2512,11 @@ def facm2_exp(r, c : uint; v : float) : float => exp(v)
 [spirv_per_element, unused_argument(r, c)]
 def facm2_pick(r, c : uint; v, o : float) : float => max(v, o)
 
-// causal: key kbase+c may not exceed query w0+q0+r (-FLT_MAX/2 keeps Mold-M NaN-free);
-// padding rows keep their causal window so no row is all -inf (rowsum stays positive)
+// causal: key kbase+c may not exceed query w0+q0+r (-FLT_MAX/2 keeps Mold-M NaN-free), nor sit
+// below the query's window on a sliding layer (win 0 = every position); padding rows keep their
+// causal window so no row is all -inf (rowsum stays positive)
 [spirv_per_element]
-def facm2_mask(r, c : uint; v : float; qbase, kbase : uint) : float => kbase + c > qbase + r ? -1.7e38 : v
+def facm2_mask(r, c : uint; v : float; qbase, kbase, win : uint) : float => (kbase + c > qbase + r || (win != 0u && kbase + c + win <= qbase + r)) ? -1.7e38 : v
 
 [spirv_per_element, unused_argument(r, c)]
 def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
@@ -2528,6 +2534,7 @@ struct FaCm2Args {
     scale : float
     qstride : uint  // the q panel's row stride when it is not qd (a gated q plane: [q | gate] per head); 0 = qd
     qhs : uint      // the q panel's per-head stride (2 x hs on a gated plane); 0 = hs
+    window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
 }
 
 // The cm2 flash pass over the f16 K/V shadows: ONE class template over the head size. The head
@@ -2578,13 +2585,14 @@ class template FaCm2T {
         var lrow : SACC
         var o : QACC
         let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
-        var j = 0u
+        // a sliding layer's first step: the step below the tile's first query's window start
+        var j = (pa.window != 0u && pa.w0 + q0 > pa.window) ? ((pa.w0 + q0 - pa.window) / BC) * BC : 0u
         while (j < kmax) {
             var s : SACC
             var kt : KB
             coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, BC, kvh * HS, HS, tv)
             s = coopmatMulAdd(qf, kt, s)
-            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j)
+            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j, pa.window)
             var rmax : SACC
             coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
             var mold : SACC
@@ -2736,6 +2744,7 @@ struct DaAttnBArgs {
     scale : float
     qhs : uint      // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head)
     gated : uint    // multiply each head's output by the sigmoid of its gate half
+    window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
 }
 
 // batched causal attention over the decode mirrors (the template's run): K/V read at kbase/vbase,
@@ -2969,6 +2978,7 @@ struct DaAttnArgs {
     scale : float   // the KV count to attend rides tok[0].cnt
     qstride : uint  // q head stride: 0 = hs; 2*hs on a gated-q model ([q | gate] per head)
     gated : uint    // 1 = multiply the head's output by sigmoid of its gate half before the store
+    window : uint   //! a sliding layer attends the last `window` positions of the cnt; 0 = every position
 }
 
 // decode attention (one query row): one wg per head, GQA, KT-typed K/V mirror. Online softmax
@@ -3008,7 +3018,7 @@ class template DaAttnT {
         barrier()
         var acc = 0.0             // this thread's V partial (group g's slice of dim c)
         var mrun = -3.0e38        // running max — uniform, tracked in lockstep by every thread
-        var c0 = 0u
+        var c0 = pa.window != 0u && cnt > pa.window ? cnt - pa.window : 0u
         while (c0 < cnt) {
             let clen = min(256u, cnt - c0)
             // chunk scores: thread tid owns position c0 + tid
@@ -7544,6 +7554,7 @@ struct RopeKvArgs {
     layerbase : uint   // this layer's K/V mirror base; the row rides tok[0].pos
     boff : uint     // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
     hasb : uint
+    cbase : uint    //! this layer's rope class's row base in the cos/sin plane (a second class's row follows the first's)
 }
 
 // fused rope + KV-row store (decode, one token): one thread per rotation pair, each owning
@@ -7569,8 +7580,8 @@ class template RopeKvStoreT {
             let lp = is_k ? gid - pa.kpair0 : gid
             let h = lp / pa.half
             let j = lp % pa.half
-            let fcr = cossin[j]
-            let fci = cossin[pa.half + j]
+            let fcr = cossin[pa.cbase + j]
+            let fci = cossin[pa.cbase + pa.half + j]
             let e0 = pa.neox != 0u ? j : j * 2u
             let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
             if (is_k) {
@@ -7632,6 +7643,8 @@ struct RopeKvBArgs {
     qhs : uint       // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head, the gate half left in place)
     boff : uint      // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
     hasb : uint
+    cstride : uint   //! a position's cos/sin plane width (every rope class's row); 0 = hs, the one-class plane
+    cbase : uint     //! this layer's rope class's row base inside the plane
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -7659,7 +7672,7 @@ class template RopeKvStoreBT {
             let h = pr / hpairs
             let j = pr % hpairs
             let rot = j < pa.half
-            let cb = p * pa.hs
+            let cb = p * (pa.cstride == 0u ? pa.hs : pa.cstride) + pa.cbase
             let cj = min(j, pa.half - 1u)   // the pass-through pairs past the rotated half read a clamped table entry the select then drops
             let tcr = cossin[cb + cj]
             let tci = cossin[cb + pa.half + cj]
@@ -7726,6 +7739,7 @@ struct QknRopeArgs {
     qstride : uint  // q head stride in qrows: 0 = hs; 2*hs on a gated-q model ([q | gate] per head, roped in place)
     boff : uint     // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
     hasb : uint
+    cbase : uint    //! this layer's rope class's row base in the cos/sin plane
 }
 
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models), one wg per head-row; verbatim
@@ -7766,8 +7780,8 @@ class template QknRopeKvT : RmsWgBase {
         barrier()
         // rope this head's pairs off the normed row; the pairs partition [0, hs)
         if (tid < pa.half) {
-            let fcr = cossin[tid]
-            let fci = cossin[pa.half + tid]
+            let fcr = cossin[pa.cbase + tid]
+            let fci = cossin[pa.cbase + pa.half + tid]
             let e0 = pa.neox != 0u ? tid : tid * 2u
             let e1 = pa.neox != 0u ? tid + pa.half : tid * 2u + 1u
             let a0 = row[e0]

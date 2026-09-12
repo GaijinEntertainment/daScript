@@ -981,7 +981,7 @@ def private pf_setup {
     g_rd.pf_up = make_device_buf(np * hid * 4l)
     g_rd.pf_ffnout = make_device_buf(np * dim * 4l)
     g_rd.pf_xb2 = make_device_buf(np * dim * 4l)
-    g_rd.pf_cos = make_device_buf(np * g_rd.head_size * 4l)
+    g_rd.pf_cos = make_device_buf(np * g_rd.cos_elems * 4l)
     g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
     if (g_env_vulkan.vk_overlap) {
@@ -1042,31 +1042,44 @@ def private pf_setup {
     for (mi in range(nsets)) {
         g_rd.pf_meta[mi] = make_host_buf(BATCH_META_BYTES, true)
     }
-    let mirbytes = g_rd.n_attn * g_rd.seq_cap * kvd * g_rd.kv_esz
+    let mirbytes = g_rd.mir_elems * g_rd.kv_esz
     let normbytes = g_rd.norms_bytes
     let kv16 = g_rd.kv16
-    // the cm2 fa tiles read f16 K/V, so f16 mirrors bind directly; f32 keeps the chunked/h128 paths; the gated stamps exist at head 256 alone
-    g_rd.pf_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
-        && (g_rd.head_size == 64l || g_rd.head_size == 128l || g_rd.head_size == 256l)
-        && (!g_rd.q_gated || g_rd.head_size == 256l))
-    let fa128s = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
+    // the fa pick is per layer: a model's attention classes may differ in head size, and a class with no fa stamp takes the chunked pair
+    let fa_dev = g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
+    var fa_hs : table<int64>   //! the head sizes the fa tiles serve on this model
+    var chunked_hs : table<int64>   //! ... and the ones the chunked pair serves
+    g_rd.pf_facm2 = false
+    for (L in g_rd.layers) {
+        continue if (L.recurrent)
+        L.pf_fa = fa_dev && (L.hs == 64l || L.hs == 128l || L.hs == 256l) && (!g_rd.q_gated || L.hs == 256l)
+        g_rd.pf_facm2 = g_rd.pf_facm2 || L.pf_fa
+        if (L.pf_fa) {
+            fa_hs |> insert(L.hs)
+        } else {
+            chunked_hs |> insert(L.hs)
+        }
+    }
+    let fa128s = !fa_dev && g_gpu.has_coopmat && vk_fa_on() && key_exists(chunked_hs, 128l)
+    let chunked_other = !fa128s ? long_length(chunked_hs) > 0l : long_length(chunked_hs) > 1l
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b()
         && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
-        && (fa128s ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
-            : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
-        && (!g_rd.pf_facm2
-            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_cls() : (g_rd.head_size == 128l ? ensure_fa_cm2_h128_cls()
-                : (g_rd.q_gated ? ensure_fa_cm2_h256_g_cls() : ensure_fa_cm2_h256_cls()))))
-        && (!g_rd.pf_facm2 || !any_f16_feed
-            || (g_rd.head_size == 64l ? ensure_fa_cm2_h64_f16_cls() : (g_rd.head_size == 128l ? ensure_fa_cm2_h128_f16_cls()
-                : (g_rd.q_gated ? ensure_fa_cm2_h256_g_f16_cls() : ensure_fa_cm2_h256_f16_cls()))))
+        && (!fa128s || (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()))
+        && (!chunked_other || (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+        && (!key_exists(fa_hs, 64l) || (ensure_fa_cm2_h64_cls() && (!any_f16_feed || ensure_fa_cm2_h64_f16_cls())))
+        && (!key_exists(fa_hs, 128l) || (ensure_fa_cm2_h128_cls() && (!any_f16_feed || ensure_fa_cm2_h128_f16_cls())))
+        && (!key_exists(fa_hs, 256l) || (g_rd.q_gated
+            ? (ensure_fa_cm2_h256_g_cls() && (!any_f16_feed || ensure_fa_cm2_h256_g_f16_cls()))
+            : (ensure_fa_cm2_h256_cls() && (!any_f16_feed || ensure_fa_cm2_h256_f16_cls()))))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed (hs {g_rd.head_size}, native f16 mirrors)\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed ({long_length(fa_hs)} head size(s), native f16 mirrors; {long_length(chunked_hs)} on the chunked pair)\n")
     }
+    delete fa_hs
+    delete chunked_hs
     var nkvm = 0l
     for (l in range64(g_rd.n_layers)) {
         if (pf_kv_merged(l, dim, kvd)) {
@@ -1124,12 +1137,13 @@ def private pf_setup {
         if (!L.recurrent) {
             // 4 rope+store (class: q, kv, Kmir, Vmir, cos, bias)
             let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
-            let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.head_size * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
+            let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
             let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u)
             g_rd.pf_sets[b + 4] = (kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits)
                 : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
-        // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve
-        if (g_rd.pf_facm2) {
+        // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve this layer's head size
+        let fa128l = fa128s && L.hs == 128l
+        if (L.pf_fa) {
             g_rd.pf_sets[b + 5] = (wo6
                 ? set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_af),
                     fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 2l),
@@ -1141,7 +1155,7 @@ def private pf_setup {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l)
             let agbits5 = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)
-            g_rd.pf_sets[b + 5] = (fa128s
+            g_rd.pf_sets[b + 5] = (fa128l
                 ? (kv16 ? set_da_attn_b_h128_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_h128_cls(abufs5, asizes5, agbits5))
                 : (kv16 ? set_da_attn_b_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_cls(abufs5, asizes5, agbits5)))
         }
@@ -1285,11 +1299,10 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
     pf_setup()
     let dim = g_rd.dim
-    let qd = g_rd.qd
-    let kvd = g_rd.kv_dim
-    let hid = g_rd.hidden
     let nlfin = g_rd.n_layers * 2l * dim
-    let pairs = int(qd / 2l + kvd / 2l)
+    let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
+    let cos_elems = g_rd.cos_elems
+    let fa128s = !(g_gpu.has_coopmat2_fa && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
     unsafe {
         var w0 = 0l
         var last_wlen = 0l
@@ -1316,7 +1329,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             } else {
                 upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             }
-            upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * g_rd.head_size)]), wlen * g_rd.head_size * 4l)
+            upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * cos_elems)]), wlen * cos_elems * 4l)
             if (w0 == 0l && g_rd.hybrid) {
                 g_rd.dn_parity = 0
             }
@@ -1335,10 +1348,6 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pf_dn_zero(raw, h)
             }
             pfq_ts(raw)   // q1: kept for the role-aggregation stamp shape (params ride push now)
-            let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
-            let fa128 = !g_rd.pf_facm2 && g_gpu.has_coopmat && g_rd.head_size == 128l && vk_fa_on()
-            let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l)
-            let hs = g_rd.head_size
             if (use_ids) {
                 // no extra pfq_ts - the gather cost folds into the prologue stamp
                 var pce = EmbArgs(npos = uint(wlen), dim = uint(dim),
@@ -1377,16 +1386,27 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let dn6 = pf_f16_feed(g_rd.layers[l].f2)
                 let guk = kq_sb(g_rd.layers[l].f1) && !gu6
                 let dnk = kq_sb(g_rd.layers[l].f2) && !dn6
+                let hid = g_rd.layers[l].hid
                 if (g_rd.layers[l].recurrent) {
                     rd_pf_recurrent(raw, h, l, b, wlen, last)
                 } else {
+                // this layer's attention class: gemma-4's sliding and global layers differ in head size, kv width, rope and window
+                let hs = g_rd.layers[l].hs
+                let qd = g_rd.layers[l].qd
+                let kvd = g_rd.layers[l].kvd
+                let kv_mul = uint(g_rd.layers[l].kv_mul)
+                let window = uint(g_rd.layers[l].window)
+                let pairs = int(qd / 2l + kvd / 2l)
+                let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
+                let fa128 = fa128s && hs == 128l
+                let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : g_rd.n_heads * ((wlen + 7l) / 8l)
                 // f16-fed roles (mode 4's cm2 tiles): the f32->f16 convert feeds decode-in-load; the fill's tile rule keys off the same flag
                 let fq6 = pf_qkv6(l)
                 let fo6 = pf_f16_feed(g_rd.layers[l].fo)
                 // kq consumers take the Q8_K quant/act forms — unless the f16 feed serves them (k4 cm2)
                 let fqk = kq_sb(g_rd.layers[l].fq) && !fq6
                 let fok = kq_sb(g_rd.layers[l].fo) && !fo6
-                let mirb = g_rd.layers[l].mir_idx * g_rd.seq_cap * kvd   // nolint:LINT021 — the mirror offset multiply must run 64-bit before the push-field narrow; one slot per attention layer
+                let mirb = uint(g_rd.layers[l].mir_base)
                 let feed_already_fused = l > 0l && pf_qkv_feed_fused(l)
                 if (!feed_already_fused) {
                     if (fq6) {
@@ -1431,27 +1451,28 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 if (g_rd.qk_norm) {
                     var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(kvd / hs),
                         qstride = uint(qrow), kstride = uint(kv_merged ? 2l * kvd : kvd), kbase = 0u,
-                        qwoff = uint(nlfin + dim + l * 2l * hs), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hs),
+                        qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
                         eps = g_rd.eps, qhs = uint(qhs))
                     enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + kvd / hs))
                     pfq_ts(raw)
                 }
-                var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.rot / 2l),
+                var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
                     neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-                    layerbase = uint(mirb), npos = uint(wlen), pos0 = uint(w0),
+                    layerbase = mirb, npos = uint(wlen), pos0 = uint(w0),
                     voff = uint(kv_merged ? kvd : wlen * kvd), kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
-                    boff = uint(l * (qd + 2l * kvd)), hasb = g_rd.has_bias ? 1u : 0u)
+                    boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
+                    cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase))
                 if (g_rd.kv16) {
                     enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
                 } else {
                     enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
                 }
                 pfq_ts(raw)
-                if (g_rd.pf_facm2) {
+                if (g_rd.layers[l].pf_fa) {
                     // the cm2 fa tile reads the f16 mirrors directly
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
-                        kvd = uint(kvd), kv_mul = uint(g_rd.kv_mul), kvbase = uint(mirb),
-                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs))
+                        kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
+                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window)
                     let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l)
                     if (hs == 64l) {
                         if (fo6) {
@@ -1480,8 +1501,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 } else {
                     var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
-                        hs = uint(hs), kv_mul = uint(g_rd.kv_mul), kbase = uint(mirb), vbase = uint(mirb),
-                        w0 = uint(w0), scale = g_rd.scale, qhs = uint(qhs), gated = g_rd.q_gated ? 1u : 0u)
+                        hs = uint(hs), kv_mul = kv_mul, kbase = mirb, vbase = mirb,
+                        w0 = uint(w0), scale = g_rd.scale, qhs = uint(qhs), gated = g_rd.q_gated ? 1u : 0u, window = window)
                     if (fa128) {
                         if (g_rd.kv16) {
                             enc_da_attn_b_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
@@ -1497,7 +1518,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let attn_landed_f16 = fo6 && g_rd.pf_facm2
+                let attn_landed_f16 = fo6 && g_rd.layers[l].pf_fa
                 if (attn_landed_f16) {
                 } elif (fo6) {
                     var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
