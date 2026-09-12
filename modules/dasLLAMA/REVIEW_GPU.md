@@ -1,7 +1,7 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`. Planned work: `followup_metal.md`
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN.md`. Planned work: `followup_metal.md`
 for Metal, `followup_vulkan.md` for Vulkan.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
