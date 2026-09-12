@@ -57,7 +57,7 @@ the diff puts it.** An emitted-text or fail-closed fixture answers to `tests/msl
 
 - **Never zero a cooperative tensor element by element, in a `[metal_kernel]` body or in emitted
   MSL, before a `matmul2d` `run` accumulates into it - `get_destination_cooperative_tensor`
-  already hands it back zeroed.** The CPU-replay stubs in `metal/metal_builtins.das` are outside it. That walk
+  already hands it back zeroed.** That walk
   forces every element into real storage before the accumulation loop, and that costs the op
   its fast path for the whole loop.
 
@@ -78,8 +78,9 @@ the diff puts it.** An emitted-text or fail-closed fixture answers to `tests/msl
   Nothing checks a fixture's allocation against the stride, so a one-sided change overruns
   it silently.
 
-- **A diff that removes a das function name, or an overload distinction, that
-  `metal/msl_emit.das` dispatches on is a defect - a duplicated body moves into a private helper
-  both builtins call.** Those builtins are markers: the emitter picks each one's emitted MSL by
-  its das function name and, for the tmm2d A stream, by the argument's pointee type, so a fold
-  that erases either loses one flavor's lowering.
+- **A diff that removes a key `metal/msl_emit.das` selects a lowering with - a das function name,
+  or the operand type it reads - is a defect; a builtin that binds a wider type than its
+  lowering covers ships the emitter refusal that names the operand.** Those builtins are
+  markers: the emitter picks each one's emitted MSL by the das function name and, for the tmm2d
+  A stream, by the argument's pointee, and the das front end no longer rejects what a generic
+  stub binds.

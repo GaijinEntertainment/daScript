@@ -6,6 +6,7 @@ module dasllama_metal_decode shared public
 
 require dasllama/dasllama_lint public
 require math
+require strings
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/das_metal_boost
 require dasllama/dasllama_common
@@ -1540,6 +1541,23 @@ def private encode_verify_layer(t : Model; var r : StepRes; enc : MetalComputeEn
     r.chain_pos = pos
     var e = VerifyLayerEnc(r = unsafe(addr(r)))
     e->encode(t, enc, l, dnli)
+}
+
+//! One speculative round's drafts beside the verify's truths, for the trace arms.
+[cold_path]
+def mtp_round_trace(tag : string; s : Session; pos, k, nr, a, vocab : int64) {
+    let line : string = build_string() $(var w) {
+        w |> write("{tag} round pos={pos} k={k} drafts=[")
+        for (i in range64(k)) {
+            w |> write("{s.mtp_vbatch[i + 1l]} ")
+        }
+        w |> write("] truths=[")
+        for (i in range64(nr)) {
+            w |> write("{argmax_row(s.mtp_logits_b, i, vocab)} ")
+        }
+        w |> write("] a={a}")
+    }
+    to_log(LOG_INFO, "{line}\n")
 }
 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm"), arch(at="../ARCHITECTURE_GPU_MTP.md#verify-serial-encoder")]

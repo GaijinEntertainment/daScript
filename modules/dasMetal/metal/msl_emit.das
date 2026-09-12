@@ -915,6 +915,16 @@ def private note(var ctx : MslCtx; kind : string) {
 // scalar class of a type for census keys: {f,i,u}{32,16,8} scalars (+ bool), the same with a `v`
 // suffix for their 2/3/4 vectors (lane count does not change the emitted text, so the census is
 // lane-agnostic). Classification rides the shared shader_block_layout rails.
+//! the simdgroup intrinsics' operand is a float, int or uint scalar - the generic CPU stubs bind
+//! any value, the emitter is the gate
+def private simd_operand_check(var ctx : MslCtx; ec : ExprCall?; cname : string) {
+    let t = ec.arguments[0]._type
+    let bt = t != null ? t.baseType : Type.none
+    if (bt != Type.tFloat && bt != Type.tInt && bt != Type.tUInt) {
+        err(ctx, ec.arguments[0].at, "{cname}: the operand is a float, int or uint scalar, not {t != null ? describe(t) : "an untyped value"}")
+    }
+}
+
 def private census_class(t : TypeDecl?) : string {
     if (t == null) {
         return "?"
@@ -1410,6 +1420,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
             err(ctx, ec.at, "{cname} takes exactly one argument")
             return "/*call {cname}*/"
         }
+        simd_operand_check(ctx, ec, cname)
         let v = emit_value(ctx, ec.arguments[0])
         note(ctx, "call.{cname}.{census_class(ec._type)}")
         return "{cname}({v})"
@@ -1419,6 +1430,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
             err(ctx, ec.at, "{cname} takes exactly two arguments")
             return "/*call {cname}*/"
         }
+        simd_operand_check(ctx, ec, cname)
         let v = emit_value(ctx, ec.arguments[0])
         let l = emit_value(ctx, ec.arguments[1])
         note(ctx, "call.{cname}.{census_class(ec._type)}")

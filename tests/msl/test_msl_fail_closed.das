@@ -98,6 +98,7 @@ def test_fail_closed_rejections(t : T?) {
         // the Metal-4 tensor-op surface
         check_rejects(t, "_fc_tmm2d_float_a", "FLOAT A operand")
         check_rejects(t, "_fc_tmm2d_bad_a_elem", "streams float or float16 activations, not int")
+        check_rejects(t, "_fc_simd_bad_elem", "simd_sum: the operand is a float, int or uint scalar, not")
         check_rejects(t, "_fc_tmm2d_bk", "bk must be 32, 64, or 128 (= 64-deep double-buffered: two ping-pong tiles, an n*144-half wt)")
         check_rejects(t, "_fc_tmm2d_deva_witness", "begin_deva's witness typed")
     }

@@ -1833,22 +1833,6 @@ def argmax_row(v : array<float>; row, n : int64) : int64 {
     }
 }
 
-//! One speculative round's drafts beside the verify's truths, for the trace arms.
-[cold_path]
-def mtp_round_trace(tag : string; s : Session; pos, k, nr, a, vocab : int64) {
-    let line : string = build_string() $(var w) {
-        w |> write("{tag} round pos={pos} k={k} drafts=[")
-        for (i in range64(k)) {
-            w |> write("{s.mtp_vbatch[i + 1l]} ")
-        }
-        w |> write("] truths=[")
-        for (i in range64(nr)) {
-            w |> write("{argmax_row(s.mtp_logits_b, i, vocab)} ")
-        }
-        w |> write("] a={a}")
-    }
-    to_log(LOG_INFO, "{line}\n")
-}
 var g_lp_xb : MetalBuffer?      // production sync + CPU-classifier path: x_b writeback
 var g_lp_xb_dst : void?         // ... into the caller's workspace (borrowed, sync-only)
 var g_lp_xb_bytes = 0l

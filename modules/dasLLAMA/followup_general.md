@@ -1562,7 +1562,7 @@
     generator confirm (`gen_tune_probe.das`, confirm_e2e_prefill) scores each arm by the
     `llvm_tune: q8q8_tile_gen <- <perm>` line of a verbose child, and a child that runs the
     prefill and prints its `CONFIRM_PP` still scores 0 when the line is absent: under a
-    `daspkg release` on this box every arm's child loaded, ran the E4B prefill (pp 429) and
+    `daspkg release` on this box every arm's child loaded, ran the E4B prefill and
     printed no stamp, so the confirm rejected, the tuner refused to ship, and the bundle kept
     its unrenamed exe; the same child command by hand prints the stamp. Row 134 names the hole
     from the cache side: a generator served from a cached compile is not re-stamped, so its
