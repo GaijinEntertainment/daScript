@@ -167,7 +167,8 @@ typedef RdecDnPrefillOwnFn = function<(l : int64; stp : float?; histp : float?) 
 typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) : void>
 //! `ple_row` / `ple_rows`: the per-layer-embedding side input the CPU pre-step built ([layers x ple] a token; position-major over a prompt); empty on a model without one
 typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; pos : int64; cnt : int64; var logits : array<float>) : void>
-typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; npos : int64; var logits : array<float>) : void>
+//! `ple_raw`: the rows are the gather half alone (sqrt(ple)-scaled table rows) and the driver finishes the pre-step on device; false = the finished side input
+typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) : void>
 typedef RdecSyncKvFn = function<(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) : void>
 typedef RdecReadKvFn = function<(l : int64; pos : int64; var kp : uint8?; var vp : uint8?) : void>
 typedef RdecReadKvBulkFn = function<(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) : void>
@@ -196,8 +197,8 @@ def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int; cap : float; su
 def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) {
     panic("dasLLAMA: resident decode token hit without an installed GPU driver")
 }
-[unused_argument(x_batch, cos_batch, ple_rows, npos, logits)]
-def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; npos : int64; var logits : array<float>) {
+[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, logits)]
+def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) {
     panic("dasLLAMA: resident prefill hit without an installed GPU driver")
 }
 [unused_argument(l, kp, vp, npos)]
@@ -388,25 +389,39 @@ def public rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : 
 //! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes
 typedef RdecSetPleFn = function<(ple : int64) : bool>
 typedef RdecSetPleLayerFn = function<(l : int64; bgate : int64; bproj : int64; fmt : int) : void>
+//! the pre-step's projection on device: `w` the per-layer model projection [layers*ple x dim] as f32 rows, `pnorm` its [ple] norm row; false = the driver keeps the CPU pre-step
+typedef RdecSetPleProjFn = function<(w : array<float>; pnorm : array<float>; all : int64) : bool>
 [unused_argument(ple)]
 def private rdec_unset_set_ple(ple : int64) : bool => false
 [unused_argument(l, bgate, bproj, fmt)]
 def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fmt : int) {}
+[unused_argument(w, pnorm, all)]
+def private rdec_unset_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool => false
 
 var g_rdec_set_ple = @@rdec_unset_set_ple
 var g_rdec_set_ple_layer = @@rdec_unset_set_ple_layer
+var g_rdec_set_ple_proj = @@rdec_unset_set_ple_proj
 var g_rdec_ple_installed = false
+var g_rdec_ple_proj_on = false
 
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def public install_rdec_ple(set_ple : RdecSetPleFn; set_ple_layer : RdecSetPleLayerFn) {
+def public install_rdec_ple(set_ple : RdecSetPleFn; set_ple_layer : RdecSetPleLayerFn; set_ple_proj : RdecSetPleProjFn) {
     g_rdec_set_ple = set_ple
     g_rdec_set_ple_layer = set_ple_layer
+    g_rdec_set_ple_proj = set_ple_proj
     g_rdec_ple_installed = true
 }
 
 def public rdec_ple_installed() : bool => g_rdec_ple_installed
 def public rdec_set_ple(ple : int64) : bool => invoke(g_rdec_set_ple, ple)
 def public rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) { invoke(g_rdec_set_ple_layer, l, bgate, bproj, fmt) }
+//! true once the driver took the pre-step's projection: the prefill then wants the gather half alone (`ple_raw`)
+def public rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
+    g_rdec_ple_proj_on = invoke(g_rdec_set_ple_proj, w, pnorm, all)
+    return g_rdec_ple_proj_on
+}
+def public rdec_ple_proj_on() : bool => g_rdec_ple_proj_on
+def public rdec_ple_proj_reset() { g_rdec_ple_proj_on = false }
 
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
@@ -416,7 +431,7 @@ def public rdec_upload_norms(norms : array<float>) { invoke(g_rdec_norms, norms)
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
 def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) { invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, logits) }
-def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, npos, logits) }
+def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, ple_raw, npos, logits) }
 def public rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) { invoke(g_rdec_sync_kv, l, kp, vp, npos) }
 def public rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_read_kv, l, pos, kp, vp) }
 def public rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) { invoke(g_rdec_read_kv_bulk, l, kp, vp, npos) }
@@ -1855,6 +1870,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_set_ple_layer == null) {
         g_rdec_set_ple_layer = @@rdec_unset_set_ple_layer
+    }
+    if (g_rdec_set_ple_proj == null) {
+        g_rdec_set_ple_proj = @@rdec_unset_set_ple_proj
     }
     if (g_rdec_set_emb == null) {
         g_rdec_set_emb = @@rdec_unset_set_emb

@@ -2787,6 +2787,32 @@ class FaCm2H256GF16 : FaCm2H256T {
     override GATED = true
 }
 
+// hs=512 (gemma-4's global heads, V from K): the h256 pass at twice the head width, Bc=32
+[ |> template_struct_instance]
+class template FaCm2H512T : FaCm2T {
+    override HS = 512u
+    override BC = 32u
+    typedef QACC = coopmatWgAcc_f32_64x512
+    typedef QA = coopmatWgA_f16_64x512
+    typedef SACC = coopmatWgAcc_f32_64x32
+    typedef PA = coopmatWgA_f16_64x32
+    typedef KB = coopmatWgB_f16_512x32
+    typedef VB = coopmatWgB_f16_32x512
+    typedef ONE = coopmatWgB_f16_32x32
+    typedef OF = coopmatWgAcc_f16_64x512
+}
+
+[vk_dispatch(name = "fa_cm2_h512_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H512 : FaCm2H512T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_cm2_h512_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H512F16 : FaCm2H512T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
 //! gemma-2's attention logit softcap on a scaled score: cap * tanh(s / cap) in the exp form the CPU's softcap4 takes; 0 = none
 def private attn_softcap(s, cap : float) : float
     => cap != 0.0 ? cap * (1.0 - 2.0 / (1.0 + exp(2.0 * s / cap))) : s

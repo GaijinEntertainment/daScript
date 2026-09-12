@@ -1,8 +1,20 @@
+// The gemma cells of the whole-model resident driver, shared by the per-model test files
+// (test_gpu_resident_gemma*.das): ONE model a file, so a process loads one carrier and no test
+// inherits another model's device state. The GPU chains and the CPU chain are not bit-identical
+// (GPU exp / f32 accumulation order, the prefill's f16 activation feed against the CPU's Q8
+// activation blocks), so the gates are: the forced-feed logits-tolerance form (the same prose
+// tokens fed to both arms, the logits within a bar of the CPU chain after the prefill and at every
+// step, the one-step-off control past it), the agreement form (the window chain and the token
+// command against each other on the same tokens, the CPU chain's own two paths the yardstick),
+// and the perplexity form (teacher-forced positions after a prefill, the resident's perplexity
+// within a ratio of the CPU chain's) for the models whose logits sit flat over whole stretches.
+
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
-options persistent_heap   // + explicit deletes below: the model and sessions free before exit
 options _dasllama_internal = true
 
+module _gemma_resident shared public
+
+require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration (gemma3)
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
@@ -10,6 +22,7 @@ require dasllama/dasllama   // create_session, moe_gpu_drop_model
 [init]
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
+    set_gpu_ctx_max(32768l)   // the rig's mirror cap: a model max of 131072 would take an 8 GB mirror on a 4B for prompts of 600
 }
 require math
 require daslib/jobque_boost
@@ -18,44 +31,22 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard 
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode, where the module exists
-require _model_tier   // models_dir() + model_available() presence/size-tier gate
-
-// The whole-model resident driver on the gemma dense base under DASLLAMA_GPU=1: sandwich norms
-// (the residual steps norm their add partner first), sliding-window layers beside global ones with
-// their own rope class, the GeGLU FFN, the sqrt(dim) embed scale. The GPU chains and the CPU chain
-// are not bit-identical (GPU exp / f32 accumulation order, and the prefill's f16 activation feed
-// against the CPU's Q8 activation blocks), so the gate is the forced-feed logits-tolerance form: the
-// same fixed tokens fed to both arms, the logits within a bar of the CPU chain after the prefill and
-// at every step, and the one-step-off control that must exceed it. The cells past the 512-position
-// sliding window make every sliding layer mask keys below its window on the prefill tiles and the
-// decode chunks alike. The agreement cells hold the two GPU paths - the window chain and the token
-// command - to each other on the same tokens, with the CPU chain's own two paths as the yardstick.
+require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on
 
 //! of the step's max |logit|. gemma-3-1b's logits move with the activation rounding itself: the CPU
 //! chain's OWN prefill kernel and decode kernel land 0.06-0.10 of the max logit apart on the same
 //! tokens (0.87 of 15.3 at eight tokens, 0.45 of 13.4 at forty), and the resident arms sit a further
 //! factor off it (the prefill feeds the GEMMs f16 rows where the CPU quantizes Q8 blocks); the
 //! one-step-off controls read 5 to 19, so the bar keeps its teeth
-let private GEMMA_LOGIT_BAR_REL = 0.16
+let GEMMA_LOGIT_BAR_REL = 0.16
 //! the resident window chain and token command may sit this many times further apart than the CPU chain's own two paths on the same tokens (measured 1.6 to 4.8 on gemma-3-1b, by the prefill's activation feed)
-let private GEMMA_PATH_GAP_RATIO = 6.0
+let GEMMA_PATH_GAP_RATIO = 6.0
 //! the resident driver's teacher-forced perplexity may exceed the CPU chain's by this ratio (12B Q8_0 measured 1.449 vs 1.516 over 150 positions, llama.cpp 1.390)
-let private GEMMA_PPL_RATIO = 1.05
-let private PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
-let private GEMMA3_FILE = "gemma-3-1b-it-Q8_0.gguf"
-let private GEMMA3_4B_FILE = "gemma-3-4b-it-Q8_0.gguf"
-let private GEMMA2_FILE = "gemma-2-2b-it-Q8_0.gguf"   //! the attention logit softcap (50) on every score, a 4096 window on the even layers, no qk-norm   //! the dense base at width 2560, heads 8 x 256 over 4 kv heads, a 1024 sliding window
-//! the gemma-4 dense carriers (large tier): the weightless v-norm, the V-from-K global layers at head 512 beside the sliding 256s,
-//! the per-layer output scale, the final softcap and the suppressed ids. The Q8_0 file takes the forced-feed cells; the Q4_K_M file
-//! takes the agreement cell alone - on it the CPU chain's own prefill and decode kernels land 12% of the max logit apart, so a
-//! CPU-referenced bar there measures the model's sensitivity to the K-quant activation rounding, not the driver
-let private GEMMA4_FILE = "gemma-4-12B-it-Q4_K_M.gguf"
-//! the gemma-4 E-series carrier: per-layer embeddings (ple 256 on 35 layers), twenty layers sharing the K/V of the fifteen below, two dense FFN widths, a 512 sliding window
-let private GEMMA4E_FILE = "gemma-4-E2B-it-Q8_0.gguf"
-let private GEMMA4E4_FILE = "gemma-4-E4B-it-Q8_0.gguf"   //! the larger E-series carrier (large tier): 42 layers, eighteen sharing K/V
-let private GEMMA4_Q8_FILE = "gemma-4-12B-it-Q8_0.gguf"
+let GEMMA_PPL_RATIO = 1.05
+let PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
 
-def private window_pin(t : T?) {
+//! the prompt is sized past the engine's own window
+def window_pin(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
     }
@@ -150,9 +141,9 @@ def private feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks
     return <- rows
 }
 
-// prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
-// prefill logits and every step's within the bar, the one-step-off control past it.
-def private gemma_forced_feed(t : T?; n : int64; file : string) {
+//! prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
+//! prefill logits and every step's within the bar, the one-step-off control past it.
+def gemma_forced_feed(t : T?; n : int64; file : string) {
     var tr <- gemma_model(t, file)
     if (tr.config.n_layers == 0l) {
         delete tr
@@ -195,11 +186,11 @@ def private gemma_forced_feed(t : T?; n : int64; file : string) {
     delete tr
 }
 
-// the same tokens through the window chain at once and through the token command one at a time,
-// on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
-// arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
-// this model by rounding alone
-def private prefill_vs_decode(t : T?; n : int64; file : string) {
+//! the same tokens through the window chain at once and through the token command one at a time,
+//! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
+//! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
+//! this model by rounding alone
+def prefill_vs_decode(t : T?; n : int64; file : string) {
     var tr <- gemma_model(t, file)
     if (tr.config.n_layers == 0l) {
         delete tr
@@ -285,12 +276,12 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
     return (nll = nll, off = off, hits = hits)
 }
 
-// the same prose through the resident driver and the CPU chain, scored as a perplexity over `steps`
-// teacher-forced positions after an `n`-id prefill: the resident within the ratio of the CPU chain's,
-// its argmax hits within three, and the one-off control at least three times the CPU chain's perplexity.
-// On the 12B the logits sit within a few points at whole stretches of positions (llama.cpp's own margins
-// read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver.
-def private ppl_compare(t : T?; n, steps : int64; file : string) {
+//! the same prose through the resident driver and the CPU chain, scored as a perplexity over `steps`
+//! teacher-forced positions after an `n`-id prefill: the resident within the ratio of the CPU chain's,
+//! its argmax hits within three, and the one-off control at least three times the CPU chain's perplexity.
+//! On the 12B the logits sit within a few points at whole stretches of positions (llama.cpp's own margins
+//! read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver.
+def ppl_compare(t : T?; n, steps : int64; file : string) {
     var tr <- gemma_model(t, file)
     if (tr.config.n_layers == 0l) {
         delete tr
@@ -320,124 +311,4 @@ def private ppl_compare(t : T?; n, steps : int64; file : string) {
         delete ids
     }
     delete tr
-}
-
-[test]
-def test_gpu_resident_gemma3_one_window(t : T?) {
-    t |> run("gemma-3-1b: resident prefill + decode with sandwich norms and sliding layers on device vs the CPU chain, one window") @(t : T?) {
-        if (!arm_on(t, "g3")) return
-        gemma_forced_feed(t, 40l, GEMMA3_FILE)
-    }
-    t |> run("gemma-3-1b: an eight-token prompt - the shortest window, where this model's logits move most with the rounding") @(t : T?) {
-        if (!arm_on(t, "g3")) return
-        gemma_forced_feed(t, 8l, GEMMA3_FILE)
-    }
-}
-
-[test]
-def test_gpu_resident_gemma3_past_window(t : T?) {
-    t |> run("gemma-3-1b: a 520-token prompt - two prefill windows, the sliding window engaged on the last eight positions") @(t : T?) {
-        if (!arm_on(t, "g3")) return
-        window_pin(t)
-        gemma_forced_feed(t, PF_WINDOW_ROWS + 8l, GEMMA3_FILE)
-    }
-    t |> run("gemma-3-1b: a 600-token prompt - every sliding layer masks below its window on the prefill tiles, then the decode chunks past it") @(t : T?) {
-        if (!arm_on(t, "g3")) return
-        window_pin(t)
-        gemma_forced_feed(t, PF_WINDOW_ROWS + 88l, GEMMA3_FILE)
-    }
-}
-
-[test]
-def test_gpu_resident_gemma3_4b(t : T?) {
-    t |> run("gemma-3-4b: resident prefill + decode vs the CPU chain, forty tokens - the dense base at its wider geometry") @(t : T?) {
-        if (!arm_on(t, "g3b")) return
-        gemma_forced_feed(t, 40l, GEMMA3_4B_FILE)
-    }
-    t |> run("gemma-3-4b: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        if (!arm_on(t, "g3b")) return
-        ppl_compare(t, 150l, 150l, GEMMA3_4B_FILE)
-    }
-}
-
-[test]
-def test_gpu_resident_gemma2(t : T?) {
-    t |> run("gemma-2-2b: resident prefill + decode vs the CPU chain, forty tokens - the attention logit softcap on the 8-row tile and the token command") @(t : T?) {
-        if (!arm_on(t, "g2")) return
-        gemma_forced_feed(t, 40l, GEMMA2_FILE)
-    }
-    t |> run("gemma-2-2b: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        if (!arm_on(t, "g2")) return
-        ppl_compare(t, 150l, 150l, GEMMA2_FILE)
-    }
-    t |> run("gemma-2-2b: eight tokens through the window chain against the token command, both arms") @(t : T?) {
-        if (!arm_on(t, "g2")) return
-        prefill_vs_decode(t, 8l, GEMMA2_FILE)
-    }
-}
-
-[test]
-def test_gpu_resident_gemma4_dense(t : T?) {
-    t |> run("gemma-4-12B Q8_0: resident prefill + decode - v-norm, V-from-K 512-heads, the layer scale, the capped and pinned logits - vs the CPU chain, one window") @(t : T?) {
-        if (!arm_on(t, "g4q8")) return
-        gemma_forced_feed(t, 40l, GEMMA4_Q8_FILE)
-    }
-    t |> run("gemma-4-12B Q8_0: 150 prose ids prefilled, 150 teacher-forced - the wide heads over up to 300 keys on the token command, scored as a perplexity against the CPU chain") @(t : T?) {
-        if (!arm_on(t, "g4q8")) return
-        ppl_compare(t, 150l, 150l, GEMMA4_Q8_FILE)
-    }
-    t |> run("gemma-4-12B Q8_0: 520 ids prefilled - two windows, the second eight rows deep - then 80 teacher-forced past them, the 1024 window not yet engaged") @(t : T?) {
-        if (!arm_on(t, "g4q8")) return
-        window_pin(t)
-        ppl_compare(t, PF_WINDOW_ROWS + 8l, 80l, GEMMA4_Q8_FILE)
-    }
-}
-
-[test]
-def test_gpu_resident_gemma4_eseries(t : T?) {
-    t |> run("gemma-4-E2B Q8_0: resident prefill + decode - the per-layer-embedding branch, twenty shared-KV layers, two FFN widths - vs the CPU chain, forty tokens") @(t : T?) {
-        if (!arm_on(t, "g4e")) return
-        gemma_forced_feed(t, 40l, GEMMA4E_FILE)
-    }
-    t |> run("gemma-4-E2B Q8_0: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        if (!arm_on(t, "g4e")) return
-        ppl_compare(t, 150l, 150l, GEMMA4E_FILE)
-    }
-    t |> run("gemma-4-E2B Q8_0: 520 ids prefilled - two windows, the 512 sliding window engaged on the last eight - then 80 teacher-forced") @(t : T?) {
-        if (!arm_on(t, "g4e")) return
-        window_pin(t)
-        ppl_compare(t, PF_WINDOW_ROWS + 8l, 80l, GEMMA4E_FILE)
-    }
-    t |> run("gemma-4-E2B Q8_0: eight tokens through the window chain against the token command, both arms") @(t : T?) {
-        if (!arm_on(t, "g4e")) return
-        prefill_vs_decode(t, 8l, GEMMA4E_FILE)
-    }
-    t |> run("gemma-4-E4B Q8_0: resident prefill + decode vs the CPU chain, forty tokens - the E-series arms on the larger carrier") @(t : T?) {
-        if (!arm_on(t, "g4f")) return
-        gemma_forced_feed(t, 40l, GEMMA4E4_FILE)
-    }
-    t |> run("gemma-4-E4B Q8_0: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        if (!arm_on(t, "g4f")) return
-        ppl_compare(t, 150l, 150l, GEMMA4E4_FILE)
-    }
-}
-
-[test]
-def test_gpu_resident_gemma3_prefill_vs_decode(t : T?) {
-    t |> run("gemma-3-1b: eight tokens through the window chain against the same eight through the token command, both arms") @(t : T?) {
-        if (!arm_on(t, "g3")) return
-        prefill_vs_decode(t, 8l, GEMMA3_FILE)
-    }
-    t |> run("gemma-3-1b: the same at forty tokens") @(t : T?) {
-        if (!arm_on(t, "g3")) return
-        prefill_vs_decode(t, 40l, GEMMA3_FILE)
-    }
-    t |> run("gemma-4-12B: eight tokens through the window chain against the token command, both arms - the wide heads' prefill kernel against their decode kernel") @(t : T?) {
-        if (!arm_on(t, "g4k")) return
-        prefill_vs_decode(t, 8l, GEMMA4_FILE)
-    }
-    t |> run("gemma-4-12B: the same at 300 tokens - the wide heads over many keys on both paths") @(t : T?) {
-        if (!arm_on(t, "g4x")) return
-        prefill_vs_decode(t, 300l, GEMMA4_FILE)
-    }
 }

@@ -687,6 +687,14 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
 }
 let private RDEC_MIN_CTX = 4096l        // smallest ctx worth arming a capped mirror at
 
+var private g_rdec_ctx_max = 0l   //! the in-process cap on the mirror's positions (0 = none): the test rigs pin 32768, a server keeps the model's context
+
+//! Cap the resident driver's KV mirror at `n` positions for the models this process loads next (0 lifts the pin):
+//! the in-process form of DASLLAMA_GPU_CTX_MAX. A program serving long contexts leaves it alone.
+def public set_gpu_ctx_max(n : int64) {
+    g_rdec_ctx_max = max(n, 0l)
+}
+
 // the auto-cap floor, env-overridable: DASLLAMA_GPU_MIN_CTX lets a short-context session arm a
 // model whose capped mirror lands under the default floor (e.g. a 3B on an 8GB card fits at 3429)
 def private rdec_min_ctx : int64 {
@@ -755,6 +763,7 @@ def moe_gpu_resident_memory_decline() : bool => g_rdec_memory_decline
 [cold_path]
 def private rdec_decline(reason : string) : bool {
     rdec_decline_say(reason)
+    moe_gpu_drop_model_state()   //! whatever the upload placed before declining leaves the device: the per-op rails start clean, no later model inherits a half-upload
     return false
 }
 
@@ -978,6 +987,7 @@ def private log_resident_image(planes : array<tuple<n : int64; rows : int64; f :
 def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentPlan) : bool {   // nolint:STYLE037,STYLE038 — all-or-nothing arm: one reject per unsupported family feature, no seam
     g_rdec_active = false
     g_rdec_emb_gpu = false
+    rdec_ple_proj_reset()
     g_rdec_pass_said |> clear()
     vulkan_bake_role(VkBakeRole.arena)
     if (!moe_gpu_resident_installed()) return rdec_decline("the tier installed no resident-driver seams")
@@ -1240,6 +1250,26 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             mir_base += seq_cap * g.kvd
         }
     }
+    if (ple > 0l) {   //! the pre-step's projection on device where the driver takes it (the cm2 route); the CPU pre-step serves otherwise
+        let all = c.n_layers * ple
+        var w : array<float>
+        w |> reserve(all * dim)   // E4B: 27.5M floats - the guard wants the final size reserved first
+        w |> resize(all * dim)
+        if (t.ple_model_bf16) {
+            for (i in range64(all * dim)) {
+                w[i] = unsafe(reinterpret<float>(uint(t.bf16blob[t.ple_model_off + i]) << 16u))
+            }
+        } else {
+            for (i in range64(all * dim)) {
+                w[i] = t.fblob[t.ple_model_off + i]
+            }
+        }
+        var pnorm <- [for (i in range64(ple)); t.fblob[t.ple_pnorm_off + i]]
+        let on = rdec_set_ple_proj(w, pnorm, all)
+        to_log(LOG_INFO, "dasLLAMA: resident driver: the per-layer-embedding pre-step's projection {on ? "runs on device" : "stays on the CPU"}\n")
+        delete w
+        delete pnorm
+    }
     let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
     if (bcls < 0l) return rdec_decline("classifier placement failed")
     rdec_set_cls(bcls, int(cls_fmt), c.final_logit_softcap, t.suppress)
@@ -1365,6 +1395,29 @@ def private rdec_rope_rows(t : Model; pos : int64; var dst : array<float>; base 
         build_rope_row_packed(dst, base + rot, pos, resident_rot_swa(c), c.rope_freq_base_swa, c.rope_freq_scale_swa, c.rope_mscale,
             c.rope_ff_global_only ? noff : t.rope_freqs)
     }
+}
+
+//! a prompt's rope rows, one cos/sin plane per position at `delta` past its index, across the job threads: each row is its own work
+def private resident_prefill_rope_rows(t : Model; delta, npos, ce : int64; var cb : array<float>) {
+    unsafe {   // the rows land in disjoint ranges of the caller's buffer, one position each; the jobs take the model and the buffer by address
+        let tp = addr(t)
+        var cbp = addr(cb)
+        maybe_parallel_for(npos >= 64l, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            for (p in range(rb, re)) {
+                rdec_rope_rows(*tp, int64(p) + delta, *cbp, int64(p) * ce)
+            }
+        }
+    }
+}
+
+//! the gather half of the per-layer-embedding pre-step into the scratch rows, timed (us) for the profile line
+def private resident_prefill_ple_rows(t : Model; tokens : array<int64>; npos : int64) : int {
+    let need = npos * t.config.n_layers * t.config.n_embd_per_layer
+    g_rdec_ple_rows |> reserve(need)   // a long prompt's rows pass the unreserved-growth guard
+    g_rdec_ple_rows |> resize(need)
+    let ts_gather = ref_time_ticks()
+    ple_gather_rows(t, tokens, npos, g_rdec_ple_rows)
+    return get_time_usec(ts_gather)
 }
 
 var private g_rdec_cos_elems = 0l   //! a position's cos/sin plane width on the armed driver (`resident_cos_elems`)
@@ -1511,9 +1564,26 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     return true
 }
 
+var private @scratch g_rdec_ple_rows : array<float>   //! the gather half of the per-layer-embedding pre-step, position-major, when the driver finishes it on device
+
+//! forward_prefill's offer of the per-layer-embedding pre-step: taken when the armed driver holds the projection (the token ids
+//! land in the session's stash; the override gathers the table rows and the device does the rest)
+[unused_argument(s, npos, start_pos)]
+def private vulkan_ple_gate(t : Model; s : Session; npos, start_pos : int64) : bool
+    => g_rdec_active && has_ple(t.config) && rdec_ple_proj_on()
+
 // the "vulkan" whole-prefill override — host KV hydrates back on demand, so the CPU rails always take over from a valid authority
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill call
 def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
+    let done = vulkan_resident_prefill_go(t, s, npos, start_pos)
+    if (!done && s.ple_gpu_pending) {   //! the gate took the pre-step and the driver then declined: the CPU pre-step runs late, off the stashed ids
+        ple_pre_prefill(t, s, s.ple_gpu_tokens, npos)
+        s.ple_gpu_pending = false
+    }
+    return done
+}
+
+def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_pos : int64) : bool {
     if (!g_rdec_active) {
         return false
     }
@@ -1553,14 +1623,26 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     let ce = g_rdec_cos_elems
     g_rdec_tmp |> resize(npos * ce)   // the rope-plane batch borrows the scratch row
     var cb & = g_rdec_tmp
-    for (p in range64(npos)) {
-        rdec_rope_rows(t, p + s.rope_pos_delta, cb, p * ce)
-    }
+    let ts_rope = ref_time_ticks()
+    resident_prefill_rope_rows(t, s.rope_pos_delta, npos, ce, cb)
+    let us_rope = get_time_usec(ts_rope)
+    var us_gather = 0
+    let ts_run = ref_time_ticks()
     if (s.embed_gpu_pending) {
         rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, s.logits)
         s.embed_gpu_pending = false
     } else {
-        rdec_prefill(s.x_b, cb, s.ple_inp, npos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
+        if (s.ple_gpu_pending) {
+            // the gate took the pre-step: the gather half here (the table rows, sqrt(ple)-scaled), the projection, norm and average on device
+            us_gather = resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
+            rdec_prefill(s.x_b, cb, g_rdec_ple_rows, true, npos, s.logits)
+            s.ple_gpu_pending = false
+        } else {
+            rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
+        }
+    }
+    if (g_env_gpu.gpu_prof) {
+        to_log(LOG_INFO, "dasLLAMA: resident prefill host: {npos} rows, rope rows {us_rope} us, ple gather {us_gather} us, the driver's run {get_time_usec(ts_run) - us_gather} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
     }
     if (c.recr_mask != 0ul) {
         for (l in range64(c.n_layers)) {
@@ -1670,6 +1752,7 @@ def resident_driver_register() {
     register_decode_override("vulkan", @@vulkan_resident_decode)
     register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
+    register_ple_gpu_gate(@@vulkan_ple_gate)
     register_prefill_override_split_span("vulkan")
     register_gpu_upload_resident(@@moe_gpu_upload_resident)
     set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)
@@ -1707,6 +1790,7 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     g_rdec_cnt = 0l
     g_rdec_cap = 0l
     g_rdec_emb_gpu = false
+    rdec_ple_proj_reset()
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
@@ -1784,6 +1868,7 @@ def moe_gpu_drop_model_() {
     g_rdec_cnt = 0l
     g_rdec_cap = 0l
     g_rdec_emb_gpu = false
+    rdec_ple_proj_reset()
     // resident_upload selected the "vulkan" overrides; deselect so (a) a later re-arm's
     // resident_upload passes its no-active-override gate (the warm re-arm decline), and (b) a
     // dropped model's prefill/decode take the plain CPU path without consulting dead state
@@ -1916,6 +2001,10 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     // DASLLAMA_VK_KV32=1 arms f32 mirrors instead (A/B; then only f32 sessions serve)
     let rkdt = g_env_vulkan.vk_kv32 != 0l ? KVDtype.f32 : KVDtype.f16
     var seq_cap = t.config.seq_len
+    let ctx_max = g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max   //! the in-process pin first, then the knob; 0 follows the model
+    if (ctx_max > 0l && ctx_max < seq_cap) {   // a mirror sized to a 131072-token model max is 8 GB on a 4B: the rigs pin 32768
+        seq_cap = max(ctx_max, rdec_min_ctx())
+    }
     var plan : ResidentPlan
     if (resident_try) {
         let bctx = resident_binding_ctx(t.config, rkdt, moe_gpu_binding_cap())
@@ -1926,7 +2015,8 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
             // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's
             // own remedy), as long as it stays a usable window. The driver guards decode past the cap.
-            let fit_ctx = (max(plan.usable_bytes - plan.weight_bytes - plan.scratch_bytes, 0l)) / (plan.kv_bytes / seq_cap)
+            //! seven eighths of the room: a mirror sized to the last byte fails on a heap the previous model fragmented
+            let fit_ctx = (max(plan.usable_bytes - plan.weight_bytes - plan.scratch_bytes, 0l) / 8l * 7l) / (plan.kv_bytes / seq_cap)
             if (fit_ctx >= rdec_min_ctx()) {
                 seq_cap = fit_ctx
                 plan = resident_plan(t, seq_cap, rkdt, rkdt)

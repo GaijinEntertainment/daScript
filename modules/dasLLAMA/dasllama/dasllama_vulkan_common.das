@@ -832,7 +832,24 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
 }
 
 [cold_path]   // buffer creation — setup, not steady state
-def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
+//! the soft form: 0 on ERROR_OUT_OF_DEVICE_MEMORY instead of the panic, for the multi-GB allocations a plan may still miss (a heap the last model fragmented, a budget that moved)
+def try_device_buf(bytes : int64) : uint64 => make_device_buf(bytes, false, true)
+
+//! a device allocation that failed: the panic every plain caller expects, or - soft - the buffer shell destroyed, the warning said, 0 back
+[cold_path]
+def private device_buf_failed(buf : uint64; bytes : int64; ares : VkResult; soft : bool) : uint64 {
+    if (!soft) {
+        panic("Vulkan call failed: {ares} (a {bytes >> 20l} MB device buffer)")
+    }
+    unsafe {
+        vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(buf), null)
+    }
+    to_log(LOG_WARNING, "dasLLAMA vulkan tier: a {bytes >> 20l} MB device buffer failed with {ares}\n")
+    return 0ul
+}
+
+[cold_path]   // a device allocation is model setup, never a per-token step
+def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = false) : uint64 {
     var bci : BufferCreateInfo
     bci.size = uint64(bytes)
     bci.usage.storage_buffer = true
@@ -887,7 +904,11 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false) : uint64 {
     unsafe {
         mai.next = addr<void?>(bda)
     }
-    var m <- allocate_memory(g_gpu.device, mai)
+    var ares = VkResult.SUCCESS
+    var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
+    if (ares != VkResult.SUCCESS) {
+        return device_buf_failed(b._vk, bytes, ares, soft)
+    }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
     if (g_gpu.has_bda) {
         note_device_address(b)
@@ -2032,7 +2053,7 @@ def private arena_slab_blocks(fmt : int) : int64 {
 
 // open the next slab, sized to what the content still needs (the last slab is usually partial).
 // The sealed slab's tail goes unused — bounded by the tensor that crossed, and said out loud.
-def private arena_open_slab(var a : ArenaFmt) {
+def private arena_open_slab(var a : ArenaFmt) : bool {
     let bb = arena_block_bytes(a.fmt)
     let cap = min(a.slab_cap, a.cap_blocks - a.blocks)
     if (!empty(a.slabs)) {
@@ -2041,8 +2062,19 @@ def private arena_open_slab(var a : ArenaFmt) {
     }
     let qb = cap * bb.wq
     let sb = max(cap * bb.ws, 64l)   // ws floor keeps the descriptor slots valid (stack-shell rule)
-    a.slabs |> push(ArenaSlab(cap = cap, wqbytes = qb, wsbytes = sb,
-        wqbuf = g_gpu.dry ? 0ul : make_device_buf(qb), wsbuf = g_gpu.dry ? 0ul : make_device_buf(sb)))
+    let wqbuf = g_gpu.dry ? 0ul : try_device_buf(qb)
+    let wsbuf = g_gpu.dry ? 0ul : try_device_buf(sb)
+    if (!g_gpu.dry && (wqbuf == 0ul || wsbuf == 0ul)) {   //! the device had no room for the slab: the placement declines instead of dying mid-upload
+        if (wqbuf != 0ul) {
+            destroy_device_buf(wqbuf)
+        }
+        if (wsbuf != 0ul) {
+            destroy_device_buf(wsbuf)
+        }
+        return false
+    }
+    a.slabs |> push(ArenaSlab(cap = cap, wqbytes = qb, wsbytes = sb, wqbuf = wqbuf, wsbuf = wsbuf))
+    return true
 }
 
 // Reserve one format's arena up front. Sizing is a decision, not a walk: the resident driver knows
@@ -2090,8 +2122,8 @@ def arena_place(wq : uint8 const?; ws : uint8 const?; n, rows : int64; fmt : int
         while (a.cur < length(a.slabs) && a.slabs[a.cur].used + need > a.slabs[a.cur].cap) {
             a.cur++
         }
-        if (a.cur >= length(a.slabs)) {
-            arena_open_slab(a)
+        if (a.cur >= length(a.slabs) && !arena_open_slab(a)) {
+            return -1l
         }
         var s & = a.slabs[a.cur]
         let blk = s.used
@@ -2356,6 +2388,13 @@ struct RDec {
     ple_host : HostBuf
     ple_dev, pleg_dev : uint64
     pf_ple : uint64
+    // the pre-step's projection on device (cm2 route): the per-layer model projection as an f16 mirror [layers*ple x dim],
+    // its [ple] norm row, the window's f16 embedding rows and the projected [np x layers*ple] plane, and the three steps' sets
+    ple_gpu : bool
+    ple_w16_dev, ple_pnorm_dev : uint64
+    ple_w16_bytes : int64
+    pf_plexf, pf_plep : uint64
+    pf_ple_cvt_set, pf_ple_gemm_set, pf_ple_ar_set : VkDescriptorSet
     tok_meta : HostBuf            // the shared TokMeta block (pos/cnt), host-poked per token
     // prefill batch buffers (lazy — sized MAX_NPOS x their width) + per-layer prefill sets
     pf_ready : bool

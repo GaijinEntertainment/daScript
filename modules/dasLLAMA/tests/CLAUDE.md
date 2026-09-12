@@ -444,8 +444,11 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
-`test_gpu_resident_gemma.das` - stocked suite, `-jit` only; the whole-model resident driver on the
-gemma dense base (gemma-3-1b-it-Q8_0, `DASLLAMA_GPU=1`): the sandwich norms (the residual steps
+`test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
+`gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b` -
+a process loads one carrier, so no cell inherits another model's device state, and a GPU run
+loads ONE model at a time, never a chain) - stocked suite, `-jit` only; the whole-model resident
+driver on the gemma dense base (gemma-3-1b-it-Q8_0, `DASLLAMA_GPU=1`): the sandwich norms (the residual steps
 norm their add partner first), the sliding-window layers beside the global ones with their own rope
 class, the GeGLU FFN and the sqrt(dim) embed scale - the hybrid file's forced-feed logits-tolerance
 form at the 16% bar this model's rounding sensitivity sets (its CPU chain's own prefill and decode

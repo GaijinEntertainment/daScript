@@ -457,6 +457,12 @@ struct coopmatWgB_f16_256x32 {}
 struct coopmatWgB_f16_32x256 {}
 struct coopmatWgAcc_f16_64x256 {}
 struct coopmatWgAcc_f32_64x256 {}
+// the h512 flash tiles (Br=64, Bc=32; gemma-4's global heads): Q & O 64x512, Qf16 as A, K^T as B 512x32, V as B 32x512
+struct coopmatWgA_f16_64x512 {}
+struct coopmatWgB_f16_512x32 {}
+struct coopmatWgB_f16_32x512 {}
+struct coopmatWgAcc_f16_64x512 {}
+struct coopmatWgAcc_f32_64x512 {}
 // the int8 twins (q8 x q8 -> s32 at workgroup scope; K-tile 32)
 struct coopmatWgA_s8_64x32 {}
 struct coopmatWgB_s8_32x16 {}
@@ -512,6 +518,11 @@ def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c 
 def public coopmatMulAdd(a : coopmatWgA_f16_64x256; b : coopmatWgB_f16_256x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f32_64x256) : coopmatWgAcc_f32_64x256 { return c }
+// the h512 Bc=32 pair
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x512; b : coopmatWgB_f16_512x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x512; c : coopmatWgAcc_f32_64x512) : coopmatWgAcc_f32_64x512 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x16; c : coopmatWgAcc_s32_64x16) : coopmatWgAcc_s32_64x16 { return c }
 [unused_argument(a, b), sideeffects]

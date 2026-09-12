@@ -4799,14 +4799,14 @@ def test_vkd_fa_cm2(t0 : T?) {
                 feint("device lacks the cm2 flash-attention trio - skipping\n")
                 return
             }
-            verify(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h128_cls() && ensure_fa_cm2_h256_cls(), "fa class rails must engage on an fa-capable device")
-            verify(ensure_fa_cm2_h64_f16_cls() && ensure_fa_cm2_h128_f16_cls() && ensure_fa_cm2_h256_f16_cls(), "fa f16-out twins must engage on an fa-capable device")
+            verify(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h128_cls() && ensure_fa_cm2_h256_cls() && ensure_fa_cm2_h512_cls(), "fa class rails must engage on an fa-capable device")
+            verify(ensure_fa_cm2_h64_f16_cls() && ensure_fa_cm2_h128_f16_cls() && ensure_fa_cm2_h256_f16_cls() && ensure_fa_cm2_h512_f16_cls(), "fa f16-out twins must engage on an fa-capable device")
             let nheads = 4
             let kv_mul = 2
             let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run
             let w0 = 64      // nonzero window base: the causal bound crosses K tiles mid-window
             let scale = 0.125
-            for (hs in [64, 128, 256]) {
+            for (hs in [64, 128, 256, 512]) {
                 let qd = nheads * hs
                 let kvd = (nheads / kv_mul) * hs
                 let kpos = w0 + rows
@@ -4883,9 +4883,12 @@ def test_vkd_fa_cm2(t0 : T?) {
                     } elif (hs == 128) {
                         enc_fa_cm2_h128_cls(raw2, h2, sfa, pcf, fawgs)
                         enc_fa_cm2_h128_f16_cls(raw2, h2, sfa16, pcf, fawgs)
-                    } else {
+                    } elif (hs == 256) {
                         enc_fa_cm2_h256_cls(raw2, h2, sfa, pcf, fawgs)
                         enc_fa_cm2_h256_f16_cls(raw2, h2, sfa16, pcf, fawgs)
+                    } else {
+                        enc_fa_cm2_h512_cls(raw2, h2, sfa, pcf, fawgs)
+                        enc_fa_cm2_h512_f16_cls(raw2, h2, sfa16, pcf, fawgs)
                     }
                     // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
                     var pcy = ActArgs(nelem = uint(rows * qd), gelu = 0u, nblk = 0u)
