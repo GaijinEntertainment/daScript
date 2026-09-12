@@ -1530,3 +1530,11 @@
     words and selects with a dynamic vector index plus a byte shift. Unquirked: the emitter
     lowers a `let` fixed_array of literals to a constant-storage array, or a lint flags a
     dynamically indexed fixed_array local inside a kernel class.
+
+137. **The toolchain roll carries its own copy of dasImgui's wasm archive list.** Step 4 of
+    `utils/internal/dasweb-buildd/roll_toolchain.sh` repeats the `emcmake` build command and the
+    archive names that `modules/dasImgui/.das_package` declares (`release_wasm_build`,
+    `release_wasm_archive`), minus `liblibDasModuleClipboard.a`, which `daspkg build --wasm`
+    stages; a pairing rule in the folder's `REVIEW.md` is what keeps the two copies equal. The
+    fix is one source, not a second check: the roll runs the package's own wasm build - a daspkg
+    entry point that reads the manifest and bakes what it declares - and the copied list goes.
