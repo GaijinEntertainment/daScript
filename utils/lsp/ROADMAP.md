@@ -28,10 +28,11 @@ subtool pattern, `utils/mcp/tools/common.das`):
   kill-before-rebuild guard, no respawn/replay machinery (cf. the watchdog's `--stdio` front,
   which exists precisely because the MCP das child *is* resident).
 - **Crash isolation**: a compiler crash on a broken buffer costs one request, not the session.
-- **Cost**: every request pays a compile (~0.2-1 s) - the same profile as the MCP tools,
-  which has been acceptable. Diagnostics are debounced; navigation is on-demand. If it
-  ever hurts, a compiled-AST cache slots in behind the subtool boundary without changing
-  the architecture.
+- **Cost**: every request pays a compile, but under the module cache
+  (`CodeOfPolicies.module_cache`, set by both subtools) only the edited module and the
+  modules after it are parsed - the rest deserialize from
+  `.jitted_scripts/module_cache/` in the workspace root, the cwd every subtool inherits
+  from the supervisor. Diagnostics are debounced; navigation is on-demand.
 
 The supervisor kills an in-flight validate when a newer edit for the same URI arrives
 (python-trivial; the das side never needs cancellation).
@@ -219,8 +220,8 @@ and CC converts to 0-based LSP before they reach the server.
   dodges the Windows Store alias) and skips with a log notice when neither
   exists. AOT-registered in `tests/aot/CMakeLists.txt`.
   The test immediately caught a real bug: `find_compiler` accepted a relative
-  binary path that broke under the subtools' per-request cwd - compiler
-  discovery now absolutizes.
+  binary path, which breaks the moment a subtool runs from another cwd -
+  compiler discovery absolutizes.
 - Docs: `utils/lsp/README.md` (registration, config, Windows `python3`
   spelling note), `skills/internal/daslang_lsp.md`, CLAUDE.md skill-table row. No
   bootstrap script needed - the committed manifest is portable as-is

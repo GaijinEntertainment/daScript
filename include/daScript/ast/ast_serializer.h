@@ -399,6 +399,9 @@ namespace das {
         void install ( const string & readFrom, const string & writeTo, bool quiet = false );
         Result finish ();
         static string defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions );
+        // the hostOptions of a compile_file issued by a script: this process's arguments up to
+        // `--` plus a hash of the policies, streamed the way a record stamps them
+        static string embeddedHostOptions ( const CodeOfPolicies & policies );
         SerializationStorageVector  readStorage, writeStorage;
         unique_ptr<AstSerializer>   reader, writer;
         string                      writePath;

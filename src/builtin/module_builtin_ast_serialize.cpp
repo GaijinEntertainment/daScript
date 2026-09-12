@@ -10,6 +10,7 @@
 #include "daScript/misc/anyhash.h"
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/env_cfg.h"
+#include "daScript/simulate/aot_builtin.h"
 #include <cstdarg>
 #include <cstdio>
 #include <sys/stat.h>
@@ -3304,6 +3305,28 @@ namespace das {
         char hex[17];
         snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_blockz64((const uint8_t *) key.c_str()));
         return string(".jitted_scripts/module_cache/") + stem + "-" + string(hex, 8) + ".dascache";
+    }
+
+    string ModuleFileCache::embeddedHostOptions ( const CodeOfPolicies & policies ) {
+        string key;
+        Array args;
+        getCommandLineArguments(args);
+        auto argv = (char **) args.data;
+        for ( uint32_t i=1; i<args.size; ++i ) {
+            const char * a = argv[i] ? argv[i] : "";
+            if ( strcmp(a, "--") == 0 ) break;
+            key += a;
+            key += '\n';
+        }
+        SerializationStorageVector storage;
+        AstSerializer ser(&storage, true);
+        CodeOfPolicies streamed = policies;
+        ser << streamed;
+        char hex[17];
+        snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_block64(storage.buffer.data(), storage.buffer.size()));
+        key += "policies:";
+        key += hex;
+        return key;
     }
 
     void ModuleFileCache::install ( const string & readFrom, const string & writeTo, bool quiet ) {

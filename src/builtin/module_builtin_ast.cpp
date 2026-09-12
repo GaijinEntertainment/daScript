@@ -1,8 +1,7 @@
 #include "daScript/misc/platform.h"
 
-#if defined(_WIN32)
-    #include "daScript/misc/sysos.h"
-#else
+#include "daScript/misc/sysos.h"
+#if !defined(_WIN32)
     #include <unistd.h>
     #define das_dep_getcwd getcwd
 #endif
@@ -15,6 +14,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_simulate.h"
+#include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
@@ -1407,7 +1407,28 @@ namespace das {
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
+        // the cache owns deserialized-AST FileInfos, so it is declared before the program it feeds;
+        // the environment's serializer slots are the enclosing compile's (a compile_file from an
+        // [init] runs under the host's armed cache) and are put back once this one is finished
+        ModuleFileCache moduleCache;
+        auto & env = *daScriptEnvironment::getBound();
+        AstSerializer * outerRead = env.serializer_read;
+        AstSerializer * outerWrite = env.serializer_write;
+        string cachePath;
+        if ( cop.module_cache ) {
+            char exePath[4096];
+            size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+            cachePath = ModuleFileCache::defaultPath(modName, exeLen ? string(exePath, exeLen) : string(),
+                ModuleFileCache::embeddedHostOptions(cop));
+            moduleCache.install(cachePath, cachePath, true);
+        }
         auto program = compileDaScript(modName, access, issues, *module_group, cop);
+        if ( cop.module_cache ) {
+            auto cres = moduleCache.finish();
+            if ( cres.saveFailed ) issues << "ser: cannot write '" << cachePath << "'\n";
+            env.serializer_read = outerRead;
+            env.serializer_write = outerWrite;
+        }
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {

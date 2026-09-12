@@ -975,6 +975,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_init_check)>("no_init_check");
             addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
             addField<DAS_BIND_MANAGED_FIELD(serialize_main_module)>("serialize_main_module");
+            addField<DAS_BIND_MANAGED_FIELD(module_cache)>("module_cache");
             addField<DAS_BIND_MANAGED_FIELD(keep_alive)>("keep_alive");
             addField<DAS_BIND_MANAGED_FIELD(very_safe_context)>("very_safe_context");
         // reporting

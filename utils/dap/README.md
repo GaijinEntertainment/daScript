@@ -35,7 +35,11 @@ required = true
 3. Call `debug_threads`. The daScript startup gate requires this request.
 4. Call `debug_configuration_done`.
 5. Wait for `stopped` with `debug_wait_event`, then use `debug_stack_trace`,
-   `debug_scopes`, `debug_variables`, and `debug_evaluate`.
+   `debug_scopes`, `debug_variables`, and `debug_evaluate`. A `debug_evaluate`
+   result carries the value and its type; an evaluation the server could not
+   perform is a failed call whose text is the evaluator's diagnostic. The bridge
+   keeps the first response to every request and fails the next call when a
+   server answers one request twice.
 6. Resume with `debug_continue`, `debug_step_in`, `debug_step_over`, or
    `debug_step_out`.
 7. Finish with `debug_terminate` or `debug_disconnect`.

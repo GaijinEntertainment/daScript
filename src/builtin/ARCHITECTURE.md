@@ -60,6 +60,16 @@ share one. `-no-module-cache` disables the cache outright, over an explicit `-mo
 override; beside `-ser` / `-deser` - the explicit round-trip halves, whose verdict is the point
 of the run - the host rejects the command line instead of silently disabling them.
 
+A script's own `compile_file` (`rtti_builtin_compile_file`, `module_builtin_ast.cpp`) installs
+the same default cache when its `CodeOfPolicies.module_cache` is set, with
+`ModuleFileCache::embeddedHostOptions` standing in for the host's command line: this process's
+arguments up to `--` (the host flags that shape the module registry) and a hash of the policies
+streamed as a record stamps them, so two tools compiling one file under different policies keep
+separate records instead of rewriting one. The environment's serializer slots belong to the
+enclosing compile - a `compile_file` from an `[init]` runs under the host's armed cache - and
+are put back once the nested cache is finished; the finish happens before the block runs, so a
+require the block issues is not this cache's.
+
 Every variant is its own record and an engine root's record is 200 MB, so the default directory
 is capped: after a writeback `ModuleFileCache::finish` lists the directory's `.dascache` files
 and removes the oldest by mtime until it fits `DAS_MODULE_CACHE_LIMIT` megabytes (4096 unless

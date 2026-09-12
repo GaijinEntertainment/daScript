@@ -87,6 +87,10 @@ class DapClient:
         self.condition = threading.Condition()
         self.write_lock = threading.Lock()
         self.responses: dict[int, dict[str, Any]] = {}
+        # every request_seq the server has answered: a second response to one is a protocol
+        # violation, kept here and raised by the next request instead of replacing the first
+        self.answered: set[int] = set()
+        self.duplicate_responses: list[dict[str, Any]] = []
         self.events: deque[dict[str, Any]] = deque()
         self.event_history: deque[dict[str, Any]] = deque(maxlen=DAP_HISTORY_LIMIT)
         self.next_seq = 1
@@ -132,6 +136,8 @@ class DapClient:
             self.sock = sock
             self.stream = stream
             self.responses.clear()
+            self.answered.clear()
+            self.duplicate_responses.clear()
             self.events.clear()
             self.event_history.clear()
             self.next_seq = 1
@@ -161,7 +167,11 @@ class DapClient:
                     if message.get("type") == "response":
                         request_seq = message.get("request_seq")
                         if isinstance(request_seq, (int, float)):
-                            self.responses[int(request_seq)] = message
+                            if int(request_seq) in self.answered:
+                                self.duplicate_responses.append(message)
+                            else:
+                                self.answered.add(int(request_seq))
+                                self.responses[int(request_seq)] = message
                     elif message.get("type") == "event":
                         self._enqueue_event_locked(message)
                     self.condition.notify_all()
@@ -239,6 +249,12 @@ class DapClient:
         if not self.connected or self.sock is None:
             raise BridgeError("not connected to a DAP server; call debug_connect or debug_launch")
         with self.condition:
+            if self.duplicate_responses:
+                duplicate = self.duplicate_responses[0]
+                raise BridgeError(
+                    "DAP server answered request_seq "
+                    f"{duplicate.get('request_seq')} ({duplicate.get('command')}) twice: {duplicate}"
+                )
             seq = self.next_seq
             self.next_seq += 1
         message = {

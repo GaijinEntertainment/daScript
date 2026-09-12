@@ -474,6 +474,28 @@ def main() -> int:
             )
         )
         assert str(guard_value) in evaluated["result"], evaluated
+        # an expression (not a bare name) takes the debug_eval path: one response, typed
+        summed = response_body(
+            client.tool(
+                "debug_evaluate",
+                {"expression": "guard + 1", "frame_id": frame_id},
+            )
+        )
+        assert summed["result"] == str(guard_value + 1), summed
+        assert summed["type"] == "int64", summed  # debug_eval widens integer arithmetic to int64
+        # a failed evaluation is a failed request, its diagnostic in `message`, not a value
+        failed = client.tool_error(
+            "debug_evaluate",
+            {"expression": "nosuchvar", "frame_id": frame_id},
+        )
+        assert "unknown variable nosuchvar" in failed, failed
+        after_failure = response_body(
+            client.tool(
+                "debug_evaluate",
+                {"expression": "guard", "frame_id": frame_id},
+            )
+        )
+        assert str(guard_value) in after_failure["result"], after_failure
 
         data_info = response_body(
             client.tool(

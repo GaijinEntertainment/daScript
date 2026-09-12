@@ -2130,18 +2130,21 @@ class private DAServer : Server {
                         --frame
                     }
 
+                    found = true
                     var result = debug_eval(vars, ini.expression)
-                    var resStr = ""
                     if (!empty(result.error)) {
-                        resStr = result.error
-                    } elif (result.data != null) {
+                        sendErrorResponse(seq, command, result.error)
+                        return
+                    }
+                    var resStr = ""
+                    if (result.data != null) {
                         resStr = sprint_data(result.data, unsafe(addr(result.tinfo)), print_flags_debug)
                     } else {
                         resStr = sprint_data(result.value, unsafe(addr(result.tinfo)), print_flags_debug)
                     }
                     var inscope res = EvaluateResponse(
                         result = resStr,
-                        _type = !empty(result.error) ? describe(result.tinfo) : "",
+                        _type = describe(result.tinfo),
                         indexedVariables = 0lf,
                         variablesReference = 0lf)
                     sendSuccessResponseStr(seq, command, sprint_json(res, false))
@@ -2180,6 +2183,12 @@ class private DAServer : Server {
     def sendSuccessResponseStr(id : double; command : string; body : string) {
         //! Sends a successful DAP response with a pre-serialized JSON string body.
         sendRawDataStr("\{\"request_seq\":{id}, \"type\":\"response\", \"body\":{body}, \"command\":\"{command}\", \"success\":true\}", true)
+    }
+
+    def sendErrorResponse(id : double; command : string; message : string) {
+        //! Sends a failed DAP response; the diagnostic rides `message`, never a body.
+        sendRawData(JV({"request_seq" => JV(id), "type" => JV("response"),
+                                "command" => JV(command), "success" => JV(false), "message" => JV(message)}), true)
     }
 
     def sendRawData(var data : JsonValue?; logData : bool) {

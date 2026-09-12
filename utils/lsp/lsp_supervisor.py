@@ -9,6 +9,10 @@ and exits. The document shadow rides along as a --overlay temp file, so
 compiles see the client's buffer even when it is unsaved (Claude Code saves
 before notifying; other LSP clients don't). No resident daslang, by design: no macro-state leaks across
 compiles, no binary/DLL locks while builds run, per-request crash isolation.
+Every subtool compiles under the module cache (CodeOfPolicies.module_cache), so a
+request re-parses only the edited module and what follows it; subtools inherit
+this process's cwd - the workspace root - so the cache is one
+.jitted_scripts/module_cache/ there, not one per source directory.
 Rationale + wave plan: utils/lsp/ROADMAP.md.
 
 Registered via the Claude Code plugin manifest in utils/lsp/plugin/
@@ -63,8 +67,7 @@ def path_to_uri(path: str) -> str:
 
 
 def find_compiler(init_options: dict) -> str | None:
-    # absolute paths only: subtools spawn with per-request cwd, so a relative
-    # path that resolves here would break there
+    # absolute paths only: the subtool argv must name the binary wherever it is run from
     cand = init_options.get("compiler") or os.environ.get("DASLANG_LSP_COMPILER")
     if cand and os.path.exists(cand):
         return os.path.abspath(cand)
@@ -178,8 +181,7 @@ class Server:
         if overlay:
             argv += ["--overlay", overlay]
         try:
-            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    cwd=os.path.dirname(path) or None)
+            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             with self.lock:
                 self.inflight[uri] = proc
             out, err = proc.communicate(timeout=VALIDATE_TIMEOUT_SEC)
@@ -284,7 +286,7 @@ class Server:
             return None
 
     # ---- navigation requests ---------------------------------------------
-    def nav_request(self, mid, op: str, args: list[str], cwd: str | None,
+    def nav_request(self, mid, op: str, args: list[str],
                     overlay_uri: str | None = None, data_uri: str | None = None) -> None:
         """Spawns nav.das on a worker thread so the read loop keeps consuming
         didChange while a request compiles. data_uri is the call-hierarchy
@@ -301,16 +303,15 @@ class Server:
         overlay = self.write_overlay(overlay_uri)
         if overlay:
             argv += ["--overlay", overlay]
-        t = threading.Thread(target=self.run_nav, args=(mid, op, argv, cwd, overlay, data_uri),
+        t = threading.Thread(target=self.run_nav, args=(mid, op, argv, overlay, data_uri),
                              daemon=True)
         t.start()
 
-    def run_nav(self, mid, op: str, argv: list[str], cwd: str | None,
+    def run_nav(self, mid, op: str, argv: list[str],
                 overlay: str | None = None, data_uri: str | None = None) -> None:
         try:
             try:
-                proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        cwd=cwd)
+                proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 out, err = proc.communicate(timeout=NAV_TIMEOUT_SEC)
             except subprocess.TimeoutExpired:
                 proc.kill()
@@ -379,11 +380,10 @@ class Server:
                     for s in payload.get("symbols") or []]
         return None
 
-    def cursor_args(self, params: dict) -> tuple[list[str], str | None]:
+    def cursor_args(self, params: dict) -> list[str]:
         path = uri_to_path(params["textDocument"]["uri"])
         pos = params.get("position") or {}
-        args = [path, str(pos.get("line", 0)), str(pos.get("character", 0))]
-        return args, os.path.dirname(path) or None
+        return [path, str(pos.get("line", 0)), str(pos.get("character", 0))]
 
     def active_doc_path(self) -> str | None:
         return uri_to_path(self.active_uri) if self.active_uri else None
@@ -397,9 +397,8 @@ class Server:
 
         if method == "initialize":
             self.init_options = params.get("initializationOptions") or {}
-            # subtools spawn with a per-request cwd, so relative option paths
-            # would re-resolve per file — pin them to the supervisor's startup
-            # cwd (the workspace root) once, here
+            # option paths are pinned to the supervisor's startup cwd (the workspace
+            # root) once, here, so the subtool argv carries them absolute
             for k in ("project", "project_root"):
                 if self.init_options.get(k):
                     self.init_options[k] = os.path.abspath(self.init_options[k])
@@ -456,12 +455,10 @@ class Server:
             self.publish(uri, [])
         elif method in ("textDocument/definition", "textDocument/hover",
                         "textDocument/implementation"):
-            args, cwd = self.cursor_args(params)
-            self.nav_request(mid, method.rsplit("/", 1)[1], args, cwd,
+            self.nav_request(mid, method.rsplit("/", 1)[1], self.cursor_args(params),
                              overlay_uri=params["textDocument"]["uri"])
         elif method == "textDocument/prepareCallHierarchy":
-            args, cwd = self.cursor_args(params)
-            self.nav_request(mid, "prepareCallHierarchy", args, cwd,
+            self.nav_request(mid, "prepareCallHierarchy", self.cursor_args(params),
                              overlay_uri=params["textDocument"]["uri"],
                              data_uri=params["textDocument"]["uri"])
         elif method in ("callHierarchy/incomingCalls", "callHierarchy/outgoingCalls"):
@@ -474,16 +471,15 @@ class Server:
                 self.nav_request(mid, op,
                                  [anchor, data.get("file", ""), str(data.get("line", 0)),
                                   data["name"]],
-                                 os.path.dirname(anchor) or None,
                                  overlay_uri=data["uri"], data_uri=data["uri"])
         elif method == "textDocument/references":
-            args, cwd = self.cursor_args(params)
             include_decl = bool((params.get("context") or {}).get("includeDeclaration"))
-            self.nav_request(mid, "references", args + ["true" if include_decl else "false"], cwd,
+            self.nav_request(mid, "references",
+                             self.cursor_args(params) + ["true" if include_decl else "false"],
                              overlay_uri=params["textDocument"]["uri"])
         elif method == "textDocument/documentSymbol":
             path = uri_to_path(params["textDocument"]["uri"])
-            self.nav_request(mid, "documentSymbol", [path], os.path.dirname(path) or None,
+            self.nav_request(mid, "documentSymbol", [path],
                              overlay_uri=params["textDocument"]["uri"])
         elif method == "workspace/symbol":
             context = self.active_doc_path()
@@ -492,7 +488,6 @@ class Server:
             else:
                 self.nav_request(mid, "workspaceSymbol",
                                  [params.get("query", ""), context],
-                                 os.path.dirname(context) or None,
                                  overlay_uri=self.active_uri)
         elif mid is not None:
             self.reply_error(mid, -32601, f"daslang-lsp: method not implemented: {method}")

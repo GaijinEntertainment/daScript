@@ -33,7 +33,8 @@ def test_macro_dep_invalidate(t : T?) {
     fwrite(dep, "content v1")
     let root = get_das_root()
     // the driver runs as the child's MAIN program (not a dastest child): a nested runtime
-    // compile bypasses the module cache, so only the main-line require chain proves the gate
+    // compile caches only under its own module_cache policy, so the main-line require chain
+    // is what proves the host's gate
     let cmd = "\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc.bin\" \"{root}/tests/module_cache/_fixtures/mc_dep_drv.das\""
     var cold : string
     let coldRc = env_run(dep, cmd, cold)

@@ -84,6 +84,13 @@ Two processes, hard split - full rationale and wave history in
 No resident daslang, by design: no macro-state leaks across compiles, no
 binary/DLL locks while builds run, per-request crash isolation.
 
+Each subtool compiles under the module cache (`CodeOfPolicies.module_cache`),
+the same cache the `daslang` command line uses for its own script: a request
+re-parses the edited module and what follows it, and deserializes the rest. The
+cache is `.jitted_scripts/module_cache/` in the workspace root - subtools inherit
+the supervisor's cwd - so a large module graph costs one cold compile per
+workspace, not one per keystroke.
+
 ## Navigation notes
 
 - **Call hierarchy** covers direct calls (`foo()`, `obj.method()`). Virtual

@@ -15,6 +15,7 @@ Skip Program::lint() entirely (as if every module set ``options lint = false``).
 Skip the Module::Initialize() assert in compileDaScript (for environments initialized later, e.g. dynamic-module discovery).
 Export all functions and global variables.
 If not set, we recompile main module each time.
+compile_file from a script reads and refreshes the default module cache around this compile (keyed by the file, the running binary, the host arguments and these policies).
 Keep context alive after main function.
 Whether to use very safe context (delete of data is delayed, to avoid table[foo]=table[bar] lifetime bugs).
 Threshold for reporting candidates for function calls. If less than this number, we always report them.

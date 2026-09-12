@@ -42,6 +42,7 @@ namespace das {
         bool        no_init_check = false;              // skip the Module::Initialize() assert, most of the time should be false (except maybe dynamic-module discovery)
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time
+        bool        module_cache = false;               // compile_file from a script reads and refreshes the default module cache around this compile (keyed by the file, the running binary, this process's host arguments and these policies); the host's own cache is the host's flag
         bool        keep_alive = false;                 // produce keep-alive noodes
         /*option*/ bool        very_safe_context = false;          // context is very safe (does not release old memory from array or table grow, leaves it to GC)
     // error reporting
