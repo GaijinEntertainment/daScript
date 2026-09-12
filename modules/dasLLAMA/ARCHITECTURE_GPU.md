@@ -134,8 +134,8 @@ in prefill) and the tuner calls those public entries.
 `MetalPrefillDecline`); decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for
 both paths.
 
-Sections 2.28-2.39 - the Metal speculative round, the depth a round drafts, the kernel argument-alignment
-contract, and the verify, drafter and batch-driver mechanics after them - are `ARCHITECTURE_GPU_MTP.md`.
+Sections 2.28-2.39a - the Metal speculative round, the depth a round drafts, the kernel argument-alignment
+contract, the verify, drafter and batch-driver mechanics, and the decode layer encoder - are `ARCHITECTURE_GPU_MTP.md`.
 
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its
 entry here:**

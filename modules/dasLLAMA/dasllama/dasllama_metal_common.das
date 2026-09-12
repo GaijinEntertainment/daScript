@@ -55,8 +55,7 @@ var @scratch g_region_retire : array<MetalBuffer?>  // grown-out buffers: unreta
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
 var g_decodes = 0l
-var g_declines = 0l
-var g_declines_by_reason : table<string; int64>
+var g_decode_declines : DeclineCounter
 var g_logits_cpu = false
 var g_skip = ""                              // DASLLAMA_METAL_DECODE_SKIP=gemv|attn|ew|moe_rt|moe_sh|qkv|wo knockout rail
 
@@ -76,29 +75,18 @@ var g_tower_rows = 0l
 var g_tower_blocks = 0l
 var g_tower_convs = 0l                       // conv-frontend chunks served on the GPU
 var g_tower_f16_encodes = 0l                 // encodes whose GEMMs rode the f16-W shadow route
-var g_tower_declines_by_reason : table<string; int64>
-
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
-def note_tower_decline(key : string) {
-    g_tower_declines_by_reason[key] = (g_tower_declines_by_reason?[key] ?? 0l) + 1l
-}
+var g_tower_declines : DeclineCounter
 
 // the whisper ASR-decoder driver's counters (dasllama_metal_asr_dec; counting home here)
 var g_wdec_windows = 0l                      // cross-KV windows served
 var g_wdec_steps = 0l                        // decode batches served
 var g_wdec_tokens = 0l                       // token rows across the served batches
-var g_wdec_declines_by_reason : table<string; int64>
-
-[cold_path]
-def note_wdec_decline(key : string) {
-    g_wdec_declines_by_reason[key] = (g_wdec_declines_by_reason?[key] ?? 0l) + 1l
-}
+var g_wdec_declines : DeclineCounter
 
 // the batched-step twins (per eval_batch step, not per token)
 var g_batch_steps = 0l
 var g_batch_rows = 0l
-var g_batch_declines = 0l
-var g_batch_declines_by_reason : table<string; int64>
+var g_batch_declines : DeclineCounter
 var g_us_bsetup = 0l
 var g_us_bencode = 0l
 var g_us_bwait = 0l
@@ -408,56 +396,70 @@ def require_or_panic(kind : string; why : string) {
 [cold_path]
 def cb_error_text(cb : MetalCommandBuffer?) : string => metal_command_buffer_error(cb)
 
+//! One driver's decline bookkeeping: the count, the per-reason table, and the required-mode
+//! panic. A policy decline - the GPU could serve but chooses not to - counts but never panics.
+struct DeclineCounter {
+    total : int64
+    by_reason : table<string; int64>
+}
+
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
-def decline(why : MetalDecodeDecline) {
-    g_declines++
-    g_declines_by_reason["{why}"]++
-    require_or_panic("decode", "{why}")
+def note_decline(var c : DeclineCounter; kind, why : string; policy : bool = false) {
+    c.total++
+    c.by_reason[why]++
+    if (!policy) {
+        require_or_panic(kind, why)
+    }
 }
 
 // the `feature` flavor: records a need_* key per missing bit, and the required-mode panic names them
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
+def note_decline(var c : DeclineCounter; kind, why : string; missing : MetalNeed) {
+    c.total++
+    c.by_reason[why]++
+    record_needs(c.by_reason, missing)
+    require_or_panic(kind, "{why} {missing}")
+}
+
+[cold_path]
+def decline(why : MetalDecodeDecline) {
+    note_decline(g_decode_declines, "decode", "{why}")
+}
+
+[cold_path]
 def decline(why : MetalDecodeDecline; missing : MetalNeed) {
-    g_declines++
-    g_declines_by_reason["{why}"]++
-    record_needs(g_declines_by_reason, missing)
-    require_or_panic("decode", "{why} {missing}")
+    note_decline(g_decode_declines, "decode", "{why}", missing)
 }
 
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
 def batch_decline(why : MetalDecodeDecline) {
-    g_batch_declines++
-    g_batch_declines_by_reason["{why}"]++
-    require_or_panic("batch decode", "{why}")
+    note_decline(g_batch_declines, "batch decode", "{why}")
 }
 
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
 def batch_decline(why : MetalDecodeDecline; missing : MetalNeed) {
-    g_batch_declines++
-    g_batch_declines_by_reason["{why}"]++
-    record_needs(g_batch_declines_by_reason, missing)
-    require_or_panic("batch decode", "{why} {missing}")
+    note_decline(g_batch_declines, "batch decode", "{why}", missing)
 }
 
 //! (gpu decode steps served, declines to the CPU path) since load — diagnostics / tests.
 def public metal_decode_stats() : tuple<decodes : int64; declines : int64> {
-    return (decodes = g_decodes, declines = g_declines)
+    return (decodes = g_decodes, declines = g_decode_declines.total)
 }
 
 //! Single-stream declines-by-reason since load — reason name -> count (the first failing gate
 //! clause per declined step). The support-matrix test asserts WHY a config declined.
 def public metal_decode_declines() : table<string; int64> {
-    return clone_to_move(g_declines_by_reason)
+    return clone_to_move(g_decode_declines.by_reason)
 }
 
 //! (batched eval_batch steps served, total rows across them, batch declines) since load.
 def public metal_batch_decode_stats() : tuple<steps : int64; rows : int64; declines : int64> {
-    return (steps = g_batch_steps, rows = g_batch_rows, declines = g_batch_declines)
+    return (steps = g_batch_steps, rows = g_batch_rows, declines = g_batch_declines.total)
 }
 
 //! Batched-step declines-by-reason since load — reason name -> count.
 def public metal_batch_decode_declines() : table<string; int64> {
-    return clone_to_move(g_batch_declines_by_reason)
+    return clone_to_move(g_batch_declines.by_reason)
 }
 
 // speculative-chain state: the pre-encoded next step may open with GPU argmax + embed gather off
@@ -500,22 +502,66 @@ def spec_armed() : bool {
     return true
 }
 
-// the stages the single-row and batch decode drivers honor as a knockout (g_skip != "<stage>")
-let DECODE_SKIP_STAGES <- ["gemv", "attn", "ew", "moe_rt", "moe_sh", "qkv", "wo"]
+//! Release a Metal object through its slot and null the slot - a PSO, a buffer, any handle
+//! `metal_release` takes.
+def release_handle(var h : auto(HT)?&) {
+    if (h != null) {
+        metal_release(h)
+        h = null
+    }
+}
 
-def decode_skip_known(v : string) : bool {
-    for (s in DECODE_SKIP_STAGES) {
-        if (s == v) {
-            return true
+//! Zero rows [from, to) of `width` floats in `buf` - a pooled buffer keeps stale rows, and a pad
+//! row a kernel reads must be zero.
+def zero_rows(var buf : MetalBuffer?; from, to, width : int64) {
+    if (to <= from) {
+        return
+    }
+    unsafe {
+        var zp = reinterpret<float?>(reinterpret<uint8?>(metal_buffer_contents(buf)) + from * width * 4l)
+        for (i in range64((to - from) * width)) {
+            zp[i] = 0.0
         }
     }
-    return false
 }
+
+//! Copy `rows` rows of `width` floats from `src` into `buf` and zero the pad rows up to `mp`.
+def upload_rows_padded(var buf : MetalBuffer?; src : void?; rows, mp, width : int64) {
+    unsafe {
+        memcpy(metal_buffer_contents(buf), src, rows * width * 4l)
+    }
+    zero_rows(buf, rows, mp, width)
+}
+
+//! One mirror row of layer `l` - K and V - copied from the arena back into the session's CPU KV.
+def mirror_row_writeback(var s : Session; seq_len, l, pos, prow, rowb, lb : int64; ab : uint8?; koff, voff : uint64) {
+    unsafe {
+        memcpy(reinterpret<void?>(kv_layer_kbase(s, l, seq_len) + prow * rowb), reinterpret<void?>(ab + koff + lb + pos * rowb), rowb)
+        memcpy(reinterpret<void?>(kv_layer_vbase(s, l, seq_len) + prow * rowb), reinterpret<void?>(ab + voff + lb + pos * rowb), rowb)
+    }
+}
+
+//! The least recently touched mirror in `tab` other than `keep`, skipping the pinned ones when
+//! `honor_pin`; 0 when nothing is evictable.
+def lru_victim(tab : table<uint64; auto(TM)>; keep : uint64; honor_pin : bool) : uint64 {
+    var victim = 0ul
+    var vtick = 0l
+    for (uid, mr in keys(tab), values(tab)) {
+        if (uid != keep && !(honor_pin && key_exists(g_pin, uid)) && (victim == 0ul || mr.tick < vtick)) {
+            victim = uid
+            vtick = mr.tick
+        }
+    }
+    return victim
+}
+
+// the stages the single-row and batch decode drivers honor as a knockout (g_skip != "<stage>")
+let DECODE_SKIP_STAGES <- ["gemv", "attn", "ew", "moe_rt", "moe_sh", "qkv", "wo"]
 
 //! The knockout rail as an in-process setter (timing attribution — served output is GARBAGE while
 //! non-empty; `""` restores full math). Same rail as `DASLLAMA_METAL_DECODE_SKIP`.
 def public set_metal_decode_skip(v : string) {
-    if (!empty(v) && !decode_skip_known(v)) {
+    if (!empty(v) && !has_value(DECODE_SKIP_STAGES, v)) {
         panic("dasLLAMA: unknown metal decode knockout '{v}' - the drivers read gemv, attn, ew, moe_rt, moe_sh, qkv, wo")
     }
     g_skip = v
@@ -611,14 +657,14 @@ def public metal_decode_stage_report {
         let n = float(g_batch_steps)
         to_log(LOG_INFO, "dasLLAMA metal batch decode: {g_batch_steps} steps ({g_batch_rows} rows)  per-step setup={float(g_us_bsetup) / n}us encode={float(g_us_bencode) / n}us wait={float(g_us_bwait) / n}us (sched {g_sched_b_ms * 1000.0lf / double(g_batch_steps)}us handoff {g_handoff_b_ms * 1000.0lf / double(g_batch_steps)}us gpu {g_gpu_b_ms * 1000.0lf / double(g_batch_steps)}us) readback+writeback={float(g_us_breadback) / n}us\n")
     }
-    if (g_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal decode declines: {g_declines} -{declines_line(g_declines_by_reason)}\n")
+    if (g_decode_declines.total > 0l) {
+        to_log(LOG_INFO, "dasLLAMA metal decode declines: {g_decode_declines.total} -{declines_line(g_decode_declines.by_reason)}\n")
     }
-    if (g_batch_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal batch decode declines: {g_batch_declines} -{declines_line(g_batch_declines_by_reason)}\n")
+    if (g_batch_declines.total > 0l) {
+        to_log(LOG_INFO, "dasLLAMA metal batch decode declines: {g_batch_declines.total} -{declines_line(g_batch_declines.by_reason)}\n")
     }
-    if (g_prefill_declines > 0l) {
-        to_log(LOG_INFO, "dasLLAMA metal prefill declines: {g_prefill_declines} -{declines_line(g_prefill_declines_by_reason)}\n")
+    if (g_prefill_declines.total > 0l) {
+        to_log(LOG_INFO, "dasLLAMA metal prefill declines: {g_prefill_declines.total} -{declines_line(g_prefill_declines.by_reason)}\n")
     }
 }
 
@@ -736,18 +782,23 @@ def private region_upload_new(key : uint64; src : void?; bytes : uint64) : Metal
     return buf
 }
 
-def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
-    let key = intptr(src)
-    if (key_exists(g_regions, key)) {
-        var cached = g_regions[key]
+//! The cached region at `key` when it covers `bytes`, else null - a shorter entry at the same
+//! base is retired first: the old buffer may be bound in an in-flight unretained cb.
+def private region_hit(@scratch var tab : table<uint64; RegionEntry>; key, bytes : uint64) : MetalBuffer? {
+    if (key_exists(tab, key)) {
+        var cached = tab[key]
         if (cached.bytes >= bytes) {
             return cached.buf
         }
-        // a wider span at a shorter entry's base: the old buffer may be bound in an in-flight
-        // unretained cb — retire it, re-upload the full span
         g_region_retire |> push(cached.buf)
     }
-    return region_upload_new(key, src, bytes)
+    return null
+}
+
+def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
+    let key = intptr(src)
+    var hit = region_hit(g_regions, key, bytes)
+    return hit != null ? hit : region_upload_new(key, src, bytes)
 }
 
 [cold_path]
@@ -772,14 +823,8 @@ def private region_upload_cat3_new(key : uint64; p0 : void?; b0 : uint64; p1 : v
 // indexing). Load-once-stable like upload_region; b2 == 0 makes it a two-piece concat.
 def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64) : MetalBuffer? {
     let key = intptr(p0)
-    if (key_exists(g_regions_cat3, key)) {
-        var cached = g_regions_cat3[key]
-        if (cached.bytes >= b0 + b1 + b2) {
-            return cached.buf
-        }
-        g_region_retire |> push(cached.buf)
-    }
-    return region_upload_cat3_new(key, p0, b0, p1, b1, p2, b2)
+    var hit = region_hit(g_regions_cat3, key, b0 + b1 + b2)
+    return hit != null ? hit : region_upload_cat3_new(key, p0, b0, p1, b1, p2, b2)
 }
 
 // ===== the whole-plane resident buffers (blob-only models) =====
@@ -788,12 +833,9 @@ def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : vo
 
 def plane_buffer(dev : MetalDevice?; base : void?; bytes : uint64; mapped : bool) : MetalBuffer? {   // public: the tower driver wraps embedder planes too
     let key = intptr(base)
-    if (key_exists(g_regions, key)) {
-        var cached = g_regions[key]
-        if (cached.bytes >= bytes) {
-            return cached.buf
-        }
-        g_region_retire |> push(cached.buf)   // plane requests are whole-tensor constants — grow never fires in practice
+    var hit = region_hit(g_regions, key, bytes)
+    if (hit != null) {
+        return hit
     }
     var buf : MetalBuffer?
     if (mapped) {
@@ -896,54 +938,12 @@ def nc_logits_release {
 //! grp-repacked loads). Serves BOTH resident drivers (prefill passes its own device handle).
 def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; qoff : uint64> {
     assert(t.metal_blob)
-    let sb0 = off / 256l
+    var kq : array<uint8> const?
+    var ks : array<uint8> const?
+    kq_planes_of(t, fmt, kq, ks)
     unsafe {
-        if (fmt == KqFmt.k4) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k4q[0]), uint64(long_length(t.k4q)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.k5) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k5q[0]), uint64(long_length(t.k5q)), t.image_map != null),
-                    qoff = uint64(sb0 * 160l))
-        }
-        if (fmt == KqFmt.iq4xs) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq4xsq[0]), uint64(long_length(t.iq4xsq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.k3) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k3q[0]), uint64(long_length(t.k3q)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq3s) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq3sq[0]), uint64(long_length(t.iq3sq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq3xxs) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq3xxsq[0]), uint64(long_length(t.iq3xxsq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq4nl) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq4nlq[0]), uint64(long_length(t.iq4nlq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.k2) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k2q[0]), uint64(long_length(t.k2q)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq2s) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2sq[0]), uint64(long_length(t.iq2sq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq2xs) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2xsq[0]), uint64(long_length(t.iq2xsq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        if (fmt == KqFmt.iq2xxs) {
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2xxsq[0]), uint64(long_length(t.iq2xxsq)), t.image_map != null),
-                    qoff = uint64(sb0 * kq_qsb(fmt)))
-        }
-        return (buf = plane_buffer(dev, addr < void? >(t.k6q[0]), uint64(long_length(t.k6q)), t.image_map != null),
-                qoff = uint64(sb0 * 192l))
+        return (buf = plane_buffer(dev, addr<void?>((*kq)[0]), uint64(long_length(*kq)), t.image_map != null),
+                qoff = uint64((off / 256l) * kq_qsb(fmt)))
     }
 }
 
@@ -954,62 +954,16 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)
     let sb0 = off / 256l
+    var kq : array<uint8> const?
+    var ks : array<uint8> const?
+    kq_planes_of(t, fmt, kq, ks)
+    let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl
+    let tail = compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
     unsafe {
-        if (fmt == KqFmt.k6) {
-            let plane_sb = long_length(t.k6s) / 18l   // split form keeps the 18B/sb total
-            return (buf = plane_buffer(dev, addr < void? >(t.k6s[0]), uint64(long_length(t.k6s)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.k4) {
-            return (buf = plane_buffer(dev, addr < void? >(t.k4s[0]), uint64(long_length(t.k4s)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = 0ul)
-        }
-        if (fmt == KqFmt.k3) {
-            let plane_sb = long_length(t.k3s) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.k3s[0]), uint64(long_length(t.k3s)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq3s) {
-            let plane_sb = long_length(t.iq3ss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq3ss[0]), uint64(long_length(t.iq3ss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq3xxs) {
-            let plane_sb = long_length(t.iq3xxss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq3xxss[0]), uint64(long_length(t.iq3xxss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq4xs) {
-            let plane_sb = long_length(t.iq4xss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq4xss[0]), uint64(long_length(t.iq4xss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq4nl) {   // q40's 16B/sb plane of 8 f16 d - verbatim, one bind (doff unused)
-            return (buf = plane_buffer(dev, addr < void? >(t.iq4nls[0]), uint64(long_length(t.iq4nls)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = 0ul)
-        }
-        if (fmt == KqFmt.k2) {   // the k6 split shape with a 4B d+dmin tail per superblock
-            let plane_sb = long_length(t.k2s) / 20l
-            return (buf = plane_buffer(dev, addr < void? >(t.k2s[0]), uint64(long_length(t.k2s)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 4l))
-        }
-        if (fmt == KqFmt.iq2s) {   // the k6 split form over the 18B/sb device plane (d8 tail)
-            let plane_sb = long_length(t.iq2ss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2ss[0]), uint64(long_length(t.iq2ss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq2xs) {
-            let plane_sb = long_length(t.iq2xss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2xss[0]), uint64(long_length(t.iq2xss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        if (fmt == KqFmt.iq2xxs) {
-            let plane_sb = long_length(t.iq2xxss) / 18l
-            return (buf = plane_buffer(dev, addr < void? >(t.iq2xxss[0]), uint64(long_length(t.iq2xxss)), t.image_map != null),
-                    soff = uint64(sb0 * 16l), doff = uint64(plane_sb * 16l + sb0 * 2l))
-        }
-        return (buf = plane_buffer(dev, addr < void? >(t.k5s[0]), uint64(long_length(t.k5s)), t.image_map != null),
-                soff = uint64(sb0 * 16l), doff = 0ul)
+        let plane_sb = long_length(*ks) / (16l + tail)
+        return (buf = plane_buffer(dev, addr<void?>((*ks)[0]), uint64(long_length(*ks)), t.image_map != null),
+                soff = uint64(sb0 * 16l),
+                doff = compact ? 0ul : uint64(plane_sb * 16l + sb0 * tail))
     }
 }
 
@@ -1027,19 +981,18 @@ def q51_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : Met
     }
 }
 
-def uniform_u32(v : uint) : MetalBuffer? {
-    var buf = pool_acquire_untracked(g_upool, g_dev, 4ul)
-    var p = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
+//! A 4-byte buffer holding one scalar - the caller says where the bytes come from.
+def scalar_buffer(var buf : MetalBuffer?; v : auto(TT)) : MetalBuffer? {
+    unsafe {
+        var p = reinterpret<TT -const?>(metal_buffer_contents(buf))
+        p[0] = v
+    }
     return buf
 }
 
-def uniform_f32(v : float) : MetalBuffer? {
-    var buf = pool_acquire_untracked(g_upool, g_dev, 4ul)
-    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
+def uniform_u32(v : uint) : MetalBuffer? => scalar_buffer(pool_acquire_untracked(g_upool, g_dev, 4ul), v)
+
+def uniform_f32(v : float) : MetalBuffer? => scalar_buffer(pool_acquire_untracked(g_upool, g_dev, 4ul), v)
 
 // only the llama-family std shape is wired — the same decline set as prefill_decline minus the
 // npos window (the model/config half, shared by the single-stream and batched drivers). Returns
@@ -1047,14 +1000,7 @@ def uniform_f32(v : float) : MetalBuffer? {
 
 def mirror_evict_to_cap(cap_bytes : uint64; keep : uint64) {
     while (g_mirror_bytes > cap_bytes) {
-        var victim = 0ul
-        var vtick = 0l
-        for (uid, mr in keys(g_mirrors), values(g_mirrors)) {
-            if (uid != keep && !key_exists(g_pin, uid) && (victim == 0ul || mr.tick < vtick)) {
-                victim = uid
-                vtick = mr.tick
-            }
-        }
+        let victim = lru_victim(g_mirrors, keep, true)
         if (victim == 0ul) {   // only the live session's mirror remains
             return
         }
@@ -1208,14 +1154,7 @@ def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; k
         let vbytes = shp.vbytes
         var off = arena_alloc(kbytes + vbytes)
         while (off < 0l) {   // arena full — evict LRU until the slice fits (or nothing evictable)
-            var victim = 0ul
-            var vtick = 0l
-            for (uid, mr in keys(g_mirrors), values(g_mirrors)) {
-                if (uid != s.uid && !key_exists(g_pin, uid) && (victim == 0ul || mr.tick < vtick)) {
-                    victim = uid
-                    vtick = mr.tick
-                }
-            }
+            let victim = lru_victim(g_mirrors, s.uid, true)
             if (victim == 0ul) {
                 // nothing left to evict — grow toward the ceiling, unless a batch step holds
                 // pinned rows (the batch driver's mirror_reserve pre-grows for that case)
@@ -1328,14 +1267,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     }
     if (!have) {
         while (length(g_dn_mirrors) >= DN_MIRRORS_MAX) {
-            var victim = 0ul
-            var vtick = 0l
-            for (uid, mr in keys(g_dn_mirrors), values(g_dn_mirrors)) {
-                if (victim == 0ul || mr.tick < vtick) {
-                    victim = uid
-                    vtick = mr.tick
-                }
-            }
+            let victim = lru_victim(g_dn_mirrors, 0ul, false)
             dn_mirror_release(g_dn_mirrors[victim])
             g_dn_mirrors |> erase(victim)
         }
@@ -1730,19 +1662,7 @@ struct KSched {
 }
 
 var @scratch g_gr_scheds : table<uint64; KSched>
-var g_gr_sched_mode = -1   // DASLLAMA_METAL_SCHED: 1 = leveled reorder (default), 0 = capture order
-
-[cold_path]   // one-time env resolution; sched_enabled is a global test after the first call
-def private load_sched_mode() {
-    g_gr_sched_mode = g_env_metal.sched
-}
-
-def private sched_enabled : bool {
-    if (g_gr_sched_mode < 0) {
-        load_sched_mode()
-    }
-    return g_gr_sched_mode != 0
-}
+def private sched_enabled : bool => g_env_metal.sched != 0
 
 // the shape-class key: pso sequence + per-node bind/range counts (pooled buffer identities and
 // arena offsets vary per step, but the conflict STRUCTURE is role-determined within a class —
@@ -1908,17 +1828,11 @@ def sameslab_argmax(i : int64) : int64 => g_sameslab_arg[i]
 
 //! argmax of row `row` in a [rows x n] logits image; the lowest index wins a tie (the CPU sampler's rule)
 def argmax_row(v : array<float>; row, n : int64) : int64 {
-    let off = row * n
-    var best = 0l
-    var bv = v[off]
-    for (i in range64(1l, n)) {
-        if (v[off + i] > bv) {
-            bv = v[off + i]
-            best = i
-        }
+    unsafe {
+        return parallel_argmax(addr(v[row * n]), n)
     }
-    return best
 }
+
 var g_lp_xb : MetalBuffer?      // production sync + CPU-classifier path: x_b writeback
 var g_lp_xb_dst : void?         // ... into the caller's workspace (borrowed, sync-only)
 var g_lp_xb_bytes = 0l
@@ -2222,31 +2136,23 @@ def metal_common_release {
 // The MetalPrefillDecline enum lives in dasllama_metal_shapes beside its decode twin (M5);
 // the counting machinery for both paths stays here (require_or_panic + the reason tables).
 
-var g_prefill_declines = 0l
-var g_prefill_declines_by_reason : table<string; int64>
+var g_prefill_declines : DeclineCounter
 
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
 def decline(why : MetalPrefillDecline) {
-    g_prefill_declines++
-    g_prefill_declines_by_reason["{why}"]++
-    if (why != MetalPrefillDecline.npos_window) {   // the one POLICY decline — see require_or_panic
-        require_or_panic("prefill", "{why}")
-    }
+    note_decline(g_prefill_declines, "prefill", "{why}", policy = why == MetalPrefillDecline.npos_window)
 }
 
-[cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
+[cold_path]
 def decline(why : MetalPrefillDecline; missing : MetalNeed) {
-    g_prefill_declines++
-    g_prefill_declines_by_reason["{why}"]++
-    record_needs(g_prefill_declines_by_reason, missing)
-    require_or_panic("prefill", "{why} {missing}")
+    note_decline(g_prefill_declines, "prefill", "{why}", missing)
 }
 
 //! Declines-by-reason since load — reason name -> count (the first failing gate clause per
 //! declined prefill). The support-matrix test asserts WHY a config declined; the stage report
 //! prints it alongside the decode tables.
 def public metal_prefill_declines() : table<string; int64> {
-    return clone_to_move(g_prefill_declines_by_reason)
+    return clone_to_move(g_prefill_declines.by_reason)
 }
 
 //! The IQ4_XS codebook (kvalues_iq4nl) as four packed words, selected + byte-extracted - no
@@ -2277,14 +2183,7 @@ def race_buf(dev : MetalDevice?; bytes : uint64; src : void?) : MetalBuffer? {
     return b
 }
 
-def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? {
-    var b = metal_new_buffer(dev, 4ul)
-    unsafe {
-        var p = reinterpret<uint?>(metal_buffer_contents(b))
-        p[0] = v
-    }
-    return b
-}
+def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer(dev, 4ul), v)
 
 // deterministic 34B-interleaved q8_0 W blob for the races: int quants, pow2 f16 scales
 def race_q8_blob(nblk : int) : array<int8> {
@@ -2422,6 +2321,19 @@ def race_envelope_ok(ba, bb : MetalBuffer?; count : int; var note : string&) : b
     }
     note = "twin within envelope: maxdiff={maxdiff} <= 5% of maxref={maxref}"
     return true
+}
+
+//! Both arms timed and within the envelope -> the faster wins; "tensor" is the second arm.
+//! `half` compares the two payloads as f16.
+def kq_race_verdict(var res : MetalTensorRaceResult; by_a, by_b : MetalBuffer?; count : int; half : bool = false) {
+    if (res.base_ms < 0.0lf || res.twin_ms < 0.0lf) {
+        res.winner = res.base_ms < 0.0lf ? "" : "simdgroup"
+        res.note = "dispatch failed"
+    } elif (!(half ? race_envelope_ok_h(by_a, by_b, count, res.note) : race_envelope_ok(by_a, by_b, count, res.note))) {
+        res.winner = "simdgroup"
+    } else {
+        res.winner = res.twin_ms < res.base_ms ? "tensor" : "simdgroup"
+    }
 }
 
 // interleaved adjacent A/B pair — separate per-side blocks read the box's thermal/clock ramp

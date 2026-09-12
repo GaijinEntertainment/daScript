@@ -126,9 +126,9 @@ def private gemv_arms(f) : array<KqRaceArm> {   // candidate GEMV spellings regi
     } elif (f.fmt == 6) {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_k6_msl, entry = metal_kq_gemv_k6_msl_entry, fastmath = metal_kq_gemv_k6_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
     } elif (f.fmt == 44) {
-        arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq4xs_msl, entry = metal_kq_gemv_iq4xs_msl_entry, fastmath = metal_kq_gemv_iq4xs_msl_fastmath, tgmem = metal_kq_gemv_iq4xs_msl_tgmem, gdiv = f.gemv_gdiv))
+        arms |> push(KqRaceArm(name = "prod", src = MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl, entry = MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl_entry, fastmath = MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl_fastmath, tgmem = MetalKqGemvIq4xs_metal_kq_gemv_iq4_msl_tgmem, gdiv = f.gemv_gdiv))
     } elif (f.fmt == 45) {
-        arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_iq4nl_msl, entry = metal_kq_gemv_iq4nl_msl_entry, fastmath = metal_kq_gemv_iq4nl_msl_fastmath, tgmem = metal_kq_gemv_iq4nl_msl_tgmem, gdiv = f.gemv_gdiv))
+        arms |> push(KqRaceArm(name = "prod", src = MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl, entry = MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl_entry, fastmath = MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl_fastmath, tgmem = MetalKqGemvIq4nl_metal_kq_gemv_iq4_msl_tgmem, gdiv = f.gemv_gdiv))
     } elif (f.fmt == 3) {
         arms |> push(KqRaceArm(name = "prod", src = metal_kq_gemv_k3_msl, entry = metal_kq_gemv_k3_msl_entry, fastmath = metal_kq_gemv_k3_msl_fastmath, tgmem = 0ul, gdiv = f.gemv_gdiv))
     } elif (f.fmt == 33) {

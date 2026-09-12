@@ -915,6 +915,16 @@ def private note(var ctx : MslCtx; kind : string) {
 // scalar class of a type for census keys: {f,i,u}{32,16,8} scalars (+ bool), the same with a `v`
 // suffix for their 2/3/4 vectors (lane count does not change the emitted text, so the census is
 // lane-agnostic). Classification rides the shared shader_block_layout rails.
+//! the simdgroup intrinsics' operand is a float, int or uint scalar - the generic CPU stubs bind
+//! any value, the emitter is the gate
+def private simd_operand_check(var ctx : MslCtx; ec : ExprCall?; cname : string) {
+    let t = ec.arguments[0]._type
+    let bt = t != null ? t.baseType : Type.none
+    if (bt != Type.tFloat && bt != Type.tInt && bt != Type.tUInt) {
+        err(ctx, ec.arguments[0].at, "{cname}: the operand is a float, int or uint scalar, not {t != null ? describe(t) : "an untyped value"}")
+    }
+}
+
 def private census_class(t : TypeDecl?) : string {
     if (t == null) {
         return "?"
@@ -1410,6 +1420,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
             err(ctx, ec.at, "{cname} takes exactly one argument")
             return "/*call {cname}*/"
         }
+        simd_operand_check(ctx, ec, cname)
         let v = emit_value(ctx, ec.arguments[0])
         note(ctx, "call.{cname}.{census_class(ec._type)}")
         return "{cname}({v})"
@@ -1419,6 +1430,7 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
             err(ctx, ec.at, "{cname} takes exactly two arguments")
             return "/*call {cname}*/"
         }
+        simd_operand_check(ctx, ec, cname)
         let v = emit_value(ctx, ec.arguments[0])
         let l = emit_value(ctx, ec.arguments[1])
         note(ctx, "call.{cname}.{census_class(ec._type)}")
@@ -2732,10 +2744,15 @@ def private emit_tmm2d_tg_step_devant(var ctx : MslCtx; ec : ExprCall?; indent :
 // the A-stream element type of a deva-family call: the das overload resolves by the pointer's
 // pointee, and the emitted operand tensor follows it — float16 = the converted half panel
 // (a float A operand keeps matmul2d off the native half x half path)
-def private tmm2d_a_elem(e : Expression?) : string {
+//! the A stream's pointee picks the half or float lowering; any other pointee is refused -
+//! the generic builtins bind any pointer type, the emitter is the gate
+def private tmm2d_a_elem(var ctx : MslCtx; e : Expression?) : string {
     let t = e._type
     if (t != null && t.firstType != null && t.firstType.baseType == Type.tFloat16) {
         return "half"
+    }
+    if (t == null || t.firstType == null || t.firstType.baseType != Type.tFloat) {
+        err(ctx, e.at, "tmm2d: the A operand streams float or float16 activations, not {t != null && t.firstType != null ? describe(t.firstType) : "an untyped pointer"}")
     }
     return "float"
 }
@@ -2745,7 +2762,7 @@ def private tmm2d_a_elem(e : Expression?) : string {
 // TYPE WITNESS: the destination cooperative tensor's layout is parameterized by the A element
 // type, so the begin must type the operand the steps will stream.
 def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
-    if (tmm2d_a_elem(ec.arguments[1]) == "float" && !ctx.float_a_ok) {
+    if (tmm2d_a_elem(ctx, ec.arguments[1]) == "float" && !ctx.float_a_ok) {
         err(ctx, ec.at, "tmm2d_tg_begin_deva: FLOAT A operand keeps matmul2d off the native half path (measured 8-11% per GEMM) - stamp a float16 XT twin, or license the deliberate f32 fallback with [metal_kernel(float_a_ok=true)]")
     }
     if (length(ec.arguments) != 6) {
@@ -2753,7 +2770,7 @@ def private emit_tmm2d_tg_begin_deva(var ctx : MslCtx; ec : ExprCall?; indent : 
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
-    let at = tmm2d_a_elem(ec.arguments[1])
+    let at = tmm2d_a_elem(ctx, ec.arguments[1])
     let m = tmm2d_const_uint(ctx, ec.arguments[2], "m (tile rows)")
     let n = tmm2d_const_uint(ctx, ec.arguments[3], "n (tile cols)")
     let sgs = tmm2d_const_uint(ctx, ec.arguments[4], "sgs (simdgroups)")
@@ -2783,7 +2800,7 @@ def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : s
         return
     }
     let acc = tg_acc_name(ctx, ec.arguments[0])
-    let at = tmm2d_a_elem(ec.arguments[1])
+    let at = tmm2d_a_elem(ctx, ec.arguments[1])
     let ap = emit_value(ctx, ec.arguments[1])
     let lda = emit_value(ctx, ec.arguments[2])
     let tb = emit_value(ctx, ec.arguments[3])
@@ -2906,11 +2923,11 @@ def private emit_tmm2d(var ctx : MslCtx; ec : ExprCall?; indent : string; var li
     var kind = cname == "tmm2d_f32_bf16_f32" ? "bf" : (cname == "tmm2d_f16w_f32" ? "hw" : (cname == "tmm2d_q8b_f32" ? "q8b" : (cname == "tmm2d_q8u_f32" ? "q8u" : (cname == "tmm2d_q8_f16s" ? "q8h" : "q8"))))
     if (kind == "q8u" && length(ec.arguments) == 14) {
         // the overload resolves by the activation pointer's pointee: float16 = the half-A stream
-        if (tmm2d_a_elem(ec.arguments[6]) == "half") {
+        if (tmm2d_a_elem(ctx, ec.arguments[6]) == "half") {
             kind = "q8uh"
         }
     }
-    if ((kind == "bf" || kind == "hw") && length(ec.arguments) == 10 && tmm2d_a_elem(ec.arguments[3]) == "half") {
+    if ((kind == "bf" || kind == "hw") && length(ec.arguments) == 10 && tmm2d_a_elem(ctx, ec.arguments[3]) == "half") {
         kind = kind == "bf" ? "bfh" : "hwh"
     }
     if ((kind == "q8u" || kind == "bf" || kind == "hw" || kind == "q8b") && !ctx.float_a_ok) {

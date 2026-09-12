@@ -47,7 +47,7 @@ Flags:
 | `-p / --path` | required* | File or directory to scan; repeatable. `*` one of `-p`, `--paths-from`, `--paths-stdin` is required (or `--import-functions` / `--against`) |
 | `--paths-from` | (off) | Read newline-delimited paths from a file (`#`-comments and blank lines skipped). Composes with `-p`. Each entry can be a file or directory; directories recurse |
 | `--paths-stdin` | off | Read newline-delimited paths from stdin (`#`-comments and blank lines skipped). Composes with `-p`. Mutually exclusive with `--against-from-stdin` (one stdin reader per run) |
-| `-j / --workers` | 0 (auto) | Worker count for parallel `--export-functions` runs. 0 = hardware threads. 1 = sequential. Files are sorted, split into N contiguous chunks, each compiled by a child detect-dupe process; shards are merged in chunk-index order so output is byte-identical across worker counts. Below 16 input files the export stays sequential regardless. Ignored without `--export-functions` |
+| `-j / --workers` | 0 (auto) | Worker count for parallel `--export-functions` runs. 0 = physical cores, at most 16. 1 = sequential. Files are sorted, split into N contiguous chunks, each compiled by a child detect-dupe process; shards are merged in chunk-index order so output is byte-identical across worker counts. Below 16 input files the export stays sequential regardless. Ignored without `--export-functions` |
 | `-t / --threshold` | 0.7 | Fuzzy similarity floor (0..1). Score is `sqrt(jaccard x len_ratio)` plus a hard `len_ratio >= threshold` gate |
 | `-n / --top` | 20 | Top-N entries shown in stdout summary |
 | `--json` | (off) | Path for full JSON report |
