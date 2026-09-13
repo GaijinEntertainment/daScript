@@ -165,7 +165,8 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     }
     let waves_l = (tiles_l + cores - 1l) / cores
     let waves_m = (tiles_m + cores - 1l) / cores
-    return tiles_m * waves_l > tiles_l * waves_m ? 128l : 256l
+    //! m wins only when its share of its wave slots beats l's by more than a quarter: the l column's double arithmetic intensity is worth that much (RTX PRO 4500, eighteen gemma shapes)
+    return 4l * tiles_m * waves_l > 5l * tiles_l * waves_m ? 128l : 256l
 }
 
 //! workgroups a (d, cnt) GEMM takes at the token column `tc`
@@ -192,10 +193,8 @@ def cm2_split_k(d, cnt, n, tc : int64; sib_tiles : int64 = 0l) : tuple<nsplit : 
     } elif (cores != 0l && n >= 2048l && d >= 128l && cnt >= tc) {
         let own = cm2_tiles_at(d, cnt, tc)
         let tiles = own + sib_tiles
-        if (tiles <= cores / 2l) {
+        if (tiles <= cores / 2l) {   //! a group past half the SMs runs whole: three chunks over 48 to 120 m tiles read 1.4x to 1.9x the whole GEMM (the E2B, E4B and 12B downs on 82 SMs)
             sk = cores / own
-        } elif (tiles <= cores * 2l / 3l) {
-            sk = 3l
         }
         sk = min(sk, 8l)
         if (sk < 3l) {   //! two chunks never pay: the reduce and the halved k loop cost more than the second wave returns (gemma-3-1b's down on 82 SMs: 176 us in two against 157 whole)
