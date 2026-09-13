@@ -1391,7 +1391,10 @@ module) is independent and can land any time - it is pure structure.
     2 us a step at dims 1152 to 3840 - so the `ArRq` epilogue riding the q8 GEMVs (wo into the
     post-attention step, down into the post-FFN one, the E-series proj into its) is the form still
     worth building, two to three hops a layer on every gemma (`Q8GemvAr` is that form: gemma-3-1b's
-    tg128 358.5 -> 370.1, past llama.cpp's 362.9). The barrier's form is not a lever: the probe's
+    tg128 358.5 -> 370.1, past llama.cpp's 362.9) - except the E-series branch's step riding
+    `Q8GemvPleAct`, measured and reverted: eighty workgroups publish and the last one runs a
+    2560-wide step alone, and the token loses more than the hop (E4B tg128 109.3 -> 108.5, E2B
+    192.3 -> 189.4; the stamps read 29 us less a token, the wall 70 more). The barrier's form is not a lever: the probe's
     `barform` arm chains `cls_ar` through the rail's global compute+transfer barrier, a compute-only
     one, shader access bits alone, a buffer barrier on the row and an execution-only barrier, and on
     the RTX PRO 4500 every form costs the same 4.7 us a dispatch at dim 1152 (6.7 to 8.1 at 2560)
