@@ -1102,6 +1102,12 @@ def private pf_setup {
             fixed_array(g_rd.emb_f32_bytes, np * 4l, np * dim * 4l),
             fixed_array(0u, 0u, VHZ_X))
     }
+    if (g_rd.ple_tbl_blk >= 0l && g_rd.pf_ids != 0ul) {   //! the token table's gather into the side rows (the pre-step's finish reads them under the cos plane's bit)
+        let all = g_rd.n_layers * g_rd.ple
+        let pt = arena_planes(int(KqFmt.q8), g_rd.ple_tbl_blk)
+        g_rd.pf_ple_tbl_set = set_emb_gather_cls(fixed_array(pt.wq, pt.ws, g_rd.pf_ids, g_rd.pf_ple),
+            fixed_array(pt.wqb, pt.wsb, np * 4l, np * all * 4l), fixed_array(0u, 0u, 0u, VHZ_COS))
+    }
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
     // f16-fed groups (pf_f16_feed) take f16 convert roles; kq consumers the Q8_K quant/act forms
     var any_f16_feed = false
@@ -1403,7 +1409,9 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
     assert(g_rd != null && (g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul), "vk_rdec_prefill_ids without a placed embd plane")
     let nox : array<float>
     vk_demotion_check("prefill")
-    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, false, npos, logits)   //! the ids form serves no per-layer-embedding model (its pre-step needs the embedded rows on the host)
+    let ple_tbl = pf_ple_tbl_on()
+    assert(g_rd.ple == 0l || ple_tbl, "vk_rdec_prefill_ids: a per-layer-embedding model without its token table and projection on device")
+    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, logits)   //! the ids form gathers a per-layer-embedding model's side rows from the device table and finishes the pre-step there
 }
 
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
@@ -1434,6 +1442,23 @@ def vk_rdec_set_emb(emb_block : int64) : bool {
     return true
 }
 
+//! The per-layer-embedding token table in the arena: the ids prefill gathers the side rows from it (the embed gather's kernel at
+//! the row width layers x ple, scaled by sqrt(ple)) where the host gathered and uploaded them a window at a time
+def vk_rdec_set_ple_table(blk : int64) : bool {
+    if (g_gpu != null && g_gpu.dry) {
+        return true
+    }
+    assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_table before set_ple")
+    if (!ensure_emb_gather_cls()) {
+        return false
+    }
+    g_rd.ple_tbl_blk = blk
+    return true
+}
+
+//! the ids prefill gathers and finishes the pre-step on device: the table placed and the projection held
+def private pf_ple_tbl_on : bool => g_rd.ple_tbl_blk >= 0l && g_rd.ple_gpu
+
 //! False past RDEC_EMB_F32_CAP, the device's SSBO range, or the weight budget, or when the gather
 //! rail cannot build (the caller keeps the CPU embed)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
@@ -1460,7 +1485,8 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
                    cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
-    assert(g_rd.ple == 0l || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
+    let ple_tbl = use_ids && ple_raw   //! the side rows gather on device from the token table
+    assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
     pf_setup()
     let dim = g_rd.dim
     let nlfin = rd_norm_final()
@@ -1494,7 +1520,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             }
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * cos_elems)]), wlen * cos_elems * 4l)
-            if (g_rd.ple > 0l) {   //! this window's side-input rows, position-major [wlen x (layers x ple)]
+            if (g_rd.ple > 0l && !ple_tbl) {   //! this window's side-input rows, position-major [wlen x (layers x ple)]
                 let all = g_rd.n_layers * g_rd.ple
                 upload_region_at(g_rd.pf_ple, 0l, addr<uint8 const?>(ple_rows[int(w0 * all)]), wlen * all * 4l)
             }
@@ -1524,6 +1550,11 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     enc_emb_gather_cls(raw, h, g_rd.pf_emb_set, pce, (wlen * dim / 4l + 255l) / 256l)
                 } else {
                     enc_emb_gather_f32_cls(raw, h, g_rd.pf_emb_set, pce, (wlen * dim / 4l + 255l) / 256l)
+                }
+                if (ple_tbl) {   //! the side rows off the token table, sqrt(ple)-scaled as the host gather leaves them
+                    let all = g_rd.n_layers * g_rd.ple
+                    var pcs = EmbArgs(npos = uint(wlen), dim = uint(all), wblk0 = uint(arena_local_blk(g_rd.ple_tbl_blk)), embed_scale = sqrt(float(g_rd.ple)))
+                    enc_emb_gather_cls(raw, h, g_rd.pf_ple_tbl_set, pcs, (wlen * all / 4l + 255l) / 256l)
                 }
             }
             if (ple_raw) {   //! the per-layer-embedding pre-step's finish: the projection of the scaled embedding rows, normed per slice and averaged into the gathered rows

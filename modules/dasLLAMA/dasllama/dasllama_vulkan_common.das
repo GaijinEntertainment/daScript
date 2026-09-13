@@ -2457,6 +2457,8 @@ struct RDec {
     emb_blk : int64 = -1l
     emb_f32 : uint64
     emb_f32_bytes : int64
+    ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block (q8): the ids prefill gathers pf_ple from it
+    pf_ple_tbl_set : VkDescriptorSet
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
     pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next

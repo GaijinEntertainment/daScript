@@ -86,8 +86,14 @@ behind its own opt-in, sat at 13.7 GB dedicated and 24.1). The tag is an A/B arm
 An OPTIONAL plane rides only the room left under the budget at THIS context - what remains of
 `budget_bytes - headroom_bytes` after weights, KV and scratch; the reserved headroom itself
 stays unfilled. It never shrinks any of the three, and it reports zero bytes when it does not
-fit - so the same model plans the plane in at a short context and out at a long one. The raw f32 embed
-table is the one optional plane today.
+fit - so the same model plans the plane in at a short context and out at a long one. Two planes are
+optional: the raw f32 embed table, and after it the gemma-4 E-series' per-layer-embedding token
+table (`ResidentPlan.ple_tbl_bytes`, a q8 plane [vocab x layers*ple]) - placed first, into the empty
+arena, in pieces of 65536 rows the host gather's 2 GB array admits, which must land back to back in
+one slab because the window chain's gather (`EmbGather` at the row width layers*ple, scaled by
+sqrt(ple)) reads them off one block base. With it placed the ids prefill serves a per-layer-embedding
+model too - the embed and the side rows gathered on device, no host row upload - and the token
+command keeps its one-row host gather.
 
 **A MoE is planned like a dense model with bigger FFN planes.** Its weight planes are the
 attention quads, every MoE layer's expert triple (`[ne x nfe x dim]` twice and `[ne x dim x

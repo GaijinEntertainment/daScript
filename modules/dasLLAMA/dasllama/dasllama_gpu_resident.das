@@ -434,6 +434,7 @@ struct ResidentPlan {
     usable_bytes : int64    //!< what the plan may fill: the budget minus the headroom, capped by the room the OS reports when it answers and no pin overrides
     others_bytes : int64    //!< dedicated video memory every other process holds, when the OS answers (0 otherwise) - named in a decline
     emb_f32_bytes : int64   //!< the raw f32 embd table the gather would upload - counted only when it rides the headroom left after weights + KV (0 = the CPU embed serves)
+    ple_tbl_bytes : int64   //!< the per-layer-embedding token table (gemma-4 E-series, q8) the window chain would gather on device - counted the same way, after the embd table (0 = the host gathers)
     fits : bool
     memory : bool         //!< the decline is the card's room at the session's context, not a feature the driver lacks
     reason : string       //!< "" when it fits; otherwise why, with a remedy where one exists
@@ -604,7 +605,7 @@ def private resident_kv_row_bytes(t : Model; kdt, vdt : KVDtype) : tuple<krow : 
     return (krow = krow, vrow = vrow)
 }
 
-def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {
+def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan {   // nolint:STYLE037 — one tally of every plane class the card must hold, then the two optional planes on what is left
     let c = t.config
     var p = ResidentPlan(budget_bytes = moe_gpu_weight_budget_())
     if (p.budget_bytes <= 0l) {
@@ -657,6 +658,11 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     let emb_bytes = emb_want ? rdec_emb_f32_bytes(c.vocab_size, c.dim) : 0l
     p.emb_f32_bytes = total + emb_bytes <= usable ? emb_bytes : 0l
     p.weight_bytes += p.emb_f32_bytes
+    //! the E-series token table rides the room left after that: its gather on device replaces the host's per-window side rows
+    let ple_tbl_want = has_ple(c) && t.ple_emb_fmt == KqFmt.q8 && g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && rdec_ple_installed()
+    let ple_tbl_bytes = ple_tbl_want ? moe_gpu_plane_bytes(c.n_layers * c.n_embd_per_layer, c.vocab_size, int(KqFmt.q8)) : 0l
+    p.ple_tbl_bytes = total + p.emb_f32_bytes + ple_tbl_bytes <= usable ? ple_tbl_bytes : 0l
+    p.weight_bytes += p.ple_tbl_bytes
     p.fits = total <= usable
     if (!p.fits) {
         p.memory = true
@@ -746,6 +752,8 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
     delete ws
     return blk
 }
+
+let private RDEC_PLE_TBL_PIECE_ROWS = 65_536l   //! a token-table piece: 65536 rows of the E4B's 10752 stay under the host gather's 2 GB array
 
 //! the per-32 formats: q8 and q51 stride 32-weight blocks, the kq lattice 256-weight superblocks
 def private rdec_b32(f : KqFmt) : bool => f == KqFmt.q8 || f == KqFmt.q51
@@ -1080,12 +1088,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     // tally arena blocks per format
     var need : table<int; int64>
-    //! a per-layer-embedding model keeps the CPU embed: its pre-step reads the embedded rows on the host
-    let emb_q8_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && !has_ple(c)
-        && c.shared_weights && t.cls_q8 && cls_fmt == KqFmt.q8)
-    let emb_f32_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && !has_ple(c)
-        && !t.emb_q8 && !cls_kq(t) && !t.planes_trimmed   // an untied q8 table has no f32 copy to upload: the CPU embed loop serves it
-        && plan.emb_f32_bytes > 0l)   // the plan counted it at this context
     var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
     planes |> reserve(c.n_layers * 11l + 1l)
     var n_moe = 0l
@@ -1139,6 +1141,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
     }
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
+    if (plan.ple_tbl_bytes > 0l) {   //! the E-series token table the plan found room for
+        planes |> push((n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8))
+    }
     for (pl in planes) {
         if (!rdec_rows_ok(pl.n, pl.f)) {   // unplaceable row: the whole driver declines (all-or-nothing)
             let why = "a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple"   // pl refers into planes: read it before the delete
@@ -1193,6 +1198,26 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     mir_slots |> resize(c.n_layers)
     let ple = has_ple(c) ? c.n_embd_per_layer : 0l
     if (ple > 0l && !rdec_set_ple(ple)) return rdec_decline("the per-layer-embedding width {ple} is not a 32-multiple")
+    var ple_tbl_placed = false
+    if (plan.ple_tbl_bytes > 0l) {   //! the token table: placed, the window chain gathers the side rows on device; declined, the host keeps gathering them
+        //! placed first, into the empty arena, in vocabulary pieces (the host gather stages a plane through a 2 GB array) that must land
+        //! back to back in one slab - one block base serves the gather; a layer plane placed ahead of it could put a slab boundary between two pieces
+        let all = c.n_layers * ple
+        var bpt0 = -1l
+        var contiguous = true
+        var row = 0l
+        while (row < c.vocab_size && contiguous) {
+            let prows = min(RDEC_PLE_TBL_PIECE_ROWS, c.vocab_size - row)
+            let bpt = resident_place(t, KqFmt.q8, t.ple_emb_off + row * all, all, prows, 1l, 4l, 0l)   //! the table sits linear in the q8 plane, outside the weights' repack
+            if (row == 0l) {
+                bpt0 = bpt
+            }
+            contiguous = bpt >= 0l && bpt == bpt0 + rdec_blocks_for(all, row, KqFmt.q8)
+            row += prows
+        }
+        ple_tbl_placed = contiguous && rdec_set_ple_table(bpt0)
+        to_log(LOG_INFO, "dasLLAMA: resident driver - the per-layer-embedding token table {ple_tbl_placed ? "gathers on device" : "stays on the CPU (the placement or the gather rail declined)"}\n")
+    }
     var router_slot = 0l
     for (l in range64(c.n_layers)) {
         var lf = resident_layer_fmts(t, l)
@@ -1325,6 +1350,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
     if (bcls < 0l) return rdec_decline("classifier placement failed")
     rdec_set_cls(bcls, int(cls_fmt), c.final_logit_softcap, t.suppress)
+    //! a per-layer-embedding model keeps the CPU embed unless its token table sits on the device too: the pre-step wants both gathers in one place
+    let emb_q8_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && (!has_ple(c) || ple_tbl_placed)
+        && c.shared_weights && t.cls_q8 && cls_fmt == KqFmt.q8)
+    let emb_f32_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && (!has_ple(c) || ple_tbl_placed)
+        && !t.emb_q8 && !cls_kq(t) && !t.planes_trimmed   // an untied q8 table has no f32 copy to upload: the CPU embed loop serves it
+        && plan.emb_f32_bytes > 0l)   // the plan counted it at this context
     var emb_q8_placed = false
     var emb_f32_placed = false
     if (emb_q8_want) {
@@ -1724,6 +1755,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (s.embed_gpu_pending) {
         rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, s.logits)
         s.embed_gpu_pending = false
+        s.ple_gpu_pending = false   //! the ids form gathers the side rows on device too: no late CPU pre-step
     } else {
         if (s.ple_gpu_pending) {
             // the gate took the pre-step: the gather half here (the table rows, sqrt(ple)-scaled), the projection, norm and average on device
