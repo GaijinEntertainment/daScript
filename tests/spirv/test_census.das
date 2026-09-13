@@ -29,6 +29,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
     t |> run("emitter opcode census == declared set (all fixtures)") <| @(t : T?) {
         var present : table<uint>
         add_set(present, square_words())
+        add_set(present, cossbo_words())
         add_set(present, uarith_words())
         add_set(present, iarith_words())
         add_set(present, farith_words())

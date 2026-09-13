@@ -2951,6 +2951,199 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
     delete b
 }
 
+// ===== the last-arriving-workgroup hand-off (arg "lastwg") =====
+// An f32 row GEMV (a subgroup a row, eight rows a workgroup) whose workgroups each write their rows of y; under LASTWG
+// every workgroup publishes its rows (memoryBarrierBuffer) and bumps a counter, and the one that arrives last runs the
+// row epilogue itself - the residual add, the rms norm and the normed row the next GEMV reads - so the chain is one
+// dispatch a step where the split form is the GEMV then `cls_ar`, a dependent-dispatch hop between. Both forms chain
+// their steps through the normed row; the probe times a step of each and checks the two forms' rows agree.
+struct PxLwArgs {
+    n : uint
+    d : uint
+    eps : float
+}
+
+[ |> template_struct_instance]
+class template PxLwGemvT {
+    @template_constant LASTWG : bool = false
+    @ssbo @binding = 0 @readonly w : array<float>    // the plane, [d x n]
+    @ssbo @binding = 1 xn : array<float>             // the normed row the GEMV reads (and, last, writes)
+    @ssbo @binding = 2 @coherent y : array<float>    // the rows out: the last workgroup reads every other's
+    @ssbo @binding = 3 cnt : array<uint>             // the arrival counter, reset by the last workgroup
+    @ssbo @binding = 4 xres : array<float>           // the residual row the epilogue adds y into
+    @ssbo @binding = 5 @readonly wn : array<float>   // the norm weights
+    @push_constant pa : PxLwArgs
+    @workgroup last : uint[1]
+    @workgroup part : float[8]   //! no row stash: a 32 KB workgroup array would cap the GEMV's resident workgroups; the epilogue re-reads its own residual writes
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let r = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (r < pa.d) {
+            var acc = 0.0
+            var i = gl_SubgroupInvocationID
+            while (i < pa.n) {
+                acc += w[r * pa.n + i] * xn[i]
+                i += gl_SubgroupSize
+            }
+            let s = subgroupAdd(acc)
+            if (subgroupElect()) {
+                y[r] = s
+            }
+        }
+        static_if (LASTWG) {
+            let tid = gl_LocalInvocationID.x
+            memoryBarrierBuffer()
+            barrier()
+            if (tid == 0u) {
+                last[0] = atomicAdd(cnt[0], 1u)
+            }
+            barrier()
+            if (last[0] + 1u == gl_NumWorkGroups.x) {
+                memoryBarrierBuffer()
+                var ss = 0.0
+                var k = tid
+                while (k < pa.d) {
+                    let v = xres[k] + y[k]
+                    xres[k] = v
+                    ss += v * v
+                    k += 256u
+                }
+                let sg = subgroupAdd(ss)
+                if (gl_SubgroupInvocationID == 0u) {
+                    part[gl_SubgroupID] = sg
+                }
+                barrier()
+                var tot = 0.0
+                var sgi = 0u
+                while (sgi < gl_NumSubgroups) {
+                    tot += part[sgi]
+                    sgi++
+                }
+                let inv = 1.0 / sqrt(tot / float(pa.d) + pa.eps)
+                k = tid
+                while (k < pa.d) {
+                    xn[k] = wn[k] * (xres[k] * inv)
+                    k += 256u
+                }
+                if (tid == 0u) {
+                    cnt[0] = 0u
+                }
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "px_lw_gemv", grid = "wgs", params = "wgs : int64")]
+class PxLwGemv : PxLwGemvT {}
+
+[vk_dispatch(name = "px_lw_gemv_last", grid = "wgs", params = "wgs : int64")]
+class PxLwGemvLast : PxLwGemvT {
+    override LASTWG = true
+}
+
+//! one square row width: the split chain (GEMV, then `cls_ar` over y into the normed row) against the fused one, a step
+//! of each timed over the chained dispatches, the two forms' normed rows compared after the same number of steps
+def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurement body
+    let nb = int64(dim) * 4l
+    let w_bytes = int64(dim) * int64(dim) * 4l
+    let wd = make_device_buf(w_bytes)
+    let wnd = make_device_buf(nb)
+    var wh : array<float>
+    var wnh : array<float>
+    var x0 : array<float>
+    wh |> resize(dim * dim)
+    wnh |> resize(dim)
+    x0 |> resize(dim)
+    for (i in range(dim * dim)) {
+        wh[i] = (float(hash_word(uint(i) + 3u) % 2001u) - 1000.0) * 0.00005 / float(dim) * 1152.0
+    }
+    for (i in range(dim)) {
+        wnh[i] = 0.9 + 0.2 * float(i % 7) / 7.0
+        x0[i] = 0.001 * float(i % 17) + 0.5
+    }
+    unsafe {
+        upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), nb)
+    }
+    let wgs = (int64(dim) + 4l * g_gpu.rows_per_wg - 1l) / (4l * g_gpu.rows_per_wg)
+    var pc = PxLwArgs(n = uint(dim), d = uint(dim), eps = 1.0e-6)
+    var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    var out_split : array<float>
+    var out_fused : array<float>
+    out_split |> resize(dim)
+    out_fused |> resize(dim)
+    var us_split = 0.0lf
+    var us_fused = 0.0lf
+    var cnt_after = 0u
+    for (form in range(2)) {
+        // fresh state a form: xn = xres = x0, y and the counter zero
+        let xnd = make_device_buf(nb)
+        let xresd = make_device_buf(nb)
+        let yd = make_device_buf(nb)
+        let cntd = make_device_buf(16l)
+        var zero : array<uint>
+        zero |> resize(4)
+        var host = make_host_buf(nb + 16l, true, [cached = true])
+        unsafe {
+            upload_region_at(xnd, 0l, addr<uint8 const?>(x0[0]), nb)
+            upload_region_at(xresd, 0l, addr<uint8 const?>(x0[0]), nb)
+            upload_region_at(yd, 0l, addr<uint8 const?>(x0[0]), nb)
+            upload_region_at(cntd, 0l, addr<uint8 const?>(zero[0]), 16l)
+        }
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        if (form == 0) {
+            var sg = set_px_lw_gemv(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
+                fixed_array(0u, 1u, 2u, 0u, 0u, 0u))
+            var sa = set_cls_ar(fixed_array(xresd, yd, wnd, xnd), fixed_array(nb, nb, nb, nb), fixed_array(4u, 2u, 0u, 1u))
+            for (_k in range(DISPATCHES)) {
+                enc_px_lw_gemv(raw, hz, sg, pc, wgs)
+                enc_cls_ar(raw, hz, sa, pca, 1l)
+            }
+        } else {
+            var sf = set_px_lw_gemv_last(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
+                fixed_array(0u, 1u, 2u, 8u, 4u, 0u))
+            for (_k in range(DISPATCHES)) {
+                enc_px_lw_gemv_last(raw, hz, sf, pc, wgs)
+            }
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)   //! per step: the split form's step is two dispatches
+        var rawc = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(rawc, begin), null)
+        var hc : VkHaz
+        vhz_dep(rawc, hc, 1u | 8u, 0u, true)
+        cmd_copy_whole(rawc, xnd, host.buf, nb)
+        cmd_copy_range(rawc, cntd, 0l, host.buf, nb, 16l)
+        vk_check(vkEndCommandBuffer(rawc), null)
+        submit_wait(rawc)
+        unsafe {
+            if (form == 0) {
+                memcpy(addr<void?>(out_split[0]), host.mapped, nb)
+                us_split = us
+            } else {
+                memcpy(addr<void?>(out_fused[0]), host.mapped, nb)
+                us_fused = us
+                cnt_after = *reinterpret<uint?>(intptr(host.mapped) + uint64(nb))
+            }
+        }
+        delete zero
+    }
+    var maxd = 0.0
+    for (i in range(dim)) {
+        maxd = max(maxd, abs(out_split[i] - out_fused[i]))
+    }
+    print("lastwg dim={dim} wgs={wgs}: split (GEMV + cls_ar) {us_split} us/step, fused (last workgroup's epilogue) {us_fused} us/step; rows max |diff| {maxd}, counter after {cnt_after}\n")
+    delete wh
+    delete wnh
+    delete x0
+    delete out_split
+    delete out_fused
+}
+
 //! the token command's small-kernel floor: the add+rms step (`cls_ar`) and its fused requant twin (`cls_ar_rq`) at
 //! a row width, 64 dispatches chained through the hazard rail (each reads what the last wrote, a barrier between)
 //! against the same 64 with no dependency declared - the per-dispatch cost of a one-workgroup row kernel, with
@@ -3407,7 +3600,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "small" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "small" || a == "lastwg" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -3648,6 +3841,13 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     if (only == "small") {
         for (dim in [1152, 2560, 3840]) {
             run_small_kernels(dim)
+        }
+        return
+    }
+    if (only == "lastwg") {
+        verify(ensure_px_lw_gemv() && ensure_px_lw_gemv_last() && ensure_cls_ar(), "the last-workgroup probe's class rails must engage")
+        for (dim in [1152, 2560, 3840]) {
+            run_lastwg(dim)
         }
         return
     }

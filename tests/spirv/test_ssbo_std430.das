@@ -103,3 +103,17 @@ def test_ssbo_readonly(t : T?) {
         delete words
     }
 }
+
+[test]
+def test_ssbo_coherent(t : T?) {
+    t |> run("ssbo @coherent: Coherent on the variable alone, the plain SSBO beside it undecorated") <| @(t : T?) {
+        var words <- cossbo_words()
+        t |> success(count_op_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Coherent)) == 1,
+            "cossbo: exactly one Coherent OpDecorate (the @coherent hand-off buffer), got {count_op_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Coherent))}")
+        t |> success(count_op_operand_at(words, SpvOp.MemberDecorate, 2, uint(SpvDecoration.Coherent)) == 0,
+            "cossbo: no member-level Coherent, got {count_op_operand_at(words, SpvOp.MemberDecorate, 2, uint(SpvDecoration.Coherent))}")
+        t |> success(has_op(words, SpvOp.AtomicIAdd) && has_op(words, SpvOp.MemoryBarrier), "cossbo: the counter's atomic and the device-scope barrier are emitted")
+        validate(t, words, "cossbo")
+        delete words
+    }
+}

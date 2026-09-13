@@ -1184,6 +1184,46 @@ def public cbufbar_words : array<uint> {
     return clone_to_move(cbufbar_spv)
 }
 
+// cossbo: the last-arriving-workgroup hand-off — every workgroup writes its row into a @coherent SSBO
+// (Coherent on the variable: the loads below bypass a cached line another workgroup's store missed),
+// publishes it with memoryBarrierBuffer(), and bumps a counter; the workgroup that sees the last count
+// reads every row. @coherent lowers to a Coherent OpDecorate on the OpVariable, the plain counter
+// buffer beside it stays undecorated.
+var @ssbo @coherent @binding = 0 co_rows : array<uint>
+var @ssbo @binding = 1 co_cnt : array<uint>
+var @ssbo @binding = 2 co_out : array<uint>
+var @workgroup co_last : uint[1]
+
+[compute_shader(local_size_x=64, name="cossbo_spv"), marker(no_coverage)]
+def cossbo {
+    let lid = gl_LocalInvocationID.x
+    let wg = gl_WorkGroupID.x
+    co_rows[wg * 64u + lid] = wg + lid
+    memoryBarrierBuffer()
+    barrier()
+    if (lid == 0u) {
+        co_last[0] = atomicAdd(co_cnt[0], 1u)
+    }
+    barrier()
+    if (co_last[0] + 1u == gl_NumWorkGroups.x) {
+        memoryBarrierBuffer()
+        var s = 0u
+        var w = 0u
+        while (w < gl_NumWorkGroups.x) {
+            s += co_rows[w * 64u + lid]
+            w++
+        }
+        co_out[lid] = s
+        if (lid == 0u) {
+            co_cnt[0] = 0u
+        }
+    }
+}
+
+def public cossbo_words : array<uint> {
+    return clone_to_move(cossbo_spv)
+}
+
 // catomics: the rest of the atomic family on @workgroup int + uint scalar counters (Workgroup
 // scope). Both signednesses are present so atomicMin/Max emit BOTH the signed (SMin/SMax) and
 // unsigned (UMin/UMax) opcodes; atomicCompSwap is the OpAtomicCompareExchange CAS. The results feed

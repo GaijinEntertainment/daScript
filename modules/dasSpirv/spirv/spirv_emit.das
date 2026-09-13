@@ -1635,6 +1635,12 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         if (ssbo_read_only || (ssbo_maybe_read_only && ssbo_is_render)) {
             emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.NonWritable))
         }
+        // @coherent -> Coherent on the VARIABLE (GLSL's `coherent buffer`): a store one invocation makes is
+        // visible to another workgroup's load after a device-scope memory barrier (memoryBarrierBuffer) - the
+        // last-arriving-workgroup hand-off; without it the loads may read a cached line
+        if (v.annotation |> find_arg("coherent") is tBool) {
+            emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Coherent))
+        }
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true, is_block = true, elem_type = el.elem_type))
         reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,
             kind = SpirvDescriptorKind.storage_buffer, count = 1, stages = stage_flag(stage)))
