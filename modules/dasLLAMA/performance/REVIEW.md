@@ -32,14 +32,15 @@ name, in the same change.** The archive is content-addressed; a row left on the 
 points at a file that no longer exists.
 
 **A diff that writes a reference-engine row - a run row whose `engine` is not `das` - to
-`records/` whose `sha` names anything but the standing ref pin (`DEFAULT_REF_SHA`,
+`records/<box>.json` whose `sha` names anything but the standing ref pin (`DEFAULT_REF_SHA`,
 `../benchmarks/setup_lcpp_ref.das`) is a defect - re-mint.**
 
-**A reference-engine row that carries no `sha` names, in its provenance, the checkout that
-built the binary it timed; a python leg names `../benchmarks/asr/requirements-*.txt` instead.**
+**A diff that writes a reference-engine row carrying no `sha` to `records/<box>.json` names,
+in that row's provenance, the checkout that built the binary it timed; a python leg names
+`../benchmarks/asr/requirements-*.txt` instead.**
 
-**A diff that writes a records row, sidecar archive, or `defaults/` profile under this
-folder whose version pin is missing, or differs from `DASLLAMA_RELEASE`
+**A diff that writes a `records/<box>.json` row, sidecar archive, or `defaults/` profile under
+this folder whose version pin is missing, or differs from `DASLLAMA_RELEASE`
 (`../dasllama/dasllama_version.das`), is a defect - re-mint.** The pin is a records row's
 `dasllama_version`, and `provenance.dasllama_version` in a sidecar archive or a `defaults/`
 profile. For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
@@ -59,17 +60,16 @@ diff that adds one names the ruler command line in the PR body.** The ruler reco
 speculative round's cell (`../ARCHITECTURE_MEASUREMENT.md` sec.2.45); its shape is the ruler's,
 and the board walkers (`list_record_stores`) do not read it.
 
-**A `records/mtp/` file names its engines in `meta.das_sha`, and in `meta.lcpp_version` when
-a reference arm ran (`-` when none did).**
+**A diff that adds or changes a `records/mtp/` file names its engines in `meta.das_sha`, and in
+`meta.lcpp_version` when a reference arm ran (`-` when none did).**
 
-**A `records/mtp/` file that carries a reference-engine row with no `das` row from the same run
-is a defect - re-mint the pair.**
+**A diff that adds or changes a `records/mtp/` file carrying a reference-engine row with no
+`das` row from the same run is a defect - re-mint the pair.**
 
-**A `records/mtp/` file whose `meta.settle` is below the ruler's default names the reason in
-the PR body.**
-
-**A diff that adds a `records/mtp/` file whose `meta.settle` is below the ruler's default names
-its rows `direction-grade` wherever it cites them.**
+**A diff that adds or changes a `records/mtp/` file whose `meta.settle` is missing, or below
+the ruler's `--settle` default (the ruler's `--help` states it), names the reason in the PR body
+and labels the file's rows `direction-grade` everywhere the change cites them - PR body, ledger
+rows, architecture or profile docs.**
 
 **A diff that writes a `das` row - a run row whose `engine` is `das` - to `records/<box>.json`
 times that row with the released `lcpp_bench` exe.** That exe is
@@ -91,8 +91,8 @@ second tool's record carrying the wrong engine, and looks real.
 board membership, provenance, or parity fixtures is a defect - write it as a view over those
 two functions.** Board membership is which models the site results board shows.
 
-**A view over `model_specs()` or `asr_catalog()` recomputes from them on every call and stores
-no `url`, `bytes`, or `sha256` of its own.**
+**A diff that adds or changes a view over `model_specs()` or `asr_catalog()` recomputes from
+them on every call; a view storing a `url`, `bytes`, or `sha256` of its own is a defect.**
 
 **A view over `model_specs()` or `asr_catalog()` selects its rows by one field whose value on
 the row states membership; a view that matches a field against a list of literal values - file

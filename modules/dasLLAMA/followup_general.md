@@ -1543,16 +1543,19 @@
     below its stored mean (gemma-4-12B tg128 -28% / pp512 -43%, gemma-4-26B tg128 -19%,
     Qwen3.8-27B tg128 -41%, and on a second board gemma-4-E4B tg128 -21%, Qwen3.6-27B pp512
     -32%, Qwen3.6-35B-A3B pp512 -33% / tg128 -20%), and the solo re-run after the 180 s settle
-    lands within 1% every time. Reproduced on the M5 box with the board's own sequence - a big
-    model's timed cell, then the victim's prepare, the 12 s settle, the victim's timed cell - five
-    of five times: the GPU enters Moderate thermal pressure during the big cell and runs the
-    victim at 990-1420 MHz instead of 1620 (Qwen3.6-35B pp512 2444 +- 628, tg128 103 vs 3401 /
-    127.5), while the page-in counter, the residency rails and the map's reclaim state show
-    nothing; a 60 s settle reads Nominal and lands within 1%, a 120 s settle the same. The
-    prepare is only the sequence's shape: the throttle is the previous cell's heat, and the 12 s
-    `--settle` is a reclaim window, not a cooling one, so the oracle idles `--oracle-settle`
-    seconds (60) before every timed cell, on every leg - the Vulkan boxes show the same cold
-    first read. Unquirked: a timed cell waits for the process's thermal state to read nominal
+    lands within 1% every time. Reproduced on the M5 Max box with the board's own sequence - a
+    big model's timed cell, then the victim's prepare, the 12 s settle, the victim's timed cell
+    - five of five times, the cells run by hand as the oracle runs them (the released
+    `dasllama-bench` exe, `--frozen`, the box's tuned sidecar, no overrides) with
+    `powermetrics --samplers gpu_power,thermal` reading the GPU clock and the pressure level:
+    the GPU enters Moderate thermal pressure during the big cell and runs the victim at
+    990-1420 MHz instead of 1620 (Qwen3.6-35B pp512 2444 +- 628, tg128 103 vs 3401 / 127.5),
+    while the page-in counter, the residency rails and the map's reclaim state show nothing; a
+    60 s settle reads Nominal and lands within 1%, a 120 s settle the same. The prepare is only
+    the sequence's shape: the throttle is the previous cell's heat, and the 12 s `--settle` is a
+    reclaim window, not a cooling one, so the oracle idles `--oracle-settle` seconds (60) before
+    every timed cell, on every leg - the Vulkan boards report the same first-read drop, not yet
+    instrumented. Unquirked: a timed cell waits for the process's thermal state to read nominal
     (`NSProcessInfo.thermalState`, no sudo) with a capped wait, so the box's own reading
     replaces a fixed number that is too long for a cool box and may be too short for a hot one.
 139. **The tuner's end-to-end confirm reads a stamp line a warm JIT does not print.** The
@@ -1577,10 +1580,13 @@
     between the August 30 record and master's head, not in a branch. The short-clip bias (a
     larger loss the shorter the clip) points at per-call overhead - a wake, a prep, or a
     kernel winner that lost its small-shape arm - rather than a GEMM's steady-state rate.
-    Replicated on the M5 box after a reboot with a worktree at the recording commit (013a151f4)
-    beside master's head, the parakeet jfk.wav cell interleaved, eight reps a run, five runs a
-    tree: best reps equal (146 vs 143 ms), medians 158.5 vs 162.5 (2.5%). An 11% step would show
-    in one run of eight; none did. The spread is placement: the box's six Super cores stay
+    Replicated on the M5 Max box after a reboot with a worktree at the recording commit
+    (013a151f4) beside master's head, the parakeet jfk.wav cell interleaved, eight reps a run,
+    five runs a tree, each tree's own `-jit` binary on a single-clip script in the bench's
+    regime (its jobque, five workers, the box profile, `DASLLAMA_ALLOW_UNTUNED=1
+    DAS_TUNE_MANIFEST=0`), the cluster residency read by `powermetrics --samplers cpu_power`:
+    best reps equal (146 vs 143 ms), medians 158.5 vs 162.5 (2.5%). An 11% step would show in
+    one run of eight; none did. The spread is placement: the box's six Super cores stay
     saturated while the twelve Performance cores take 35% of the run when fast and 55% when
     slow, per rep, on both trees and both affinity modes. The oracle's shortfall is a record
     minted as a best-of-two on a fresh box read against a placement-scattered box; the residual

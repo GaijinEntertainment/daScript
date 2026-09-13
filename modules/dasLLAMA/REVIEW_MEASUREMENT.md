@@ -13,7 +13,7 @@ provenance line covers it.
 **A `PERF_LEDGER.md` entry states a served-turn figure of the engine this repository builds - a
 tok/s rate or a turn wall - only when the released `lcpp_bench` exe (`benchmarks/lcpp_bench.das`
 built by `daspkg release`) or a board cell produced it.** A served turn is one whole request an
-engine serves - a prefill-plus-decode run, or one synthesis; a turn wall is its wall.
+engine serves, whatever the modality; a turn wall is its wall.
 
 **A `-jit` A/B pair enters `PERF_LEDGER.md` as its ratio, with the arms' absolute rates left in
 the run's report.** The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under
@@ -32,9 +32,10 @@ one side of a pair held against the other - a knob value, a kernel form, a build
 **A diff that adds a `PERF_LEDGER.md` entry whose reading no board cell produced names the
 instrument that produced it - the script or exe whose output is that wall or rate.** A board
 cell is a run `performance/gen_bench_records.das` spawns, or a manual
-`benchmarks/lcpp_bench.das` cell its `PROFILE.md` section documents; its reading lands as a row
-of `performance/records/<box>.json`. A ruler record (`performance/records/mtp/*.json`, written
-by `harness/mtp_ruler.das`) is not a board cell.
+`benchmarks/lcpp_bench.das` cell its `PROFILE.md` section documents, whose reading lands as a
+row of `performance/records/<box>.json`; an `--oracle` re-measure is not one - it never writes
+the store. A ruler record (`performance/records/mtp/*.json`, written by
+`harness/mtp_ruler.das`) is not a board cell.
 
 **A ruler record's third-party row is written by the same `harness/mtp_ruler.das` run that
 wrote the das row it pairs with.** A wall pasted in from another run measures a different
@@ -79,17 +80,15 @@ the same change, and names that row in the PR body.** A box mints a path when
 the module's committed record of what serving costs; a kernel win that never lands there is
 invisible to the next regression check.
 
-**A timing figure of a served turn as a whole - tok/s, latency, a whole-turn model or engine
-comparison, the 512-token prefill (pp512) and 128-token decode (tg128) rates, a synthesis's
-real-time factor (RTF) - written down as a measurement rather than as a prediction - is a
-defect without either a board cell behind it or a provenance line naming harness, flags,
-environment overrides, box, and the exe or script that ran it.** Flags are the tier (`-jit` or
-not), the `DAS_TUNE_POLICY` value in force, and the kernel backend the run served on. The board
-cell states its quant mode and stamps box and engine provenance, so a number can never silently
-describe a format nobody serves or a kernel set nobody ships.
+**A rate or wall of any leg of a served turn - prefill, decode, or the turn end to end -
+written down as a measurement rather than as a prediction, is a defect without either a board
+cell behind it or a provenance line naming harness, flags, environment overrides, box, and the
+exe or script that ran it.** Flags are the tier (`-jit` or not), the `DAS_TUNE_POLICY` value in
+force, and the kernel backend the run served on.
 
-**A figure that covers less than one whole served turn and whose value depends on the box it
-ran on - timing or not - names the harness, the flags and the box that produced it.** A figure
+**A figure below a leg of a served turn - a kernel, a layer, an op, a clock or a residency -
+whose value depends on the box it ran on names the harness, the flags and the box that
+produced it.** A figure
 a committed board cell or ruler record produced names the record and row instead.
 
 **A figure whose value is the same on every box names the build, fixture, or command that
@@ -101,9 +100,10 @@ model, never spawning a child process.** A shipped exe carries no vehicle model 
 file a harness run drives - and no harness script, so a model or a child there is a hang or a
 silent skip.
 
-**A shipped exe's startup race never races a `[tune]` kernel family; a GPU pso twin race, which
-only sets a runtime knob, is what a first start may do** (`ARCHITECTURE_MEASUREMENT.md`
-sec.2.42a). A `[tune]` winner needs a recompiled clone the shipped exe does not carry.
+**A shipped exe's startup race never races a `[tune]` kernel family; a GPU pipeline-state twin
+race, which only sets a runtime knob, is what a first start may do**
+(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a). A `[tune]` winner needs a recompiled clone the
+shipped exe does not carry.
 
 **A diff never adds a confirm - an end-to-end A/B served on a vehicle model in a spawned
 child - outside `harness/`.**

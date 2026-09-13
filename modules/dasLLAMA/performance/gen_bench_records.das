@@ -112,7 +112,7 @@ struct Args {
     oracle_retry_settle : int = 180
 
     @clarg_name = "oracle-settle"
-    @clarg_doc = "Oracle: seconds to idle before each timed das cell (default: 60) — the previous cell's heat throttles the GPU through a 12 s reclaim settle (M5: 990-1420 MHz vs 1620, tg128 −20%, pp512 −33%); 60 s reads Nominal on every leg, GPU and CPU alike"
+    @clarg_doc = "Oracle: seconds to idle before each timed das cell, every leg (default: 60) — the previous cell's heat throttles the GPU through a 12 s reclaim settle (M5 Max Metal: 990-1420 MHz vs 1620, tg128 −20%, pp512 −33%); 60 s reads Nominal there"
     oracle_settle : int = 60
 
     @clarg_name = "oracle-allow-crossgen"
