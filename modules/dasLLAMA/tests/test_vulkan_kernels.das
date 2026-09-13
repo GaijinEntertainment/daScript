@@ -6250,6 +6250,163 @@ def test_vkd_q51_gemv(t0 : T?) {
     }
 }
 
+//! the fused gate + up + act + Q8_0 requant dispatch against the CPU oracle: the two q8 GEMVs in the scalar order,
+//! the activation, and the block quant of the hidden row - the dequantized row within a quant step of the oracle's,
+//! the scales within the GEMV bar, under both activations and at a width whose block count is off the 16-block lane pass
+def private q8_gemv_gu_run(t : T?; n, hid : int; gelu : bool) {
+    let nb = n / 32
+    let nblk_out = hid / 32
+    let totblk = hid * nb
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    var gqh : array<uint>
+    var gsh : array<uint>
+    var uqh : array<uint>
+    var ush : array<uint>
+    var xqh : array<uint>
+    var xsh : array<float>
+    gqh |> resize(totblk * 8)
+    uqh |> resize(totblk * 8)
+    gsh |> resize(totblk / 2 + 1)
+    ush |> resize(totblk / 2 + 1)
+    xqh |> resize(nb * 8)
+    xsh |> resize(nb)
+    for (i in range(totblk * 8)) {
+        gqh[i] = hash_word(uint(i) + 71u)
+        uqh[i] = hash_word(uint(i) * 3u + 5u)
+    }
+    for (i in range(totblk / 2 + 1)) {
+        gsh[i] = ws_word(uint(i) + 3u)
+        ush[i] = ws_word(uint(i) * 7u + 11u)
+    }
+    for (i in range(nb * 8)) {
+        xqh[i] = hash_word(uint(i) * 17u + 9u)
+    }
+    for (i in range(nb)) {
+        xsh[i] = 0.25 + float(i % 5) * 0.125
+    }
+    let xq_bytes = int64(nb) * 32l
+    let xs_bytes = int64(nb) * 4l
+    let oq_bytes = int64(hid)
+    let os_bytes = int64(nblk_out) * 4l
+    let gqd = make_device_buf(wq_bytes)
+    let gsd = make_device_buf(ws_bytes)
+    let uqd = make_device_buf(wq_bytes)
+    let usd = make_device_buf(ws_bytes)
+    let xqd = make_device_buf(xq_bytes)
+    let xsd = make_device_buf(xs_bytes)
+    let oqd = make_device_buf(oq_bytes)
+    let osd = make_device_buf(os_bytes)
+    var host = make_host_buf(oq_bytes + os_bytes, true, [cached = true])
+    var oq : array<int8>
+    var os : array<float>
+    oq |> resize(hid)
+    os |> resize(nblk_out)
+    unsafe {
+        upload_region_at(gqd, 0l, addr<uint8 const?>(gqh[0]), wq_bytes)
+        upload_region_at(gsd, 0l, addr<uint8 const?>(gsh[0]), ws_bytes)
+        upload_region_at(uqd, 0l, addr<uint8 const?>(uqh[0]), wq_bytes)
+        upload_region_at(usd, 0l, addr<uint8 const?>(ush[0]), ws_bytes)
+        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+        nan_sentinel_upload(osd, os_bytes)
+        var s_cls = set_q8_gemv_gu_cls(fixed_array(gqd, gsd, uqd, usd, xqd, xsd, oqd, osd),
+            fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes, xs_bytes, oq_bytes, os_bytes),
+            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 64u))
+        var raw2 = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+        var h2 : VkHaz
+        var pc = GuArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, gelu = gelu ? 1u : 0u)
+        enc_q8_gemv_gu_cls(raw2, h2, s_cls, pc, int64(nblk_out))
+        vhz_dep(raw2, h2, 64u, 0u, true)
+        cmd_copy_whole(raw2, oqd, host.buf, oq_bytes)
+        cmd_copy_range(raw2, osd, 0l, host.buf, oq_bytes, os_bytes)
+        vk_check(vkEndCommandBuffer(raw2), null)
+        submit_wait(raw2)
+        memcpy(addr<void?>(oq[0]), host.mapped, oq_bytes)
+        memcpy(addr<void?>(os[0]), reinterpret<void?>(intptr(host.mapped) + uint64(oq_bytes)), os_bytes)
+    }
+    // the oracle: both dots per row in the scalar block order, the activation, the block quant
+    var act : array<float>
+    act |> resize(hid)
+    for (row in range(hid)) {
+        var g = 0.0
+        var u = 0.0
+        for (b in range(nb)) {
+            let wb = row * nb + b
+            var gd = 0
+            var ud = 0
+            for (j in range(8)) {
+                gd += sdot4(gqh[wb * 8 + j], xqh[b * 8 + j])
+                ud += sdot4(uqh[wb * 8 + j], xqh[b * 8 + j])
+            }
+            let gs = wb % 2 == 0 ? unpackHalf2x16(gsh[wb / 2]).x : unpackHalf2x16(gsh[wb / 2]).y
+            let us = wb % 2 == 0 ? unpackHalf2x16(ush[wb / 2]).x : unpackHalf2x16(ush[wb / 2]).y
+            g += float(gd) * gs * xsh[b]
+            u += float(ud) * us * xsh[b]
+        }
+        act[row] = act_mul_ref(g, u, gelu)
+    }
+    var bad = 0
+    var bads = 0
+    for (blk in range(nblk_out)) {
+        var m = 0.0
+        for (e in range(32)) {
+            m = max(m, abs(act[blk * 32 + e]))
+        }
+        let d_ref = m / 127.0
+        if (abs(os[blk] - d_ref) > 2e-3 * max(d_ref, 1e-6)) {
+            bads++
+        }
+        for (e in range(32)) {
+            let deq = float(oq[blk * 32 + e]) * os[blk]
+            if (abs(deq - act[blk * 32 + e]) > d_ref + 2e-3 * abs(act[blk * 32 + e])) {
+                bad++
+            }
+        }
+    }
+    let tag = "{gelu ? "gelu" : "silu"} n {n} hid {hid}"
+    t |> success(bads == 0, "q8 gu {tag}: the block scales match the oracle ({bads} of {nblk_out} off)")
+    t |> success(bad == 0, "q8 gu {tag}: the dequantized hidden row sits within a quant step of the oracle ({bad} of {hid} off)")
+    var poison := act   // the control: one oracle value pushed three quant steps past its block's must red
+    poison[0] += 3.0 * os[0] + 1.0
+    var pbad = 0
+    for (e in range(32)) {
+        let deq = float(oq[e]) * os[0]
+        if (abs(deq - poison[e]) > os[0] + 2e-3 * abs(poison[e])) {
+            pbad++
+        }
+    }
+    t |> success(pbad > 0, "q8 gu {tag}: the bar reds a poisoned oracle element")
+    delete poison
+    delete act
+    delete gqh
+    delete gsh
+    delete uqh
+    delete ush
+    delete xqh
+    delete xsh
+    delete oq
+    delete os
+}
+
+[test]
+def test_vkd_q8_gemv_gu(t0 : T?) {
+    t0 |> run("fused q8 gate + up GEMV + act + Q8_0 requant == the CPU oracle (gelu and silu; 36 and 16 blocks deep)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_gemv_gu_cls()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            q8_gemv_gu_run(t, 1152, 256, true)   // gemma-3-1b's dim: 36 blocks, a partial third lane pass; eight requant blocks
+            q8_gemv_gu_run(t, 512, 96, false)    // 16 blocks: exactly one lane pass; three blocks
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
 [test]
 def test_vkd_q8_gemv_pair(t0 : T?) {
     t0 |> run("q8 GEMV class kernel == the CPU oracle") <| @(t : T?) {

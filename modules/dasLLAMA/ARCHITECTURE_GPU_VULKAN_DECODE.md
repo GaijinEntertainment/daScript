@@ -196,7 +196,7 @@ once.
 
 **A recurrent layer rides the same recorded token command as an attention layer.** The
 whole-model driver (`ARCHITECTURE_GPU.md` sec.1.5, `dasllama_gpu_resident.das`) records one
-command per model whose per-layer body is one of two heads followed by the shared FFN tail: an
+command per model whose per-layer body is one of two heads followed by the shared FFN tail (a q8 triple with a Q8_0 feed runs `Q8GemvGu` - the gate and up dots, the activation and the hidden row's Q8_0 requant in one dispatch, a workgroup a 32-row block - else the gate GEMV, the up GEMV and the act+requant kernel; then the down GEMV): an
 attention head (q/k/v GEMVs, the fused qk-norm and rope storing the mirror row, decode attention
 over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
 GEMV into one projection row (z at offset `cd`; the two halves under their own hazard classes,

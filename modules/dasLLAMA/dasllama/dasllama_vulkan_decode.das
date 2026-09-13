@@ -190,6 +190,13 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         L.s_actrq = set_actrq_cls(fixed_array(g_rd.gate_dev, g_rd.up_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(hid * 4l, hid * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
+        //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
+        L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on()
+        if (L.gu_on) {
+            L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+                fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim, (dim / 32l) * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+                fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
+        }
         // down GEMV -> ffnout
         L.s_down = gemv_cls_set(f2, fixed_array(p2.wq, p2.ws, L.m_down.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev),
             fixed_array(p2.wqb, p2.wsb, META_BYTES, hid, (hid / 32l) * 4l, dim * 4l),
@@ -267,7 +274,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let po = arena_planes(fo, bo)
         let anykq = kq_sb(fq) || kq_sb(fo) || kq_sb(f1) || kq_sb(f2)   //! kq consumers take the Q8_K quant/act forms
         let kv16 = g_rd.kv16
-        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
+        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
             && (kv16 ? ensure_da_attn_f16_cls() : ensure_da_attn_cls())
             && (!g_rd.qk_norm || (ensure_qk_rms_cls()
@@ -1150,17 +1157,23 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer) 
     let gelu = L.gelu ? 1u : 0u
     var pc_act = ActArgs(nelem = uint(hid), gelu = gelu, nblk = uint(hid / 32l))
     var pc_act_k = ActArgs(nelem = uint(hid), gelu = gelu, nblk = uint(hid / 256l))
-    var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u)
-    gemv_enc(L.f1, raw, h, L.s_gate, pcg, hid)
-    rd_ts(raw, "{pfx}gate")
-    gemv_enc(L.f3, raw, h, L.s_up, pcg, hid)
-    rd_ts(raw, "{pfx}up")
-    if (kq_sb(L.f2)) {
-        enc_q8k_actrq_cls(raw, h, L.s_actrq, pc_act_k, (hid / 8l + 255l) / 256l)
+    if (L.gu_on) {   //! one dispatch: both GEMVs, the activation and the Q8_0 requant of the hidden row
+        var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), gelu = gelu)
+        enc_q8_gemv_gu_cls(raw, h, L.s_gu, pcgu, hid / 32l)
+        rd_ts(raw, L.moe ? "m:sh_gu" : "{pfx}gu")
     } else {
-        enc_q8_actrq_cls(raw, h, L.s_actrq, pc_act, (hid / 4l + 255l) / 256l)
+        var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u)
+        gemv_enc(L.f1, raw, h, L.s_gate, pcg, hid)
+        rd_ts(raw, "{pfx}gate")
+        gemv_enc(L.f3, raw, h, L.s_up, pcg, hid)
+        rd_ts(raw, "{pfx}up")
+        if (kq_sb(L.f2)) {
+            enc_q8k_actrq_cls(raw, h, L.s_actrq, pc_act_k, (hid / 8l + 255l) / 256l)
+        } else {
+            enc_q8_actrq_cls(raw, h, L.s_actrq, pc_act, (hid / 4l + 255l) / 256l)
+        }
+        rd_ts(raw, L.moe ? "m:sh_act" : "{pfx}actrq")
     }
-    rd_ts(raw, L.moe ? "m:sh_act" : "{pfx}actrq")
     var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u)
     gemv_enc(L.f2, raw, h, L.s_down, pcd, dim)
     rd_ts(raw, "{pfx}down")

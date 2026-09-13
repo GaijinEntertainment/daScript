@@ -8656,6 +8656,105 @@ class Q8Gemv {
     }
 }
 
+struct GuArgs {
+    n : uint      //! the reduction width (the model dim)
+    d : uint      //! the output rows (the FFN width), a 32-multiple
+    gblk : uint   //! the gate plane's block base in its slab
+    ublk : uint   //! the up plane's block base in its slab
+    gelu : uint   //! activation select: 0 = silu, else tanh-gelu
+}
+
+//! the dense FFN's gate and up GEMVs, the activation and its Q8_0 requant in one dispatch: a workgroup owns 32
+//! output rows (one requant block), each subgroup dots its rows against both q8 planes in the q8 GEMV's lane form
+//! (two lanes a block, xor fold, both planes' loads in flight), the rows meet in workgroup memory, and one subgroup
+//! activates and quantizes the block - the tail's gate, up and act+requant hops become one
+[vk_dispatch(name = "q8_gemv_gu_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvGu {
+    @ssbo @binding = 0 gq4 : array<uint4>     // gate quant words, vec4 view
+    @ssbo @binding = 1 gsh : array<float16>   // gate per-block f16 scales
+    @ssbo @binding = 2 uq4 : array<uint4>     // up quant words, vec4 view
+    @ssbo @binding = 3 ush : array<float16>   // up per-block f16 scales
+    @ssbo @binding = 4 xqw : array<uint>      // the normed row's Q8_0 quant words
+    @ssbo @binding = 5 axs : array<float>     // ... and its per-block scales
+    @ssbo @binding = 6 outq : array<int8>     // the activated hidden row's Q8_0 quants (the down GEMV's feed)
+    @ssbo @binding = 7 outs : array<float>    // ... and its per-block scales
+    @push_constant pa : GuArgs
+    @workgroup wg_g : float[32]   //! the block's gate dots
+    @workgroup wg_u : float[32]   //! ... and up dots
+
+    //! one output row's gate and up dots over the shared x, a subgroup wide
+    def row_dots(row : uint) : float2 {
+        let nb = pa.n / 32u
+        let gb0 = pa.gblk + row * nb
+        let ub0 = pa.ublk + row * nb
+        let lane = gl_SubgroupInvocationID
+        let bpp = gl_SubgroupSize / 2u
+        var accg = 0.0
+        var accu = 0.0
+        var bi0 = 0u
+        while (bi0 < nb) {
+            let b = bi0 + lane / 2u
+            if (b < nb) {
+                let gv = gq4[(gb0 + bi0) * 2u + lane]
+                let uv = uq4[(ub0 + bi0) * 2u + lane]
+                let xbase = bi0 * 8u + lane * 4u
+                let x0 = xqw[xbase]
+                let x1 = xqw[xbase + 1u]
+                let x2 = xqw[xbase + 2u]
+                let x3 = xqw[xbase + 3u]
+                var gd = sdot4(gv.x, x0)
+                gd += sdot4(gv.y, x1)
+                gd += sdot4(gv.z, x2)
+                gd += sdot4(gv.w, x3)
+                var ud = sdot4(uv.x, x0)
+                ud += sdot4(uv.y, x1)
+                ud += sdot4(uv.z, x2)
+                ud += sdot4(uv.w, x3)
+                gd += subgroupShuffleXor(gd, 1u)
+                ud += subgroupShuffleXor(ud, 1u)
+                if (lane % 2u == 0u) {
+                    let xs = axs[b]
+                    accg += float(gd) * float(gsh[gb0 + b]) * xs
+                    accu += float(ud) * float(ush[ub0 + b]) * xs
+                }
+            }
+            bi0 += bpp
+        }
+        return float2(subgroupAdd(accg), subgroupAdd(accu))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_gemv_gu_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def run {
+        let row0 = gl_WorkGroupID.x * 32u
+        let nsg = gl_NumSubgroups
+        let rows_per = 32u / nsg   // 4 rows a subgroup at 32 lanes, 8 at 64
+        var k = 0u
+        while (k < rows_per) {
+            let r = gl_SubgroupID + k * nsg
+            let v = row_dots(row0 + r)
+            if (subgroupElect()) {
+                wg_g[r] = v.x
+                wg_u[r] = v.y
+            }
+            k++
+        }
+        barrier()
+        if (gl_SubgroupID == 0u) {   // the block's activation and Q8_0 quant: one lane an output row
+            let lane = gl_SubgroupInvocationID
+            let li = min(lane, 31u)
+            let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.gelu) : 0.0
+            let d = q8k_amax5(abs(a)) / 127.0
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            if (lane == 0u) {
+                outs[gl_WorkGroupID.x] = d
+            }
+            if (lane < 32u) {
+                outq[row0 + lane] = q8_quant1(a, id)
+            }
+        }
+    }
+}
+
 //! the four fifth bits of a nibble word's elements as their byte's 0x10: nibble n (bits 0..3) spread to bits 4, 12, 20, 28
 def q51_hbits(n : uint) : uint => ((n & 0xFu) * 0x02040810u) & 0x10101010u
 

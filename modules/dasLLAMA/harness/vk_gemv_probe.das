@@ -110,6 +110,83 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint) : tuple<mb 
     return (mb = double(wq_bytes + ws_bytes) / 1048576.0lf, us = us)
 }
 
+//! the q8 decode GEMV (`q8_gemv_cls`, a subgroup a row) at the same shape and ring: 32 int8 quants and an f16 scale a block
+def private probe_q8(n, d : int) : tuple<mb : double; us : double> {
+    let nb = n / 32
+    let nblk = d * nb
+    let plane_bytes = nblk * 34
+    let copies = g_single_copy ? 1 : (STREAM_MB * 1048576 + plane_bytes - 1) / plane_bytes
+    let wq_words = nblk * 8 * copies
+    let ws_words = (nblk * copies + 1) / 2
+    var wqh : array<uint>
+    var wsh : array<uint>
+    var xqh : array<uint>
+    var xsh : array<float>
+    wqh |> reserve(wq_words)
+    wqh |> resize(wq_words)
+    wsh |> reserve(ws_words)
+    wsh |> resize(ws_words)
+    xqh |> resize(nb * 8)
+    xsh |> resize(nb)
+    for (i in range(wq_words)) {
+        wqh[i] = hash_word(uint(i) + 99991u)
+    }
+    for (i in range(ws_words)) {
+        wsh[i] = cool_f16_pair(uint(i) + 17u)
+    }
+    for (i in range(nb * 8)) {
+        xqh[i] = hash_word(uint(i) * 31u + 5u)
+    }
+    for (i in range(nb)) {
+        xsh[i] = 0.5 + float(i % 7) * 0.25
+    }
+    let wq_bytes = int64(wq_words) * 4l
+    let ws_bytes = int64(ws_words) * 4l
+    let xq_bytes = int64(nb) * 32l
+    let xs_bytes = int64(nb) * 4l
+    let y_bytes = int64(d) * 4l * int64(copies)
+    let rg_bytes = 8l * int64(copies)
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xqd = make_device_buf(xq_bytes)
+    let xsd = make_device_buf(xs_bytes)
+    let yd = make_device_buf(y_bytes)
+    let rgd = make_device_buf(rg_bytes)
+    var regs <- [for (i in range(copies * 2)); (i % 2 == 0) ? uint(i / 2 * nblk) : 0u]
+    let wgs = gemv_wgs(int64(d) * int64(copies), 0u)
+    var raw = alloc_cmd()
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+        upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), rg_bytes)
+        var s_cls = set_q8_gemv_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd),
+            fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes),
+            fixed_array(1u, 2u, 4u, 8u, 16u, YBIT))
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h : VkHaz
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(copies), ybase = 0u, lanes_per_row = 0u)
+        for (_i in range(DISPATCHES)) {
+            enc_q8_gemv_cls(raw, h, s_cls, pc, wgs)
+            vhz_dep(raw, h, YBIT, 0u, true)
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+    }
+    submit_wait(raw)
+    let t0 = ref_time_ticks()
+    for (_i in range(SUBMITS)) {
+        submit_wait(raw)
+    }
+    let us = double(get_time_usec(t0)) / double(SUBMITS * DISPATCHES)
+    delete wqh
+    delete wsh
+    delete xqh
+    delete xsh
+    return (mb = double(wq_bytes + ws_bytes) / 1048576.0lf, us = us)
+}
+
 [export]
 def main : int {
     let args <- get_command_line_arguments()
@@ -133,6 +210,9 @@ def main : int {
     print("vk_gemv_probe: decode GEMV classes at [n {n} x d {d}], {g_gpu.rows_per_wg} rows/wg, {ring}, {DISPATCHES} dispatches x {SUBMITS} submits after a warm-up; lanes = lanes per output row (32 = one row per subgroup)\n")
     print("| fmt    | lanes |   MB/dispatch |  us/dispatch |    GB/s |             |\n")
     print("| :----- | ----: | ------------: | -----------: | ------: | :---------- |\n")
+    verify(ensure_q8_gemv_cls(), "vk_gemv_probe: the q8 gemv class rail must engage on a live device")
+    let q8 = probe_q8(n, d)
+    print("| q8 | {g_gpu.subgroup_size:5d} | {q8.mb:13.1f} | {q8.us:12.1f} | {q8.mb * 1048576.0lf / (q8.us * 1000.0lf):7.1f} | timing-only |\n")
     let splits = fixed_array(0u, 16u, 8u)
     for (f in fmts) {
         for (lanes_per_row in splits) {

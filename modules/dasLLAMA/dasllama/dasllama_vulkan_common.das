@@ -2253,6 +2253,8 @@ struct RLayer {
     s_quant_xb2 : VkDescriptorSet
     s_gate, s_up : VkDescriptorSet
     s_actrq : VkDescriptorSet
+    s_gu : VkDescriptorSet          //! the fused gate + up + act + Q8_0 requant dispatch (`Q8GemvGu`), where the triple is q8 with a Q8_0 feed
+    gu_on : bool
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
     s_addr_next_rq : VkDescriptorSet
