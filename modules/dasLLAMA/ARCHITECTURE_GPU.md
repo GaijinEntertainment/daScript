@@ -73,14 +73,14 @@ that a question answered for one backend has an obvious address in the other. Th
   E-series never reaches its width question.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
-  follows the class - "the builder needs the driver module" is never a placement reason. Prefill's
-  prefill-only classes are convergence debt, not precedent.
+  follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.
 - **Ledgered kernel-binding asymmetries** - a REVIEW rule firing on one of these is expected, and
-  this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` /
-  `MetalMoeMulMmMx4T`) keep the pre-family compact kargs slots while their base classes bind the
-  family numbers, so no shared bind path may span the two layouts; and the in-engine moe mul_mm
-  A/B race harnesses (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail`
-  rather than a per-class `enc_*` builder.
+  this entry is the sanction: the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
+  keep the pre-family compact kargs slots while their base classes bind the family numbers, so no
+  shared bind path may span the two layouts; the in-engine moe mul_mm A/B race harnesses
+  (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail` rather than a per-class
+  `enc_*` builder; and the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`)
+  bind the strip plane unread, so both formats share one set layout and one host bind path.
 - **`dasllama_gpu_tier.das`** - the device-cooperation SPI: hook types, install/unset slots, route/mark/want/status
   state, engine-facing forwarders. Vulkan implements it (per-op offload plus resident plumbing, and the decode-era
   seats it alone fills: the cm2 expert chain `set_moe_gpu_ffn_xf_hooks` / `_async_hooks`, the decode attention block
@@ -134,8 +134,8 @@ in prefill) and the tuner calls those public entries.
 `MetalPrefillDecline`); decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for
 both paths.
 
-Sections 2.28-2.39 - the Metal speculative round, the depth a round drafts, the kernel argument-alignment
-contract, and the verify, drafter and batch-driver mechanics after them - are `ARCHITECTURE_GPU_MTP.md`.
+Sections 2.28-2.39a - the Metal speculative round, the depth a round drafts, the kernel argument-alignment
+contract, the verify, drafter and batch-driver mechanics, and the decode layer encoder - are `ARCHITECTURE_GPU_MTP.md`.
 
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its
 entry here:**

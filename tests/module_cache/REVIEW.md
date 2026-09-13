@@ -3,14 +3,13 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-- **A diff that changes an assertion literal, or the helper producing the text a test in this
-  folder compares a spawned child's output or the files it wrote against, so the compare accepts
-  text the child does not truly emit is a defect.** A child's output is the only instrument a
-  human has for what the cache and the module scan served.
+- **A diff that adds or changes an assertion literal in this folder's tests makes it match only
+  text the spawned child emits, in its output or in a file it wrote.** A child's output is the
+  only instrument a human has for what the cache and the module scan served.
 
-- **A helper that trims a child's line before the compare drops only its elapsed times - every
-  other field on the line, a count included, stays in the compared text.** A dropped field is
-  a change the test can no longer see.
+- **A diff that adds or changes a helper that produces the text a test in this folder compares
+  against a spawned child's output keeps every field of the child's line but its elapsed
+  times.** A dropped field is a change the test can no longer see.
 
 - **A test in this folder writes only under a directory it created for this process - its own
   files and its children's - and removes that directory.**

@@ -1,7 +1,7 @@
 # dasweb-buildd Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md`.
+`README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo root).
 
 **Never put a `[test]` file under the global `tests/` tree, and never register one in a
 `CMakeLists.txt` - a `[test]` file for this directory lives here and requires its siblings by
@@ -71,16 +71,17 @@ re-queues jobs from builders that died - is not a resolution.
 
 **Never retain a route callback with `emplace` - use `push` instead.**
 
-**A diff that changes the behavior of a file in this folder other than a `.das` source or its
-test also documents that change in `README.md` - in the section covering that file, or in a new
-section for it - in the same change.**
+**A diff that adds or changes a command-line mode of `run_build.sh` or `roll_toolchain.sh`, or
+what one of their steps does, also documents it in `README.md` - in the section covering that
+file, or in a new section for it - in the same change.**
 
 **A diff that changes a build command line in `run_build.sh` also updates the matching
 cache-warming build in `roll_toolchain.sh`, in the same change.**
 
 **Never let a toolchain roll (`roll_toolchain.sh`) move the worktree without also rebuilding
-`bin/daslang` - the host compiler that emits the emcc link line - and
-`web/output64/lib/*_runtime*.a`.**
+`bin/daslang`, `web/output64/lib/*_runtime*.a`, and `web/output64/lib/liblib*Imgui*.a`.**
+`bin/daslang` is the host compiler that emits the emcc link line, and `daspkg build --wasm` does
+not build `liblib*Imgui*.a`.
 
 **Never let a roll step decide to skip itself by reading the worktree's HEAD alone - it skips
 only on a marker the roll writes after its last step.** A roll that dies after the checkout
@@ -90,10 +91,8 @@ leaves HEAD at the target with nothing rebuilt.
 the same change.**
 
 **A diff that changes the wasm-archive step's build command or archive list in
-`roll_toolchain.sh`, or `modules/dasImgui/.das_package`, also changes the other to match, in
-the same change.**
-
-**The wasm-archive list in `roll_toolchain.sh` never carries `liblibDasModuleClipboard.a`.**
+`roll_toolchain.sh`, or `modules/dasImgui/.das_package`, also changes the other to match in the
+same change, minus `liblibDasModuleClipboard.a`, which `daspkg build --wasm` stages.**
 
 **Never ship a file an operator edits on the box with plain `release_include` - use
 `release_include_if_missing`, so an upgrade keeps the operator's edits.**

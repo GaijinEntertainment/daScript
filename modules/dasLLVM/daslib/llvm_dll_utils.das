@@ -133,7 +133,9 @@ class public UidNodes {
 
     def private get_base(ptr : void?; hint : string) {
         if (!(id_map |> key_exists(ptr))) {
-            panic("Key not found for {hint}")
+            let who = thisFunc != null ? "{describe(thisFunc.at)}: {thisFunc.name}" : "a global initializer"
+            panic("LLVM: {who} is outside the JIT function set - it fell back to the interpreter, " +
+                "so its `{hint}` has no id and cannot be emitted")
             return DllName()
         }
         let id = unsafe(id_map[ptr])
@@ -301,17 +303,31 @@ class public DLLHandle {
 
 }
 
-def public add_obj_extension(path : string) {
-    return "{path}.o"
-}
-def public add_dll_extension(path : string) {
-    return "{path}.dll"
+enum public JitArtifact {
+    object
+    jit_dll
+    exe
+    shared_lib
+    static_lib
 }
 
-def public add_exe_extension(path : string) {
-    return "{path}.exe"
+
+def public artifact_path(path : string; kind : JitArtifact) : string {
+    let plat = get_platform_name()
+    var suffix = "o"
+    if (kind == JitArtifact.jit_dll) {
+        suffix = "dll"
+    } elif (kind == JitArtifact.exe) {
+        suffix = "exe"
+    } elif (kind == JitArtifact.static_lib) {
+        suffix = plat == "windows" ? "lib" : "a"
+    } elif (kind == JitArtifact.shared_lib) {
+        suffix = plat == "windows" ? "dll" : (plat == "darwin" ? "dylib" : "so")
+    }
+    return "{path}.{suffix}"
 }
+
 
 def public get_dll_by_path(path : string) : DLLHandle? {
-    return new DLLHandle(handle = load_dynamic_library(add_dll_extension(path)))
+    return new DLLHandle(handle = load_dynamic_library(artifact_path(path, JitArtifact.jit_dll)))
 }

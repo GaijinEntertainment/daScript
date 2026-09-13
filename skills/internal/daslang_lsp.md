@@ -15,10 +15,15 @@ works for development and wins over the checked-in copy (name-keyed dedup).
 
 ## Architecture (LOCKED - do not revisit without a new decision)
 
-- **`lsp_supervisor.py`** = the LSP endpoint. ALL session state lives here:
-  Content-Length framing, initialize, `{uri -> text}` document shadow, 0.1 s
-  debounce, kill-stale-validate generations, worker threads for nav requests,
-  das-path -> `file://` URI mapping. Zero language knowledge.
+- **`utils/watchdog/lsp_front.das`** (`watchdog --lsp`, in the static watchdog exe;
+  `daslang utils/watchdog/main.das -- --lsp` under the interpreter) = the LSP
+  endpoint. ALL session state lives here: Content-Length framing, initialize,
+  `{uri -> text}` document shadow, 0.1 s debounce, das-path -> `file://` URI
+  mapping. Zero language knowledge. One loop, no thread: stdin is polled
+  (`fpoll`) with the time to the next due validate as the timeout; a validate is
+  a child (`spawn_process`) the loop polls between frames, and an edit of the
+  file kills the one in flight, so a stale buffer never publishes; nav subtools
+  run to completion inline (the client waits on those anyway).
 - **`subtools/validate.das` / `subtools/nav.das`** (+ shared
   `subtools/lsp_common.das` module) = stateless spawn-per-request batch tools:
   argv in, LSP-shaped JSON on stdout, exit. das owns byte<->UTF-16 position
@@ -32,6 +37,12 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   `class` source line - both cursor paths skip synthesized functions.
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
   crash isolation). Same rationale as the MCP subtool pattern.
+- **Every subtool compile sets `cop.module_cache = true`** - the default module cache
+  (`ModuleFileCache::defaultPath`, keyed by file, binary, host argv and policies) serves
+  the unchanged modules; the overlay's bytes are what the edited file's record is
+  stamped against. Subtools inherit the supervisor's cwd (the workspace root), so the
+  cache is one `.jitted_scripts/module_cache/` there - never spawn them with a
+  per-file cwd, that scatters a cache directory beside every edited source.
 - **`--overlay <path>`**: the supervisor writes the document shadow to a temp
   file per request; subtools `set_file_source(access, file, text)` and
   position-map against that text, so unsaved buffers compile correctly.
@@ -70,14 +81,16 @@ from a scratch project dir. The log records every message both ways.
 
 ## Tests
 
-`tests/lsp/test_lsp_protocol.das` - full session over `popen_argv_pipe`
+`tests/lsp/test_lsp_protocol.das` - full session over `popen_argv_pipe`, once
+through the interpreter host and once through `bin/watchdog` where it is built
 (initialize -> didOpen broken-buffer/clean-disk -> publishDiagnostics with the
 exact 30341 range -> didChange clean -> empty publish -> definition -> shutdown).
 Byte-exact frame bodies via `fread(f, array<uint8>)` (C fread loops until the
-requested length); headers via `fgets`. Probes `python3` then `python`,
-verifying output starts with "Python" (dodges the Windows Store alias), and
-skips with a `to_log` notice when neither exists. AOT-registered in
+requested length); headers via `fgets`. AOT-registered in
 `tests/aot/CMakeLists.txt` (glob excludes `/_` fixtures).
+`tests/watchdog/test_lsp_front.das` - the cross-tree guard over throwaway
+git-style trees (requires the front's module, so it sits with the watchdog
+tests and their module gate).
 
 ## Gotchas
 
@@ -88,6 +101,6 @@ skips with a `to_log` notice when neither exists. AOT-registered in
   infer, so fidelity is unchanged; lint needs the unoptimized AST.
 - dastest expect-files: validate emits one Information note and suppresses
   diagnostics (intentional errors are not noise to report).
-- The plugin manifest spawns `python3`; Windows may only have `python` -
-  README documents the local edit. Don't hardcode a fallback chain in the
-  manifest (no such mechanism).
+- The plugin manifest names `bin/watchdog` (single-config layout); a Visual
+  Studio tree has `bin/Release/watchdog.exe` - README documents the local edit.
+  Don't hardcode a fallback chain in the manifest (no such mechanism).

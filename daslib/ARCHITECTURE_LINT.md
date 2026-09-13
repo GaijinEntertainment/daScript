@@ -199,8 +199,8 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 - **`canVisitWithAliasSubexpression` returns false on purpose** - `assume` keeps the
   template block at the definition site and clones it per use; the block is never invoked
   there, so descending would report its arguments unused.
-- **C++ mirror pairs**: `lint022_optimized` / `lint022_calls_may_be_inlined` <->
-  `Program::getOptimize` / `Program::patchInline`; `stale_scan_line` <->
+- **C++ mirror pairs**: `lint022_calls_may_be_inlined` <-> `Program::patchInline` (the
+  optimizer switch itself is read through the bound `Program.getOptimize`, never respelled); `stale_scan_line` <->
   `rtti_is_nolint_suppressed`; `is_inline_temp_name` <-> `INLINE_TEMP_PREFIX`;
   `lint017_is_32bit_parse`'s name set and `lint017_parse_remedy`'s twin spelling -
   `to_int` and `to_uint` over a string are the 32-bit parses, `to_int64` and `to_uint64`

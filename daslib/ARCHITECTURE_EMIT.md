@@ -52,8 +52,30 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   dasHV takes `rtti_core`). A module missing from the daslib list still registers, only in
   the dependencies-first pass that follows; a module added to the C++ side joins the list.
 
+- **The AnnotationInfo table resets at the START of the debug-info dump, not its end.** The
+  globals' `VarInfo`s are written after that dump and a handled global's info refers to an
+  `AnnotationInfo` by the name the dump minted, so clearing on the way out left `&` with nothing
+  after it. Only that walk reaches a global's annotation - `writeHandledAnnotations` iterates
+  types, structs and functions.
+- **A member pointer is qualified with `aotModuleName`, never the raw module name.** The main
+  module is unnamed, so `_module.name` is empty for every type a script declares itself, while
+  `describeCppType` resolves those types through `g_aot_main_module_name`. Where one emitter writes
+  both - `das_safe_navigation<T, F, &T::field>` - they must agree, or the type argument names the
+  context's namespace while the member pointer names nothing. Only a standalone context sets a
+  main-module name, so regular AOT never sees it.
+
 ## 6. aot_standalone
 
+- **The entry module's structures are visited SORTED.** `visitModule` takes `sortStructures`,
+  which runs `topoSortStructures` so a by-value field's structure is complete before the structure
+  holding it; regular AOT passes it through `visit(program, adapter, true)` and a standalone
+  context, which visits the entry module by itself, has to ask for it too. Declaration order is the
+  author's, and nothing else re-derives it.
+- **The context name is an identifier; the file stem is not the same string.** A stem reaches C++
+  as a namespace and C as a symbol prefix, so `while.das` or `3d-math.das` would open
+  `namespace while {`. `context_name` is the stem through `cpp_context_ident`, while `file_stem`
+  keeps the raw name - a build system predicts the generated file names from the input path and
+  cannot be told they were sanitized.
 - **The generated constructor IS the init protocol** - a standalone context never calls
   `Context::runInitScript`, so the ctor reproduces its observable semantics inline:
   `memset(context.globals, 0, context.getGlobalSize())` mirrors runInitScript's globals

@@ -12,6 +12,7 @@ module metal_builtins shared public
 
 require daslib/shader_lingua_franca public
 require daslib/math_bits   // uint_bits_to_float — the tensor-op CPU stubs decode bf16/f16 halfwords
+require daslib/f16_cvt
 
 // ===== compute builtins =====
 // The subgroup IDs (gl_Subgroup* — KHR_shader_subgroup spellings) live in shader_lingua_franca
@@ -20,33 +21,22 @@ require daslib/math_bits   // uint_bits_to_float — the tensor-op CPU stubs dec
 // ===== loop shaping =====
 // ===== simdgroup reductions + shuffles (Metal spellings — the Metal value-add) =====
 // simd_sum(v): sum of v across the simdgroup's active lanes.
-[unused_argument(v), sideeffects] def public simd_sum(v : float) : float { return v }
-[unused_argument(v), sideeffects] def public simd_sum(v : int) : int { return v }
-[unused_argument(v), sideeffects] def public simd_sum(v : uint) : uint { return v }
+[unused_argument(v), sideeffects] def public simd_sum(v : auto(TT)) : TT { return v }
 
 //! simd_max(v): maximum of v across the simdgroup's active lanes.
-[unused_argument(v), sideeffects] def public simd_max(v : float) : float { return v }
+[unused_argument(v), sideeffects] def public simd_max(v : auto(TT)) : TT { return v }
 
 // simd_shuffle(v, lane): v from the given absolute lane. Reading an inactive lane is undefined —
 // keep shuffles in simdgroup-uniform control flow and select the edge cases on the VALUE after.
-[unused_argument(lane), sideeffects] def public simd_shuffle(v : float; lane : uint) : float { return v }
-[unused_argument(lane), sideeffects] def public simd_shuffle(v : int; lane : uint) : int { return v }
-[unused_argument(lane), sideeffects] def public simd_shuffle(v : uint; lane : uint) : uint { return v }
+[unused_argument(lane), sideeffects] def public simd_shuffle(v : auto(TT); lane : uint) : TT { return v }
 
 // simd_shuffle_up/_down(v, delta): v from lane - delta / lane + delta (NOT wrapping — the result
 // is undefined for lanes whose source falls outside the simdgroup).
-[unused_argument(delta), sideeffects] def public simd_shuffle_up(v : float; delta : uint) : float { return v }
-[unused_argument(delta), sideeffects] def public simd_shuffle_up(v : int; delta : uint) : int { return v }
-[unused_argument(delta), sideeffects] def public simd_shuffle_up(v : uint; delta : uint) : uint { return v }
-
-[unused_argument(delta), sideeffects] def public simd_shuffle_down(v : float; delta : uint) : float { return v }
-[unused_argument(delta), sideeffects] def public simd_shuffle_down(v : int; delta : uint) : int { return v }
-[unused_argument(delta), sideeffects] def public simd_shuffle_down(v : uint; delta : uint) : uint { return v }
+[unused_argument(delta), sideeffects] def public simd_shuffle_up(v : auto(TT); delta : uint) : TT { return v }
+[unused_argument(delta), sideeffects] def public simd_shuffle_down(v : auto(TT); delta : uint) : TT { return v }
 
 // simd_shuffle_xor(v, mask): v from lane ^ mask (the butterfly primitive; always in range).
-[unused_argument(mask), sideeffects] def public simd_shuffle_xor(v : float; mask : uint) : float { return v }
-[unused_argument(mask), sideeffects] def public simd_shuffle_xor(v : int; mask : uint) : int { return v }
-[unused_argument(mask), sideeffects] def public simd_shuffle_xor(v : uint; mask : uint) : uint { return v }
+[unused_argument(mask), sideeffects] def public simd_shuffle_xor(v : auto(TT); mask : uint) : TT { return v }
 
 // ===== simdgroup_matrix 8x8 tiles (Metal spellings; reference bodies = CPU semantics) =====
 // The reference structs hold a row-major 8x8 tile; every op below is the FULL cooperative tile
@@ -267,25 +257,7 @@ def public simdgroup_multiply(var d : simdgroup_half8x8; a, b : simdgroup_half8x
 //! overload streams a converted half panel — the emitter picks the operand type by the
 //! activation pointer's pointee, same contract as tmm2d_q8u_f32.
 [unused_argument(sgs), sideeffects]
-def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float const?; lda : uint; w : uint16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    unsafe {
-        for (r in range(int(m))) {
-            for (j in range(int(n))) {
-                var acc = 0.0
-                for (k in range(int(kk))) {
-                    acc += a[r * int(lda) + k] * uint_bits_to_float(uint(w[j * int(ldw) + k]) << 16u)
-                }
-                c[r * int(ldc) + j] = acc
-            }
-        }
-    }
-}
-
-[unused_argument(sgs), sideeffects]
-def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float16 const?; lda : uint; w : uint16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : auto(TA) const?; lda : uint; w : uint16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
@@ -307,25 +279,7 @@ def public tmm2d_f32_bf16_f32(m, n, sgs : uint; a : float16 const?; lda : uint; 
 //! half panel (n cols x kk, row stride ldw). The float16-A overload streams a half panel;
 //! the emitter picks the operand type by the activation pointer's pointee.
 [unused_argument(sgs), sideeffects]
-def public tmm2d_f16w_f32(m, n, sgs : uint; a : float const?; lda : uint; w : float16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    unsafe {
-        for (r in range(int(m))) {
-            for (j in range(int(n))) {
-                var acc = 0.0
-                for (k in range(int(kk))) {
-                    acc += a[r * int(lda) + k] * float(w[j * int(ldw) + k])
-                }
-                c[r * int(ldc) + j] = acc
-            }
-        }
-    }
-}
-
-[unused_argument(sgs), sideeffects]
-def public tmm2d_f16w_f32(m, n, sgs : uint; a : float16 const?; lda : uint; w : float16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
+def public tmm2d_f16w_f32(m, n, sgs : uint; a : auto(TA) const?; lda : uint; w : float16 const?; ldw : uint; var c : float?; ldc : uint; kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
@@ -368,32 +322,6 @@ def public tmm2d_q8_f32(m, n, sgs : uint; aq : int8 const?; lda : uint; asf : fl
     }
 }
 
-// binary16 halfword -> f32 for the CPU stubs (exact; subnormals included)
-def private f16_bits_to_f32(h : uint) : float {
-    let s = (h >> 15u) & 1u
-    let e = (h >> 10u) & 31u
-    let mant = h & 1023u
-    var bits : uint
-    if (e == 0u) {
-        if (mant == 0u) {
-            bits = s << 31u
-        } else {
-            var m = mant
-            var ee = 127u - 15u + 1u
-            while ((m & 1024u) == 0u) {
-                m <<= 1u
-                ee--
-            }
-            bits = (s << 31u) | (ee << 23u) | ((m & 1023u) << 13u)
-        }
-    } elif (e == 31u) {
-        bits = (s << 31u) | (255u << 23u) | (mant << 13u)
-    } else {
-        bits = (s << 31u) | ((e + 127u - 15u) << 23u) | (mant << 13u)
-    }
-    return uint_bits_to_float(bits)
-}
-
 //! The wscale_f16 twin of tmm2d_q8_f32: weight scales are raw binary16 halfwords.
 [unused_argument(sgs), sideeffects]
 def public tmm2d_q8_f16s(m, n, sgs : uint; aq : int8 const?; lda : uint; asf : float const?; lda_s : uint; wq : int8 const?; ldw : uint; wsf : uint16 const?; ldw_s : uint; var c : float?; ldc : uint; kk : uint) {
@@ -410,7 +338,7 @@ def public tmm2d_q8_f16s(m, n, sgs : uint; aq : int8 const?; lda : uint; asf : f
                     for (k in range(32)) {
                         iacc += int(aq[r * int(lda) + b * 32 + k]) * int(wq[j * int(ldw) + b * 32 + k])
                     }
-                    facc += float(iacc) * asf[r * int(lda_s) + b] * f16_bits_to_f32(uint(wsf[j * int(ldw_s) + b]))
+                    facc += float(iacc) * asf[r * int(lda_s) + b] * f16_to_f32(uint(wsf[j * int(ldw_s) + b]))
                 }
                 c[r * int(ldc) + j] = facc
             }
@@ -455,34 +383,7 @@ def public tmm2d_q8b_f32(m, n, sgs : uint; wsh : float16 const?; wqb : int8 cons
 //! `bk` (call-site constant 32/64/128) is the resident staging footprint: 64 needs an
 //! n*72-half `wt`, 128 (64-deep double-buffered) an n*144-half `wt`.
 [unused_argument(sgs, wt, tid, bk), sideeffects]
-def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : float const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint; bk : uint = 32u) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    unsafe {
-        let nb = int(kk) / 32
-        for (r in range(int(m))) {
-            for (j in range(int(n))) {
-                var facc = 0.0
-                for (b in range(nb)) {
-                    let blk = j * int(ldwb) + b
-                    let ws = float(wsh[blk * 17])
-                    var ch = 0.0
-                    for (k in range(32)) {
-                        ch += a[r * int(lda) + b * 32 + k] * float(float16(float(wqb[blk * 34 + k]) * ws))
-                    }
-                    facc += ch
-                }
-                c[r * int(ldc) + j] = facc
-            }
-        }
-    }
-}
-
-//! the half-A overload: identical walk, activations stream as device f16 (the emitter picks
-//! the q8uh helper by this pointer's pointee — a float A operand is off the native half path)
-[unused_argument(sgs, wt, tid, bk), sideeffects]
-def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : float16 const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint; bk : uint = 32u) {
+def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 const?; a : auto(TA) const?; lda : uint; var c : float?; ldc : uint; kk : uint; ldwb : uint; tid : uint; bk : uint = 32u) {
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
@@ -506,6 +407,7 @@ def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 
     }
 }
 
+
 // ===== staged-tile cooperative GEMM protocol (begin / step / store) =====
 // For kernels that DEQUANT-stage weight/activation tiles into @workgroup float16 (mx4 LUT,
 // k-quant sub-scales): stage a FLAT row-major [rows][kk] tile pair per K-chunk, then step.
@@ -514,15 +416,19 @@ def public tmm2d_q8u_f32(m, n, sgs : uint; wt; wsh : float16 const?; wqb : int8 
 // The op is built in multiply_accumulate mode, so each step's run() accumulates into that
 // persistent tensor directly (default-mode run() overwrites — that mode is not used here).
 
-//! begin: zero the accumulator. m/n/sgs/kk must be call-site constants (kk = chunk K width).
-[unused_argument(sgs, kk), sideeffects]
-def public tmm2d_tg_begin(var acc; m, n, sgs, kk : uint) {
+def private tmm2d_zero_acc(var acc; m, n : uint) {
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
     for (i in range(int(m * n))) {
         acc[i] = 0.0
     }
+}
+
+//! begin: zero the accumulator. m/n/sgs/kk must be call-site constants (kk = chunk K width).
+[unused_argument(sgs, kk), sideeffects]
+def public tmm2d_tg_begin(var acc; m, n, sgs, kk : uint) {
+    tmm2d_zero_acc(acc, m, n)
 }
 
 //! step: acc[r][j] += ta[r][k] * tb[j][k] over one staged chunk — ta flat [m][kk] f16,
@@ -581,49 +487,16 @@ def public tmm2d_tg_rowscale(var acc; f; m, n : uint) {
 //! begin must see the same pointer the steps will stream — float or float16 picks the operand
 //! type (a float A operand keeps matmul2d off the native half x half path).
 [unused_argument(a, sgs, kk), sideeffects]
-def public tmm2d_tg_begin_deva(var acc; a : float const?; m, n, sgs, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    for (i in range(int(m * n))) {
-        acc[i] = 0.0
-    }
+def public tmm2d_tg_begin_deva(var acc; a : auto(TA) const?; m, n, sgs, kk : uint) {
+    tmm2d_zero_acc(acc, m, n)
 }
 
-[unused_argument(a, sgs, kk), sideeffects]
-def public tmm2d_tg_begin_deva(var acc; a : float16 const?; m, n, sgs, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    for (i in range(int(m * n))) {
-        acc[i] = 0.0
-    }
-}
 
 //! step, deva flavor: acc[r][j] += a[r*lda + k] * tb[j][k] over one K-chunk — `a` points at
 //! the chunk's first activation (device f32 or f16, row stride lda), tb flat [n][ldb] f16
 //! staged, where ldb mirrors the emitter: 72-half padded rows for a kk=64 tile, kk otherwise.
 [sideeffects]
-def public tmm2d_tg_step_deva(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    let ldb = kk == 64u ? 72 : int(kk)
-    unsafe {
-        for (r in range(int(m))) {
-            for (j in range(int(n))) {
-                var facc = 0.0
-                for (k in range(int(kk))) {
-                    facc += a[r * int(lda) + k] * float(tb[j * ldb + k])
-                }
-                acc[r * int(n) + j] += facc
-            }
-        }
-    }
-}
-
-[sideeffects]
-def public tmm2d_tg_step_deva(var acc; a : float16 const?; lda : uint; tb; m, n, kk : uint) {
+def public tmm2d_tg_step_deva(var acc; a : auto(TA) const?; lda : uint; tb; m, n, kk : uint) {
     if (gl_LocalInvocationID.x != 0u) {
         return
     }
@@ -641,16 +514,12 @@ def public tmm2d_tg_step_deva(var acc; a : float16 const?; lda : uint; tb; m, n,
     }
 }
 
+
 //! begin, nt flavor: the step's B tile is staged NATURAL [kk][n] (transpose_right=false on
 //! the GPU op) — V-style operands land with coalesced row copies, no transpose gather.
 [unused_argument(sgs, kk), sideeffects]
 def public tmm2d_tg_begin_nt(var acc; m, n, sgs, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    for (i in range(int(m * n))) {
-        acc[i] = 0.0
-    }
+    tmm2d_zero_acc(acc, m, n)
 }
 
 //! step, nt flavor: acc[r][j] += ta[r][k] * tb[k][j] — ta flat [m][kk] f16, tb flat [kk][n] f16.
@@ -673,12 +542,7 @@ def public tmm2d_tg_step_nt(var acc; ta; tb; m, n, kk : uint) {
 //! begin, deva+nt flavor: A streams from device f32, the step's B tile staged NATURAL [kk][n].
 [unused_argument(sgs, kk), sideeffects]
 def public tmm2d_tg_begin_devant(var acc; m, n, sgs, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    for (i in range(int(m * n))) {
-        acc[i] = 0.0
-    }
+    tmm2d_zero_acc(acc, m, n)
 }
 
 //! step, deva+nt flavor: acc[r][j] += a[r*lda + k] * tb[k][n] — a device f32 at the chunk's

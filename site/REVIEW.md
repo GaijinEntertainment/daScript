@@ -63,9 +63,9 @@ folder) against the branch tip, naming the passes and any failures; a later edit
 files restates the run.** The no-WASM lane cannot see a broken runtime path, and a run
 recorded mid-branch describes a tree that no longer ships.
 
-**A stated Playwright run names every playground sample the diff changed: for each, the spec
-that loaded it, or - when no spec loads it - that it was opened and run by hand in the
-playground.**
+**A stated Playwright run names every playground sample the diff changed (the samples are
+staged from `web/examples/ui/samples/`, repo root): for each, the spec that loaded it, or -
+when no spec loads it - that it was opened and run by hand in the playground.**
 
 **A stated Playwright run names the runtime artifacts it used: built from this change when
 the diff touches any source compiled into the WASM runtime (`daslang_static` - its `main()`

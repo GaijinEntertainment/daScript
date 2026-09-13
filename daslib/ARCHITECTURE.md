@@ -3,10 +3,11 @@
 Design rationale a maintainer cannot recover from the code alone. One numbered section per
 module; entries are anchored to symbols.
 
-Three companions carry a concern each; a section number is unique across all four files.
+Four companions carry a concern each; a section number is unique across all five files.
 
 - `ARCHITECTURE_LINT.md` - sec. 1-4: perf_lint, lint_config, lint, style_lint.
 - `ARCHITECTURE_EMIT.md` - sec. 5-7, 28-29: aot_cpp, aot_standalone, flatten, the shader rails.
+- `ARCHITECTURE_CAPI.md` - sec. 30: c_api_header, the C surface both backends emit.
 - `ARCHITECTURE_LINQ.md` - sec. 11-17, 33, 37: the linq family, sql_linq, sql_migrate.
 
 ## 8. ast_verify
@@ -143,6 +144,18 @@ Three companions carry a concern each; a section number is unique across all fou
   on the context mutex - false while a hook runs - so the threadlock test proves the
   callback/pinvoke serialization from one thread, with no timing window and no thread started
   under a blocked hook.
+
+- **The stepping debugger is armed by an `[init]` that tells the debuggee's context apart from a
+  macro context by `is_compiling_macros()`, not by the macro-module test alone** - `Program::simulate`
+  binds the program while init scripts run, so `is_compiling_macros_in_module("debug")` answers
+  false in the debuggee's own init exactly as it does in another module's macro context; a
+  runtime init gated on that test alone never runs where it matters. The `[_macro]` functions
+  keep the bare test: they never run at simulate time.
+- **A folding context is never a debuggee thread** - the optimizer evaluates a pure call over
+  constants in a context of its own (`ContextCategory.folding_context`), during the compile;
+  `onCreateContext` skips it, so a breakpoint inside a folded call reports nothing rather than a
+  stop inside the compiler. The call itself is gone from the program: a debugger that must stop
+  there launches with `-no-optimization` (the DAP bridge's `optimize=false`).
 
 ### 24.2 Debugger worker startup {#debugger-worker-startup}
 

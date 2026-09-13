@@ -146,8 +146,13 @@ namespace das {
             return false;
         }
         int res = 0;
+#ifdef MSG_NOSIGNAL
+        const int sendFlags = MSG_NOSIGNAL;
+#else
+        const int sendFlags = 0;
+#endif
         for ( ;; ) {
-            res = send(client_fd, data, size, 0);
+            res = send(client_fd, data, size, sendFlags);
             if ( res>0 ) {
                 DAS_ASSERT(size>=res);
                 data += res;
@@ -174,6 +179,10 @@ namespace das {
             int addrlen = sizeof(address);
             client_fd = accept(server_fd, (struct sockaddr *)&address,(socklen_t*)&addrlen);
             if ( !invalid_socket(client_fd) ) {
+#if defined(__APPLE__)
+                int nosigpipe = 1;
+                setsockopt(client_fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
+#endif
                 if ( !set_socket_blocking(client_fd,false) ) {
                     onError("can't set client nbio", last_socket_error());
                     closesocket(client_fd);

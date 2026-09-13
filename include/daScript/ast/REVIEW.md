@@ -1,8 +1,8 @@
 # AST Headers Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`src/ast/ARCHITECTURE.md` (repo root). A diff that adds, reorders or retypes a member of a C++
-type das binds through an annotation (`Program`, `Function`, `Variable`, the AST nodes) applies
+`src/ast/ARCHITECTURE.md` (repo root). A diff that adds, reorders or retypes a data member of a
+C++ type that das binds through an annotation applies
 `src/builtin/REVIEW.md` too; checklist discovery walks changed paths only, so a header edit
 never opens that checklist on its own.
 

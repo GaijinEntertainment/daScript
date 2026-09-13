@@ -1,7 +1,7 @@
-# dasLLAMA Architecture - the Metal speculative round
+# dasLLAMA Architecture - the Metal speculative round and the decode layer encoder
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.28-2.39: the speculative round on Metal, the box knob that sets the depth a
+carries sections 2.28-2.39a: the speculative round on Metal, the box knob that sets the depth a
 round drafts, and the argument-alignment contract a kernel declares on its `[metal_dispatch]` -
 the contract the batch driver's fixed-B mul_mv forms carry. The GPU backend role table these
 sections build on, the assistant-drafter driver's role row included, stays in
@@ -244,3 +244,26 @@ concurrent rail buys nothing here: measured through the round's profiler section
 (`lcpp_bench --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, `-jit`, Qwen3.8-27B
 on the M5 Max), the two forms show the same GPU time and the concurrent one doubles the host
 encode, so the round keeps the serial encoder and pays no hazard-tracker work per dispatch.
+
+### 2.39a The decode driver's layer encoder {#metal-layer-enc}
+
+**A layer is one chain at every row shape, written once.** `LayerEncT`
+(`dasllama/dasllama_metal_decode.das`) carries the phase order - QKV, the norms, rope plus the KV
+store, attention, wo, the dense or routed FFN, the post norms and the residual adds - as one
+`encode` method over a `StepRes` the stamp's driver owns. A row shape is a stamp that binds its own
+adapters into the template's call slots: the weight site, the row totals, add_rms, rms and add, the
+expert args, rope plus store, attention, the recurrent layer, the fused gate+up form and the FFN
+panels. Three stamps exist - `SingleLayerEnc` (one row), `VerifyLayerEnc` (the MTP verify's k+1 rows
+over one slab) and `BatchLayerEnc` (the batch step's B rows). `SINGLE` is the template's one
+`@template_constant`: the single row alone serves the fused QKV form, the QK-norm prepass skip on an
+f16 mirror, the fused pre-norm and PLE. What differs between row shapes is how a weight site
+dispatches and which kernel family serves a phase, never the phase order, so the order cannot drift
+between them.
+
+The row shapes share their adapters. `VerifyLayerEnc` and `BatchLayerEnc` bind one generic per
+slot - `rms_rows`, `add_rows`, `add_rms_rows`, `moe_args_rows` and `total_rows` - each written
+over `auto(ET)` and reading nothing but the stamp's `StepRes`, so a new row shape binds the set
+instead of copying it. Their weight site is the batch ladder under `rows_tier`, one `BatchTier`
+with every arm off (`use_mm` and `use_gemm` false, `mp = nrows`, no split-K buffer): a row chain
+takes the K-quant plane GEMV or the row GEMVs, never the batch's tensor, mv, split-K or tile
+forms.

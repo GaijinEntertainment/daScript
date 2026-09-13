@@ -2541,6 +2541,17 @@ namespace das {
         program->visitModule(*adapter, module);
     }
 
+    void astVisitModuleWithSort ( smart_ptr_raw<Program> program, VisitorAdapter * adapter,
+                          Module* module, bool sortStructures, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(line_info, "adapter is required");
+        if (!program)
+            context->throw_error_at(line_info, "program is required");
+        if (!module)
+            context->throw_error_at(line_info, "module is required");
+        program->visitModule(*adapter, module, false, sortStructures);
+    }
+
     void astVisitModulesInOrder ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
@@ -2611,6 +2622,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(astVisitModulesInOrder)>(*this, lib,  "visit_modules",
             SideEffects::accessExternal, "astVisitModulesInOrder")
                 ->args({"program","adapter","context","line"});
+        addExtern<DAS_BIND_FUN(astVisitModuleWithSort)>(*this, lib,  "visit_module",
+            SideEffects::accessExternal, "astVisitModuleWithSort")
+                ->args({"program","adapter","module","sortStructures","context","lineInfo"});
         addExtern<DAS_BIND_FUN(astVisitModule)>(*this, lib,  "visit_module",
             SideEffects::accessExternal, "astVisitModule")
                 ->args({"program","adapter","module","context","line"});

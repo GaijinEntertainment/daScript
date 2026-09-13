@@ -4,15 +4,16 @@ An LSP server for `.das`, registered with Claude Code via its LSP-plugin mechani
 What it buys over the MCP tools: **push diagnostics** - the compiler (and lint)
 report after *every* edit with no explicit tool call - plus native go-to-definition /
 references / hover / symbols, at zero setup cost for consumers (a daslang binary +
-python; no sgconfig, no tree-sitter, no MCP server).
+the watchdog exe; no python, no sgconfig, no tree-sitter, no MCP server).
 
 ## Architecture (locked)
 
 Two processes, hard split:
 
-- **`utils/lsp/lsp_supervisor.py`** - the LSP endpoint Claude Code spawns. Owns ALL
-  session state: Content-Length framing, `initialize` handshake, `{uri -> latest text}`
-  document shadow, debounce, and request dispatch. Zero language knowledge.
+- **`utils/watchdog/lsp_front.das`** (`watchdog --lsp`) - the LSP endpoint Claude Code
+  spawns. Owns ALL session state: Content-Length framing, `initialize` handshake,
+  `{uri -> latest text}` document shadow, debounce, and request dispatch. Zero language
+  knowledge.
 - **`utils/lsp/subtools/*.das`** - stateless batch tools. argv in -> **LSP-shaped JSON**
   out (das owns the 1-based-byte -> 0-based-UTF-16 position conversion; it has the file
   text) -> exit. One fresh `daslang` process per request; nothing stays resident.
@@ -28,13 +29,14 @@ subtool pattern, `utils/mcp/tools/common.das`):
   kill-before-rebuild guard, no respawn/replay machinery (cf. the watchdog's `--stdio` front,
   which exists precisely because the MCP das child *is* resident).
 - **Crash isolation**: a compiler crash on a broken buffer costs one request, not the session.
-- **Cost**: every request pays a compile (~0.2-1 s) - the same profile as the MCP tools,
-  which has been acceptable. Diagnostics are debounced; navigation is on-demand. If it
-  ever hurts, a compiled-AST cache slots in behind the subtool boundary without changing
-  the architecture.
+- **Cost**: every request pays a compile, but under the module cache
+  (`CodeOfPolicies.module_cache`, set by both subtools) only the edited module and the
+  modules after it are parsed - the rest deserialize from
+  `.jitted_scripts/module_cache/` in the workspace root, the cwd every subtool inherits
+  from the supervisor. Diagnostics are debounced; navigation is on-demand.
 
-The supervisor kills an in-flight validate when a newer edit for the same URI arrives
-(python-trivial; the das side never needs cancellation).
+A validate is debounced per URI: a newer edit before the timer fires restarts it, so
+one compile serves a burst (the das side never needs cancellation).
 
 ## Registration
 
@@ -51,8 +53,8 @@ unlike `.mcp.json`). The vehicle is one checked-in manifest:
   "description": "daslang language server (compiler diagnostics + navigation)",
   "lspServers": {
     "daslang": {
-      "command": "python3",
-      "args": ["utils/lsp/lsp_supervisor.py"],
+      "command": "bin/watchdog",
+      "args": ["--lsp"],
       "extensionToLanguage": { ".das": "daslang" }
     }
   }
@@ -124,7 +126,7 @@ Severity rendering: 1 -> `no`, 2 -> `[!]`, 3 -> `[i]` (Information DOES render);
 
 ### Wave 1 - diagnostics MVP
 
-**Status: COMPLETE, proven live** - `lsp_supervisor.py` + `subtools/validate.das`
+**Status: COMPLETE, proven live** - the endpoint (now `utils/watchdog/lsp_front.das`) + `subtools/validate.das`
 + `plugin/.claude-plugin/plugin.json`. A headless CC session with the plugin gets real
 compiler diagnostics after an Edit (verified verbatim: position, error code 30341, full
 message). Injection semantics: diagnostics attach to the **next tool result** after the
@@ -209,18 +211,16 @@ and CC converts to 0-based LSP before they reach the server.
   saves before notifying) the overlay is identical to disk - the mechanism
   still runs every request, so it stays tested.
 - Protocol tests: `tests/lsp/test_lsp_protocol.das` drives
-  `python3 lsp_supervisor.py` over `popen_argv_pipe` - initialize handshake ->
+  the endpoint over `popen_argv_pipe` - initialize handshake ->
   didOpen with BROKEN buffer text while the committed fixture stays clean
   (publishDiagnostics must carry the buffer's 30341 at the exact range -
   overlay proven through the wire) -> didChange back to clean (empty publish)
   -> definition at the call site (exact def location) -> shutdown/exit rc 0.
   Frame bodies read byte-exact via `fread(f, array<uint8>)`; headers via
-  `fgets`. Probes `python3` then `python` (output must start with "Python" -
-  dodges the Windows Store alias) and skips with a log notice when neither
-  exists. AOT-registered in `tests/aot/CMakeLists.txt`.
+  `fgets`. AOT-registered in `tests/aot/CMakeLists.txt`.
   The test immediately caught a real bug: `find_compiler` accepted a relative
-  binary path that broke under the subtools' per-request cwd - compiler
-  discovery now absolutizes.
+  binary path, which breaks the moment a subtool runs from another cwd -
+  compiler discovery absolutizes.
 - Docs: `utils/lsp/README.md` (registration, config, Windows `python3`
   spelling note), `skills/internal/daslang_lsp.md`, CLAUDE.md skill-table row. No
   bootstrap script needed - the committed manifest is portable as-is
@@ -284,8 +284,8 @@ PR for the whole branch AFTER wave 4 (single preflight + CI round).
   on workspace trust). Headless probe from the repo root with NO `--plugin-dir`
   got the exact 30341 diagnostic end-to-end; supervisor log shows one startup
   spawned via the checked-in manifest.
-- `args` hop back to the tree relatively:
-  `${CLAUDE_PLUGIN_ROOT}/../../../utils/lsp/lsp_supervisor.py` - portable to
+- `command` hops back to the tree relatively:
+  `${CLAUDE_PLUGIN_ROOT}/../../../bin/watchdog` - portable to
   worktrees/clones as-is.
 - Loads only when the session STARTS at the repo root - skills-dir plugins do
   not walk up from subdirectories (documented limitation of this vehicle).
@@ -295,15 +295,6 @@ PR for the whole branch AFTER wave 4 (single preflight + CI round).
 - Worktree bootstrap: the manifest travels with git, so `utils/mcp/setup.das`
   needs no LSP wiring - its build already produces the binary `find_compiler`
   discovers (`build/daslang` et al.); setup's done-message now says so.
-
-## Follow-ups
-
-- **Port `lsp_supervisor.py` to das and ship it the watchdog's way** - a `-ctx` static exe that
-  compiles nothing at run time, so it holds no lock a build replaces and needs no Python on the
-  box; the MCP side already runs so, as the watchdog's `--stdio` front. The endpoint is framing,
-  the initialize handshake, the document shadow, debounce and dispatch to the stateless subtools -
-  `lsp_supervisor.py` is the spec, `tests/lsp/test_lsp_protocol.das` drives it over a pipe end to
-  end and is the acceptance test. The plugin manifest then names the exe instead of `python3`.
 
 ## Non-goals
 

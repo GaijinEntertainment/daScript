@@ -28,7 +28,7 @@ Invocation is `bin/daslang utils/detect-dupe/main.das -- <flags>`.
 | `-p / --path` | required+ | File or directory to scan; repeatable |
 | `--paths-from` | off | Newline-delimited path list from a file (`#`-comments and blanks skipped); composes with `-p`; entries may be directories |
 | `--paths-stdin` | off | Same, from stdin. Mutually exclusive with `--against-from-stdin` (one stdin reader per run) |
-| `-j / --workers` | 0 (auto) | Workers for `--export-functions`; 0 = hardware threads, 1 = sequential. Ignored without `--export-functions` |
+| `-j / --workers` | 0 (auto) | Workers for `--export-functions`; 0 = physical cores capped at 16, 1 = sequential. Ignored without `--export-functions` |
 | `-t / --threshold` | 0.7 | Fuzzy floor (0..1) on `sqrt(jaccard x len_ratio)`, plus a hard `len_ratio >= threshold` gate |
 | `-n / --top` | 20 | Top-N entries in the stdout summary |
 | `--json` | off | Path for the full JSON report |
@@ -57,8 +57,9 @@ the scanner on the second use.
 
 Files whose compile fails on `missing prerequisite` (a module this build/platform does not
 carry - e.g. Apple-only Metal benchmarks on Windows) are skipped loudly (`SKIP <file>` + a
-count), never counted as compile failures: export refuses only on files that are genuinely
-broken.
+count), never counted as compile failures. Any other compile failure is reported `FAIL` and
+counted, and the file's functions are still collected from the AST the failed compile left;
+the export is written with a warning naming the count. Nothing blocks on a broken file.
 
 
 (utils_detect_dupe_patterns)=

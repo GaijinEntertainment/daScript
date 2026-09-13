@@ -289,6 +289,7 @@ namespace das
 
     struct DAS_API Variable : gc_node {
         Variable() { gc_magic = GC_MAGIC_VARIABLE; }
+        explicit Variable( const LineInfo & at ) : at(at) { gc_magic = GC_MAGIC_VARIABLE; }
         VariablePtr clone() const;
         string getMangledName() const;
         uint64_t getMangledNameHash() const;

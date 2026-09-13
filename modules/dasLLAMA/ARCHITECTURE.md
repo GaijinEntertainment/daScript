@@ -70,9 +70,9 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 - `ARCHITECTURE_GPU_VULKAN_MOE.md` - sec.2.2af, 2.2ag, 2.2ak: the resident driver's routed block in its
   two eras - the MoE block of the prefill window, and the whole-model driver's MoE token
   command - and the gemma-4 form both eras take.
-- `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39: the Metal speculative round over the batch driver's
-  same-slab verify, the box knob that sets the depth a round drafts, and the kernel
-  argument-alignment contract enforced at every dispatch.
+- `ARCHITECTURE_GPU_MTP.md` - sec.2.28-2.39a: the Metal speculative round over the batch driver's
+  same-slab verify, the box knob that sets the depth a round drafts, the kernel
+  argument-alignment contract enforced at every dispatch, and the decode layer encoder.
 - `ARCHITECTURE_RUNTIME.md` - sec.2.2, 2.3, 2.3a, 2.4, 2.6-2.9, 2.11, 2.12, 2.18-2.19, 2.44:
   kernel shape, caches, lint policy, knobs, coverage, the GPU ramp, the hybrid worker pool, the
   MoE region split, and the job queue the engine dispatches on.

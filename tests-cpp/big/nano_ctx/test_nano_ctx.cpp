@@ -78,12 +78,12 @@ int main () {
     das_nano_set_print(&capture_print);
 
     {   // tier A - POD compute, no das heap
-        pure_math::Standalone ctx;
-        pure_math::Vec3 a; a.x = 1.0f; a.y = 2.0f; a.z = 3.0f;
-        pure_math::Vec3 b; b.x = 4.0f; b.y = 5.0f; b.z = 6.0f;
+        ctx_pure_math::Standalone ctx;
+        ctx_pure_math::Vec3 a; a.x = 1.0f; a.y = 2.0f; a.z = 3.0f;
+        ctx_pure_math::Vec3 b; b.x = 4.0f; b.y = 5.0f; b.z = 6.0f;
         expect_float("dot", ctx.dot(a, b), 32.0f);
         expect_float("scale.y", ctx.scale(a, 3.0f).y, 6.0f);
-        expect_float("component(z)", ctx.component(a, pure_math::Axis::z), 3.0f);
+        expect_float("component(z)", ctx.component(a, ctx_pure_math::Axis::z), 3.0f);
         expect_float("weighted_sum", ctx.weighted_sum(a), 2.0f);
         expect_int("collatz_steps(27)", ctx.collatz_steps(27), 111);
         // `options stack = 4096` is honored exactly, plus the headroom the
@@ -103,7 +103,7 @@ int main () {
     }
 
     {   // tier B - the das heap
-        heap_demo::Standalone ctx;
+        ctx_heap_demo::Standalone ctx;
         expect_int("sum_range(10)", ctx.sum_range(10), 285);
         expect_int("histogram_peak(20)", ctx.histogram_peak(20), 3);
         expect_int("alloc_and_free(8)", int(ctx.alloc_and_free(8)), 4);
@@ -112,7 +112,7 @@ int main () {
     }
 
     {   // tier C - lambdas, function pointers, generators
-        closures::Standalone ctx;
+        ctx_closures::Standalone ctx;
         expect_int("apply_twice(10)", ctx.apply_twice(10), 16);
         expect_int("call_through_pointer(21)", ctx.call_through_pointer(21), 42);
         expect_int("sum_squares(5)", ctx.sum_squares(5), 30);
@@ -122,7 +122,7 @@ int main () {
     }
 
     {   // output - `print` reaches the embedder's sink and nowhere else
-        blinker::Standalone ctx;
+        ctx_blinker::Standalone ctx;
         expect_int("lamp_pattern(3)", ctx.lamp_pattern(3), 8);
         expect_int("lamp_pattern(4)", ctx.lamp_pattern(4), 4);
         g_captured.clear();
@@ -175,7 +175,7 @@ int main () {
         // that the numbers survived into the linked program at all: nothing in this
         // binary can read thermistor.csv, so a wrong table cannot be recovered at
         // run time - it can only be wrong.
-        thermometer::Standalone ctx;
+        ctx_thermometer::Standalone ctx;
         expect_int("baked table size", ctx.curve_size(), 64);
         expect_int("baked ADC low", ctx.adc_range_lo(), 267);
         expect_int("baked ADC high", ctx.adc_range_hi(), 3740);

@@ -1530,7 +1530,84 @@
     words and selects with a dynamic vector index plus a byte shift. Unquirked: the emitter
     lowers a `let` fixed_array of literals to a constant-storage array, or a lint flags a
     dynamically indexed fixed_array local inside a kernel class.
-137. **The CPU chain's gemma-4-12B perplexity trails the resident driver's, and more so past one
+
+137. **The toolchain roll carries its own copy of dasImgui's wasm archive list.** Step 4 of
+    `utils/internal/dasweb-buildd/roll_toolchain.sh` repeats the `emcmake` build command and the
+    archive names that `modules/dasImgui/.das_package` declares (`release_wasm_build`,
+    `release_wasm_archive`), minus `liblibDasModuleClipboard.a`, which `daspkg build --wasm`
+    stages; a pairing rule in the folder's `REVIEW.md` is what keeps the two copies equal. The
+    fix is one source, not a second check: the roll runs the package's own wasm build - a daspkg
+    entry point that reads the manifest and bakes what it declares - and the copied list goes.
+138. **The records oracle's first read after an image prepare is cold.** In `--oracle --legs
+    metal` the first measure of a text cell whose image the batch just mapped or baked reads far
+    below its stored mean (gemma-4-12B tg128 -28% / pp512 -43%, gemma-4-26B tg128 -19%,
+    Qwen3.8-27B tg128 -41%), and the solo re-run after the 180 s settle lands within 1% every
+    time; cells whose prepare found a warm image read flat first time. The prepare pass and the
+    timed child are separate processes, so the suspect is residual state the prepare leaves
+    behind - a mapping still reclaiming asynchronously, the previous cell's GPU residency, or the
+    page cache not yet holding the fresh image - not the code under test; the residency thread
+    that keeps Metal buffers pinned across submissions is the second suspect (the prepare pass
+    ran it, the timed child starts one of its own against the same image). A second board on the
+    same box reads cold on different cells (gemma-4-E4B tg128 -21%, Qwen3.6-27B pp512 -32% /
+    tg128 -13%, Qwen3.6-35B-A3B pp512 -33% / tg128 -20%, each retry within 2%) - the pp512
+    shortfall is bandwidth, so the pages not being resident is the leading reading. The
+    experiments that split the suspects, cheapest first: one failing cell with `--settle 60`
+    (OS reclaim of the prepare child's map), the same cell under `DASLLAMA_METAL_RESIDENCY=0`
+    and `DASLLAMA_METAL_HEARTBEAT_S=0` (the residency thread), the cell JSON's five reps (a slow
+    rep 1 is page-in warmup, five slow reps is the box), `vm_stat` / `powermetrics` sampled
+    between prepare exit and cell start, and the LENS for per-dispatch timing. Unquirked: the
+    oracle reads a prepared cell's residual state before timing (or takes the warm-retry as the
+    first measure by design), so a cold first read never spends a FAIL and a retry slot.
+139. **The tuner's end-to-end confirm reads a stamp line a warm JIT does not print.** The
+    generator confirm (`gen_tune_probe.das`, confirm_e2e_prefill) scores each arm by the
+    `llvm_tune: q8q8_tile_gen <- <perm>` line of a verbose child, and a child that runs the
+    prefill and prints its `CONFIRM_PP` still scores 0 when the line is absent: under a
+    `daspkg release` on this box every arm's child loaded, ran the E4B prefill and
+    printed no stamp, so the confirm rejected, the tuner refused to ship, and the bundle kept
+    its unrenamed exe; the same child command by hand prints the stamp. Row 134 names the hole
+    from the cache side: a generator served from a cached compile is not re-stamped, so its
+    stamp line is not printed either. Unquirked: the confirm reads the served permutation from
+    the runtime (the sidecar apply's own report), not from a compile-time log line.
+140. **The CPU-side board is slower than its August 30 records at master's head.** On the M5
+    box, `gen_bench_records --oracle` at master e6eca7218 (the arcanoid-tune merge) reads every
+    CPU and Accelerate ASR row past its stored mean - parakeet v2/v3 +11..+17% on the short
+    clips and +4..+5% on the nine-minute one, gemma4a +8..+11%, canary +8..+16%, Qwen3-ASR
+    +8..+15%, Qwen3-Omni audio +5..+14%, whisper tiny/large-turbo +2..+5% - and the CPU image
+    rows' spliced prefill 15..21% slower (Qwen3VL-4B, Qwen2.5-Omni) with the Qwen2.5-Omni CPU
+    window-ViT encode +23%; every Metal text, image and ASR row holds within 1%. An A/B of the
+    same cells between master and a Metal-only refactor branch on identical winners (both trees
+    as -jit scripts on the shipped class defaults) reads within 2% both ways, so the drift sits
+    between the August 30 record and master's head, not in a branch. The short-clip bias (a
+    larger loss the shorter the clip) points at per-call overhead - a wake, a prep, or a
+    kernel winner that lost its small-shape arm - rather than a GEMM's steady-state rate.
+    Unquirked: first replicate the August 30 numbers - a worktree at the recording commit
+    (013a151f4) beside master's head, the same cell on both, side by side on a quiet box - then
+    bisect the CPU ASR cell (parakeet jfk.wav, 11 s) across the merges between them under one
+    manifest, and re-record the board.
+141. **Four tower sites release a pool buffer under a byte count that is not its acquire's.** In
+    `dasllama_metal_tower.das` the K panel `bk` is acquired at `bytes_rowk` (the 64-padded key
+    rows) and released at `bytes_row` / `bytes_rowp` (the 32-padded rows) at four self-attention
+    sites, where `pool_release` files by `pool_bucket(bytes)` and the pool's contract is that the
+    two counts match. Harmless today because `nk == npos` there, so the misfiled buffer is the
+    larger of the two; a shape where it is the smaller hands the next acquire a short buffer and
+    the GPU writes past it with no diagnostic. Unquirked: the four sites release under
+    `bytes_rowk`, and the tower context (`tw_ctx_make` / `tw_ctx_release`) carries the K panel
+    so the pair is written once.
+142. **The verify's chunk count and its partials buffer are sized by two formulas.** The MTP
+    verify's chunked attention dispatches `ceil((chain_pos + nrows) / 64)` chunks per row (the
+    pre-fold spelling, kept), while `acquire_step` sizes `bpart` for `ceil((pos + 1) / 64)`
+    chunks of its own (one-ahead) position - the two differ once `nrows > 2` crosses a 64-row
+    boundary, and the deepest verify row's true count is `ceil((chain_pos + nrows + 1) / 64)`.
+    Nothing reaches it below `g_attn_single_max` rows of context. Unquirked: one chunk-count
+    formula over the deepest row, used both to size `bpart` and to dispatch, with a cell that
+    verifies at a context depth crossing a 64-row boundary.
+143. **The q8 mul_mm tensor and double-buffer kernels are one body one stage width apart.**
+    `MetalQ8MulMmTensorT` and `MetalQ8MulMmDbT` (`dasllama_metal_prefill.das`) carry the same
+    eight-line kernel; they differ in the chunk width `tmm2d_q8u_f32` takes (64 / 128), the
+    staging tile (`twb` 6144 / 9216 halves) and the default M tile (32 / 128). Unquirked: one
+    class template with the stage width as its constant, the stamps keeping their dispatch
+    names, gated by the emitted-kernel identity compare and the prefill kq arms.
+144. **The CPU chain's gemma-4-12B perplexity trails the resident driver's, and more so past one
     prefill window.** Measured 2026-09-12 on the RTX 5060 Ti box, gemma-4-12B Q8_0, ordinary
     prose through the model's tokenizer, teacher-forced after a prefill (`test_gpu_resident_gemma.das`,
     the perplexity cells): 150 prefilled + 150 scored reads CPU 1.516 (137 argmax hits) against

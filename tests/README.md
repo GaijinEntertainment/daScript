@@ -384,6 +384,8 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 |---|---|---|
 | fio_errors.das | Path manipulation and error handling - extension, dir_name, base_name, normalize, mkdir/rmdir edge cases | |
 | fio_file.das | File I/O - fopen, fread, fwrite with fuzzing | |
+| _fixture_poll_child.das | *(helper)* the child fio_poll.das polls - silent until a release file appears, then one line | |
+| fio_poll.das | `fpoll` on a pipe - false while the child is silent, true on its line, true at EOF; a regular file is always ready; `funbuffered` | |
 | fio_utils.das | File utilities - fexist, rmdir, rmdir_rec, fread/fwrite by path, get_das_version | |
 | glob_test.das | Pathname glob - `match_glob` (literal, `*`, `**`, `?`, `[a-z]`, `[!abc]`, edge cases), `glob`, `glob_filtered` walk, `is_glob_pattern` | |
 | popen_argv.das | `popen_argv` - basic invocation, non-zero exit on unknown flag, exit code capture, a forward-slash relative argv[0] | |
@@ -855,7 +857,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 |---|---|---|
 | _fixture_clean.das | *(helper)* the clean disk file the protocol test opens with broken buffer text | |
 | test_lsp_project_root.das | the validate subtool under -project_root sees a project's own descriptors | |
-| test_lsp_protocol.das | the LSP server over a stdio pipe - handshake, overlay diagnostics, navigation, shutdown | |
+| test_lsp_protocol.das | the LSP front over a stdio pipe, through the interpreter host and the static exe - handshake, overlay diagnostics, navigation, shutdown | |
 
 ## match/
 
@@ -1130,6 +1132,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | File | Description | Expects errors |
 |---|---|---|
 | _fixture_watchdog_child.das | *(helper)* the supervised child - a run counter and a mode pick the story it acts out | |
+| test_lsp_front.das | the --lsp front's cross-tree guard over throwaway git-style trees - the three hints, the compiler's own tree, a scoping project_root | |
 | test_stdio_front.das | the --stdio front through both hosts - the server's own initialize result, local ping, lazy child, respawn after the server's shutdown | |
 | test_watchdog.das | the supervisor - restart backoff, exit-code policy, stages, crash bundles, the stop ladder, the tray | |
 

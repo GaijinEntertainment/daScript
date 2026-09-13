@@ -113,7 +113,7 @@ no compilation, no simulation:
        TextPrinter tout;
        tout << "Creating standalone context...\n";
 
-       auto ctx = standalone_context::Standalone();
+       auto ctx = ctx_standalone_context::Standalone();
 
        tout << "Calling test():\n";
        ctx.test();
@@ -126,7 +126,7 @@ Key points:
 
 * **No** ``NEED_ALL_DEFAULT_MODULES`` or ``Module::Initialize`` —
   the standalone context is entirely self-contained.
-* ``standalone_context::Standalone()`` — the constructor sets up all
+* ``ctx_standalone_context::Standalone()`` — the constructor sets up all
   functions, globals, and type info from pre-generated AOT data.
 * ``ctx.test()`` — a direct C++ method call, not ``findFunction``
   followed by ``evalWithCatch``.

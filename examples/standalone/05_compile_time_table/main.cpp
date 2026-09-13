@@ -29,7 +29,7 @@ static int read_adc ( int sample ) {
 int main () {
     das_nano_set_print(&board_print);
 
-    thermometer::Standalone ctx;
+    ctx_thermometer::Standalone ctx;
 
     const int lo = ctx.adc_range_lo();
     const int hi = ctx.adc_range_hi();

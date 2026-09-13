@@ -81,6 +81,72 @@ cached DLL for instant execution.
 - By default, the `dll` is stored in `.jitted_scripts/`.
 - This can be changed using `jit_output_path`.
 
+## Native library with a C API (`-lib`)
+`-lib` emits a native library plus the C header a host calls it through, so a
+program that only needs to *call* one script links no daslang API:
+
+```sh
+./bin/daslang -lib script.das -output build/script
+```
+
+writes `build/script.so` (`.dylib` / `.dll`) and `build/script.h`. Add
+`-- --jit-lib-static` for a `.a` / `.lib` archive instead; the generated header
+records what a host then links.
+
+Which functions cross the boundary, in three forms: `[export_c]` marks them one
+at a time; `-- --jit-lib-export-marked` takes whatever the program already marks
+`[export]`, so a script with a host API needs no new annotation; and
+`-lib-export-all` offers every public function of the entry module whose
+signature C can spell (naming the ones it skips). The first two are a selection
+only - a signature C cannot spell stays a hard error - while export-all skips it
+with a warning. `examples/c_api_library/` builds one library each way and loads
+all three at once through dasbind.
+
+`-- --jit-lib-bindings out/script_c.das` writes the daslang twin of the header
+alongside it: one `[extern(cdecl, late, ...)]` per entry point, plus a das struct
+per structure that crosses. A daslang host then `require`s that file instead of
+hand-writing the declarations or binding the C header through clang, and because
+the externs are `late` the bindings compile before the library exists - which is
+what lets a build system generate them as an ordinary output. The example's
+CMakeLists does exactly that for its three libraries. Every library gets the same four entry points,
+prefixed with the output name, so they always match the header they are declared in:
+
+```c
+script_ctx * script_create(void);
+void script_destroy(script_ctx * ctx);
+const char * script_last_error(script_ctx * ctx);
+void script_shutdown_runtime(void);
+```
+
+One instance owns one daslang context - its own globals, heap and string heap - and `_create`
+works on any thread. Several such libraries coexist in one process, as does one inside a host that
+registered the daslang modules itself: the first there registers the runtime, the rest bind to it.
+Scalars, `string`, pointers and enums cross by value; structures and the
+`float2`..`uint4` / `range` families cross as `const T *` and return through a
+trailing `T * out`. A daslang panic returns zero, leaves `out` untouched, and
+shows up in `script_last_error(ctx)` until the next call clears it.
+
+Codegen is the same as `-exe`: the same private wrappers, the same
+load-resolved globals, no DLL cache. Cross-compilation is not supported here -
+build the library on its target host.
+
+## Standalone contexts, and which tier writes one
+
+A standalone context is a script that carries its own `Context` and needs no
+compiler at run time. Two tiers write one, from the same script:
+
+- **AOT** - `daslang utils/aot/main.das -- -ctx script.das out/` emits C++ the
+  host compiles itself: `class Standalone : public Context` plus one method per
+  `[export]` function, next to the same C entry points `-lib` emits - one
+  describer writes both. The host owns the build, so it cross-compiles
+  anywhere its own toolchain reaches.
+- **LLVM** - `-lib` and `-exe` above emit the binary directly, no C++ compiler
+  in the loop and no daslang sources shipped. `-exe` can cross-compile, since
+  codegen picks the target triple; `-lib` is host-only.
+
+Both answer the same C API, so a host can move between them without editing a
+call site. `skills/cpp_integration.md` covers choosing one.
+
 ## Cross-compilation (WebAssembly)
 The JIT pipeline can emit a non-host target instead of running on the host.
 The supported cross-target is `wasm32-unknown-emscripten` (the default when no

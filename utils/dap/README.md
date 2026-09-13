@@ -35,7 +35,11 @@ required = true
 3. Call `debug_threads`. The daScript startup gate requires this request.
 4. Call `debug_configuration_done`.
 5. Wait for `stopped` with `debug_wait_event`, then use `debug_stack_trace`,
-   `debug_scopes`, `debug_variables`, and `debug_evaluate`.
+   `debug_scopes`, `debug_variables`, and `debug_evaluate`. A `debug_evaluate`
+   result carries the value and its type; an evaluation the server could not
+   perform is a failed call whose text is the evaluator's diagnostic. The bridge
+   keeps the first response to every request and fails the next call when a
+   server answers one request twice.
 6. Resume with `debug_continue`, `debug_step_in`, `debug_step_over`, or
    `debug_step_out`.
 7. Finish with `debug_terminate` or `debug_disconnect`.
@@ -52,6 +56,13 @@ instruments contexts already present when `configurationDone` arrives, then
 instruments later contexts when they are created, before their code runs.
 Statement stepping remains available with `stepping_debugger=true`; it stays
 opt-in so callers choose between statement stepping and instrumentation.
+
+The program compiles optimized by default, the same code a plain run executes,
+so a call the optimizer evaluates at compile time never runs and a breakpoint
+inside it never hits. `optimize=false` launches with `-no-optimization` (the
+program-side spelling is `options optimize = false`): every source statement
+and call survives and the debugger stops where the source says. The compiler's
+own folding contexts are never reported as threads.
 
 ## Custom debugger state
 

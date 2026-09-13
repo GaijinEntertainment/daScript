@@ -27,7 +27,7 @@ static void to_console ( const char * text ) {
 int main () {
     das_nano_set_print(&to_console);
 
-    heap_demo::Standalone ctx;
+    ctx_heap_demo::Standalone ctx;
 
     // 0..9 squared
     expect_int("sum_range(10)", ctx.sum_range(10), 285);

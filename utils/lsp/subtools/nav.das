@@ -185,6 +185,7 @@ def private compile_nav(file, project : string; blk : block<(program : smart_ptr
         using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
+            cop.module_cache = true
             cop.export_all = true
             cop.no_optimizations = true
             cop.no_infer_time_folding = true

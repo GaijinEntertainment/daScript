@@ -4,6 +4,7 @@ require dastest/testing_boost public
 require strings
 require math
 require daslib/fio
+require daslib/command_line
 require daslib/json_boost
 
 require canonical
@@ -1447,4 +1448,50 @@ def test_generics_called_and_uncalled_canonicalize_equal(t : T?) {
     let a = find_canonical_required(t, records, "case_generic_called")
     let b = find_canonical_required(t, records, "case_generic_uncalled")
     t |> equal(a, b)
+}
+
+
+let BROKEN_FIXTURE = "utils/detect-dupe/fixture/_fixture_broken_cases.das"
+
+[test]
+def test_compile_failure_still_collects(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(BROKEN_FIXTURE, records, false, false)
+    t |> success(!ok, "broken_cases.das must fail to compile")
+    let canon = find_canonical_by_name(records, "case_broken_survivor")
+    t |> success(!empty(canon),
+        "a function beside a compile error is still collected - the AST survives the failed infer")
+}
+
+
+// --export-functions over a file that fails to compile exits 0 and writes the survivors - the
+// sharding scripts read the file, not a partial-run exit code
+[test]
+def test_export_cli_survives_compile_failure(t : T?) {
+    let out = make_temp_export_path(t)
+    if (empty(out)) return
+    let argv <- [get_das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/detect-dupe/main.das", "--",
+                 "-p", "{get_das_root()}/{BROKEN_FIXTURE}", "--export-functions", out]
+    var output = ""
+    let rc = unsafe(popen_argv(argv, 0.0, $(f) {
+        if (f != null) {
+            output = fread(f)
+        }
+    }))
+    t |> equal(rc, 0, "an export over a broken file exits 0 (the run is not partial-failed):\n{output}")
+    var records : array<FuncRecord>
+    var err = ""
+    let ok = read_import(out, records, false, 0, err, true)
+    t |> success(ok, "the export file is readable: {err}")
+    t |> success(!empty(find_canonical_by_name(records, "case_broken_survivor")),
+        "the function beside the compile error is in the export")
+    remove(out)
+}
+
+[test]
+def test_worker_count_auto_is_physical_cores(t : T?) {
+    t |> equal(compute_worker_count(1000, 0), min(get_total_hw_cores(), MAX_AUTO_WORKERS),
+        "0 = auto means the box's cores under the ceiling; get_total_hw_threads is the jobque's own lane count")
+    t |> equal(compute_worker_count(1000, MAX_AUTO_WORKERS * 4), MAX_AUTO_WORKERS * 4,
+        "an explicit count is not capped")
 }

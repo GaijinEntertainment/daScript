@@ -62,16 +62,20 @@ enum class JitMode {
     Direct,
     Dll,
     Executable,
+    Library,
 };
 static JitMode jitEnabled = JitMode::None; // Disabled by default.
 static bool jitNoCache = false; // -jit-no-cache: bypass DLL-cache path, run in-memory.
 static bool jitStack = false; // -jit-stack: retain every generated call in the logical das stack.
 static string jitOutPath = ""; // Empty, JIT module will choose default.
+static bool libExportAll = false;
+static bool libNeedsOutput = false;
 static string serFile = "";   // -ser <path>: write the AST module cache (env serializer rail) after compile
 static string deserFile = ""; // -deser <path>: read the AST module cache during compile instead of parsing
 static string moduleCacheFile = ""; // -module-cache <path>: both - read when present, refresh when the compile diverged
 static bool moduleCacheExplicit = false; // -module-cache given
 static bool noModuleCache = false;  // -no-module-cache: off, over -module-cache and the default alike
+static bool noOptimization = false; // -no-optimization: `options optimize = false` for the whole program
 static string hostBinary = "";      // argv[0]
 static string hostOptions = "";     // argv up to "--": the compile's own options key the default cache
 
@@ -112,6 +116,7 @@ static CodeOfPolicies getPolicies() {
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
     policies.no_lint = noLint;
+    policies.no_optimizations = noOptimization;
     policies.log_module_compile_time = logModuleCompileTime;
     policies.building_documentation = buildingDocumentation;
     return policies;
@@ -473,6 +478,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         policies.jit_enabled = true;
         switch (jitEnabled) {
             case JitMode::Executable: policies.jit_exe_mode = true; break;
+            case JitMode::Library:
+                policies.export_public_functions = libExportAll;
+                break;
             case JitMode::Dll: policies.jit_dll_mode = true; break;
             case JitMode::Direct: break;
             default: break;
@@ -511,6 +519,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
     policies.no_lint = noLint;
+    policies.no_optimizations = noOptimization;
     policies.log_module_compile_time = logModuleCompileTime;
     policies.building_documentation = buildingDocumentation;
     policies.persistent_heap = true;
@@ -590,6 +599,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                 return 0;
             }
 
+            if ( jitEnabled==JitMode::Library ) {
+                program->options.push_back(AnnotationArgument("jit_lib", true));
+            }
             auto simulate0 = ref_time_ticks();
             auto pctx = SimulateWithErrReport(program, tout);
             startupSimulateUsec += get_time_usec(simulate0);
@@ -730,6 +742,10 @@ void print_help() {
         << "                Useful when the cached .jitted_scripts/ DLL is stale or unwanted.\n"
         << "    -jit-stack  with -jit: retain every generated call in the logical daslang stack.\n"
         << "    -exe        JIT compile to standalone executable (implies -dry-run)\n"
+        << "    -lib        JIT compile to a C-ABI native library: <output>.so/.dylib/.dll plus <output>.h\n"
+        << "                (add -- --jit-lib-static for a .a/.lib archive instead; implies -dry-run)\n"
+        << "    -lib-export-all with -lib: export every public entry-module function whose signature has a C\n"
+        << "                representation, instead of only the [export_c] ones\n"
         << "    -output <path> set JIT output path\n"
         << "    --list-shared-modules <path> with -exe: write JSON describing the program's shared modules and daspkg-package .das module sources to <path>\n"
         << "    --force-shared-module <name> with -exe: force-include a shared module by daslang or package name (repeatable)\n"
@@ -738,6 +754,7 @@ void print_help() {
         << "                silently, at .jitted_scripts/module_cache/<script>-<hash>.dascache for a run that\n"
         << "                executes; off under -exe (one-unit codegen is the faster binary), -compile-only, -documentation, -use-aot\n"
         << "    -no-module-cache  no AST module cache at all\n"
+        << "    -no-optimization  compile every module unoptimized (a debugger then stops on every statement the source has)\n"
         << "    -ser <path> write the compiled AST module cache to <path> after compile (explicit write half)\n"
         << "    -deser <path> read the AST module cache from <path> during compile instead of parsing;\n"
         << "                prints 'deser: clean' when every module came from the cache, 'deser: FALLBACK' otherwise\n"
@@ -933,6 +950,12 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             } else if ( cmd=="exe") {
                 jitEnabled = JitMode::Executable;
                 dryRun = true;
+            } else if ( cmd=="lib") {
+                jitEnabled = JitMode::Library;
+                dryRun = true;
+                libNeedsOutput = true;
+            } else if ( cmd=="lib-export-all") {
+                libExportAll = true;
             } else if ( cmd=="ser" ) {
                 if ( i+1 >= argc ) {
                     printf("-ser requires path argument\n");
@@ -960,6 +983,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="no-module-cache" ) {
                 noModuleCache = true;
+            } else if ( cmd=="no-optimization" ) {
+                noOptimization = true;
             } else if ( cmd=="-list-shared-modules" ) {
                 // script will pick up next argument by itself (read from llvm_exe.das via get_command_line_arguments())
                 if ( i+1 >= argc ) {
@@ -1115,6 +1140,11 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     if ( noModuleCache && (!serFile.empty() || !deserFile.empty()) ) {
         printf("-no-module-cache disables the cache; do not combine it with -ser/-deser\n");
+        return -1;
+    }
+    if ( libNeedsOutput && jitOutPath.empty() ) {
+        printf("-lib needs -output <path>: a host includes the generated header by name, and the\n"
+               "default JIT cache path is hash-named and swept\n");
         return -1;
     }
     startupPreScanUsec = get_time_usec(startupMain0);

@@ -4,7 +4,7 @@
 using namespace das;
 
 int main( int, char * [] ) {
-    standalone_init_fixture::Standalone ctx;
+    ctx_standalone_init_fixture::Standalone ctx;
     TextPrinter tout;
     int failures = 0;
     auto expect = [&]( const char * name, int32_t have, int32_t want ) {
@@ -18,16 +18,16 @@ int main( int, char * [] ) {
     expect("get_init_fn_stamp()", ctx.get_init_fn_stamp(), 3);
     expect("get_reads_forward()", ctx.get_reads_forward(), 100);
     expect("get_later()", ctx.get_later(), 7);
-    standalone_init_fixture::Pair madePair = ctx.make_pair(3, 4);
+    ctx_standalone_init_fixture::Pair madePair = ctx.make_pair(3, 4);
     expect("make_pair(3,4).a", madePair.a, 3);
     expect("make_pair(3,4).b", madePair.b, 4);
     expect("pair_sum(make_pair(3,4))", ctx.pair_sum(madePair), 7);
-    standalone_init_fixture::Pair embedderPair;
+    ctx_standalone_init_fixture::Pair embedderPair;
     embedderPair.a = 20;
     embedderPair.b = 22;
     expect("pair_sum(embedder-built Pair)", ctx.pair_sum(embedderPair), 42);
-    expect("flip(on)", int32_t(ctx.flip(standalone_init_fixture::Mode::on)),
-        int32_t(standalone_init_fixture::Mode::off));
+    expect("flip(on)", int32_t(ctx.flip(ctx_standalone_init_fixture::Mode::on)),
+        int32_t(ctx_standalone_init_fixture::Mode::off));
     constexpr uint32_t kFixtureStackSize = 262144;
     expect("stack.size() exceeds options stack by the init headroom",
         ctx.stack.size() > kFixtureStackSize ? 1 : 0, 1);
@@ -48,6 +48,7 @@ int main( int, char * [] ) {
     expect("findVariable(nope)", ctx.findVariable("nope"), -1);
     // a shared global sits in the shared block: its emitted offset is the shared running size
     expect("get_shared_total()", ctx.get_shared_total(), 6);
+    expect("renamed_sum(20,22)", ctx.renamed_sum(20, 22), 42);
     int sharedTaps = ctx.findVariable("g_shared_taps");
     expect("findVariable(g_shared_taps)", sharedTaps >= 0 ? 1 : 0, 1);
     expect("getVariable(g_shared_taps)[0]", sharedTaps >= 0 ? ((int32_t *) ctx.getVariable(sharedTaps))[0] : -1, 1);

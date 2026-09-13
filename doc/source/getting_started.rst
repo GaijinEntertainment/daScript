@@ -125,7 +125,7 @@ directory::
    claude --plugin-dir /abs/path/to/daScript/utils/lsp/plugin
 
 Any other stdio LSP client can spawn it directly as
-``python3 utils/lsp/lsp_supervisor.py``.  Configuration options and
+``bin/watchdog --lsp``.  Configuration options and
 architecture notes are in :ref:`utils_lsp`.
 
 

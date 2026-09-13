@@ -8,16 +8,18 @@ require daslib/command_line
 require daslib/json_boost
 require daslib/strings_boost
 require strings
+require uriparser
 
-//! Protocol tests for utils/lsp/lsp_supervisor.py, driven over a stdio pipe
-//! (precedent: tests/mcp/test_popen_argv_pipe.das). One live session covers:
+//! Protocol tests for the LSP front (utils/watchdog/lsp_front.das, `watchdog --lsp`), driven
+//! over a stdio pipe through both hosts (precedent: tests/mcp/test_popen_argv_pipe.das). One
+//! live session covers:
 //! initialize handshake, didOpen with broken buffer text while the disk file
 //! stays clean (publishDiagnostics must reflect the buffer — the --overlay
 //! path), didChange back to clean (empty publish), a definition request, the
 //! call-hierarchy loop (prepare -> incomingCalls with the item's data
 //! round-tripped verbatim -> outgoingCalls from the returned caller item),
 //! an implementation request (base method -> derived override), and
-//! shutdown/exit. Skips with a log notice when python is not on PATH.
+//! shutdown/exit.
 
 // ===== outgoing LSP messages (sprint_json envelopes) =====
 
@@ -207,27 +209,35 @@ def private echo_item_data(item : JsonValue const?) : HierItemData {
         name = item?["data"]?["name"] ?? "")
 }
 
-// "python3" everywhere except Windows installs that only ship "python";
-// probe both, verify the output to dodge the Windows Store python3 alias
-def private find_python() : string {
-    for (cand in ["python3", "python"]) {
-        var looks_like_python = false
-        var rc = -1
-        unsafe {
-            rc = popen_argv_pipe([cand, "--version"]) $(stdin_w, stdout_r) {
-                return if (stdin_w == null || stdout_r == null)
-                let line = fgets(stdout_r)
-                looks_like_python = !empty(line) && (line |> starts_with("Python"))
-            }
-        }
-        return cand if (rc == 0 && looks_like_python)
+def private das_exe() : string {
+    return get_full_file_name(get_das_exe())
+}
+
+//! the static exe beside the daslang binary, when it is built
+def private watchdog_exe() : string {
+    let beside = path_join(dir_name(das_exe()), "watchdog{get_platform_name() == "windows" ? ".exe" : ""}")
+    return fexist(beside) ? beside : ""
+}
+
+struct FrontHost {
+    name : string
+    argv : array<string>
+}
+
+//! the two hosts of the LSP front: the interpreter running utils/watchdog/main.das, and the
+//! static exe where it is built
+def private front_hosts() : array<FrontHost> {
+    var hosts : array<FrontHost>
+    hosts |> emplace(FrontHost(name = "interpreter host", argv <- [das_exe(), path_join(get_das_root(), "utils/watchdog/main.das"), "--", "--lsp"]))
+    let exe = watchdog_exe()
+    if (!empty(exe)) {
+        hosts |> emplace(FrontHost(name = "static exe", argv <- [exe, "--lsp"]))
     }
-    return ""
+    return <- hosts
 }
 
 def private path_to_uri(path : string) : string {
-    let gp = to_generic_path(path)
-    return gp |> starts_with("/") ? "file://{gp}" : "file:///{gp}"
+    return file_name_to_uri(path)
 }
 
 def private uri_for_compare(uri : string) : string {
@@ -240,12 +250,6 @@ def private uri_for_compare(uri : string) : string {
 
 [test]
 def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on one pipe; splitting it breaks the request/response choreography
-    let python = find_python()
-    if (empty(python)) {
-        to_log(LOG_WARNING, "lsp: no python3/python on PATH — skipping LSP protocol test\n")
-        return
-    }
-    let supervisor = path_join(get_das_root(), "utils/lsp/lsp_supervisor.py")
     let fixture = path_join(get_das_root(), "tests/lsp/_fixture_clean.das")
     let clean = fread(fixture)
     let broken = replace(clean, "    lsp_probe_helper()", "    zzz(1)\n    lsp_probe_helper()")
@@ -278,16 +282,19 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0)
     let uri = path_to_uri(fixture)
 
-    t |> run("supervisor protocol end-to-end") @(t : T?) {
+    for (host in front_hosts()) {
+      let front_name = host.name
+      let front_argv := host.argv
+      t |> run("front protocol end-to-end through the {front_name}") @capture(:= front_argv) (t : T ?) {
         var rc = -1
         unsafe {
-            rc = popen_argv_pipe([python, supervisor]) $(w, r) {
+            rc = popen_argv_pipe(front_argv) $(w, r) {
                 if (w == null || r == null) {
-                    t |> failure("could not spawn LSP supervisor via {python}")
+                    t |> failure("could not spawn the LSP front: {front_argv}")
                     return
                 }
-                // initialize — the compiler override makes the run hermetic;
-                // absolute path because subtools spawn with per-request cwd
+                // initialize — the compiler override makes the run hermetic; absolute path,
+                // since the subtool argv must name the binary wherever it is run from
                 write_frame(w, sprint_json(InitializeMsg(id = 1, params = InitializeParams(
                     initializationOptions = InitializeOptions(
                         compiler = get_full_file_name(get_das_exe())))), false))
@@ -327,6 +334,20 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 let pub2 = read_until(r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
                 t |> success(pub2 != null, "publishDiagnostics after didChange")
                 t |> equal(diagnostics_of(pub2), 0)
+
+                // an edit kills the compile in flight for its file: broken, then clean again
+                // once the broken compile has started - the next publish is the clean one, the
+                // stale buffer's never lands
+                write_frame(w, sprint_json(DidChangeMsg(params <- DidChangeParams(
+                    textDocument = VersionedDoc(uri = uri, version = 3),
+                    contentChanges <- [ContentChange(text = broken)])), false))
+                sleep(150u)
+                write_frame(w, sprint_json(DidChangeMsg(params <- DidChangeParams(
+                    textDocument = VersionedDoc(uri = uri, version = 4),
+                    contentChanges <- [ContentChange(text = clean)])), false))
+                let pub3 = read_until(r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
+                t |> success(pub3 != null, "publishDiagnostics after the superseding didChange")
+                t |> equal(diagnostics_of(pub3), 0, "the superseded broken compile never published")
 
                 // definition at the call site resolves to the def line
                 write_frame(w, sprint_json(DefinitionMsg(id = 2, params = CursorParams(
@@ -402,6 +423,16 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 write_frame(w, sprint_json(PlainMsg(method = "exit"), false))
             }
         }
-        t |> equal(rc, 0, "supervisor exit code")
+        t |> equal(rc, 0, "front exit code")
+      }
+    }
+    t |> run("the validated file's record sits in the workspace's module cache") @(t : T?) {
+        var records = 0
+        fio::dir(".jitted_scripts/module_cache") $(name) {
+            if (name |> starts_with("_fixture_clean-") && name |> ends_with(".dascache")) {
+                records++
+            }
+        }
+        t |> success(records > 0, "the validated file's record sits in the workspace's module cache")
     }
 }

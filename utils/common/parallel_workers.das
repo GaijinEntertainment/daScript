@@ -41,12 +41,14 @@ def public should_parallelize(n_items : int; workers_setting : int) : bool {
 }
 
 
-// Map `workers_setting` to an actual worker count. 0 => hardware
-// threads. Clamps to [1, n_items].
+// Auto ceiling: a worker is a whole daslang process compiling its own module graph - one per core costs memory, not time.
+let public MAX_AUTO_WORKERS = 16
+
+// 0 means the box's physical cores capped at MAX_AUTO_WORKERS - get_total_hw_threads is the jobque's worker count, not the box.
 def public compute_worker_count(n_items : int; workers_setting : int) : int {
     var w = workers_setting
     if (w == 0) {
-        w = get_total_hw_threads()
+        w = min(get_total_hw_cores(), MAX_AUTO_WORKERS)
         if (w < 1) {
             w = 1
         }

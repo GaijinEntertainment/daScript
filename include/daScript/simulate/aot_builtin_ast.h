@@ -441,6 +441,8 @@ namespace das {
     DAS_CC_API void astVisitGenerics ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
     DAS_CC_API void astVisitModule ( smart_ptr_raw<Program> program, VisitorAdapter * adapter,
                       Module* module, Context * context, LineInfoArg * line_info );
+    DAS_CC_API void astVisitModuleWithSort ( smart_ptr_raw<Program> program, VisitorAdapter * adapter,
+                      Module* module, bool sortStructures, Context * context, LineInfoArg * line_info );
     DAS_CC_API void astVisitModulesInOrder ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
     DAS_CC_API void astVisitFunction ( Function * func, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info);
     DAS_CC_API Expression * astVisitExpression ( Expression * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info);

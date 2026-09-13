@@ -2729,3 +2729,30 @@ def test_wasm_archive_detection(t : T?) {
         force_rmdir(root)
     }
 }
+
+[test]
+def test_wasm_archive_staging(t : T?) {
+    t |> run("build --wasm stages the runtime and module archives of the web build's lib dir and nothing else") @(t : T?) {
+        let tmp = create_temp_directory_result("daspkg staging ")
+        if (!(tmp is value)) {
+            t |> failure("could not create temp directory: {tmp as error}")
+            return
+        }
+        let root = tmp as value
+        let web_lib = path_join(root, "web_lib")
+        let dst = path_join(root, "dst")
+        mkdir_rec(web_lib)
+        let wasm_magic <- [0x00u8, 0x61u8, 0x73u8, 0x6du8, 0x01u8, 0x00u8, 0x00u8, 0x00u8]
+        let native_magic <- [0xcfu8, 0xfau8, 0xedu8, 0xfeu8, 0x0cu8, 0x00u8, 0x00u8, 0x01u8]
+        write_archive(path_join(web_lib, "liblibDaScript_runtime.a"), wasm_magic)
+        write_archive(path_join(web_lib, "liblibDasModuleGlfw.a"), wasm_magic)
+        write_archive(path_join(web_lib, "libfreetype.a"), native_magic)   // a third-party bake beside them
+        t |> equal(stage_wasm_archives(web_lib, dst), 2, "the runtime and the module archive are staged")
+        t |> success(fexist(path_join(dst, "liblibDaScript_runtime.a")) && fexist(path_join(dst, "liblibDasModuleGlfw.a")), "both land in the lib dir")
+        t |> success(!fexist(path_join(dst, "libfreetype.a")), "an archive that is neither runtime nor module is left where it is")
+        t |> equal(stage_wasm_archives(web_lib, web_lib), 2, "the same directory counts without copying")
+        write_archive(path_join(web_lib, "liblibDasModuleNative.a"), native_magic)
+        t |> equal(stage_wasm_archives(web_lib, dst), -1, "a native archive among them refuses the stage")
+        force_rmdir(root)
+    }
+}

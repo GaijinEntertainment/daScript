@@ -232,7 +232,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 208;   // 208: a node reference is the writer's first-mention number as a varint, not a pointer-and-epoch word (207: neither Function nor Variable flags carry a used bit, and neither streams an index; 206: the record header carries the requires the parse took; 205: a vector of a handled element streams under the element's module; 204: the record header stamps the source by content hash; the policy stream carries every CodeOfPolicies field)
+            return 210;   // 210: module_cache joins the policy stream; `options no_optimizations` is read (209: a record written by a recompile that served a dasbind registrar could carry a dependent's calls to the extern stubs unrewritten - the format is unchanged, the bump discards those records (208: a node reference is the writer's first-mention number as a varint, not a pointer-and-epoch word; 207: neither Function nor Variable flags carry a used bit, and neither streams an index; 206: the record header carries the requires the parse took; 205: a vector of a handled element streams under the element's module; 204: the record header stamps the source by content hash; the policy stream carries every CodeOfPolicies field)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -399,6 +399,7 @@ namespace das {
         void install ( const string & readFrom, const string & writeTo, bool quiet = false );
         Result finish ();
         static string defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions );
+        static string embeddedHostOptions ( const CodeOfPolicies & policies );   // hostOptions for a script's compile_file: argv up to `--` + policies hash
         SerializationStorageVector  readStorage, writeStorage;
         unique_ptr<AstSerializer>   reader, writer;
         string                      writePath;

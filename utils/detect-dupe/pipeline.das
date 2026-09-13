@@ -242,6 +242,7 @@ def public compile_and_collect(file : string; var records : array<FuncRecord>;
 //! `missing prerequisite` (a module this build/platform does not carry — Apple-only Metal
 //! benchmarks on Windows) sets `prereq_skipped` and returns true. That is an honest skip,
 //! not a broken file: the caller counts and reports it, never fails the corpus on it.
+//! Any other compile failure returns false and still collects: a failed infer leaves an AST, and its functions enter the corpus.
 def public compile_and_collect_ex(file : string; var records : array<FuncRecord>;
                                   var seen_loc : table<string; void?>;
                                   var prereq_skipped : bool&;
@@ -274,7 +275,7 @@ def public compile_and_collect_ex(file : string; var records : array<FuncRecord>
                             to_log(LOG_ERROR, "FAIL {file}\n")
                         }
                     }
-                    return
+                    if (program == null) return
                 }
                 collect_from_program(program, file, records, seen_loc, lambdas_only, want_sigs, min_tokens)
             }

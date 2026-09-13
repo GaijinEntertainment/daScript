@@ -3,16 +3,13 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `README.md`.
 
-**A diff that adds an `event` value to the JSON-lines log adds it to the `The events:` list in
-`README.md`, and a diff that adds a field key to such a line describes it in the same `## The
-log` section, in the same change** - that section is the list a rename sweep starts from.
-`REVIEW.das` (beside this file) checks the `event` half: every name the folder's sources emit
-is listed, and every listed name is emitted.
+**A diff that adds a field key to a JSON-lines log line describes it in the `## The log`
+section of `README.md`, in the same change** - that section is the list a rename sweep starts
+from. The `event` half is `REVIEW.das`'s.
 
-**A diff that adds an `event` value or a field key to the log in `watchdog.das` or
-`stdio_front.das` uses the name the other file already writes for the same thing** - one
-meaning under two spellings matches a log reader on only one of the two, and the miss is
-silent.
+**A diff that adds an `event` value or a field key to the log from any `.das` in this folder
+uses the name another file here already writes for the same thing** - one meaning under two
+spellings matches a log reader on only one of the two, and the miss is silent.
 
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a
 check walks, or rewriting a finding text so it no longer names what failed.**

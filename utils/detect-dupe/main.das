@@ -28,7 +28,7 @@ struct Config {
     paths_stdin : bool
 
     @clarg_short = "j"
-    @clarg_doc = "Worker count for parallel --export-functions runs. 0 = auto (= hardware threads). 1 = sequential. Files are sorted, split into N contiguous chunks, each compiled by a child detect-dupe process; shards merged in chunk-index order so output is byte-identical across worker counts. Below 16 input files the export stays sequential regardless. Ignored without --export-functions."
+    @clarg_doc = "Worker count for parallel --export-functions runs. 0 = auto (= physical cores, at most 16). 1 = sequential. Files are sorted, split into N contiguous chunks, each compiled by a child detect-dupe process; shards merged in chunk-index order so output is byte-identical across worker counts. Below 16 input files the export stays sequential regardless. Ignored without --export-functions."
     workers : int
 
     @clarg_short = "t"
@@ -491,14 +491,8 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
         }
 
         if (exporting) {
-            // In export mode, treat compile failures as fatal —
-            // sharding scripts that merge multiple exports must be able
-            // to detect partial-failure runs, same reason write
-            // failures panic below. Best-effort export would silently
-            // ship an incomplete corpus.
             if (n_failed > 0) {
-                to_log(LOG_ERROR, "error: {n_failed} compile failure(s); refusing to write partial export\n")
-                panic("detect-dupe export failed: {n_failed} compile failure(s)")
+                to_log(LOG_WARNING, "{n_failed} file(s) failed to compile; their functions are exported from the AST the failed compile left\n")
             }
             if (write_export(records, cfg.export_functions)) {
                 to_log(LOG_INFO, "wrote {length(records)} function(s) to {cfg.export_functions}\n")

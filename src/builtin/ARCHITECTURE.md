@@ -60,6 +60,20 @@ share one. `-no-module-cache` disables the cache outright, over an explicit `-mo
 override; beside `-ser` / `-deser` - the explicit round-trip halves, whose verdict is the point
 of the run - the host rejects the command line instead of silently disabling them.
 
+A script's own `compile_file` (`rtti_builtin_compile_file`, `module_builtin_ast.cpp`) installs
+the same default cache when its `CodeOfPolicies.module_cache` is set, with
+`ModuleFileCache::embeddedHostOptions` standing in for the host's command line: this process's
+arguments up to `--`, a `--jit-target` after it, and a hash of the policies streamed as a record
+stamps them, so two tools compiling one file under different policies keep separate records
+instead of rewriting one. `ScriptModuleCache` is the guard around that compile: it empties the
+environment's serializer slots before installing - the enclosing compile's stream (a
+`compile_file` from an `[init]` runs under the host's armed cache) never feeds the nested one, a
+cold nested read included - finishes the cache and puts the slots back on every exit, an
+exception's included, and the finish happens before the block runs, so a require the block
+issues is not this cache's. The writeback's temporary file carries the process id and a per-process
+sequence number, since two subtools compiling one file at once key the same record, as do two
+threads of one process.
+
 Every variant is its own record and an engine root's record is 200 MB, so the default directory
 is capped: after a writeback `ModuleFileCache::finish` lists the directory's `.dascache` files
 and removes the oldest by mtime until it fits `DAS_MODULE_CACHE_LIMIT` megabytes (4096 unless
@@ -114,9 +128,25 @@ under distinct multipliers, so one argument in the wrong register or slot change
 `tests/dasbind/CMakeLists.txt` builds the probe on a 64-bit host that builds and dlopens a
 shared library at test time - not wasm, Android or iOS, none of which walks `tests/` - and
 `tests/.das_test` skips the suite only on a 32-bit host, where the probe is not built, and under
-dastest's `--ser`/`--deser` sweep, because a deserialized program never applies `[extern]` and
-so never manufactures the `__dasbind__` function it names in the `dasbind` module; a 64-bit
-desktop tree without the library fails the suite instead of skipping it.
+dastest's `--ser`/`--deser` sweep. A deserialized program never applies `[extern]`, while a
+deserialized call already names its `__dasbind__` function in the `dasbind` module - and only
+`apply` or a retarget manufactures that function. A 64-bit desktop tree without the library
+fails the suite instead of skipping it.
+
+The `__dasbind__` proxy - the `DasBindFunction` a call to an `[extern]` is retargeted to - is
+registered by the `[extern]` annotation's `apply` callback when the registrar - the module
+carrying the `[extern]` declarations - compiles, and on demand by `transformCall` when the
+`dasbind` module lacks it: the module cache serves a registrar in a process that already
+compiled it (a live reload - the same process, so the `dasbind` module's hash shows no drift and
+nothing reparses the registrar), or a fresh process reads a dependent's record before any
+compile applied the registrar. `transformCall` takes the bind name from the call target's own
+`[extern]` declaration every time (`bindNameOf`) - the one input every process has - rather than
+from a table keyed on the function object, which every deserialization mints anew and whose
+freed addresses a later compile reuses. The proxy's signature types are clones with no source
+location (`proxyType`): the declaration's types and file record belong to the registrar's
+compile, which a served registrar's program takes with it, while the proxy lives for the
+process. A failed bind on the on-demand path is the call's transform error, the diagnostic
+`apply` would have given.
 
 ## 4. A message that crosses the panic jump
 

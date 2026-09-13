@@ -21,7 +21,6 @@ require live/live_vars public
 // skips re-spawning under is_reload(). The templates are all POD, so they
 // serialize cleanly.
 require live/decs_live public
-require live/audio_live public
 require audio/audio_boost public
 require strudel/strudel public
 require strudel/strudel_player public

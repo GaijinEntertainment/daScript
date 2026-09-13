@@ -540,17 +540,12 @@ jobs:
         $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./utils/daspkg/test_daspkg.das --timeout 900
 
     - name: "Test DAP MCP bridge (python)"
-      if: matrix.target == 'linux'
+      # the per-PR core cell runs it too: nightly-only, a red in this suite stays unseen until the next night
+      if: matrix.target != 'windows' && matrix.role != 'modules'
       run: |
         set -eux
         PYTHONDONTWRITEBYTECODE=1 python3 utils/dap/test_mcp_bridge.py
         DAS_TEST_STEPPING=1 PYTHONDONTWRITEBYTECODE=1 python3 utils/dap/test_mcp_bridge.py
-
-    - name: "Test LSP cross-tree guard (python)"
-      if: matrix.role != 'modules'
-      run: |
-        set -eux
-        python3 utils/lsp/test_crosstree_guard.py
 
     - name: "Test CI matrix and role conditions (python)"
       # ci/ci_matrix.py is what pre_job fed this very run; the test pins its per-event cells and

@@ -29,7 +29,7 @@ mcp__daslang__export_corpus(paths="daslib,utils,tests", out="corpus.json")
 
 Build the corpus once over the body of code you want to compare against. Re-run when the code drifts enough that stale matches become a problem.
 
-`workers="0"` parallelizes across hardware threads (auto). `workers="1"` keeps the run sequential. The output JSON is byte-identical across worker counts - the file list is sorted before chunking, and shards are merged in chunk-index order. Below 16 input files the export stays sequential regardless (child-process startup dominates).
+`workers="0"` parallelizes across the box's physical cores, at most 16 (auto). `workers="1"` keeps the run sequential. The output JSON is byte-identical across worker counts - the file list is sorted before chunking, and shards are merged in chunk-index order. Below 16 input files the export stays sequential regardless (child-process startup dominates).
 
 `paths_file="<path>"` scopes the export to an explicit precomputed list - useful for PR-scoped runs:
 
@@ -100,7 +100,7 @@ The CLI at `utils/detect-dupe/main.das` supports modes the MCP tools don't expos
 - **`--baseline-strict`** - drops clusters whose canonical was already in the baseline; only fully-new canonicals survive.
 - **`--against-from-stdin`** - read newline-delimited candidate paths from stdin, e.g. piped from `git diff --name-only`.
 - **`--paths-from <file>` / `--paths-stdin`** - read the *primary* file list from a file or stdin (skips blank lines and `#`-comments). Composes with `-p`. Use the file form when you'd hit ARG_MAX with thousands of entries; the stdin form to plug into `git diff --name-only` pipelines for PR-scoped corpus builds.
-- **`-j / --workers N`** - parallel `--export-functions` across N child detect-dupe processes. 0 (default) = hardware threads. Output is byte-identical to a sequential run (sorted-then-chunked, shards merged in order). Below 16 files the export stays sequential.
+- **`-j / --workers N`** - parallel `--export-functions` across N child detect-dupe processes. 0 (default) = physical cores, at most 16. Output is byte-identical to a sequential run (sorted-then-chunked, shards merged in order). Below 16 files the export stays sequential.
 - **`-L / --lambdas-only`** - cluster lambda bodies instead of top-level functions; useful for finding duplicated dastest `run` lambdas.
 - **`--min-tokens N`** - drop trivial wrappers (default 8).
 - **`--no-fuzzy`** - exact clusters only, faster on large corpora.
@@ -137,7 +137,7 @@ Full flag reference: `bin/daslang utils/detect-dupe/main.das -- -?` or `skills/i
 
 - **Structural matcher.** Same shape, different semantics -> match. Different shape, same semantics -> no match. Report is "candidates worth investigating", not a definitive verdict.
 - **No auto-fix.** Discovery only.
-- **Compile-required.** Candidate files must compile. If `candidate_files_failed > 0`, fix the compile error and rerun.
+- **A compile failure is not a stop.** A file that fails to compile is reported `FAIL` and still scanned: the AST survives a failed infer, so its functions enter the corpus or the candidate set. Only a file with no AST at all (a `missing prerequisite` module, a parse that yields nothing) contributes nothing.
 - **Macro-expanded.** Canonicalization runs after macro expansion. Two functions that differ in source but collapse to the same shape after macros will match - usually what you want, but can surprise you with macro-heavy daslib code.
 
 ## Iteration tip

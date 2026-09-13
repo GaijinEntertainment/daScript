@@ -37,6 +37,7 @@ if(TARGET libDasModuleHV AND TARGET libDasModuleStdDlg AND TARGET libDasModuleSt
             "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das"
             "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
+        "${PROJECT_SOURCE_DIR}/daslib/c_api_header.das"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         COMMENT "Standalone AOT (full runtime): watchdog"
         VERBATIM
@@ -95,7 +96,7 @@ endif()
 
 # Entries are paths relative to utils/; the exe/target name is the basename.
 # mcp/lsp never build as exe: their development runs interpreted under a supervisor
-# (the watchdog front, lsp_supervisor.py), so an exe form would never be dogfooded.
+# (the watchdog's --stdio and --lsp fronts), so an exe form would never be dogfooded.
 set(DAS_UTILS
     aot
     dascov

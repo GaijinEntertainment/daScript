@@ -449,8 +449,8 @@ var @live pellets_eaten_total = 0
 // ===== Pellet state =====
 // Stored as flat arrays indexed by cell — simpler than DECS for a static maze
 
-var pellets     : array<bool>   // true = pellet present
-var power_pills : array<bool>   // true = power pill present
+var @live pellets     : array<bool>   // true = pellet present
+var @live power_pills : array<bool>   // true = power pill present
 
 def init_pellets() {
     pellets     |> resize(MAZE_COLS * MAZE_ROWS)
@@ -1113,8 +1113,8 @@ def reset_game() {
 def init() {
     live_create_window("Pac-Man", 900, 760)
     create_gl_objects()
+    asch = audio_live_system()
     if (!audio_initialized) {
-        asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
     }
@@ -1139,7 +1139,8 @@ def init() {
         music_initialized = true
         start_menu_music()
     }
-    if (!is_reload()) {
+    // a full reload or a reset leaves the @live pellet arrays at their default, empty: start as on a cold start
+    if (!is_reload() || empty(pellets)) {
         init_pellets()
         reset_pac()
         dot_counter = 0
@@ -1284,7 +1285,7 @@ def shutdown() {
         strudel_shutdown()
         music_initialized = false
     }
-    audio_system_finalize(asch.command, asch.next_sid)
+    audio_live_finalize(asch)
     live_destroy_window()
 }
 

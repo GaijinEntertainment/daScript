@@ -168,6 +168,7 @@ def main() : int {
         using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
+            cop.module_cache = true
             // lint-profile compile (same as utils/lint): unoptimized AST so
             // source-shape rules fire; errors surface at infer, before either
             cop.export_all = true

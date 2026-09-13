@@ -14,6 +14,7 @@ Whether we are in lint-check mode (standalone linters set this so modules can ad
 Skip Program::lint() entirely (as if every module set ``options lint = false``).
 Skip the Module::Initialize() assert in compileDaScript (for environments initialized later, e.g. dynamic-module discovery).
 Export all functions and global variables.
+Treat every public, non-generic function of the entry module as [export] (daslang -lib -lib-export-all).
 If not set, we recompile main module each time.
 Keep context alive after main function.
 Whether to use very safe context (delete of data is delayed, to avoid table[foo]=table[bar] lifetime bugs).
@@ -108,3 +109,4 @@ JIT optimization level for compiled code (0-3).
 JIT size optimization level for compiled code (0-3).
 Path to shared library, which is used in JIT.
 Path to linker, which is used in JIT.
+compile_file from a script reads and refreshes the default module cache around this compile (keyed by the file, the running binary, the host arguments and these policies).

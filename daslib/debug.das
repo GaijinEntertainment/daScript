@@ -1414,8 +1414,10 @@ class private DAgent : DapiDebugAgent {
         }
     }
 
+    [arch(at="ARCHITECTURE.md#debugger-readiness-query")]
     def override onCreateContext(var ctx : Context) : void {
         //! Handles new context creation by registering it and re-instrumenting breakpoints.
+        if (ctx.category.folding_context) return
         addContext(ctx)
         invalidateBreakpoints(ctx)
     }
@@ -2130,18 +2132,21 @@ class private DAServer : Server {
                         --frame
                     }
 
+                    found = true
                     var result = debug_eval(vars, ini.expression)
-                    var resStr = ""
                     if (!empty(result.error)) {
-                        resStr = result.error
-                    } elif (result.data != null) {
+                        sendErrorResponse(seq, command, result.error)
+                        return
+                    }
+                    var resStr = ""
+                    if (result.data != null) {
                         resStr = sprint_data(result.data, unsafe(addr(result.tinfo)), print_flags_debug)
                     } else {
                         resStr = sprint_data(result.value, unsafe(addr(result.tinfo)), print_flags_debug)
                     }
                     var inscope res = EvaluateResponse(
                         result = resStr,
-                        _type = !empty(result.error) ? describe(result.tinfo) : "",
+                        _type = describe(result.tinfo),
                         indexedVariables = 0lf,
                         variablesReference = 0lf)
                     sendSuccessResponseStr(seq, command, sprint_json(res, false))
@@ -2180,6 +2185,12 @@ class private DAServer : Server {
     def sendSuccessResponseStr(id : double; command : string; body : string) {
         //! Sends a successful DAP response with a pre-serialized JSON string body.
         sendRawDataStr("\{\"request_seq\":{id}, \"type\":\"response\", \"body\":{body}, \"command\":\"{command}\", \"success\":true\}", true)
+    }
+
+    def sendErrorResponse(id : double; command : string; message : string) {
+        //! Sends a failed DAP response; the diagnostic rides `message`, never a body.
+        sendRawData(JV({"request_seq" => JV(id), "type" => JV("response"),
+                                "command" => JV(command), "success" => JV(false), "message" => JV(message)}), true)
     }
 
     def sendRawData(var data : JsonValue?; logData : bool) {
@@ -2276,11 +2287,11 @@ def private start_agent(force : bool = false) {
     return true
 }
 
-[init]
+[init, arch(at="ARCHITECTURE.md#debugger-readiness-query")]
 def init_stepping_debugger() {
     //! Initializes the stepping debugger by enabling single-step mode on the current context at module load time.
     if (use_instruments() || !wait_debugger() || (is_in_aot() && loads_itself()) ||
-        is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) return
+        is_in_debug_agent_creation() || (is_compiling_macros() && !is_compiling_macros_in_module("debug")) || is_in_completion()) return
     let args <- get_command_line_arguments()
     if (has_value(args, "--no-das-debug")) return
     set_single_step(this_context(), true)

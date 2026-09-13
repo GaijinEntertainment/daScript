@@ -92,9 +92,11 @@ live_command name=cmd_reset_game                                # Reset the game
 
 ## Keyboard Controls
 
-- **Arrow keys**: Move paddle left/right
+- **Arrow keys** or **A** / **D**: Move paddle left/right
 - **Space**: Start game / launch ball / release sticky ball / restart after game over
 - **Escape**: Pause / unpause
+- **F1** / **F2**: Toggle the CRT present / the ambient-occlusion pass
+- **F3** / **F4**: Step the CRT scanline pitch down / up (framebuffer pixels per line, 2 to 8; the HUD shows it)
 
 ## Game States
 

@@ -17,7 +17,7 @@ with no explicit tool call --- plus native go-to-definition, references,
 hover, document / workspace symbols, call hierarchy, and
 go-to-implementation.
 
-Zero setup beyond a daslang binary and Python 3: no sgconfig, no
+Zero setup beyond a daslang build: no Python, no sgconfig, no
 tree-sitter, no MCP server.
 
 .. contents::
@@ -47,13 +47,18 @@ call-hierarchy operations.
 
 Any other stdio LSP client works too --- point it at::
 
-   python3 utils/lsp/lsp_supervisor.py
+   bin/watchdog --lsp
+
+or, from a tree with no static exe built, at the same front under the
+interpreter::
+
+   bin/daslang utils/watchdog/main.das -- --lsp
 
 .. note::
 
-   The plugin manifest spawns ``python3``.  On Windows, python.org
-   installs typically ship only ``python.exe`` --- either create a
-   ``python3`` alias or edit the manifest's ``command`` locally.
+   The plugin manifest names ``bin/watchdog``, the single-config layout.
+   In a Visual Studio tree the exe is ``bin/Release/watchdog.exe`` ---
+   edit the manifest's ``command`` locally.
 
 
 Diagnostics
@@ -137,10 +142,11 @@ Architecture
 
 Two processes, hard split:
 
-- ``utils/lsp/lsp_supervisor.py`` --- the endpoint the client spawns.
-  Owns all session state: Content-Length framing, the ``initialize``
-  handshake, the document shadow, debounce, and request dispatch.
-  Zero language knowledge.
+- ``watchdog --lsp`` (``utils/watchdog/lsp_front.das``, in the static
+  watchdog exe) --- the endpoint the client spawns.  Owns all session
+  state: Content-Length framing, the ``initialize`` handshake, the
+  document shadow, debounce, and request dispatch.  Zero language
+  knowledge.
 - ``utils/lsp/subtools/*.das`` --- stateless batch tools
   (``validate.das``, ``nav.das``).  One fresh daslang process per
   request: argv in, LSP-shaped JSON out, exit.
@@ -154,16 +160,17 @@ session.  Full rationale and wave history: ``utils/lsp/ROADMAP.md``.
 Tests
 =====
 
-``tests/lsp/test_lsp_protocol.das`` drives the supervisor over a stdio
-pipe: initialize → didOpen with broken buffer text against a clean disk
+``tests/lsp/test_lsp_protocol.das`` drives the front over a stdio pipe,
+through the interpreter host and through the static exe where it is
+built: initialize → didOpen with broken buffer text against a clean disk
 file (proving the unsaved-buffer overlay) → didChange back to clean →
 definition → the call-hierarchy loop (prepare → incoming → outgoing) →
 implementation → shutdown/exit::
 
    bin/daslang dastest/dastest.das -- --test tests/lsp
 
-The test probes ``python3`` then ``python`` and skips with a log notice
-when neither is on ``PATH``.
+``tests/watchdog/test_lsp_front.das`` covers the cross-tree guard over
+throwaway git-style trees.
 
 
 .. seealso::

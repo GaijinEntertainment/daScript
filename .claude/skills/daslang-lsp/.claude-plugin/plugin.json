@@ -3,8 +3,8 @@
   "description": "daslang language server — compiler diagnostics after every edit, plus definition/hover/references/symbols",
   "lspServers": {
     "daslang": {
-      "command": "python3",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/../../../utils/lsp/lsp_supervisor.py"],
+      "command": "${CLAUDE_PLUGIN_ROOT}/../../../bin/watchdog",
+      "args": ["--lsp"],
       "extensionToLanguage": { ".das": "daslang" }
     }
   }

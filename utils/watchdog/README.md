@@ -93,7 +93,11 @@ them between ticks, and a number that only grows across heartbeats is a leak. `c
 carries `pid` from the supervisor and `command` from the front, whose pipe reports no pid;
 `child_exited` carries `code`, with `uptime_seconds` from the supervisor and `answered` from
 the front, whether the child answered a request before it died; `child_noise` and
-`client_noise` carry the `line` that was not a JSON message. The events: `watchdog_started`,
+`client_noise` carry the `line` that was not a JSON message. From the `--lsp` front,
+`watchdog_started` carries `cwd`, `compiler` and `subtools`, and `watchdog_stopped` the
+`reason`; `received` carries the request's `method` and `id`, `handle_error` the `method`;
+`published` and `overlay_error` carry the `uri`, `overlay_error` and `parse_error` the
+`error`; `nav` carries the `op` and `ok`. The events: `watchdog_started`,
 `child_started`, `spawn_failed`, `child` (one per line the child wrote), `stage`, `tune`,
 `health`, `health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
 `tune_bootstrap_complete`, `tune_incomplete`, `config_restart_relaunch`, `crash`,
@@ -101,7 +105,8 @@ the front, whether the child answered a request before it died; `child_noise` an
 `terminate_requested`, `kill_requested`, `child_unkillable`, `watchdog_already_running`,
 `wer_ready` / `wer_not_ready` / `wer_installed` / `wer_install_failed`, `tray_started`,
 `tray_unavailable`, `tray_icon_unavailable`, `tray_open_requested`, `tray_open_failed`,
-`tray_shutdown_requested`, `child_noise`, `client_noise`, `watchdog_stopped`.
+`tray_shutdown_requested`, `child_noise`, `client_noise`, `watchdog_stopped`; from the `--lsp`
+front, `received`, `parse_error`, `handle_error`, `published`, `overlay_error`, `nav`.
 In-tree readers: `smoke_test.cmake`, `tests/watchdog/test_watchdog.das` and
 `tests/watchdog/test_stdio_front.das`.
 
@@ -178,11 +183,30 @@ bin/watchdog --stdio --name daslang-mcp --cwd <tree> --program <tree>/bin/daslan
 `utils/mcp/setup.das` writes that line into a tree's `.mcp.json`; `tests/watchdog/test_stdio_front.das`
 drives it through both hosts.
 
+## Serving an LSP client
+
+`--lsp` makes the watchdog the daslang language server: an LSP client (Claude Code through the
+`.claude/skills/daslang-lsp` plugin manifest, or any stdio editor) spawns `bin/watchdog --lsp`,
+and every request runs one short daslang process - `utils/lsp/subtools/validate.das` or
+`nav.das` - with the client's unsaved buffer along as an `--overlay` file. The front owns the
+framing, the `initialize` handshake, the `{uri -> text}` document shadow, a 100 ms validate
+debounce and the shaping of subtool output into LSP results; nothing stays resident, and the
+exe compiles nothing, so a build can replace `bin/daslang` under a running session. One loop
+polls stdin with the time to the next due validate as its timeout; a validate is a child the
+loop polls between frames, and an edit of the file kills the one in flight, so a stale buffer's
+diagnostics never publish and an edit never waits on a compile. `--compiler <path>`,
+`--cwd <dir>` and `--log <file>` before the `--` override the discovered daslang, the
+workspace and the log (default: `$DASLANG_LSP_LOG`, else `daslang_lsp.log` in the temp
+directory). Stdout is the protocol;
+no pid file, no health poll, no tray. Configuration and the navigation notes: `utils/lsp/README.md`;
+`tests/lsp/test_lsp_protocol.das` drives it through both hosts.
+
 ## Layout
 
 - `watchdog.das` - the library: configuration, discovery, the log, stages, crash capture, the
   tray, and `Supervisor`, a state machine the host ticks (`tick()` / `request_stop()` / `run()`).
 - `stdio_front.das` - `StdioFront`, the `--stdio` mode: one child lifetime per tick.
+- `lsp_front.das` - `LspFront`, the `--lsp` mode: one client frame per tick, the validates in flight polled between.
 - `main.das` - the entry for both hosts: `start` / `tick` / `request_stop` / `result` for the
   executable, `main` for the interpreter; it collects the heaps between ticks.
 - `main.cpp` - the executable's `main`: argv, the pid, the signals, the loop.

@@ -59,7 +59,7 @@ struct Config {
     clang : string
 
     @clarg_short = "j"
-    @clarg_doc = "Parallel width for the C++ syntax pass and cmake builds; 0 = hardware threads"
+    @clarg_doc = "Parallel width for the C++ syntax pass and cmake builds; 0 = physical cores, at most 16"
     jobs : int
 
     @clarg_doc = "Per-user preflight TOML (default: platform config directory)"

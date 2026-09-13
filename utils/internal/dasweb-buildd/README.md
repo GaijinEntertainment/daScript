@@ -152,7 +152,10 @@ warms it outside the sandbox with one build of **each** mode, because the page r
 ./roll_toolchain.sh --green       # roll to the newest master commit whose CI is green
 ```
 
-It refuses to start if the worktree has modified tracked files, and reports the old and new id.
+A tracked file that differs from HEAD only in its line endings was rewritten by a build - a
+generated `.das.inc` committed with the other ending - and the roll puts it back before moving;
+any other modified tracked file is a hand edit and the roll refuses to start. It reports the old
+and new id.
 Verify afterwards with the browser leg of `utils/internal/dasweb-verify`, which drives the live site.
 
 **Nightly, gated on green.** A toolchain left behind master compiles every sample with old
@@ -182,7 +185,9 @@ journalctl -u dasweb-buildd-roll.service -n 50      # last night's roll
 
 `--green` reads the public Actions API unauthenticated (60 requests an hour; one per commit
 walked, at most 30) and needs `jq` on the box. `test_roll_toolchain.das` drives the green
-predicate through `--green-check <runs.json>`, one recorded run shape per branch of the rule.
+predicate through `--green-check <runs.json>`, one recorded run shape per branch of the rule,
+and the worktree guard through `--dirty-check <worktree>`, which settles the named worktree the
+way a roll would - restores line-ending-only rewrites, exits 12 on a real edit - and stops.
 
 ## Tests
 

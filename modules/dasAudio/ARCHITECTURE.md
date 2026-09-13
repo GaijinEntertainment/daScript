@@ -31,6 +31,19 @@ wait gave up. Do not "fix" a timeout path by freeing there.
 `SeqBox` is the exception and is released on both paths: its holders drop references in any order
 and the last one deletes, so it needs no agreement with the audio thread.
 
+## audio_live owns the audio system across a reload
+
+Under `daslang-live` the host runs the program's `shutdown()` on every reload and `init()`
+after it, while `audio/audio_live.das` carries the audio thread's command stream and channels
+across the reload by adopting the old context's reference - the stream itself keeps mixing.
+`audio_live_system()` creates the system on the first `init()` and adopts it on every later one;
+`audio_live_finalize()` finalizes only at the real shutdown. A live program that calls
+`audio_system_create`, `audio_system_finalize` or `set_audio_thread_command_stream` itself
+breaks that in one of two ways: a finalize on reload frees the stream the restore is about to
+push through, and a `set_` on reload takes a reference per reload that the real finalize can
+never drop. `REVIEW.das` reports those calls in any program that requires `live/audio_live`;
+a program whose reload design tears audio down drops the require instead.
+
 ## The waits cascade
 
 `strudel_init` spawns the worker; the worker runs the caller's function, which calls

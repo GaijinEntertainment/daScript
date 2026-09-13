@@ -19,6 +19,10 @@ namespace das {
         }
     }
 
+    void aotLibraryEmplace ( AotLibrary & lib, uint64_t hash, const AotFactory & factory ) {
+        lib.emplace(hash, factory);
+    }
+
     AotListBase::AotListBase( RegisterAotFunctions prfn ) {
         tail = head;
         head = this;

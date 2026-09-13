@@ -1645,6 +1645,9 @@ if (NOT ${DAS_TOOLS_DISABLED})
     # their C++, which is why they live here and not beside the nano library.
     add_subdirectory(examples/standalone)
 
+    # `daslang -lib` libraries bound back into daslang through generated [extern] bindings.
+    add_subdirectory(examples/c_api_library)
+
 endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.
@@ -2014,14 +2017,13 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
 
 # Install LSP server (Claude Code plugin: push diagnostics after every edit +
 # definition/references/hover/symbols/call hierarchy/implementation).
-#   lsp_supervisor.py — the LSP endpoint (python; zero language knowledge)
-#   subtools/*.das    — stateless spawn-per-request batch tools
+#   the endpoint is `watchdog --lsp` (utils/watchdog/lsp_front.das, in the static exe)
+#   subtools/*.das — stateless spawn-per-request batch tools
 # The .claude/skills manifest auto-loads the plugin for Claude Code sessions
 # started at the install root; utils/lsp/plugin serves explicit --plugin-dir
 # registration from anywhere else. Same relative layout as the repo, so both
 # manifests work unchanged.
 install(FILES
-    ${PROJECT_SOURCE_DIR}/utils/lsp/lsp_supervisor.py
     ${PROJECT_SOURCE_DIR}/utils/lsp/README.md
     DESTINATION utils/lsp
 )
@@ -2154,6 +2156,7 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/dasllama-convert/main.das
 install(FILES
     ${PROJECT_SOURCE_DIR}/utils/watchdog/watchdog.das
     ${PROJECT_SOURCE_DIR}/utils/watchdog/stdio_front.das
+    ${PROJECT_SOURCE_DIR}/utils/watchdog/lsp_front.das
     ${PROJECT_SOURCE_DIR}/utils/watchdog/main.das
     ${PROJECT_SOURCE_DIR}/utils/watchdog/README.md
     DESTINATION utils/watchdog

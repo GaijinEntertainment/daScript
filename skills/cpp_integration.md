@@ -297,7 +297,7 @@ and link the result against nano instead:
 #include "script.das.h"
 
 das::das_nano_set_print(&my_uart_write);   // every print leaves through this
-script::Standalone ctx;                    // a plain C++ object
+ctx_script::Standalone ctx;                    // a plain C++ object
 int answer = ctx.exported_function(21);
 ```
 
@@ -345,6 +345,56 @@ called through their slot) lands in the one generated translation unit; there is
 link. Worked example: `examples/standalone/06_full_runtime/` - read it for the shape; building
 it needs the daslang repository, since the bundle carries no dasHV headers or archive. The recipe
 above works from a bundle for any C++ module you build yourself.
+
+## Calling daslang from C - `daslang -lib`
+
+When the host is C, or wants no daslang API at all, compile the script to a native library with a
+generated C header instead:
+
+```sh
+daslang -lib script.das -output build/script     # build/script.so (.dylib/.dll) + build/script.h
+daslang -lib script.das -output build/script -- --jit-lib-static   # build/script.a instead
+```
+
+Three ways to pick what crosses: mark each function `[export_c]` (an `[export]` the library also
+surfaces in C); pass `-- --jit-lib-export-marked` to take whatever the program already marks
+`[export]`; or pass `-lib-export-all` for every public function of the entry module whose signature
+C can spell - only export-all skips an unspellable one with a warning, the other two make it a hard
+error. `-lib` carries the annotation itself; add `require daslib/export_c` to compile that same
+source without the JIT, which the linter and the AOT pass both do. `examples/c_api_library/` builds
+one library each way and binds all three at once.
+
+A daslang host needs no C at all: `-- --jit-lib-bindings out/script_c.das` writes the daslang twin
+of the header - one `[extern(cdecl, late, ...)]` per entry point plus a das struct per structure
+that crosses - and the host `require`s that file. The externs are `late`, so the bindings compile
+before the library exists and a build system can generate them as an ordinary output.
+
+For a C host, then:
+
+```c
+#include "script.h"
+
+script_ctx * ctx = script_create();          /* one instance = one context, globals and heap */
+script_Vec3 v = { 1.0f, 2.0f, 3.0f }, out;
+script_scale(ctx, &v, 2.0f, &out);           /* a struct or vector result uses a trailing out ptr */
+if ( script_last_error(ctx) ) { /* the call raised; out is untouched */ }
+script_destroy(ctx);
+```
+
+Scalars, `string` (as `const char *`), pointers and enums cross by value; everything else
+representable crosses as `const T *`. A daslang panic returns zero and reports through
+`script_last_error(ctx)` - it never unwinds into C. A returned `const char *` lives in that
+instance's string heap, so copy it if you need it past the next call. The header asserts the
+layout of every structure it declares, so a host built for a different target fails to compile.
+Several such libraries coexist in one process, as does a library inside a host that registered
+the daslang modules itself - the first one there registers the runtime and the rest bind to it.
+Several instances of one library are fine, created and driven on any thread.
+
+Choosing between the four: **nano** when the host is C++ and you want the smallest runtime; a
+**standalone context on the full runtime** when the host is C++ and the script reaches a C++
+module beyond `builtin`; **`-lib`** when the host is C, or wants a plain ABI boundary and no
+daslang headers; the **C API** (`daScriptC.h`) when the host has to compile daslang itself at run
+time.
 
 ## Diagnostics - `TextPrinter`, never `fprintf(stderr, ...)`
 

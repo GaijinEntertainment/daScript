@@ -121,17 +121,8 @@ def private note_type_names(var self : RefIndex; t : TypeDecl?; depth : int) : v
     }
 }
 
-def private lint022_optimized(prog : ProgramPtr) : bool {
-    return false if (prog.policies.no_optimizations)
-    let optimize = prog._options |> find_arg("optimize")
-    return optimize as tBool if (optimize is tBool)
-    let no_optimization = prog._options |> find_arg("no_optimization")
-    return !(no_optimization as tBool) if (no_optimization is tBool)
-    return true
-}
-
 def private lint022_calls_may_be_inlined(prog : ProgramPtr) : bool {
-    return (lint022_optimized(prog)
+    return (prog.getOptimize
         && !(prog._options |> find_arg("disable_auto_inline") ?as tBool ?? prog.policies.disable_auto_inline)
         && !(prog._options |> find_arg("no_aliasing") ?as tBool ?? prog.policies.no_aliasing)
         && (prog._options |> find_arg("auto_inline_functions") ?as tBool ?? prog.policies.auto_inline_functions))

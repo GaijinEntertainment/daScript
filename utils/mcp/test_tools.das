@@ -2138,8 +2138,8 @@ def test_export_corpus_workers_one(t : T?) {
 
 
 [test]
-def test_export_corpus_workers_failure_propagates(t : T?) {
-    t |> run("compile error in input fails the run, even with workers") <| @(t : T?) {
+def test_export_corpus_workers_compile_failure_still_exports(t : T?) {
+    t |> run("compile error in input still exports the survivors, even with workers") <| @(t : T?) {
         let paths_body = "{fixture_path("_fixture_error.das")}\n"
         let paths_file = make_temp_paths_file(t, paths_body)
         if (empty(paths_file)) return
@@ -2156,8 +2156,9 @@ def test_export_corpus_workers_failure_propagates(t : T?) {
             do_export_corpus("", paths_file, out_path, "", "1"),
             text, is_error)
         t |> success(ok, "parse result JSON")
-        t |> success(is_error, "should be error: {text}")
-        t |> success(find(text, "exit code") >= 0, "envelope mentions exit code: {text}")
+        t |> success(!is_error, "a compile failure is not a failed run: {text}")
+        t |> success(find(text, "failed to compile") >= 0, "the envelope's stdout carries the failure count: {text}")
+        t |> success(stat(out_path).is_valid, "the corpus file is written")
         remove(paths_file)
         remove(out_path)
     }

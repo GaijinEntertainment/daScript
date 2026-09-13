@@ -7,12 +7,13 @@
 drops a finding it used to report is a defect** - updating a constant so a check keeps
 matching the tree is not.
 
-**A `.das` a diff adds or edits beside a game declares `module <name> public`, never
+**A `.das` in a game's folder that declares a module declares `module <name> public`, never
 `shared`** - a shared module survives a live reload, and the late-bound GL calls inside it fail
 their second compile.
 
-**A shader a diff adds or edits in a game uses only GLSL ES 3.00 features** - the same file
-runs in the playground on WebGL2.
+**A diff that adds or edits a `[vertex_program]` or `[fragment_program]` function in a game,
+or any `def` such a function reaches directly or through another `def`, keeps that code inside
+GLSL ES 3.00** - the same file runs in the playground on WebGL2.
 
 **A colour attachment a diff creates or retypes in a format other than `GL_RGBA8` checks
 framebuffer completeness at creation and falls back to `GL_RGBA8` when the framebuffer is

@@ -354,8 +354,8 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    names it.
 4. **Ladders:** `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`
    (the base mul_mm only - no tensor / tall / dev-W twins: those are the M5 kernel pass),
-   `pf_devw_panel_kq` (returns false - its `dq` pick would otherwise be k5's), `pf_enc_kq_gemv`
-   (prefill), `moe_site_ok` + the `sb1/2/3` predicates (shapes), and last the gate.
+   `pf_devw_panel_kq` (returns false - its `dq` pick would otherwise be k5's), `enc_site_gemv`
+   (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3` predicates (shapes), and last the gate.
 5. **Tests:** `dequant_iq4xs_plane_superblock_at` (`dasllama_convert.das`, the split-layout
    twin the CPU row now calls), fixtures at fmt 44 in `tests/_metal_kernel_common.das`, the
    ladders + calls in `test_metal_gemv_kernels.das` (GEMV, B2/B4/B8) and

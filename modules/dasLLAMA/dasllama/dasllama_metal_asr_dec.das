@@ -71,19 +71,14 @@ var private g_wd_us_encode = 0l
 //! Engage/decline counters (the counts live in dasllama_metal_common, the counting home):
 //! `windows` = cross-KV windows served, `steps` = decode batches, `tokens` = rows across them.
 def metal_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; declines : int64> {
-    var dtot = 0l
-    for (k, v in keys(g_wdec_declines_by_reason), values(g_wdec_declines_by_reason)) {
-        // policy notes (small, step_knob) describe SERVED windows — only refusals count
-        if (k != "{MetalWdecDecline.small}" && k != "{MetalWdecDecline.step_knob}") {
-            dtot += v
-        }
-    }
-    return (windows = g_wdec_windows, steps = g_wdec_steps, tokens = g_wdec_tokens, declines = dtot)
+    // policy notes (small, step_knob) describe SERVED windows — only refusals count
+    let served_notes = (g_wdec_declines.by_reason?["{MetalWdecDecline.small}"] ?? 0l) + (g_wdec_declines.by_reason?["{MetalWdecDecline.step_knob}"] ?? 0l)
+    return (windows = g_wdec_windows, steps = g_wdec_steps, tokens = g_wdec_tokens, declines = g_wdec_declines.total - served_notes)
 }
 
 //! The declines-by-reason table (a copy), keyed by `MetalWdecDecline` value names.
 def metal_wdec_declines : table<string; int64> {
-    return <- clone_to_move(g_wdec_declines_by_reason)
+    return <- clone_to_move(g_wdec_declines.by_reason)
 }
 
 //! The step-time split across every served decode batch: GPU-busy vs host-encode microseconds.
@@ -110,37 +105,28 @@ def set_metal_wdec_step_min_d(n : int64) {
 
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private wd_decline(why : MetalWdecDecline) : bool {
-    note_wdec_decline("{why}")
     // knob/small/step_knob = policy (the enum documents them); capability declines honor required
-    if (why != MetalWdecDecline.knob && why != MetalWdecDecline.small && why != MetalWdecDecline.step_knob) {
-        require_or_panic("wdec", "{why}")
-    }
+    let policy = why == MetalWdecDecline.knob || why == MetalWdecDecline.small || why == MetalWdecDecline.step_knob
+    note_decline(g_wdec_declines, "wdec", "{why}", policy = policy)
     return false
 }
 
-def private wd_release_one(var b : MetalBuffer?&) {
-    if (b != null) {
-        metal_release(b)
-        b = null
-    }
-}
-
 def private wd_release_all {
-    wd_release_one(g_wd_mblob)
-    wd_release_one(g_wd_bkxr)
-    wd_release_one(g_wd_bvxr)
-    wd_release_one(g_wd_bkc)
-    wd_release_one(g_wd_bvc)
-    wd_release_one(g_wd_sx)
-    wd_release_one(g_wd_sxb)
-    wd_release_one(g_wd_sxb2)
-    wd_release_one(g_wd_sq)
-    wd_release_one(g_wd_sk)
-    wd_release_one(g_wd_sv)
-    wd_release_one(g_wd_sh)
-    wd_release_one(g_wd_slog)
-    wd_release_one(g_wd_bpms)
-    wd_release_one(g_wd_bpy)
+    release_handle(g_wd_mblob)
+    release_handle(g_wd_bkxr)
+    release_handle(g_wd_bvxr)
+    release_handle(g_wd_bkc)
+    release_handle(g_wd_bvc)
+    release_handle(g_wd_sx)
+    release_handle(g_wd_sxb)
+    release_handle(g_wd_sxb2)
+    release_handle(g_wd_sq)
+    release_handle(g_wd_sk)
+    release_handle(g_wd_sv)
+    release_handle(g_wd_sh)
+    release_handle(g_wd_slog)
+    release_handle(g_wd_bpms)
+    release_handle(g_wd_bpy)
     g_wd_key = 0ul
     g_wd_len = 0l
     g_wd_window_key = 0ul
@@ -286,14 +272,7 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
     var bkx = pool_acquire(g_wd_pool, g_dev, bytes_x)
     var bvx = pool_acquire(g_wd_pool, g_dev, bytes_x)
     unsafe {
-        var p = reinterpret<uint8?>(metal_buffer_contents(bx))
-        memcpy(p, addr(enc_out[0]), ta * d * 4l)
-        if (mp > ta) {   // DEFENSIVE pad zero (the pad outputs go unread): guards stale-Inf pool reuse
-            var zp = reinterpret<float?>(p + ta * d * 4l)
-            for (i in range64((mp - ta) * d)) {
-                zp[i] = 0.0
-            }
-        }
+        upload_rows_padded(bx, addr(enc_out[0]), ta, mp, d)   // the pad outputs go unread; the zero guards stale-Inf pool reuse
     }
     var u_d = uniform_u32(uint(d))
     var u_hs = uniform_u32(uint(hs))

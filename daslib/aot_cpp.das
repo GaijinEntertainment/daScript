@@ -4425,7 +4425,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
     }
     if (!fnn.empty()) {
         write(*logs, "    for (const auto &[hash, cmres, fn1, fn2] : functions) \{\n")
-        write(*logs, "        aotLib.emplace(hash, AotFactory(cmres, fn1, fn2));\n")
+        write(*logs, "        aotLibraryEmplace(aotLib, hash, AotFactory(cmres, fn1, fn2));\n")
         write(*logs, "    \}\n")
     }
 
