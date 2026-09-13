@@ -1184,11 +1184,9 @@ def public cbufbar_words : array<uint> {
     return clone_to_move(cbufbar_spv)
 }
 
-// cossbo: the last-arriving-workgroup hand-off — every workgroup writes its row into a @coherent SSBO
-// (Coherent on the variable: the loads below bypass a cached line another workgroup's store missed),
-// publishes it with memoryBarrierBuffer(), and bumps a counter; the workgroup that sees the last count
-// reads every row. @coherent lowers to a Coherent OpDecorate on the OpVariable, the plain counter
-// buffer beside it stays undecorated.
+// cossbo: the last-arriving-workgroup hand-off — every workgroup writes its row into a @coherent SSBO,
+// publishes it with memoryBarrierBuffer() and bumps a counter; the one that sees the last count reads
+// every row.
 var @ssbo @coherent @binding = 0 co_rows : array<uint>
 var @ssbo @binding = 1 co_cnt : array<uint>
 var @ssbo @binding = 2 co_out : array<uint>

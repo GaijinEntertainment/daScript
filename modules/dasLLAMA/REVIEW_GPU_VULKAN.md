@@ -155,6 +155,17 @@ accessor.** The accessor is a constant composite the driver reads lane-serially 
 while the grid buffer is staged once per workgroup and read by every row that workgroup serves,
 whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 
+**A kernel that takes more than one workgroup reduce (`wg_rms_inv` of `RmsWgBase` in
+`dasllama/dasllama_vulkan_classes.das`) alternates the `slot` between consecutive reduces - never
+the same slot twice running.** One barrier guards a reduce, so a thread still summing the first
+reduce's partials would read the second's writes out of the same 64 floats.
+
+**A diff that makes `rd_ffn_sets` or `rd_attn_sets` (`dasllama/dasllama_vulkan_decode.das`) build
+a descriptor set for a class adds that class's `ensure_*` to every registration path that reaches
+the builder - the attention layer's and the recurrent layer's alike, in the same change.** A set
+asked of a class whose pipeline is not ensured is the null handle; `vkd_alloc_set` refuses it by
+the class's family name, and the model's prepare fails on the one path that skipped the ensure.
+
 **A diff that changes how many GPU timestamps the resident prefill's window command records - a
 `pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in
 `dasllama/dasllama_vulkan_prefill.das` - updates `pf_roles_per_layer` and that file's

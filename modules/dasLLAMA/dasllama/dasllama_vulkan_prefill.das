@@ -1154,7 +1154,6 @@ def private pf_setup {
     g_rd.pf_facm2 = false
     for (L in g_rd.layers) {
         continue if (L.recurrent)
-        //! the softcap stamps exist at h256 alone (gemma-2), ungated; a capped layer of any other shape takes the 8-row tile
         L.pf_fa = (fa_dev && (L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l) && (!g_rd.q_gated || L.hs == 256l)
             && (L.attn_cap == 0.0 || (L.hs == 256l && !g_rd.q_gated)))
         any_cap = any_cap || (L.pf_fa && L.attn_cap != 0.0)
@@ -1604,7 +1603,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let kvd = g_rd.layers[l].kvd
                 let kv_mul = uint(g_rd.layers[l].kv_mul)
                 let window = uint(g_rd.layers[l].window)
-                let kvsh = g_rd.layers[l].kv_shared   //! Q only: no k/v GEMMs, no k/v norm groups, no mirror store; attention reads the donor's rows
+                let kvsh = g_rd.layers[l].kv_shared
                 let pairs = int(qd / 2l + (kvsh ? 0l : kvd / 2l))
                 let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
                 let fa128 = fa128s && hs == 128l

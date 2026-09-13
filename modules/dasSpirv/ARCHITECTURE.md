@@ -129,6 +129,19 @@ condition guards. On the device an out-of-range load faults only when the oversh
 memory, so whether it faults follows the allocation layout, not the kernel's inputs. A local fixed
 array stays eager: its index is register arithmetic, not a device address.
 
+### 3.8 SSBO decorations ride the variable {#ssbo-variable-decorations}
+
+`@readonly`, `@maybe_readonly` and `@coherent` decorate the `OpVariable`, never the block member:
+the `Block` struct type is deduplicated, so a member decoration would leak onto every SSBO sharing
+that element type. `@readonly` is `NonWritable`. `@maybe_readonly` is GLSL's `MAYBE_READONLY`
+macro - `NonWritable` in a vertex or fragment stage, writable in compute and ray tracing - so a
+buffer shared by both rails matches each stage's glslang reference. `@coherent` is `Coherent`
+(GLSL's `coherent buffer`): a store one invocation makes is visible to another workgroup's load
+once a device-scope buffer barrier (`memoryBarrierBuffer`) separates them, where an undecorated
+load may read a cached line. It serves the last-arriving-workgroup hand-off: every workgroup
+publishes its rows and bumps an arrival counter, and the workgroup that reads the last count reads
+every row.
+
 ## 4. Test architecture - "every emitted instruction has a test"
 
 The behavioral layers, then the enforcement gates (all in main-tree `tests/spirv/` except the

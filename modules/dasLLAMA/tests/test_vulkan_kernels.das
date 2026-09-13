@@ -6844,7 +6844,7 @@ def private q8_gemv_ar_run(t : T?; n, d : int; pre_on, raw : bool; ascale : floa
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
         var h2 : VkHaz
         var pc = GemvArArgs(n = uint(n), d = uint(d), wblk = 0u, xblk = 0u, add_on = 1u, woff = uint(d), pwoff = 0u,
-            pre_on = pre_on ? 1u : 0u, raw = raw ? 1u : 0u, eps = eps, ascale = ascale)
+            pre_on = pre_on ? 1u : 0u, no_norm = raw ? 1u : 0u, eps = eps, ascale = ascale)
         let rpw = 4l * g_gpu.rows_per_wg
         enc_q8_gemv_ar_cls(raw2, h2, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
         vhz_dep(raw2, h2, 16u | 32u | 64u, 0u, true)
@@ -10555,7 +10555,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
         got_y |> resize(npos * n)
         got_h |> resize(npos * n / 2)
         var pc = ArArgs(dim = uint(n), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, row0 = 0u,
-            slots = uint(k), pwoff = uint(n), p2off = uint(2 * n), p3off = uint(3 * n))
+            slots = uint(k), pwoff = uint(n), routed_post_off = uint(2 * n), sum_post_off = uint(3 * n))
         unsafe {
             upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
             upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)

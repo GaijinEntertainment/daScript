@@ -28,6 +28,11 @@ capability after the change.** A device cell runs a kernel using the capability 
 `modules/dasVulkan/tests/integration/` or `modules/dasLLAMA/tests/test_vulkan_kernels.das`. A
 fixture asserts words; only a device run shows the words compute.
 
+**A diff that adds a per-loop hint name this emitter accepts also adds that name to
+`append_loop_hint_operand` in `modules/dasLLVM/daslib/llvm_jit.das`, in the same change.** A
+compute kernel's body compiles for the CPU oracle too, and the JIT fails a hint name it does not
+know.
+
 **A diff under this folder that adds or changes a device cell for a capability of this emitter -
 wherever the diff puts that cell - judges the cell's result against a CPU result computed
 independently of the emitter: the kernel body run on the CPU, a CPU body that returns what the

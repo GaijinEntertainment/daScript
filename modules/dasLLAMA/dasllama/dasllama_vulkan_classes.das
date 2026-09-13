@@ -44,9 +44,9 @@ struct ArArgs {
     gated : uint    //! the combine twins: the shared expert's gate scales its row
     pre_on : uint   //! the add partner is rms-normed with the row at `pwoff` before the add (a gemma's post-attention / post-FFN norm)
     pwoff : uint
-    p2off : uint     //! the gemma-4 MoE combine: the routed sum's post norm row (`pwoff` is the dense branch's)
-    p3off : uint     //! ... and the post norm over the two branches' sum
-    raw : uint       //! the requant twins: quantize the updated row as it is (no norm) - the E-series residual feeding its per-layer-embedding gate
+    routed_post_off : uint   //! the gemma-4 MoE combine's norm rows: `pwoff` norms the dense branch, this the routed sum
+    sum_post_off : uint      //! ... and this the two branches' sum
+    no_norm : uint           //! the requant twins quantize the updated row as it is - the E-series residual feeding its per-layer-embedding gate
     presummed : uint //! the gemma-4 combine: the routed rows arrive summed under their weights in row 0 (the down GEMV folded them)
 }
 
@@ -75,10 +75,8 @@ def private q8k_amax5(m0 : float) : float {
     return m
 }
 
-// the workgroup-rms machinery the row kernels share (one wg reduces one row): one barrier a reduce -
-// every thread sums the subgroup partials itself in the same order, so every thread holds the same
-// inverse; the two partial slots alternate between consecutive reduces, so a thread still reading one
-// reduce's partials never races the next reduce's writes
+// the workgroup-rms the row kernels share (one wg reduces one row): one barrier a reduce, every
+// thread summing the subgroup partials in the same order, so every thread holds the same inverse
 class RmsWgBase {
     @workgroup part : float[128]   //! two slots of 64 partials, one per subgroup (subgroupSize >= 4 floor)
 
@@ -171,14 +169,14 @@ class ArRqBase : ArBase {
         quant32(qb0, row_inv(ss))
     }
 
-    //! the row's norm inverse - one under `raw` (the reduce still runs: its barrier is every thread's)
+    //! the row's norm inverse - one under `no_norm` (the reduce still runs: its barrier is every thread's)
     def row_inv(ss : float) : float {
         let inv = rms_inv(ss)
-        return pa.raw != 0u ? 1.0 : inv
+        return pa.no_norm != 0u ? 1.0 : inv
     }
 
-    //! the norm weight at `e`, one under `raw`
-    def nw(e : uint) : float => pa.raw != 0u ? 1.0 : wn[pa.woff + e]
+    //! the norm weight at `e`, one under `no_norm`
+    def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
 
     def quant32(qb0 : uint; inv : float) {
         let tid = gl_LocalInvocationID.x
@@ -391,10 +389,7 @@ class ClsArCombF16B : ArCombBase {
     }
 }
 
-//! the gemma-4 MoE combine: x = (x + post(post2(sum_j w_j d_j) + post1(dense))) * ascale - the routed sum
-//! under its own post norm (`p2off`), the dense shared expert's row under its (`pwoff`), the two summed
-//! under the layer's post-FFN norm (`p3off`), the residual step scaled by the layer's output scale; the
-//! dense row is always on, ungated
+//! the gemma-4 MoE combine: x = (x + post3(post2(sum_j w_j d_j) + post1(dense))) * ascale, the dense row always on and ungated
 class ArCombG4Base : ArBase {
     @ssbo @binding = 4 slot_idx : array<uint>    //! position -> its k slot rows
     @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights (the per-expert down scale folded in)
@@ -447,7 +442,7 @@ class ArCombG4Base : ArBase {
         var sc = 0.0
         k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            let c = wn[pa.p2off + k] * (row[k] * inv_r) + wn[pa.pwoff + k] * (aa[base + k] * inv_d)
+            let c = wn[pa.routed_post_off + k] * (row[k] * inv_r) + wn[pa.pwoff + k] * (aa[base + k] * inv_d)
             row[k] = c
             sc += c * c
             k += 256u
@@ -456,7 +451,7 @@ class ArCombG4Base : ArBase {
         var ss = 0.0
         k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            let vv = (xs[base + k] + wn[pa.p3off + k] * (row[k] * inv_c)) * pa.ascale
+            let vv = (xs[base + k] + wn[pa.sum_post_off + k] * (row[k] * inv_c)) * pa.ascale
             xs[base + k] = vv
             row[k] = vv
             ss += vv * vv
@@ -2851,12 +2846,12 @@ class template FaCm2T {
         var mrow : SACC
         coopmatFill(mrow, -1.7e38)
         var lrow : SACC
-        var o : OF   //! the f16 O accumulator: half the P @ V step and half the tile's registers (llama.cpp's O_TYPE), safe under the row-max bias
+        var o : OF
         let qbase = pa.w0 + q0
         let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
         // a sliding layer's first step: the step below the tile's first query's window start
         var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / BC) * BC : 0u
-        while [dont_unroll] (j < kmax) {   //! the driver left to unroll a body of this size multiplies the live tile state
+        while [dont_unroll] (j < kmax) {
             var s : SACC
             var kt : KB
             coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, BC, kvh * HS, HS, tv)
@@ -2864,7 +2859,6 @@ class template FaCm2T {
             static_if (CAP) {
                 coopmatPerElement(s, s, @@facm2_softcap, pa.cap)
             }
-            //! the mask pass runs only where a step can mask: the steps crossing the causal diagonal, and the steps below the tile's last window start
             if (j + BC > qbase + 1u || (pa.window != 0u && j + pa.window < qbase + 64u)) {
                 coopmatPerElement(s, s, @@facm2_mask, qbase, j, pa.window)
             }
@@ -3456,12 +3450,8 @@ let DA_RQ_NONE = 2u  //! ... no fold: a separate requant serves (or nothing read
 //! the Q8_0 block scale of a head row's dim: the 32-lane group's amax over 127 (the group is the block on a 32- or 64-wide subgroup)
 def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 
-// decode attention (one query row): a wg per (head, key split), GQA, KT-typed K/V mirror. Online softmax
-// over 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works. The
-// scores go a subgroup a key, the lanes across the head's dims (a K row read as one coalesced span;
-// the dot closes in a subgroup add); the V pass keeps a thread a dim. A head past 256 (gemma-4's
-// global layers, 512) runs one V group with two dims a thread. Split, the pass stores its unnormalized
-// partial and the combine kernel finishes the head; unsplit it stores the head's row.
+// decode attention (one query row): a wg per (head, key split), GQA, KT-typed K/V mirror. Online
+// softmax over 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works.
 [ |> template_struct_instance]
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
@@ -3492,8 +3482,7 @@ class template DaAttnT {
         return ((qrow[qo] * a.x + qrow[qo + 1u] * a.y) + (qrow[qo + 2u] * b.x + qrow[qo + 3u] * b.y)) + ((qrow[qo + 4u] * c.x + qrow[qo + 5u] * c.y) + (qrow[qo + 6u] * d.x + qrow[qo + 7u] * d.y))
     }
 
-    //! the finished row (o at dim `d` = tid, o2 at tid + 256 on a wide head) stored, and its requant when the push folds it:
-    //! Q8_0 by the 32-lane group's amax, Q8_K by the workgroup's (one superblock a 256-wide head, two on a 512)
+    //! the finished row (o at dim `d` = tid, o2 at tid + 256 on a wide head) stored, with the push's requant fold
     def store_row(h, hs, d : uint; o, o2 : float; wide : bool) {
         let live = d < hs
         if (live) {
@@ -3580,14 +3569,11 @@ class template DaAttnT {
         var acc2 = 0.0            // the wide head's second dim, c + 256
         var mrun = -3.0e38        // running max — uniform, tracked in lockstep by every thread
         let cstart = pa.window != 0u && cnt > pa.window ? cnt - pa.window : 0u
-        // this workgroup's key range: the attended span cut in nsplit 32-aligned pieces (a piece past the end is empty)
         let per = ((cnt - cstart + nsplit - 1u) / nsplit + 31u) & ~31u
         var c0 = min(cnt, cstart + sp * per)
         let cend = min(cnt, cstart + (sp + 1u) * per)
         while (c0 < cend) {
             let clen = min(256u, cend - c0)
-            // chunk scores: a subgroup two keys a step, the lanes across the dims - both keys' loads in flight before
-            // either dot (the pass is latency-bound: a piece holds a few keys a subgroup, each a memory round trip)
             var kk = gl_SubgroupID
             while (kk < clen) {
                 let kk2 = kk + gl_NumSubgroups
@@ -3669,7 +3655,6 @@ class template DaAttnT {
             // V accumulate: group g strides the chunk, rescaled by this chunk's alpha
             acc *= alpha
             acc2 *= alpha
-            // the loads of several keys leave before any add: a thread's keys are memory round trips, not bytes
             let vb = pa.vbase + kvh * hs + c
             if (wide) {
                 var jj = 0u
@@ -3782,8 +3767,7 @@ class DaAttnF16 : DaAttnT {
     override KV16 = true
 }
 
-//! the split decode attention's combine: one wg a head over its nsplit partials - the running maxes
-//! align the denoms and accumulators (weight e^(m_s - M)), the sum normalizes, the gate applies, y stores
+//! the split decode attention's combine: one wg a head over its nsplit partials, each weighed e^(m_s - M) against the aligned max
 [vk_dispatch(name = "da_attn_comb_cls", grid = "nheads", params = "nheads : int64")]
 class DaAttnComb {
     @ssbo @binding = 0 q : array<float>      //! the query rows, for the gate half of a gated head
@@ -6201,7 +6185,7 @@ class template KqCm2BatchT : MoeCmBase {
             k1 = min(pa.n, (ks + 1u) * pa.ksplit)
             ybase = ks * (row0 + cnt) * pa.d
         }
-        let k0 = (ks * pa.ksplit) & ~(BK * UNR - 1u)   //! the chunk is 256-aligned by the pick; the mask tells the compiler so, as the literal k = 0 tells it on the whole GEMM's own loop - without it the same loop ran at half the rate
+        let k0 = (ks * pa.ksplit) & ~(BK * UNR - 1u)
         let xt = tix % ttiles             // token BN-tile (fastest)
         let wt = tix / ttiles             // weight 128-tile
         if (gl_LocalInvocationID.x == 0u) {
@@ -6306,7 +6290,7 @@ class template KqCm2BatchT : MoeCmBase {
         var b : BT
         var acc : ACC
         let t0 = row0 + xt * BN
-        //! a partial last weight tile (a 2112-wide plane's 17th, a 704-wide expert's 6th) takes the plane's last whole 128 rows instead - in bounds, unclamped, its overlap with the tile before it rewriting the same values - since a clamped weight load runs every tile at a third the speed (the fast path's own layout clamped: q8 E2B down 268 -> 612 us) and the edge path made the dispatch wait on the partial workgroups (the 26B's shared expert 164 against 70 us whole)
+        //! a partial last weight tile takes the plane's last whole 128 rows, its overlap rewriting the same values
         let m0 = wt * 128u + 128u <= pa.d || pa.d < 128u ? wt * 128u : pa.d - 128u
         if (gl_LocalInvocationID.x == 0u) {
             wg_m0 = m0   //! visible past the scale cache's first barrier, ahead of every decode
@@ -8336,7 +8320,7 @@ class F16GemmCm2 {
         let t0 = (rem / wtiles) * 128u
         let m0 = (rem % wtiles) * 128u
         let split = pa.ksplit != 0u
-        let k0 = split ? (chunk * pa.ksplit) & ~(F16G_BK - 1u) : 0u   //! the chunk is a k-step multiple by the shape gate; the mask tells the compiler so (the decode-load's fast path)
+        let k0 = split ? (chunk * pa.ksplit) & ~(F16G_BK - 1u) : 0u
         let k1 = split ? min(k0 + pa.ksplit, pa.n) : pa.n
         let ybase = split ? pa.ybase + chunk * pa.rows * pa.d : pa.ybase
         let ystride = split ? pa.d : pa.ystride
@@ -8863,16 +8847,13 @@ struct GemvArArgs {
     woff : uint
     pwoff : uint
     pre_on : uint
-    raw : uint
+    no_norm : uint
     eps : float
     ascale : float
 }
 
 //! the q8 decode GEMV carrying the residual step as its last workgroup's epilogue: a subgroup a row, eight rows a
-//! workgroup, the rows into a `@coherent` y; every workgroup publishes its rows and bumps the arrival counter, and the
-//! one that arrives last runs `ArRq`'s step over the whole row - the add partner normed first under `pre_on`, the residual
-//! updated in place, the normed row (as it is under `raw`) quantized to Q8_0 blocks for the next GEMV's feed - and resets
-//! the counter; the dependent dispatch between the GEMV and its residual step goes (about 2 us a hop on the probe)
+//! workgroup, the rows into a `@coherent` y, the last workgroup to arrive running `ArRq`'s step and resetting the counter
 [vk_dispatch(name = "q8_gemv_ar_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvAr : RmsWgBase {
     @ssbo @binding = 0 wq4 : array<uint4>          // weight quant words, vec4 view
@@ -8888,8 +8869,8 @@ class Q8GemvAr : RmsWgBase {
     @push_constant pa : GemvArArgs
     @workgroup arrived : uint[1]
 
-    //! the norm weight at `e`, one under `raw`
-    def nw(e : uint) : float => pa.raw != 0u ? 1.0 : wn[pa.woff + e]
+    //! the norm weight at `e`, one under `no_norm`
+    def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
 
     //! the residual step over the finished rows, `ArRqBase.rq_row`'s math on the workgroup's 256 threads
     def epilogue {
@@ -8915,7 +8896,7 @@ class Q8GemvAr : RmsWgBase {
             k += 256u
         }
         let inv0 = wg_rms_inv(ss, pa.d, pa.eps, 1u)
-        let inv = pa.raw != 0u ? 1.0 : inv0
+        let inv = pa.no_norm != 0u ? 1.0 : inv0
         memoryBarrierBuffer()   //! the row's writes reach the lanes that quantize them
         barrier()
         let nblk = pa.d / 32u
@@ -8997,9 +8978,7 @@ struct GuArgs {
 }
 
 //! the dense FFN's gate and up GEMVs, the activation and its Q8_0 requant in one dispatch: a workgroup owns 32
-//! output rows (one requant block), each subgroup dots its rows against both q8 planes in the q8 GEMV's lane form
-//! (two lanes a block, xor fold, both planes' loads in flight), the rows meet in workgroup memory, and one subgroup
-//! activates and quantizes the block - the tail's gate, up and act+requant hops become one
+//! output rows (one requant block), its subgroups dot both q8 planes, and one subgroup activates and quantizes the block
 [vk_dispatch(name = "q8_gemv_gu_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvGu {
     @ssbo @binding = 0 gq4 : array<uint4>     // gate quant words, vec4 view
@@ -9096,9 +9075,7 @@ struct PleActArgs {
 }
 
 //! the per-layer-embedding branch's activation, its Q8_0 requant and the proj GEMV in one dispatch: every workgroup
-//! builds the (at most 256-wide) x in workgroup memory - gelu(gate) x the side row, a block's scale by its 32-lane amax,
-//! the quants or-ed into words - then each of its subgroups dots one output row in the q8 GEMV's lane form; the
-//! act+requant hop goes, the redundant build costs 256 elements a workgroup
+//! rebuilds the (at most 256-wide) x in workgroup memory, then dots one output row a subgroup - the redundant build costs 256 elements a workgroup
 [vk_dispatch(name = "q8_gemv_pleact_cls", grid = "wgs", params = "wgs : int64")]
 class Q8GemvPleAct {
     @ssbo @binding = 0 wq4 : array<uint4>     // proj quant words, vec4 view
@@ -9221,8 +9198,7 @@ class Q51Gemv : Q51GemvBase {
     }
 }
 
-//! the routed down GEMV summed under the routing weights: a subgroup a row of the model dim, the k regions' dots one after
-//! another, y[row] = sum_r w[r] dot_r - the combine reads one row where it read k and folded them itself
+//! the routed down GEMV summed under the routing weights: a subgroup a row of the model dim, y[row] = sum_r w[r] dot_r
 [vk_dispatch(name = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
 class Q51GemvSum : Q51GemvBase {
     @ssbo @binding = 6 sw : array<float>   //! the k routing weights (the per-expert down scale folded in)
@@ -9696,9 +9672,7 @@ class KqGemvK4 : KqGemvK4Base {
 }
 
 //! the routed experts' Q4_K gate and up GEMVs, the activation and its Q8_0 requant in one dispatch (`Q8GemvGu`'s form
-//! over the slot regions): a workgroup owns one 32-row block of the k x d output rows, its subgroups dot the rows against
-//! both planes in the kq GEMV's lane split (the gate stack's regions at binding 2, the up stack's at 7, the one feed row),
-//! the rows meet in workgroup memory, and one subgroup activates and quantizes the block into the down GEMV's feed
+//! over the slot regions): the gate stack's regions at binding 2, the up stack's at 7, the one feed row
 [vk_dispatch(name = "kq_gemv_k4_gu_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4Gu : KqGemvK4Base {
     @ssbo @binding = 7 regions3 : array<uint>   // the up stack's (rel_wblock, xblock) pairs per slot

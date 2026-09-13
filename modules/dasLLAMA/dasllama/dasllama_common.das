@@ -312,8 +312,7 @@ def register_ple_pre_prefill_pad(fn : PlePrePrefillPadFn) {
     g_ple_pre_prefill_pad = fn
 }
 
-//! the gather half of the pre-step alone: every position's per-layer table row, scaled by sqrt(ple), position-major into `dst`
-//! (a device driver that finishes the pre-step on its side - the model_proj GEMM, the norm, the average - takes these rows)
+//! the gather half of the pre-step alone: every position's per-layer table row, scaled by sqrt(ple), position-major into `dst` - a device driver finishing the pre-step on its side takes these rows
 typedef PleGatherRowsFn = function<(t : Model; tokens : array<int64>; npos : int64; var dst : array<float>) : void>
 var private g_ple_gather_rows : PleGatherRowsFn
 

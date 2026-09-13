@@ -132,8 +132,6 @@ struct RdecDnGeom {
     cd, kd, di, nvh, nkh, ds, dconv : int64
     ba_f32 : bool
 }
-//! the resident driver's norms plane carries this many rows per layer: the attention norm, the FFN norm,
-//! and a pre/post-norm model's post-attention and post-FFN norms (zero rows on any other model)
 let public RDEC_NORM_ROWS = 9l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm, then the gemma-4 MoE layer's router scale, routed pre norm, dense post norm and routed post norm (zero rows where a model lacks them)
 
 //! One attention layer's geometry for the resident driver - its attention class (gemma-4's sliding and
@@ -151,7 +149,7 @@ struct RdecLayerGeom {
     out_scale : float               //! the layer's output scale on its FFN residual step; 1.0 = none
     kv_shared : bool                //! the layer projects Q only and attends over a donor layer's K/V rows (`mir_base` is the donor's; gemma-4 E-series)
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
-    moe_g4 : bool                   //! the gemma-4 MoE layer: the dense triple is a parallel shared expert under its own post norm, the routed branch feeds off its own pre norm of x and lands under its post norm, the router off a weightless rms of x
+    moe_g4 : bool                   //! the gemma-4 MoE layer: a parallel dense shared expert, the routed branch and the router each on their own norm of x
 }
 //! qd / kv_dim / head_size / hidden / rot are the maxima over the layers (the scratch is sized to
 //! them); `mir_elems` is one mirror side's element count over every attention layer, `cos_elems`

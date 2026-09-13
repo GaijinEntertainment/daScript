@@ -199,7 +199,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
         L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on()
         if (L.gu_on) {
-            verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")   //! the recurrent layers' triple asks here too, past the attention layer's own ensure list
+            verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
             L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
                 fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim, (dim / 32l) * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
                 fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
@@ -487,7 +487,7 @@ def private rd_moe_sets(var L : RLayer) {
     L.s_eact = set_actrq_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
         fixed_array(k * nfe * 4l, k * nfe * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
         fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
-    //! Q4_K gate and up stacks in one slab feeding a Q8_0 down: the two GEMVs and the act+requant as one dispatch
+    //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once
     L.egu = (L.fe1 == int(KqFmt.k4) && L.fe3 == int(KqFmt.k4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
         && vk_fuse_on() && ensure_kq_gemv_k4_gu_cls())
     if (L.egu) {
@@ -499,7 +499,7 @@ def private rd_moe_sets(var L : RLayer) {
         fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
     L.edown_sum = L.moe_g4 && L.fe2 == int(KqFmt.q51) && vk_fuse_on() && ensure_q51_gemv_sum_cls()
-    if (L.edown_sum) {   //! the q51 down experts summed under the routing weights in the GEMV: one row for the combine
+    if (L.edown_sum) {
         L.s_edown_sum = set_q51_gemv_sum_cls(fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev, g_rd.moe_dw_dev),
             fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l, MAX_ROUTED_SLOTS * 4l),
             fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN, VHZ_MRT))
@@ -1021,7 +1021,6 @@ def private rd_ensure_fused_sets {
         for (l in range64(nl)) {
             var L & = g_rd.layers[l]
             L.s_addr_ffn_rq = set_ar_rq_stamp(L.rq_ffn_stamp, g_rd.xb2_dev, VHZ_XB2, g_rd.xq_dev, g_rd.xs_dev)
-            //! a q8 wo whose post-attention step quantizes to Q8_0 carries the step as its last workgroup's epilogue
             L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && ensure_q8_gemv_ar_cls()
             if (L.wo_ar) {
                 let po = arena_planes(L.fo, L.bo)
@@ -1036,7 +1035,7 @@ def private rd_ensure_fused_sets {
             }
             if (!L.moe) {
                 L.s_addr_next_rq = set_ar_rq_stamp(L.rq_next_stamp, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
-                //! ... and a q8 down whose post-FFN step does (a per-layer-embedding layer's quantizes the row as it is for the gate)
+                //! a PLE layer joins whatever its next stamp is: its step quantizes the row as it is, for the gate's feed
                 L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && ensure_q8_gemv_ar_cls()
                 if (L.down_ar) {
                     let p2 = arena_planes(L.f2, L.b2)
@@ -1051,9 +1050,7 @@ def private rd_ensure_fused_sets {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: fused add+rms+requant on every decode site (DASLLAMA_VK_FUSE=0 pins the split dispatches)\n")
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
-//! the attention row's requant form the pass folds into its store: Q8_0 blocks on a q8 wo plane, Q8_K superblocks on
-//! a K-quant plane where the head is a multiple of 256 (gemma's 256 and 512), none where the head is narrower
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
 def private rd_attn_rqk(L : RLayer) : uint {
     if (!kq_sb(L.fo)) return DA_RQ_Q8
     return L.hs % 256l == 0l ? DA_RQ_Q8K : DA_RQ_NONE
@@ -1154,10 +1151,10 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
         rd_ts(raw, "a:rq_a")
     }
-    if (L.wo_ar) {   //! the post-attention residual step rides the GEMV's last workgroup
+    if (L.wo_ar) {
         var pcwa = GemvArArgs(n = uint(qd), d = uint(dim), wblk = uint(arena_local_blk(L.bo)), xblk = 0u, add_on = 1u,
             woff = uint(rd_norm_off(l, RD_NORM_FFN)), pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)), pre_on = L.pre_post ? 1u : 0u,
-            raw = 0u, eps = g_rd.eps, ascale = 1.0)
+            no_norm = 0u, eps = g_rd.eps, ascale = 1.0)
         enc_q8_gemv_ar_cls(raw, h, L.s_wo_ar, pcwa, rd_ar_wgs(dim))
         rd_ts(raw, "a:wo_ar")
         return
@@ -1251,7 +1248,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let gelu = L.gelu ? 1u : 0u
     var pc_act = ActArgs(nelem = uint(hid), gelu = gelu, nblk = uint(hid / 32l))
     var pc_act_k = ActArgs(nelem = uint(hid), gelu = gelu, nblk = uint(hid / 256l))
-    if (L.gu_on) {   //! one dispatch: both GEMVs, the activation and the Q8_0 requant of the hidden row
+    if (L.gu_on) {
         var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), gelu = gelu)
         enc_q8_gemv_gu_cls(raw, h, L.s_gu, pcgu, hid / 32l)
         rd_ts(raw, L.moe ? "m:sh_gu" : "{pfx}gu")
@@ -1271,7 +1268,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     if (L.down_ar) {   //! the post-FFN residual step rides the GEMV's last workgroup (a PLE layer's quantizes the row as it is, unscaled: the gate's feed)
         var pcda = GemvArArgs(n = uint(hid), d = uint(dim), wblk = uint(arena_local_blk(L.b2)), xblk = 0u, add_on = 1u,
             woff = uint(nxt), pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)), pre_on = L.pre_post ? 1u : 0u,
-            raw = L.ple ? 1u : 0u, eps = g_rd.eps, ascale = L.ple ? 1.0 : L.out_scale)
+            no_norm = L.ple ? 1u : 0u, eps = g_rd.eps, ascale = L.ple ? 1.0 : L.out_scale)
         enc_q8_gemv_ar_cls(raw, h, L.s_down_ar, pcda, rd_ar_wgs(dim))
         rd_ts(raw, "{pfx}down_ar")
         return
@@ -1386,7 +1383,7 @@ def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
     if (L.moe_g4) {   //! both branches normed, their sum normed, the step scaled: the gemma-4 form's rows
         return ArArgs(dim = uint(g_rd.dim), add_on = 1u, woff = uint(woff), eps = g_rd.eps, ascale = L.out_scale,
             slots = uint(g_rd.k), pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
-            p2off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), p3off = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
+            routed_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), sum_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
     }
     return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
         slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u)
@@ -1488,7 +1485,7 @@ def private rd_encode_token {
                     pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
                 if (L.down_ar) {   //! the down GEMV's epilogue took the step
                 } elif (L.ple_fused) {   //! the step quantizes the row it writes, as it is: the gate's feed
-                    pc14a.raw = 1u
+                    pc14a.no_norm = 1u
                     enc_ar_rq_stamp(RqStamp.rq, raw, h, L.s_ple_ar_rq, pc14a)
                     rd_ts(raw, "{tpfx}ar2a_rq")
                 } else {

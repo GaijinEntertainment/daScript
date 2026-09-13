@@ -193,8 +193,8 @@ renormalization (`TopkArgs.dsoff` / `TopkRowsArgs.dsoff` name the layer's row in
 binding filled and never read), where the CPU chain scales the picked weights before the expert
 GEMVs. The combine (`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step
 of the CPU chain's `gemma4_moe_ffn`: the k weighted routed rows summed and normed under the
-routed post norm (`ArArgs.p2off`), the dense row in `ffnout` normed under the dense post norm
-(`pwoff`), the two added and normed under the layer's post-FFN norm (`p3off`), the residual
+routed post norm (`ArArgs.routed_post_off`), the dense row in `ffnout` normed under the dense post norm
+(`pwoff`), the two added and normed under the layer's post-FFN norm (`sum_post_off`), the residual
 `(x + that) * out_scale`, then the next layer's norm - four workgroup reductions over one row
 stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are
 Q5_1 the token command's down GEMV folds the k rows itself (`Q51GemvSum`: a subgroup a row of the

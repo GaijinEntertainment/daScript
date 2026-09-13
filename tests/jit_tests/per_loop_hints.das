@@ -51,7 +51,7 @@ def countdown_while_annotated(start : int) {
 def countdown_while_spirv_spelling(start : int) {
     var x = start
     var iters = 0
-    while [dont_unroll] (x > 0) {   // the SPIR-V emitter's name for the same hint; a kernel body carries it and compiles on the CPU as well
+    while [dont_unroll] (x > 0) {
         x--
         iters++
     }

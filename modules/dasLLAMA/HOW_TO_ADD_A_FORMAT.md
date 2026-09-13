@@ -261,7 +261,7 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
 
 A per-32 format (q51's shape: 32-weight blocks, Q8_0-form activations, off the kq lattice) takes
 none of the kq id bridge: it joins `vk_fmt_b32` and `arena_block_bytes` (the CPU plane's own block
-strides), `rdec_b32` in `dasllama_gpu_resident.das`, the `pf_f16_feed` admission, and writes its
+strides), `rdec_block32` in `dasllama_gpu_resident.das`, the `pf_f16_feed` admission, and writes its
 own classes beside q8's rather than a `KqGemvBase` child - a `KqCm2BatchT` format template at
 `BLKW` 32 with a word scale plane (`Q51Cm2T`, the s and e stamps the expert schedule dispatches;
 `cm2_cls_ensure` refuses it a dense column, the plan declines a dense plane of it) and a decode

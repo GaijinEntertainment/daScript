@@ -160,16 +160,16 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     let wtiles = (d + 127l) / 128l
     let tiles_l = wtiles * ((cnt + 255l) / 256l)
     let tiles_m = wtiles * ((cnt + 127l) / 128l)
-    if (tiles_m * 4l <= cores) {   //! a narrow GEMM whose m columns leave three quarters of the card idle takes the s column (gemma-3-1b's k/v: 8 m tiles on 82 SMs, 805 -> 574 us a window)
+    if (tiles_m * 4l <= cores) {
         return 32l
     }
     return cm2_wave_units(tiles_m, 1l, cores, 128l) < cm2_wave_units(tiles_l, 1l, cores, 256l) ? 128l : 256l
 }
 
-//! the wave model the tile and split picks share: a grid runs in whole waves over the SMs, and a wave costs its k steps at the column's step weight - m 10, l 16 (the l column does twice m's work in 1.6x its step), s 5
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def private cm2_wave_units(wgs, steps, cores, tc : int64) : int64 => ((wgs + cores - 1l) / cores) * steps * (tc == 256l ? 16l : (tc == 128l ? 10l : 5l))
 
-//! the split-k reduce in wave units: 9 us behind the barrier and 2.5 MB a us over the partial planes and the sum; an m step is 1.4 us, ten units (RTX PRO 4500)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def private cm2_reduce_units(nsplit, cnt, d : int64) : int64 => (9l + ((nsplit + 1l) * cnt * d * 4l) / 2_500_000l) * 7l
 
 //! the 256-aligned chunk `nsplit` pieces cut K into; 0 when the last piece would start past K
@@ -207,14 +207,12 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
     if (n < 2048l || d < 128l || cnt < tc0) {
         return (tc = tc0, nsplit = 1l, ksplit = 0l)
     }
-    // the whole GEMM's column is the tile pick's own; the l and m columns weigh in together for the split candidates where that pick chose between them (the s column and a forced tile stand alone)
     let twin = (tc0 == 128l || tc0 == 256l) && cnt > 128l && cm2_tile_env() <= 0l
     let ntc = twin ? 2 : 1
     let tcs = fixed_array(twin ? 256l : tc0, 128l)
     var best_tc = tc0
     var best_sk = 1l
     var best_ck = 0l
-    //! the siblings ride the whole GEMM's waves, never its column: a sibling's fixed count added to both columns favours m on a wide gate (E4B's 16384-wide gate beside up read m, 474 us against l's 424)
     let whole = cm2_wave_units(cm2_tiles_at(d, cnt, tc0) + sib_tiles, n / 64l, cores, tc0)
     var best = whole
     for (sk in range64(2l, 9l)) {
@@ -228,9 +226,8 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
         let red = cm2_reduce_units(sk, cnt, d)
         for (i in range(ntc)) {
             let own = cm2_tiles_at(d, cnt, tcs[i])
-            //! a split gives the co-run up, so the group's roles run one after another, each split alike: the group's units scale with its size
             let u = (cm2_wave_units(own * sk, (ck + 63l) / 64l, cores, tcs[i]) + red) * (own + sib_tiles) / own
-            if (u * 12l < whole * 11l && u < best) {   //! a split serves only a twelfth under the whole - a barrier and a reduce for a wash is a loss (E2B's wo sits at 290 against 320 and measures 50 -> 43 us)
+            if (u * 12l < whole * 11l && u < best) {
                 best = u
                 best_tc = tcs[i]
                 best_sk = sk
@@ -2034,7 +2031,7 @@ def vk_kq_schema_id(fmt : int) : int {
     return 0
 }
 
-// fmt space here = int(KqFmt): q8 and q51 stride 32-elem blocks, every other value the kq lattice
+// fmt here is int(KqFmt), not the enum
 def vk_fmt_b32(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51)
 
 // meta/activation block unit of a stack format — q8 counts 32-weight blocks, the kq
@@ -2321,7 +2318,7 @@ struct RLayer {
     s_ple_gate, s_ple_proj : VkDescriptorSet
     s_ple_act : VkDescriptorSet     //! gelu(gate) x this layer's side-input row, requantized (the proj GEMV's feed)
     ple_fused : bool                //! the branch in three dispatches: the FFN residual step quantizes the row it writes (the gate's feed), the act rides the proj GEMV
-    s_ple_ar_rq : VkDescriptorSet   //! the residual step + raw Q8_0 requant (`ArArgs.raw`)
+    s_ple_ar_rq : VkDescriptorSet   //! the residual step + raw Q8_0 requant (`ArArgs.no_norm`)
     s_ple_pa : VkDescriptorSet      //! the act + requant + proj GEMV (`Q8GemvPleAct`)
     m_pg, m_pp : HostBuf
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
@@ -2545,15 +2542,14 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
     return min((2l * sm_count + n_heads - 1l) / n_heads, DA_NSPLIT_MAX)
 }
 
-//! the norms plane's rows per layer (`RDEC_NORM_ROWS`, the uploader's count): the attention norm, the FFN norm, the post-attention and post-FFN norms; the final norm follows the layers, the q/k norm rows follow it
+//! the norms plane's per-layer row indices (`RDEC_NORM_ROWS` rows a layer); the final norm follows the layers and the q/k norm rows follow it
 let RD_NORM_ROWS = RDEC_NORM_ROWS
 let RD_NORM_ATT = 0l
 let RD_NORM_FFN = 1l
 let RD_NORM_POST_ATT = 2l
 let RD_NORM_POST_FFN = 3l
 let RD_NORM_PLE_POST = 4l   //! the per-layer-embedding branch's post norm (gemma-4 E-series); a zero row elsewhere
-//! the gemma-4 MoE layer's four rows (zero rows elsewhere): the router's input scale over sqrt(dim) (a weightless rms of x
-//! takes it as its weight), the routed branch's pre norm, the dense shared expert's post norm, the routed sum's post norm
+//! gemma-4's four rows (zero elsewhere): the router's input scale over sqrt(dim), the routed pre norm, the dense branch's post norm (FFN1), the routed sum's post norm (FFN2)
 let RD_NORM_ROUTER = 5l
 let RD_NORM_PRE_FFN2 = 6l
 let RD_NORM_POST_FFN1 = 7l

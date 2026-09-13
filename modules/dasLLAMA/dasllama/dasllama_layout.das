@@ -952,9 +952,8 @@ def private pack_iq_dev_row(fmt : KqFmt; var out : uint8?; d : uint8 const?; sc 
     }
 }
 
-//! Gather one PREPARED q51 expert stack into the GPU tier's device planes - the disk layout (20 quant bytes and a
-//! d | m word a 32-block, row-major) out of the grp<mr> interleave `expand_q51_grp_row` and `gather_q51_grp_scales`
-//! read (a block's nibble dwords at (j / 4) * 4 * mr + r * 4, its qh word at the 16 * mr tail, its scale word at bi * 4 * mr + r * 4), disk order past the groups
+//! Gather one PREPARED q51 expert stack into the GPU tier's device planes: the disk layout (20 quant bytes and a
+//! d | m word a 32-block, row-major), out of whatever grp<mr> interleave the repack left.
 def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
                              repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nb = n / Q8_BLOCK_ELEMS
