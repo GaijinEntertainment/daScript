@@ -47,6 +47,7 @@ struct ArArgs {
     p2off : uint     //! the gemma-4 MoE combine: the routed sum's post norm row (`pwoff` is the dense branch's)
     p3off : uint     //! ... and the post norm over the two branches' sum
     raw : uint       //! the requant twins: quantize the updated row as it is (no norm) - the E-series residual feeding its per-layer-embedding gate
+    presummed : uint //! the gemma-4 combine: the routed rows arrive summed under their weights in row 0 (the down GEMV folded them)
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -399,8 +400,11 @@ class ArCombG4Base : ArBase {
     @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights (the per-expert down scale folded in)
     @ssbo @binding = 6 down_rows : array<float>  //! the routed down-GEMM output rows
 
-    //! the position's k weighted routed rows at element k
+    //! the position's k weighted routed rows at element k (one row, already summed, under `presummed`)
     def routed_sum(pk, k : uint) : float {
+        if (pa.presummed != 0u) {
+            return down_rows[k]
+        }
         var f = 0.0
         var j = 0u
         while (j + 4u <= pa.slots) {
@@ -9081,8 +9085,7 @@ def q51_hbits(n : uint) : uint => ((n & 0xFu) * 0x02040810u) & 0x10101010u
 //! Q5_1 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: the block's five words (four
 //! nibble words, the qh word), the low and high nibbles raised to bytes with their fifth bit, sdot4 against the
 //! activation words; (d * isum + m * asum) * xs per block - `dot_q51q8_scalar`'s float order, reassociated by lane
-[vk_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class Q51Gemv {
+class Q51GemvBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words, five per block
     @ssbo @binding = 1 wsu : array<uint>       // per-block f16 d | f16 m
     @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
@@ -9091,6 +9094,38 @@ class Q51Gemv {
     @ssbo @binding = 5 y : array<float>
     @push_constant pa : GemvArgs
 
+    //! one row's dot over `nb` blocks from weight block `wb0` and activation block `xb0`: a lane a block, the subgroup's sum
+    def row_dot(wb0, xb0, nb : uint) : float {
+        let lane = gl_SubgroupInvocationID
+        var acc = 0.0
+        var bi0 = 0u
+        while (bi0 < nb) {
+            let b = bi0 + lane
+            if (b < nb) {
+                let wbase = (wb0 + b) * 5u
+                let xbase = (xb0 + b) * 8u
+                let qh = wq[wbase + 4u]
+                var idot = 0
+                var asum = 0
+                for [unroll_full] (c in range(4)) {
+                    let w = wq[wbase + uint(c)]
+                    let xl = xqw[xbase + uint(c)]
+                    let xh = xqw[xbase + 4u + uint(c)]
+                    idot += sdot4((w & 0x0F0F0F0Fu) | q51_hbits(qh >> (uint(c) * 4u)), xl)
+                    idot += sdot4(((w >> 4u) & 0x0F0F0F0Fu) | q51_hbits(qh >> (16u + uint(c) * 4u)), xh)
+                    asum += sdot4(xl, 0x01010101u) + sdot4(xh, 0x01010101u)
+                }
+                let dm = unpackHalf2x16(wsu[wb0 + b])
+                acc += (dm.x * float(idot) + dm.y * float(asum)) * axs[xb0 + b]
+            }
+            bi0 += gl_SubgroupSize
+        }
+        return subgroupAdd(acc)
+    }
+}
+
+[vk_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q51Gemv : Q51GemvBase {
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q51_gemv_cls_spv")]
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
@@ -9098,35 +9133,33 @@ class Q51Gemv {
             let r = rg / pa.d
             let row = rg % pa.d
             let nb = pa.n / 32u
-            let wb0 = regions[r * 2u] + row * nb
-            let xb0 = regions[r * 2u + 1u]
-            let lane = gl_SubgroupInvocationID
-            var acc = 0.0
-            var bi0 = 0u
-            while (bi0 < nb) {
-                let b = bi0 + lane
-                if (b < nb) {
-                    let wbase = (wb0 + b) * 5u
-                    let xbase = (xb0 + b) * 8u
-                    let qh = wq[wbase + 4u]
-                    var idot = 0
-                    var asum = 0
-                    for [unroll_full] (c in range(4)) {
-                        let w = wq[wbase + uint(c)]
-                        let xl = xqw[xbase + uint(c)]
-                        let xh = xqw[xbase + 4u + uint(c)]
-                        idot += sdot4((w & 0x0F0F0F0Fu) | q51_hbits(qh >> (uint(c) * 4u)), xl)
-                        idot += sdot4(((w >> 4u) & 0x0F0F0F0Fu) | q51_hbits(qh >> (16u + uint(c) * 4u)), xh)
-                        asum += sdot4(xl, 0x01010101u) + sdot4(xh, 0x01010101u)
-                    }
-                    let dm = unpackHalf2x16(wsu[wb0 + b])
-                    acc += (dm.x * float(idot) + dm.y * float(asum)) * axs[xb0 + b]
-                }
-                bi0 += gl_SubgroupSize
-            }
-            let total = subgroupAdd(acc)
+            let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
             if (subgroupElect()) {
                 y[pa.ybase + rg] = total
+            }
+        }
+    }
+}
+
+//! the routed down GEMV summed under the routing weights: a subgroup a row of the model dim, the k regions' dots one after
+//! another, y[row] = sum_r w[r] dot_r - the combine reads one row where it read k and folded them itself
+[vk_dispatch(name = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
+class Q51GemvSum : Q51GemvBase {
+    @ssbo @binding = 6 sw : array<float>   //! the k routing weights (the per-expert down scale folded in)
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q51_gemv_sum_cls_spv")]
+    def run {
+        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (row < pa.d) {
+            let nb = pa.n / 32u
+            var tot = 0.0
+            var r = 0u
+            while (r < pa.nreg) {
+                tot += sw[r] * row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
+                r++
+            }
+            if (subgroupElect()) {
+                y[pa.ybase + row] = tot
             }
         }
     }

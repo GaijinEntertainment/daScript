@@ -194,7 +194,10 @@ of the CPU chain's `gemma4_moe_ffn`: the k weighted routed rows summed and norme
 routed post norm (`ArArgs.p2off`), the dense row in `ffnout` normed under the dense post norm
 (`pwoff`), the two added and normed under the layer's post-FFN norm (`p3off`), the residual
 `(x + that) * out_scale`, then the next layer's norm - four workgroup reductions over one row
-stash, the dense row re-read from `ffnout` rather than staged twice. The norms plane grows by the
+stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are
+Q5_1 the token command's down GEMV folds the k rows itself (`Q51GemvSum`: a subgroup a row of the
+model dim, the k regions' dots summed under the routing weights), so the combine reads one row
+(`ArArgs.presummed`) where it read k through the slot map. The norms plane grows by the
 four rows (`RDEC_NORM_ROWS` 9; zero on every other model). The plan's unserved list names the
 dense shared expert only where no backend installed the MoE seats; the plan sizes an MoE layer
 at its expert triple plus the FFN triple, and the layer decline reads the FFN triple's formats on

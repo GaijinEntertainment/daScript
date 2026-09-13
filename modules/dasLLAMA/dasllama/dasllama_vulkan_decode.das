@@ -489,6 +489,12 @@ def private rd_moe_sets(var L : RLayer) {
     L.s_edown = gemv_cls_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev),
         fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
+    L.edown_sum = L.moe_g4 && L.fe2 == int(KqFmt.q51) && vk_fuse_on() && ensure_q51_gemv_sum_cls()
+    if (L.edown_sum) {   //! the q51 down experts summed under the routing weights in the GEMV: one row for the combine
+        L.s_edown_sum = set_q51_gemv_sum_cls(fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev, g_rd.moe_dw_dev),
+            fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l, MAX_ROUTED_SLOTS * 4l),
+            fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN, VHZ_MRT))
+    }
     if (L.moe_g4) {
         verify(ensure_cls_ar_comb_g4(), "vk decode: the gemma-4 combine-folded residual class rail must engage on a live device")
         L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
@@ -1342,8 +1348,13 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
     rd_ts(raw, "m:e_act")
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k), ybase = 0u)
-    gemv_enc(L.fe2, raw, h, L.s_edown, pcd, k * dim)
-    rd_ts(raw, "m:e_down")
+    if (L.edown_sum) {
+        enc_q51_gemv_sum_cls(raw, h, L.s_edown_sum, pcd, gemv_wgs(dim, 0u))
+        rd_ts(raw, "m:e_down_sum")
+    } else {
+        gemv_enc(L.fe2, raw, h, L.s_edown, pcd, k * dim)
+        rd_ts(raw, "m:e_down")
+    }
 }
 
 //! The residual step's push block over a MoE layer's combine: the shared row at its gate when the layer has
@@ -1458,6 +1469,7 @@ def private rd_encode_token {
                 pre_on = (L.pre_post || L.ple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, L.ple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
             if (L.moe) {
                 var pc14c = rd_ar_comb_args(L, l, nxt)
+                pc14c.presummed = L.edown_sum ? 1u : 0u   //! the token command's down GEMV folded the k rows; the window chain's GEMM writes them apart
                 if (L.moe_g4) {
                     enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pc14c, 1l)
                 } else {

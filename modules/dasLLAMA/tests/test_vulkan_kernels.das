@@ -6232,6 +6232,47 @@ def test_vkd_q51_gemv(t0 : T?) {
                 }
                 let bad = mismatch_approx(y_cls, y_ref)
                 t |> success(bad == 0, "q51 GEMV at n {n} matches the scalar dot ({bad} of {rows} rows off)")
+                //! the summed form: the two regions' rows folded under their weights inside the GEMV, one row of d out
+                if (ensure_q51_gemv_sum_cls()) {
+                    var wgt <- [0.625, -0.375]
+                    let ys_bytes = int64(d) * 4l
+                    let ysd = make_device_buf(ys_bytes)
+                    let swd = make_device_buf(8l)
+                    var ys_cls : array<float>
+                    ys_cls |> resize(d)
+                    unsafe {
+                        upload_region_at(swd, 0l, addr<uint8 const?>(wgt[0]), 8l)
+                        nan_sentinel_upload(ysd, ys_bytes)
+                        var s_sum = set_q51_gemv_sum_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, ysd, swd),
+                            fixed_array(wq_bytes, ws_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, ys_bytes, 8l),
+                            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u))
+                        var raw3 = alloc_cmd()
+                        let begin3 = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(raw3, begin3), null)
+                        var h3 : VkHaz
+                        var pcs = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u)
+                        enc_q51_gemv_sum_cls(raw3, h3, s_sum, pcs, gemv_wgs(int64(d), 0u))
+                        vhz_dep(raw3, h3, 32u, 0u, true)
+                        cmd_copy_whole(raw3, ysd, host.buf, ys_bytes)
+                        vk_check(vkEndCommandBuffer(raw3), null)
+                        submit_wait(raw3)
+                        memcpy(addr<void?>(ys_cls[0]), host.mapped, ys_bytes)
+                    }
+                    var ys_ref : array<float>
+                    ys_ref |> resize(d)
+                    for (row in range(d)) {
+                        ys_ref[row] = wgt[0] * y_ref[row] + wgt[1] * y_ref[d + row]
+                    }
+                    let bads = mismatch_approx(ys_cls, ys_ref)
+                    t |> success(bads == 0, "q51 GEMV summed under the weights at n {n} matches the weighted rows ({bads} of {d} off)")
+                    var ys_poison := ys_cls
+                    ys_poison[0] += 1.0 + 2.0 * max_abs(ys_ref)
+                    t |> success(mismatch_approx(ys_poison, ys_ref) > 0, "q51 GEMV summed: the bar reds a poisoned row")
+                    delete wgt
+                    delete ys_cls
+                    delete ys_ref
+                    delete ys_poison
+                }
                 var y_poison := y_cls   // the bar's control
                 y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
                 t |> success(mismatch_approx(y_poison, y_ref) > 0, "the q51 GEMV bar reds a poisoned element")

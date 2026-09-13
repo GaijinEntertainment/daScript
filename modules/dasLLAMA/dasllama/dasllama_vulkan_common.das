@@ -2333,6 +2333,8 @@ struct RLayer {
     s_egate, s_eup : VkDescriptorSet
     s_eact : VkDescriptorSet
     s_edown : VkDescriptorSet
+    edown_sum : bool                //! the routed down GEMV sums the k rows under their weights itself (`Q51GemvSum`): the combine reads one row
+    s_edown_sum : VkDescriptorSet
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   //! the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   //! ... and the m column's, over the same planes
