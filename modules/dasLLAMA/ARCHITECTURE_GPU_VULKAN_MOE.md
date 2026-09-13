@@ -197,7 +197,9 @@ routed post norm (`ArArgs.p2off`), the dense row in `ffnout` normed under the de
 stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are
 Q5_1 the token command's down GEMV folds the k rows itself (`Q51GemvSum`: a subgroup a row of the
 model dim, the k regions' dots summed under the routing weights), so the combine reads one row
-(`ArArgs.presummed`) where it read k through the slot map. The norms plane grows by the
+(`ArArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
+the token command's combine quantizes it itself (`ClsArCombG4Rq`, `RLayer.comb_rq`), so the requant
+dispatch that opened the next layer (or the classifier) goes. The norms plane grows by the
 four rows (`RDEC_NORM_ROWS` 9; zero on every other model). The plan's unserved list names the
 dense shared expert only where no backend installed the MoE seats; the plan sizes an MoE layer
 at its expert triple plus the FFN triple, and the layer decline reads the FFN triple's formats on

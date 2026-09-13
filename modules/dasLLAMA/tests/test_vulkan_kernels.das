@@ -10431,6 +10431,70 @@ def private moe_ar_comb_g4_arm(t : T?) {
         let f16_bar = 2.0e-3
         let bad_h = mismatch_bars(got_yf, want_y, f16_bar, f16_bar * max_abs(want_y))
         t |> success(bad_h == 0, "the gemma-4 combine step: the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
+        //! the quantizing twin: the same step, the normed rows as Q8_0 blocks (two a row) held to the oracle's blocks
+        if (ensure_cls_ar_comb_g4_rq()) {
+            let nblk = npos * n / 32
+            let oq_bytes = int64(npos * n)
+            let os_bytes = int64(nblk) * 4l
+            let oqd = make_device_buf(oq_bytes)
+            let osd = make_device_buf(os_bytes)
+            var oq : array<int8>
+            var os : array<float>
+            oq |> resize(npos * n)
+            os |> resize(nblk)
+            unsafe {
+                upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
+                nan_sentinel_upload(osd, os_bytes)
+                var scq = set_cls_ar_comb_g4_rq(fixed_array(xd, shd, wnd, oqd, sid, swd, rod, osd),
+                    fixed_array(x_bytes, x_bytes, wn_bytes, oq_bytes, si_bytes, si_bytes, ro_bytes, os_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 4u))
+                var rawq = alloc_cmd()
+                let beginq = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(rawq, beginq), null)
+                var hq : VkHaz
+                enc_cls_ar_comb_g4_rq(rawq, hq, scq, pc, int64(npos))
+                vhz_dep(rawq, hq, 4u, 0u, true)
+                cmd_copy_range(rawq, oqd, 0l, host.buf, 0l, oq_bytes)
+                cmd_copy_range(rawq, osd, 0l, host.buf, oq_bytes, os_bytes)
+                vk_check(vkEndCommandBuffer(rawq), null)
+                submit_wait(rawq)
+                memcpy(addr<void?>(oq[0]), host.mapped, oq_bytes)
+                memcpy(addr<void?>(os[0]), reinterpret<void?>(intptr(host.mapped) + uint64(oq_bytes)), os_bytes)
+            }
+            var badq = 0
+            var badqs = 0
+            for (blk in range(nblk)) {
+                var m = 0.0
+                for (e in range(32)) {
+                    m = max(m, abs(want_y[blk * 32 + e]))
+                }
+                let d_ref = m / 127.0
+                if (abs(os[blk] - d_ref) > 2e-3 * max(d_ref, 1e-6)) {
+                    badqs++
+                }
+                for (e in range(32)) {
+                    let deq = float(oq[blk * 32 + e]) * os[blk]
+                    if (abs(deq - want_y[blk * 32 + e]) > d_ref + 2e-3 * abs(want_y[blk * 32 + e])) {
+                        badq++
+                    }
+                }
+            }
+            t |> success(badqs == 0, "the gemma-4 quantizing combine: the block scales match the oracle's normed rows ({badqs} of {nblk} off)")
+            t |> success(badq == 0, "the gemma-4 quantizing combine: the dequantized rows sit within a quant step of the oracle ({badq} of {npos * n} off)")
+            var poisonq := want_y
+            poisonq[0] += 3.0 * os[0] + 1.0
+            var pbad = 0
+            for (e in range(32)) {
+                let deq = float(oq[e]) * os[0]
+                if (abs(deq - poisonq[e]) > os[0] + 2e-3 * abs(poisonq[e])) {
+                    pbad++
+                }
+            }
+            t |> success(pbad > 0, "gemma-4 quantizing combine control: the quant bar reds a poisoned oracle element")
+            delete oq
+            delete os
+            delete poisonq
+        }
         want_x[2 * n + 9] += 0.5
         t |> success(mismatch_approx(got_x, want_x) == 1, "gemma-4 combine control: the residual bar reds one poisoned element")
         want_y[3 * n + 5] += 0.5

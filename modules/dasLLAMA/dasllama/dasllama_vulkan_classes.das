@@ -500,6 +500,45 @@ class ClsArCombG4F16B : ArCombG4Base {
     }
 }
 
+//! the gemma-4 combine that quantizes the next head's feed itself: the normed row into Q8_0 blocks (`ArRqBase.quant32`'s
+//! form at the combine's free bindings) instead of a float row a requant dispatch would read
+[vk_dispatch(name = "cls_ar_comb_g4_rq", grid = "nrows", params = "nrows : int64")]
+class ClsArCombG4Rq : ArCombG4Base {
+    @ssbo @binding = 3 outq : array<int8>    //! the normed row's Q8_0 quants (the next layer's q feed)
+    @ssbo @binding = 7 outs : array<float>   //! ... and its block scales
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def run {
+        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
+        let ss = accum_row(base)
+        let inv = rms_inv(ss)
+        let tid = gl_LocalInvocationID.x
+        let nblk = pa.dim / 32u
+        let lane8 = tid % 8u
+        let qb0 = (gl_WorkGroupID.x + pa.row0) * nblk
+        var b = tid / 8u
+        while (b < nblk) {
+            let e = b * 32u + lane8 * 4u
+            let v0 = wn[pa.woff + e] * (row[e] * inv)
+            let v1 = wn[pa.woff + e + 1u] * (row[e + 1u] * inv)
+            let v2 = wn[pa.woff + e + 2u] * (row[e + 2u] * inv)
+            let v3 = wn[pa.woff + e + 3u] * (row[e + 3u] * inv)
+            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+            let dq = m / 127.0
+            let id = dq != 0.0 ? 1.0 / dq : 0.0
+            if (lane8 == 0u) {
+                outs[qb0 + b] = dq
+            }
+            let qb = qb0 * 32u + e
+            outq[qb] = q8_quant1(v0, id)
+            outq[qb + 1u] = q8_quant1(v1, id)
+            outq[qb + 2u] = q8_quant1(v2, id)
+            outq[qb + 3u] = q8_quant1(v3, id)
+            b += 32u
+        }
+    }
+}
+
 [vk_dispatch(name = "cls_ar_f16_b", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsF16B : ArBase {
     @ssbo @binding = 3 outh : array<float16>   // the normed rows, f16
@@ -8979,7 +9018,7 @@ class Q8GemvGu {
     def run {
         let row0 = gl_WorkGroupID.x * 32u
         let nsg = gl_NumSubgroups
-        let rows_per = 32u / nsg   // 4 rows a subgroup at 32 lanes, 8 at 64
+        let rows_per = 32u / nsg   // a row a subgroup at 32 lanes, 2 at 64: every row of the block in flight at once
         var k = 0u
         while (k < rows_per) {
             let r = gl_SubgroupID + k * nsg

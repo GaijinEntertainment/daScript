@@ -2335,6 +2335,8 @@ struct RLayer {
     s_edown : VkDescriptorSet
     edown_sum : bool                //! the routed down GEMV sums the k rows under their weights itself (`Q51GemvSum`): the combine reads one row
     s_edown_sum : VkDescriptorSet
+    comb_rq : bool                  //! the gemma-4 combine quantizes the next head's Q8_0 feed itself (`ClsArCombG4Rq`): no requant dispatch follows
+    s_comb_rq : VkDescriptorSet
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   //! the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   //! ... and the m column's, over the same planes

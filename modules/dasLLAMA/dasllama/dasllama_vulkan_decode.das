@@ -989,7 +989,9 @@ def private rd_ensure_fused_sets {
             var L & = g_rd.layers[l]
             L.rq_ffn_stamp = rq_stamp(L.f1, L.moe)   //! a bare MoE layer's f1 is the experts' feed format; a MoE site stores the row its router reads
             used[int(L.rq_ffn_stamp)] = true
-            if (L.moe) {   //! a MoE layer's next site is the combine, which carries its own norm and store
+            if (L.moe) {   //! a MoE layer's next site is the combine, which carries its own norm and store - and, on a gemma-4 layer whose next feed is Q8_0, the requant
+                let fn = l + 1l < nl ? rd_head_feed(g_rd.layers[l + 1l]) : (fmt = g_rd.cls_fmt_marker, storex = false)
+                L.comb_rq = L.moe_g4 && fn.fmt == int(KqFmt.q8) && !fn.storex && ensure_cls_ar_comb_g4_rq()
                 continue
             }
             if (l + 1l < nl) {
@@ -1017,6 +1019,11 @@ def private rd_ensure_fused_sets {
                 L.s_wo_ar = set_q8_gemv_ar_cls(fixed_array(po.wq, po.ws, g_rd.aq_dev, g_rd.as_dev, g_rd.xb2_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev, g_rd.ar_cnt_dev),
                     fixed_array(po.wqb, po.wsb, L.qd, (L.qd / 32l) * 4l, dim * 4l, dim * 4l, g_rd.norms_bytes, dim, (dim / 32l) * 4l, 16l),
                     fixed_array(0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2, VHZ_X, 0u, VHZ_XQ, VHZ_XQ, VHZ_XB2))
+            }
+            if (L.comb_rq) {
+                L.s_comb_rq = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.xs_dev),
+                    fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, g_rd.k * dim * 4l, (dim / 32l) * 4l),
+                    fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_XQ))
             }
             if (!L.moe) {
                 L.s_addr_next_rq = set_ar_rq_stamp(L.rq_next_stamp, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
@@ -1412,7 +1419,7 @@ def private rd_encode_token {
             var L & = g_rd.layers[l]
             let hpfx = rd_head_pfx(L)
             let tpfx = rd_tail_pfx(L)
-            let after_moe_combine = l > 0l && g_rd.layers[l - 1l].moe
+            let after_moe_combine = l > 0l && g_rd.layers[l - 1l].moe && !g_rd.layers[l - 1l].comb_rq   //! a combine that quantized the feed leaves nothing to requant
             if (!fuse || after_moe_combine) {
                 if (kq_sb(L.recurrent ? L.fqkv : L.fq)) {
                     enc_cls_q8k_rq(raw, h, L.s_quant_xb, pc_rq_dim_k, rqwg_dim_k)
@@ -1470,7 +1477,9 @@ def private rd_encode_token {
             if (L.moe) {
                 var pc14c = rd_ar_comb_args(L, l, nxt)
                 pc14c.presummed = L.edown_sum ? 1u : 0u   //! the token command's down GEMV folded the k rows; the window chain's GEMM writes them apart
-                if (L.moe_g4) {
+                if (L.comb_rq) {   //! the next head's Q8_0 feed quantized here
+                    enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq, pc14c, 1l)
+                } elif (L.moe_g4) {
                     enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pc14c, 1l)
                 } else {
                     enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, 1l)
@@ -1486,7 +1495,7 @@ def private rd_encode_token {
                 rd_ts(raw, "{tpfx}ar2")
             }
         }
-        if (!fuse || g_rd.layers[g_rd.n_layers - 1l].moe) {   //! the fused next site did the final norm and its requant
+        if (!fuse || (g_rd.layers[g_rd.n_layers - 1l].moe && !g_rd.layers[g_rd.n_layers - 1l].comb_rq)) {   //! the fused next site (or the quantizing combine) did the final norm and its requant
             if (kq_sb(g_rd.cls_fmt_marker)) {
                 enc_cls_q8k_rq(raw, h, g_rd.s_quant_final, pc_rq_dim_k, rqwg_dim_k)
             } else {
