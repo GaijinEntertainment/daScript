@@ -5427,6 +5427,149 @@ def test_vkd_fa_cm2_h256_gated(t0 : T?) {
     }
 }
 
+//! the softcap stamps at gemma-2's shape (256-wide heads, cap 50): the f32 and f16-out leaves against the oracle with the
+//! same cap on every scaled score. Returns (f32 mismatches, f16-vs-f32 mismatches, outputs compared).
+def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float) : tuple<bad : int; bad16 : int; n : int> {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let hs = 256
+        let scale = 0.0625
+        let qd = nheads * hs
+        let kvd = (nheads / kv_mul) * hs
+        let kpos = w0 + rows
+        var qh : array<float>
+        var kh : array<float>
+        var vh : array<float>
+        qh |> resize(rows * qd)
+        kh |> resize(kpos * kvd)
+        vh |> resize(kpos * kvd)
+        for (i in range(rows * qd)) {   //! wide q and k values: the scaled scores run past the cap, so the cap is load-bearing
+            qh[i] = float((i * 41) % 73) * 0.25 - 9.0
+        }
+        for (i in range(kpos * kvd)) {
+            kh[i] = float((i * 17) % 97) * 0.15 - 7.0
+            vh[i] = float((i * 53) % 89) * 0.04 - 1.7
+        }
+        let q_bytes = int64(rows * qd) * 4l
+        let m_bytes = int64(kpos * kvd) * 4l
+        let sh_bytes = int64(kpos * kvd) * 2l
+        let o16_bytes = int64(rows * qd) * 2l
+        let qdev = make_device_buf(q_bytes)
+        let kdev = make_device_buf(m_bytes)
+        let vdev = make_device_buf(m_bytes)
+        let khdev = make_device_buf(sh_bytes)
+        let vhdev = make_device_buf(sh_bytes)
+        let yd = make_device_buf(q_bytes)
+        let yh16 = make_device_buf(o16_bytes)
+        var host = make_host_buf(q_bytes + o16_bytes, true, [cached = true])
+        var y_cls : array<float>
+        var y16 : array<float16>
+        y_cls |> resize(rows * qd)
+        y16 |> resize(rows * qd)
+        nan_sentinel_upload(yd, q_bytes)
+        nan_sentinel_upload(yh16, o16_bytes)
+        unsafe {
+            upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
+            upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
+            upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+            var sck = set_f16cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
+            var scv = set_f16cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
+            var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd, yd),
+                fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes, q_bytes), fixed_array(1u, 16u, 32u, 4u, 4u))
+            var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16, yh16),
+                fixed_array(q_bytes, sh_bytes, sh_bytes, o16_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u, 64u))
+            var raw2 = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw2, begin), null)
+            var h2 : VkHaz
+            var pcv = ActArgs(nelem = uint(kpos * kvd), gelu = 0u, nblk = 0u)
+            let cvtwgs = int64((kpos * kvd / 4 + 255) / 256)
+            enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
+            enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
+            var pcf = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd),
+                kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, cap = cap)
+            let fawgs = int64(nheads * ((rows + 63) / 64))
+            enc_fa_cm2_h256_cap_cls(raw2, h2, sfa, pcf, fawgs)
+            enc_fa_cm2_h256_cap_f16_cls(raw2, h2, sfa16, pcf, fawgs)
+            vhz_dep(raw2, h2, 4u | 64u, 0u, true)
+            cmd_copy_whole(raw2, yd, host.buf, q_bytes)
+            cmd_copy_range(raw2, yh16, 0l, host.buf, q_bytes, o16_bytes)
+            vk_check(vkEndCommandBuffer(raw2), null)
+            submit_wait(raw2)
+            memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+            memcpy(addr<void?>(y16[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), o16_bytes)
+        }
+        var qh2 : array<float>
+        var kh2 : array<float>
+        var vh2 : array<float>
+        qh2 |> resize(rows * qd)
+        kh2 |> resize(kpos * kvd)
+        vh2 |> resize(kpos * kvd)
+        for (i in range(rows * qd)) {
+            qh2[i] = float(float16(qh[i] * scale))
+        }
+        for (i in range(kpos * kvd)) {
+            kh2[i] = float(float16(kh[i]))
+            vh2[i] = float(float16(vh[i]))
+        }
+        var y_ref : array<float>
+        var y_nocap : array<float>
+        y_ref |> resize(rows * qd)
+        y_nocap |> resize(rows * qd)
+        for (r in range(rows)) {
+            for (hh in range(nheads)) {
+                attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
+                    w0 + r + 1, 1.0, y_ref, r * qd + hh * hs, 0, cap)
+                attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
+                    w0 + r + 1, 1.0, y_nocap, r * qd + hh * hs)
+            }
+        }
+        let bad = mismatch_approx(y_cls, y_ref)
+        let bad_nocap = mismatch_approx(y_cls, y_nocap)   //! the control: the same rows without the cap must miss, or the fixture never reached the cap
+        var bad16 = 0
+        for (i in range(rows * qd)) {
+            if (abs(float(y16[i]) - y_cls[i]) > 2e-3 * max(1.0, abs(y_cls[i]))) {
+                bad16++
+            }
+        }
+        delete qh
+        delete kh
+        delete vh
+        delete qh2
+        delete kh2
+        delete vh2
+        delete y_ref
+        delete y_nocap
+        delete y_cls
+        delete y16
+        return (bad = bad, bad16 = bad16, n = bad_nocap > 0 ? rows * qd : 0)
+    } else {
+        return (bad = 0, bad16 = 0, n = 0)
+    }
+}
+
+[test]
+def test_vkd_fa_cm2_h256_softcap(t0 : T?) {
+    t0 |> run("cm2 flash-attention h256 softcap stamps == the CPU oracle under cap 50 (gemma-2's shape; the uncapped oracle as the control)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_f16cvt_cls()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            if (!g_gpu.has_coopmat2_fa) {
+                feint("device lacks the cm2 flash-attention trio - skipping\n")
+                return
+            }
+            verify(ensure_fa_cm2_h256_cap_cls() && ensure_fa_cm2_h256_cap_f16_cls(), "the softcap h256 fa rails must engage on an fa-capable device")
+            let r = fa_h256_softcap_run(4, 2, 77, 64, 50.0)   // partial 64-tile, a nonzero window base
+            t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
+            t |> success(r.bad == 0, "fa_cm2 h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
+            t |> success(r.bad16 == 0, "fa_cm2 h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
 // the 9B's own shape: 16 heads over 4 kv heads, a full 512-row window from position 0
 [test]
 def test_vkd_fa_cm2_h256_9b(t0 : T?) {

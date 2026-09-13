@@ -1138,11 +1138,14 @@ def private pf_setup {
     let fa_dev = g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
     var fa_hs : table<int64>   //! the head sizes the fa tiles serve on this model
     var chunked_hs : table<int64>   //! ... and the ones the chunked pair serves
+    var any_cap = false   //! a flash layer under the attention softcap: the h256 cap stamps engage
     g_rd.pf_facm2 = false
     for (L in g_rd.layers) {
         continue if (L.recurrent)
-        //! the cm2 flash tile scales its scores inside the matrix: no softcap arm, the 8-row tile serves a gemma-2
-        L.pf_fa = fa_dev && (L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l) && (!g_rd.q_gated || L.hs == 256l) && L.attn_cap == 0.0
+        //! the softcap stamps exist at h256 alone (gemma-2), ungated; a capped layer of any other shape takes the 8-row tile
+        L.pf_fa = (fa_dev && (L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l) && (!g_rd.q_gated || L.hs == 256l)
+            && (L.attn_cap == 0.0 || (L.hs == 256l && !g_rd.q_gated)))
+        any_cap = any_cap || (L.pf_fa && L.attn_cap != 0.0)
         g_rd.pf_facm2 = g_rd.pf_facm2 || L.pf_fa
         if (L.pf_fa) {
             fa_hs |> insert(L.hs)
@@ -1187,6 +1190,7 @@ def private pf_setup {
         && (!key_exists(fa_hs, 256l) || (g_rd.q_gated
             ? (ensure_fa_cm2_h256_g_cls() && (!any_f16_feed || ensure_fa_cm2_h256_g_f16_cls()))
             : (ensure_fa_cm2_h256_cls() && (!any_f16_feed || ensure_fa_cm2_h256_f16_cls()))))
+        && (!any_cap || (ensure_fa_cm2_h256_cap_cls() && (!any_f16_feed || ensure_fa_cm2_h256_cap_f16_cls())))
         && (!key_exists(fa_hs, 512l) || (ensure_fa_cm2_h512_cls() && (!any_f16_feed || ensure_fa_cm2_h512_f16_cls())))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
@@ -1664,7 +1668,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
                         scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window,
-                        ksplit = uint(nsplit), gated = g_rd.q_gated ? 1u : 0u, hs = uint(hs))
+                        ksplit = uint(nsplit), gated = g_rd.q_gated ? 1u : 0u, hs = uint(hs), cap = g_rd.layers[l].attn_cap)
                     let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l) * nsplit
                     if (hs == 64l) {
                         if (fo6) {
@@ -1689,6 +1693,12 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                             enc_fa_cm2_h256_g_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
                         } else {
                             enc_fa_cm2_h256_g_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } elif (pcf.cap != 0.0) {
+                        if (fo6) {
+                            enc_fa_cm2_h256_cap_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_cm2_h256_cap_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
                         }
                     } else {
                         if (fo6) {

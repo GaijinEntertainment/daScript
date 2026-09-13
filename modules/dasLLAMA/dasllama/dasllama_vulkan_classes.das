@@ -2716,7 +2716,12 @@ struct FaCm2Args {
     ksplit : uint   //! the key range of a (head, q tile) cut across this many workgroups, each storing a partial for `FaCm2Comb`; 0 or 1 = one workgroup finishes the tile
     gated : uint    //! the combine's gate: multiply the sigmoid of the head's gate half into the row (the pass reads its GATED stamp instead)
     hs : uint       //! the head width, for the combine (the pass reads its HS stamp)
+    cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50), read by the CAP stamps; 0 = none
 }
+
+//! gemma-2's attention logit softcap on a scaled score tile: cap * tanh(s / cap) in the exp form the CPU's softcap4 takes
+[spirv_per_element, unused_argument(r, c)]
+def facm2_softcap(r, c : uint; v : float; cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
 
 //! a flash partial's rows in the partials plane: the 64-row O tile (HS wide) in the O region, the 64-row (max | denom)
 //! tile in the ML region that follows every O tile - the max tile at column 0, the denom tile at column 64, each
@@ -2743,6 +2748,7 @@ class template FaCm2T {
     @template_constant BC : uint = 64u           // the K/V step: 64 at hs 64, 32 above (the head-size cut: K^T, V and the softmax state at 32 columns)
     @template_constant OUT16 : bool = false      // the o store as f16
     @template_constant GATED : bool = false      // multiply the sigmoid of the gate half of a [q | gate] head into o; qstride/qhs describe that panel and read as qd/HS when unset
+    @template_constant CAP : bool = false        //! the softcap stamps: every scaled score through cap * tanh(s / cap) before the mask (gemma-2)
 
     [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
@@ -2793,6 +2799,9 @@ class template FaCm2T {
             var kt : KB
             coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, BC, kvh * HS, HS, tv)
             s = coopmatMulAdd(qf, kt, s)
+            static_if (CAP) {
+                coopmatPerElement(s, s, @@facm2_softcap, pa.cap)
+            }
             coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j, pa.window)
             var rmax : SACC
             coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
@@ -2948,6 +2957,20 @@ class FaCm2H256GF16 : FaCm2H256T {
     typedef OT = float16
     override OUT16 = true
     override GATED = true
+}
+
+//! the softcap leaves (gemma-2's 256-wide heads): the h256 pass with every scaled score capped before the mask
+[vk_dispatch(name = "fa_cm2_h256_cap_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256Cap : FaCm2H256T {
+    typedef OT = float
+    override CAP = true
+}
+
+[vk_dispatch(name = "fa_cm2_h256_cap_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H256CapF16 : FaCm2H256T {
+    typedef OT = float16
+    override OUT16 = true
+    override CAP = true
 }
 
 // hs=512 (gemma-4's global heads, V from K): the h256 pass at twice the head width, Bc=32
