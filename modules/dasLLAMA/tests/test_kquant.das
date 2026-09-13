@@ -883,10 +883,68 @@ def private q51_grp_gate(t : T?) {
     }
 }
 
+//! the GPU tier's q51 expert gather: the device planes (disk order, 20 + 4 bytes a block, row-major) gathered off the
+//! grp<mr> plane must equal the ones gathered off the disk-order plane, byte for byte, groups and the disk-order tail alike
+def private q51_gather_gate(t : T?) {
+    let n = 704l
+    let nb = n / 32l
+    let d = 26l   // 3 grp8 groups + a 2-row disk-order tail
+    var kq : array<uint8>
+    var ks : array<uint8>
+    q51_fill_planes(kq, ks, d, n)
+    var m = Model()
+    m.q51q := kq
+    m.q51s := ks
+    var wqDisk : array<uint8>
+    var wsDisk : array<uint8>
+    moe_gpu_gather_stack_q51(m, 0l, n, d, d, false, 1l, wqDisk, wsDisk)
+    var qdisk = 0
+    for (a, b in wqDisk, kq) {
+        if (a != b) {
+            qdisk++
+        }
+    }
+    t |> equal(qdisk, 0, "the disk-order gather is the plane itself")
+    t |> equal(long_length(wqDisk), d * nb * 20l)
+    t |> equal(long_length(wsDisk), d * nb * 4l)
+    for (mr in fixed_array(4l, 8l)) {
+        var g = Model()
+        g.q51q := kq
+        g.q51s := ks
+        unsafe {
+            repack_q51_grp(addr(g.q51q[0]), addr(g.q51s[0]), n, d, mr)
+        }
+        var wqGrp : array<uint8>
+        var wsGrp : array<uint8>
+        moe_gpu_gather_stack_q51(g, 0l, n, d, d, true, mr, wqGrp, wsGrp)
+        var qdiff = 0
+        for (a, b in wqDisk, wqGrp) {
+            if (a != b) {
+                qdiff++
+            }
+        }
+        var sdiff = 0
+        for (a, b in wsDisk, wsGrp) {
+            if (a != b) {
+                sdiff++
+            }
+        }
+        t |> equal(qdiff, 0, "grp{mr}: the gathered quant bytes match the disk-order gather")
+        t |> equal(sdiff, 0, "grp{mr}: the gathered scale words match the disk-order gather")
+        delete g
+    }
+    delete m
+    delete kq
+    delete ks
+}
+
 [test]
 def test_q51_kernels(t : T?) {
     t |> run("dot_q51q8_scalar matches the fp64 plane-dequant reference at n=704") @(t : T?) {
         q51_dot_gate(t)
+    }
+    t |> run("the GPU tier's q51 gather off grp4 and grp8 planes matches the disk-order gather byte for byte") @(t : T?) {
+        q51_gather_gate(t)
     }
     t |> run("q51 groupn bit-matches scalar row dots") @(t : T?) {
         q51_groupn_gate(t)

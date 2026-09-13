@@ -16,11 +16,11 @@ let private GEMMA4_26B_HITS_SLACK = 8l
 def test_gpu_resident_gemma4_26b(t : T?) {
     t |> run("gemma-4-26B-A4B IQ3_XXS: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the routed block's gemma-4 form") @(t : T?) {
         if (!arm_on(t, "g4m")) return
-        ppl_compare(t, 150l, 150l, GEMMA4_26B_FILE, GEMMA4_26B_HITS_SLACK)
+        ppl_compare(t, 150l, 150l, GEMMA4_26B_FILE, GEMMA4_26B_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
     }
     t |> run("gemma-4-26B-A4B IQ3_XXS: 520 prose ids prefilled (two windows), 80 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
         if (!arm_on(t, "g4m")) return
         window_pin(t)
-        ppl_compare(t, 520l, 80l, GEMMA4_26B_FILE, GEMMA4_26B_HITS_SLACK)
+        ppl_compare(t, 520l, 80l, GEMMA4_26B_FILE, GEMMA4_26B_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
     }
 }

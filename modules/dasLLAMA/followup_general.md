@@ -1625,5 +1625,8 @@
     per-position log-probs the CPU chain's mean gap is 0.36 nats (worst 16.2) where the resident's
     is 0.18 (worst 6.9) over the 130 positions llama.cpp is confident on, the chunk perplexities
     llama.cpp 3.304 / CPU 3.357 / resident 2.579 (argmax hits 132 / 133 / 129); on this model the
-    routed near-ties add to the suspects. Unquirked: the CPU chain's chunk perplexity within 2% of
-    llama.cpp's on both files.
+    routed near-ties add to the suspects, and the UD-Q4_K_M file (its Q5_1 down experts on their
+    own rail) reads the other way round on the same prose - mean gap CPU 0.21 nats, resident 0.37,
+    perplexities CPU 3.378 / resident 3.922 against llama-perplexity's 3.186, each arm with its own
+    whole-position misses where the other two agree - so the 26B cells hold a 1.25 perplexity
+    ratio. Unquirked: the CPU chain's chunk perplexity within 2% of llama.cpp's on both files.

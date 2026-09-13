@@ -492,9 +492,10 @@ routed block in its gemma-4 form (the parallel dense shared expert as the layer'
 the routed feed and the router off their own norms of x, the per-expert down scale folded into
 the routing weights, the combine norming both branches and their sum under the layer's output
 scale) in the perplexity form at 150 + 150 and at 520 + 80 (two windows) with an argmax slack of
-eight: a router near-tie flips whole positions between the arms, and on this model the CPU chain
-sits farther from llama.cpp than the resident does (per-position log-probs against llama.cpp
-b10660 on the same prose: mean gap 0.36 for the CPU chain, 0.18 for the resident), so a
+eight and a perplexity ratio of 1.25: a router near-tie flips whole positions between the arms,
+and either arm lands the farther one (per-position log-probs against llama.cpp b10660 on the
+same prose, mean gap on its confident positions: the IQ3_XXS file CPU 0.36 / resident 0.18, the
+Q4_K_M file CPU 0.21 / resident 0.37; perplexities 3.36 / 2.58 and 3.38 / 3.92), so a
 forced-feed maxdiff against the CPU chain is no instrument here. Its planes alone pass a 16 GB
 card (the 704-wide down-expert rows demote to q8), so the cells skip there on the memory decline
 and run on a 32 GB card. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on

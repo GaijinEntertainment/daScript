@@ -952,6 +952,68 @@ def private pack_iq_dev_row(fmt : KqFmt; var out : uint8?; d : uint8 const?; sc 
     }
 }
 
+//! Gather one PREPARED q51 expert stack into the GPU tier's device planes - the disk layout (20 quant bytes and a
+//! d | m word a 32-block, row-major) out of the grp<mr> interleave `expand_q51_grp_row` and `gather_q51_grp_scales`
+//! read (a block's nibble dwords at (j / 4) * 4 * mr + r * 4, its qh word at the 16 * mr tail, its scale word at bi * 4 * mr + r * 4), disk order past the groups
+def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
+                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    let nb = n / Q8_BLOCK_ELEMS
+    assert(n % Q8_BLOCK_ELEMS == 0l, "GPU MoE q51 gather: row length must be a 32-block multiple")
+    assert(rows * nb * Q51_QB <= 2147483647l, "GPU MoE q51 stack exceeds the int32 gather-buffer rail")
+    wq |> grow_resize(rows * nb * Q51_QB)
+    ws |> grow_resize(rows * nb * Q51_SB)
+    let nslices = int(rows / slice_rows)
+    let qrow = nb * Q51_QB
+    let srow = nb * Q51_SB
+    let ng = repacked ? slice_rows / mr : 0l
+    unsafe {
+        let b0 = woff / Q8_BLOCK_ELEMS
+        let qp = addr<uint8 const?>(t.q51q[b0 * Q51_QB])
+        let sp = addr<uint8 const?>(t.q51s[b0 * Q51_SB])
+        var wqp = addr(wq[0])
+        var wsp = addr(ws[0])
+        let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
+        maybe_parallel_for(0, nslices, njobs) $(ssb, sse) {
+            unsafe {
+                for (s in range(ssb, sse)) {
+                    let sliceQ = int64(s) * slice_rows * qrow
+                    let sliceS = int64(s) * slice_rows * srow
+                    for (ri in range64(slice_rows)) {
+                        let rr = int64(s) * slice_rows + ri
+                        let grouped = repacked && ri < ng * mr
+                        let g = ri / mr
+                        let r = ri % mr
+                        for (bi in range64(nb)) {
+                            var dq = wqp + rr * qrow + bi * Q51_QB
+                            var dsc = wsp + (rr * nb + bi) * Q51_SB
+                            if (grouped) {
+                                let gq = qp + sliceQ + g * mr * qrow + bi * Q51_QB * mr
+                                let gs = sp + sliceS + g * mr * srow + bi * Q51_SB * mr
+                                for (j in range64(16l)) {
+                                    dq[j] = gq[(j / 4l) * 4l * mr + r * 4l + j % 4l]
+                                }
+                                for (h in range64(4l)) {
+                                    dq[16l + h] = gq[16l * mr + r * 4l + h]
+                                    dsc[h] = gs[r * 4l + h]
+                                }
+                            } else {
+                                let rq = qp + sliceQ + ri * qrow + bi * Q51_QB
+                                let rs = sp + sliceS + ri * srow + bi * Q51_SB
+                                for (m in range64(Q51_QB)) {
+                                    dq[m] = rq[m]
+                                }
+                                for (m in range64(Q51_SB)) {
+                                    dsc[m] = rs[m]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus the device scale rows (decoded 20 B, or
 // the codebook formats' two words); grp<mr> interleave or disk-order in, identical device bytes out.
@@ -1166,7 +1228,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 [init]
 def private register_layout_hooks {
     register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks,
-        @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq)
+        @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q51)
     register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@stream_repack_one,
         @@metal_blob_eligible, @@metal_blob_scale_plane)
 }

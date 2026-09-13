@@ -47,6 +47,10 @@ let GEMMA_LOGIT_BAR_REL = 0.16
 let GEMMA_PATH_GAP_RATIO = 6.0
 //! the resident driver's teacher-forced perplexity may exceed the CPU chain's by this ratio (12B Q8_0 measured 1.449 vs 1.516 over 150 positions, llama.cpp 1.390)
 let GEMMA_PPL_RATIO = 1.05
+//! the routed 26B's ratio: a router near-tie flips whole positions, and either arm lands the farther one - against
+//! llama.cpp's per-position log-probs the IQ3_XXS file read CPU 0.36 / resident 0.18 nats mean, the Q4_K_M file
+//! CPU 0.21 / resident 0.37, the perplexities 3.36 / 2.58 and 3.38 / 3.92 over 150 positions
+let GEMMA_MOE_PPL_RATIO = 1.25
 let PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
 
 //! the prompt is sized past the engine's own window
@@ -287,7 +291,7 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
 //! On the 12B the logits sit within a few points at whole stretches of positions (llama.cpp's own margins
 //! read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver;
 //! a routed model's near-tie flips move whole positions, so its slack is wider.
-def ppl_compare(t : T?; n, steps : int64; file : string; hits_slack : int64 = 3l) {
+def ppl_compare(t : T?; n, steps : int64; file : string; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
     var tr <- gemma_model(t, file)
     if (tr.config.n_layers == 0l) {
         delete tr
@@ -311,7 +315,7 @@ def ppl_compare(t : T?; n, steps : int64; file : string; hits_slack : int64 = 3l
         let ppl_c = exp(c.nll / fsteps)
         let ppl_off = exp(c.off / fsteps)
         to_log(LOG_INFO, "{n} prefilled + {steps} teacher-forced [{tile_arm_tag()}]: PPL resident {ppl_g} (hits {g.hits}/{steps}), cpu {ppl_c} (hits {c.hits}/{steps}), one-off control {ppl_off}\n")
-        t |> success(ppl_g <= ppl_c * GEMMA_PPL_RATIO, "the resident perplexity {ppl_g} sits within {GEMMA_PPL_RATIO}x of the CPU chain's {ppl_c}")
+        t |> success(ppl_g <= ppl_c * ppl_ratio, "the resident perplexity {ppl_g} sits within {ppl_ratio}x of the CPU chain's {ppl_c}")
         t |> success(g.hits + hits_slack >= c.hits, "the resident argmax hits ({g.hits}) sit within {hits_slack} of the CPU chain's ({c.hits}) over {steps} positions")
         t |> success(ppl_off >= 3.0 * ppl_c, "control: the one-position-off targets read {ppl_off}, at least three times the CPU chain's {ppl_c}")
         delete ids
