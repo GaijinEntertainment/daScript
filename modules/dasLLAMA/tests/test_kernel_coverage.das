@@ -615,6 +615,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // coverage is the e arm of each format's cell in test_vulkan_kernels.das
     "kq_batch_k5_cm2e_cls_spv", "kq_batch_k6_cm2e_cls_spv", "kq_batch_q40_cm2e_cls_spv",
     "kq_batch_k3_cm2e_cls_spv", "kq_batch_iq4nl_cm2e_cls_spv", "kq_batch_k2_cm2e_cls_spv",
+    // the q51 expert rail (the 32-block down planes of the 26B-A4B's Q4_K_M: a carrier above the zoo's tier) -
+    // its s and e stamps and its decode GEMV; their coverage is test_vkd_q51_cm2_batch and test_vkd_q51_gemv
+    "q51_batch_cm2s_cls_spv", "q51_batch_cm2e_cls_spv", "q51_gemv_cls_spv",
     // the gemma-4 MoE combine (the two normed branches' residual step, f32 and f16 normed-row forms):
     // its carrier is the 26B-A4B, above the zoo's tier; its coverage is test_vkd_moe_routing's gemma-4
     // combine arm in test_vulkan_kernels.das

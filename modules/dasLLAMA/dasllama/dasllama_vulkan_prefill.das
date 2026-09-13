@@ -42,7 +42,7 @@ var private @scratch g_pf_ids_stage : array<uint>
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def public pf_f16_feed(f : int) : bool {
     if (g_gpu.coopmat_mode == COOPMAT_CM2) {
-        return f == int(KqFmt.q8) || kq_sb(f)
+        return f == int(KqFmt.q8) || f == int(KqFmt.q51) || kq_sb(f)
     }
     return g_gpu.coopmat_mode == COOPMAT_MM && kq_sb(f) && khr_kq_tile_on()
 }
@@ -148,6 +148,7 @@ def cm2e_cls_ensure(fmt : int) : bool {
     if (fmt == int(KqFmt.iq2s)) return ensure_kq_batch_iq2s_cm2e_cls()
     if (fmt == int(KqFmt.iq2xs)) return ensure_kq_batch_iq2xs_cm2e_cls()
     if (fmt == int(KqFmt.iq2xxs)) return ensure_kq_batch_iq2xxs_cm2e_cls()
+    if (fmt == int(KqFmt.q51)) return ensure_q51_batch_cm2e_cls()
     verify(fmt == int(KqFmt.q8), "vk prefill: the e-column ensure fell through for a kq format - a format the feed admits must own a tile arm")
     return ensure_q8_batch_cm2e_cls()
 }
@@ -167,6 +168,7 @@ def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbit
     if (fmt == int(KqFmt.iq2s)) return set_kq_batch_iq2s_cm2e_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.iq2xs)) return set_kq_batch_iq2xs_cm2e_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.iq2xxs)) return set_kq_batch_iq2xxs_cm2e_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.q51)) return set_q51_batch_cm2e_cls(bufs, sizes, gbits)
     verify(fmt == int(KqFmt.q8), "vk prefill: the e-column set fell through for a kq format - a format the feed admits must own a tile arm")
     return set_q8_batch_cm2e_cls(bufs, sizes, gbits)
 }
@@ -199,6 +201,8 @@ def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDesc
         enc_kq_batch_iq2xs_cm2e_cls(raw, h, s, pc, groups)
     } elif (fmt == int(KqFmt.iq2xxs)) {
         enc_kq_batch_iq2xxs_cm2e_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.q51)) {
+        enc_q51_batch_cm2e_cls(raw, h, s, pc, groups)
     } else {
         verify(fmt == int(KqFmt.q8), "vk prefill: the e-column enc fell through for a kq format - a format the feed admits must own a tile arm")
         enc_q8_batch_cm2e_cls(raw, h, s, pc, groups)
@@ -207,13 +211,17 @@ def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDesc
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_cls_ensure(fmt : int; tc : int64) : bool {
-    verify(fmt == int(KqFmt.q8) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
+    verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
         return khr_cls_ensure(fmt)
     }
     if (tc == CM2_TC_E) {
         return cm2e_cls_ensure(fmt)
+    }
+    if (fmt == int(KqFmt.q51)) {   //! the q51 rail is the expert schedule's: its s and e stamps; a dense q51 plane is declined at the plan
+        verify(tc == 32l, "vk prefill: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
+        return ensure_q51_batch_cm2s_cls()
     }
     if (fmt == int(KqFmt.k4)) {
         return tc == 256l ? ensure_kq_batch_k4_cm2l_cls() : (tc == 128l ? ensure_kq_batch_k4_cm2m_cls() : ensure_kq_batch_k4_cm2s_cls())
@@ -266,6 +274,10 @@ def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 con
     }
     if (tc == CM2_TC_E) {
         return cm2e_cls_set(fmt, bufs, sizes, gbits)
+    }
+    if (fmt == int(KqFmt.q51)) {
+        verify(tc == 32l, "vk prefill: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
+        return set_q51_batch_cm2s_cls(bufs, sizes, gbits)
     }
     if (fmt == int(KqFmt.k4)) {
         if (tc == 256l) {
@@ -359,6 +371,9 @@ def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var
         khr_cls_enc(fmt, raw, h, s, pc, groups)
     } elif (tc == CM2_TC_E) {
         cm2e_cls_enc(fmt, raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.q51)) {
+        verify(tc == 32l, "vk prefill: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
+        enc_q51_batch_cm2s_cls(raw, h, s, pc, groups)
     } elif (fmt == int(KqFmt.k4)) {
         if (tc == 256l) {
             enc_kq_batch_k4_cm2l_cls(raw, h, s, pc, groups)

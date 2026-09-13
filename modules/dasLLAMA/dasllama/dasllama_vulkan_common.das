@@ -2000,8 +2000,8 @@ def vk_kq_schema_id(fmt : int) : int {
     return 0
 }
 
-// fmt space here = int(KqFmt): 0 = q8 (32-elem blocks), every other value the kq lattice
-def vk_fmt_b32(fmt : int) : bool => fmt == 0
+// fmt space here = int(KqFmt): q8 and q51 stride 32-elem blocks, every other value the kq lattice
+def vk_fmt_b32(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51)
 
 // meta/activation block unit of a stack format — q8 counts 32-weight blocks, the kq
 // lattice counts 256-weight superblocks
@@ -2009,8 +2009,11 @@ def fmt_unit(fmt : int) : int64 => vk_fmt_b32(fmt) ? 32l : 256l
 
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
-    if (fmt == 0) {
+    if (fmt == int(KqFmt.q8)) {
         return (wq = Q8_QPB, ws = Q8_SPB)     // 32 int8 quants + one f16 scale
+    }
+    if (fmt == int(KqFmt.q51)) {
+        return (wq = Q51_QPB, ws = Q51_SPB)   // 16 nibble bytes + 4 qh bytes, f16 d + f16 m: the CPU plane verbatim
     }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
 }

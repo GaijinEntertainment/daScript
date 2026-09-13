@@ -19,8 +19,8 @@ A cm2 tile's decode callback runs inside the driver's block load, whose shader c
 pattern-matches one load width into that path: a 16-bit load (`int16[N]` block members) with
 sub-fields pulled out by shift and mask. A 32-bit word with a variable shift runs slower, and an
 `unpack8` of a 32-bit word indexed by a runtime value drops the whole kernel off the block-load
-path, to about a third of the rate - so every cm2 decode, q8 and every kq superblock format, is
-spelled the 16-bit way (the block structs are `int16` arrays over the same bytes), a byte at a
+path, to about a third of the rate - so every cm2 decode, q8, q51 and every kq superblock format,
+is spelled the 16-bit way (the block structs are `int16` arrays over the same bytes), a byte at a
 runtime position comes out of its lane by a shift, `(uint(int(blk.qs[i >> 1u])) & 0xFFFFu) >>
 ((i & 1u) * 8u)`, not an `unpack8(w)[i & 1u]` byte2 select (the same lane, but a decode built
 on selects runs slower on the expert-schedule shape - `moe:<fmt>`, RTX 5060 Ti: iq2xxs 1.28x,
