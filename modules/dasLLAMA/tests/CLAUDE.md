@@ -483,7 +483,7 @@ and the window chain), twenty layers attending over the K/V of the fifteen below
 dense FFN widths; gemma-4-E4B Q8_0 (large tier) at forty tokens and 150 + 150; gemma-3-4b Q8_0
 (the dense base at width 2560 and four kv heads) at forty tokens and 150 + 150; gemma-2-2b Q8_0
 (the attention logit softcap on every score - the 8-row prefill tile and the token command take
-it, the cm2 flash tile has no arm and stands down on that model) at forty tokens, 150 + 150 and
+it, and the cm2 flash tile's softcap stamps at its 256-wide heads) at forty tokens, 150 + 150 and
 the eight-token agreement form. The MoE row (large tier): gemma-4-26B-A4B UD-IQ3_XXS - the
 routed block in its gemma-4 form (the parallel dense shared expert as the layer's own FFN triple,
 the routed feed and the router off their own norms of x, the per-expert down scale folded into

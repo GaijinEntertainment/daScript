@@ -2270,7 +2270,7 @@ struct RLayer {
     vnorm : bool                    //! V scaled by its own rms, weightless
     out_scale : float               //! the FFN residual step's scale on the sum; 1.0 = none
     kv_shared : bool                //! Q only: the K/V GEMVs, the k/v norms and the mirror store stay off; attention reads the donor's rows at mir_base
-    attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none - the cm2 flash tile has no arm for it
+    attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none - the cm2 flash tile's cap stamps take it at h256
     // the per-layer-embedding branch (gemma-4 E-series): gate [dim x ple] and proj [ple x dim] planes, their sets and metas
     ple : bool
     bpg, bpp : int64

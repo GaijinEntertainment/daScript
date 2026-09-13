@@ -297,4 +297,4 @@ partials by their maxes, normalizes, gates and stores the row (unsplit, the pass
 store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax, Q8_K
 superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. The scores
 go a subgroup a key, lanes across the dims (one coalesced K row, the dot a subgroup add); the V pass
-keeps a thread a dim. The flash tile (`FaCm2T`) splits the same way per (head, 64-row q tile) (`pf_fa_nsplit`, at most `FA_NSPLIT_MAX`); `FaCm2CombT` finishes the tile from the pieces' O and (max | denom) partials, f32 or f16, gated.
+keeps a thread a dim. The flash tile (`FaCm2T`) splits the same way per (head, 64-row q tile) (`pf_fa_nsplit`, at most `FA_NSPLIT_MAX`); `FaCm2CombT` finishes the tile from the pieces' O and (max | denom) partials, f32 or f16, gated. A model that softcaps its attention logits (gemma-2) takes the tile's `CAP` leaves at head size 256: every scaled score through `cap * tanh(s / cap)` before the mask, the 8-row tile serving any other capped shape.
