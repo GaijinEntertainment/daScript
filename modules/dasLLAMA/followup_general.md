@@ -1541,23 +1541,19 @@
 138. **The records oracle's first read after an image prepare is cold.** In `--oracle --legs
     metal` the first measure of a text cell whose image the batch just mapped or baked reads far
     below its stored mean (gemma-4-12B tg128 -28% / pp512 -43%, gemma-4-26B tg128 -19%,
-    Qwen3.8-27B tg128 -41%), and the solo re-run after the 180 s settle lands within 1% every
-    time; cells whose prepare found a warm image read flat first time. The prepare pass and the
-    timed child are separate processes, so the suspect is residual state the prepare leaves
-    behind - a mapping still reclaiming asynchronously, the previous cell's GPU residency, or the
-    page cache not yet holding the fresh image - not the code under test; the residency thread
-    that keeps Metal buffers pinned across submissions is the second suspect (the prepare pass
-    ran it, the timed child starts one of its own against the same image). A second board on the
-    same box reads cold on different cells (gemma-4-E4B tg128 -21%, Qwen3.6-27B pp512 -32% /
-    tg128 -13%, Qwen3.6-35B-A3B pp512 -33% / tg128 -20%, each retry within 2%) - the pp512
-    shortfall is bandwidth, so the pages not being resident is the leading reading. The
-    experiments that split the suspects, cheapest first: one failing cell with `--settle 60`
-    (OS reclaim of the prepare child's map), the same cell under `DASLLAMA_METAL_RESIDENCY=0`
-    and `DASLLAMA_METAL_HEARTBEAT_S=0` (the residency thread), the cell JSON's five reps (a slow
-    rep 1 is page-in warmup, five slow reps is the box), `vm_stat` / `powermetrics` sampled
-    between prepare exit and cell start, and the LENS for per-dispatch timing. Unquirked: the
-    oracle reads a prepared cell's residual state before timing (or takes the warm-retry as the
-    first measure by design), so a cold first read never spends a FAIL and a retry slot.
+    Qwen3.8-27B tg128 -41%, and on a second board gemma-4-E4B tg128 -21%, Qwen3.6-27B pp512
+    -32%, Qwen3.6-35B-A3B pp512 -33% / tg128 -20%), and the solo re-run after the 180 s settle
+    lands within 1% every time. Reproduced on the M5 box with the board's own sequence - a big
+    model's timed cell, then the victim's prepare, the 12 s settle, the victim's timed cell - five
+    of five times: the GPU enters Moderate thermal pressure during the big cell and runs the
+    victim at 990-1420 MHz instead of 1620 (Qwen3.6-35B pp512 2444 +- 628, tg128 103 vs 3401 /
+    127.5), while the page-in counter, the residency rails and the map's reclaim state show
+    nothing; a 60 s settle reads Nominal and lands within 1%, a 120 s settle the same. The
+    prepare is only the sequence's shape: the throttle is the previous cell's heat, and the 12 s
+    `--settle` is a reclaim window, not a cooling one. Unquirked: a timed cell waits for the
+    process's thermal state to read nominal (`NSProcessInfo.thermalState`, no sudo) with a
+    capped wait, or the settle before a das cell rises to the 60 s the box needs - either way a
+    cold first read never spends a FAIL and a retry slot.
 139. **The tuner's end-to-end confirm reads a stamp line a warm JIT does not print.** The
     generator confirm (`gen_tune_probe.das`, confirm_e2e_prefill) scores each arm by the
     `llvm_tune: q8q8_tile_gen <- <perm>` line of a verbose child, and a child that runs the
