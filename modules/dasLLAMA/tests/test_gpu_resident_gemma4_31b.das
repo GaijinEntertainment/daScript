@@ -4,13 +4,13 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _gemma_resident   // the gemma cells; one model a file - this process loads the 31B alone
+require _gemma_resident
 
-//! the largest gemma-4 dense carrier (large tier, a 32 GB card: 18.2 GB of Q4_K and Q6_K planes) in the agreement form the
-//! 12B Q4_K_M takes - on a K-quant file the CPU chain's own prefill and decode kernels land far apart, so the two resident
-//! paths are held to each other and to the CPU chain's own gap, not to a CPU-referenced bar; the one cell is eight tokens,
-//! since the CPU control of a dense 31B runs the reference kernel bodies for half an hour on a box with no tune sidecar
-//! (the RunPod RTX PRO 4500: the resident paths 0.18 of the max logit apart, the CPU chain's own 0.30)
+// gemma-4-31B Q4_K_M (the largest dense carrier, a 32 GB card), large tier: arm `g31`. The agreement form the 12B
+// Q4_K_M takes, one eight-token cell: on a K-quant file the CPU chain's own prefill and decode kernels land far apart,
+// and the CPU control of a dense 31B runs the reference kernel bodies for half an hour on a box with no tune sidecar.
+// Skips off the JIT, without DASLLAMA_GPU=1 on a device the whole-model driver serves, without the file under
+// models_dir(), or when the residency plan does not fit the card.
 let private GEMMA4_31B_FILE = "gemma-4-31B-it-Q4_K_M.gguf"
 
 [test]

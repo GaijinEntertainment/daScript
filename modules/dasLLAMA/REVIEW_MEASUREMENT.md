@@ -3,12 +3,15 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `PERF_LEDGER.md`.
 
-Figure rules here bind any text this change adds - in the repo or in its PR body - outside the
+Figure rules here bind any text this change adds - in the repo, in a commit message, or in its PR body - outside the
 pages a `site*/` or `utils/` folder checklist owns (repo root); those pages answer to their own
 checklist. The ledger rules key on `PERF_LEDGER.md`. The naming a figure rule asks for sits in
 the figure's own sentence, in a table heading that covers the table's rows, in a section-level
 provenance line that covers the paragraphs under it, or in a citation of the passage whose
-provenance line covers it.
+provenance line covers it. An arm is one side of a pair held against the other. Flags are the
+tier (`-jit` or not), the `DAS_TUNE_POLICY` value in force, and the kernel backend the run served
+on; for a run served on a GPU backend, the device and the coopmat mode (which cooperative-matrix
+path the run compiled: sdot4, f16, int8, mul_mm or cm2).
 
 **A `PERF_LEDGER.md` entry states a served-turn figure of the engine this repository builds - a
 tok/s rate or a turn wall - only when the released `lcpp_bench` exe (`benchmarks/lcpp_bench.das`
@@ -21,13 +24,16 @@ the run's report.** The `-jit` script is `benchmarks/lcpp_bench.das` run as a sc
 
 **A `PERF_LEDGER.md` entry stating a figure no cell, script, or exe of this repository produced
 tags it `external`; a figure one of them produced carries no such tag, whatever binary the run
-timed.**
+timed - a ratio whose own side came from a cell, script or exe of this repository included.**
 
-**A difference, ratio, or percentage of two measured walls, neither produced by the `-jit`
-script, written into `PERF_LEDGER.md` carries both raw walls in the entry.**
+**A `PERF_LEDGER.md` ratio against a third-party engine names that engine's exe and the command
+line it ran under.**
 
-**A `-jit` ratio written into `PERF_LEDGER.md` names the arm it is measured against.** An arm is
-one side of a pair held against the other - a knob value, a kernel form, a build.
+**A difference, ratio, or percentage of two measured figures - a wall or a rate - neither
+produced by the `-jit` script, written into `PERF_LEDGER.md` carries both raw figures in the
+entry.**
+
+**A `-jit` ratio written into `PERF_LEDGER.md` names the arm it is measured against.**
 
 **A diff that adds a `PERF_LEDGER.md` entry whose reading no board cell produced names the
 instrument that produced it - the script or exe whose output is that wall or rate.** A board
@@ -45,8 +51,9 @@ prompt, drafter and settle state, and the acceptance rate it implies is not the 
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
 benchmark process.**
 
-**A checked-in document that states a `--for-debug-purposes` reading for a model and arm that a
-committed board row covers cites that row and marks the reading debug-jit.** A
+**A checked-in document that states a `--for-debug-purposes` reading for a model and served-turn
+leg (prefill, decode, or the turn end to end) that a committed board row covers cites that row
+and marks the reading `debug-jit`.** A
 `--for-debug-purposes` row is the `-jit` script's own output.
 
 **A figure tagged `external` in `PERF_LEDGER.md` names the source and the report it came from.**
@@ -64,8 +71,8 @@ mints that cell in the same change.** A route is the end-to-end code path such a
 including the path a run with no flags and no environment overrides takes.
 
 **A change that owes a board cell for a route `performance/gen_bench_records.das` cannot mint a
-row for - no leg of it drives that route, or the author's box refuses or skips the leg that
-would - names instead, in the same change, the record or gate output that proves the route ran
+row for - no rig leg of it drives that route, or the author's box refuses or skips the rig leg
+that would - names instead, in the same change, the record or gate output that proves the route ran
 end to end.**
 
 **A diff that makes the fat exe - a shipped exe carrying its tune profile
@@ -75,7 +82,7 @@ end to end.**
 **A diff that claims to make an already-served path faster, from an author whose box mints
 that path, re-mints a board row (`performance/records/<box>.json`) that exercises that path, in
 the same change, and names that row in the PR body.** A box mints a path when
-`performance/gen_bench_records.das` mints a row for it on that box - a leg its `stored_row_leg`
+`performance/gen_bench_records.das` mints a row for it on that box - a rig leg its `stored_row_leg`
 (`performance/profile_common.das`) admits - rather than refusing or skipping it. The board is
 the module's committed record of what serving costs; a kernel win that never lands there is
 invisible to the next regression check.
@@ -83,13 +90,12 @@ invisible to the next regression check.
 **A rate or wall of any leg of a served turn - prefill, decode, or the turn end to end -
 written down as a measurement rather than as a prediction, is a defect without either a board
 cell behind it or a provenance line naming harness, flags, environment overrides, box, and the
-exe or script that ran it.** Flags are the tier (`-jit` or not), the `DAS_TUNE_POLICY` value in
-force, and the kernel backend the run served on.
+exe or script that ran it.**
 
-**A figure below a leg of a served turn - a kernel, a layer, an op, a clock or a residency -
-whose value depends on the box it ran on names the harness, the flags and the box that
-produced it.** A figure
-a committed board cell or ruler record produced names the record and row instead.
+**A figure a run of this repository produced that is not a served-turn leg, whose value depends
+on the box it ran on, names the harness, the flags, the environment overrides, the box and the
+exe or script that produced it.** A figure a committed board cell or ruler record produced names
+the record and row instead.
 
 **A figure whose value is the same on every box names the build, fixture, or command that
 reproduces it.**

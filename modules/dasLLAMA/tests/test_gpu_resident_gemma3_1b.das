@@ -4,10 +4,11 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _gemma_resident   // the gemma cells; one model a file - this process loads gemma-3-1b alone
+require _gemma_resident
 
-//! the gemma dense base: the sandwich norms, the sliding-window layers beside the global ones with their own
-//! rope class, the GeGLU FFN and the sqrt(dim) embed scale
+// gemma-3-1b Q8_0 (the dense base: sandwich norms, sliding layers beside the global ones with their own rope class,
+// the GeGLU FFN, the sqrt(dim) embed scale): arm `g3`. Skips off the JIT, without DASLLAMA_GPU=1 on a device the
+// whole-model driver serves, without the file under models_dir(), or when the residency plan does not fit the card.
 let private GEMMA3_FILE = "gemma-3-1b-it-Q8_0.gguf"
 
 [test]
@@ -26,12 +27,12 @@ def test_gpu_resident_gemma3_one_window(t : T?) {
 def test_gpu_resident_gemma3_past_window(t : T?) {
     t |> run("gemma-3-1b: a 520-token prompt - two prefill windows, the sliding window engaged on the last eight positions") @(t : T?) {
         if (!arm_on(t, "g3")) return
-        window_pin(t)
+        assert_pf_window(t)
         gemma_forced_feed(t, PF_WINDOW_ROWS + 8l, GEMMA3_FILE)
     }
     t |> run("gemma-3-1b: a 600-token prompt - every sliding layer masks below its window on the prefill tiles, then the decode chunks past it") @(t : T?) {
         if (!arm_on(t, "g3")) return
-        window_pin(t)
+        assert_pf_window(t)
         gemma_forced_feed(t, PF_WINDOW_ROWS + 88l, GEMMA3_FILE)
     }
 }

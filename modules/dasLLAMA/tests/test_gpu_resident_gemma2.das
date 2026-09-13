@@ -4,9 +4,11 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _gemma_resident   // the gemma cells; one model a file - this process loads gemma-2-2b alone
+require _gemma_resident
 
-//! the attention logit softcap (50) on every score, a 4096 window on the even layers, no qk-norm
+// gemma-2-2b Q8_0 (the attention logit softcap, a window on the even layers, no qk-norm): arm `g2`. Skips off the
+// JIT, without DASLLAMA_GPU=1 on a device the whole-model driver serves, without the file under models_dir(), or
+// when the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
 let private GEMMA2_FILE = "gemma-2-2b-it-Q8_0.gguf"
 
 [test]

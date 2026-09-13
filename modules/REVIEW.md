@@ -4,22 +4,22 @@
 
 **A diff to a function carrying `[metal_kernel]`, `[spirv_kernel]`, or an annotation whose name
 ends `_shader` and comes from `dasSpirv`, `dasVulkan` or `dasMetal`; to any `def` such a
-function reaches directly or through another; to a class the `dasMetal` or `dasSpirv` emitter
-generates a kernel from, its member declarations included; or to a fixture that emitter
-compiles, applies `REVIEW_SHADER_EMITTERS.md` (beside this file) together with its own folder's
-checklist.**
+function reaches directly or through another; or to a class the `dasMetal` or `dasSpirv` emitter
+generates a kernel from, its member declarations included - applies `REVIEW_SHADER_EMITTERS.md`
+(beside this file) together with its own folder's checklist.**
 
 **A C++ module whose CMake target links another in-tree module's target calls
 `Module::require("<name>")` for it, and the returned module's `initDependencies()`, in its own
-`initDependencies`, in the same change; a link without that call is a defect.** The loader
-records a module nothing required as deferred and resolves an importer's imports before any of
-its code runs, so an unrequired sibling fails the importer's next load.
+`initDependencies`, in the same change.** A module no other module requires is left unloaded, and
+the loader resolves an importer's imports before any of its code runs, so the importer's next
+load fails on the missing sibling.
 
 **A module whose `dasClangBind`-generated binding depends on another in-tree module declares
 that dependency in its `bind_*.das` - `require_modules` when the binding uses the other module's
-types, `require_load_modules` when only the library import needs it - and the binder emits
-`initDependencies` from the lists; a hand edit of the generated file alone is a defect.**
-`require_modules` adds the other module to this module's type library, so a module that binds
-the same C++ types twice resolves the fields to the other's copies; a `require_load_modules`
-entry the build lacks - a static exe linking only what its program requires - is skipped, since
-without a library import there is no load order to keep.
+types, `require_load_modules` when the module's shared library links against the other's library
+and the binding uses none of its types - and never hand-writes the dependency into the generated
+file.** The binder emits `initDependencies` from those two lists; `require_modules` also puts the
+other module's types into this module's type library, so when both modules bind the same C++
+types this module's fields resolve to the other's copies. A `require_load_modules` name the build
+does not have - a static exe linking only what its program requires - is skipped, since without
+a library import there is no load order to keep.

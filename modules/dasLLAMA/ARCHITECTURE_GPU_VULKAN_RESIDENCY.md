@@ -119,7 +119,7 @@ A multi-model host runs one device tier under several loaded models, and the tie
 state is offset-keyed - two models' marks installed together route one model's dispatches at
 the other's planes. `GpuModelMarks` is that state WHOLE: the loader-contract marks plus every
 resident-driver per-model global (the activation, the mirror count, the mirror cap, the mirror
-codec, and the device-embed arm). The save moves the installed state out and leaves the globals
+codec, the device-embed arm, and the per-layer-embedding projection arm). The save moves the installed state out and leaves the globals
 reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
 and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
 CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry

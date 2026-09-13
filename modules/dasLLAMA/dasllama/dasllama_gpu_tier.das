@@ -430,7 +430,7 @@ def public rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64
     return g_rdec_ple_proj_on
 }
 def public rdec_ple_proj_on() : bool => g_rdec_ple_proj_on
-def public rdec_ple_proj_reset() { g_rdec_ple_proj_on = false }
+def public rdec_ple_proj_set(on : bool) { g_rdec_ple_proj_on = on }
 
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)

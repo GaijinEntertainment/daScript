@@ -101,7 +101,7 @@ operand - stage it as zero, or bound the walk at the live row count.** Pad rows 
 pool bytes, so a pad row used as B multiplies stale values (NaN included) into every real row
 of the tile.
 
-**A prefill K/V panel is sized from the padded write extent, never from the live key count.**
+**A prefill K/V panel - the per-layer device K/V slab the prefill GEMMs write; the Vulkan resident mirror is one - is sized from the padded write extent, never from the live key count.**
 The K/V GEMMs write full M-tile rows at the chunk's row offset, so a panel sized to the live
 count is overrun silently into whatever the pool put next to it.
 
@@ -115,9 +115,9 @@ its previous write is encoded - rotate through as many buffers as the chain has 
 flight between a write and its read.** One shared scratch serializes the whole chain through
 its write-after-read hazards.
 
-**A diff that turns one dispatch on an encoder path into two or more also gates that path on
-work size, in the same change.** The gate's threshold is measured at the smallest and the
-largest work size the path serves. The small-work regression hides behind the big-work win.
+**A diff that turns one dispatch on an encoder path into two or more also gates that path in the same change - on the extent the
+added dispatch divides (the site's own K, key span or row count), or on the path's work size when the split divides no extent - and
+the threshold comes from a measurement at the smallest and at the largest value that extent takes on the path, both measurements in the PR body.** The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
 constant's authoritative site, in the same change.** An in-body tile constant is confirmed

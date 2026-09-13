@@ -7,6 +7,9 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP ts:|cold: - the stamp overheads: a timestamp or a barrier between two m stamps, a cold cache.
 // ATTRIBUTION SWEEP dec - the decode head's small kernels (the f16 GEMV, the deltanet step) in isolation.
 // ATTRIBUTION SWEEP moe:|moesk: - the expert schedule's s and e stamps by schedule form.
+// ATTRIBUTION SWEEP cm2g:<fmt> - a format's dense role shapes at 512 rows, overlapped and one dispatch at a time.
+// ATTRIBUTION SWEEP g3|gemma|splitk - the gemma role shapes and the down's split-k ladder, whole against split.
+// ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
 // RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
@@ -595,7 +598,7 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
         vk_check(vkEndCommandBuffer(raw), null)
         let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
-        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  {serial ? "one dispatch at a time" : "timing-only"}\n")
+        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only{serial ? ", one dispatch at a time" : ""}\n")
     }
 }
 
@@ -2958,7 +2961,7 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
         chain_us = tr.chain
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
-    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, l + reduce chained {chain_us} us\n")
+    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, l + reduce chained {chain_us} us | timing-only\n")
     delete sched
     delete b
 }
@@ -3002,7 +3005,7 @@ def private run_kq_shape_split(fmt : int; name : string; d, n, cnt, nsplit : int
             mus = us
         }
     }
-    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {lus} us  {flop / (lus * 1000000.0lf)} TFLOP/s | cm2m {mus} us  {flop / (mus * 1000000.0lf)} TFLOP/s | l + reduce chained {chain} us  one dispatch at a time\n")
+    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {lus} us  {flop / (lus * 1000000.0lf)} TFLOP/s | cm2m {mus} us  {flop / (mus * 1000000.0lf)} TFLOP/s | l + reduce chained {chain} us | timing-only, one dispatch at a time\n")
 }
 
 //! the split-k reduce over `nsplit` partial planes in `yd`: alone, then behind the l GEMM in one command buffer (the hazard rail's barrier between them, as the chain pays); us a dispatch (a pair, chained)
@@ -3215,10 +3218,16 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
         delete zero
     }
     var maxd = 0.0
+    var maxa = 0.0
     for (i in range(dim)) {
         maxd = max(maxd, abs(out_split[i] - out_fused[i]))
+        maxa = max(maxa, abs(out_split[i]))
     }
-    print("lastwg dim={dim} wgs={wgs}: split (GEMV + cls_ar) {us_split} us/step, fused (last workgroup's epilogue) {us_fused} us/step; rows max |diff| {maxd}, counter after {cnt_after}\n")
+    let bound = 2.0e-3 * maxa   //! the two forms sum the same row in a different order
+    if (maxd > bound) {
+        g_probe_exit = 1
+    }
+    print("lastwg dim={dim} wgs={wgs}: split (GEMV + cls_ar) {us_split} us/step, fused (last workgroup's epilogue) {us_fused} us/step; rows max |diff| {maxd} {maxd <= bound ? "within" : "PAST"} the bound {bound}, counter after {cnt_after}\n")
     delete wh
     delete wnh
     delete x0
@@ -3261,7 +3270,7 @@ def private run_barrier_forms(dim : int) {
         }
         vk_check(vkEndCommandBuffer(raw), null)
         let us = usec_per_dispatch(raw)
-        print("barform dim={dim} {names[form]}: cls_ar {us} us/dispatch\n")
+        print("barform dim={dim} {names[form]}: cls_ar {us} us/dispatch | timing-only\n")
     }
     delete ones
 }
@@ -3356,7 +3365,7 @@ def private run_small_kernels(dim : int) {
         }
         vk_check(vkEndCommandBuffer(rawq), null)
         let usq = usec_per_dispatch(rawq)
-        print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq {usq} us/dispatch\n")
+        print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq {usq} us/dispatch | timing-only\n")
     }
     delete ones
 }

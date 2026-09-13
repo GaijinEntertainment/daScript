@@ -12,7 +12,8 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 that reports a `vkCreateComputePipelines(` call in `dasllama/`, `harness/` and `tests/` - a
 Vulkan pipeline is created only by a `[vk_dispatch]`-generated `ensure_*`.**
 
-**A diff that adds a Vulkan dispatch family adds every piece of state the family keeps per
+**A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
+`set_<family>` pair generated from it - adds every piece of state the family keeps per
 model - device buffers, descriptor-set caches, `*_ready` latches, profiler accumulators - to
 `vk_drop_model_state`'s sweep, in the same change.** Pipelines are device-lifetime state that
 survives the drop and rebuilds lazily.
@@ -50,33 +51,39 @@ is a fallback a user finds only by profiling.
 `continue` routes work to the CPU path - that does not log the concrete reason it declined,
 once per reason per armed model, is a defect.**
 
-**A diff that keys a route of the tier on a Vulkan capability it did not read before - a
-device or instance extension by name, a feature bit a `*_supported` probe of
-`modules/dasVulkan/daslib/vulkan_boost.das` reads, or a device limit - adds that capability to
-`vk_ext_roster` (`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what
-serves without it, in the same change.** The device-init log prints the roster, so a box's log
+**A diff that keys a route of the tier on a Vulkan capability - a device or instance extension
+by name, a feature bit a `*_supported` probe of `modules/dasVulkan/daslib/vulkan_boost.das`
+reads, or a device limit - adds that capability to `vk_ext_roster`
+(`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without
+it, or adds the new route to the entry it already has, in the same change.** The device-init log prints the roster, so a box's log
 says which route each capability decided.
 
-**A cm2 tensor-load coordinate a k loop steps - the `k` of `coopmatLoadTensor` /
-`coopmatLoadTensorDecode` - starts at a literal or at a value masked to the loop's step
-(`& ~(BK * UNR - 1u)`); never at a bare runtime product or a buffer-read value.** The shader
-compiler vectorizes the decode-load only where it can prove the coordinate's alignment; a chunk
-start such as `ks * ksplit` unmasked runs the same loop at half the rate (gemma-3-1b's down through
-one chunk: 304 us against 152 whole), which is what made every split-k lose before the mask.
-A chunk the caller cuts must be a multiple of that step, so the mask changes nothing at run time.
+**The `coopmatLoadTensor` / `coopmatLoadTensorDecode` coordinate a k loop's counter feeds - `c0` where the contraction runs along columns, `r0` where it runs along rows - starts at
+a literal or at a value rounded down to the loop's step; never at a bare runtime product or a
+buffer-read value.** The shader compiler vectorizes the decode-load only where it can prove the
+coordinate's alignment, and an unproven start runs the same loop at half the rate
+(`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
 
-**A cm2 tile's weight load on its fast path never takes a clamped (`tensorLayout2DPad`) layout,
-and a weight tile the plane cannot fill starts at the plane's last whole 128 rows, never past
-its end.** The clamped decode-load runs every tile at a third the speed (the fast path's own layout
-clamped: q8 E2B's down 268 -> 612 us), and the edge path holds the whole dispatch to its partial
-workgroups (the 26B's shared expert, k6: 164 us against 71); a load past the plane reads what
-follows it, which may be nothing. A scale cache the tile stages indexes a row by its offset from
-that first row (`wg_m0`), never by `bc.x & 127`: the block coordinate is the plane's absolute row.
+**A per-loop hint on a kernel loop in `dasllama/dasllama_vulkan_classes.das` carries a name
+`append_loop_hint_operand` (`modules/dasLLVM/daslib/llvm_jit.das`) knows.** A kernel body compiles
+for the CPU oracle too, and the JIT fails a hint name it does not know.
 
-**A prefill GEMM whose output rows start above row 0 encodes unsplit, whatever splitter it
-uses - `cm2_gemm_pick` or the small f16 GEMM's `F16G_SPLIT` chunks.** The split-k reduce sums
-partial planes counted from row 0, so a dispatch starting above row 0 would reduce the wrong
-rows.
+**A cm2 tile's weight load on its fast path never takes a clamped (`tensorLayout2DPad`) layout.**
+A clamped decode-load runs every tile at a third the speed (`ARCHITECTURE_GPU_VULKAN_GEMM.md`
+sec.2.2l).
+
+**A weight tile the plane cannot fill starts at the plane's last whole 128 rows, never past the
+plane's end.** The edge path holds the whole dispatch to its partial workgroups, and a load past
+the plane reads memory the plane does not own (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
+
+**A scale cache a cm2 tile stages indexes a row by its offset from the tile's first row
+(`wg_m0`), never by `bc.x & 127`.** `bc.x` is the plane's absolute row, and a last-window tile
+does not start on a 128 multiple.
+
+**Never split k on a prefill GEMM whose output rows start above row 0 - encode it whole, whatever
+splitter it uses (`cm2_gemm_pick`, or the small f16 GEMM's `F16G_SPLIT` chunks).** The split-k
+reduce sums partial planes counted from row 0, so a dispatch starting above row 0 would reduce
+the wrong rows.
 
 **Never leave a K/V codec unserved by the kernels that read or write the whole-model driver's
 `k_mirror`/`v_mirror` slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
@@ -85,20 +92,21 @@ template cover both codecs, or a single-codec kernel has a sibling that serves t
 behind an arming gate that keys on `kv16`. The whole-model driver serves both codecs, so a
 codec no kernel covers silently drops that codec's GPU path.
 
-**A diff that changes what a kq superblock format's cm2 tile emits - a `@template_constant`
-value its stamped kernel reads (on `KqCm2BatchT`, on the format's `<Fmt>Cm2T`, or `override`n
-on a stamp), a stamp's tile typedefs or instance set, its decode body or four-wide twin
-(`decode_v4`), or the shared `cm2_tile` or `run` of `KqCm2BatchT` - puts probe rows in the PR
-body, both the `DASLLAMA_VK_DECVEC=1` and the `=0` rows: every format's when the change is to
-`KqCm2BatchT` or to a constant's default there, that format's alone when it is to a format's
-own template or one of its stamps.** A cm2 tile is the NV_cooperative_matrix2 GEMM class
-stamped per weight format, token-column width (`BN`) and k step (`BK`) in
+**A diff that changes the shared `KqCm2BatchT` - its `cm2_tile`, its `run`, or a
+`@template_constant` default declared there - puts every format's probe rows in the PR body, both
+the `DASLLAMA_VK_DECVEC=1` and the `=0` rows.** A cm2 tile is the NV_cooperative_matrix2 GEMM
+class stamped per weight format, token-column width (`BN`) and k step (`BK`) in
 `dasllama/dasllama_vulkan_classes.das`.
 
-**A diff that owes a cm2 stamp's probe rows takes them from the arm that dispatches that stamp,
-all in `harness/vk_gemm_probe.das`: `cm2:<fmt>` for the l and m stamps (`<Fmt>Cm2LBatch`,
-`<Fmt>Cm2MBatch`), `moe:<fmt>` or `moesk:<fmt>` for the s and e stamps (`<Fmt>Cm2SBatch`,
-`<Fmt>Cm2EBatch`).**
+**A diff that changes a format's own cm2 tile - its `<Fmt>Cm2T`, a `@template_constant`
+`override`n on a stamp, a stamp's tile typedefs or instance set, or its decode body or four-wide
+twin (`decode_v4`) - puts that format's probe rows in the PR body, both the `=1` and the `=0`
+rows.**
+
+**A diff that owes a cm2 stamp's probe rows takes them from the `harness/vk_gemm_probe.das` arm
+that dispatches that stamp - `cm2:<fmt>` or `cm2g:<fmt>` for the l and m stamps
+(`<Fmt>Cm2LBatch`, `<Fmt>Cm2MBatch`), `moe:<fmt>` or `moesk:<fmt>` for the s and e stamps
+(`<Fmt>Cm2SBatch`, `<Fmt>Cm2EBatch`) - never from a whole-model sweep.**
 
 **A diff that answers a probe-row or kernel-cell duty with a claim that a stamp's emitted words
 did not move carries that stamp's `DASLLAMA_VK_SPV_DUMP` words diffed against master's.**
@@ -122,7 +130,7 @@ format.**
 fixture's declaration in the same change.** The emitter suite validates the shapes it emits; a
 fixture left on a retired shape validates nothing the stamp runs.
 
-**A `kq_sb` format that ships a KHR instantiation runs its KHR arm in that format's kernel cell,
+**A kq superblock format (`kq_sb`) that ships a KHR instantiation runs its KHR arm in that format's kernel cell,
 in the same change.**
 
 **Weakening `check_khr_stage16_abstract` in `REVIEW.das` (beside this file) is a defect.**
@@ -156,15 +164,14 @@ while the grid buffer is staged once per workgroup and read by every row that wo
 whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 
 **A kernel that takes more than one workgroup reduce (`wg_rms_inv` of `RmsWgBase` in
-`dasllama/dasllama_vulkan_classes.das`) alternates the `slot` between consecutive reduces - never
-the same slot twice running.** One barrier guards a reduce, so a thread still summing the first
-reduce's partials would read the second's writes out of the same 64 floats.
+`dasllama/dasllama_vulkan_classes.das`) never passes the same `slot` to two consecutive
+reduces.** One barrier guards a reduce, so a thread still summing the first reduce's partials would read the
+second's writes out of the same 64 floats.
 
-**A diff that makes `rd_ffn_sets` or `rd_attn_sets` (`dasllama/dasllama_vulkan_decode.das`) build
-a descriptor set for a class adds that class's `ensure_*` to every registration path that reaches
-the builder - the attention layer's and the recurrent layer's alike, in the same change.** A set
-asked of a class whose pipeline is not ensured is the null handle; `vkd_alloc_set` refuses it by
-the class's family name, and the model's prepare fails on the one path that skipped the ensure.
+**A builder in `dasllama/dasllama_vulkan_decode.das` that asks `set_<family>` for a class ensures
+`ensure_<family>` on every path that reaches it.** A set asked of a class whose pipeline is not
+ensured is the null handle; `vkd_alloc_set` refuses it by the class's family name, and the model's
+prepare fails on the path that skipped the ensure.
 
 **A diff that changes how many GPU timestamps the resident prefill's window command records - a
 `pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in

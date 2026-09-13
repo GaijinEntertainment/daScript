@@ -91,10 +91,8 @@ wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
 pages at `donate_stream`); `test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan
-matmul picks for a given width, row count and coopmat mode, and whether that dispatch splits its
-reduction across partial planes - the split's inputs being the width, the rows, the coopmat mode,
-the co-running group's workgroups and the device's SM count; added rows on those axes are not an
-axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries against the
+matmul picks and whether that dispatch splits its reduction across partial planes, on every input
+of the prefill's tile-and-split pick; added rows on those inputs are not an axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries against the
 arming's fields); `utils/dasllama-server/test_worker_dispatch.das` (repo root) - worker-local
 fork pools, shared queue policy.
 
@@ -153,8 +151,8 @@ of BOTH sides is a defect: for a token or id compare the decoded text (`log_gen_
 value.** A red, or a suspicious green, must be readable in the log, not only as an id or float
 difference.
 
-**A cell whose name, comment, arm, or fixture claims a size, depth, or row count asserts that
-number.** A cap, a resize, or a counter showing the path ran is not evidence that the number was
+**A size, depth, or row count that a cell's name or a comment inside the cell claims about what
+the cell exercises is asserted in that cell.** A cap, a resize, or a counter showing the path ran is not evidence that the number was
 reached.
 
 **A freeform token-parity cell whose two sides can round differently - different lanes,
@@ -181,8 +179,9 @@ beside the dumps under `models_dir()`, named by the test that loads the dump.
 the backend, the flash-attention setting, and the mmproj precision the dump came from - is a
 defect.**
 
-**A cell sets every process-wide driver setter and serving-lane knob its claim depends on, even
-when the claim needs the knob at its DEFAULT value.**
+**A cell sets every knob its claim depends on that outlives one call - any `set_*` / `pin_*` call
+in `dasllama/` that changes the driver's route or the serving lane for the rest of the process -
+even when the claim needs the knob at its DEFAULT value.**
 
 **A cell returns with every family pin unset - whether or not this cell set one - and every
 driver setter it touched back at its default; `reset_<family>_q8` is the restore.** Why a hook

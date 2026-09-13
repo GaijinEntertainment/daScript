@@ -4,9 +4,11 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _gemma_resident   // the gemma cells; one model a file - this process loads E4B alone
+require _gemma_resident
 
-//! the larger E-series carrier (large tier): 42 layers, eighteen sharing K/V
+// gemma-4-E4B Q8_0 (the larger E-series carrier), large tier: arm `g4f`. Skips off the JIT, without DASLLAMA_GPU=1 on
+// a device the whole-model driver serves, without the file under models_dir(), or when the residency plan does not fit
+// the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
 let private GEMMA4E4_FILE = "gemma-4-E4B-it-Q8_0.gguf"
 
 [test]

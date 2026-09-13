@@ -7484,8 +7484,7 @@ class public LlvmJitVisitor : AstVisitor {
     def append_loop_hint_operand(var operands : array<LLVMOpaqueMetadata?>; a : AnnotationArgument) {
         if (a.name == "unroll") operands |> push <| make_loop_md_flag("llvm.loop.unroll.enable")
         elif (a.name == "unroll_full") operands |> push <| make_loop_md_flag("llvm.loop.unroll.full")
-        elif (a.name == "unroll_disable") operands |> push <| make_loop_md_flag("llvm.loop.unroll.disable")
-        elif (a.name == "dont_unroll") operands |> push <| make_loop_md_flag("llvm.loop.unroll.disable")   //! the SPIR-V spelling of unroll_disable: a compute kernel's body carries SPIR-V hint names and compiles for the CPU oracle too
+        elif (a.name == "unroll_disable" || a.name == "dont_unroll") operands |> push <| make_loop_md_flag("llvm.loop.unroll.disable")
         elif (a.name == "unroll_and_jam") operands |> push <| make_loop_md_flag("llvm.loop.unroll_and_jam.enable")
         elif (a.name == "unroll_and_jam_disable") operands |> push <| make_loop_md_flag("llvm.loop.unroll_and_jam.disable")
         elif (a.name == "vectorize") operands |> push <| make_loop_md_pair_i1("llvm.loop.vectorize.enable", true)

@@ -4,9 +4,11 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _gemma_resident   // the gemma cells; one model a file - this process loads gemma-3-4b alone
+require _gemma_resident
 
-//! the dense base at width 2560, heads 8 x 256 over 4 kv heads, a 1024 sliding window
+// gemma-3-4b Q8_0 (the dense base at its wider geometry): arm `g3b`. Skips off the JIT, without DASLLAMA_GPU=1 on
+// a device the whole-model driver serves, without the file under models_dir(), or when the residency plan does not
+// fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
 let private GEMMA3_4B_FILE = "gemma-3-4b-it-Q8_0.gguf"
 
 [test]

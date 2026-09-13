@@ -11,6 +11,7 @@ require dasllama/dasllama_vulkan_common   // g_gpu/g_rd state, plumbing, hazard 
 require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated set_/enc_ + gemv_cls_*)
 require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's npos==1 arm routes through the decode step
 require dasllama/dasllama_kqformat   // KqFmt — the arena fmt slots are its ordinals
+require dasllama/dasllama_convert   // cvt_f32_to_f16 — the PLE projection's f16 mirror
 require dasllama/dasllama_env   // g_env_vulkan — the vk_kv_merge / vk_overlap / vk_fuse A/B hatches
 require dasllama/dasllama_gpu_tier   // moe_gpu_stream_need — the stream-slot carve's source of truth
 require vulkan
@@ -1039,6 +1040,9 @@ def private pf_setup {
     }
     let np = PF_WINDOW
     g_rd.pf_np = np
+    if (g_env_vulkan.vk_f16_ffn) {
+        to_log(LOG_INFO, "dasLLAMA: resident prefill - the FFN GEMMs take the f16 feed where the tile admits the plane (DASLLAMA_VK_F16_FFN=0 keeps the Q8 blocks)\n")
+    }
     let dim = g_rd.dim
     let qd = g_rd.qd
     let kvd = g_rd.kv_dim
@@ -1377,11 +1381,11 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
     if (!f16g_shape_ok(g_rd.dim) || long_length(w) != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready) {
         return false   //! the f16 GEMM wants the cm2 tile and a 512-multiple width; the sets build with the prefill buffers
     }
-    var half : array<float16>
+    var half : array<uint16>
     half |> reserve(long_length(w))   // E4B: 27.5M halves - the guard wants the final size reserved first
     half |> resize(long_length(w))
-    for (v, hv in w, half) {
-        hv = float16(v)
+    unsafe {
+        cvt_f32_to_f16(addr(half[0]), addr(w[0]), long_length(w))
     }
     g_rd.ple_w16_bytes = long_length(half) * 2l
     g_rd.ple_w16_dev = make_device_buf(g_rd.ple_w16_bytes)
@@ -2067,7 +2071,7 @@ def private ensure_af_state(f1, f3, f2 : int) {
         return
     }
     ensure_ffn_state()
-    let dkq = !vk_fmt_b32(f2)
+    let dkq = !kq_block32(f2)
     verify(gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2)
         && (dkq ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()),
         "vulkan arena: the class rails must engage on a live device")
@@ -2110,11 +2114,11 @@ def private af_role_set(var sets : table<int; VkDescriptorSet>; fmt : int; blk :
 def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
                  f1, f3, f2 : int; xq : array<int8>; xs : array<float>; is_gelu : bool) {
     verify(vk_moe_init())
-    assert(vk_fmt_b32(f3) == vk_fmt_b32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
+    assert(kq_block32(f3) == kq_block32(f1), "dasLLAMA vulkan arena: gate/up form mismatch - one activation image")
     assert(nfe * 4l <= Y_BYTES && n * 4l <= Y_BYTES, "dasLLAMA vulkan arena: ffn planes exceed y capacity")
     ensure_af_state(f1, f3, f2)
     let xunit = fmt_unit(f1)
-    let dkq = !vk_fmt_b32(f2)
+    let dkq = !kq_block32(f2)
     var gate_set = af_role_set(g_gpu.af_gate_sets, f1, blk1, g_gpu.af_meta_g.buf,
         g_gpu.af_xq.buf, g_gpu.af_xs.buf, g_gpu.af_ya_dev, XQ_BYTES, XS_BYTES, 0u, VHG_Y1)
     var up_set = af_role_set(g_gpu.af_up_sets, f3, blk3, g_gpu.af_meta_u.buf,
@@ -2534,8 +2538,8 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     let s3 = find_stack(unsafe(offs3[0]), f3, "prefill ffn up")
     let s2 = find_stack(unsafe(offs2[0]), f2, "prefill ffn down")
     // gate/up share one activation image (forms must agree); down's intermediate is its own unit
-    let kq_in = !vk_fmt_b32(f1)
-    assert(!vk_fmt_b32(f3) == kq_in,
+    let kq_in = !kq_block32(f1)
+    assert(!kq_block32(f3) == kq_in,
         "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     let xunit_mid = fmt_unit(f2)

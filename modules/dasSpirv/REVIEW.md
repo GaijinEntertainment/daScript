@@ -6,15 +6,16 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_COOPMAT.md`. Shared emitter rules:
 that compiles a shader and asserts on its emitted words - answers to `tests/spirv/REVIEW.md`
 (repo root), wherever the diff puts it.
 
-**A diff that changes what the emitter emits for any das program - a program it used to reject
-now compiles, or a program's emitted words change - also adds, in the same change, a fixture
-under `tests/spirv/` (repo root) for each such change that exercises it and asserts on the
-emitted words.** Emitted words no fixture asserts are produced by nothing the suite runs. The
-fixture forms are `ARCHITECTURE.md` section 4.
+**A diff to the emitter's code that changes what it emits for a das program - a program it used
+to reject now compiles, or a program's emitted words change - adds a fixture under `tests/spirv/`
+(repo root) for each such difference, in the same change, that compiles a program showing it and
+asserts on the emitted words.** Emitted words no fixture asserts are produced by nothing the suite
+runs. The fixture forms are `ARCHITECTURE.md` section 4.
 
-**A diff that declares a struct the emitter recognizes by name and lowers to a device-side type,
-or a builtin overload over one, adds a fixture under `tests/spirv/` (repo root) that exercises
-the declaration and asserts on the emitted words, in the same change.** A declaration no fixture
+**A diff that declares a struct the emitter recognizes by name and lowers to a type whose storage
+exists only on the device - a tile, tensor, layout, sampler, or image - or a builtin overload over
+one, adds a fixture under `tests/spirv/` (repo root) that exercises the declaration and asserts on
+the emitted words, in the same change.** A declaration no fixture
 drives is lowered by nothing the suite runs.
 
 **A diff that adds emitter code refusing a construct a `.das` program can compile to also adds
@@ -28,10 +29,10 @@ capability after the change.** A device cell runs a kernel using the capability 
 `modules/dasVulkan/tests/integration/` or `modules/dasLLAMA/tests/test_vulkan_kernels.das`. A
 fixture asserts words; only a device run shows the words compute.
 
-**A diff that adds a per-loop hint name this emitter accepts also adds that name to
-`append_loop_hint_operand` in `modules/dasLLVM/daslib/llvm_jit.das`, in the same change.** A
-compute kernel's body compiles for the CPU oracle too, and the JIT fails a hint name it does not
-know.
+**A diff that adds a per-loop hint name to this emitter's accepted set leaves that name known to
+`append_loop_hint_operand` in `modules/dasLLVM/daslib/llvm_jit.das` - lowered or accepted by
+name - in the same change.** A kernel body also compiles for the CPU through the JIT, and the JIT
+fails a hint name it does not know.
 
 **A diff under this folder that adds or changes a device cell for a capability of this emitter -
 wherever the diff puts that cell - judges the cell's result against a CPU result computed

@@ -46,8 +46,8 @@ dmin x mn)` from their five-word scale row in place of three scale-plane loads, 
 and two multiplies per element; IQ4_XS (`SCIQ4`) caches `d x (ls - 32)` from its two-word row in
 place of two loads and the six-bit rebuild; k6 (`SCK6`) caches `d x sc` for its sixteen int8
 sub-block scales in place of two word loads, a sign extend, a half unpack and two multiplies an element
-(its decode ran twice the reference exe's, whose `shAscales` covers Q4_K and Q5_K alone); the grid formats' strips are read once per pair already. The refill keys on the k step (`sc_step`, `k % BLKW == 0`), and
-`cm2_split_k` cuts every chunk at a 256-aligned k, so no chunk boundary falls inside a superblock.
+(its decode ran twice the reference exe's, whose tile stages scales for Q4_K and Q5_K alone); the grid formats' strips are read once per pair already. The refill keys on the k step (`sc_step`, `k % BLKW == 0`), and
+`cm2_gemm_pick` cuts every chunk at a 256-aligned k, so no chunk boundary falls inside a superblock.
 
 Every kq format's four-wide twin is hand-written (`decode_v4`, the template's `DECV4` axis) in
 the same spelling, sharing what four consecutive elements share - a K-quant twin reads its four
@@ -62,7 +62,7 @@ the CPU oracle, and a kernel body can call it on the plane element itself - `dec
 
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
 
-**The l/m tile pick and the split-k pick are one wave model** (`cm2_gemm_pick`). For a GEMM of
+Every dispatch time in this section is the probe's (`harness/vk_gemm_probe.das`, the arm named where it decides) on the RunPod RTX PRO 4500 under the tree's defaults unless another box is named; a window's time is the prefill profiler's (`DASLLAMA_GPU_PROF=1`, `benchmarks/lcpp_bench.das -- -p 512`) on the same card. **The l/m tile pick and the split-k pick are one wave model** (`cm2_gemm_pick`). For a GEMM of
 width `d` over `cnt` rows the l tile (256-row columns) and the m tile (128-row columns) each take
 some number of workgroups; a grid runs in whole waves over the device's SM count, and a wave costs
 its k steps at the column's step weight - m 10, l 16, s 5 - since the l column does twice m's work
@@ -95,11 +95,11 @@ grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; the e stamp is `<Fmt>C
 `cm2e_cls_*` ladder beside the KHR one); a stamp's `AT`/`BT` carry its depth. A grid decode is
 occupancy-bound - a 64-deep column holds twice the A tile, and with the codebook lookup's live range
 a workgroup fewer fits an SM (the iq2xxs gate/up plane 0.611 against 0.730 ms at 32, `moe:<fmt>`,
-RTX 5060 Ti) - while a light decode is step-bound (the k4 s tile 0.744 against 0.679 at 32, its
-dense l and m tiles 44 against 49 TFLOP/s, the 35B whole-model row 2996 -> 3236 at 32). The unroll
+RTX 5060 Ti) - while a light decode is step-bound (the k4 s tile 0.744 against 0.679 at 32 (`moesk:k4`), its
+dense l and m tiles 44 against 49 TFLOP/s (`cm2:k4`), the 35B whole-model row 2996 -> 3236 at 32). The unroll
 (`UNR`: 4 steps of 64, 8 of 32 - 256 elements either way) is written out, since the driver leaves a
 rolled loop rolled whatever control its `OpLoopMerge` carries (`[unroll]` read the k6 tiles at half
-rate), and the block is one superblock because the decode inlines once per copy: an eight-copy
+rate, `cm2:k6` on the RTX 5060 Ti), and the block is one superblock because the decode inlines once per copy: an eight-copy
 stamp's code, refetched after each window's weight stream had passed the L2, cost a 64-workgroup
 GEMM 16 us of its 27 (`cold:k6`'s flush row, RTX 5080), and four copies run its m tiles 10-14%
 faster hot (`cm2:k6`); the 32-deep e stamps read alike at 8 and 1 (`moesk:`).
@@ -113,7 +113,7 @@ The split arm's k offset is masked to the chunk alignment so the compiler knows 
 on a whole GEMM: unmasked, the same loop ran at half the rate (gemma-3-1b's down through one chunk
 304 us against 152 whole), so every earlier split lost; the whole GEMM keeps its literal-bound loop (the l
 stamp through the split loop's variables ran the E4B, 12B and gemma-3-4b gates a sixth slower). Measured at 512 rows, whole against the pick with its reduce: gemma-3-1b's down (36 m tiles,
-K 6912) 152 -> 78 us in four l chunks (llama.cpp b10660: 93), E2B's 12288-deep down 268 -> 162 in
+K 6912) 152 -> 78 us in four l chunks (the reference exe's GEMM at the same shape: 93), E2B's 12288-deep down 268 -> 162 in
 three, E4B's 16384-deep down 398 -> 350 and gemma-2's 214 -> 182 in two; the 12B's 15360-deep down
 stays whole. The group is the role's workgroups plus its chain neighbours' - q with k and v, gate with
 up - because the hazard-mask rail lets independent roles co-run while every split role serializes

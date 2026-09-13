@@ -15,20 +15,22 @@ tool's own runtime - calls `tune_gate()` (`../performance/profile_common.das`) b
 instrument's first timed rep, or - where the instrument cannot require this module's
 performance tree - stamps its rows with the tune manifest (`DAS_TUNE_MANIFEST`) or the class
 profile (`../performance/defaults/<class>.tune-defaults.json`) the run compiled
-against.** An instrument is a file that times a run and reports a wall-clock time or rate as
-its result, printed or returned to a caller that prints it. Without the gate or the stamp the
-instrument measures fallback kernels silently.
+against.** An instrument is a file that times a run itself and reports a wall-clock time or rate
+as its result, printed or returned to a caller that prints it; a file that reads a child process's
+clock is not one. Without the gate or the stamp the instrument measures fallback kernels silently.
 
 **A diff that adds or changes a race alternates its arms - one timed round per arm, best-of
-across rounds - and reports each arm's row on its own, never folded into a single ratio row.**
-A race is a run that times two implementations of the same computation in one process; an arm
-is one implementation's timed run; a compared arm is one whose output the run reads back and
-measures against another arm's output or a CPU reference. An instrument is reviewed arm by arm.
+across rounds.** A race is a run that times two implementations of the same computation in one
+process; an arm is one implementation's timed run; a compared arm is one whose output the run
+reads back and measures against another arm's output or a CPU reference. An instrument is
+reviewed arm by arm.
 
-**A diff that adds or changes a race arm that computes a comparable output proves that output
-on its report line:** an arm whose result is bit-identical to the baseline's prints the
-bit-exact compare over the sampled region - the set of output elements the run compares - on
-the report's "bit-exact vs ..." line; every other arm prints a bounded-difference compare
+**A diff that adds or changes a race reports each arm's row on its own, never folded into a
+single ratio row.**
+
+**A diff that adds or changes a compared arm proves that output on its report line:** an arm
+whose result is bit-identical to the baseline's prints the bit-exact compare over the sampled
+region - the set of output elements the run compares - on the report's `bit-exact vs ...` line; every other arm prints a bounded-difference compare
 (against the baseline arm or the CPU reference) plus the bound it passed. How the arm orders
 its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared precision.
 
@@ -37,9 +39,8 @@ against a CPU reference.** The baseline arm is the arm running the implementatio
 reference check runs in the same process, on the same output elements the arms are judged on.
 Two arms can agree and both be wrong; only the reference makes the winner right.
 
-**A diff that adds or changes an arm whose output no other arm and no CPU reference computes -
-one that stages constants or reads its own fixture - makes that arm carry the literal token
-`timing-only` on its report line.**
+**A diff that adds or changes a race arm that is not a compared arm makes that arm carry the
+literal token `timing-only` on its report line.**
 
 **A diff that adds or changes a mode that times its arms without reading their outputs back and
 comparing them makes that mode carry the literal text `ATTRIBUTION SWEEP` on its own line of the
@@ -57,14 +58,15 @@ cannot be compared to any row the board already carries.
 measures what that process can measure about itself; that measurement goes inside the process
 instead.**
 
-**A data file an instrument reads or writes that holds a third-party wall - a wall-clock time
-measured for a binary this repository does not build - outside `../performance/records/` and
-`../PERF_LEDGER.md` is scratch: untracked, owned by exactly one instrument, re-derivable from a
-command in that instrument's header comment, and never an input to a board cell.** A tracked or
+**A diff that adds or changes a data file an instrument reads or writes that holds a third-party
+wall - a wall-clock time measured for a binary this repository does not build - outside
+`../performance/records/` and `../PERF_LEDGER.md` keeps that file untracked, owned by exactly one
+instrument, re-derivable from a command in that instrument's header comment, and never an input
+to a board cell.** A tracked or
 shared copy of a third-party wall becomes a stale baseline nobody re-derives.
 
-**A diff that adds or changes an instrument that prints the difference of two walls also
-prints both of those walls on that report line.** A plain elapsed-time row - one clock pair,
+**A diff that adds or changes an instrument that prints the difference of two wall-clock times
+also prints both of those times on that report line.** A plain elapsed-time row - one clock pair,
 no attribution across stages - is not a difference.
 
 **A diff that changes what a board cell times ships before/after rows for each affected cell
@@ -72,19 +74,20 @@ and corpus - or withdraws the affected rows and names the withdrawal and its rea
 body.** What a cell times changes when a change inside its timed body, to its input corpus, or
 to the pinned reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else
 deciding which reference binary or environment the run measures) moves the measured quantity; a
-change outside the timed body - a flag, a require, the submit path - does not, nor does a
-change to a GPU kernel emitter whose emitted kernel code - the `*_msl` source globals, the AIR
-they build into, the SPIR-V words the Vulkan dump writes - is byte-identical before and after,
-with the PR body naming that compare. The new rows or the withdrawal land in
-`../performance/records/<box>.json`, the file the affected rows live in.
+change outside the timed body - a flag, a require, the submit path - does not. The new rows or
+the withdrawal land in `../performance/records/<box>.json`, the file the affected rows live in.
 
-**A diff that adds a file under this folder whose modes report result rows, or changes how such
-a mode reports or exits, makes every result-row mode of that file exit non-zero on a run that
-reports none - wrong flags, failed load, a device that declines.** A result row is a row
+**A diff that changes a GPU kernel emitter and ships no before/after rows names, in the PR body,
+the compare showing the emitted kernel code byte-identical before and after** - the `*_msl`
+source globals, the AIR they build into, the SPIR-V words the Vulkan dump writes.
+
+**A diff that adds a result-row mode - to a new or an existing instrument - or changes how such
+a mode reports or exits, makes every result-row mode of that instrument exit non-zero on a run
+that reports none - wrong flags, failed load, a device that declines.** A result row is a row
 carrying a time, a rate, or a per-kernel occupancy count. A run that matched nothing and
 reported success leaves a sidecar or a record untouched, and its caller cannot tell.
 
-**A diff that adds an A/B arm, or changes how an arm reports or exits, makes that instrument
+**A diff that adds an A/B arm, or changes how such an arm reports or exits, makes that instrument
 exit non-zero when the lever does not change what the run executes - or, when the instrument
 runs that check before the arm, print a warning naming the inert lever.** An A/B arm is one of
 an instrument's timed runs, distinguished by a named lever - the flag or environment switch

@@ -4,11 +4,10 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-**A diff another checklist routes here applies this list together with that checklist.**
-
 **A diff that changes a kernel's dispatch geometry - a grid divisor or the threads per threadgroup -
-updates every gate (a cell or probe that dispatches a kernel) that hand-dispatches that kernel,
-in the same change.** A moved divisor leaves the gate dispatching the wrong shape with no error.
+updates every gate - a cell or probe that dispatches or binds a kernel by hand, written in the
+gate rather than through the generated builders - that dispatches that kernel, in the same
+change.** A moved divisor leaves the gate dispatching the wrong shape with no error.
 
 **A diff that gives a `[metal_dispatch]` kernel `@workgroup` state, or takes it away, updates
 the threadgroup-memory length in every gate that hand-dispatches that kernel, in the same
@@ -21,9 +20,8 @@ same change, every gate that hand-dispatches a different stamp while reading thi
 stamp it dispatches follows the new size on its own.
 
 **A diff that changes a kernel's kargs - the kernel-argument struct, or any buffer binding -
-re-checks every gate that hand-binds that kernel and updates each bind the change made stale,
-in the same change.** A stale hand bind reads the wrong buffer and passes on garbage that
-happens to compare.
+updates every hand-bind of that kernel the change made stale, in the same change.** A stale hand
+bind reads the wrong buffer and passes on garbage that happens to compare.
 
 **A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
 output - missing a compare against a CPU oracle that can witness the cell's property is a
@@ -42,8 +40,8 @@ buffers that the dispatch does not also read as input.** An unprefilled output c
 staying stale - the previous dispatch's values, or garbage that happens to sit inside the
 tolerance bar.
 
-**A cross-dispatch bit-identity compare - comparing the outputs of two dispatches - runs GPU
-against GPU.** No CPU oracle can witness that property.
+**A cell that asserts bit identity compares two GPU dispatches, never a dispatch against a CPU
+oracle.** No CPU oracle can witness that property.
 
 **A kernel-unit cell whose output buffer is its input buffer, and whose CPU oracle does not
 differ from that input by construction, pairs its compare with an assert that the output
@@ -57,18 +55,17 @@ mechanism, or a second independent lane; a gate's own reference is never its con
 
 **A kernel-unit cell whose kernel computes at a narrower precision than its oracle at any
 step - operands, accumulator, or the stored result - bounds that step's error by construction
-(f16-exact inputs, magnitude-bounded fixtures) or states, in the cell or at the shared bar
-helper the cell calls, how its bar follows from that step's error.** A bar moved without that
+(f16-exact inputs, magnitude-bounded fixtures), or states how its bar follows from that step's
+error, in the cell or at the shared bar helper the cell calls.** A bar moved without that
 derivation is a loosening: the compare then passes any result the wider bar admits.
 
 **A diff that changes a kernel's narrow step - the precision of its operands, its accumulator,
-or its stored result - restates in every kernel-unit cell of that kernel what bounds that
-step's error under the new step - the construction that bounds it, or how the cell's bar
-follows from it - in the same change, whether or not the bar moves.**
+or its stored result - restates that bound, or that derivation, in every kernel-unit cell of
+that kernel, in the same change, whether or not the bar moves.**
 
 **A gate for a kernel that attends inside a restricted horizon - a window, a sliding span, a
 block-diagonal range - writes its CPU oracle to attend strictly inside that horizon.** A leak
-then reds the ordinary compare, so the gate needs no separate leak control.
+then fails the ordinary compare, so the gate needs no separate leak control.
 
 **A cell whose only compare is bit-identity between two kernel forms also compares one of the
 two against a CPU oracle, in the same cell.** Two forms can be bit-equal and both wrong.

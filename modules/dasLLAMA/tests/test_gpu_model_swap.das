@@ -67,6 +67,21 @@ def test_gpu_drop_before_load_keeps_request(t : T?) {
     }
 }
 
+// Model-free: the marks save/restore pair carries the per-layer-embedding projection arm, so a
+// model whose pre-step sits on the device does not take the CPU form as well after a slot switch.
+[test]
+def test_gpu_marks_carry_ple_projection(t : T?) {
+    t |> run("the marks swap carries the PLE projection arm: off across the save, back on the restore") @(t : T?) {
+        var st <- gpu_model_marks_init()
+        rdec_ple_proj_set(true)
+        moe_gpu_model_marks_save(st)
+        t |> success(!rdec_ple_proj_on(), "the save leaves the projection arm reading as no-model")
+        moe_gpu_model_marks_restore(st)
+        t |> success(rdec_ple_proj_on(), "the restore puts the projection arm back")
+        rdec_ple_proj_set(false)
+    }
+}
+
 [test]
 def test_gpu_model_swap(t : T?) {
     t |> run("a second model loaded after the first is deleted decodes its own weights (needs Qwen3-0.6B + SmolLM2-135M, DASLLAMA_GPU=1)") @(t : T?) {

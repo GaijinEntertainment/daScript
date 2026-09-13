@@ -29,7 +29,6 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
     t |> run("emitter opcode census == declared set (all fixtures)") <| @(t : T?) {
         var present : table<uint>
         add_set(present, square_words())
-        add_set(present, cossbo_words())
         add_set(present, uarith_words())
         add_set(present, iarith_words())
         add_set(present, farith_words())
@@ -78,6 +77,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, fragx_words())
         add_set(present, fragshadow_words())
         add_set(present, cshared_words())
+        add_set(present, cossbo_words())
         add_set(present, catomics_words())
         add_set(present, imgquery_words())
         add_set(present, modconst_words())
@@ -112,6 +112,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, coopmat2e_words())
         add_set(present, coopmat2fa_words())
         add_set(present, coopmat2fa256_words())
+        add_set(present, coopmat2fa512_words())
         add_set(present, q8store_words())
         add_set(present, unpack16_words())
         add_set(present, spdirect_words())

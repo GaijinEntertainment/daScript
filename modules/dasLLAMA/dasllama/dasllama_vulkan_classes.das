@@ -839,7 +839,7 @@ struct ClsEpiArgs {
 [vk_dispatch(name = "cls_epi", grid = "wgs", params = "wgs : int64")]
 class ClsEpilogue {
     @ssbo @binding = 0 y : array<float>      // the logits row
-    @ssbo @binding = 1 supp : array<uint>    // the suppressed ids (a placeholder when nsupp is 0)
+    @ssbo @binding = 1 @role = "weight" supp : array<uint>    // the suppressed ids (a placeholder when nsupp is 0)
     @push_constant pa : ClsEpiArgs
 
     [spirv_kernel(local_size_x = 256, name = "cls_epi_spv")]
@@ -1263,7 +1263,7 @@ class TopK : TopKCore {
     @ssbo @binding = 2 meta3 : array<uint>
     @ssbo @binding = 3 meta2 : array<uint>
     @ssbo @binding = 4 w : array<float>      //! the k routing weights
-    @ssbo @binding = 5 ds : array<float>     //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
+    @ssbo @binding = 5 @role = "weight" ds : array<float>     //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
     @push_constant pa : TopkArgs
 
     [spirv_kernel(local_size_x = 256, name = "topk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
@@ -1312,7 +1312,7 @@ class TopKRows : TopKCore {
     @ssbo @binding = 0 logits : array<float>   //! [npos x lstride]
     @ssbo @binding = 1 idx : array<uint>       //! [npos x k] the picked expert per slot
     @ssbo @binding = 2 w : array<float>        //! ... and its routing weight
-    @ssbo @binding = 3 ds : array<float>       //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
+    @ssbo @binding = 3 @role = "weight" ds : array<float>       //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
     @push_constant pa : TopkRowsArgs
 
     [spirv_kernel(local_size_x = 256, name = "topk_rows_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]

@@ -12,7 +12,7 @@ measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup
 **A timing rig (a file that times a run itself and reports a wall-clock time or rate as its
 result, printed or returned to a caller that prints it - a driver reading a child's clock is
 not one), a kernel race (a run timing two kernel variants - arms - against each other in one
-process), or a function a `benchmarks/lcpp_bench.das` cell's timed body calls, wherever it
+process), or a file under `benchmarks/` or `performance/` that `benchmarks/lcpp_bench.das` requires directly, wherever it
 lives, answers to this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
@@ -131,8 +131,8 @@ a `@sidecar` event instead.** A supervised or piped boot must never block on inp
 **A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside a
 cold one-shot load, bake, map or tokenizer-build progress log and the fat exe's first-start
 kernel race report, is a defect** - instrumentation goes through the
-profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan
-tier's `vk_prof()`-gated ledgers), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
+profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan tier's `vk_prof()`-gated ledgers, or a log
+`g_env_gpu.gpu_prof` - the knob behind `vk_prof()` - gates in `dasllama/dasllama_gpu_resident.das`), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
 
 **In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
 flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over
@@ -218,19 +218,18 @@ beyond what that consumer's ruled charter grants, breaks this rule too.
 **Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, rewriting a
 finding text so it no longer names what failed, or adding a name to a check's licensed set -
 the names that check does not flag. A name joins a licensed set only when that check's own
-finding text names the set as its extension point and the diff lands the paired architecture
-edit that text asks for. What the gate enforces is read from the gate itself; each check's
-finding text states its own rule.
+finding text names the set as its extension point. What the gate enforces is read from the gate
+itself; each check's finding text states its own rule.
 
-**A new `REVIEW.das` check ships its line in the companion section that owns the mechanism the
-check guards - an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.**
-The line names the check and the names it licenses. A licensed name is one that check does not
-flag. When the check licenses no names, the line says so.
+**A new `REVIEW.das` check, or a check whose licensed set gains a name, ships its line in the
+companion section that owns the mechanism the check guards - an `ARCHITECTURE_*.md` companion,
+never `ARCHITECTURE.md` - in the same change.**
+The line names the check and the names it licenses; when the check licenses no names, the line
+says so.
 
 **Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language -
 that describes a mechanism of the reference build, or names that build, its binaries or its
-symbols, wherever the diff puts it, applies `REVIEW_UPSTREAM.md`.** The reference build is the
-third-party engine this module measures itself against - `benchmarks/setup_lcpp_ref.das` pins it.
+symbols, wherever the diff puts it - and the commit message or PR body of a diff that does - applies `REVIEW_UPSTREAM.md`.**
 
 **A diff that changes what authoring a new weight format entails - a step added or dropped, a
 file the author must touch, a fixture or probe entry the format must supply, or a gate it must
@@ -260,12 +259,10 @@ registry does not, `tests/test_env_registry.das` catches.
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff that adds a file under `dasllama/`, adds or moves a def, a `require`, or a module
-global in a file there, or gives a file a weight format, a serving lane (the quant form a
-tensor serves from) or a data structure its charter does not name, lands the sec.1 edit that
+**A diff that adds a file under `dasllama/`, or gives a file there a weight format, a serving
+lane (the quant form a tensor serves from) or a data structure its charter does not name, lands the sec.1 edit that
 keeps the charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the
-same change.** A file added beside files with their own sec.1 charter lines gets one too; a
-module-root ledger has none.
+same change.**
 
 **A follow-up ledger row whose work landed in this change is deleted, and the rows below keep
 their numbers; when a row lists several items and one item's work landed, that item is deleted

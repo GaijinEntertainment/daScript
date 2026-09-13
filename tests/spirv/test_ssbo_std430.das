@@ -113,6 +113,7 @@ def test_ssbo_coherent(t : T?) {
         t |> success(count_op_operand_at(words, SpvOp.MemberDecorate, 2, uint(SpvDecoration.Coherent)) == 0,
             "cossbo: no member-level Coherent, got {count_op_operand_at(words, SpvOp.MemberDecorate, 2, uint(SpvDecoration.Coherent))}")
         t |> success(has_op(words, SpvOp.AtomicIAdd) && has_op(words, SpvOp.MemoryBarrier), "cossbo: the counter's atomic and the device-scope barrier are emitted")
+        t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_3, "cossbo: SPIR-V header version 1.3 (the default vulkan1.1 target admits it)")
         validate(t, words, "cossbo")
         delete words
     }

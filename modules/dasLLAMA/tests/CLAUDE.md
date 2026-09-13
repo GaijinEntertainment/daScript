@@ -61,9 +61,10 @@ No preflight tier runs the two per-PR suites: `preflight -- --only dasllama-mode
 - Before launching any suite, state what the change can affect. A default-off knob or a
   comment edit does not need a rerun.
 - Fixing or adding one arm runs exactly that arm: `--arm arm12 --suite decode`.
-- A kernel-file cell has no arm: a kernel edit runs its own cells through dastest's name filter,
-  `--test-names <prefix>` (repeatable, a `[test]` function-name prefix) - the whole kernel file
-  (~15 min) runs once before the commit, never per edit.
+- A cell of `test_vulkan_kernels.das` (model-free, so dastest may run it directly) has no arm: a
+  kernel edit runs its own cells through dastest's name filter, `--test-names <prefix>`
+  (repeatable, a `[test]` function-name prefix) - the whole file (~15 min) runs once before the
+  commit, never per edit. The Metal kernel files sit in the `kernels` suite and run through the runner.
 - Coverage is a cell in a suite, never a scratchpad probe. A probe proves nothing after the
   session that wrote it, and its setup diverges from the suite's silently. If covering a path
   needs a large model, it needs a large model.
@@ -330,7 +331,16 @@ fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the s
 and two-part state columns, the scan's four- and eight-lane clusters); `test_vkd_dn_scan_narrow`
 runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometry - 512 rows,
 one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate arrays' exact
-bound).
+bound). The gemma arc's cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
+its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
+`test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
+`test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant) and
+`test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths),
+`test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
+the pass and the combine), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
+restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
+the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
+f32 stamp).
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the

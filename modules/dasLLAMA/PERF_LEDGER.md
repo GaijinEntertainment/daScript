@@ -18,8 +18,8 @@ what it costs today and what the fix would change.
   gemma-4-E2B Q8_0 1.038 / 0.981, gemma-4-E4B Q8_0 0.994 / 0.950, gemma-4-12B Q4_K_M 1.026 / 0.950,
   gemma-4-12B Q8_0 1.010 / 0.987, gemma-4-26B-A4B UD-IQ3_XXS 1.071 / 1.025, gemma-4-26B-A4B UD-Q4_K_M
   1.128 / 0.950. The last three prefill levers of the arc, each pod-confirmed: the split-k arm's k
-  offset masked to its chunk alignment (unmasked, the decode-load ran at half rate and every split
-  lost) with the tile and split picks folded into one wave model (`cm2_gemm_pick`; gemma-3-1b's
+  offset masked to its chunk alignment (unmasked, one chunk of gemma-3-1b's down ran 304 us against
+  the whole GEMM's 152, the probe's `splitk` arm on the pod, so every split lost) with the tile and split picks folded into one wave model (`cm2_gemm_pick`; gemma-3-1b's
   down 152 -> 78 us in four l chunks, E2B's 12288-deep down 268 -> 162 in three); the flash tile's
   f16 O accumulator under a 3 ln 2 row-max bias, its mask pass gated to the edge steps and a
   `[dont_unroll]` KV loop (E4B's attention 6868 -> 4014 us a window, gemma-3-1b's 2671 -> 1844);
@@ -109,7 +109,7 @@ what it costs today and what the fix would change.
   from 0.86x to 1.00x of its scalar arm [direction-grade - one commit].
 
 - **LANDED (2026-09-10) - a split role takes as many k chunks as fill the device by itself.**
-  `cm2_split_k` still lets the dispatch group (a role plus the neighbours it co-runs beside)
+  The split pick (since folded into `cm2_gemm_pick`) still lets the dispatch group (a role plus the neighbours it co-runs beside)
   decide whether k splits, but the chunk count is the SM count over the role's own workgroups,
   since a split role serializes its group through the one scratch plane anyway
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l). On a Linux RTX 5080 (84 SMs, driver 580.173,

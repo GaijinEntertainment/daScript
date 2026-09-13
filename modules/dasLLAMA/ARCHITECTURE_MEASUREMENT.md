@@ -62,7 +62,7 @@ stripped through `vkd_pipes_rebuild`) interleaved in one process, two rounds eac
 `DECVEC` verdict comes from one instrument; every arm of the sweep dispatches over two alternating
 output planes under a fresh hazard each, the form the served graph overlaps (the RTX 5080 rows the
 ledger carries read the one-plane form, which serialized a chain on the plane's write-after-write
-hazard). The `khrx` arm is the second axis for the KHR kq
+hazard). Two forms hold one output plane and one hazard rail on purpose: the `serial` rows (`cm2g:<fmt>`) read a single dispatch's latency - the cost a dependent decode chain pays a hop - not the overlapped throughput, and the `lastwg` arm (an f32 row GEMV then `cls_ar` against the GEMV whose last workgroup runs the epilogue) is the hand-off's retained reference beside the shipped `Q8GemvAr`. The `khrx` arm is the second axis for the KHR kq
 tile. It runs eight arms: a resync copy of the shipped k4 tile with no lever moved
 (`khrpx_ship`), five copies each with one lever moved back - the weight stage as a constant fill
 or as the four-wide callback on the plane element, f32 accumulators, a 16-row strip tiling, and
@@ -190,7 +190,7 @@ Engine timing goes through the rails that aggregate and tag it: the `jobque_prof
 `prof_add` / `forward_profile_*` decode buckets (`dasllama_common.das`), the `asr_prof_add`
 encode buckets (`dasllama_audio.das`), and the Vulkan tier's `vk_prof()`-gated ledgers
 (`DASLLAMA_GPU_PROF=1`; per-dispatch and per-submit sums the tier prints at its own cadence -
-a report leg, never the served path). A new clock read paired with a print of the elapsed
+a report leg, never the served path) with the resident prefill's host-side report the same knob gates in `dasllama_gpu_resident.das`. A new clock read paired with a print of the elapsed
 interval bypasses the aggregation - it measures one call site once, is not filterable, and rots
 where a rail entry would keep serving. Where a timed line IS the deliverable - `benchmarks/`,
 `performance/`, `harness/`, and cold one-shot load/mint progress logs (image bake/map, load

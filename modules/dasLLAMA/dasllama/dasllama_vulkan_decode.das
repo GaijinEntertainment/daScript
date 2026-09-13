@@ -22,6 +22,15 @@ require daslib/strings_boost
 // mirror sync/read seams, the deltanet decode step, the FFN GEMV / qkv-group / classifier
 // decode arms, and the heat-pinned expert cache.
 
+let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
+
+//! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
+//! DA_NSPLIT_MAX; one where the card's SM count is unknown or the heads alone cover it
+def da_nsplit(n_heads, sm_count : int64) : int64 {
+    if (sm_count <= 0l || n_heads <= 0l || n_heads >= 2l * sm_count) return 1l
+    return min((2l * sm_count + n_heads - 1l) / n_heads, DA_NSPLIT_MAX)
+}
+
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
 //! resident model at a time (the arbiter guarantees it). Call before set_layer / token.
 //! `kv16` picks the mirror codec (f16 default upstream) — sessions of the same codec byte-copy.
@@ -640,7 +649,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         L.recurrent = true
         L.mir_idx = -1l
         L.hid = g_rd.hidden   //! a recurrent layer's dense triple takes the model's width; its attention fields stay unused
-        L.out_scale = 1.0     //! ... and its residual step is unscaled
+        L.out_scale = 1.0     //! a PLE layer's residual step is unscaled: its row is the gate's feed
         L.bqkv = bqkv; L.bz = bz; L.bout = bout; L.bbeta = bbeta; L.balpha = balpha
         L.fqkv = fqkv; L.fz = fz; L.fout = fout
         L.ba_off = ba_off
@@ -1282,7 +1291,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64) {
     let dim = g_rd.dim
     let ple = g_rd.ple
-    if (!L.ple_fused) {   //! fused, the residual step quantized the row it wrote
+    if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own Q8_0 quants of the row
         var pcx = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
         enc_cls_dn_rq(raw, h, L.s_ple_x, pcx, (dim / 4l + 255l) / 256l)
         rd_ts(raw, "p:rq_x")
@@ -1292,8 +1301,7 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
         var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), gelu = 1u)
-        let rpw = 4l * g_gpu.rows_per_wg   //! a 256-thread workgroup: a row a subgroup
-        enc_q8_gemv_pleact_cls(raw, h, L.s_ple_pa, pcf, (dim + rpw - 1l) / rpw)
+        enc_q8_gemv_pleact_cls(raw, h, L.s_ple_pa, pcf, rd_ar_wgs(dim))
         rd_ts(raw, "p:actproj")
         return
     }
@@ -2076,7 +2084,7 @@ def private ffn_cmd_key(s1, s3, s2 : int) : int64 {
     let key = (int64(s1) * int64(MAX_STACKS) + int64(s3)) * int64(MAX_STACKS) + int64(s2)
     if (!key_exists(g_gpu.ffn_cmds, key)) {
         var fc = FfnCmd(cmd = alloc_cmd(), nrows = 0l)
-        let down_is_kq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
+        let down_is_kq = !kq_block32(g_gpu.stacks[s2].fmt)
         verify((down_is_kq ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()) && gemv_cls_ensure(g_gpu.stacks[s2].fmt),
             "vk decode: the class rails must engage on a live device")
         // fused act+requant (class): gate@0, up@1, hq@2, hs@3 — one family set serves both forms
@@ -2104,7 +2112,7 @@ def private ffn_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var fc : FfnCmd;
     var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
     gemv_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, nrows * nfe)
     gemv_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, nrows * nfe)
-    let down_is_kq = !vk_fmt_b32(g_gpu.stacks[s2].fmt)
+    let down_is_kq = !kq_block32(g_gpu.stacks[s2].fmt)
     var pca = ActArgs(nelem = uint(nrows * nfe), gelu = is_gelu ? 1u : 0u,
         nblk = uint(nrows * nfe / (down_is_kq ? 256l : 32l)))
     let awgs = (nrows * nfe / (down_is_kq ? 8l : 4l) + 255l) / 256l
@@ -2149,8 +2157,8 @@ def private ffn_fill(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 c
     let s2 = find_stack(unsafe(offs2[0]), f2, "decode ffn down")
     assert(nrows * max(nfe, n) * 4l <= Y_BYTES, "dasLLAMA vulkan tier: FFN dispatch exceeds output capacity")
     // gate/up share one activation image (same xqp below) so forms must agree; down's is its own
-    let kq_in = !vk_fmt_b32(f1)
-    assert(!vk_fmt_b32(f3) == kq_in,
+    let kq_in = !kq_block32(f1)
+    assert(!kq_block32(f3) == kq_in,
         "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
     let xunit_in = fmt_unit(f1)
     ensure_gemv_scratch(s1)
@@ -2662,11 +2670,11 @@ def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, n
     let src2 = heat_stream_src(b2, f2)
     let want = gpu_want_heat()
     // gate/up share one act image; down is free — the mid-step form follows IT (the mixed-triple rail)
-    if (src1 < 0 || src3 < 0 || src2 < 0 || vk_fmt_b32(f3) != vk_fmt_b32(f1) || want <= 0l
+    if (src1 < 0 || src3 < 0 || src2 < 0 || kq_block32(f3) != kq_block32(f1) || want <= 0l
             || !arena_rows_ok(n, f1) || !arena_rows_ok(n, f3) || !arena_rows_ok(nfe, f2)) {
         let why = (want <= 0l ? "want 0"
             : (src1 < 0 || src3 < 0 || src2 < 0 ? "no mirror src {src1}/{src3}/{src2} for b {b1}/{b3}/{b2} fmt {f1}/{f3}/{f2}"
-            : (vk_fmt_b32(f3) != vk_fmt_b32(f1) ? "gate/up form mismatch fmt {f1}/{f3}"
+            : (kq_block32(f3) != kq_block32(f1) ? "gate/up form mismatch fmt {f1}/{f3}"
             : "row length not a block multiple ({n}/{nfe})")))
         to_log(LOG_INFO, "dasLLAMA vulkan tier: heat cache skips layer {l} ({why})\n")
         g_gpu.heat_pools[l] <- pool

@@ -4,11 +4,12 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _gemma_resident   // the gemma cells; one model a file - this process loads the 12B Q8_0 alone
+require _gemma_resident
 
-//! the gemma-4 dense carrier on the Q8_0 planes (large tier): the weightless v-norm, the V-from-K global layers at head 512
-//! beside the sliding 256s, the per-layer output scale, the final softcap and the suppressed ids; arms on a 16 GB card under
-//! DASLLAMA_GPU_MIN_CTX=1024 (12.3 GB of weights)
+// gemma-4-12B Q8_0 (the dense carrier on the Q8_0 planes: the weightless v-norm, the V-from-K global layers beside
+// the sliding ones, the per-layer output scale, the final softcap and the suppressed ids), large tier: arm `g4q8`.
+// Skips off the JIT, without DASLLAMA_GPU=1 on a device the whole-model driver serves, without the file under
+// models_dir(), or when the residency plan does not fit the card - a 16 GB card arms it under DASLLAMA_GPU_MIN_CTX=1024.
 let private GEMMA4_Q8_FILE = "gemma-4-12B-it-Q8_0.gguf"
 
 [test]
@@ -23,7 +24,7 @@ def test_gpu_resident_gemma4_dense(t : T?) {
     }
     t |> run("gemma-4-12B Q8_0: 520 ids prefilled - two windows, the second eight rows deep - then 80 teacher-forced past them, the 1024 window not yet engaged") @(t : T?) {
         if (!arm_on(t, "g4q8")) return
-        window_pin(t)
+        assert_pf_window(t)
         ppl_compare(t, PF_WINDOW_ROWS + 8l, 80l, GEMMA4_Q8_FILE)
     }
 }

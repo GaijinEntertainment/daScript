@@ -901,7 +901,7 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
 
 def private check_cm2_ladder_sets {
     check_cm2_ladder_set(LadderTrio(suffix = "KhrBatch", tail = "khr_cls", ladder = "khr_cls_",
-        why = "the f16 feed admits the format on a KHR-mode card, where the KHR ladders panic"), CM2_KHR_EXEMPT)
+        why = "the f16 feed admits the format on a KHR-mode card, where the KHR ladders panic; a per-32 format the feed never admits there joins CM2_KHR_EXEMPT in this file and the licensed set ARCHITECTURE_GPU_VULKAN.md names, in the same change"), CM2_KHR_EXEMPT)
     check_cm2_ladder_set(LadderTrio(suffix = "Cm2EBatch", tail = "cm2e_cls", ladder = "cm2e_cls_",
         why = "the expert schedule takes the format's planes, and the e ladders panic on the first resident MoE window"), CM2_NO_EXEMPT)
 }

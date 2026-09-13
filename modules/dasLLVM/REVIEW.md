@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
 `ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`,
-`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`. Planned work: `LEDGER.md` takes a new row; `DEBUGGING.md` (sec. Roadmap) and `fat_mode_plan.md` carry older plans.
+`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_LIB.md`. Planned work: `LEDGER.md` takes a new row; `DEBUGGING.md` (sec. Roadmap) and `fat_mode_plan.md` carry older plans.
 
 **A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
@@ -47,10 +47,9 @@ there.
   identical inputs - IR generation, target-machine setup, a `[llvm_code]` generator body, or the
   call ABI the generated code binds: function signatures, the name scheme, the prologue, the
   externs the install phase binds - bumps `LLVM_JIT_CODEGEN_VERSION`**
-  (`daslib/llvm_jit_plan.das`); selecting among existing generators' `[llvm_code]` arguments, the
-  `[tune]` stamping, is not such a change. The caches are addressed by the AST hashes and this
-  constant, so such a change without the bump serves the old machine code back
-  (`ARCHITECTURE.md` sec.1.2).
+  (`daslib/llvm_jit_plan.das`). Both keys fold each function's AST hash, the hint inputs they
+  carry - loop-hint names, `[llvm_code]` arguments, function hints - and this constant, so a
+  change none of those covers serves the old machine code back (`ARCHITECTURE.md` sec.1.2).
 
 - **A diff that adds a `require` line naming a `[llvm_code]` generator module outside this
   module - a package's, dasLLAMA's - to `daslib/llvm_user_modules.das` is a defect; the package

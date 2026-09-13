@@ -24,10 +24,10 @@ reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses
 numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
 `dasllama_vulkan_classes.das` twice: for the KHR trio it requires `<Fmt>KhrBatch`, its
 `kq_batch_<fmt>_khr_cls` stamp and an arm in each of `khr_cls_ensure`, `khr_cls_set` and
-`khr_cls_enc` in `dasllama_vulkan_prefill.das`, licensing `Q8Cm2T` alone - q8 is no `kq_sb`
-format, its cm2 tiles carry no KHR arm, and the KHR mode serves q8 through its own tile; for the
-e trio it requires `<Fmt>Cm2EBatch`, its `kq_batch_<fmt>_cm2e_cls` stamp (`q8_batch_cm2e_cls` for
-q8) and an arm in each of `cm2e_cls_ensure`, `cm2e_cls_set` and `cm2e_cls_enc`, licensing none.
+`khr_cls_enc` in `dasllama_vulkan_prefill.das`, licensing `Q8Cm2T` and `Q51Cm2T` alone - the two
+per-32 formats are no `kq_sb` format, their cm2 tiles carry no KHR arm, and the f16 feed admits neither on a KHR-mode card;
+for the e trio it requires `<Fmt>Cm2EBatch`, its `kq_batch_<fmt>_cm2e_cls` stamp (`<fmt>_batch_cm2e_cls` for the per-32
+formats) and an arm in each of `cm2e_cls_ensure`, `cm2e_cls_set` and `cm2e_cls_enc`, licensing none.
 `check_cm2_stamp_tiles` reads every `[vk_dispatch]` stamp of those templates - in
 `dasllama_vulkan_classes.das`, the probe's twins in `harness/vk_gemm_probe.das` and the bring-up
 fixture `tests/_vkd_toy.das` - and requires its `AT`, `BT`, `ACC` and `ACCW` typedefs to follow

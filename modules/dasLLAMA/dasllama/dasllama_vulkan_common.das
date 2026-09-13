@@ -207,9 +207,9 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
     if (n < 2048l || d < 128l || cnt < tc0) {
         return (tc = tc0, nsplit = 1l, ksplit = 0l)
     }
-    let twin = (tc0 == 128l || tc0 == 256l) && cnt > 128l && cm2_tile_env() <= 0l
-    let ntc = twin ? 2 : 1
-    let tcs = fixed_array(twin ? 256l : tc0, 128l)
+    let two_cols = (tc0 == 128l || tc0 == 256l) && cnt > 128l && cm2_tile_env() <= 0l
+    let ntc = two_cols ? 2 : 1
+    let tcs = fixed_array(two_cols ? 256l : tc0, 128l)
     var best_tc = tc0
     var best_sk = 1l
     var best_ck = 0l
@@ -223,12 +223,12 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
         if (sk * cnt * d * 4l > scratch_bytes) {
             break
         }
-        let red = cm2_reduce_units(sk, cnt, d)
+        let reduce_units = cm2_reduce_units(sk, cnt, d)
         for (i in range(ntc)) {
             let own = cm2_tiles_at(d, cnt, tcs[i])
-            let u = (cm2_wave_units(own * sk, (ck + 63l) / 64l, cores, tcs[i]) + red) * (own + sib_tiles) / own
-            if (u * 12l < whole * 11l && u < best) {
-                best = u
+            let units = (cm2_wave_units(own * sk, (ck + 63l) / 64l, cores, tcs[i]) + reduce_units) * (own + sib_tiles) / own
+            if (units * 12l < whole * 11l && units < best) {
+                best = units
                 best_tc = tcs[i]
                 best_sk = sk
                 best_ck = ck
@@ -868,7 +868,7 @@ def try_device_buf(bytes : int64) : uint64 => make_device_buf(bytes, false, true
 
 //! a device allocation that failed: the panic every plain caller expects, or - soft - the buffer shell destroyed, the warning said, 0 back
 [cold_path]
-def private device_buf_failed(buf : uint64; bytes : int64; ares : VkResult; soft : bool) : uint64 {
+def private fail_device_buf(buf : uint64; bytes : int64; ares : VkResult; soft : bool) : uint64 {
     if (!soft) {
         panic("Vulkan call failed: {ares} (a {bytes >> 20l} MB device buffer)")
     }
@@ -938,7 +938,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
     if (ares != VkResult.SUCCESS) {
-        return device_buf_failed(b._vk, bytes, ares, soft)
+        return fail_device_buf(b._vk, bytes, ares, soft)
     }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
     if (g_gpu.has_bda) {
@@ -2031,12 +2031,10 @@ def vk_kq_schema_id(fmt : int) : int {
     return 0
 }
 
-// fmt here is int(KqFmt), not the enum
-def vk_fmt_b32(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51)
 
 // meta/activation block unit of a stack format — q8 counts 32-weight blocks, the kq
 // lattice counts 256-weight superblocks
-def fmt_unit(fmt : int) : int64 => vk_fmt_b32(fmt) ? 32l : 256l
+def fmt_unit(fmt : int) : int64 => kq_block32(fmt) ? 32l : 256l
 
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
@@ -2054,9 +2052,9 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
 def arena_rows_ok(n : int64; fmt : int) : bool => n % fmt_unit(fmt) == 0l
 
 def arena_blocks_for(n, rows : int64; fmt : int) : int64 {
-    assert(vk_fmt_b32(fmt) || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
-    assert(!vk_fmt_b32(fmt) || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
-    return rows * (n / (vk_fmt_b32(fmt) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
+    assert(kq_block32(fmt) || n % KQ_SUPERBLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: kq row length must be a superblock multiple")
+    assert(!kq_block32(fmt) || n % Q8_BLOCK_ELEMS == 0l, "dasLLAMA vulkan arena: q8 row length must be a 32-block multiple")
+    return rows * (n / (kq_block32(fmt) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS))
 }
 
 var private g_arena_slab_override = 0l
@@ -2532,15 +2530,6 @@ let F16G_SPLIT = 8l    //! its k chunks into the split-k scratch
 def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && dim % (int64(F16G_BK) * F16G_SPLIT) == 0l
 
 var g_rd : RDec?
-
-let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
-
-//! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
-//! DA_NSPLIT_MAX; one where the card's SM count is unknown or the heads alone cover it
-def da_nsplit(n_heads, sm_count : int64) : int64 {
-    if (sm_count <= 0l || n_heads <= 0l || n_heads >= 2l * sm_count) return 1l
-    return min((2l * sm_count + n_heads - 1l) / n_heads, DA_NSPLIT_MAX)
-}
 
 //! the norms plane's per-layer row indices (`RDEC_NORM_ROWS` rows a layer); the final norm follows the layers and the q/k norm rows follow it
 let RD_NORM_ROWS = RDEC_NORM_ROWS
@@ -3028,7 +3017,6 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
 }
 
 def vkd_alloc_set(c : VkdClass; family : string) : VkDescriptorSet {
-    //! a set before the class's ensure has no layout: the loader would fault on the null handle, so the class names itself first
     if (intptr(boost_value_to_vk(c.set_layout)) == 0ul) {
         panic("dasLLAMA vulkan tier: a descriptor set asked of {family} before its pipeline was ensured - call ensure_{family} first")
     }
