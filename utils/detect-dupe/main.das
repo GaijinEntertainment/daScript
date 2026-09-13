@@ -15,6 +15,11 @@ require pipeline
 require ../common/parallel_workers.das
 
 
+// A file parses in a few milliseconds and a child process starts in a few hundred, so the
+// fan-out only pays past this many files (measured break-even on a 10-core box).
+let PARALLEL_FILES = 128
+
+
 [CommandLineArgs]
 struct Config {
     @clarg_short = "p"
@@ -28,7 +33,7 @@ struct Config {
     paths_stdin : bool
 
     @clarg_short = "j"
-    @clarg_doc = "Worker count for parallel --export-functions runs. 0 = auto (= physical cores, at most 16). 1 = sequential. Files are sorted, split into N contiguous chunks, each compiled by a child detect-dupe process; shards merged in chunk-index order so output is byte-identical across worker counts. Below 16 input files the export stays sequential regardless. Ignored without --export-functions."
+    @clarg_doc = "Worker count for parallel --export-functions runs. 0 = auto (= physical cores, at most 16). 1 = sequential. Files are sorted, split into N contiguous chunks, each parsed by a child detect-dupe process; shards merged in chunk-index order so output is byte-identical across worker counts. Below 128 input files the export stays sequential regardless. Ignored without --export-functions."
     workers : int
 
     @clarg_short = "t"
@@ -60,7 +65,7 @@ struct Config {
     @clarg_doc = "Write all extracted functions to JSON and exit before clustering"
     export_functions : string
 
-    @clarg_doc = "Load functions from a JSON file (produced by --export-functions) instead of compiling"
+    @clarg_doc = "Load functions from a JSON file (produced by --export-functions) instead of parsing"
     import_functions : string
 
     @clarg_doc = "Path to baseline JSON (an --export-functions output) — B1 mode: tag records whose member identity (file:line:name) is not in the baseline as candidates"
@@ -432,67 +437,52 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
         // sub-threshold, paying child-process startup for nothing.
         // Sequential mode also benefits: no per-iteration I/O for the
         // expect-check, just compile the filtered list.
-        var compile_files : array<string>
-        compile_files |> reserve(length(files))
+        var parse_files : array<string>
+        parse_files |> reserve(length(files))
         var n_skipped = 0
-        var n_agent = 0
         for (f in files) {
             if (has_expect_directive(f)) {
                 n_skipped++
                 continue
             }
-            if (installs_debug_agent(f)) {
-                n_agent++
-                continue
-            }
-            compile_files |> push(f)
+            parse_files |> push(f)
         }
         if (n_skipped > 0) {
             to_log(LOG_INFO, "{n_skipped} file(s) skipped (expect-directive)\n")
-        }
-        if (n_agent > 0) {
-            to_log(LOG_INFO, "{n_agent} file(s) skipped (debug-agent installer - two in one scan process panic at the second install)\n")
         }
         files_scanned = length(files)
 
         // Parallel export fast-path: skip the in-process compile loop
         // entirely. Workers see the pre-filtered list, so they don't
         // waste startup cost on fixtures.
-        if (exporting && should_parallelize(length(compile_files), cfg.workers)) {
-            if (empty(compile_files)) {
+        if (exporting && should_parallelize(length(parse_files), cfg.workers, PARALLEL_FILES)) {
+            if (empty(parse_files)) {
                 to_log(LOG_ERROR, "error: every input file contains an `expect` directive; nothing to export\n")
-                panic("detect-dupe export failed: no compilable files")
+                panic("detect-dupe export failed: no parsable files")
             }
-            run_parallel_export(compile_files, cfg)
+            run_parallel_export(parse_files, cfg)
             return
         }
 
-        if (!empty(compile_files)) {
-            to_log(LOG_INFO, "scanning {length(compile_files)} file(s)...\n")
+        if (!empty(parse_files)) {
+            to_log(LOG_INFO, "scanning {length(parse_files)} file(s)...\n")
         }
 
         var n_failed = 0
-        var n_prereq = 0
-        for (i in range(length(compile_files))) {
-            let file = compile_files[i]
+        for (i in range(length(parse_files))) {
+            let file = parse_files[i]
             if (cfg.verbose) {
-                to_log(LOG_INFO, "[{i + 1}/{length(compile_files)}] {file}\n")
+                to_log(LOG_INFO, "[{i + 1}/{length(parse_files)}] {file}\n")
             }
-            var prereq_skipped = false
-            if (!compile_and_collect_ex(file, records, seen_loc, prereq_skipped, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
+            if (!parse_and_collect(file, records, seen_loc, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
                 n_failed++
-            } elif (prereq_skipped) {
-                n_prereq++
             }
         }
-        to_log(LOG_INFO, "collected {length(records)} function record(s); {n_failed} compile failure(s), {n_skipped} skipped (expect-directive)\n")
-        if (n_prereq > 0) {
-            to_log(LOG_INFO, "{n_prereq} file(s) skipped (missing prerequisite - module not in this build)\n")
-        }
+        to_log(LOG_INFO, "collected {length(records)} function record(s); {n_failed} parse failure(s), {n_skipped} skipped (expect-directive)\n")
 
         if (exporting) {
             if (n_failed > 0) {
-                to_log(LOG_WARNING, "{n_failed} file(s) failed to compile; their functions are exported from the AST the failed compile left\n")
+                to_log(LOG_WARNING, "{n_failed} file(s) failed to parse; the functions parsed before the syntax error are exported\n")
             }
             if (write_export(records, cfg.export_functions)) {
                 to_log(LOG_INFO, "wrote {length(records)} function(s) to {cfg.export_functions}\n")
@@ -514,7 +504,7 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
         mark_records_as_candidates(records, against_files)
         var n_against_failed = 0
         var n_against_skipped = 0
-        var n_against_compiled = 0
+        var n_against_parsed = 0
         // Sort the candidate file list so compile-and-report order is
         // deterministic across runs — `keys(table)` iteration order is
         // unspecified, which would make the per-candidate output (and the
@@ -538,26 +528,21 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
                 continue
             }
             let before = length(records)
-            var af_prereq = false
-            if (!compile_and_collect_ex(af, records, seen_loc, af_prereq, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
+            if (!parse_and_collect(af, records, seen_loc, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
                 n_against_failed++
-                continue
-            }
-            if (af_prereq) {
-                n_against_skipped++
                 continue
             }
             // Tag the freshly-pushed records as candidates.
             for (i in range(before, length(records))) {
                 records[i].is_candidate = true
             }
-            n_against_compiled++
+            n_against_parsed++
         }
-        if (n_against_compiled > 0 || n_against_failed > 0 || n_against_skipped > 0) {
-            to_log(LOG_INFO, "--against: compiled {n_against_compiled}, failed {n_against_failed}, skipped {n_against_skipped}\n")
+        if (n_against_parsed > 0 || n_against_failed > 0 || n_against_skipped > 0) {
+            to_log(LOG_INFO, "--against: parsed {n_against_parsed}, failed {n_against_failed}, skipped {n_against_skipped}\n")
         }
         if (n_against_failed > 0) {
-            panic("detect-dupe --against failed: {n_against_failed} candidate file(s) did not compile - the report would be incomplete")
+            panic("detect-dupe --against failed: {n_against_failed} candidate file(s) did not parse - the report would be incomplete")
         }
     }
 

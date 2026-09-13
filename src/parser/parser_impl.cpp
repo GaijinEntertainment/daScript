@@ -15,6 +15,21 @@ namespace das {
 
     static __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
 
+    struct UnknownReaderMacro : ReaderMacro {
+        UnknownReaderMacro () : ReaderMacro("unknown") {}
+        virtual bool accept ( Program *, Module *, ExprReader * expr, int ch, const LineInfo & ) override {
+            if ( ch == -1 ) return false;
+            expr->sequence += char(ch);
+            auto len = expr->sequence.size();
+            return !(len >= 2 && expr->sequence[len-2]=='%' && expr->sequence[len-1]=='%');
+        }
+    };
+
+    ReaderMacro * das_unknown_reader_macro () {
+        static UnknownReaderMacro macro;
+        return &macro;
+    }
+
     void das2_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr ) {
         yyextra->g_Program->error(error,"","",at,cerr);
     }

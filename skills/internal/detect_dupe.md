@@ -18,7 +18,7 @@ The MCP server exposes the entire pipeline. Both tools shell out to `daslang uti
 
 | MCP tool | Purpose |
 |---|---|
-| `export_corpus` | Scan paths/dirs/globs, compile each `.das` file, write a `corpus.json` |
+| `export_corpus` | Scan paths/dirs/globs, parse each `.das` file, write a `corpus.json` |
 | `detect_duplicates` | Compare candidate file(s) against a `corpus.json`, return per-candidate matches |
 
 ### Step 1 - build a corpus
@@ -29,7 +29,7 @@ mcp__daslang__export_corpus(paths="daslib,utils,tests", out="corpus.json")
 
 Build the corpus once over the body of code you want to compare against. Re-run when the code drifts enough that stale matches become a problem.
 
-`workers="0"` parallelizes across the box's physical cores, at most 16 (auto). `workers="1"` keeps the run sequential. The output JSON is byte-identical across worker counts - the file list is sorted before chunking, and shards are merged in chunk-index order. Below 16 input files the export stays sequential regardless (child-process startup dominates).
+`workers="0"` parallelizes across the box's physical cores, at most 16 (auto). `workers="1"` keeps the run sequential. The output JSON is byte-identical across worker counts - the file list is sorted before chunking, and shards are merged in chunk-index order. Below 128 input files the export stays sequential regardless (a file parses in milliseconds; child-process startup dominates).
 
 `paths_file="<path>"` scopes the export to an explicit precomputed list - useful for PR-scoped runs:
 
@@ -57,7 +57,7 @@ mcp__daslang__detect_duplicates(
 )
 ```
 
-Pass `paths` as comma- or newline-delimited (the latter lets you pipe `git diff --name-only` through). Records in the corpus whose `file` matches a `paths` entry are dropped first, then the candidate is freshly compiled - so the file is compared against the rest of the world, never against its own stale copy in the corpus.
+Pass `paths` as comma- or newline-delimited (the latter lets you pipe `git diff --name-only` through). Records in the corpus whose `file` matches a `paths` entry are dropped first, then the candidate is freshly parsed - so the file is compared against the rest of the world, never against its own stale copy in the corpus.
 
 Envelope:
 
@@ -82,15 +82,14 @@ Currently shipped:
 | Name | Detects | Why it's boilerplate |
 |---|---|---|
 | `visitor` | Class-method whose hook starts with `visit`, `preVisit`, `postVisit`, `before`, or `after` (matched by name, regardless of body) | `AstVisitor` overrides - one method per AST node type by dispatch contract, so cross-class duplication is structural. Catches the swarms in `aot_cpp`, `ast_print`, `templates_boost`, `rst_comment`, `perf_lint` |
-| `dispatch` | Body is N >= 2 byte-identical top-level statement chunks | dastest's `t \|> run("X") @(t) {...}` lists, `t \|> bench(...)` lists, repeated-init blocks. Lambda bodies collapse to `ADDR` upstream, so two `run` calls look identical regardless of what the lambdas do |
-| `test_wrapper` | Function named `test_*` whose body is a single `run(...)` call statement carrying at least one lambda (`ADDR` token) | dastest wrappers - `def test_x { t \|> run("x") @(t) {...} }`. Lambda bodies collapse to `ADDR` upstream, so every such wrapper looks identical |
+| `dispatch` | Body is N >= 2 byte-identical top-level statement chunks | `t \|> bench(...)` lists, repeated-init blocks, any uniform call list. A dastest `run` list matches only when its lambda bodies are identical - a lambda body sits inline in the parent's canonical |
 | `emit` | 1..6 top-level statements, each a single trivial `CALL:foo(...)` (literal/var/field args only - no nested calls, no control flow) or a `RET ...` | Emitter shells like `def visitX(...) { write(*ss, ")") ; return that }`. Catches free-function variants that the name-based `visitor` matcher doesn't cover |
 
-Match order is name-first (`visitor`), then body-shape (`dispatch`, `test_wrapper`, `emit`). A visitor method whose body fits the `emit` shape is still classified as `visitor` - the more semantic bucket wins.
+Match order is name-first (`visitor`), then body-shape (`dispatch`, `emit`). A visitor method whose body fits the `emit` shape is still classified as `visitor` - the more semantic bucket wins.
 
 Override per-pattern with `keep="<name>"` (comma-separated for multiple), or disable filtering wholesale with `keep="all"`. Default (omit `keep`) skips every known pattern.
 
-The filter applies to **both** corpus records and freshly-compiled candidates - if a corpus is full of dispatch shapes and you don't filter, every candidate dispatcher will fuzzy-match every other one (pure noise).
+The filter applies to **both** corpus records and freshly-parsed candidates - if a corpus is full of dispatch shapes and you don't filter, every candidate dispatcher will fuzzy-match every other one (pure noise).
 
 ## CLI workflow (advanced)
 
@@ -100,8 +99,8 @@ The CLI at `utils/detect-dupe/main.das` supports modes the MCP tools don't expos
 - **`--baseline-strict`** - drops clusters whose canonical was already in the baseline; only fully-new canonicals survive.
 - **`--against-from-stdin`** - read newline-delimited candidate paths from stdin, e.g. piped from `git diff --name-only`.
 - **`--paths-from <file>` / `--paths-stdin`** - read the *primary* file list from a file or stdin (skips blank lines and `#`-comments). Composes with `-p`. Use the file form when you'd hit ARG_MAX with thousands of entries; the stdin form to plug into `git diff --name-only` pipelines for PR-scoped corpus builds.
-- **`-j / --workers N`** - parallel `--export-functions` across N child detect-dupe processes. 0 (default) = physical cores, at most 16. Output is byte-identical to a sequential run (sorted-then-chunked, shards merged in order). Below 16 files the export stays sequential.
-- **`-L / --lambdas-only`** - cluster lambda bodies instead of top-level functions; useful for finding duplicated dastest `run` lambdas.
+- **`-j / --workers N`** - parallel `--export-functions` across N child detect-dupe processes. 0 (default) = physical cores, at most 16. Output is byte-identical to a sequential run (sorted-then-chunked, shards merged in order). Below 128 files the export stays sequential.
+- **`-L / --lambdas-only`** - cluster every `@(...) { }` / `$(...) { }` block body instead of top-level functions; useful for finding duplicated dastest `run` lambdas.
 - **`--min-tokens N`** - drop trivial wrappers (default 8).
 - **`--no-fuzzy`** - exact clusters only, faster on large corpora.
 
@@ -137,8 +136,7 @@ Full flag reference: `bin/daslang utils/detect-dupe/main.das -- -?` or `skills/i
 
 - **Structural matcher.** Same shape, different semantics -> match. Different shape, same semantics -> no match. Report is "candidates worth investigating", not a definitive verdict.
 - **No auto-fix.** Discovery only.
-- **A compile failure is not a stop.** A file that fails to compile is reported `FAIL` and still scanned: the AST survives a failed infer, so its functions enter the corpus or the candidate set. Only a file with no AST at all (a `missing prerequisite` module, a parse that yields nothing) contributes nothing.
-- **Macro-expanded.** Canonicalization runs after macro expansion. Two functions that differ in source but collapse to the same shape after macros will match - usually what you want, but can surprise you with macro-heavy daslib code.
+- **Parse only.** Each file is parsed alone - no prerequisite walk, no infer, no macro run, no module cache - so the corpus is the source shape: nothing is folded, inlined, reified or macro-expanded, a `v.xy` is a field access, and a require, annotation or parent class the parse cannot resolve costs nothing. A syntax error ends the file's parse (`FAIL`, counted) and the functions before it are still collected.
 
 ## Iteration tip
 

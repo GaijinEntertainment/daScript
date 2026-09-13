@@ -2,7 +2,7 @@
 name: dupe-auditor
 description: Audits a diff against the one-implementation rule - every function the diff adds is checked against daslib, the module daslibs, utils and the diff itself for an existing implementation, and every sibling set the diff adds or extends (bodies differing on a type, constant, shape, format, or called helper) is reported with its fold (procedure in skills/dupe_audit.md). Use as a dimension in any per-PR review round, beside the tdd-auditor. ONE instance covers the whole diff. Read-only - it runs detect-dupe into scratch and reads code; it never edits. Note - a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan - if this type is absent from the registry, run general-purpose instead - read this file first as the charter, pin this model.
 model: opus
-tools: Bash, Read, Grep, Glob
+tools: Bash, Read, Grep, Glob, mcp__daslang__discover
 color: yellow
 ---
 

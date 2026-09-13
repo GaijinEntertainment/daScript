@@ -82,11 +82,21 @@ def private classify(line : string) : ClientMessage {
             msg.id_text = id == null ? "null" : write_json_compact(id)
         }
     }
-    unsafe {
-        delete js
-    }
+    delete_json(js)
     return msg
 }
+
+// A JSON object carrying `jsonrpc` - the only line the child may answer with; a JSON log record
+// or any other object-shaped noise is not a message.
+def public is_jsonrpc_message(line : string) : bool {
+    if (empty(line) || character_at(line, 0) != '{') return false // nolint:PERF003
+    var err : string
+    var js = read_json(line, err)
+    let ok = js != null && js.value is _object && (js.value as _object) |> key_exists("jsonrpc")
+    delete_json(js)
+    return ok
+}
+
 
 def private jsonrpc_result(id_text, result_json : string) : string {
     return "\{\"jsonrpc\":\"2.0\",\"id\":{id_text},\"result\":{result_json}\}"
@@ -138,9 +148,10 @@ class public StdioFront {
         return !feof(w)
     }
 
-    //! the child's next JSON line; anything else on its stdout is a diagnostic - a compile failure,
-    //! a module that did not load - logged and skipped, and carried in the error text if the child
-    //! then dies. Empty means the child is gone.
+    // the child's next JSON-RPC line; anything else on its stdout is a diagnostic - a compile
+    // failure, a module that did not load, a JSON log record a tool wrote to the stderr the pipe
+    // merges in - logged and skipped, and carried in the error text if the child then dies. Empty
+    // means the child is gone.
     def private read_child(r : file; var noise : array<string>&) : string {
         while (true) {
             let line = read_line(r)
@@ -148,15 +159,7 @@ class public StdioFront {
                 if (feof(r)) return ""
                 continue
             }
-            if (character_at(line, 0) == '{') { // nolint:PERF003
-                var err : string
-                var js = read_json(line, err)
-                let ok = js != null
-                unsafe {
-                    delete js
-                }
-                if (ok) return line
-            }
+            if (is_jsonrpc_message(line)) return line
             log->emit("child_noise", JV({"line" => JV(slice(line, 0, 400))}))
             if (length(noise) < NOISE_LINES) {
                 noise |> push(line)

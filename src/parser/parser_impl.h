@@ -71,6 +71,7 @@ namespace das {
 
     void das_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr );
     void das2_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr );
+    ReaderMacro * das_unknown_reader_macro ();
     void das_checkName ( yyscan_t scanner, const string & name, const LineInfo &at );
 
     template <typename ConstT, typename ValueT>

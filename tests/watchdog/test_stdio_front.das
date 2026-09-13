@@ -7,6 +7,7 @@ require daslib/fio
 require daslib/json_boost
 require daslib/command_line
 require strings
+require ../../utils/watchdog/stdio_front.das
 
 //! the stdio front over a pipe, through both hosts where the exe is built: `initialize` and `ping`
 //! are answered before any child exists, the first tool call spawns the daslang MCP server, the
@@ -126,6 +127,13 @@ def private session(t : T?; host : array<string>; root : string) {
             unsafe {
                 delete listing
             }
+            write_line(w, "\{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":\{\"name\":\"discover\",\"arguments\":\{\"query\":\"convert uri to file path\"\}\}\}")
+            var found = read_reply(r)
+            t |> success(found != null && id_of(found) == 8, "a tool whose handler writes a JSON log record to stderr is still answered - the record is not the reply")
+            t |> success(find(tool_text(found), "match(es)") >= 0, "the child served discover: {tool_text(found)}")
+            unsafe {
+                delete found
+            }
             write_line(w, "\{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/list\"\}")
             let catalog_line = read_reply_line(r)
             t |> success(length(catalog_line) > 16384, "the tool catalog is longer than one fgets chunk, so it crossed the front's line reader in pieces")
@@ -179,6 +187,16 @@ def private initialize_result(argv : array<string>) : string {
     }
     return text
 }
+
+[test]
+def test_child_line_is_a_message_only_with_jsonrpc(t : T?) {
+    t |> success(is_jsonrpc_message("\{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":\{\}\}"), "a reply is a message")
+    t |> success(!is_jsonrpc_message("\{\"ts\":\"2026-09-13T07:15:51.084Z\",\"level\":\"info\",\"cat\":\"mcp.discover\",\"msg\":\"x\"\}"),
+        "a JSON log record the pipe merged in from stderr is noise, not the reply")
+    t |> success(!is_jsonrpc_message("error[20605]: missing prerequisite"), "a diagnostic line is noise")
+    t |> success(!is_jsonrpc_message(""), "an empty line is nothing")
+}
+
 
 [test]
 def test_stdio_front(t : T?) {

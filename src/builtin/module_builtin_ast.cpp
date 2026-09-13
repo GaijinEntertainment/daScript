@@ -1336,6 +1336,29 @@ namespace das {
         return rtti_builtin_compile_ex(modName, str, cop, true, block, context, at);
     }
 
+    static void invokeProgramBlock ( const char * who, const ProgramPtr & program, TextWriter & issues, bool bindGlobalProgram,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
+        if ( !program ) {
+            context->throw_error_at(at, "%s internal error, something went wrong", who);
+        }
+        bool ok = !program->failed();
+        if ( !ok ) {
+            for ( auto & err : program->errors ) {
+                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+            }
+        }
+        string istr = issues.str();
+        vec4f args[3] = {
+            cast<bool>::from(ok),
+            cast<smart_ptr<Program>>::from(program),
+            cast<string *>::from(&istr)
+        };
+        auto env = daScriptEnvironment::getBound();
+        if ( bindGlobalProgram ) env->g_Program = program;
+        context->invoke(block, args, nullptr, at);
+        if ( bindGlobalProgram ) env->g_Program.reset();
+    }
+
     void rtti_builtin_compile_ex ( char * modName, char * str, const CodeOfPolicies & cop, bool exportAll,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         str = str ? str : ((char *)"");
@@ -1346,30 +1369,7 @@ namespace das {
         access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
         auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, exportAll, false, cop);
-        if ( program ) {
-            if (program->failed()) {
-                for (auto & err : program->errors) {
-                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-                }
-                string istr = issues.str();
-                vec4f args[3] = {
-                    cast<bool>::from(false),
-                    cast<smart_ptr<Program>>::from(program),
-                    cast<string *>::from(&istr)
-                };
-                context->invoke(block, args, nullptr, at);
-            } else {
-                string istr = issues.str();
-                vec4f args[3] = {
-                    cast<bool>::from(true),
-                    cast<smart_ptr<Program>>::from(program),
-                    cast<string *>::from(&istr)
-                };
-                context->invoke(block, args, nullptr, at);
-            }
-        } else {
-            context->throw_error_at(at, "rtti_compile internal error, something went wrong");
-        }
+        invokeProgramBlock("rtti_compile", program, issues, false, block, context, at);
     }
 
 #if !DAS_NO_FILEIO
@@ -1378,25 +1378,40 @@ namespace das {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
         auto program = parseDaScriptWithPrerequisits(fileName, access, issues, *module_group, cop);
-        if ( program ) {
-            for ( auto & err : program->errors ) {
-                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-            }
-            string istr = issues.str();
-            vec4f args[3] = {
-                cast<bool>::from(!program->failed()),
-                cast<smart_ptr<Program>>::from(program),
-                cast<string *>::from(&istr)
-            };
-            daScriptEnvironment::getBound()->g_Program = program;
-            context->invoke(block, args, nullptr, at);
-            daScriptEnvironment::getBound()->g_Program.reset();
-        } else {
-            context->throw_error_at(at, "rtti_parse_file internal error, something went wrong");
+        invokeProgramBlock("rtti_parse_file", program, issues, true, block, context, at);
+    }
+
+    struct SerializerSlotsHidden {
+        daScriptEnvironment *   env;
+        AstSerializer *         read;
+        AstSerializer *         write;
+        SerializerSlotsHidden () : env(daScriptEnvironment::getBound()), read(env->serializer_read), write(env->serializer_write) {
+            env->serializer_read = nullptr;
+            env->serializer_write = nullptr;
         }
+        ~SerializerSlotsHidden () {
+            env->serializer_read = read;
+            env->serializer_write = write;
+        }
+    };
+
+    void rtti_builtin_parse_file_no_prerequisites ( char * fileName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
+        TextWriter issues;
+        if ( !access ) access = make_smart<FsFileAccess>();
+        ProgramPtr program;
+        {
+            SerializerSlotsHidden hidden;
+            program = parseDaScriptNoInfer(fileName, "", access, issues, *module_group, cop.export_all, false, cop);
+        }
+        invokeProgramBlock("rtti_parse_file_no_prerequisites", program, issues, true, block, context, at);
     }
 #else
     void rtti_builtin_parse_file ( char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies &,
+            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+    }
+    void rtti_builtin_parse_file_no_prerequisites ( char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies &,
             const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
     }
@@ -1405,23 +1420,19 @@ namespace das {
 #if !DAS_NO_FILEIO
     // src/builtin/ARCHITECTURE.md sec.2
     struct ScriptModuleCache {
-        daScriptEnvironment &   env;
-        AstSerializer *         outerRead;
-        AstSerializer *         outerWrite;
-        ModuleFileCache         cache;
-        string                  path;
-        bool                    armed = false;
-        bool                    finished = false;
-        ScriptModuleCache ( const CodeOfPolicies & cop, const char * modName )
-            : env(*daScriptEnvironment::getBound()), outerRead(env.serializer_read), outerWrite(env.serializer_write) {
+        unique_ptr<SerializerSlotsHidden>   hidden;
+        ModuleFileCache                     cache;
+        string                              path;
+        bool                                armed = false;
+        bool                                finished = false;
+        ScriptModuleCache ( const CodeOfPolicies & cop, const char * modName ) {
             if ( !cop.module_cache ) return;
             char exePath[4096];
             size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
             path = ModuleFileCache::defaultPath(modName, exeLen ? string(exePath, exeLen) : string(),
                 ModuleFileCache::embeddedHostOptions(cop));
             armed = true;
-            env.serializer_read = nullptr;
-            env.serializer_write = nullptr;
+            hidden = make_unique<SerializerSlotsHidden>();
             cache.install(path, path, true);
         }
         ModuleFileCache::Result finish () {
@@ -1429,8 +1440,7 @@ namespace das {
             if ( armed && !finished ) {
                 finished = true;
                 res = cache.finish();
-                env.serializer_read = outerRead;
-                env.serializer_write = outerWrite;
+                hidden.reset();
             }
             return res;
         }
@@ -1445,32 +1455,7 @@ namespace das {
         auto program = compileDaScript(modName, access, issues, *module_group, cop);
         auto cres = moduleCache.finish();
         if ( cres.saveFailed ) issues << "ser: cannot write '" << moduleCache.path << "'\n";
-        if ( program ) {
-            if (program->failed()) {
-                for (auto & err : program->errors) {
-                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-                }
-                string istr = issues.str();
-                vec4f args[3] = {
-                    cast<bool>::from(false),
-                    cast<smart_ptr<Program>>::from(program),
-                    cast<string *>::from(&istr)
-                };
-                context->invoke(block, args, nullptr, at);
-            } else {
-                string istr = issues.str();
-                vec4f args[3] = {
-                    cast<bool>::from(true),
-                    cast<smart_ptr<Program>>::from(program),
-                    cast<string *>::from(&istr)
-                };
-                daScriptEnvironment::getBound()->g_Program = program;
-                context->invoke(block, args, nullptr, at);
-                daScriptEnvironment::getBound()->g_Program.reset();
-            }
-        } else {
-            context->throw_error_at(at, "rtti_compile internal error, something went wrong");
-        }
+        invokeProgramBlock("rtti_compile", program, issues, program && !program->failed(), block, context, at);
     }
 #else
     void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies &,
@@ -1552,6 +1537,9 @@ namespace das {
                 ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_parse_file)>(*this, lib, "parse_file",
             SideEffects::modifyExternal, "rtti_builtin_parse_file")
+                ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_parse_file_no_prerequisites)>(*this, lib, "parse_file_no_prerequisites",
+            SideEffects::modifyExternal, "rtti_builtin_parse_file_no_prerequisites")
                 ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_require_module_now)>(*this, lib, "require_module_now",
             SideEffects::modifyExternal, "rtti_builtin_require_module_now")

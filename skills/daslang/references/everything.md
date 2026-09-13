@@ -1008,6 +1008,7 @@ The NETWORK module implements networking facilities including HTTP client/server
 
 ### Handled structures
 
+- `NetworkClient` - The native TCP client behind the `Client` class: one outgoing connection, driven by `client_connect`, `client_tick`, `client_send` and `client_close`.
 - `NetworkServer` - Base implementation of the server.
 
 ### Low level NetworkServer IO
@@ -1019,6 +1020,16 @@ The NETWORK module implements networking facilities including HTTP client/server
 - `server_restore` - Restores a server from an orphaned or interrupted state.
 - `server_send` - Sends data from the server to the connected client.
 - `server_tick` - Processes pending network I/O; must be called periodically for the server to function.
+
+### Low level NetworkClient IO
+
+- `client_close` - Closes the client's socket.
+- `client_connect` - Opens a TCP connection to `host` (a host name, an IPv4 or IPv6 literal, or `localhost`) on `port`, trying each address the name resolves to in turn.
+- `client_is_connected` - Returns true while the client holds an open socket: after a successful `client_connect` and before `client_close` or the peer's close was seen by `client_tick`.
+- `client_send` - Sends `size` bytes from `data` to the peer, looping until every byte is out.
+- `client_tick` - Reads everything the socket holds without blocking, handing each chunk to `onData`.
+- `make_client` - Creates the native client behind a `Client` class instance: stores it in the instance's `_client` field and wires the instance's `onConnect`, `onDisconnect`, `onData`, `onError` and `onLog` methods as the socket's callbacks.
+- `probe_local_port` - Binds a throwaway TCP socket to `port` on every interface, as a listener would, and returns the port it got: the same port when it is free, the one the system picked when `port` is 0, and -1 when the port is taken or `host` (an IPv4 address, or `localhost`) does not resolve.
 
 ## dashv
 
@@ -2159,7 +2170,7 @@ Module strudel_mini
 
 ### Structures
 
-- `Token`
+- `Token` - JSON input stream token.
 
 ### Tokenizer and parser
 
@@ -2853,7 +2864,7 @@ The PEG module is a parser generator based on `Parsing Expression Grammars`_. De
 
 - `get_current_char`
 - `matches`
-- `move`
+- `move` - Moves the smart pointer `src` into the smart pointer `dest`, nullifying the previous contents of `dest` and transferring ownership from `src`.
 - `reached_EOF`
 - `reached_EOL`
 
@@ -3854,6 +3865,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `compile_file` - Compiles a daslang program from a file registered in the given `FileAccess` object, returning a `ProgramPtr` (null on failure).
 - `make_file_access` - Creates and returns a new `FileAccessPtr` (`smart_ptr<FileAccess>`) initialized as a default file-system-backed project.
 - `parse_file` - Parses a daslang file and stops there — no type inference, no optimization, no simulation.
+- `parse_file_no_prerequisites` - Parses one file alone and stops there: no prerequisite walk, no type inference, no macro run, and the host's module-cache stream is hidden for the duration.
 - `require_module_now` - Compiles `module_name` - a `shared` module, named by its file - and its prerequisites into the process at the point of the call, or answers the module already there, under `codeOfPolicies`; a null `fileAccess` means the compiling program's own.
 
 ### Call generation
@@ -3982,7 +3994,7 @@ The AST module provides access to the abstract syntax tree representation of das
 ### Textual descriptions of the objects
 
 - `das_to_string` - Returns the name of the corresponding daslang base type as a string.
-- `describe`
+- `describe` - Returns textual description of the type.
 - `describe_cpp`
 - `describe_expression` - Returns a string description of the Expression matching the corresponding daslang source code.
 - `describe_function` - Returns a human-readable string description of the specified function, including its name, arguments, and return type.
@@ -4827,7 +4839,7 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 
 ### Result inspection
 
-- `describe`
+- `describe` - Returns textual description of the type.
 
 ## ast_used
 
@@ -5890,6 +5902,7 @@ The JSON_BOOST module extends JSON support with operator overloads for convenien
 - `JsonValue const? ==const?[]` - Returns the value of the index in the JSON array, if it exists.
 - `JsonValue? ==const?.` - Returns the value of the key in the JSON object, if it exists.
 - `JsonValue? ==const?[]` - Returns the value of the index in the JSON array, if it exists.
+- `key_exists` - True when `a` is a JSON object carrying `key`; false for null, a non-object, or a missing key - the `?[]` read alone cannot tell a missing key from a null value.
 
 ### Null coalescing operators
 
@@ -5970,6 +5983,7 @@ The JSON-RPC module is a transport-agnostic JSON-RPC 2.0 implementation (https:/
 
 - `error` - Wrap `code` + `message` in a JSON-RPC 2.0 error response envelope.
 - `error_with_data` - Like `error`, but also includes the optional `data` field (spec §5.1).
+- `quoted` - `s` as a JSON string literal, quotes and escapes included.
 - `response` - Wrap `result_json` in a JSON-RPC 2.0 success response envelope.
 - `serialize_id` - Serialize a JSON-RPC id (string/number/null) to its wire form.
 
@@ -6560,7 +6574,7 @@ Monadic `Option<T>` — represents a value that may or may not be present. Funct
 ### Constructors
 
 - `move_some`
-- `none`
+- `none` - Returns true if the array has no elements
 - `some`
 
 ### Queries
@@ -6571,8 +6585,8 @@ Monadic `Option<T>` — represents a value that may or may not be present. Funct
 ### Transforming
 
 - `and_then`
-- `filter`
-- `map`
+- `filter` - iterates over `src` and yields only those elements for which `blk` returns true
+- `map` - iterates over `src` and yields the result of `blk` for each element
 - `or_else`
 - `or_value`
 
@@ -6592,7 +6606,7 @@ Monadic `Option<T>` — represents a value that may or may not be present. Funct
 
 ### Pairing
 
-- `zip`
+- `zip` - Merges two arrays into an array of tuples
 
 ### Operators
 
@@ -6860,7 +6874,7 @@ Monadic `Result<T, E>` — a value (`ok`) or an error (`err`). Functional API fo
 
 ### Structures
 
-- `Result`
+- `Result` - Result of evaluating a debug expression.
 
 ### Constructors
 
@@ -6877,7 +6891,7 @@ Monadic `Result<T, E>` — a value (`ok`) or an error (`err`). Functional API fo
 ### Transforming
 
 - `and_then`
-- `map`
+- `map` - iterates over `src` and yields the result of `blk` for each element
 - `map_err`
 - `or_else`
 

@@ -1873,7 +1873,7 @@ def test_detect_duplicates_missing_corpus(t : T?) {
 [test]
 def test_detect_duplicates_missing_paths(t : T?) {
     t |> run("missing 'paths' arg returns error envelope") <| @(t : T?) {
-        let path = make_temp_corpus_file(t, "\{\"schema_version\":2,\"functions\":[]\}")
+        let path = make_temp_corpus_file(t, "\{\"schema_version\":3,\"functions\":[]\}")
         if (empty(path)) return
         var text : string
         var is_error = false
@@ -1905,7 +1905,7 @@ def test_detect_duplicates_corpus_not_found(t : T?) {
 [test]
 def test_detect_duplicates_empty_corpus(t : T?) {
     t |> run("empty corpus + valid candidate yields envelope with embedded report") <| @(t : T?) {
-        let path = make_temp_corpus_file(t, "\{\"schema_version\":2,\"functions\":[]\}")
+        let path = make_temp_corpus_file(t, "\{\"schema_version\":3,\"functions\":[]\}")
         if (empty(path)) return
         var text : string
         var is_error = false
@@ -2139,9 +2139,9 @@ def test_export_corpus_workers_one(t : T?) {
 
 
 [test]
-def test_export_corpus_workers_compile_failure_still_exports(t : T?) {
-    t |> run("compile error in input still exports the survivors, even with workers") <| @(t : T?) {
-        let paths_body = "{fixture_path("_fixture_error.das")}\n"
+def test_export_corpus_workers_parse_failure_still_exports(t : T?) {
+    t |> run("syntax error in input still exports the survivors, even with workers") <| @(t : T?) {
+        let paths_body = "{fixture_path("_fixture_syntax_error.das")}\n"
         let paths_file = make_temp_paths_file(t, paths_body)
         if (empty(paths_file)) return
         let r = create_temp_file_result("export_corpus_fail", ".json")
@@ -2157,8 +2157,8 @@ def test_export_corpus_workers_compile_failure_still_exports(t : T?) {
             do_export_corpus("", paths_file, out_path, "", "1"),
             text, is_error)
         t |> success(ok, "parse result JSON")
-        t |> success(!is_error, "a compile failure is not a failed run: {text}")
-        t |> success(find(text, "failed to compile") >= 0, "the envelope's stdout carries the failure count: {text}")
+        t |> success(!is_error, "a parse failure is not a failed run: {text}")
+        t |> success(find(text, "failed to parse") >= 0, "the envelope's stdout carries the failure count: {text}")
         t |> success(stat(out_path).is_valid, "the corpus file is written")
         remove(paths_file)
         remove(out_path)
