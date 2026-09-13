@@ -8983,15 +8983,18 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_tile_cols(768l, 64l), 32l)       // ... up to the half-m edge
             t |> equal(cm2_tile_cols(768l, 65l), 128l)      // past it an m column is more than half full
             t |> equal(cm2_tiles(512l, 512l), 16l)                             // the 1B k/v shape: four m columns of four
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l).nsplit, 2l)        // ... alone it fills under half the SMs: split in two
+            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l).nsplit, 1l)        // ... alone it fills under half the SMs, but two chunks never pay: whole
             t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 80l).nsplit, 1l)   // ... beside q and the other kv projection (96 in the group): never
             t |> equal(cm2_split_k(2048l, 512l, 2048l, 128l).nsplit, 1l)       // the 1B q shape: 64 workgroups, no split
             t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 1l)   // the 35B shexp gate beside up (32 in the group): whole, the pair co-runs
             g_gpu.sm_count = 84
             t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 4l, "on 84 SMs the pair engages the split and the role's own 16 set the chunks: five, shed to four by the 256-aligned chunk")
             t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 144l).nsplit, 1l, "k beside q's 128 and v's 16 workgroups: never")
+            t |> equal(cm2_split_k(1152l, 512l, 6912l, 128l).nsplit, 1l, "gemma-3-1b's down (36 m tiles of 84): two chunks would fill the card, and two never pay - whole")
+            t |> equal(cm2_tile_cols(256l, 512l), 32l, "gemma-3-1b's k/v shape (8 m tiles of 84): the s column")
+            t |> equal(cm2_tile_cols(1024l, 512l), 128l, "... its q shape (32 m tiles): m")
             g_gpu.sm_count = 36
-            t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 0l, 0l).nsplit, 2l)     // the sliced down shape from row 0 would split in two
+            t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 0l, 0l).nsplit, 1l)     // the sliced down shape from row 0: 16 s tiles of 36 would take two chunks, which never pay - whole
             t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 480l, 0l).nsplit, 1l)   // ... from row 480 it never splits
             t |> equal(pf_ffn_slice_row0(15l, 16l, 512l, true, true), 480l)   // the last layer on the f16 route starts 32 rows below the window's end
             t |> equal(pf_ffn_slice_row0(15l, 16l, 20l, true, true), 0l)      // a window under 32 rows runs whole

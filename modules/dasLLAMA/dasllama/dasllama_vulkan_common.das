@@ -160,6 +160,9 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     let wtiles = (d + 127l) / 128l
     let tiles_l = wtiles * ((cnt + 255l) / 256l)
     let tiles_m = wtiles * ((cnt + 127l) / 128l)
+    if (tiles_m * 4l <= cores) {   //! a narrow GEMM whose m columns leave three quarters of the card idle takes the s column (gemma-3-1b's k/v: 8 m tiles on 82 SMs, 805 -> 574 us a window)
+        return 32l
+    }
     let waves_l = (tiles_l + cores - 1l) / cores
     let waves_m = (tiles_m + cores - 1l) / cores
     return tiles_m * waves_l > tiles_l * waves_m ? 128l : 256l
@@ -195,6 +198,9 @@ def cm2_split_k(d, cnt, n, tc : int64; sib_tiles : int64 = 0l) : tuple<nsplit : 
             sk = 3l
         }
         sk = min(sk, 8l)
+        if (sk < 3l) {   //! two chunks never pay: the reduce and the halved k loop cost more than the second wave returns (gemma-3-1b's down on 82 SMs: 176 us in two against 157 whole)
+            sk = 1l
+        }
     }
     // 256-align the chunk; shed splits a rounded-up chunk would strand past the end of K
     while (sk > 1l) {

@@ -67,10 +67,10 @@ l tile (256-row columns) and the m tile (128-row columns) each take some number 
 grid runs in whole waves over the device's SM count, so a grid's wave count times that SM count is
 the slots it allocates. The pick takes the tile whose workgroups fill the larger share of its
 allocated slots, the two ratios compared by cross-multiplying; the m tile wins only on a strict
-win, a tie goes to l, whose bigger tile carries twice the arithmetic intensity. Three rules sit
+win, a tie goes to l, whose bigger tile carries twice the arithmetic intensity. Four rules sit
 ahead of the comparison: a region of 64 rows or fewer takes the s tile (32-row columns - the per-op
 tier's MoE expert-bucket shape, where a 512-token window routes ~32 rows to each of 128 experts on
-average), a window of 128 rows or fewer takes m (the l column would run half empty), and a device
+average), a window of 128 rows or fewer takes m (the l column would run half empty), a GEMM whose m columns fill a quarter of the SMs or fewer takes s (gemma-3-1b's k and v, 8 m tiles on 82 SMs: 805 -> 574 us a window), and a device
 that reports no SM count takes l and never splits k. Beyond `(d, cnt, sm_count)` the pick reads only
 two values fixed at init - the served mode and `DASLLAMA_CM2_TILE` - so the class the pipeline binds
 and the tile rule the meta fill writes can never disagree; `cnt` is the AVERAGE rows per active
@@ -111,7 +111,7 @@ its 27 on the RTX 5080 (`cold:k6`'s flush row), and four copies run its m tiles 
 long K (2048 and up), a group that fills at most half the SMs splits each of its roles' reduction
 across f32 partial planes that `SplitKReduce` sums, into as many chunks as fill the device with the
 role alone (SM count over its workgroups); a group filling up to two thirds splits into three; eight
-is the ceiling; a chunk is 256-aligned, and a count whose last chunk would be empty drops by one.
+is the ceiling, three the floor (two chunks never pay: gemma-3-1b's 36-tile down on 82 SMs read 176 us in two against 157 whole - the reduce and the halved k loop cost more than the second wave returns); a chunk is 256-aligned, and a count whose last chunk would be empty drops by one.
 The group is the role's workgroups plus its chain neighbours' - q with k and v, gate with up -
 because the hazard-mask rail lets independent roles co-run, while every split role serializes
 through the one scratch plane (`VHZ_SK`): a group that fills the device runs whole and co-runs; one
