@@ -11,8 +11,9 @@ Three rigs, below, and which one you want depends on the model size:
 Rigs 2 and 3 spawn `benchmarks/lcpp_bench.das` once per cell - that is the only thing that measures
 board performance, and no second harness gets written.
 
-**Reach for rig 1 first.** "Run the oracle" on the big board costs tens of minutes per box; the
-small tier answers the same question - did this change cost performance - in a fraction of it.
+**Reach for rig 1 first.** "Run the oracle" on the big board costs an hour or so per box (a
+60 s cool slot before each of its timed cells alone is most of it); the small tier answers the
+same question - did this change cost performance - in a fraction of it.
 
 ---
 
@@ -125,6 +126,11 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
   restored it; llama.cpp refs never moved). The cv retry cannot catch a stable-low cell - only
   cool-slot entry can. Refs get no cool slot on purpose: they are insensitive, and skipping it
   saves hours.
+- `--oracle-settle <seconds>` (default 60) idles before every timed oracle cell, GPU and CPU
+  legs alike. The previous cell's heat outlives the 12 s reclaim settle: on the M5 Max
+  (`powermetrics --samplers gpu_power,thermal` beside the Metal cells) the GPU still runs a
+  Moderate-pressure 990-1420 MHz instead of 1620 when the next cell starts (tg128 -20%, pp512
+  -33%, a FAIL and a retry slot spent on a cold read); 60 s reads Nominal.
 
 Then merge the per-box stores into the file the site renders:
 

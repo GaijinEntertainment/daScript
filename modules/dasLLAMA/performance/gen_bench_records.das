@@ -111,6 +111,10 @@ struct Args {
     @clarg_doc = "Oracle: seconds to idle before the automatic solo re-run of a FAILED cell, whose verdict then stands (default: 180; 0 disables) — board-tail cells under-read on a hot chip (−6.5%..−34% observed; thermal recovery takes ~3 min), a solo re-run after settle reads true"
     oracle_retry_settle : int = 180
 
+    @clarg_name = "oracle-settle"
+    @clarg_doc = "Oracle: seconds to idle before each timed das cell, every leg (default: 60) — the previous cell's heat throttles the GPU through a 12 s reclaim settle (M5 Max Metal: 990-1420 MHz vs 1620, tg128 −20%, pp512 −33%); 60 s reads Nominal there"
+    oracle_settle : int = 60
+
     @clarg_name = "oracle-allow-crossgen"
     @clarg_doc = "Oracle: compare across sidecar generations anyway (default: a tune_sha mismatch is INCOMPARABLE — the stored mean belongs to different winners — and fails the run)"
     oracle_allow_crossgen : bool
@@ -321,17 +325,11 @@ def private stamp_note(var models : array<BenchModel>; gguf, note : string) {
     }
 }
 
-// idle gap before every pass — lets the kernel finish reclaiming the previous child's map
-def private settle(cfg : Args) {
-    if (cfg.settle > 0) {
-        sleep(uint(cfg.settle * 1000))
-    }
-}
-
-// cool-slot entry for das cells: thermal recovery, not map-reclaim churn — see --das-settle
-def private settle_das(cfg : Args) {
-    if (cfg.das_settle > 0) {
-        sleep(uint(cfg.das_settle * 1000))
+// idle gap before a pass: --settle reclaims the previous child's map, --das-settle and
+// --oracle-settle cool the chip; 0 skips the gap
+def private settle(seconds : int) {
+    if (seconds > 0) {
+        sleep(uint(seconds) * 1000u)
     }
 }
 
@@ -387,7 +385,7 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
         if (attempt == 0) {
             to_log(LOG_WARNING, "gen_bench_records: HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) - cold-map warming suspect, re-running the cell warm\n")
             logger_warning("bench.records", "high variance - warm re-run", JV({"model" => JV(file), "leg" => JV(tag), "cv_pct" => JV(worst * 100.0lf)}))
-            settle(cfg)
+            settle(cfg.settle)
         } else {
             to_log(LOG_WARNING, "gen_bench_records: STILL HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) after a warm re-run - keeping it, treat with suspicion\n")
         }
@@ -674,14 +672,14 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 if (!crossgen_ok(sr, currentSha, cfg.oracle_allow_crossgen, "{m.gguf} das image", board, fails, warns)) {
                     continue
                 }
-                settle(cfg)
+                settle(cfg.oracle_settle)
                 let pic = "{models_dir()}{bench_image_fixture()}"
                 var vi = oracle_image_cell(m.gguf, mm, pic, sr, imgLeg, cfg, threads, cellPath, exe, board)
                 if (vi == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
                     // same contract as the LLM legs below: the solo re-run's verdict stands
                     to_log(LOG_WARNING, "gen_bench_records: ORACLE FAIL {m.gguf} - auto solo re-run after {cfg.oracle_retry_settle}s settle (the retry is the verdict)\n")
                     board |> push("  ^ suspect FAIL - the auto solo re-run below is the verdict")
-                    sleep(uint(cfg.oracle_retry_settle * 1000))
+                    settle(cfg.oracle_retry_settle)
                     vi = oracle_image_cell(m.gguf, mm, pic, sr, imgLeg, cfg, threads, cellPath, exe, board)
                 }
                 if (vi == OracleVerdict.fail) {
@@ -724,13 +722,13 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 if (!crossgen_ok(sr, currentSha, cfg.oracle_allow_crossgen, "{m.gguf} das asr", board, fails, warns)) {
                     continue
                 }
-                settle(cfg)
+                settle(cfg.oracle_settle)
                 var va = oracle_asr_cell(spec, sr, asrLeg, cfg, threads, cellPath, exe, board)
                 if (va == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
                     // same contract as the LLM legs below: the solo re-run's verdict stands
                     to_log(LOG_WARNING, "gen_bench_records: ORACLE FAIL {m.gguf} - auto solo re-run after {cfg.oracle_retry_settle}s settle (the retry is the verdict)\n")
                     board |> push("  ^ suspect FAIL - the auto solo re-run below is the verdict")
-                    sleep(uint(cfg.oracle_retry_settle * 1000))
+                    settle(cfg.oracle_retry_settle)
                     va = oracle_asr_cell(spec, sr, asrLeg, cfg, threads, cellPath, exe, board)
                 }
                 if (va == OracleVerdict.fail) {
@@ -776,14 +774,14 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
                 continue
             }
             oracle_prepare(m.gguf, be, tag, exe, accel, threads, cellPath)
-            settle(cfg)
+            settle(cfg.oracle_settle)
             var v = oracle_cell(m.gguf, be, tag, exe, accel, sr, cfg, threads, cellPath, board)
             if (v == OracleVerdict.fail && cfg.oracle_retry_settle > 0) {
                 // a tail-of-board FAIL is a re-run instruction, never a verdict (BRINGUP): the
                 // solo re-run after settle is automatic, and ITS verdict stands
                 to_log(LOG_WARNING, "gen_bench_records: ORACLE FAIL {m.gguf} - auto solo re-run after {cfg.oracle_retry_settle}s settle (the retry is the verdict)\n")
                 board |> push("  ^ suspect FAIL - the auto solo re-run below is the verdict")
-                sleep(uint(cfg.oracle_retry_settle * 1000))
+                settle(cfg.oracle_retry_settle)
                 v = oracle_cell(m.gguf, be, tag, exe, accel, sr, cfg, threads, cellPath, board)
             }
             if (v == OracleVerdict.fail) {
@@ -1428,27 +1426,27 @@ def main : int {
         // state (27B: das 110.7 soaked vs 138.1 quiet — a phantom 0.91 board red). Refs still
         // run independently of das-cell failures.
         if (doLlm && legMetal) {
-            settle_das(cfg)
+            settle(cfg.das_settle)
             das_cell(file, path, "metal", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
-            settle_das(cfg)
+            settle(cfg.das_settle)
             ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
         if (doLlm && legNeon) {
-            settle_das(cfg)
+            settle(cfg.das_settle)
             das_cell(file, path, "cpu", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
-            settle_das(cfg)
+            settle(cfg.das_settle)
             ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
         if (doLlm && legAmx) {
-            settle_das(cfg)
+            settle(cfg.das_settle)
             das_cell(file, path, "cpu", exe, true, cfg, threads, cellPath, ent.note, store, models, failed)
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
-            settle_das(cfg)
+            settle(cfg.das_settle)
             ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
         // the image-chat legs of a vision decoder (an mmproj companion) — same
@@ -1461,22 +1459,22 @@ def main : int {
             // CPU build (kernel vs kernel — stock ggml op-offloads to Metal even at -ngl 0);
             // amx vs stock -ngl 0 --no-op-offload
             if (legMetal) {
-                settle_das(cfg)
+                settle(cfg.das_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "metal")
-                settle_das(cfg)
+                settle(cfg.das_settle)
                 image_ref_pass(file, path, mmPath, picPath, stockMtmd, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
             if (legNeon) {
-                settle_das(cfg)
+                settle(cfg.das_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed)
-                settle_das(cfg)
+                settle(cfg.das_settle)
                 let cpuMtmd = mtmd_bin()
                 image_ref_pass(file, path, mmPath, picPath, stat(cpuMtmd).is_valid ? cpuMtmd : "", "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
             if (legAmx) {
-                settle_das(cfg)
+                settle(cfg.das_settle)
                 image_das_cell(file, path, mmPath, picPath, cfg, threads, cellPath, ent.note, store, exe, models, failed, "accel")
-                settle_das(cfg)
+                settle(cfg.das_settle)
                 image_ref_pass(file, path, mmPath, picPath, stockMtmd, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             }
         }
@@ -1507,15 +1505,15 @@ def main : int {
                 to_log(LOG_INFO, "gen_bench_records: SKIP {spec.display} - not in --asr-tier {cfg.asr_tier}\n")
                 continue
             }
-            settle_das(cfg)
+            settle(cfg.das_settle)
             asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed)
             static_if (typeinfo builtin_module_exists(das_accelerate)) {
-                settle_das(cfg)
+                settle(cfg.das_settle)
                 asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, "accel")
             }
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 if (is_metal_served_family(spec)) {   // GPU-served families only: the anti-sandbag would refuse the rest
-                    settle_das(cfg)
+                    settle(cfg.das_settle)
                     asr_das_cell(spec, cfg, threads, cellPath, store, exe, models, failed, "metal")
                 }
             }
@@ -1523,11 +1521,11 @@ def main : int {
                 if (!key_exists(toolVersions, rf.tool)) {
                     toolVersions |> insert(rf.tool, asr_ref_available(rf.tool) ? asr_tool_versions(rf.tool) : "")
                 }
-                settle(cfg)
+                settle(cfg.settle)
                 asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed)
                 static_if (typeinfo builtin_module_exists(das_metal)) {
                     if (asr_gpu_pair_tool(rf.tool) && is_metal_served_family(spec)) {
-                        settle(cfg)
+                        settle(cfg.settle)
                         asr_ref_pass(spec, rf, toolVersions?[rf.tool] ?? "", cfg, threads, hw, box, date, store, models, failed, true)
                     }
                 }
