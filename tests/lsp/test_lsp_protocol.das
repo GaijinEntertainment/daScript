@@ -336,8 +336,9 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 t |> equal(diagnostics_of(pub2), 0)
 
                 // an edit kills the compile in flight for its file: broken, then clean again
-                // once the broken compile has started - the next publish is the clean one, the
-                // stale buffer's never lands
+                // once the broken compile has started. A broken publish may land before the
+                // clean edit is received (the compile can finish inside the gap on a fast box);
+                // the clean publish lands, and nothing stale lands after it
                 write_frame(w, sprint_json(DidChangeMsg(params <- DidChangeParams(
                     textDocument = VersionedDoc(uri = uri, version = 3),
                     contentChanges <- [ContentChange(text = broken)])), false))
@@ -345,16 +346,32 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 write_frame(w, sprint_json(DidChangeMsg(params <- DidChangeParams(
                     textDocument = VersionedDoc(uri = uri, version = 4),
                     contentChanges <- [ContentChange(text = clean)])), false))
-                let pub3 = read_until(r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
+                var early = 0
+                let pub3 = read_until(r) $(js) {
+                    return false if ((js?["method"] ?? "") != "textDocument/publishDiagnostics")
+                    if (diagnostics_of(js) != 0) {
+                        early++
+                        return false
+                    }
+                    return true
+                }
                 t |> success(pub3 != null, "publishDiagnostics after the superseding didChange")
-                t |> equal(diagnostics_of(pub3), 0, "the superseded broken compile never published")
+                t |> success(early <= 1, "at most the broken compile that finished before the clean edit published")
 
-                // definition at the call site resolves to the def line
+                // definition at the call site resolves to the def line; a stale publish arriving
+                // after the clean one would show up here
                 write_frame(w, sprint_json(DefinitionMsg(id = 2, params = CursorParams(
                     textDocument = DocId(uri = uri),
                     position = Position0(line = call_line0, character = 4))), false))
-                let def_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 2
+                var stale = 0
+                let def_resp = read_until(r) $(js) {
+                    if ((js?["method"] ?? "") == "textDocument/publishDiagnostics" && diagnostics_of(js) != 0) {
+                        stale++
+                    }
+                    return (js?["id"] ?? -1) == 2
+                }
                 t |> success(def_resp != null, "definition response received")
+                t |> equal(stale, 0, "no stale publish after the clean one")
                 let loc0 = def_resp?["result"]?[0]
                 t |> equal(uri_for_compare(loc0?["uri"] ?? ""), uri_for_compare(uri))
                 t |> equal(loc0?["range"]?["start"]?["line"] ?? -1, def_line0)
