@@ -432,7 +432,10 @@ class VkDispatch : AstStructureAnnotation {
         if (ord == 0) {
             var body : array<ExpressionPtr>
             var sv = new Variable(at = at, name := "set_", _type = new TypeDecl(at = at, baseType = Type.autoinfer))
-            sv.init = mk_call1(at, "vkd_alloc_set", gname)
+            var ac = new ExprCall(at = at, name := "vkd_alloc_set")   //! the family's name rides along, so a set asked before the class's ensure names its class
+            ac.arguments |> emplace_new <| mk_gvar(at, gname)
+            ac.arguments |> emplace_new <| new ExprConstString(at = at, value := family)
+            sv.init = ac
             var letd = new ExprLet(at = at)
             letd.variables |> emplace(sv)
             body |> push(letd)

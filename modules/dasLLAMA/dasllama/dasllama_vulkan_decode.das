@@ -199,6 +199,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
         L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on()
         if (L.gu_on) {
+            verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")   //! the recurrent layers' triple asks here too, past the attention layer's own ensure list
             L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
                 fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim, (dim / 32l) * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
                 fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))

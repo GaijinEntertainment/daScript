@@ -1408,3 +1408,19 @@ module) is independent and can land any time - it is pure structure.
     shaders, so those kernels are not the reference's) reads its small decode ops at 2.5 to 4.2 us
     each in isolation - the same class as ours - and its q8 mat-vecs at our rates; the logger fences
     every op, so what their chained gap costs it cannot say.
+52. **`DASLLAMA_CM2_TILE=256` hangs the 26B IQ3_XXS load on the RunPod RTX PRO 4500.** The forced l
+    column runs the resident upload's first dispatches into a fence the GPU never signals (the host
+    spins, the device idles; killed after fourteen minutes), where the unforced pick and the
+    `DASLLAMA_VK_F16_FFN=0` arm load in a minute. A forced tile reaches shapes the pick never hands
+    the l column - a region under its 256 rows, a plane the s rule owns - and one of them faults
+    silently. The knob is an A/B instrument, so the fix is a refusal: a forced column the shape
+    cannot fill falls back to the pick, and the load says so.
+53. **The decode callbacks still carry work llama.cpp b10660's do not.** Every kq block struct
+    declares its lanes `int16`, so each 16-bit load pays a sign extend and a mask (`uint(int(x)) &
+    0xFFFF`, two ops an element on k6, three on iq2s across all twelve leaves) where a `uint16`
+    member would load clean; the iq2s signs are two negate-selects where an XOR of the sign bit
+    or their `1 - (2 & ...)` multiply is one; and the expert gate and up run as two GEMMs over the
+    same gathered rows where llama.cpp runs one fused `[gate | up]` GEMM at 28 TFLOP/s against our
+    two at 18 to 20 (the 26B's expert gate 20.5 ms a window, its up 20.9, its down 14.5, against
+    their 33.4 for the pair and 16.3 for the down - the pair is the 26B's remaining prefill lever,
+    with the tile picks and the k6 cache landed).

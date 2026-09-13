@@ -3031,9 +3031,11 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
     g_pipe_names[pk] = kernel
 }
 
-def vkd_alloc_set(c : VkdClass) : VkDescriptorSet {
+def vkd_alloc_set(c : VkdClass; family : string) : VkDescriptorSet {
     //! a set before the class's ensure has no layout: the loader would fault on the null handle, so the class names itself first
-    verify(intptr(boost_value_to_vk(c.set_layout)) != 0ul, "dasLLAMA vulkan tier: a descriptor set asked of a class whose pipeline was never ensured - call its ensure_ first")
+    if (intptr(boost_value_to_vk(c.set_layout)) == 0ul) {
+        panic("dasLLAMA vulkan tier: a descriptor set asked of {family} before its pipeline was ensured - call ensure_{family} first")
+    }
     return alloc_set_from_chain(boost_value_to_vk(c.set_layout))
 }
 
