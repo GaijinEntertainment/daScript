@@ -321,14 +321,15 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         // attn (class): per-token cnt rides TokMeta, the scale rides the push
         let partbytes = g_rd.n_heads * DA_NSPLIT_MAX * (g_rd.head_size + 2l) * 4l
-        let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev)
-        let asizes = fixed_array(qbytes, mirbytes, mirbytes, qd * 4l, 16l, partbytes)
-        let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT)   //! the partials ride the attention-out bit: written by the pass, read by the combine that writes the row
+        //! the partials ride the attention-out bit (written by the pass, read by the combine that writes the row); the folded requant lands in the wo feed's aq/as
+        let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev)
+        let asizes = fixed_array(qbytes, mirbytes, mirbytes, qd * 4l, 16l, partbytes, qd, (qd / 32l) * 4l)
+        let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ)
         L.s_attn = kv16 ? set_da_attn_f16_cls(abufs, asizes, abits) : set_da_attn_cls(abufs, asizes, abits)
         if (g_rd.attn_nsplit > 1l) {
             verify(ensure_da_attn_comb_cls(), "vk decode: the split attention's combine class rail must engage on a live device")
-            L.s_attn_comb = set_da_attn_comb_cls(fixed_array(g_rd.q_dev, g_rd.attn_part_dev, g_rd.attn_dev),
-                fixed_array(qbytes, partbytes, qd * 4l), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT))
+            L.s_attn_comb = set_da_attn_comb_cls(fixed_array(g_rd.q_dev, g_rd.attn_part_dev, g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
+                fixed_array(qbytes, partbytes, qd * 4l, qd, (qd / 32l) * 4l), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT, VHZ_AQ, VHZ_AQ))
         }
         // quantize attn -> aq/as
         L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
@@ -968,6 +969,13 @@ def private rd_ensure_fused_sets {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+//! the attention row's requant form the pass folds into its store: Q8_0 blocks on a q8 wo plane, Q8_K superblocks on
+//! a K-quant plane where the head is a multiple of 256 (gemma's 256 and 512), none where the head is narrower
+def private rd_attn_rqk(L : RLayer) : uint {
+    if (!kq_sb(L.fo)) return DA_RQ_Q8
+    return L.hs % 256l == 0l ? DA_RQ_Q8K : DA_RQ_NONE
+}
+
 def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin : int64) {
     let dim = g_rd.dim
     let qd = L.qd
@@ -1034,9 +1042,10 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         rd_ts(raw, "a:rope")
     }
     let nsplit = g_rd.attn_nsplit
+    let rqk = rd_attn_rqk(L)
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
-        window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit))
+        window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk)
     if (g_rd.kv16) {
         enc_da_attn_f16_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
     } else {
@@ -1047,12 +1056,14 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         enc_da_attn_comb_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads)
         rd_ts(raw, "a:attc")
     }
-    if (kq_sb(L.fo)) {
-        enc_cls_q8k_rq(raw, h, L.s_quant_at, pc_rq_qd_k, rqwg_qd_k)
-    } else {
-        enc_cls_dn_rq(raw, h, L.s_quant_at, pc_rq_qd, rqwg_qd)
+    if (rqk == DA_RQ_NONE) {   //! a head the fold cannot block (a K-quant wo plane under a head off 256): the separate requant
+        if (kq_sb(L.fo)) {
+            enc_cls_q8k_rq(raw, h, L.s_quant_at, pc_rq_qd_k, rqwg_qd_k)
+        } else {
+            enc_cls_dn_rq(raw, h, L.s_quant_at, pc_rq_qd, rqwg_qd)
+        }
+        rd_ts(raw, "a:rq_a")
     }
-    rd_ts(raw, "a:rq_a")
     var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u)
     gemv_enc(L.fo, raw, h, L.s_wo, pcw, dim)
     rd_ts(raw, "a:wo")
@@ -2788,10 +2799,10 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
             fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 16l, bbytes),
             fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u))
     }
-    L.s_attn = set_da_attn_f16_cls(   //! the unsplit pass: the out rows fill the partials binding, never read
-        fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf, g_gpu.dat_attn_dev),
-        fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, 16l, qd * 4l),
-        fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT))
+    L.s_attn = set_da_attn_f16_cls(   //! the unsplit, unfolded pass: the out rows fill the partials and quant bindings, never read or written
+        fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf, g_gpu.dat_attn_dev, g_gpu.dat_attn_dev, g_gpu.dat_attn_dev),
+        fixed_array(qd * 4l, mirbytes, mirbytes, qd * 4l, 16l, qd * 4l, qd * 4l, qd * 4l),
+        fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_ATT, VHZ_ATT))
     L.s_rq = set_rq_cls(fixed_array(g_gpu.dat_attn_dev, g_gpu.dat_aq_dev, g_gpu.dat_as_dev),
         fixed_array(qd * 4l, qd, (qd / 32l) * 4l),
         fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ))
@@ -2900,7 +2911,7 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
             neox = neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l), layerbase = 0u, boff = 0u, hasb = hb)
         enc_rope_kv_f16_cls(raw, h, L.s_qkr, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
     }
-    var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale)
+    var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
     enc_da_attn_f16_cls(raw, h, L.s_attn, pca, n_heads)
     rq_enc(raw, h, L.s_rq, fo, qd)
     var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u)

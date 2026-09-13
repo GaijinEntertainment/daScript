@@ -73,28 +73,27 @@ def private q8k_amax5(m0 : float) : float {
     return m
 }
 
-// the workgroup-rms machinery the row kernels share (one wg reduces one row)
+// the workgroup-rms machinery the row kernels share (one wg reduces one row): one barrier a reduce -
+// every thread sums the subgroup partials itself in the same order, so every thread holds the same
+// inverse; the two partial slots alternate between consecutive reduces, so a thread still reading one
+// reduce's partials never races the next reduce's writes
 class RmsWgBase {
-    @workgroup part : float[64]   // one partial per subgroup (subgroupSize >= 4 floor)
-    @workgroup inv1 : float[1]
+    @workgroup part : float[128]   //! two slots of 64 partials, one per subgroup (subgroupSize >= 4 floor)
 
-    def wg_rms_inv(ss0 : float; n : uint; eps : float) : float {
+    //! `slot` alternates 0 / 1 between consecutive reduces of one kernel
+    def wg_rms_inv(ss0 : float; n : uint; eps : float; slot : uint) : float {
         let ss = subgroupAdd(ss0)
         if (gl_SubgroupInvocationID == 0u) {
-            part[gl_SubgroupID] = ss
+            part[slot * 64u + gl_SubgroupID] = ss
         }
         barrier()
-        if (gl_LocalInvocationID.x == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += part[sgi]
-                sgi++
-            }
-            inv1[0u] = 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
+        var tot = 0.0
+        var sgi = 0u
+        while (sgi < gl_NumSubgroups) {
+            tot += part[slot * 64u + sgi]
+            sgi++
         }
-        barrier()
-        return inv1[0u]
+        return 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
     }
 }
 
@@ -120,7 +119,7 @@ class ArBase : RmsWgBase {
                 sa += a * a
                 j += 256u
             }
-            ainv = wg_rms_inv(sa, pa.dim, pa.eps)
+            ainv = wg_rms_inv(sa, pa.dim, pa.eps, 0u)
         }
         var ss = 0.0
         var k = gl_LocalInvocationID.x
@@ -135,8 +134,8 @@ class ArBase : RmsWgBase {
         return ss
     }
 
-    // workgroup-wide rms inverse from per-thread sum-of-squares partials
-    def rms_inv(ss0 : float) : float => wg_rms_inv(ss0, pa.dim, pa.eps)
+    // workgroup-wide rms inverse from per-thread sum-of-squares partials (slot 1: the add partner's norm took slot 0)
+    def rms_inv(ss0 : float) : float => wg_rms_inv(ss0, pa.dim, pa.eps, 1u)
 }
 
 // ar_add_rms_b's class twin: one workgroup per row, the normed output to its own member
@@ -423,7 +422,7 @@ class ArCombG4Base : ArBase {
             sr += r * r
             k += 256u
         }
-        let inv_r = wg_rms_inv(sr, pa.dim, pa.eps)
+        let inv_r = wg_rms_inv(sr, pa.dim, pa.eps, 0u)
         var sd = 0.0
         k = gl_LocalInvocationID.x
         while (k < pa.dim) {
@@ -431,7 +430,7 @@ class ArCombG4Base : ArBase {
             sd += a * a
             k += 256u
         }
-        let inv_d = wg_rms_inv(sd, pa.dim, pa.eps)
+        let inv_d = wg_rms_inv(sd, pa.dim, pa.eps, 1u)
         var sc = 0.0
         k = gl_LocalInvocationID.x
         while (k < pa.dim) {
@@ -440,7 +439,7 @@ class ArCombG4Base : ArBase {
             sc += c * c
             k += 256u
         }
-        let inv_c = wg_rms_inv(sc, pa.dim, pa.eps)
+        let inv_c = wg_rms_inv(sc, pa.dim, pa.eps, 0u)   //! slot 0 again: the slot-1 reduce between sits every thread past this slot's readers
         var ss = 0.0
         k = gl_LocalInvocationID.x
         while (k < pa.dim) {
@@ -641,7 +640,8 @@ class Q8ActRq : ActRqMembers {
         let b = sg * 4u + lane / 8u
         if (b < pa.nblk) {
             let eb = sg * 128u + lane * 4u
-            let ub = pa.ustride != 0u ? pa.ubase + (eb / pa.ulen) * pa.ustride + eb % pa.ulen : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
+            let ul = max(pa.ulen, 1u)   //! the select evaluates both arms: the flat form's ulen is 0, and a modulo by it is a fault under GPU-assisted validation
+            let ub = pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
             let v0 = act_mul(gate[eb], up[ub])
             let v1 = act_mul(gate[eb + 1u], up[ub + 1u])
             let v2 = act_mul(gate[eb + 2u], up[ub + 2u])
@@ -2713,17 +2713,31 @@ struct FaCm2Args {
     qstride : uint  // the q panel's row stride when it is not qd (a gated q plane: [q | gate] per head); 0 = qd
     qhs : uint      // the q panel's per-head stride (2 x hs on a gated plane); 0 = hs
     window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
+    ksplit : uint   //! the key range of a (head, q tile) cut across this many workgroups, each storing a partial for `FaCm2Comb`; 0 or 1 = one workgroup finishes the tile
+    gated : uint    //! the combine's gate: multiply the sigmoid of the head's gate half into the row (the pass reads its GATED stamp instead)
+    hs : uint       //! the head width, for the combine (the pass reads its HS stamp)
 }
+
+//! a flash partial's rows in the partials plane: the 64-row O tile (HS wide) in the O region, the 64-row (max | denom)
+//! tile in the ML region that follows every O tile - the max tile at column 0, the denom tile at column 64, each
+//! BC wide (64 on the h64 stamp, 32 above), the row 128 wide
+let FA_ML_COLS = 128u
+let FA_ML_DENOM = 64u
+//! the partials plane's O region: `ntiles` (head x q tile x split) tiles of 64 x hs floats; the ML region follows it
+def fa_part_ml_base(ntiles, hs : uint) : uint => ntiles * 64u * hs
 
 // The cm2 flash pass over the f16 K/V shadows: ONE class template over the head size. The head
 // template sizes the eight coopmat typedefs: QACC/QA the q and o tiles (64 x HS), SACC/PA the
 // score tiles (64 x BC), KB/VB the K^T and V steps, ONE the rowsum ones-matrix, OF the f16 store.
+// Split across keys (`ksplit`), a workgroup runs its piece of the key range and stores its
+// unnormalized O tile and its (max | denom) rows into the partials plane for the combine.
 [ |> template_struct_instance]
 class template FaCm2T {
     @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
     @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
     @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
+    @ssbo @binding = 4 part : array<float>       //! the split form's partials; unsplit, any buffer (unwritten)
     @push_constant pa : FaCm2Args
     @template_constant HS : uint = 64u           // the head width
     @template_constant BC : uint = 64u           // the K/V step: 64 at hs 64, 32 above (the head-size cut: K^T, V and the softmax state at 32 columns)
@@ -2733,8 +2747,11 @@ class template FaCm2T {
     [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qtiles = (pa.rows + 63u) / 64u
-        let h = gl_WorkGroupID.x / qtiles
-        let q0 = (gl_WorkGroupID.x % qtiles) * 64u
+        let nsplit = max(pa.ksplit, 1u)
+        let h = gl_WorkGroupID.x / (qtiles * nsplit)
+        let qt = (gl_WorkGroupID.x / nsplit) % qtiles
+        let sp = gl_WorkGroupID.x % nsplit
+        let q0 = qt * 64u
         let kvh = h / pa.kv_mul
         let kvlen = pa.w0 + pa.rows
         let qstride = pa.qstride == 0u ? pa.qd : pa.qstride
@@ -2762,9 +2779,15 @@ class template FaCm2T {
         coopmatFill(mrow, -1.7e38)
         var lrow : SACC
         var o : QACC
-        let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        var kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
         // a sliding layer's first step: the step below the tile's first query's window start
         var j = (pa.window != 0u && pa.w0 + q0 > pa.window) ? ((pa.w0 + q0 - pa.window) / BC) * BC : 0u
+        if (nsplit > 1u) {   // this workgroup's piece of the tile's key range, in whole steps (a piece past the end is empty)
+            let per = ((kmax - j + nsplit - 1u) / nsplit + BC - 1u) / BC * BC
+            let kend = min(kmax, j + (sp + 1u) * per)
+            j = min(kmax, j + sp * per)
+            kmax = kend
+        }
         while (j < kmax) {
             var s : SACC
             var kt : KB
@@ -2796,6 +2819,23 @@ class template FaCm2T {
             coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, BC, kvh * HS, HS)
             o = coopmatMulAdd(pf, vt, o)                                // O = eMdiag*O + P @ V
             j += BC
+        }
+        if (nsplit > 1u) {   // the piece's partial: the unnormalized O tile, then its (max | denom) rows
+            let ntiles = (pa.qd / HS) * qtiles * nsplit
+            let pr = (h * qtiles + qt) * nsplit + sp
+            var tlp : tensorLayout2D
+            tensorLayoutCreate(tlp)
+            tensorLayoutSetDimension(tlp, ntiles * 64u, HS)
+            tensorLayoutSetStride(tlp, HS, 1u)
+            coopmatStoreTensor(o, part, 0u, tlp, pr * 64u, 64u, 0u, HS)
+            var tlm : tensorLayout2D
+            tensorLayoutCreate(tlm)
+            tensorLayoutSetDimension(tlm, ntiles * 64u, FA_ML_COLS)
+            tensorLayoutSetStride(tlm, FA_ML_COLS, 1u)
+            let mlb = fa_part_ml_base(ntiles, HS)
+            coopmatStoreTensor(mrow, part, mlb, tlm, pr * 64u, 64u, 0u, BC)
+            coopmatStoreTensor(lrow, part, mlb, tlm, pr * 64u, 64u, FA_ML_DENOM, BC)
+            return
         }
         var ld : QACC
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
@@ -2932,6 +2972,90 @@ class FaCm2H512 : FaCm2H512T {
 
 [vk_dispatch(name = "fa_cm2_h512_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H512F16 : FaCm2H512T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
+//! the split flash pass's combine: one workgroup a (head, q tile), the split partials aligned by their row maxes,
+//! summed, normalized, gated where the head carries a gate half, and stored as the tile's rows (the partials
+//! plane's layout is the pass's: O tiles, then (max | denom) tiles)
+[ |> template_struct_instance]
+class template FaCm2CombT {
+    @ssbo @binding = 0 qpanel : array<float>   //! the q rows, for the gate half
+    @ssbo @binding = 1 part : array<float>
+    @ssbo @binding = 2 outp : array<OT>        //! attention out plane (rows x qd)
+    @push_constant pa : FaCm2Args
+    @template_constant OUT16 : bool = false
+    @workgroup wm : float[64]   //! the tile's aligned row maxes
+    @workgroup wl : float[64]   //! ... and denominators
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
+    def run {
+        let hs = pa.hs
+        let qtiles = (pa.rows + 63u) / 64u
+        let nsplit = max(pa.ksplit, 1u)
+        let h = gl_WorkGroupID.x / qtiles
+        let qt = gl_WorkGroupID.x % qtiles
+        let tid = gl_LocalInvocationID.x
+        let hsz = pa.qhs == 0u ? hs : pa.qhs
+        let ntiles = (pa.qd / hs) * qtiles * nsplit
+        let mlb = fa_part_ml_base(ntiles, hs)
+        let pr0 = (h * qtiles + qt) * nsplit
+        if (tid < 64u) {   // row tid's max and denom over the splits
+            var m = -1.7e38
+            var s = 0u
+            while (s < nsplit) {
+                m = max(m, part[mlb + ((pr0 + s) * 64u + tid) * FA_ML_COLS])
+                s++
+            }
+            var l = 0.0
+            s = 0u
+            while (s < nsplit) {
+                let mb = mlb + ((pr0 + s) * 64u + tid) * FA_ML_COLS
+                l += part[mb + FA_ML_DENOM] * exp(part[mb] - m)
+                s++
+            }
+            wm[tid] = m
+            wl[tid] = l
+        }
+        barrier()
+        let qstride = pa.qstride == 0u ? pa.qd : pa.qstride
+        var idx = tid
+        while (idx < 64u * hs) {   // the tile's (row, dim) pairs, dims fastest
+            let r = idx / hs
+            let d = idx % hs
+            let row = qt * 64u + r
+            if (row < pa.rows) {
+                var acc = 0.0
+                var s = 0u
+                while (s < nsplit) {
+                    let pr = pr0 + s
+                    let mv = part[mlb + (pr * 64u + r) * FA_ML_COLS]
+                    acc += part[(pr * 64u + r) * hs + d] * exp(mv - wm[r])
+                    s++
+                }
+                var o = acc / wl[r]
+                if (pa.gated != 0u) {
+                    o = o / (1.0 + exp(-qpanel[row * qstride + h * hsz + hs + d]))
+                }
+                static_if (OUT16) {
+                    outp[row * pa.qd + h * hs + d] = float16(o)
+                } else {
+                    outp[row * pa.qd + h * hs + d] = o
+                }
+            }
+            idx += 256u
+        }
+    }
+}
+
+[vk_dispatch(name = "fa_cm2_comb_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2Comb : FaCm2CombT {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_cm2_comb_f16_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2CombF16 : FaCm2CombT {
     typedef OT = float16
     override OUT16 = true
 }
@@ -3328,10 +3452,18 @@ struct DaAttnArgs {
     window : uint   //! a sliding layer attends the last `window` positions of the cnt; 0 = every position
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
     nsplit : uint   //! the key range split across this many workgroups a head, each leaving a (max, denom, acc) partial for `DaAttnComb`; 0 or 1 = one workgroup a head stores y itself
+    rqk : uint      //! the row's requant folded into the store: 0 = Q8_0 blocks of 32, 1 = Q8_K superblocks of 256 (a head a multiple of 256), 2 = none (the row alone)
 }
 
 //! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
 def da_attn_part_stride(hs : uint) : uint => hs + 2u
+
+let DA_RQ_Q8 = 0u    //! `DaAttnArgs.rqk`: the wo plane reads Q8_0 activations
+let DA_RQ_Q8K = 1u   //! ... Q8_K activations
+let DA_RQ_NONE = 2u  //! ... no fold: a separate requant serves (or nothing reads the quants)
+
+//! the Q8_0 block scale of a head row's dim: the 32-lane group's amax over 127 (the group is the block on a 32- or 64-wide subgroup)
+def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 
 // decode attention (one query row): a wg per (head, key split), GQA, KT-typed K/V mirror. Online softmax
 // over 256-position chunks (running max/denom, alpha-rescaled V accumulators) — any cnt works. The
@@ -3347,11 +3479,72 @@ class template DaAttnT {
     @ssbo @binding = 3 y : array<float>      // attention out rows
     @ssbo @binding = 4 tok : array<TokMeta>  // the shared per-token block (element 0)
     @ssbo @binding = 5 part : array<float>   //! the split form's partials [head x split x (hs + 2)]; unsplit, any buffer (unread)
+    @ssbo @binding = 6 aq : array<int8>      //! the row's quants when `rqk` folds the requant (the wo plane's feed); else any buffer (unwritten)
+    @ssbo @binding = 7 aqs : array<float>    //! ... and its block scales
     @push_constant pa : DaAttnArgs
     @workgroup qrow : float[512]   // this head's query row (hs <= 512)
     @workgroup sc : float[256]     // chunk scores, then the cross-group V partial reduce
     @workgroup sgp : float[64]     // per-subgroup partials
     @workgroup ml : float[2]       // [0] = running max, [1] = running softmax denom
+
+    //! the finished row (o at dim `d` = tid, o2 at tid + 256 on a wide head) stored, and its requant when the push folds it:
+    //! Q8_0 by the 32-lane group's amax, Q8_K by the workgroup's (one superblock a 256-wide head, two on a 512)
+    def store_row(h, hs, d : uint; o, o2 : float; wide : bool) {
+        let live = d < hs
+        if (live) {
+            y[h * hs + d] = o
+        }
+        if (wide) {
+            y[h * hs + d + 256u] = o2
+        }
+        if (pa.rqk == DA_RQ_Q8) {
+            if (live) {   // a 32-aligned head keeps every lane of a block live together
+                let dq = da_q8_blk_d(o)
+                if ((d & 31u) == 0u) {
+                    aqs[(h * hs + d) >> 5u] = dq
+                }
+                aq[h * hs + d] = q8_quant1(o, dq != 0.0 ? 1.0 / dq : 0.0)
+            }
+            if (wide) {
+                let dq2 = da_q8_blk_d(o2)
+                if ((d & 31u) == 0u) {
+                    aqs[(h * hs + d + 256u) >> 5u] = dq2
+                }
+                aq[h * hs + d + 256u] = q8_quant1(o2, dq2 != 0.0 ? 1.0 / dq2 : 0.0)
+            }
+        } elif (pa.rqk == DA_RQ_Q8K) {   // every thread of the workgroup takes part: the head is 256 or 512 wide
+            let m1 = subgroupMax(abs(o))
+            let m2 = subgroupMax(wide ? abs(o2) : 0.0)
+            if (gl_SubgroupInvocationID == 0u) {
+                sgp[gl_SubgroupID] = m1
+                sgp[32u + gl_SubgroupID] = m2
+            }
+            barrier()
+            var mx1 = 0.0
+            var mx2 = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                mx1 = max(mx1, sgp[sgi])
+                mx2 = max(mx2, sgp[32u + sgi])
+                sgi++
+            }
+            let d1 = mx1 / 127.0
+            let id1 = d1 != 0.0 ? 1.0 / d1 : 0.0
+            let b1 = (h * hs) >> 8u
+            if (d == 0u) {
+                aqs[b1] = d1
+            }
+            aq[h * hs + d] = q8_quant1(o, id1)
+            if (wide) {
+                let d2 = mx2 / 127.0
+                let id2 = d2 != 0.0 ? 1.0 / d2 : 0.0
+                if (d == 0u) {
+                    aqs[b1 + 1u] = d2
+                }
+                aq[h * hs + d + 256u] = q8_quant1(o2, id2)
+            }
+        }
+    }
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
@@ -3480,36 +3673,35 @@ class template DaAttnT {
                 o = o / (1.0 + exp(-q[h * qstride + hs + tid]))
                 o2 = o2 / (1.0 + exp(-q[h * qstride + hs + tid + 256u]))
             }
-            y[h * hs + tid] = o
-            y[h * hs + tid + 256u] = o2
+            store_row(h, hs, tid, o, o2, true)
             return
         }
         // cross-group reduce (sc reused as the partial slab: slot tid == g * hs + c)
         sc[tid] = acc
         barrier()
+        var tot = 0.0
         if (tid < hs) {
-            var tot = 0.0
             var gg = 0u
             while (gg < npart) {
                 tot += sc[gg * hs + tid]
                 gg++
             }
-            if (nsplit > 1u) {
-                if (tid == 0u) {
-                    part[pb] = mrun
-                    part[pb + 1u] = ml[1u]
-                }
-                part[pb + 2u + tid] = tot
-                return
-            }
-            let linv = 1.0 / ml[1u]
-            var o = tot * linv
-            if (pa.gated != 0u) {
-                let gt = q[h * qstride + hs + tid]
-                o = o / (1.0 + exp(-gt))
-            }
-            y[h * hs + tid] = o
         }
+        if (nsplit > 1u) {
+            if (tid == 0u) {
+                part[pb] = mrun
+                part[pb + 1u] = ml[1u]
+            }
+            if (tid < hs) {
+                part[pb + 2u + tid] = tot
+            }
+            return
+        }
+        var o = tot / ml[1u]
+        if (pa.gated != 0u && tid < hs) {
+            o = o / (1.0 + exp(-q[h * qstride + hs + tid]))
+        }
+        store_row(h, hs, tid, o, 0.0, false)
     }
 }
 
@@ -3531,11 +3723,30 @@ class DaAttnComb {
     @ssbo @binding = 0 q : array<float>      //! the query rows, for the gate half of a gated head
     @ssbo @binding = 1 part : array<float>   //! [head x split x (hs + 2)]
     @ssbo @binding = 2 y : array<float>      //! attention out rows
+    @ssbo @binding = 3 aq : array<int8>      //! the row's quants when `rqk` folds the requant; else any buffer (unwritten)
+    @ssbo @binding = 4 aqs : array<float>    //! ... and its block scales
     @push_constant pa : DaAttnArgs
     @workgroup wsum : float[2]   //! [0] = the aligned max, [1] = the aligned denom
+    @workgroup sgp : float[64]   //! the Q8_K fold's per-subgroup maxes (two superblocks on a wide head)
+
+    //! the head's finished value at dim `d`: the aligned partials summed and normalized, then the gate
+    def dim_value(hb, stride, nsplit, h, hs, d : uint; m, linv : float) : float {
+        var o = 0.0
+        var s = 0u
+        while (s < nsplit) {
+            o += part[hb + s * stride + 2u + d] * exp(part[hb + s * stride] - m)
+            s++
+        }
+        o *= linv
+        if (pa.gated != 0u) {
+            let qstride = pa.qstride == 0u ? hs : pa.qstride
+            o = o / (1.0 + exp(-q[h * qstride + hs + d]))
+        }
+        return o
+    }
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
-    def run {
+    def run {   // nolint:STYLE037,STYLE038 — the combine and its folded requant, the two head widths in one pass
         let hs = pa.hs
         let nsplit = max(pa.nsplit, 1u)
         let h = gl_WorkGroupID.x
@@ -3561,21 +3772,60 @@ class DaAttnComb {
         barrier()
         let m = wsum[0u]
         let linv = 1.0 / wsum[1u]
-        let qstride = pa.qstride == 0u ? hs : pa.qstride
-        var d = tid
-        while (d < hs) {
-            var o = 0.0
-            var s = 0u
-            while (s < nsplit) {
-                o += part[hb + s * stride + 2u + d] * exp(part[hb + s * stride] - m)
-                s++
+        let wide = hs > 256u
+        let live = tid < hs
+        let o = live ? dim_value(hb, stride, nsplit, h, hs, tid, m, linv) : 0.0
+        let o2 = wide ? dim_value(hb, stride, nsplit, h, hs, tid + 256u, m, linv) : 0.0
+        if (live) {
+            y[h * hs + tid] = o
+        }
+        if (wide) {
+            y[h * hs + tid + 256u] = o2
+        }
+        if (pa.rqk == DA_RQ_Q8) {
+            if (live) {
+                let dq = da_q8_blk_d(o)
+                if ((tid & 31u) == 0u) {
+                    aqs[(h * hs + tid) >> 5u] = dq
+                }
+                aq[h * hs + tid] = q8_quant1(o, dq != 0.0 ? 1.0 / dq : 0.0)
             }
-            o *= linv
-            if (pa.gated != 0u) {
-                o = o / (1.0 + exp(-q[h * qstride + hs + d]))
+            if (wide) {
+                let dq2 = da_q8_blk_d(o2)
+                if ((tid & 31u) == 0u) {
+                    aqs[(h * hs + tid + 256u) >> 5u] = dq2
+                }
+                aq[h * hs + tid + 256u] = q8_quant1(o2, dq2 != 0.0 ? 1.0 / dq2 : 0.0)
             }
-            y[h * hs + d] = o
-            d += 256u
+        } elif (pa.rqk == DA_RQ_Q8K) {
+            let m1 = subgroupMax(abs(o))
+            let m2 = subgroupMax(abs(o2))
+            if (gl_SubgroupInvocationID == 0u) {
+                sgp[gl_SubgroupID] = m1
+                sgp[32u + gl_SubgroupID] = m2
+            }
+            barrier()
+            var mx1 = 0.0
+            var mx2 = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                mx1 = max(mx1, sgp[sgi])
+                mx2 = max(mx2, sgp[32u + sgi])
+                sgi++
+            }
+            let d1 = mx1 / 127.0
+            let b1 = (h * hs) >> 8u
+            if (tid == 0u) {
+                aqs[b1] = d1
+            }
+            aq[h * hs + tid] = q8_quant1(o, d1 != 0.0 ? 1.0 / d1 : 0.0)
+            if (wide) {
+                let d2 = mx2 / 127.0
+                if (tid == 0u) {
+                    aqs[b1 + 1u] = d2
+                }
+                aq[h * hs + tid + 256u] = q8_quant1(o2, d2 != 0.0 ? 1.0 / d2 : 0.0)
+            }
         }
     }
 }
@@ -8013,7 +8263,7 @@ class QkRms : RmsWgBase {
         if (two) {
             v1 = is_q ? qrows[base + t1] : krows[base + t1]
         }
-        let inv = wg_rms_inv(tid < pa.hs ? v * v + v1 * v1 : 0.0, pa.hs, pa.eps)
+        let inv = wg_rms_inv(tid < pa.hs ? v * v + v1 * v1 : 0.0, pa.hs, pa.eps, 0u)
         if (tid < pa.hs) {
             let w = is_v ? 1.0 : wn[wbase + tid]
             if (is_q) {
@@ -8299,7 +8549,7 @@ class template QknRopeKvT : RmsWgBase {
             v1 = (is_k ? kvsrc[sbase + t1] : qrows[sbase + t1]) + (pa.hasb != 0u ? bias[pa.boff + bbase + t1] : 0.0)
         }
         let ss = tid < pa.hs ? v * v + v1 * v1 : 0.0
-        let inv = wg_rms_inv(ss, pa.hs, pa.eps)
+        let inv = wg_rms_inv(ss, pa.hs, pa.eps, 0u)
         let woff = is_k ? pa.kwoff : pa.qwoff
         if (tid < pa.hs) {
             row[tid] = wn[woff + tid] * (v * inv)
@@ -8351,7 +8601,7 @@ class template QknRopeKvT : RmsWgBase {
                     w1 = kvsrc[vi + t1] + (pa.hasb != 0u ? bias[pa.boff + vi + t1] : 0.0)
                 }
                 if (pa.vnorm != 0u) {
-                    let vinv = wg_rms_inv(tid < pa.hs ? w0 * w0 + w1 * w1 : 0.0, pa.hs, pa.eps)
+                    let vinv = wg_rms_inv(tid < pa.hs ? w0 * w0 + w1 * w1 : 0.0, pa.hs, pa.eps, 1u)
                     w0 *= vinv
                     w1 *= vinv
                 }
