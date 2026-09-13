@@ -259,6 +259,15 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    `enc` ladder lacks the new arm dispatches the else format's pipeline over the new planes and
    reads byte-stable across fix rounds.
 
+A per-32 format (q51's shape: 32-weight blocks, Q8_0-form activations, off the kq lattice) takes
+none of the kq id bridge: it joins `vk_fmt_b32` and `arena_block_bytes` (the CPU plane's own block
+strides), `rdec_b32` in `dasllama_gpu_resident.das`, the `pf_f16_feed` admission, and writes its
+own classes beside q8's rather than a `KqGemvBase` child - a `KqCm2BatchT` format template at
+`BLKW` 32 with a word scale plane (`Q51Cm2T`, the s and e stamps the expert schedule dispatches;
+`cm2_cls_ensure` refuses it a dense column, the plan declines a dense plane of it) and a decode
+GEMV in `Q8Gemv`'s shape (`Q51Gemv`: one lane a block, `gemv_lanes_per_row` 0). Its census rows
+land in `VK_CENSUS_NEVER_DISPATCHED` while no stocked small carrier holds such a plane.
+
 A grid format adds one more: its table joins the family's grid buffer (`kq_grid_dev` - a
 `KQ_GRID_<FMT>` word offset, `KQ_GRID_WORDS` / `KQ_GRID_BYTES` grown, the accessor called
 once per word into the host image) and the GEMV's `run` stages `gridb[KQ_GRID_<FMT> + idx]`

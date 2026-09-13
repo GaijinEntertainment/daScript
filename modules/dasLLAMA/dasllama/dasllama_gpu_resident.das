@@ -731,12 +731,15 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
     return blk
 }
 
+//! the per-32 formats: q8 and q51 stride 32-weight blocks, the kq lattice 256-weight superblocks
+def private rdec_b32(f : KqFmt) : bool => f == KqFmt.q8 || f == KqFmt.q51
+
 def private rdec_blocks_for(n, rows : int64; f : KqFmt) : int64 => (
-    rows * (n / (f == KqFmt.q8 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
+    rows * (n / (rdec_b32(f) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS)))
 
 // row-length servability twin of the tier's arena_rows_ok (this module is backend-agnostic)
 def private rdec_rows_ok(n : int64; f : KqFmt) : bool => (
-    n % (f == KqFmt.q8 ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
+    n % (rdec_b32(f) ? Q8_BLOCK_ELEMS : KQ_SUPERBLOCK_ELEMS) == 0l)
 
 // a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock
 def private rdec_quant_class(f : KqFmt) : int => kq_sb(f) ? 1 : 0

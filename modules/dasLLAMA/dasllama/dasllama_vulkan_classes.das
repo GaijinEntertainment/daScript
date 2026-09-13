@@ -6015,6 +6015,10 @@ struct VkK4Blk {
     qs : int16[64]   // one Q4_K superblock's 128 nibble bytes as 16-bit lanes; its scale row (d|dmin + 8 sc + 8 mn bytes) lives in ws
 }
 
+struct VkQ51Blk {
+    qs : int16[10]   //! one Q5_1 32-block: 16 nibble bytes (element j low, j + 16 high) then the 4 qh bytes (bit e = element e's fifth bit); d | m live in ws as one word
+}
+
 struct VkK6Blk {
     ql : int16[64]   // one Q6_K superblock's 128 low-nibble bytes as 16-bit lanes
     qh : int16[32]   // ... and its 64 high-2-bit bytes; scales (16 int8 + f16 d) live in ws
@@ -6731,6 +6735,42 @@ class template Q40Cm2T : KqCm2BatchT {
     }
 }
 
+//! Q5_1 on the cm2 tile: the per-32 plane verbatim (the CPU's `dot_q51q8_scalar` layout), w = d * q + m with
+//! q = nibble | qh bit << 4; the scale word is f16 d in the low half, f16 m in the high
+[ |> template_struct_instance]
+class template Q51Cm2T : KqCm2BatchT {
+    typedef BLK = VkQ51Blk
+    typedef ST = uint
+    override BLKW = 32u
+    override DECV4 = true
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkQ51Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let j = e & 15u
+        let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
+        let qh = (uint(int(blk.qs[8])) & 0xFFFFu) | ((uint(int(blk.qs[9])) & 0xFFFFu) << 16u)
+        let q = ((by >> ((e >> 4u) * 4u)) & 0xFu) | (((qh >> e) & 1u) << 4u)
+        let dm = unpackHalf2x16(ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y])
+        return float16(dm.x * float(q) + dm.y)
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode_v4(blk : VkQ51Blk; bc, cib : uint2) : half4 {
+        let e = cib.y
+        let li = int((e & 15u) >> 1u)
+        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
+        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
+        let sh = (e >> 4u) * 4u
+        let qh = ((uint(int(blk.qs[8])) & 0xFFFFu) | ((uint(int(blk.qs[9])) & 0xFFFFu) << 16u)) >> e
+        let dm = unpackHalf2x16(ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y])
+        return half4(float4(dm.x * float(((l0 >> sh) & 0xFu) | ((qh & 1u) << 4u)) + dm.y,
+            dm.x * float(((l0 >> (sh + 8u)) & 0xFu) | (((qh >> 1u) & 1u) << 4u)) + dm.y,
+            dm.x * float(((l1 >> sh) & 0xFu) | (((qh >> 2u) & 1u) << 4u)) + dm.y,
+            dm.x * float(((l1 >> (sh + 8u)) & 0xFu) | (((qh >> 3u) & 1u) << 4u)) + dm.y))
+    }
+}
+
 [ |> template_struct_instance]
 class template Iq4xsCm2T : KqCm2BatchT {
     typedef BLK = VkK4Blk   // the iq4xs plane is the k/k+16 pairing verbatim - the k4 lane view fits
@@ -7423,6 +7463,17 @@ class Q8Cm2SBatch : Q8Cm2T {
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
+//! the q51 rail's s column: the expert schedule's 32-row pieces (the routed down planes' one Vulkan home - a dense q51 plane never reaches the tiles)
+[vk_dispatch(name = "q51_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q51Cm2SBatch : Q51Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
 [vk_dispatch(name = "kq_batch_k4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K4Cm2LBatch : K4Cm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -7799,6 +7850,16 @@ class Iq2xxsCm2SBatch : Iq2xxsCm2T {
 
 [vk_dispatch(name = "q8_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8Cm2EBatch : Q8Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "q51_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q51Cm2EBatch : Q51Cm2T {
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -8695,6 +8756,63 @@ class Q8Gemv {
     }
 }
 
+//! the four fifth bits of a nibble word's elements as their byte's 0x10: nibble n (bits 0..3) spread to bits 4, 12, 20, 28
+def q51_hbits(n : uint) : uint => ((n & 0xFu) * 0x02040810u) & 0x10101010u
+
+//! Q5_1 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: the block's five words (four
+//! nibble words, the qh word), the low and high nibbles raised to bytes with their fifth bit, sdot4 against the
+//! activation words; (d * isum + m * asum) * xs per block - `dot_q51q8_scalar`'s float order, reassociated by lane
+[vk_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q51Gemv {
+    @ssbo @binding = 0 wq : array<uint>        // weight quant words, five per block
+    @ssbo @binding = 1 wsu : array<uint>       // per-block f16 d | f16 m
+    @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
+    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
+    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
+    @ssbo @binding = 5 y : array<float>
+    @push_constant pa : GemvArgs
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q51_gemv_cls_spv")]
+    def run {
+        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (rg < pa.nreg * pa.d) {
+            let r = rg / pa.d
+            let row = rg % pa.d
+            let nb = pa.n / 32u
+            let wb0 = regions[r * 2u] + row * nb
+            let xb0 = regions[r * 2u + 1u]
+            let lane = gl_SubgroupInvocationID
+            var acc = 0.0
+            var bi0 = 0u
+            while (bi0 < nb) {
+                let b = bi0 + lane
+                if (b < nb) {
+                    let wbase = (wb0 + b) * 5u
+                    let xbase = (xb0 + b) * 8u
+                    let qh = wq[wbase + 4u]
+                    var idot = 0
+                    var asum = 0
+                    for [unroll_full] (c in range(4)) {
+                        let w = wq[wbase + uint(c)]
+                        let xl = xqw[xbase + uint(c)]
+                        let xh = xqw[xbase + 4u + uint(c)]
+                        idot += sdot4((w & 0x0F0F0F0Fu) | q51_hbits(qh >> (uint(c) * 4u)), xl)
+                        idot += sdot4(((w >> 4u) & 0x0F0F0F0Fu) | q51_hbits(qh >> (16u + uint(c) * 4u)), xh)
+                        asum += sdot4(xl, 0x01010101u) + sdot4(xh, 0x01010101u)
+                    }
+                    let dm = unpackHalf2x16(wsu[wb0 + b])
+                    acc += (dm.x * float(idot) + dm.y * float(asum)) * axs[xb0 + b]
+                }
+                bi0 += gl_SubgroupSize
+            }
+            let total = subgroupAdd(acc)
+            if (subgroupElect()) {
+                y[pa.ybase + rg] = total
+            }
+        }
+    }
+}
+
 // ===== the K-quant decode GEMV family: one base shell, per-format block contributions =====
 // ONE LANE PER 32-BLOCK via uint4 loads (one scale decode per block).
 // The formats share the region walk, the lane->block map, and the subgroup fold — only the
@@ -8999,6 +9117,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
 def gemv_cls_ensure(fmt : int) : bool {
     if (fmt == int(KqFmt.q8)) {
         return ensure_q8_gemv_cls()
+    } elif (fmt == int(KqFmt.q51)) {
+        return ensure_q51_gemv_cls()
     } elif (fmt == int(KqFmt.k4)) {
         return ensure_kq_gemv_k4_cls()
     } elif (fmt == int(KqFmt.k5)) {
@@ -9033,6 +9153,8 @@ def gemv_cls_ensure(fmt : int) : bool {
 def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
     if (fmt == int(KqFmt.q8)) {
         return set_q8_gemv_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.q51)) {
+        return set_q51_gemv_cls(bufs, sizes, gbits)
     } elif (kq_sb(fmt)) {
         // the family shares one layout — one set serves every kq format
         return set_kq_gemv_cls(fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], kq_grid_dev()),
@@ -9046,6 +9168,8 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
 def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
     if (fmt == int(KqFmt.q8)) {
         enc_q8_gemv_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.q51)) {
+        enc_q51_gemv_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k4)) {
         enc_kq_gemv_k4_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k5)) {
@@ -9092,7 +9216,7 @@ def gemv_grid_fmt(fmt : int) : bool {
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
-    if (fmt == int(KqFmt.q8)) return 0u
+    if (fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51)) return 0u   //! the per-32 formats: a whole subgroup a row, a lane a block
     let nb = n / 32l
     let grid = gemv_grid_fmt(fmt)
     if (nb <= 24l) return 8u

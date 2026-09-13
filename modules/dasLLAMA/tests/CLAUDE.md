@@ -283,7 +283,10 @@ per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs 
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
-which carry no KHR arm, and q51 carries no tile cell) run five arms: the cm2 l/m/s tiles and the
+which carry no KHR arm; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
+only, on a cm2 device, over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
+its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408) run five
+arms: the cm2 l/m/s tiles and the
 expert schedule's e column (the format's own 128-row e stamp, whose k step is the stamp's - 32 on
 iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
@@ -447,7 +450,7 @@ the one-step-off control) at one window and two windows, with the arm witnesses 
 carries the bias and the driver armed on it; skips without the model or the armed tier.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
-`gemma4_26b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
+`gemma4_26b`, `gemma4_26b_k` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
 loads ONE model at a time, never a chain) - stocked suite, `-jit` only; the whole-model resident
 driver on the gemma dense base (gemma-3-1b-it-Q8_0, `DASLLAMA_GPU=1`): the sandwich norms (the residual steps
 norm their add partner first), the sliding-window layers beside the global ones with their own rope
@@ -491,10 +494,13 @@ sits farther from llama.cpp than the resident does (per-position log-probs again
 b10660 on the same prose: mean gap 0.36 for the CPU chain, 0.18 for the resident), so a
 forced-feed maxdiff against the CPU chain is no instrument here. Its planes alone pass a 16 GB
 card (the 704-wide down-expert rows demote to q8), so the cells skip there on the memory decline
-and run on a 32 GB card. Arms: `g2` (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
+and run on a 32 GB card. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on
+the model table's official UD-Q4_K_M file, whose 704-wide down stacks are native Q5_1 and ride
+the q51 expert rail (the s and e stamps, the Q8_0-activation decode GEMV) beside the k4 gate and
+up stacks. Arms: `g2` (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
 (gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
-`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B) - the tokens share no
-substring, so one arm selects one file. Skips
+`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B IQ3_XXS), `g4mk` (the
+26B-A4B Q4_K_M) - the tokens share no substring, so one arm selects one file. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.

@@ -116,7 +116,10 @@ site (the fused twins never store `xb`), and the last-layer FFN slice of
 the normed rows feeds the dense triple alone - the gather takes the f32 rows - so a layer with
 no shared expert skips it. The tile family is the f16-fed cm2 tiles, so the plan admits a MoE
 only in cm2 mode on a coopmat2 device with every expert format the f16 feed admits
-(`rdec_moe_ok`).
+(`rdec_moe_ok`). Q5_1 is admitted as a routed expert plane alone: its rail is the schedule's s and
+e stamps (`Q51Cm2T`, the per-32 plane verbatim, `BLKW` 32) and the token command's `Q51Gemv` over
+Q8_0 activations (`vk_fmt_b32`, one lane a block), so a 704-wide down stack rides its own format
+where the K-quant rails' 256-multiple rule would demote it to q8; a dense q51 plane stays declined.
 
 ### 2.2ag The whole-model driver's MoE token command {#resident-moe-token}
 
