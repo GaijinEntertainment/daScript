@@ -1372,3 +1372,23 @@ module) is independent and can land any time - it is pure structure.
     per-workgroup cost, not occupancy. The shapes still worth a try: pieces proportional to a
     tile's key count (the causal imbalance is 8:1 across a window), f16 partials, and the pass's
     fixed cost (the q tile load and the per-element mask, exp and max passes per step).
+51. **The token command's remaining decode gap is the dependent-dispatch gap, not the kernels.** On
+    the RunPod RTX PRO 4500 every decode GEMV streams at the card's 840 GB/s (`harness/vk_gemv_probe.das`
+    at the 26B's 2816-wide shapes, every kq format and q8) and a one-workgroup row kernel costs 0.85 us
+    alone against 4.7 to 8.8 chained behind a barrier (`harness/vk_gemm_probe.das -- small`), so a
+    layer's ten or so dependent hops carry a quarter of a token; gemma-2's GPU stamp total (4686 us a
+    token at 128 generated) equals llama.cpp b10660's whole token (4661), which also pays its own
+    submit and fence, so their gap a hop is smaller than ours. Measured and reverted, each on the pod:
+    the row kernels (`ArBase`, `quant32`, the gemma-4 combine) unrolled over 32-element register arrays
+    with their loads first - the 26B's residual step 431 -> 614, its combine 556 -> 1246 us a token
+    (the arrays spill at dim 2816), gemma-3-1b flat; the q8 GEMVs taking two block steps a turn -
+    gemma-3-1b's down 376 -> 426, its classifier 376 -> 410; the decode attention's combine folded
+    into the pass as the head's last-arriving split (`@coherent` partials, a per-head counter) -
+    gemma-3-1b's attention 178 + combine 108 -> 369, E4B's 307 + 177 -> 629: a publish and an atomic
+    on sixty-four latency-bound workgroups plus the serialized per-head combine cost more than the
+    dispatch. What the last-arriving-workgroup hand-off does pay for, per the probe's `lastwg` arm
+    (an f32 row GEMV then `cls_ar` against the GEMV whose last workgroup runs the epilogue): about
+    2 us a step at dims 1152 to 3840 - so the `ArRq` epilogue riding the q8 GEMVs (wo into the
+    post-attention step, down into the post-FFN one, the E-series proj into its) is the form still
+    worth building, two to three hops a layer on every gemma; a llama.cpp build with
+    `GGML_VULKAN_PERF` would show what their hop costs (the prebuilt b10660 compiles it out).
