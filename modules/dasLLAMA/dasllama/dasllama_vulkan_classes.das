@@ -8770,6 +8770,140 @@ class Q8Gemv {
     }
 }
 
+struct GemvArArgs {
+    n : uint        //! the GEMV's reduction width
+    d : uint        //! its output rows - the residual row's width
+    wblk : uint     //! the plane's block base in its slab (one region: the pair rides the push)
+    xblk : uint     //! the activation's block base
+    add_on : uint   //! the residual step's `ArArgs` fields (the add partner is the GEMV's own row)
+    woff : uint
+    pwoff : uint
+    pre_on : uint
+    raw : uint
+    eps : float
+    ascale : float
+}
+
+//! the q8 decode GEMV carrying the residual step as its last workgroup's epilogue: a subgroup a row, eight rows a
+//! workgroup, the rows into a `@coherent` y; every workgroup publishes its rows and bumps the arrival counter, and the
+//! one that arrives last runs `ArRq`'s step over the whole row - the add partner normed first under `pre_on`, the residual
+//! updated in place, the normed row (as it is under `raw`) quantized to Q8_0 blocks for the next GEMV's feed - and resets
+//! the counter; the dependent dispatch between the GEMV and its residual step goes (about 2 us a hop on the probe)
+[vk_dispatch(name = "q8_gemv_ar_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvAr : RmsWgBase {
+    @ssbo @binding = 0 wq4 : array<uint4>          // weight quant words, vec4 view
+    @ssbo @binding = 1 wsh : array<float16>        // per-block f16 weight scales
+    @ssbo @binding = 2 xqw : array<uint>           // the GEMV's activation quant words
+    @ssbo @binding = 3 axs : array<float>          // ... and their block scales
+    @ssbo @binding = 4 @coherent y : array<float>  // the rows out, read back whole by the last workgroup
+    @ssbo @binding = 5 xres : array<float>         // the residual row, updated in place
+    @ssbo @binding = 6 wn : array<float>           // the norms plane
+    @ssbo @binding = 7 outq : array<int8>          // the normed row's Q8_0 quants (the next GEMV's feed)
+    @ssbo @binding = 8 outs : array<float>         // ... and its block scales
+    @ssbo @binding = 9 cnt : array<uint>           // the arrival counter at word 0, zero between dispatches
+    @push_constant pa : GemvArArgs
+    @workgroup arrived : uint[1]
+
+    //! the norm weight at `e`, one under `raw`
+    def nw(e : uint) : float => pa.raw != 0u ? 1.0 : wn[pa.woff + e]
+
+    //! the residual step over the finished rows, `ArRqBase.rq_row`'s math on the workgroup's 256 threads
+    def epilogue {
+        let tid = gl_LocalInvocationID.x
+        var ainv = 0.0
+        if (pa.pre_on != 0u && pa.add_on != 0u) {
+            var sa = 0.0
+            var j = tid
+            while (j < pa.d) {
+                let a = y[j]
+                sa += a * a
+                j += 256u
+            }
+            ainv = wg_rms_inv(sa, pa.d, pa.eps, 0u)
+        }
+        var ss = 0.0
+        var k = tid
+        while (k < pa.d) {
+            let a = pa.pre_on != 0u ? wn[pa.pwoff + k] * (y[k] * ainv) : y[k]
+            let vv = pa.add_on != 0u ? (xres[k] + a) * pa.ascale : xres[k]
+            xres[k] = vv
+            ss += vv * vv
+            k += 256u
+        }
+        let inv0 = wg_rms_inv(ss, pa.d, pa.eps, 1u)
+        let inv = pa.raw != 0u ? 1.0 : inv0
+        memoryBarrierBuffer()   //! the row's writes reach the lanes that quantize them
+        barrier()
+        let nblk = pa.d / 32u
+        let lane8 = tid % 8u
+        var b = tid / 8u
+        while (b < nblk) {
+            let base = b * 32u + lane8 * 4u
+            let v0 = nw(base) * (xres[base] * inv)
+            let v1 = nw(base + 1u) * (xres[base + 1u] * inv)
+            let v2 = nw(base + 2u) * (xres[base + 2u] * inv)
+            let v3 = nw(base + 3u) * (xres[base + 3u] * inv)
+            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+            let dq = m / 127.0
+            let id = dq != 0.0 ? 1.0 / dq : 0.0
+            if (lane8 == 0u) {
+                outs[b] = dq
+            }
+            outq[base] = q8_quant1(v0, id)
+            outq[base + 1u] = q8_quant1(v1, id)
+            outq[base + 2u] = q8_quant1(v2, id)
+            outq[base + 3u] = q8_quant1(v3, id)
+            b += 32u
+        }
+        if (tid == 0u) {
+            cnt[0] = 0u
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_gemv_ar_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def run {
+        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (rg < pa.d) {   // the q8 GEMV's row: two lanes a block, the xor fold
+            let nb = pa.n / 32u
+            let wb0 = pa.wblk + rg * nb
+            let lane = gl_SubgroupInvocationID
+            let bpp = gl_SubgroupSize / 2u
+            var acc = 0.0
+            var bi0 = 0u
+            while (bi0 < nb) {
+                let b = bi0 + lane / 2u
+                if (b < nb) {
+                    let wv = wq4[(wb0 + bi0) * 2u + lane]
+                    let xbase = (pa.xblk + bi0) * 8u + lane * 4u
+                    var idot = sdot4(wv.x, xqw[xbase])
+                    idot += sdot4(wv.y, xqw[xbase + 1u])
+                    idot += sdot4(wv.z, xqw[xbase + 2u])
+                    idot += sdot4(wv.w, xqw[xbase + 3u])
+                    idot += subgroupShuffleXor(idot, 1u)
+                    if (lane % 2u == 0u) {
+                        acc += float(idot) * float(wsh[wb0 + b]) * axs[pa.xblk + b]
+                    }
+                }
+                bi0 += bpp
+            }
+            let total = subgroupAdd(acc)
+            if (subgroupElect()) {
+                y[rg] = total
+            }
+        }
+        memoryBarrierBuffer()
+        barrier()
+        if (gl_LocalInvocationID.x == 0u) {
+            arrived[0] = atomicAdd(cnt[0], 1u)
+        }
+        barrier()
+        if (arrived[0] + 1u == gl_NumWorkGroups.x) {
+            memoryBarrierBuffer()
+            epilogue()
+        }
+    }
+}
+
 struct GuArgs {
     n : uint      //! the reduction width (the model dim)
     d : uint      //! the output rows (the FFN width), a 32-multiple

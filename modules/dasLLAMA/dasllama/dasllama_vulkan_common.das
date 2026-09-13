@@ -2250,6 +2250,10 @@ struct RLayer {
     s_attn_comb : VkDescriptorSet   //! the split attention's combine (a head's partials into its row)
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
+    wo_ar : bool                    //! the wo GEMV carries the post-attention residual step as its last workgroup's epilogue (`Q8GemvAr`)
+    s_wo_ar : VkDescriptorSet
+    down_ar : bool                  //! the down GEMV carries the post-FFN residual step the same way
+    s_down_ar : VkDescriptorSet
     s_addr_ffn : VkDescriptorSet
     s_addr_ffn_rq : VkDescriptorSet   // the fused add+rms+requant twins of addr_ffn / addr_next
     s_quant_xb2 : VkDescriptorSet
@@ -2361,6 +2365,7 @@ struct RDec {
     q_dev, kv_dev : uint64        // roped q; the k/v projection buffer rope reads (k@qd, v@qd+kvd)
     attn_dev : uint64             // attention output
     attn_part_dev : uint64        //! the split decode attention's partials [heads x DA_NSPLIT_MAX x (head_size + 2)]
+    ar_cnt_dev : uint64           //! the epilogue GEMVs' arrival counter (one word: the dispatches are sequential), zero between dispatches
     attn_nsplit : int64           //! key splits a head the token command dispatches (1 = the unsplit pass; `da_nsplit`)
     aq_dev, as_dev : uint64       // quantized attn (wo input)
     gate_dev, up_dev : uint64
@@ -2774,7 +2779,7 @@ var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name
 var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
 
 struct SetBits {
-    b : uint[8]   // per-binding region bits (up to 8 declared bindings per class)
+    b : uint[12]   // per-binding region bits (up to 12 declared bindings per class)
 }
 
 //! Census seed: every [vk_dispatch] kernel joins the coverage universe at program start (the
@@ -2896,7 +2901,7 @@ def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes :
     update_descriptor_sets(g_gpu.device, writes, no_copies)
     var sb : SetBits
     for (i in range(length(gbits))) {
-        if (c.bindings[i] < 8) {
+        if (c.bindings[i] < 12) {
             sb.b[c.bindings[i]] = gbits[i]
         }
     }
@@ -3027,7 +3032,7 @@ def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : 
     let sb = g_set_bits[sk]
     var r = 0u
     var w = 0u
-    for (i in range(8)) {
+    for (i in range(12)) {
         let bit = 1u << uint(i)
         if ((acc.x & bit) != 0u) {
             r |= sb.b[i]

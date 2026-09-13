@@ -6522,6 +6522,217 @@ def private q8_gemv_pleact_run(t : T?; n, d : int) {
     delete y_cls
 }
 
+//! the q8 GEMV with the residual step as its last workgroup's epilogue, against the GEMV in the scalar block order and
+//! `ArRq`'s math on the CPU: the residual row updated in place, the normed (or raw) row's Q8_0 blocks; the counter
+//! reads zero after the dispatch; a poisoned expectation must red
+def private q8_gemv_ar_run(t : T?; n, d : int; pre_on, raw : bool; ascale : float) {   // nolint:STYLE037 — one linear fixture: the GEMV, the residual step and its quant, each with its bar
+    let nb = n / 32
+    let totblk = d * nb
+    let nblk_out = d / 32
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    var wqh : array<uint>
+    var wsh : array<uint>
+    var xqh : array<uint>
+    var xsh : array<float>
+    var xres : array<float>
+    var wnh : array<float>
+    wqh |> resize(totblk * 8)
+    wsh |> resize(totblk / 2 + 1)
+    xqh |> resize(nb * 8)
+    xsh |> resize(nb)
+    xres |> resize(d)
+    wnh |> resize(2 * d)   // two norm rows: the post norm at 0, the next norm at d
+    for (i in range(totblk * 8)) {
+        wqh[i] = hash_word(uint(i) * 3u + 29u)
+    }
+    for (i in range(totblk / 2 + 1)) {
+        wsh[i] = ws_word(uint(i) * 5u + 1u)
+    }
+    for (i in range(nb * 8)) {
+        xqh[i] = hash_word(uint(i) * 13u + 7u)
+    }
+    for (i in range(nb)) {
+        xsh[i] = 0.2 + float(i % 7) * 0.1
+    }
+    for (i in range(d)) {
+        xres[i] = float((i * 43) % 97) * 0.4 - 19.0
+    }
+    for (i in range(2 * d)) {
+        wnh[i] = 0.8 + float(i % 9) * 0.05
+    }
+    let xq_bytes = int64(nb) * 32l
+    let xs_bytes = int64(nb) * 4l
+    let r_bytes = int64(d) * 4l
+    let wn_bytes = int64(2 * d) * 4l
+    let oq_bytes = int64(d)
+    let os_bytes = int64(nblk_out) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xqd = make_device_buf(xq_bytes)
+    let xsd = make_device_buf(xs_bytes)
+    let yd = make_device_buf(r_bytes)
+    let xrd = make_device_buf(r_bytes)
+    let wnd = make_device_buf(wn_bytes)
+    let oqd = make_device_buf(oq_bytes)
+    let osd = make_device_buf(os_bytes)
+    let cntd = make_device_buf(16l)
+    var zeros : array<uint>
+    zeros |> resize(4)
+    var host = make_host_buf(r_bytes + oq_bytes + os_bytes + 16l, true, [cached = true])
+    var xr_cls : array<float>
+    var oq : array<int8>
+    var os : array<float>
+    var cnt_after : array<uint>
+    xr_cls |> resize(d)
+    oq |> resize(d)
+    os |> resize(nblk_out)
+    cnt_after |> resize(4)
+    let eps = 1.0e-6
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+        upload_region_at(xrd, 0l, addr<uint8 const?>(xres[0]), r_bytes)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
+        upload_region_at(cntd, 0l, addr<uint8 const?>(zeros[0]), 16l)
+        nan_sentinel_upload(yd, r_bytes)
+        nan_sentinel_upload(osd, os_bytes)
+        var s_cls = set_q8_gemv_ar_cls(fixed_array(wqd, wsd, xqd, xsd, yd, xrd, wnd, oqd, osd, cntd),
+            fixed_array(wq_bytes, ws_bytes, xq_bytes, xs_bytes, r_bytes, r_bytes, wn_bytes, oq_bytes, os_bytes, 16l),
+            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 0u, 64u, 64u, 16u))
+        var raw2 = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+        var h2 : VkHaz
+        var pc = GemvArArgs(n = uint(n), d = uint(d), wblk = 0u, xblk = 0u, add_on = 1u, woff = uint(d), pwoff = 0u,
+            pre_on = pre_on ? 1u : 0u, raw = raw ? 1u : 0u, eps = eps, ascale = ascale)
+        let rpw = 4l * g_gpu.rows_per_wg
+        enc_q8_gemv_ar_cls(raw2, h2, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
+        vhz_dep(raw2, h2, 16u | 32u | 64u, 0u, true)
+        cmd_copy_whole(raw2, xrd, host.buf, r_bytes)
+        cmd_copy_range(raw2, oqd, 0l, host.buf, r_bytes, oq_bytes)
+        cmd_copy_range(raw2, osd, 0l, host.buf, r_bytes + oq_bytes, os_bytes)
+        cmd_copy_range(raw2, cntd, 0l, host.buf, r_bytes + oq_bytes + os_bytes, 16l)
+        vk_check(vkEndCommandBuffer(raw2), null)
+        submit_wait(raw2)
+        memcpy(addr<void?>(xr_cls[0]), host.mapped, r_bytes)
+        memcpy(addr<void?>(oq[0]), reinterpret<void?>(intptr(host.mapped) + uint64(r_bytes)), oq_bytes)
+        memcpy(addr<void?>(os[0]), reinterpret<void?>(intptr(host.mapped) + uint64(r_bytes + oq_bytes)), os_bytes)
+        memcpy(addr<void?>(cnt_after[0]), reinterpret<void?>(intptr(host.mapped) + uint64(r_bytes + oq_bytes + os_bytes)), 16l)
+    }
+    // the oracle: the GEMV rows in the scalar block order, then the residual step's math
+    var y : array<float>
+    y |> resize(d)
+    for (row in range(d)) {
+        var acc = 0.0
+        for (b in range(nb)) {
+            let wb = row * nb + b
+            var idot = 0
+            for (j in range(8)) {
+                idot += sdot4(wqh[wb * 8 + j], xqh[b * 8 + j])
+            }
+            let ws16 = wb % 2 == 0 ? unpackHalf2x16(wsh[wb / 2]).x : unpackHalf2x16(wsh[wb / 2]).y
+            acc += float(idot) * ws16 * xsh[b]
+        }
+        y[row] = acc
+    }
+    var ainv = 0.0
+    if (pre_on) {
+        var sa = 0.0
+        for (k in range(d)) {
+            sa += y[k] * y[k]
+        }
+        ainv = 1.0 / sqrt(sa / float(d) + eps)
+    }
+    var xr_ref : array<float>
+    xr_ref |> resize(d)
+    var ss = 0.0
+    for (k in range(d)) {
+        let a = pre_on ? wnh[k] * (y[k] * ainv) : y[k]
+        xr_ref[k] = (xres[k] + a) * ascale
+        ss += xr_ref[k] * xr_ref[k]
+    }
+    let inv = raw ? 1.0 : 1.0 / sqrt(ss / float(d) + eps)
+    var normed : array<float>
+    normed |> resize(d)
+    for (k in range(d)) {
+        normed[k] = (raw ? 1.0 : wnh[d + k]) * (xr_ref[k] * inv)
+    }
+    var badx = 0
+    for (k in range(d)) {
+        if (abs(xr_cls[k] - xr_ref[k]) > 1e-4 * abs(xr_ref[k]) + 1e-4) {
+            badx++
+        }
+    }
+    var bads = 0
+    var badq = 0
+    for (blk in range(nblk_out)) {
+        var m = 0.0
+        for (e in range(32)) {
+            m = max(m, abs(normed[blk * 32 + e]))
+        }
+        let d_ref = m / 127.0
+        if (abs(os[blk] - d_ref) > 2e-3 * max(d_ref, 1e-6)) {
+            bads++
+        }
+        for (e in range(32)) {
+            let deq = float(oq[blk * 32 + e]) * os[blk]
+            if (abs(deq - normed[blk * 32 + e]) > d_ref + 2e-3 * abs(normed[blk * 32 + e])) {
+                badq++
+            }
+        }
+    }
+    let tag = "n {n} d {d} pre {pre_on ? 1 : 0} raw {raw ? 1 : 0}"
+    t |> success(badx == 0, "q8 gemv+ar {tag}: the residual row matches the oracle ({badx} of {d} off)")
+    t |> success(bads == 0, "q8 gemv+ar {tag}: the block scales match ({bads} of {nblk_out} off)")
+    t |> success(badq == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({badq} of {d} off)")
+    t |> success(cnt_after[0] == 0u, "q8 gemv+ar {tag}: the arrival counter reads zero after the dispatch ({cnt_after[0]})")
+    var poison := normed   // the control: one expected value pushed three quant steps past its block must red
+    poison[0] += 3.0 * os[0] + 1.0
+    var pbad = 0
+    for (e in range(32)) {
+        let deq = float(oq[e]) * os[0]
+        if (abs(deq - poison[e]) > os[0] + 2e-3 * abs(poison[e])) {
+            pbad++
+        }
+    }
+    t |> success(pbad > 0, "q8 gemv+ar {tag}: the bar reds a poisoned oracle element")
+    delete wqh
+    delete wsh
+    delete xqh
+    delete xsh
+    delete xres
+    delete wnh
+    delete zeros
+    delete xr_cls
+    delete oq
+    delete os
+    delete cnt_after
+    delete y
+    delete xr_ref
+    delete normed
+    delete poison
+}
+
+[test]
+def test_vkd_q8_gemv_ar(t0 : T?) {
+    t0 |> run("q8 GEMV with the residual step as its last workgroup's epilogue == the CPU chain (the sandwich step, the raw-quant step, a plain step)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_gemv_ar_cls()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            q8_gemv_ar_run(t, 512, 1152, true, false, 1.0)    // gemma-3-1b's wo step: the add partner normed first, then the FFN norm's quant
+            q8_gemv_ar_run(t, 256, 1536, true, true, 1.0)     // an E-series down step: the row quantized as it is for the PLE gate
+            q8_gemv_ar_run(t, 512, 1024, false, false, 0.5)   // a plain step under an output scale
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
 [test]
 def test_vkd_q8_gemv_pleact(t0 : T?) {
     t0 |> run("fused per-layer-embedding act + Q8_0 requant + q8 proj GEMV == the CPU chain (256 and 128 wide)") <| @(t : T?) {
