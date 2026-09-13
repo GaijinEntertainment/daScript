@@ -117,20 +117,20 @@ residual row and b+0 converts or requantizes it. The fused twins never write the
 the last layer always takes the split arm - the final requant reads `xb`. The addr_ffn site
 fuses the same way for the gate/up feed. Bit-identity with the split pair is a suite gate.
 
-**The cm2 flash-attention tile lands its output f16 when the `wo` feed is f16.** The tile
-template carries an `OUT16` stamp: the f16 instance converts the O accumulator in-kernel and
-writes the `wo` feed plane directly, so the per-layer attn-to-f16 convert never encodes; the
-f32 instance serves the quant route. The two device converts agree bit for bit; the CPU's
-`float16()` rounds ties differently, so the twin's gate compares device against device.
+**The cm2 flash-attention tile (`FaCm2T`) accumulates O in f16 under a biased row max, masks only
+its edge steps, and lands its output f16 when the `wo` feed is f16.** The running row max carries
+3 ln 2, so every P = e^(S - M) sits at an eighth or under and the f16 O accumulator (half the P @ V
+step) cannot overflow; L carries the same bias, the final divide cancels it, and S, L and M stay f32.
+The mask pass runs only on the steps that cross the causal diagonal or the tile's last window start,
+and the KV loop carries `[dont_unroll]`, which the JIT reads too since the body compiles for the CPU
+oracle (RTX PRO 4500, a 512-row window: E4B's attention 6868 -> 4014 us, gemma-3-1b's 2671 -> 1844).
+The `OUT16` instance converts O in-kernel and writes the `wo` feed plane directly, so the per-layer
+attn-to-f16 convert never encodes; the f32 instance serves the quant route (the twin's gate compares
+device against device: the CPU's `float16()` rounds ties differently).
 
-**A hybrid's gated attention rides the batch kernels through a per-head q stride** (`qhs = 2
-x hs`, twice the head size): the q GEMM writes `[q | gate]` per head, qk-rms and rope read q
-head-strided in place, and the mirror attention gates on the sigmoid of the gate half. A
-partial-rope model rotates the first `rot` elements of a head, and the kernels read the count
-as the `half = rot / 2` argument word. At head size 256 the window takes the h256 cm2 flash
-stamps (Br 64, Bc 32, the h128 loop with the head-shaped tiles doubled): the gated twins load
-q at the head's q stride and scale the normalized output by the sigmoid of the gate half
-before the store; the h128 coopmat twin stays 128-only.
+**A hybrid's gated attention rides the batch kernels through a per-head q stride** (`qhs = 2 x hs`):
+the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
+attention gates on the sigmoid of the gate half, a partial-rope model rotates a head's first `rot` elements, and at head size 256 the gated twins take the h256 cm2 flash stamps (Br 64, Bc 32), q at the head's q stride, the normalized output gated before the store.
 
 ### 2.2p The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
 

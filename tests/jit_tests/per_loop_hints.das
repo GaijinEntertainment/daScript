@@ -48,6 +48,16 @@ def countdown_while_annotated(start : int) {
     return iters
 }
 
+def countdown_while_spirv_spelling(start : int) {
+    var x = start
+    var iters = 0
+    while [dont_unroll] (x > 0) {   // the SPIR-V emitter's name for the same hint; a kernel body carries it and compiles on the CPU as well
+        x--
+        iters++
+    }
+    return iters
+}
+
 def countdown_while_bare(start : int) {
     var x = start
     var iters = 0
@@ -71,5 +81,8 @@ def test_per_loop_hints(t : T?) {
     }
     t |> run("while [unroll_disable] matches bare") @(t : T?) {
         t |> equal(countdown_while_annotated(50), countdown_while_bare(50))
+    }
+    t |> run("while [dont_unroll] (the SPIR-V spelling) matches bare") @(t : T?) {
+        t |> equal(countdown_while_spirv_spelling(50), countdown_while_bare(50))
     }
 }

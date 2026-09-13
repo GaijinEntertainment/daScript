@@ -2769,8 +2769,9 @@ def facm2_smear(a, b : float) : float => a
 [spirv_per_element, unused_argument(r, c)]
 def facm2_exp(r, c : uint; v : float) : float => exp(v)
 
+//! the running row max, biased by 3 ln 2 so every P = e^(S - M) sits at an eighth or under and the f16 O accumulator cannot overflow; L carries the same bias and the final divide cancels it
 [spirv_per_element, unused_argument(r, c)]
-def facm2_pick(r, c : uint; v, o : float) : float => max(v, o)
+def facm2_pick(r, c : uint; v, o : float) : float => max(v + 2.0794415, o)
 
 // causal: key kbase+c may not exceed query w0+q0+r (-FLT_MAX/2 keeps Mold-M NaN-free), nor sit
 // below the query's window on a sliding layer (win 0 = every position); padding rows keep their
@@ -2850,11 +2851,12 @@ class template FaCm2T {
         var mrow : SACC
         coopmatFill(mrow, -1.7e38)
         var lrow : SACC
-        var o : QACC
+        var o : OF   //! the f16 O accumulator: half the P @ V step and half the tile's registers (llama.cpp's O_TYPE), safe under the row-max bias
+        let qbase = pa.w0 + q0
         let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
         // a sliding layer's first step: the step below the tile's first query's window start
-        var j = (pa.window != 0u && pa.w0 + q0 > pa.window) ? ((pa.w0 + q0 - pa.window) / BC) * BC : 0u
-        while (j < kmax) {
+        var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / BC) * BC : 0u
+        while [dont_unroll] (j < kmax) {   //! the driver left to unroll a body of this size multiplies the live tile state
             var s : SACC
             var kt : KB
             coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, BC, kvh * HS, HS, tv)
@@ -2862,7 +2864,10 @@ class template FaCm2T {
             static_if (CAP) {
                 coopmatPerElement(s, s, @@facm2_softcap, pa.cap)
             }
-            coopmatPerElement(s, s, @@facm2_mask, pa.w0 + q0, j, pa.window)
+            //! the mask pass runs only where a step can mask: the steps crossing the causal diagonal, and the steps below the tile's last window start
+            if (j + BC > qbase + 1u || (pa.window != 0u && j + pa.window < qbase + 64u)) {
+                coopmatPerElement(s, s, @@facm2_mask, qbase, j, pa.window)
+            }
             var rmax : SACC
             coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@facm2_max)
             var mold : SACC
@@ -2883,28 +2888,32 @@ class template FaCm2T {
             coopmatAdd(lrow, lrow, rsum)                                // L = eM*L + rowsum
             var emd : QACC
             coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@facm2_smear)
-            coopmatMulElem(o, emd, o)
+            var emf : OF
+            coopmatConvert(emf, emd)
+            coopmatMulElem(o, emf, o)
             var vt : VB
             coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, BC, kvh * HS, HS)
             o = coopmatMulAdd(pf, vt, o)                                // O = eMdiag*O + P @ V
             j += BC
         }
+        var o32 : QACC
+        coopmatConvert(o32, o)
         var ld : QACC
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
         coopmatPerElement(ld, ld, @@facm2_recip)
-        coopmatMulElem(o, ld, o)                                        // O /= L (padding rows discard at store)
+        coopmatMulElem(o32, ld, o32)                                    // O /= L (padding rows discard at store)
         static_if (GATED) {
             var g : QACC
             coopmatLoadTensor(g, qpanel, 0u, tlq, q0, 64u, h * qhs + HS, HS)
             coopmatPerElement(g, g, @@facm2_sigmoid)
-            coopmatMulElem(o, g, o)
+            coopmatMulElem(o32, g, o32)
         }
         static_if (OUT16) {
             var of : OF
-            coopmatConvert(of, o)
+            coopmatConvert(of, o32)
             coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * HS, HS)
         } else {
-            coopmatStoreTensor(o, outp, 0u, tlo, q0, 64u, h * HS, HS)
+            coopmatStoreTensor(o32, outp, 0u, tlo, q0, 64u, h * HS, HS)
         }
     }
 }
@@ -8296,7 +8305,7 @@ class F16GemmCm2 {
         let t0 = (rem / wtiles) * 128u
         let m0 = (rem % wtiles) * 128u
         let split = pa.ksplit != 0u
-        let k0 = split ? chunk * pa.ksplit : 0u
+        let k0 = split ? (chunk * pa.ksplit) & ~(F16G_BK - 1u) : 0u   //! the chunk is a k-step multiple by the shape gate; the mask tells the compiler so (the decode-load's fast path)
         let k1 = split ? min(k0 + pa.ksplit, pa.n) : pa.n
         let ybase = split ? pa.ybase + chunk * pa.rows * pa.d : pa.ybase
         let ystride = split ? pa.d : pa.ystride

@@ -57,6 +57,14 @@ device or instance extension by name, a feature bit a `*_supported` probe of
 serves without it, in the same change.** The device-init log prints the roster, so a box's log
 says which route each capability decided.
 
+**A cm2 tensor-load coordinate a k loop steps - the `k` of `coopmatLoadTensor` /
+`coopmatLoadTensorDecode` - starts at a literal or at a value masked to the loop's step
+(`& ~(BK * UNR - 1u)`); never at a bare runtime product or a buffer-read value.** The shader
+compiler vectorizes the decode-load only where it can prove the coordinate's alignment; a chunk
+start such as `ks * ksplit` unmasked runs the same loop at half the rate (gemma-3-1b's down through
+one chunk: 304 us against 152 whole), which is what made every split-k lose before the mask.
+A chunk the caller cuts must be a multiple of that step, so the mask changes nothing at run time.
+
 **A prefill GEMM whose output rows start above row 0 encodes unsplit, whatever splitter it
 uses - `cm2_gemm_pick` or the small f16 GEMM's `F16G_SPLIT` chunks.** The split-k reduce sums
 partial planes counted from row 0, so a dispatch starting above row 0 would reduce the wrong

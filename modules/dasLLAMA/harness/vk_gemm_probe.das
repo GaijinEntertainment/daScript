@@ -3741,6 +3741,10 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             only = "moe:"
             var pf : KqFmt
             cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
+        } elif (a |> starts_with("cm2g:")) {
+            only = "cm2g:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
         } elif (a |> starts_with("moesk:")) {
             only = "moesk:"
             var pf : KqFmt
@@ -3774,7 +3778,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_dec_small_kernels()
         return
     }
-    if (only == "cm2:" || only == "cm2d:" || only == "cm2w:") {
+    if (only == "cm2:" || only == "cm2d:" || only == "cm2w:" || only == "cm2g:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
             return
@@ -3817,6 +3821,19 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                     && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
                     && kq_batch_cls_ensure(cm2_fmt, false), "the cm2 sweeps' probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
                 let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
+                if (only == "cm2g:") {
+                    // gemma-4-26B-A4B's dense role shapes (dim 2816, shared expert 2112, q 4096, kv 2048): the file's K-quant planes against the q8 tiles below
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_down", 2816, 2112, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} wo     ", 2816, 4096, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v    ", 2048, 2816, 512)
+                    if (round == 1 && arm == arms - 1) {
+                        run_shape("q8 sh_gate", 2112, 2816, 512)
+                        run_shape("q8 q      ", 4096, 2816, 512)
+                    }
+                    continue
+                }
                 if (only == "cm2d:") {
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down ", 4096, 12288, 512)

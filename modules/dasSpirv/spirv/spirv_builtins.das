@@ -523,6 +523,15 @@ def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c 
 def public coopmatMulAdd(a : coopmatWgA_f16_64x512; b : coopmatWgB_f16_512x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x512; c : coopmatWgAcc_f32_64x512) : coopmatWgAcc_f32_64x512 { return c }
+// the flash pass's O += P @ V on an f16 accumulator (the row-max bias keeps every P at an eighth or under), one per head width
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f16_64x64) : coopmatWgAcc_f16_64x64 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f16_64x128) : coopmatWgAcc_f16_64x128 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f16_64x256) : coopmatWgAcc_f16_64x256 { return c }
+[unused_argument(a, b), sideeffects]
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x512; c : coopmatWgAcc_f16_64x512) : coopmatWgAcc_f16_64x512 { return c }
 [unused_argument(a, b), sideeffects]
 def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x16; c : coopmatWgAcc_s32_64x16) : coopmatWgAcc_s32_64x16 { return c }
 [unused_argument(a, b), sideeffects]
@@ -587,6 +596,12 @@ def public coopmatConvert(var dst : coopmatWgAcc_f32_64x16; src : coopmatWgAcc_f
 def public coopmatConvert(var dst : coopmatWgAcc_f32_64x32; src : coopmatWgAcc_f16_64x32) : void {}
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatWgAcc_f32_64x64; src : coopmatWgAcc_f16_64x64) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_64x128; src : coopmatWgAcc_f16_64x128) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_64x256; src : coopmatWgAcc_f16_64x256) : void {}
+[unused_argument(dst, src), sideeffects]
+def public coopmatConvert(var dst : coopmatWgAcc_f32_64x512; src : coopmatWgAcc_f16_64x512) : void {}
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatWgAcc_f32_128x256; src : coopmatWgAcc_f16_128x256) : void {}
 [unused_argument(dst, src), sideeffects]

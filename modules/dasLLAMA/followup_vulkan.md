@@ -1369,9 +1369,13 @@ module) is independent and can land any time - it is pure structure.
     the partial stores, the repeated q loads and the combine's reads outweigh the shorter key loop,
     and the causal grid's short tiles get empty pieces. llama.cpp b10660's flash pass runs the same
     layer in about half the time on the same grid, so the gap is the pass's own per-step and
-    per-workgroup cost, not occupancy. The shapes still worth a try: pieces proportional to a
-    tile's key count (the causal imbalance is 8:1 across a window), f16 partials, and the pass's
-    fixed cost (the q tile load and the per-element mask, exp and max passes per step).
+    per-workgroup cost, not occupancy. Of that cost the f16 O accumulator under a 3 ln 2 row-max
+    bias, the mask pass gated to the edge steps and the `[dont_unroll]` KV loop landed (E4B's
+    attention 6868 -> 4014 us a window, gemma-3-1b's 2671 -> 1844, the 26B's 7225 -> 3469;
+    llama.cpp b10660 reads 3435, 1330 and 2775). Still open: the split in llama.cpp's form - f16
+    O partials with the L and M scalars, one generic reduce dispatch, empty above-diagonal pieces
+    retiring on the block skip (its rule gives gemma-3-1b four pieces over the 32 tiles) - and 32
+    query rows at head size 512, where the 64-row tile carries a 64 x 512 O and q.
 51. **The token command's remaining decode gap is the dependent-dispatch gap, not the kernels.** On
     the RunPod RTX PRO 4500 every decode GEMV streams at the card's 840 GB/s (`harness/vk_gemv_probe.das`
     at the 26B's 2816-wide shapes, every kq format and q8) and a one-workgroup row kernel costs 0.85 us

@@ -773,16 +773,18 @@ def private pf_roles_per_layer(L : RLayer) : int64 {
         n += 4l   //! the per-layer-embedding branch: the residual + requant, the gate GEMM, the act, the proj GEMM
     }
     if (L.moe) {
-        n += PF_MOE_ROLES - (has_dense_triple(L) ? 0l : 4l)
+        n += PF_MOE_ROLES - (has_dense_triple(L) ? 0l : 4l) + (L.moe_g4 ? 2l : 0l)   //! the gemma-4 block stamps its router norm and its routed-feed norm
     }
     return n
 }
 
-//! the routed block's stamps of an MoE layer's tail past ar1 / rq_f at `m0`: the shared expert's four when the layer has one, then the block's eight and ar2
-def private pf_moe_tail_text(acc : double[26]; m0 : int; shexp : bool) : string {
+//! the routed block's stamps of an MoE layer's tail past ar1 / rq_f at `m0`: the shared expert's four when the layer has one, then the block's eight (ten on the gemma-4 block, whose two norms sit around topk) and ar2
+def private pf_moe_tail_text(acc : double[26]; m0 : int; shexp, g4 : bool) : string {
     let s = shexp ? "sh_gate {int(acc[m0])} sh_up {int(acc[m0 + 1])} sh_act {int(acc[m0 + 2])} sh_down {int(acc[m0 + 3])} " : ""
     let r = m0 + (shexp ? 4 : 0)
-    return "{s}router {int(acc[r])} topk {int(acc[r + 1])} sched {int(acc[r + 2])} gather {int(acc[r + 3])} e_gate {int(acc[r + 4])} e_up {int(acc[r + 5])} e_act {int(acc[r + 6])} e_down {int(acc[r + 7])} ar2+comb {int(acc[r + 8])}"
+    let rt = g4 ? "rt_norm {int(acc[r])} router {int(acc[r + 1])} topk {int(acc[r + 2])} pre2_norm {int(acc[r + 3])} " : "router {int(acc[r])} topk {int(acc[r + 1])} "
+    let e = r + (g4 ? 4 : 2)
+    return "{s}{rt}sched {int(acc[e])} gather {int(acc[e + 1])} e_gate {int(acc[e + 2])} e_up {int(acc[e + 3])} e_act {int(acc[e + 4])} e_down {int(acc[e + 5])} ar2+comb {int(acc[e + 6])}"
 }
 
 let private PF_MOE_ROLES = 8l   //! router topk sched gather e_gate e_up e_act e_down (the combine rides the layer's ar2 stamp)
@@ -2026,20 +2028,22 @@ def private pf_prof_report(npos : int64) {
     tot += tatt + tdn + tmoe + tdnm
     to_log(LOG_INFO, "vk_rdpf gpu ({npos} tokens, last window) prologue {int(pfq_us(2u))} fin_rq {int(pfq_us(qi))} cls {int(pfq_us(qi + 1u))} attention layers {natt}: {int(tatt)} recurrent layers {ndn}: {int(tdn)} MoE layers {nmoe}: {int(tmoe)} recurrent MoE layers {ndnm}: {int(tdnm)} total {int(tot)} us\n")
     var has_shexp = false
+    var has_g4 = false
     for (L in g_rd.layers) {
         has_shexp ||= L.moe && has_dense_triple(L)
+        has_g4 ||= L.moe_g4
     }
     if (nmoe > 0l) {
         //! an MoE layer's stamps: the attention roles (the qkn one shifts them by one), ar1, rq_f, then the tail
         let q = g_rd.qk_norm ? 1 : 0
         let qkn = q > 0 ? "qkn {int(moe[4])} " : ""
-        to_log(LOG_INFO, "vk_rdpf moe rq_x {int(moe[0])} q {int(moe[1])} k {int(moe[2])} v {int(moe[3])} {qkn}rope_kv {int(moe[4 + q])} attn {int(moe[5 + q])} rq_a {int(moe[6 + q])} wo {int(moe[7 + q])} ar1 {int(moe[8 + q])} rq_f {int(moe[9 + q])} {pf_moe_tail_text(moe, 10 + q, has_shexp)}\n")
+        to_log(LOG_INFO, "vk_rdpf moe rq_x {int(moe[0])} q {int(moe[1])} k {int(moe[2])} v {int(moe[3])} {qkn}rope_kv {int(moe[4 + q])} attn {int(moe[5 + q])} rq_a {int(moe[6 + q])} wo {int(moe[7 + q])} ar1 {int(moe[8 + q])} rq_f {int(moe[9 + q])} {pf_moe_tail_text(moe, 10 + q, has_shexp, has_g4)}\n")
     }
     if (ndnm > 0l) {
         //! a recurrent MoE layer's stamps: the deltanet head's (the f32 beta/alpha arm folds two into one), ar1, rq_f, then the tail
         let b = g_rd.dn_ba_f32 ? 0 : 1
         let ba = g_rd.dn_ba_f32 ? "ba {int(dnm[3])}" : "beta {int(dnm[3])} alpha {int(dnm[4])}"
-        to_log(LOG_INFO, "vk_rdpf dnmoe rq_x {int(dnm[0])} qkv {int(dnm[1])} z {int(dnm[2])} {ba} conv {int(dnm[4 + b])} scan {int(dnm[5 + b])} onorm {int(dnm[6 + b])} tail {int(dnm[7 + b])} rq_o {int(dnm[8 + b])} out {int(dnm[9 + b])} ar1 {int(dnm[10 + b])} rq_f {int(dnm[11 + b])} {pf_moe_tail_text(dnm, 12 + b, has_shexp)}\n")
+        to_log(LOG_INFO, "vk_rdpf dnmoe rq_x {int(dnm[0])} qkv {int(dnm[1])} z {int(dnm[2])} {ba} conv {int(dnm[4 + b])} scan {int(dnm[5 + b])} onorm {int(dnm[6 + b])} tail {int(dnm[7 + b])} rq_o {int(dnm[8 + b])} out {int(dnm[9 + b])} ar1 {int(dnm[10 + b])} rq_f {int(dnm[11 + b])} {pf_moe_tail_text(dnm, 12 + b, has_shexp, has_g4)}\n")
     }
     if (natt > 0l) {
         // the qkn dispatch stamps between v and rope_kv, shifting every later role by one; the per-layer-embedding branch's four sit between down and ar2
