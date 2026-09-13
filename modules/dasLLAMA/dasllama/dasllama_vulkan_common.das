@@ -2321,6 +2321,10 @@ struct RLayer {
     fe1, fe3, fe2 : int
     xe_own : bool                   //! the experts' feed is its own image: their quant form differs from the dense triple's
     s_quant_xe : VkDescriptorSet    //! the second requant of xb, the experts' form
+    pre2_fused : bool               //! the gemma-4 routed feed's norm and requant as one dispatch (`s_pre2_rq`, an ArRq stamp with the add off)
+    pre2_stamp : RqStamp
+    s_pre2_rq : VkDescriptorSet
+    rtn_fused : bool                //! the gemma-4 router takes its own rms of x (`RouterArgs.norm_on`): no norm dispatch before it
     s_router, s_topk : VkDescriptorSet
     s_egate, s_eup : VkDescriptorSet
     s_eact : VkDescriptorSet

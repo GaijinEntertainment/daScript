@@ -179,9 +179,12 @@ down into `ffnout`. The routed branch does not read that normed row: its feed is
 layer's own routed pre norm, so the feed is always the experts' own image (`xe_own`) - the norm
 step reuses the layer's add+rms set with the add off and the pre-norm row named in the push
 (`RD_NORM_PRE_FFN2`), then the experts' requant (the token command) or the f16 gather (the window
-chain) reads it. The router reads a third row: a weightless rms of x under the router's learned
-input scale over sqrt(dim), which the norms plane carries as one weight row
-(`RD_NORM_ROUTER`: scale[i] / sqrt(dim)), so the same add+rms kernel with the add off produces it.
+chain) reads it - the token command takes the norm and the requant as one `ArRq` stamp with the add
+off (`RLayer.pre2_fused`). The router reads a third row: a weightless rms of x under the router's
+learned input scale over sqrt(dim), which the norms plane carries as one weight row
+(`RD_NORM_ROUTER`: scale[i] / sqrt(dim)); the window chain produces it with the add+rms kernel, the
+token command's router GEMV takes that rms itself, every expert workgroup over the same x
+(`RouterArgs.norm_on`, `rtn_fused`), so no norm dispatch precedes it.
 The top-k folds the checkpoint's per-expert down scale into each routing weight after the
 renormalization (`TopkArgs.dsoff` / `TopkRowsArgs.dsoff` name the layer's row in the
 `[n_moe x ne]` scale plane `rdec_prepare_moe` uploads; `NO_DSCALE` on every other model, the

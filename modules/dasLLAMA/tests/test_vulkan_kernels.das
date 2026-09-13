@@ -8230,7 +8230,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             unsafe {
                 upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
                 upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
-                var sc = set_router_gemv_f16_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+                var sc = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
                 var raw = alloc_cmd()
                 let begin = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -8261,7 +8261,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             got2 |> resize(out_n)
             nan_sentinel_upload(od, o_bytes)
             unsafe {
-                var sc2 = set_router_gemv_f16_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+                var sc2 = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
                 var raw2 = alloc_cmd()
                 let begin2 = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw2, begin2), null)
@@ -8282,6 +8282,54 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 }
             }
             t |> success(bad2 == 0 && gap == 0, "router_gemv_f16 two bases: {bad2} of {ne} outputs off the CPU dot, {gap} of 4 gap words written")
+            //! the norm-folded form: every expert row's dot over x under the norm row at nwoff, scaled by the row's weightless rms
+            let nwoff = 64
+            var wnh : array<float>
+            wnh |> resize(nwoff + dim)
+            for (i in range(length(wnh))) {
+                wnh[i] = float(hash_word(uint(i) + 777u) % 1000u) / 1000.0 + 0.5
+            }
+            let eps = 1.0e-6
+            var ssn = 0.0
+            for (k in range(dim)) {
+                ssn += xh[k] * xh[k]
+            }
+            let invn = 1.0 / sqrt(ssn / float(dim) + eps)
+            var want3 : array<float>
+            want3 |> resize(out_n)
+            for (e in range(ne)) {
+                var acc = 0.0
+                for (k in range(dim)) {
+                    acc += float(wh16[woff + e * dim + k]) * (xh[k] * wnh[nwoff + k])
+                }
+                want3[obase + e] = acc * invn
+            }
+            let wn_bytes = int64(length(wnh)) * 4l
+            let wnd = make_device_buf(wn_bytes)
+            var got3 : array<float>
+            got3 |> resize(out_n)
+            nan_sentinel_upload(od, o_bytes)
+            unsafe {
+                upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
+                var sc3 = set_router_gemv_f16_cls(fixed_array(wd, xd, od, wnd), fixed_array(w_bytes, x_bytes, o_bytes, wn_bytes), fixed_array(0u, 1u, 2u, 4u))
+                var raw3 = alloc_cmd()
+                let begin3 = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw3, begin3), null)
+                var h3 : VkHaz
+                var pc3 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), norm_on = 1u, nwoff = uint(nwoff), eps = eps)
+                enc_router_gemv_f16_cls(raw3, h3, sc3, pc3, int64(ne))
+                vhz_dep(raw3, h3, 2u, 0u, true)
+                cmd_copy_range(raw3, od, 0l, host.buf, 0l, o_bytes)
+                vk_check(vkEndCommandBuffer(raw3), null)
+                submit_wait(raw3)
+                memcpy(addr<void?>(got3[0]), host.mapped, o_bytes)
+            }
+            let bad3 = rel_mismatches(got3, want3, obase, ne)
+            t |> success(bad3 == 0, "router_gemv_f16 norm-folded: {bad3} of {ne} outputs off the CPU chain")
+            t |> success(rel_mismatches(got3, want, obase, ne) > 0, "router_gemv_f16 norm-folded: the control - the unnormed dot must miss")
+            delete wnh
+            delete want3
+            delete got3
             delete want2
             delete got2
             delete wh

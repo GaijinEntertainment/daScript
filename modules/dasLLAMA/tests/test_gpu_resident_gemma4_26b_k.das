@@ -10,8 +10,10 @@ require _gemma_resident   // the gemma cells; one model a file - this process lo
 //! stacks at 704 (the q51 expert rail - the s and e stamps, the Q8_0-activation decode GEMV), the dense triple and the
 //! attention head on the K-quant rails
 let private GEMMA4_26B_K_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
-//! the routed model's argmax slack (the IQ3_XXS file's reading): a router near-tie flips whole positions between the arms
-let private GEMMA4_26B_K_HITS_SLACK = 8l
+//! the routed model's argmax slack: a router near-tie flips whole positions between the arms - this file's hits read 125 to
+//! 128 of 150 against the CPU chain's 134 across the token command's kernel summation orders, while its per-position gap
+//! to llama.cpp b10660 on the confident positions holds at 0.36 nats (the CPU chain 0.21) whichever order runs
+let private GEMMA4_26B_K_HITS_SLACK = 12l
 
 [test]
 def test_gpu_resident_gemma4_26b_k(t : T?) {

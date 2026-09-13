@@ -930,6 +930,9 @@ struct RouterArgs {
     dim : uint    // row width
     woff : uint   // this layer's row base in the span's router plane (elements)
     obase : uint  // output row base (the resident deltanet arm lands beta/alpha rows in the smalls)
+    norm_on : uint      //! the row read as its weightless rms under the norm row at `nwoff` (the gemma-4 router's input: the norm hop folded into the GEMV)
+    nwoff : uint
+    eps : float
     ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0 = one base
     obase_split : uint
 }
@@ -939,28 +942,55 @@ class template RouterGemvT {
     @template_constant PAIRS : bool = false   //!< the f16 stamp reads its row as half pairs, one word a step
     @ssbo @binding = 0 @role = "weight" w : array<KT>   // the rows, row-major [ne x dim] per layer
     @ssbo @binding = 0 @role = "alias" @template_gate = PAIRS w_pairs : array<uint>   //! the same rows as half pairs
-    @ssbo @binding = 1 x : array<float>       // the FFN-normed row
+    @ssbo @binding = 1 x : array<float>       // the FFN-normed row (the raw residual row under `norm_on`)
     @ssbo @binding = 2 logits : array<float>  // ne logits
+    @ssbo @binding = 3 wn : array<float>      //! the norms plane: the row at `nwoff` scales x under `norm_on`
     @push_constant pa : RouterArgs
-    @workgroup part : float[64]
+    @workgroup part : float[64]   //! slots 0..31 the dot's subgroup partials, 32..63 the norm's
+
+    //! the row element at `i` as the dot reads it: under the norm row when `norm_on`
+    def xn(i : uint) : float => pa.norm_on != 0u ? x[i] * wn[pa.nwoff + i] : x[i]
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
         let e = gl_WorkGroupID.x
         let base = pa.woff + e * pa.dim
+        let tid = gl_LocalInvocationID.x
+        var inv = 1.0
+        if (pa.norm_on != 0u) {   //! every workgroup takes the row's rms itself: a dispatch and a hop fewer than a norm kernel before the GEMV
+            var ss = 0.0
+            var j = tid
+            while (j < pa.dim) {
+                let v = x[j]
+                ss += v * v
+                j += 256u
+            }
+            let s0 = subgroupAdd(ss)
+            if (gl_SubgroupInvocationID == 0u) {
+                part[32u + gl_SubgroupID] = s0
+            }
+            barrier()
+            var tot0 = 0.0
+            var sg0 = 0u
+            while (sg0 < gl_NumSubgroups) {
+                tot0 += part[32u + sg0]
+                sg0++
+            }
+            inv = 1.0 / sqrt(tot0 / float(pa.dim) + pa.eps)
+        }
         var acc = 0.0
-        var i = gl_LocalInvocationID.x
+        var i = tid
         static_if (PAIRS) {
             let hb = base >> 1u
             let hd = pa.dim >> 1u
             while (i < hd) {
                 let p = unpackHalf2x16(w_pairs[hb + i])
-                acc += p.x * x[2u * i] + p.y * x[2u * i + 1u]
+                acc += p.x * xn(2u * i) + p.y * xn(2u * i + 1u)
                 i += 256u
             }
         } else {
             while (i < pa.dim) {
-                acc += float(w[base + i]) * x[i]   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
+                acc += float(w[base + i]) * xn(i)   // nolint:PERF020 -- KT converts; the f32 twin's cast is free
                 i += 256u
             }
         }
@@ -980,7 +1010,7 @@ class template RouterGemvT {
             if (pa.ne_split != 0u && e >= pa.ne_split) {
                 o = pa.obase_split + (e - pa.ne_split)
             }
-            logits[o] = tot
+            logits[o] = tot * inv
         }
     }
 }

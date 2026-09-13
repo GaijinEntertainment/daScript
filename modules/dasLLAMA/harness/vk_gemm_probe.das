@@ -625,7 +625,7 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
         }
-        var s = set_router_gemv_f16_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+        var s = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
