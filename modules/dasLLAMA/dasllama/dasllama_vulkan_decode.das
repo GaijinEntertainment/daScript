@@ -88,8 +88,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.xb_dev = make_device_buf(dim * 4l)
     r.xq_dev = make_device_buf(wide)              // int8 quants, 1 byte/elem
     r.xs_dev = make_device_buf((wide / 32l) * 4l)
-    r.q_dev = make_device_buf((q_gated ? 2l * qd : qd) * 4l)
     r.kv_dev = make_device_buf((qd + 2l * kv_dim) * 4l)
+    r.q_dev = q_gated ? make_device_buf(2l * qd * 4l) : r.kv_dev   //! an ungated q row is the k/v row's front (its first qd elements): one q+k+v GEMV dispatch lands all three
     r.attn_dev = make_device_buf(qd * 4l)
     r.attn_nsplit = da_nsplit(n_heads, int64(g_gpu.sm_count))
     r.attn_part_dev = make_device_buf(n_heads * DA_NSPLIT_MAX * (head_size + 2l) * 4l)
@@ -305,6 +305,13 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
             L.s_kv = gemv_cls_set(fk, fixed_array(pk.wq, pk.ws, L.m_k.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
                 fixed_array(pk.wqb, pk.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
                 fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_KVK | VHZ_KVV))
+        }
+        L.qkv_merged = (vk_fuse_on() && !g_rd.q_gated && !L.kv_shared && fq == fk && (L.vfk || fq == fv) && qd % kvd == 0l
+            && arena_slab_idx(bq) == arena_slab_idx(bk) && (L.vfk || arena_slab_idx(bq) == arena_slab_idx(bv)))   //! q, k (and v) of one format in one slab: one dispatch of kvd-row regions fills the whole row
+        if (L.qkv_merged) {
+            L.s_qkv = gemv_cls_set(fq, fixed_array(pq.wq, pq.ws, L.m_q.buf, g_rd.xq_dev, g_rd.xs_dev, g_rd.kv_dev),
+                fixed_array(pq.wqb, pq.wsb, META_BYTES, dim, (dim / 32l) * 4l, (qd + 2l * kvd) * 4l),
+                fixed_array(0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_Q | VHZ_KVK | VHZ_KVV))
         }
         let mirbytes = g_rd.mir_elems * g_rd.kv_esz
         let cosbytes = g_rd.cos_elems * 4l
@@ -864,6 +871,9 @@ def private rd_record_token {
                 fill_gemv_regions(L.m_dnbeta, L.bbeta)
                 fill_gemv_regions(L.m_dnalpha, L.balpha)
             }
+        } elif (L.qkv_merged) {
+            fill_gemv_regions_qkv(L.m_q, L.bq, L.bk, L.bv, L.qd / L.kvd, L.kvd * (g_rd.dim / fmt_unit(L.fq)), !L.vfk)
+            fill_gemv_regions(L.m_wo, L.bo)
         } else {
             fill_gemv_regions(L.m_q, L.bq)
             if (L.kv_shared) {   //! no k/v planes of its own
@@ -993,10 +1003,17 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     var pc_rq_qd_k = RqArgs(inbase = 0u, nblk = uint(qd / 256l))
     let rqwg_qd = (qd / 4l + 255l) / 256l
     let rqwg_qd_k = (qd / 8l + 255l) / 256l
-    var pcq = GemvArgs(n = uint(dim), d = uint(qrows), nreg = 1u, ybase = 0u)
-    gemv_enc(L.fq, raw, h, L.s_q, pcq, qrows)
-    rd_ts(raw, "a:q")
-    if (L.kv_shared) {   //! a shared-KV layer projects Q only: the donor layer's rows already sit in the mirror
+    if (L.qkv_merged) {   //! q in kvd-row pieces, then k, then v: one dispatch writes the whole projection row
+        let nreg = qd / kvd + (L.vfk ? 1l : 2l)
+        var pcqkv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = uint(nreg), ybase = 0u)
+        gemv_enc(L.fq, raw, h, L.s_qkv, pcqkv, nreg * kvd)
+        rd_ts(raw, "a:qkv")
+    } else {
+        var pcq = GemvArgs(n = uint(dim), d = uint(qrows), nreg = 1u, ybase = 0u)
+        gemv_enc(L.fq, raw, h, L.s_q, pcq, qrows)
+        rd_ts(raw, "a:q")
+    }
+    if (L.kv_shared || L.qkv_merged) {   //! a shared-KV layer projects Q only: the donor layer's rows already sit in the mirror
     } elif (L.kv_merged) {
         var pckv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 2u, ybase = uint(qd))
         gemv_enc(L.fk, raw, h, L.s_kv, pckv, 2l * kvd)

@@ -197,7 +197,7 @@ once.
 **A recurrent layer rides the same recorded token command as an attention layer.** The
 whole-model driver (`ARCHITECTURE_GPU.md` sec.1.5, `dasllama_gpu_resident.das`) records one
 command per model whose per-layer body is one of two heads followed by the shared FFN tail (a q8 triple with a Q8_0 feed runs `Q8GemvGu` - the gate and up dots, the activation and the hidden row's Q8_0 requant in one dispatch, a workgroup a 32-row block - else the gate GEMV, the up GEMV and the act+requant kernel; then the down GEMV): an
-attention head (q/k/v GEMVs, the fused qk-norm and rope storing the mirror row, decode attention
+attention head (the q, k and v GEMVs as ONE region dispatch where the three planes share a format and a slab - q in kv-width pieces, then k, then v, the projection row landing whole, the ungated q buffer being that row's front - else a GEMV a plane; the fused qk-norm and rope storing the mirror row, decode attention
 over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
 GEMV into one projection row (z at offset `cd`; the two halves under their own hazard classes,
 `VHZ_DNP` and `VHZ_DNZ`, so the GEMVs co-run and the step waits on both), the beta and alpha rows as ONE `RouterGemvF16`

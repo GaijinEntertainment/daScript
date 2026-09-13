@@ -2241,6 +2241,8 @@ struct RLayer {
     s_q, s_k, s_v : VkDescriptorSet  // q/k/v class GEMV
     s_kv : VkDescriptorSet          // merged k+v two-region class GEMV (fk == fv: same arena planes)
     kv_merged : bool
+    s_qkv : VkDescriptorSet         //! the q+k+v region GEMV (one format, one slab): q in kvd-row pieces, then k, then v
+    qkv_merged : bool
     s_qkn : VkDescriptorSet         // per-head q/k rmsnorm class set (qk_norm models only)
     s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
     s_rope : VkDescriptorSet        // rope + KV store class set
@@ -2543,6 +2545,26 @@ def fill_gemv_regions2(hb : HostBuf; blk_a, blk_b : int64) {
         mp[1] = 0u
         mp[2] = uint(arena_local_blk(blk_b))
         mp[3] = 0u
+    }
+}
+
+//! the q+k+v form: q as `qpieces` regions of `piece_blocks` blocks each, then k, then v (off under with_v = false) - every
+//! region kvd rows, landing at 0, qd, qd + kvd. All three blocks live in ONE slab - the caller guards.
+def fill_gemv_regions_qkv(hb : HostBuf; blk_q, blk_k, blk_v : int64; qpieces, piece_blocks : int64; with_v : bool) {
+    unsafe {
+        var mp = reinterpret<uint?>(hb.mapped)
+        var r = 0
+        for (p in range64(qpieces)) {
+            mp[r * 2] = uint(arena_local_blk(blk_q) + p * piece_blocks)
+            mp[r * 2 + 1] = 0u
+            r++
+        }
+        mp[r * 2] = uint(arena_local_blk(blk_k))
+        mp[r * 2 + 1] = 0u
+        if (with_v) {
+            mp[r * 2 + 2] = uint(arena_local_blk(blk_v))
+            mp[r * 2 + 3] = 0u
+        }
     }
 }
 
