@@ -2332,6 +2332,8 @@ struct RLayer {
     s_router, s_topk : VkDescriptorSet
     s_egate, s_eup : VkDescriptorSet
     s_eact : VkDescriptorSet
+    egu : bool                      //! the Q4_K gate and up GEMVs, the act and its Q8_0 requant as one dispatch (`KqGemvK4Gu`)
+    s_egu : VkDescriptorSet
     s_edown : VkDescriptorSet
     edown_sum : bool                //! the routed down GEMV sums the k rows under their weights itself (`Q51GemvSum`): the combine reads one row
     s_edown_sum : VkDescriptorSet

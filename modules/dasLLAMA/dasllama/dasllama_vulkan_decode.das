@@ -486,6 +486,14 @@ def private rd_moe_sets(var L : RLayer) {
     L.s_eact = set_actrq_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
         fixed_array(k * nfe * 4l, k * nfe * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
         fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
+    //! Q4_K gate and up stacks in one slab feeding a Q8_0 down: the two GEMVs and the act+requant as one dispatch
+    L.egu = (L.fe1 == int(KqFmt.k4) && L.fe3 == int(KqFmt.k4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
+        && vk_fuse_on() && ensure_kq_gemv_k4_gu_cls())
+    if (L.egu) {
+        L.s_egu = set_kq_gemv_k4_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, kq_grid_dev(), g_rd.moe_meta3_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
+    }
     L.s_edown = gemv_cls_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev),
         fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
@@ -1341,19 +1349,26 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     enc_topk_cls(raw, h, L.s_topk, pct, 1l)
     rd_ts(raw, "m:topk")
     var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(k), ybase = 0u)
-    gemv_enc(L.fe1, raw, h, L.s_egate, pcg, k * nfe)
-    rd_ts(raw, "m:e_gate")
-    gemv_enc(L.fe3, raw, h, L.s_eup, pcg, k * nfe)
-    rd_ts(raw, "m:e_up")
-    let dkq = kq_sb(L.fe2)
-    var pca = ActArgs(nelem = uint(k * nfe), gelu = g_rd.is_gelu ? 1u : 0u, nblk = uint(k * nfe / (dkq ? 256l : 32l)))
-    let awgs = (k * nfe / (dkq ? 8l : 4l) + 255l) / 256l
-    if (dkq) {
-        enc_q8k_actrq_cls(raw, h, L.s_eact, pca, awgs)
+    if (L.egu) {
+        pcg.lanes_per_row = gemv_lanes_per_row(L.fe1, dim)
+        pcg.gelu = g_rd.is_gelu ? 1u : 0u
+        enc_kq_gemv_k4_gu_cls(raw, h, L.s_egu, pcg, k * nfe / 32l)
+        rd_ts(raw, "m:e_gu")
     } else {
-        enc_q8_actrq_cls(raw, h, L.s_eact, pca, awgs)
+        gemv_enc(L.fe1, raw, h, L.s_egate, pcg, k * nfe)
+        rd_ts(raw, "m:e_gate")
+        gemv_enc(L.fe3, raw, h, L.s_eup, pcg, k * nfe)
+        rd_ts(raw, "m:e_up")
+        let dkq = kq_sb(L.fe2)
+        var pca = ActArgs(nelem = uint(k * nfe), gelu = g_rd.is_gelu ? 1u : 0u, nblk = uint(k * nfe / (dkq ? 256l : 32l)))
+        let awgs = (k * nfe / (dkq ? 8l : 4l) + 255l) / 256l
+        if (dkq) {
+            enc_q8k_actrq_cls(raw, h, L.s_eact, pca, awgs)
+        } else {
+            enc_q8_actrq_cls(raw, h, L.s_eact, pca, awgs)
+        }
+        rd_ts(raw, "m:e_act")
     }
-    rd_ts(raw, "m:e_act")
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k), ybase = 0u)
     if (L.edown_sum) {
         enc_q51_gemv_sum_cls(raw, h, L.s_edown_sum, pcd, gemv_wgs(dim, 0u))

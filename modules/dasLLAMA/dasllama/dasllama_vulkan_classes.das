@@ -8760,6 +8760,7 @@ struct GemvArgs {
     nreg : uint    // region count
     ybase : uint   // output base row
     lanes_per_row : uint   //! 8, 16, or 0 = the whole subgroup (the q8 GEMV ignores it)
+    gelu : uint    //! the fused gate-up twin's activation select (0 = silu, else tanh-gelu); the plain GEMVs ignore it
 }
 
 // ===== the Q8_0 decode GEMV pair =====
@@ -9290,43 +9291,36 @@ class KqGemvBase {
         return dm.x * float(sc * idot) - dm.y * float(mn * bs)
     }
 
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
-    def gemv_shell {
-        let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
-        let lane = gl_SubgroupInvocationID
-        let row_lane = lane % lanes_per_row
-        let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
-        let live = rg < pa.nreg * pa.d
+    //! this lane's share of one row's dot: the row's `nsb` superblocks from weight superblock `wsb0` against the
+    //! activation's from `xsb0`, the row's `lanes_per_row` lanes striding the 32-blocks, four a step then the tail
+    def row_acc(wsb0, xsb0, nsb, lanes_per_row, row_lane : uint) : float {
+        let nb = nsb * 8u
         var acc = 0.0
-        if (live) {
-            let r = rg / pa.d
-            let row = rg % pa.d
-            let nsb = pa.n / 256u
-            let wsb0 = regions[r * 2u] + row * nsb
-            let xsb0 = regions[r * 2u + 1u]
-            let nb = nsb * 8u
-            var b0 = 0u
-            while (b0 + 4u * lanes_per_row <= nb) {
-                let bb = b0 + row_lane
-                acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)
-                let b1 = bb + lanes_per_row
-                acc += blk_contrib(wsb0 + b1 / 8u, b1 % 8u, xsb0 + b1 / 8u)
-                let b2 = b1 + lanes_per_row
-                acc += blk_contrib(wsb0 + b2 / 8u, b2 % 8u, xsb0 + b2 / 8u)
-                let b3 = b2 + lanes_per_row
-                acc += blk_contrib(wsb0 + b3 / 8u, b3 % 8u, xsb0 + b3 / 8u)
-                b0 += 4u * lanes_per_row
-            }
-            while (b0 < nb) {
-                let bb = b0 + row_lane
-                if (bb < nb) {
-                    acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)
-                }
-                b0 += lanes_per_row
-            }
+        var b0 = 0u
+        while (b0 + 4u * lanes_per_row <= nb) {
+            let bb = b0 + row_lane
+            acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)
+            let b1 = bb + lanes_per_row
+            acc += blk_contrib(wsb0 + b1 / 8u, b1 % 8u, xsb0 + b1 / 8u)
+            let b2 = b1 + lanes_per_row
+            acc += blk_contrib(wsb0 + b2 / 8u, b2 % 8u, xsb0 + b2 / 8u)
+            let b3 = b2 + lanes_per_row
+            acc += blk_contrib(wsb0 + b3 / 8u, b3 % 8u, xsb0 + b3 / 8u)
+            b0 += 4u * lanes_per_row
         }
-        //! the row's fold is an xor-shuffle butterfly over its lanes (the shuffle every GEMV already requires;
-        //! a clustered add would want the clustered subgroup feature the tier never checks)
+        while (b0 < nb) {
+            let bb = b0 + row_lane
+            if (bb < nb) {
+                acc += blk_contrib(wsb0 + bb / 8u, bb % 8u, xsb0 + bb / 8u)
+            }
+            b0 += lanes_per_row
+        }
+        return acc
+    }
+
+    //! the row's fold is an xor-shuffle butterfly over its lanes (the shuffle every GEMV already requires;
+    //! a clustered add would want the clustered subgroup feature the tier never checks)
+    def fold_lanes(acc : float; lanes_per_row : uint) : float {
         var total = acc
         if (lanes_per_row == 8u) {
             total += subgroupShuffleXor(total, 4u)
@@ -9340,6 +9334,24 @@ class KqGemvBase {
         } else {
             total = subgroupAdd(acc)
         }
+        return total
+    }
+
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
+    def gemv_shell {
+        let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
+        let lane = gl_SubgroupInvocationID
+        let row_lane = lane % lanes_per_row
+        let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
+        let live = rg < pa.nreg * pa.d
+        var acc = 0.0
+        if (live) {
+            let r = rg / pa.d
+            let row = rg % pa.d
+            let nsb = pa.n / 256u
+            acc = row_acc(regions[r * 2u] + row * nsb, regions[r * 2u + 1u], nsb, lanes_per_row, row_lane)
+        }
+        let total = fold_lanes(acc, lanes_per_row)
         if (live && row_lane == 0u) {
             y[pa.ybase + rg] = total
         }
@@ -9625,8 +9637,7 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 // Q4_K: w = d*sc*q - dmin*mn*1, q in [0,15] — per 32-block axs*(d*sc*idot - dmin*mn*bsum).
 // Every kq format shares family=kq_gemv_cls: ONE set layout + ONE set_kq_gemv_cls serves every
 // pipeline (identical inherited members), each leaf keeping its own ensure_/enc_ names.
-[vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class KqGemvK4 : KqGemvBase {
+class KqGemvK4Base : KqGemvBase {
     def override blk_contrib(wsb, blk, xsb : uint) : float {
         let xb4 = xsb * 16u + blk * 2u
         let xl = xq4[xb4]
@@ -9634,10 +9645,73 @@ class KqGemvK4 : KqGemvBase {
         let idot = blk_dot4(wq4[wsb * 8u + blk], xl, xh)
         return axs[xsb] * dm_fold(wsb, blk, idot, blk_sum(xl, xh))
     }
+}
 
+[vk_dispatch(name = "kq_gemv_k4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK4 : KqGemvK4Base {
     [spirv_kernel(local_size_x = 64, name = "kq_gemv_k4_cls_spv")]
     def run {
         gemv_shell()
+    }
+}
+
+//! the routed experts' Q4_K gate and up GEMVs, the activation and its Q8_0 requant in one dispatch (`Q8GemvGu`'s form
+//! over the slot regions): a workgroup owns one 32-row block of the k x d output rows, its subgroups dot the rows against
+//! both planes in the kq GEMV's lane split (the gate stack's regions at binding 2, the up stack's at 7, the one feed row),
+//! the rows meet in workgroup memory, and one subgroup activates and quantizes the block into the down GEMV's feed
+[vk_dispatch(name = "kq_gemv_k4_gu_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK4Gu : KqGemvK4Base {
+    @ssbo @binding = 7 regions3 : array<uint>   // the up stack's (rel_wblock, xblock) pairs per slot
+    @ssbo @binding = 8 outq : array<int8>       // the activated hidden rows' Q8_0 quants (the down GEMV's feed)
+    @ssbo @binding = 9 outs : array<float>      // ... and their per-block scales
+    @workgroup wg_g : float[32]   //! the block's gate dots
+    @workgroup wg_u : float[32]   //! ... and up dots
+
+    [spirv_kernel(local_size_x = 256, name = "kq_gemv_k4_gu_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
+    def run {
+        let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
+        let lane = gl_SubgroupInvocationID
+        let row_lane = lane % lanes_per_row
+        let per_sg = gl_SubgroupSize / lanes_per_row   // the rows a subgroup holds at once
+        let per_turn = gl_NumSubgroups * per_sg        // ... and the workgroup
+        let row0 = gl_WorkGroupID.x * 32u
+        let nsb = pa.n / 256u
+        var t = 0u
+        while (t * per_turn < 32u) {
+            let lr = t * per_turn + gl_SubgroupID * per_sg + lane / lanes_per_row
+            let rg = row0 + lr
+            let live = lr < 32u && rg < pa.nreg * pa.d
+            var g = 0.0
+            var u = 0.0
+            if (live) {
+                let r = rg / pa.d
+                let row = rg % pa.d
+                let xsb0 = regions[r * 2u + 1u]
+                g = row_acc(regions[r * 2u] + row * nsb, xsb0, nsb, lanes_per_row, row_lane)
+                u = row_acc(regions3[r * 2u] + row * nsb, xsb0, nsb, lanes_per_row, row_lane)
+            }
+            g = fold_lanes(g, lanes_per_row)
+            u = fold_lanes(u, lanes_per_row)
+            if (live && row_lane == 0u) {
+                wg_g[lr] = g
+                wg_u[lr] = u
+                y[pa.ybase + rg] = g   //! the gate rows land in the family's y as well: the dot half's own witness
+            }
+            t++
+        }
+        barrier()
+        if (gl_SubgroupID == 0u) {   // the block's activation and Q8_0 quant: one lane an output row
+            let li = min(lane, 31u)
+            let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.gelu) : 0.0
+            let dq = q8k_amax5(abs(a)) / 127.0
+            let id = dq != 0.0 ? 1.0 / dq : 0.0
+            if (lane == 0u) {
+                outs[gl_WorkGroupID.x] = dq
+            }
+            if (lane < 32u) {
+                outq[row0 + lane] = q8_quant1(a, id)
+            }
+        }
     }
 }
 

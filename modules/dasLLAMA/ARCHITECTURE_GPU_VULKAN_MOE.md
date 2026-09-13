@@ -131,7 +131,9 @@ the driver's router plane - every MoE layer's rows and, when the shared expert i
 row last - into one logits row; the top-k (`TopK`, the span's kernel over the decode's core)
 writes the k routing weights and the three expert GEMVs' slot regions, each a `(block, feed
 block)` pair whose block is the expert plane's slab-local base plus the pick's stride; gate and
-up run the class GEMV over k regions, the act writes k hidden rows, down runs k regions into the
+up run the class GEMV over k regions, the act writes k hidden rows (Q4_K gate and up stacks in one
+slab feeding a Q8_0 down take `KqGemvK4Gu` for the three - both dots, the act and its requant a
+32-row block a workgroup, one dispatch where three ran; `RLayer.egu`), down runs k regions into the
 routed rows; and the residual step that follows folds the combine in (`ClsArComb`, the prefill's
 sec.2.2af kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
 logit, the k weighted routed rows through the top-k's slot map, then the next layer's norm - a

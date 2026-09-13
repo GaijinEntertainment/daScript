@@ -1191,6 +1191,202 @@ def test_vkd_kq_gemv_family(t0 : T?) {
     }
 }
 
+//! the Q4_K experts' gate+up+act twin against the family cell's oracle run twice: both stacks' rows in one plane
+//! (the up stack's regions after the gate's), the activated rows' Q8_0 blocks within a quant step at every lane
+//! split, the scales within 2e-3; a poisoned oracle element must red
+[test]
+def test_vkd_kq_gemv_k4_gu(t0 : T?) {
+    t0 |> run("Q4_K gate + up GEMVs, the act and its Q8_0 requant in one dispatch == the CPU chain") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_kq_gemv_k4_gu_cls() && ensure_kq_gemv_k4_cls() && ensure_q8_actrq_cls())) {   //! the three-kernel path's rails for the byte compare
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            for (shape in fixed_array((d = 64, nreg = 3), (d = 704, nreg = 8))) {   //! two blocks a slot; the 26B's eight slots of 704
+            let fmt = int(KqFmt.k4)
+            let nsb = 11        // 2816 wide: the 26B's routed feed
+            let d = shape.d
+            let nreg = shape.nreg
+            let rows = nreg * d
+            let nblk = rows / 32
+            let nwsb = 2 * rows * nsb   // the gate stack's rows, then the up stack's
+            let wq_words = nwsb * 32
+            let ws_words_n = nwsb * int(kq_dev_ssb_i(fmt) / 4l)
+            var wqh : array<uint>
+            var wsh : array<uint>
+            var xqh : array<uint>
+            var xsh : array<float>
+            wqh |> resize(wq_words)
+            wsh |> resize(ws_words_n)
+            xqh |> resize(nsb * 64)
+            xsh |> resize(nsb)
+            for (i in range(wq_words)) {
+                wqh[i] = hash_word(uint(i) * 7u + 4441u)
+            }
+            for (i in range(ws_words_n)) {
+                wsh[i] = ws_word(uint(i) * 3u + 91u)
+            }
+            for (i in range(nsb * 64)) {
+                xqh[i] = hash_word(uint(i) * 23u + 17u)
+            }
+            for (i in range(nsb)) {
+                xsh[i] = 0.5 + float(i % 5) * 0.25
+            }
+            var regs : array<uint>
+            var regs3 : array<uint>
+            regs |> resize(nreg * 2)
+            regs3 |> resize(nreg * 2)
+            for (r in range(nreg)) {
+                regs[r * 2] = uint(r * d * nsb)
+                regs[r * 2 + 1] = 0u
+                regs3[r * 2] = uint((nreg + r) * d * nsb)
+                regs3[r * 2 + 1] = 0u
+            }
+            var y_g <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
+            var y_u <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, regs3, nsb * 256, d, nreg)
+            let wq_bytes = int64(wq_words) * 4l
+            let ws_bytes = int64(ws_words_n) * 4l
+            let xq_bytes = int64(nsb) * 256l
+            let xs_bytes = int64(nsb) * 4l
+            let rg_bytes = int64(nreg) * 8l
+            let y_bytes = int64(rows) * 4l
+            let oq_bytes = int64(rows)
+            let os_bytes = int64(nblk) * 4l
+            let wqd = make_device_buf(wq_bytes)
+            let wsd = make_device_buf(ws_bytes)
+            let xqd = make_device_buf(xq_bytes)
+            let xsd = make_device_buf(xs_bytes)
+            let rgd = make_device_buf(rg_bytes)
+            let rg3d = make_device_buf(rg_bytes)
+            let yd = make_device_buf(y_bytes)
+            let oqd = make_device_buf(oq_bytes)
+            let osd = make_device_buf(os_bytes)
+            var host = make_host_buf(oq_bytes + os_bytes + y_bytes, true, [cached = true])
+            var oq : array<int8>
+            var os : array<float>
+            var y_cls : array<float>
+            oq |> resize(rows)
+            os |> resize(nblk)
+            y_cls |> resize(rows)
+            unsafe {
+                upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+                upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+                upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+                upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+                upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), rg_bytes)
+                upload_region_at(rg3d, 0l, addr<uint8 const?>(regs3[0]), rg_bytes)
+                var s_cls = set_kq_gemv_k4_gu_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd, kq_grid_dev(), rg3d, oqd, osd),
+                    fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes, KQ_GRID_BYTES, rg_bytes, oq_bytes, os_bytes),
+                    fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 0u, 64u, 128u, 128u))
+                for (lanes_per_row in fixed_array(0u, 16u, 8u)) {
+                    nan_sentinel_upload(osd, os_bytes)
+                    nan_sentinel_upload(yd, y_bytes)
+                    var raw2 = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row, gelu = 1u)
+                    enc_kq_gemv_k4_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
+                    vhz_dep(raw2, h2, 32u | 128u, 0u, true)
+                    cmd_copy_whole(raw2, oqd, host.buf, oq_bytes)
+                    cmd_copy_range(raw2, osd, 0l, host.buf, oq_bytes, os_bytes)
+                    cmd_copy_range(raw2, yd, 0l, host.buf, oq_bytes + os_bytes, y_bytes)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(oq[0]), host.mapped, oq_bytes)
+                    memcpy(addr<void?>(os[0]), reinterpret<void?>(intptr(host.mapped) + uint64(oq_bytes)), os_bytes)
+                    memcpy(addr<void?>(y_cls[0]), reinterpret<void?>(intptr(host.mapped) + uint64(oq_bytes + os_bytes)), y_bytes)
+                    let badg = mismatch_approx(y_cls, y_g)
+                    var bads = 0
+                    var badq = 0
+                    var pbad = 0
+                    for (blk in range(nblk)) {
+                        var m = 0.0
+                        for (e in range(32)) {
+                            m = max(m, abs(act_mul_ref(y_g[blk * 32 + e], y_u[blk * 32 + e], true)))
+                        }
+                        let d_ref = m / 127.0
+                        if (abs(os[blk] - d_ref) > 2e-3 * max(d_ref, 1e-6)) {
+                            bads++
+                        }
+                        for (e in range(32)) {
+                            let a = act_mul_ref(y_g[blk * 32 + e], y_u[blk * 32 + e], true)
+                            let deq = float(oq[blk * 32 + e]) * os[blk]
+                            if (abs(deq - a) > d_ref + 2e-3 * abs(a)) {
+                                badq++
+                            }
+                            if (e == 0 && abs(deq - (a + 3.0 * d_ref + 1.0)) <= d_ref + 2e-3 * abs(a)) {   // the control: the expectation pushed three quant steps must miss
+                                pbad++
+                            }
+                        }
+                    }
+                    let lanes = lanes_per_row == 0u ? g_gpu.subgroup_size : int64(lanes_per_row)
+                    let tag = "k4 gu {nreg} x {d} at {lanes} lanes per row"
+                    t |> success(badg == 0, "{tag}: the gate rows match the family's oracle ({badg} of {rows} off)")
+                    t |> success(bads == 0, "{tag}: the block scales match ({bads} of {nblk} off)")
+                    t |> success(badq == 0, "{tag}: the dequantized hidden rows sit within a quant step ({badq} of {rows} off)")
+                    t |> success(pbad == 0, "{tag}: the bar reds a poisoned oracle element in every block ({pbad} passed)")
+                    if (lanes_per_row == 16u) {   //! the three-kernel path on the same buffers at the served lane split: its hidden rows byte for byte
+                        let yud = make_device_buf(y_bytes)
+                        let oq2d = make_device_buf(oq_bytes)
+                        let os2d = make_device_buf(os_bytes)
+                        var s_g = gemv_cls_set(fmt, fixed_array(wqd, wsd, rgd, xqd, xsd, yd), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 4u, 8u, 16u, 32u))
+                        var s_u = gemv_cls_set(fmt, fixed_array(wqd, wsd, rg3d, xqd, xsd, yud), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 64u, 8u, 16u, 256u))
+                        var s_a = set_actrq_cls(fixed_array(yd, yud, oq2d, os2d), fixed_array(y_bytes, y_bytes, oq_bytes, os_bytes), fixed_array(32u, 256u, 512u, 512u))
+                        var raw3 = alloc_cmd()
+                        vk_check(vkBeginCommandBuffer(raw3, begin), null)
+                        var h3 : VkHaz
+                        var pc2 = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = 16u)
+                        enc_kq_gemv_k4_cls(raw3, h3, s_g, pc2, gemv_wgs(int64(rows), 16u))
+                        enc_kq_gemv_k4_cls(raw3, h3, s_u, pc2, gemv_wgs(int64(rows), 16u))
+                        var pca = ActArgs(nelem = uint(rows), gelu = 1u, nblk = uint(nblk))
+                        enc_q8_actrq_cls(raw3, h3, s_a, pca, (int64(rows) / 4l + 255l) / 256l)
+                        vhz_dep(raw3, h3, 512u, 0u, true)
+                        cmd_copy_whole(raw3, oq2d, host.buf, oq_bytes)
+                        cmd_copy_range(raw3, os2d, 0l, host.buf, oq_bytes, os_bytes)
+                        vk_check(vkEndCommandBuffer(raw3), null)
+                        submit_wait(raw3)
+                        var oq2 : array<int8>
+                        var os2 : array<float>
+                        oq2 |> resize(rows)
+                        os2 |> resize(nblk)
+                        memcpy(addr<void?>(oq2[0]), host.mapped, oq_bytes)
+                        memcpy(addr<void?>(os2[0]), reinterpret<void?>(intptr(host.mapped) + uint64(oq_bytes)), os_bytes)
+                        var dq = 0
+                        var dqmax = 0
+                        for (e in range(rows)) {
+                            let dd = abs(int(oq[e]) - int(oq2[e]))
+                            dq += dd != 0 ? 1 : 0
+                            dqmax = max(dqmax, dd)
+                        }
+                        var ds = 0
+                        for (b in range(nblk)) {
+                            ds += os[b] != os2[b] ? 1 : 0
+                        }
+                        t |> success(dq == 0 && ds == 0, "{tag}: the hidden rows match the three-kernel path byte for byte ({dq} of {rows} quants off, at most {dqmax}; {ds} of {nblk} scales off)")
+                        delete oq2
+                        delete os2
+                    }
+                }
+            }
+            delete wqh
+            delete wsh
+            delete xqh
+            delete xsh
+            delete regs
+            delete regs3
+            delete y_g
+            delete y_u
+            delete oq
+            delete os
+            delete y_cls
+            }
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
 [test]
 def test_vkd_act_family(t0 : T?) {
     t0 |> run("act/requant + combine class kernels == the CPU oracle") <| @(t : T?) {
