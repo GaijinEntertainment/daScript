@@ -453,7 +453,7 @@ the one-step-off control) at one window and two windows, with the arm witnesses 
 carries the bias and the driver armed on it; skips without the model or the armed tier.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
-`gemma4_26b`, `gemma4_26b_k` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
+`gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
 loads ONE model at a time, never a chain) - stocked suite, `-jit` only; the whole-model resident
 driver on the gemma dense base (gemma-3-1b-it-Q8_0, `DASLLAMA_GPU=1`): the sandwich norms (the residual steps
 norm their add partner first), the sliding-window layers beside the global ones with their own rope
@@ -507,10 +507,13 @@ card (the 704-wide down-expert rows demote to q8), so the cells skip there on th
 and run on a 32 GB card. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on
 the model table's official UD-Q4_K_M file, whose 704-wide down stacks are native Q5_1 and ride
 the q51 expert rail (the s and e stamps, the Q8_0-activation decode GEMV) beside the k4 gate and
-up stacks. Arms: `g2` (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
+up stacks. `test_gpu_resident_gemma4_31b.das` holds the largest dense carrier, gemma-4-31B Q4_K_M
+(large tier, a 32 GB card), in the 12B Q4_K_M's agreement form at eight tokens - one cell, since the
+CPU control of a dense 31B on the reference kernel bodies runs half an hour on an untuned box. Arms: `g2`
+(gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
 (gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
 `g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B IQ3_XXS), `g4mk` (the
-26B-A4B Q4_K_M) - the tokens share no substring, so one arm selects one file. Skips
+26B-A4B Q4_K_M), `g31` (the 31B) - the tokens share no substring, so one arm selects one file. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.
