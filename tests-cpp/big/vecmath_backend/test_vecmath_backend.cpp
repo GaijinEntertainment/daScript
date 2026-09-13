@@ -76,6 +76,10 @@ static void check_int(const char *name, long long got, long long want)
   if (got != want) { printf("FAIL %s: got %lld want %lld\n", name, got, want); g_failed++; }
 }
 static unsigned f2u(float f) { unsigned u; memcpy(&u, &f, 4); return u; }
+// gcc folds an out-of-range float->int convert to INT_MAX at compile time, where every
+// backend under test answers INT_MIN at run time; the volatile round trip keeps the row honest
+static float no_fold(float f) { volatile float v = f; return v; }
+static double no_fold(double d) { volatile double v = d; return v; }
 
 int main()
 {
@@ -121,7 +125,7 @@ int main()
   check_lanesi("cvtt", v_cvti_vec4i(a), 1u, 0xFFFFFFFEu, 3u, 0u);
   check_lanesi("cvtr", v_cvt_roundi_ieee(halves), 2u, 0xFFFFFFFEu, 4u, 0xFFFFFFFCu);
 #if !defined(_TARGET_SIMD_NEON)
-  check_lanesi("cvtt_ovf", v_cvti_vec4i(v_make_vec4f(3e9f, -3e9f, nanf_v, 100.75f)),
+  check_lanesi("cvtt_ovf", v_cvti_vec4i(v_make_vec4f(no_fold(3e9f), no_fold(-3e9f), nanf_v, 100.75f)),
                0x80000000u, 0x80000000u, 0x80000000u, 100u);
   check_lanesi("cvtr_ovf", v_cvt_roundi_ieee(v_make_vec4f(3e9f, -3e9f, nanf_v, 100.5f)),
                0x80000000u, 0x80000000u, 0x80000000u, 100u);
@@ -482,7 +486,7 @@ int main()
     vec4d di = vd_cvt_from_vec4i(v_make_vec4i(3, -7, 123456, -2000000000));
     check_int("vd_from_vec4i", vd_extract_w(di) == -2000000000.0 ? 1 : 0, 1);
 #if !defined(_TARGET_SIMD_NEON) // NEON converts saturate; SSE/scalar yield INT32_MIN out of range
-    check_lanesi("vd_to_vec4i_oor", vd_cvt_to_vec4i(vd_make_vec4d(3e9, -3e9, 1.0, -1.0)),
+    check_lanesi("vd_to_vec4i_oor", vd_cvt_to_vec4i(vd_make_vec4d(no_fold(3e9), no_fold(-3e9), 1.0, -1.0)),
                  0x80000000u, 0x80000000u, 1u, 0xFFFFFFFFu);
 #endif
     check_lanesi("vd_to_vec4i", vd_cvt_to_vec4i(vd_make_vec4d(1.9, -2.9, 100.5, -0.5)),

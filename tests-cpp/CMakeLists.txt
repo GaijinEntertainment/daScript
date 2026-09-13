@@ -37,6 +37,9 @@ set_source_files_properties(small/test_isnan_fastmath_region.cpp PROPERTIES COMP
 # the byte-for-byte compare against fmt reads fmt's own float printing, which a fast-math TU
 # folds (NaN as inf, -0 as 0): the reference is only a reference under precise math
 set_source_files_properties(small/test_float2string.cpp PROPERTIES COMPILE_OPTIONS ${DAS_PRECISE_MATH_FLAG})
+if(DAS_FAST_MATH)
+    set_property(SOURCE small/test_float2string.cpp APPEND PROPERTY COMPILE_DEFINITIONS DAS_FMT_ORACLE_IS_FAST_MATH=1)
+endif()
 
 add_executable(tests-cpp-small doctest_main.cpp ${SMALL_SOURCES})
 target_link_libraries(tests-cpp-small PRIVATE
