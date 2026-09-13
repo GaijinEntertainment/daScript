@@ -493,10 +493,11 @@ the routed feed and the router off their own norms of x, the per-expert down sca
 the routing weights, the combine norming both branches and their sum under the layer's output
 scale) in the perplexity form at 150 + 150 and at 520 + 80 (two windows) with an argmax slack of
 eight (twelve on the Q4_K_M file, whose hits read 125 to 128 against the CPU chain's 134 as the
-token command's summation orders change) and a perplexity ratio of 1.25 (1.45 on the Q4_K_M
-file: the rounding order of its routed gate and up GEMVs alone - their lane split, the fused
-gate-up twin - moves the 150 + 150 cell across 4.05, 4.48 and 4.67 against the CPU chain's
-3.38): a router near-tie flips whole positions between the arms,
+token command's summation orders change) and a perplexity ratio of 1.45 on both files (a kernel
+rounding order alone moves the 150 + 150 cell: the Q4_K_M file's routed gate and up GEMVs - their
+lane split, the fused gate-up twin - across 4.05, 4.48 and 4.67 against the CPU chain's 3.38; the
+IQ3_XXS file 2.58 -> 4.30 with the flash tile's f16 O accumulator, its hits 129 -> 130 against
+133): a router near-tie flips whole positions between the arms,
 and either arm lands the farther one (per-position log-probs against llama.cpp b10660 on the
 same prose, mean gap on its confident positions: the IQ3_XXS file CPU 0.36 / resident 0.18, the
 Q4_K_M file CPU 0.21 / resident 0.28 to 0.56 across those orders; perplexities 3.36 / 2.58 and

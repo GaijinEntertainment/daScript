@@ -6147,6 +6147,7 @@ class template KqCm2BatchT : MoeCmBase {
     @ssbo @binding = 0 @role = "alias" @template_gate = KHR @readonly wqw : array<uint>
     @ssbo @binding = 5 y : array<float>
     @workgroup wg_blk0 : uint                             // the region's block base, staged for the decode
+    @workgroup wg_m0 : uint                               //! the tile's first weight row: the scale caches index a row by its offset from it (a partial last tile starts off the 128 grid)
     @template_constant BN : uint = 256u                   // the token column
     @template_constant STILE : bool = false               // the 32-row column's partial-column fast path
     @template_constant BLKW : uint = 256u                 // elements per weight block
@@ -6171,7 +6172,9 @@ class template KqCm2BatchT : MoeCmBase {
     @workgroup @template_gate = KHR khr_b : uint[int(128u * KHR_STRIDE)]    //! the B stage: BN (128) token rows of f16 pairs
     @template_constant SCACHE : bool = false              //!< the scale cache: the tile's 128 rows' eight sub-block scale pairs staged per superblock
     @template_constant SCIQ4 : bool = false               //!< the cache's fill reads the IQ4_XS two-word scale row (d | the high scale bits, the low nibbles) instead of the K-quant five
+    @template_constant SCK6 : bool = false                //!< the cache's fill reads the Q6_K row (sixteen int8 sub-block scales and d) into sixteen d x sc entries instead of the K-quant five's eight pairs
     @workgroup @template_gate = SCACHE sc_cache : float2[int(8u * SC_STRIDE)]   //! sub-block-major, row-minor, two rows of pad per sub-block against bank conflicts
+    @workgroup @template_gate = SCK6 sc6_cache : float[int(16u * SC_STRIDE)]     //! k6's sixteen d x sc entries a superblock, the same layout, no minuend
     @ssbo @binding = 1 @role = "alias" @template_gate = SCACHE ws_words : array<uint>   //! the scale plane as words, the cache's source (K-quant: five per superblock - d | dmin, eight scale bytes, eight min bytes; IQ4_XS: two)
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
@@ -6260,6 +6263,18 @@ class template KqCm2BatchT : MoeCmBase {
                 for [unroll] (i in range(4)) {
                     sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(d * float(iq4xs_sc(w0, w1, g0 + uint(i))), 0.0)
                 }
+            } static_elif (SCK6) {
+                //! the Q6_K row: words 0-3 the sixteen int8 sub-block scales, word 4 the f16 d; a thread fills eight sub-blocks of its row from two words
+                let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 5u
+                let d = unpackHalf2x16(ws_words[srow + 4u]).x
+                let s0 = g0 * 2u
+                let w0 = ws_words[srow + (s0 >> 2u)]
+                let w1 = ws_words[srow + (s0 >> 2u) + 1u]
+                for [unroll] (i in range(8)) {
+                    let w = i < 4 ? w0 : w1
+                    let sc = int(w << ((3u - uint(i & 3)) * 8u)) >> 24
+                    sc6_cache[(s0 + uint(i)) * SC_STRIDE + r] = d * float(sc)
+                }
             } else {
                 let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 5u
                 let dm = unpackHalf2x16(ws_words[srow])
@@ -6284,14 +6299,18 @@ class template KqCm2BatchT : MoeCmBase {
         }
     }
 
-    def cm2_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the fast/edge path pair, barrier- and register-coupled
+    def cm2_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE037,STYLE038 — the fast/edge path pair, barrier- and register-coupled
         var tv : tensorView2Dt
         tensorViewCreate(tv)
         var a : AT
         var b : BT
         var acc : ACC
         let t0 = row0 + xt * BN
-        let m0 = wt * 128u
+        //! a partial last weight tile (a 2112-wide plane's 17th, a 704-wide expert's 6th) takes the plane's last whole 128 rows instead - in bounds, unclamped, its overlap with the tile before it rewriting the same values - since a clamped weight load runs every tile at a third the speed (the fast path's own layout clamped: q8 E2B down 268 -> 612 us) and the edge path made the dispatch wait on the partial workgroups (the 26B's shared expert 164 against 70 us whole)
+        let m0 = wt * 128u + 128u <= pa.d || pa.d < 128u ? wt * 128u : pa.d - 128u
+        if (gl_LocalInvocationID.x == 0u) {
+            wg_m0 = m0   //! visible past the scale cache's first barrier, ahead of every decode
+        }
         if (m0 + 128u <= pa.d && (STILE || xt * BN + BN <= cnt) && (pa.n & (BK - 1u)) == 0u) {
             var fla : tensorLayout2D
             tensorLayoutCreate(fla)
@@ -6587,7 +6606,7 @@ class template K4Cm2T : KqCm2BatchT {
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
         return float16(sc_pair.x * float(q) - sc_pair.y)
     }
 
@@ -6599,7 +6618,7 @@ class template K4Cm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
         return half4(float4(sc_pair.x * float((l0 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l0 >> (sh + 8u)) & 0xFu) - sc_pair.y,
             sc_pair.x * float((l1 >> sh) & 0xFu) - sc_pair.y, sc_pair.x * float((l1 >> (sh + 8u)) & 0xFu) - sc_pair.y))
     }
@@ -6610,6 +6629,8 @@ class template K6Cm2T : KqCm2BatchT {
     typedef BLK = VkK6Blk
     typedef ST = uint
     override DECV4 = true
+    override SCACHE = true
+    override SCK6 = true
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
@@ -6647,13 +6668,20 @@ class template K6Cm2T : KqCm2BatchT {
         let lw = uint(int(blk.ql[int(lb >> 1u)])) & 0xFFFFu
         let qb = (bu >> 2u) * 32u + hh * 16u + j
         let hw = uint(int(blk.qh[int(qb >> 1u)])) & 0xFFFFu
-        let q60 = int(((lw >> (hh * 4u)) & 0xFu) | (((hw >> ((bu & 3u) * 2u)) & 3u) << 4u)) - 32
-        let q61 = int(((lw >> (hh * 4u + 8u)) & 0xFu) | (((hw >> ((bu & 3u) * 2u + 8u)) & 3u) << 4u)) - 32
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        //! both bytes of the pair compose under one mask (the low nibbles, the two high bits shifted up), and the element's byte is selected last
+        let q2 = ((lw >> (hh * 4u)) & 0x0F0Fu) | (((hw >> ((bu & 3u) * 2u)) & 0x0303u) << 4u)
+        let q6 = int((q2 >> ((e & 1u) * 8u)) & 0xFFu) - 32
         let sidx = pair0 >> 4u
-        let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-        let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
-        return float16(ds * float((e & 1u) != 0u ? q61 : q60))
+        var ds : float
+        //! d x the sub-block's int8 scale: staged per superblock under the cache, else the row's words - byte `sidx` of words 0-3, the f16 d in word 4
+        static_if (SCK6) {
+            ds = sc6_cache[sidx * SC_STRIDE + (bc.x - wg_m0)]
+        } else {
+            let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+            let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+            ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
+        }
+        return float16(ds * float(q6))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6670,15 +6698,18 @@ class template K6Cm2T : KqCm2BatchT {
         let h1 = uint(int(blk.qh[hi + 1])) & 0xFFFFu
         let ls = hh * 4u
         let hs = (bu & 3u) * 2u
-        let q0 = int(((l0 >> ls) & 0xFu) | (((h0 >> hs) & 3u) << 4u)) - 32
-        let q1 = int(((l0 >> (ls + 8u)) & 0xFu) | (((h0 >> (hs + 8u)) & 3u) << 4u)) - 32
-        let q2 = int(((l1 >> ls) & 0xFu) | (((h1 >> hs) & 3u) << 4u)) - 32
-        let q3 = int(((l1 >> (ls + 8u)) & 0xFu) | (((h1 >> (hs + 8u)) & 3u) << 4u)) - 32
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let p0 = ((l0 >> ls) & 0x0F0Fu) | (((h0 >> hs) & 0x0303u) << 4u)   //! the two pairs compose under one mask each
+        let p1 = ((l1 >> ls) & 0x0F0Fu) | (((h1 >> hs) & 0x0303u) << 4u)
         let sidx = e >> 4u
-        let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-        let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
-        return half4(float4(ds * float(q0), ds * float(q1), ds * float(q2), ds * float(q3)))
+        var ds : float
+        static_if (SCK6) {
+            ds = sc6_cache[sidx * SC_STRIDE + (bc.x - wg_m0)]
+        } else {
+            let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+            let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+            ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
+        }
+        return half4(float4(ds * float(int(p0 & 0xFFu) - 32), ds * float(int(p0 >> 8u) - 32), ds * float(int(p1 & 0xFFu) - 32), ds * float(int(p1 >> 8u) - 32)))
     }
 }
 
@@ -6726,7 +6757,7 @@ class template K5Cm2T : KqCm2BatchT {
         let hb = ((uint(int(blk.qh[int(hidx >> 1u)])) & 0xFFFFu) >> ((hidx & 1u) * 8u)) >> ((j & 3u) + h * 4u)
         let q0 = ((w >> (h * 4u)) & 0xFu) | ((hb & 1u) << 4u)
         let q1 = ((w >> (h * 4u + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
-        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
         return float16((e & 1u) != 0u ? sc_pair.x * float(q1) - sc_pair.y : sc_pair.x * float(q0) - sc_pair.y)
     }
 
@@ -6746,7 +6777,7 @@ class template K5Cm2T : KqCm2BatchT {
         let q1 = ((l0 >> (sh + 8u)) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
         let q2 = ((l1 >> sh) & 0xFu) | (((hb >> 2u) & 1u) << 4u)
         let q3 = ((l1 >> (sh + 8u)) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
-        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
         return half4(float4(sc_pair.x * float(q0) - sc_pair.y, sc_pair.x * float(q1) - sc_pair.y, sc_pair.x * float(q2) - sc_pair.y, sc_pair.x * float(q3) - sc_pair.y))
     }
 }
@@ -6869,7 +6900,7 @@ class template Iq4xsCm2T : KqCm2BatchT {
         let bidx = g * 16u + (e & 15u)
         let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x & 127u)]
+        let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
         return float16(sc_pair.x * float(iq4lut[int(q)]))
     }
 
@@ -6881,7 +6912,7 @@ class template Iq4xsCm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
-        let ds = sc_cache[g * SC_STRIDE + (bc.x & 127u)].x
+        let ds = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)].x
         return half4(float4(ds * float(iq4lut[int((l0 >> sh) & 0xFu)]), ds * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
             ds * float(iq4lut[int((l1 >> sh) & 0xFu)]), ds * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
     }

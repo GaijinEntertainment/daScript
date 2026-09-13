@@ -44,9 +44,9 @@ side - and the decode reads its element's pair as one word, `sc_cache[g * SC_STR
 127u)]`, sub-block-major at a stride of 130 against bank conflicts. k4 and k5 cache `(d x sc,
 dmin x mn)` from their five-word scale row in place of three scale-plane loads, a half unpack
 and two multiplies per element; IQ4_XS (`SCIQ4`) caches `d x (ls - 32)` from its two-word row in
-place of two loads and the six-bit rebuild; k6's scale is a byte read directly and the grid
-formats' strips are read once per pair already. It is the reference exe's `shAscales`, which its
-Q4_K and Q5_K tiles alone carry; the refill keys on the k step (`sc_step`, `k % BLKW == 0`), and
+place of two loads and the six-bit rebuild; k6 (`SCK6`) caches `d x sc` for its sixteen int8
+sub-block scales in place of two word loads, a sign extend, a half unpack and two multiplies an element
+(its decode ran twice the reference exe's, whose `shAscales` covers Q4_K and Q5_K alone); the grid formats' strips are read once per pair already. The refill keys on the k step (`sc_step`, `k % BLKW == 0`), and
 `cm2_split_k` cuts every chunk at a 256-aligned k, so no chunk boundary falls inside a superblock.
 
 Every kq format's four-wide twin is hand-written (`decode_v4`, the template's `DECV4` axis) in
@@ -69,12 +69,10 @@ its k steps at the column's step weight - m 10, l 16, s 5 - since the l column d
 in 1.6 times its step (RTX PRO 4500: an m step 1.4 us, an l step 2.24). The whole GEMM takes the
 column of fewer units, a tie to l (E4B's 16384-wide gate l 424 us against m 474, E2B's 6144-wide
 gate l 126 against m 112). Four rules sit ahead of the comparison: a region of 64 rows or fewer takes the s tile (32-row columns - the per-op
-tier's MoE expert-bucket shape, where a 512-token window routes ~32 rows to each of 128 experts on
-average), a window of 128 rows or fewer takes m (the l column would run half empty), a GEMM whose m columns fill a quarter of the SMs or fewer takes s (gemma-3-1b's k and v, 8 m tiles on 82 SMs: 805 -> 574 us a window), and a device
+tier's MoE expert-bucket shape, ~32 rows to each of 128 experts a 512-token window), a window of 128 rows or fewer takes m (the l column would run half empty), a GEMM whose m columns fill a quarter of the SMs or fewer takes s (gemma-3-1b's k and v, 8 m tiles on 82 SMs: 805 -> 574 us a window), and a device
 that reports no SM count takes l and never splits k. Beyond `(d, cnt, sm_count)` the pick reads only
-two values fixed at init - the served mode and `DASLLAMA_CM2_TILE` - so the class the pipeline binds
-and the tile rule the meta fill writes can never disagree; `cnt` is the AVERAGE rows per active
-region of the dispatch, so one tile serves every region of a per-op MoE schedule. The resident MoE
+two values fixed at init - the served mode and `DASLLAMA_CM2_TILE` - so the class the pipeline binds and the tile rule the meta fill
+writes can never disagree; `cnt` is the AVERAGE rows per active region of the dispatch, so one tile serves every region of a per-op MoE schedule. The resident MoE
 block makes no pick: its device schedule cuts every bucket into s and m pieces by size and
 dispatches both classes per plane (`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af) - the s stamp and
 the e stamp, the m column at the format's k step, keyed `CM2_TC_E` in the class ladders - which a
@@ -83,10 +81,12 @@ tile's row count goes to the decode GEMV family. The s and m tiles' fast path lo
 UNCLAMPED (the layout's row dimension rounded up to the column) and clamps only the store, so every
 f16 plane the chain feeds them - the gathered activation image and the hidden plane - is sized with
 128 rows of slack past its last region (`TILE_READ_SLACK`, `ffn_cm2_chunk_rows`); the l tile takes
-the edge path on a partial column, since only a window's last column is ever partial there. The
-dense chain's planes carry no slack: they hold the whole window's rows whatever the last window's
-length, so a partial m column's unclamped load stays inside them. The store-layout constant the m
-and s tiles read (`STILE`) is inert on the KHR classes, whose tile never reads it.
+the edge path on a partial column, since only a window's last column is ever partial there; the
+dense chain's planes hold the whole window's rows, so a partial m column's load stays inside them. A
+partial last WEIGHT tile (a 2112-wide plane's 17th, a 704-wide expert's 6th) loads the plane's last
+whole 128 rows instead - in bounds, unclamped, its overlap with the tile before it rewriting the same
+values - since a clamped weight load runs every tile at a third the speed (the fast path's own layout
+clamped: q8 E2B down 268 -> 612 us) and through the edge path the dispatch waited on the partial workgroups (the 26B's shared expert, k6: 164 us against 71 whole). `STILE` is inert on the KHR classes.
 
 **The k step follows the column and the decode; the k loop is unrolled by hand, a superblock per
 block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of

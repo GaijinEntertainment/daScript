@@ -547,7 +547,8 @@ def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp_only : bool = false) {
+//! `serial`: one hazard rail and one output plane across the dispatches, so a barrier separates them and the row reads a single dispatch's latency - the chain's cost - instead of the throughput of sixteen overlapping ones
+def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp_only : bool = false; serial : bool = false) {
     let dv = cm2_shape_upload(fmt, d, n, cnt)
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     //! the l/m/s stamps, the s stamp's other-depth twin where the format has one, and the kq batch tile
@@ -563,9 +564,10 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        //! every arm alike: the two output planes alternate across the dispatches, each under a fresh hazard rail
+        //! every arm alike: the two output planes alternate across the dispatches, each under a fresh hazard rail (the serial row keeps one of each)
         let sizes5 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes)
         let gbits5 = fixed_array(1u, 2u, 0u, 4u, 16u)
+        var hzs : VkHaz
         if (v == 4) {
             let sizes6 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes)
             let gbits6 = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
@@ -573,27 +575,27 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
             var sb = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd_b), sizes6, gbits6)
             for (k in range(DISPATCHES)) {
                 var hz : VkHaz
-                kq_batch_cls_enc_for(fmt, false, raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
+                kq_batch_cls_enc_for(fmt, false, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
             }
         } elif (v == 3) {
             var sa = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
             var sb = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
             for (k in range(DISPATCHES)) {
                 var hz : VkHaz
-                probe_stwin_enc(fmt, raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
+                probe_stwin_enc(fmt, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
             }
         } else {
             var sa = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
             var sb = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
             for (k in range(DISPATCHES)) {
                 var hz : VkHaz
-                cm2_cls_enc(fmt, int64(ttile), raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
+                cm2_cls_enc(fmt, int64(ttile), raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
             }
         }
         vk_check(vkEndCommandBuffer(raw), null)
         let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
-        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
+        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  {serial ? "one dispatch at a time" : "timing-only"}\n")
     }
 }
 
@@ -2961,8 +2963,50 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
     delete b
 }
 
+//! the kq cm2 l and m stamps under `nsplit` 256-aligned k chunks, one dispatch at a time (a heavy decode's single-dispatch latency, the chain's cost), then the l stamp chained into its reduce
+def private run_kq_shape_split(fmt : int; name : string; d, n, cnt, nsplit : int) {
+    let ck = nsplit > 1 ? ((n + nsplit - 1) / nsplit + 255) & ~255 : n
+    if (nsplit > 1 && ck * (nsplit - 1) >= n) {
+        print("{name} split{nsplit} (chunk {ck}): the last chunk starts past K {n} - skipped\n")
+        return
+    }
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let y_bytes = int64(nsplit) * int64(cnt * d) * 4l
+    let yd = make_device_buf(y_bytes)
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = nsplit > 1 ? uint(ck) : 0u)
+    var lus = 0.0lf
+    var mus = 0.0lf
+    var chain = 0.0lf
+    var lwgs = 0
+    for (v in range(2)) {
+        let ttile = v == 0 ? 256 : 128
+        let wgs = ((cnt + ttile - 1) / ttile) * ((d + 127) / 128) * nsplit
+        let sc = one_region_sched(cnt, wgs)
+        var s = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, yd),
+            fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        for (_k in range(DISPATCHES)) {
+            cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        if (v == 0) {
+            lus = us
+            lwgs = wgs
+            chain = time_split_reduce(yd, y_bytes, cnt, d, nsplit, s, pc, wgs, fmt, 256l).chain
+        } else {
+            mus = us
+        }
+    }
+    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {lus} us  {flop / (lus * 1000000.0lf)} TFLOP/s | cm2m {mus} us  {flop / (mus * 1000000.0lf)} TFLOP/s | l + reduce chained {chain} us  one dispatch at a time\n")
+}
+
 //! the split-k reduce over `nsplit` partial planes in `yd`: alone, then behind the l GEMM in one command buffer (the hazard rail's barrier between them, as the chain pays); us a dispatch (a pair, chained)
-def private time_split_reduce(yd : uint64; y_bytes : int64; rows, d, nsplit : int; var scl : VkDescriptorSet; var pc : BatchArgs; lwgs : int) : tuple<red : double; chain : double> {
+def private time_split_reduce(yd : uint64; y_bytes : int64; rows, d, nsplit : int; var scl : VkDescriptorSet; var pc : BatchArgs; lwgs : int; fmt : int = 0; tc : int64 = 256l) : tuple<red : double; chain : double> {
     verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
     let out_bytes = int64(rows * d) * 4l
     let outd = make_device_buf(out_bytes)
@@ -2982,7 +3026,7 @@ def private time_split_reduce(yd : uint64; y_bytes : int64; rows, d, nsplit : in
     vk_check(vkBeginCommandBuffer(rawc, begin), null)
     var hzc : VkHaz
     for (_k in range(DISPATCHES)) {
-        enc_q8_batch_cm2l_cls(rawc, hzc, scl, pc, int64(lwgs))
+        cm2_cls_enc(fmt, tc, rawc, hzc, scl, pc, int64(lwgs))
         enc_splitk_reduce_cls(rawc, hzc, sr, pcr, rwgs)
     }
     vk_check(vkEndCommandBuffer(rawc), null)
@@ -3828,6 +3872,19 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} wo     ", 2816, 4096, 512)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v    ", 2048, 2816, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512, false, true)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2176", 2176, 2816, 512, false, true)   //! the shared expert's width padded to whole weight tiles: the partial 17th tile's cost
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2048", 2048, 2816, 512, false, true)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512, false, true)
+                    if (round == 1) {
+                        for (sk in [1, 2, 3, 4, 6]) {
+                            run_kq_shape_split(cm2_fmt, "{tag} sh_gate", 2112, 2816, 512, sk)
+                        }
+                        for (sk in [1, 2, 4]) {
+                            run_kq_shape_split(cm2_fmt, "{tag} q      ", 4096, 2816, 512, sk)
+                            run_kq_shape_split(cm2_fmt, "{tag} k/v    ", 2048, 2816, 512, sk)
+                        }
+                    }
                     if (round == 1 && arm == arms - 1) {
                         run_shape("q8 sh_gate", 2112, 2816, 512)
                         run_shape("q8 q      ", 4096, 2816, 512)

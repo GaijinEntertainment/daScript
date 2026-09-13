@@ -65,6 +65,14 @@ start such as `ks * ksplit` unmasked runs the same loop at half the rate (gemma-
 one chunk: 304 us against 152 whole), which is what made every split-k lose before the mask.
 A chunk the caller cuts must be a multiple of that step, so the mask changes nothing at run time.
 
+**A cm2 tile's weight load on its fast path never takes a clamped (`tensorLayout2DPad`) layout,
+and a weight tile the plane cannot fill starts at the plane's last whole 128 rows, never past
+its end.** The clamped decode-load runs every tile at a third the speed (the fast path's own layout
+clamped: q8 E2B's down 268 -> 612 us), and the edge path holds the whole dispatch to its partial
+workgroups (the 26B's shared expert, k6: 164 us against 71); a load past the plane reads what
+follows it, which may be nothing. A scale cache the tile stages indexes a row by its offset from
+that first row (`wg_m0`), never by `bc.x & 127`: the block coordinate is the plane's absolute row.
+
 **A prefill GEMM whose output rows start above row 0 encodes unsplit, whatever splitter it
 uses - `cm2_gemm_pick` or the small f16 GEMM's `F16G_SPLIT` chunks.** The split-k reduce sums
 partial planes counted from row 0, so a dispatch starting above row 0 would reduce the wrong
