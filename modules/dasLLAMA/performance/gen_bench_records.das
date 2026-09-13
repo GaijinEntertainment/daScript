@@ -325,11 +325,11 @@ def private stamp_note(var models : array<BenchModel>; gguf, note : string) {
     }
 }
 
-//! idle gap before a pass: --settle reclaims the previous child's map, --das-settle and
-//! --oracle-settle cool the chip; 0 skips the gap
+// idle gap before a pass: --settle reclaims the previous child's map, --das-settle and
+// --oracle-settle cool the chip; 0 skips the gap
 def private settle(seconds : int) {
     if (seconds > 0) {
-        sleep(uint(seconds * 1000))
+        sleep(uint(seconds) * 1000u)
     }
 }
 
