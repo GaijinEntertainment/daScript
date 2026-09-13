@@ -1360,3 +1360,15 @@ module) is independent and can land any time - it is pure structure.
     form (attention and the dense triple resident, the expert planes streamed a layer at a
     time - the 16 GB story for every MoE past the card). The block itself holds on a 32 GB card
     (`test_gpu_resident_gemma4_26b.das`, the RunPod RTX PRO 4500 rows).
+50. **The prefill flash tile runs one workgroup a (head, q tile), which leaves a low-head model's
+    attention on a few SMs.** A key split of the tile (every (head, q tile) cut into equal pieces
+    with f32 partials and a combine kernel, `pf_fa_nsplit` covering the SM count twice) lost on
+    every gemma shape measured on the RunPod RTX PRO 4500 (82 SMs, `DASLLAMA_GPU_PROF=1`, a 512-row
+    window): gemma-3-1b (four heads, 32 tiles) attention 2564 us a window unsplit against 2711 at
+    two pieces and 3283 at six; gemma-2-2b (eight heads, 64 tiles) 2963 against 3410 at three -
+    the partial stores, the repeated q loads and the combine's reads outweigh the shorter key loop,
+    and the causal grid's short tiles get empty pieces. llama.cpp b10660's flash pass runs the same
+    layer in about half the time on the same grid, so the gap is the pass's own per-step and
+    per-workgroup cost, not occupancy. The shapes still worth a try: pieces proportional to a
+    tile's key count (the causal imbalance is 8:1 across a window), f16 partials, and the pass's
+    fixed cost (the q tile load and the per-element mask, exp and max passes per step).

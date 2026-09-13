@@ -61,6 +61,9 @@ No preflight tier runs the two per-PR suites: `preflight -- --only dasllama-mode
 - Before launching any suite, state what the change can affect. A default-off knob or a
   comment edit does not need a rerun.
 - Fixing or adding one arm runs exactly that arm: `--arm arm12 --suite decode`.
+- A kernel-file cell has no arm: a kernel edit runs its own cells through dastest's name filter,
+  `--test-names <prefix>` (repeatable, a `[test]` function-name prefix) - the whole kernel file
+  (~15 min) runs once before the commit, never per edit.
 - Coverage is a cell in a suite, never a scratchpad probe. A probe proves nothing after the
   session that wrote it, and its setup diverges from the suite's silently. If covering a path
   needs a large model, it needs a large model.

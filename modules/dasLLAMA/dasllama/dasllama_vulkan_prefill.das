@@ -1153,23 +1153,6 @@ def private pf_setup {
             chunked_hs |> insert(L.hs)
         }
     }
-    g_rd.pf_fa_nsplit = 1l
-    if (g_rd.pf_facm2) {   //! the split flash pass: its partials plane over a whole window's tiles at the widest head, and the combine's two output forms
-        let qtiles = (np + 63l) / 64l
-        g_rd.pf_fa_nsplit = pf_fa_nsplit(g_rd.n_heads, qtiles, int64(g_gpu.sm_count))
-        if (g_rd.pf_fa_nsplit > 1l) {
-            let ntiles = g_rd.n_heads * qtiles * g_rd.pf_fa_nsplit
-            let pbytes = ntiles * 64l * (g_rd.head_size + int64(FA_ML_COLS)) * 4l
-            g_rd.pf_fapart = make_device_buf(pbytes)
-            verify(ensure_fa_cm2_comb_cls() && ensure_fa_cm2_comb_f16_cls(), "vk prefill: the split flash pass's combine class rails must engage")
-            g_rd.pf_fa_comb_set = set_fa_cm2_comb_cls(fixed_array(g_rd.pf_q, g_rd.pf_fapart, g_rd.pf_attn),
-                fixed_array(np * qrow * 4l, pbytes, np * qd * 4l), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT))
-            if (g_rd.pf_af != 0ul) {
-                g_rd.pf_fa_comb_f16_set = set_fa_cm2_comb_f16_cls(fixed_array(g_rd.pf_q, g_rd.pf_fapart, g_rd.pf_af),
-                    fixed_array(np * qrow * 4l, pbytes, np * qd * 2l), fixed_array(VHZ_Q, VHZ_ATT, VHZ_AQ))
-            }
-        }
-    }
     let fa128s = !fa_dev && g_gpu.has_coopmat && vk_fa_on() && key_exists(chunked_hs, 128l)
     var wide_hs = false   //! a head past 256 takes the wide chunked kernel
     var narrow_hs = false
@@ -1265,17 +1248,13 @@ def private pf_setup {
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve this layer's head size
         let fa128l = fa128s && L.hs == 128l
         if (L.pf_fa) {
-            //! the partials binding: the plane where the pass splits, the out plane itself (unwritten) where it does not
-            let split = g_rd.pf_fa_nsplit > 1l
-            let ntiles = g_rd.n_heads * ((np + 63l) / 64l) * g_rd.pf_fa_nsplit
-            let pbytes = ntiles * 64l * (g_rd.head_size + int64(FA_ML_COLS)) * 4l
             g_rd.pf_sets[b + 5] = (wo6
-                ? set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_af, split ? g_rd.pf_fapart : g_rd.pf_af),
-                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 2l, split ? pbytes : np * qd * 2l),
-                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_AQ, split ? VHZ_ATT : VHZ_AQ))
-                : set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn, split ? g_rd.pf_fapart : g_rd.pf_attn),
-                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l, split ? pbytes : np * qd * 4l),
-                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, VHZ_ATT)))
+                ? set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_af),
+                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 2l),
+                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_AQ))
+                : set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn),
+                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l),
+                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)))
         } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l)
@@ -1663,13 +1642,11 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
                 if (g_rd.layers[l].pf_fa) {
-                    // the cm2 fa tile reads the f16 mirrors directly; split, each (head, q tile) runs nsplit pieces of its keys and the combine finishes the tile
-                    let nsplit = g_rd.pf_fa_nsplit
+                    // the cm2 fa tile reads the f16 mirrors directly
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
-                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window,
-                        ksplit = uint(nsplit), gated = g_rd.q_gated ? 1u : 0u, hs = uint(hs), cap = g_rd.layers[l].attn_cap)
-                    let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l) * nsplit
+                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap)
+                    let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l)
                     if (hs == 64l) {
                         if (fo6) {
                             enc_fa_cm2_h64_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
@@ -1705,14 +1682,6 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                             enc_fa_cm2_h256_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
                         } else {
                             enc_fa_cm2_h256_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    }
-                    if (nsplit > 1l) {   //! the combine finishes every (head, q tile) from its pieces' partials, into the pass's out plane
-                        let cwgs = g_rd.n_heads * ((wlen + 63l) / 64l)
-                        if (fo6) {
-                            enc_fa_cm2_comb_f16_cls(raw, h, g_rd.pf_fa_comb_f16_set, pcf, cwgs)
-                        } else {
-                            enc_fa_cm2_comb_cls(raw, h, g_rd.pf_fa_comb_set, pcf, cwgs)
                         }
                     }
                 } else {
@@ -2881,10 +2850,10 @@ def private ensure_at_fa_state(hs : int64) {
         fixed_array(kvbytes, kv16bytes), fixed_array(VHB_ATK, VHB_ATK16))
     g_gpu.at_v16cvt_set = set_f16cvt_cls(fixed_array(g_gpu.at_v_dev, g_gpu.at_v16_dev),
         fixed_array(kvbytes, kv16bytes), fixed_array(VHB_ATV, VHB_ATV16))
-    g_gpu.at_fa_set = set_fa_cm2_cls(   //! the unsplit pass: the out plane fills the partials binding, never written
-        fixed_array(g_gpu.at_q_dev, g_gpu.at_k16_dev, g_gpu.at_v16_dev, g_gpu.at_g_dev, g_gpu.at_g_dev),
-        fixed_array(AT_WINDOW * AT_MAX_QD * 4l, kv16bytes, kv16bytes, AT_WINDOW * AT_MAX_QD * 4l, AT_WINDOW * AT_MAX_QD * 4l),
-        fixed_array(VHB_ATQ, VHB_ATK16, VHB_ATV16, VHB_ATG, VHB_ATG))
+    g_gpu.at_fa_set = set_fa_cm2_cls(
+        fixed_array(g_gpu.at_q_dev, g_gpu.at_k16_dev, g_gpu.at_v16_dev, g_gpu.at_g_dev),
+        fixed_array(AT_WINDOW * AT_MAX_QD * 4l, kv16bytes, kv16bytes, AT_WINDOW * AT_MAX_QD * 4l),
+        fixed_array(VHB_ATQ, VHB_ATK16, VHB_ATV16, VHB_ATG))
     g_gpu.at_fa_ready = true
     to_log(LOG_INFO, "dasLLAMA vulkan tier: attention chain on the cm2 flash tile (hs {hs})\n")
 }
