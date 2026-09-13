@@ -308,7 +308,9 @@ re-measures ONCE and gates one-sided against its stored mean - drop past `--orac
 fail bar as "suspicious - verify"). Exit is nonzero on any FAIL.
 
 - GATE 1 - llama.cpp never re-measures: no ref runs, ref binaries not even required.
-- GATE 2 - one das pass per row. The >3% cv warm-retry stays: it REPLACES a bad cold measure.
+- GATE 2 - one das pass per row, entered after `--oracle-settle` seconds of idle (default 60,
+  every leg): the previous cell's heat outlives the 12 s reclaim settle and a hot GPU or CPU
+  reads a clean cv 20-30% low. The >3% cv warm-retry stays: it REPLACES a bad cold measure.
 - GATE 3 - a timed text cell is frozen: the batch starts with the lifecycle wipe, a prepare
   pass bakes its image, and the timed child runs `lcpp_bench --frozen` (it never converts);
   ASR and image-chat cells bake what they need mid-cell. The store is never written.

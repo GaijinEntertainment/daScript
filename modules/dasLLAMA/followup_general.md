@@ -1550,10 +1550,11 @@
     127.5), while the page-in counter, the residency rails and the map's reclaim state show
     nothing; a 60 s settle reads Nominal and lands within 1%, a 120 s settle the same. The
     prepare is only the sequence's shape: the throttle is the previous cell's heat, and the 12 s
-    `--settle` is a reclaim window, not a cooling one. Unquirked: a timed cell waits for the
-    process's thermal state to read nominal (`NSProcessInfo.thermalState`, no sudo) with a
-    capped wait, or the settle before a das cell rises to the 60 s the box needs - either way a
-    cold first read never spends a FAIL and a retry slot.
+    `--settle` is a reclaim window, not a cooling one, so the oracle idles `--oracle-settle`
+    seconds (60) before every timed cell, on every leg - the Vulkan boxes show the same cold
+    first read. Unquirked: a timed cell waits for the process's thermal state to read nominal
+    (`NSProcessInfo.thermalState`, no sudo) with a capped wait, so the box's own reading
+    replaces a fixed number that is too long for a cool box and may be too short for a hot one.
 139. **The tuner's end-to-end confirm reads a stamp line a warm JIT does not print.** The
     generator confirm (`gen_tune_probe.das`, confirm_e2e_prefill) scores each arm by the
     `llvm_tune: q8q8_tile_gen <- <perm>` line of a verbose child, and a child that runs the

@@ -125,6 +125,10 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
   restored it; llama.cpp refs never moved). The cv retry cannot catch a stable-low cell - only
   cool-slot entry can. Refs get no cool slot on purpose: they are insensitive, and skipping it
   saves hours.
+- `--oracle-settle <seconds>` (default 60) idles before every timed oracle cell, GPU and CPU
+  legs alike. The previous cell's heat outlives the 12 s reclaim settle: on the M5 the GPU
+  still runs a Moderate-pressure 990-1420 MHz instead of 1620 when the next cell starts
+  (tg128 -20%, pp512 -33%, a FAIL and a retry slot spent on a cold read); 60 s reads Nominal.
 
 Then merge the per-box stores into the file the site renders:
 
