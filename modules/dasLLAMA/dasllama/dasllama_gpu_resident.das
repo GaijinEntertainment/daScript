@@ -1574,9 +1574,21 @@ def private rdec_dn_own_all(var s : Session; n_layers : int64) {
     }
 }
 
+var private @scratch g_rdec_one_tok : array<int64>   //! the token's id as the gather's one-row list
+
 // the resident whole-stack decode override (registered as "vulkan") — the mirror builds as positions arrive
 [hot_path]   // per token
 def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int64) : bool {
+    let done = vulkan_resident_decode_go(t, s, token, pos)
+    if (!done && s.ple_gpu_pending) {   //! the gate took the pre-step and the driver then declined: the CPU pre-step runs late
+        ple_pre_decode(t, s, token)
+        s.ple_gpu_pending = false
+    }
+    return done
+}
+
+[hot_path]
+def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : int64) : bool {
     if (!g_rdec_active) {
         return false
     }
@@ -1629,7 +1641,16 @@ def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int6
     g_rdec_cossin |> resize(g_rdec_cos_elems)
     rdec_rope_rows(t, pos + s.rope_pos_delta, g_rdec_cossin, 0l)   // rope at the delta'd position; KV stays at pos
     let cnt = pos + 1l
-    rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.logits)   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
+    if (s.ple_gpu_pending) {
+        // the gate took the pre-step: the gather half here (the table row, sqrt(ple)-scaled), the projection, norm and average on device
+        g_rdec_one_tok |> resize(1l)
+        g_rdec_one_tok[0] = token
+        resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
+        rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, cnt, s.logits)
+        s.ple_gpu_pending = false
+    } else {
+        rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.logits)   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
+    }
     g_rdec_cnt = pos + 1l   // mirror continuity: rows [0, pos] are now live
     s.rdec_host_current = false   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device

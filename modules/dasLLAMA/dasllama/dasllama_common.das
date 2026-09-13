@@ -332,7 +332,8 @@ def private ple_rail_missing() {
     panic("dasLLAMA: this model needs the PLE rail - the program must require dasllama/dasllama_ple")
 }
 
-def private ple_pre_decode(t : Model; var s : Session; token : int64) {
+//! Public as the late-decline fallback for a driver that claimed the token's pre-step via the gate.
+def ple_pre_decode(t : Model; var s : Session; token : int64) {
     if (g_ple_pre_decode == null) ple_rail_missing()
     invoke(g_ple_pre_decode, t, s, token)
 }
@@ -4505,7 +4506,11 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: build this token's per-(layer) side input before the stack
         let ts_ple = prof_ticks()
-        ple_pre_decode(t, s, token)
+        if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, 1l, pos)) {
+            s.ple_gpu_pending = true   //! the driver gathers the row off `token` itself and finishes the pre-step on device
+        } else {
+            ple_pre_decode(t, s, token)
+        }
         prof_add("ple", ts_ple)
     }
 

@@ -106,7 +106,7 @@ def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff 
 }
 
 // Decode pre-step: gather the single token's per-layer embedding row, then finish.
-def private ple_pre_decode(t : Model; var s : Session; token : int64) {
+def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
     ple_gather_row(t, token, s.ple_inp, 0l)
     ple_pre_finish(t, s, s.x, 1l)
 }
@@ -644,7 +644,7 @@ def private ple_gather_rows_impl(t : Model; tokens : array<int64>; npos : int64;
 
 [init]
 def private ple_hooks_register() {
-    register_ple_pre_decode(@@ple_pre_decode)
+    register_ple_pre_decode(@@ple_pre_decode_impl)
     register_ple_pre_prefill(@@ple_pre_prefill_impl)
     register_ple_pre_prefill_pad(@@ple_pre_prefill_pad_impl)
     register_ple_gather_rows(@@ple_gather_rows_impl)

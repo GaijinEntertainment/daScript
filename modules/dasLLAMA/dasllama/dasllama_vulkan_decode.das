@@ -1400,6 +1400,15 @@ def private rd_encode_token {
         if (g_rd.ple > 0l) {   //! the side-input row rides the cos plane's hazard bit: written here, read by the act step
             cmd_copy_whole(raw, g_rd.ple_host.buf, g_rd.ple_dev, g_rd.n_layers * g_rd.ple * 4l)
         }
+        if (g_rd.ple > 0l && g_rd.ple_gpu) {   //! the pre-step's finish: the projection of the embedded row, normed a slice at a time and averaged into the gathered row
+            let all = g_rd.n_layers * g_rd.ple
+            var pcr = RouterArgs(ne = uint(all), dim = uint(dim), woff = 0u, obase = 0u, norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ne_split = 0u, obase_split = 0u)
+            enc_router_gemv_f16_cls(raw, h, g_rd.s_tok_pleproj, pcr, all)
+            rd_ts(raw, "t:pleproj")
+            var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
+            enc_cls_ar(raw, h, g_rd.s_tok_ple_ar, pca, g_rd.n_layers)
+            rd_ts(raw, "t:plefin")
+        }
         let (fuse, fuse_qkr) = rd_fuse_gates()
         if (fuse) {
             rd_ensure_fused_sets()

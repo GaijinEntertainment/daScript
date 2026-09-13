@@ -2428,6 +2428,9 @@ struct RDec {
     ple_w16_bytes : int64
     pf_plexf, pf_plep : uint64
     pf_ple_cvt_set, pf_ple_gemm_set, pf_ple_ar_set : VkDescriptorSet
+    //! the token command's half of the pre-step: the projected [layers*ple] row and the two steps' sets (the f16 GEMV over the embedded row, the per-slice finish)
+    tok_plep : uint64
+    s_tok_pleproj, s_tok_ple_ar : VkDescriptorSet
     tok_meta : HostBuf            // the shared TokMeta block (pos/cnt), host-poked per token
     // prefill batch buffers (lazy — sized MAX_NPOS x their width) + per-layer prefill sets
     pf_ready : bool
