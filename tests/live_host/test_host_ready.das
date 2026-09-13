@@ -21,15 +21,15 @@ def test_host_serves_status(t : T?) {
         t |> skip("no daslang-live beside {get_das_exe()}")
         return
     }
-    if (free_port() < 0) {
-        t |> skip("a host answers on every port from {PORT_FIRST} to {PORT_FIRST + PORT_SPAN - 1}")
+    if (free_port(PORT_BAND_READY) < 0) {
+        t |> skip("a host answers on every port from {PORT_BAND_READY} to {PORT_BAND_READY + PORT_SPAN - 1}")
         return
     }
     t |> run("/status answers within the ready budget, and /shutdown ends the host with 0") @(t : T?) {
         let script = path_join(get_das_root(), "tests/live_host/_fixture_host_ready.das")
         let no_args : array<string>
         var lines : array<string>
-        let spawned = with_ready_host(exe, script, no_args, lines) $(var host; port; ready) {
+        let spawned = with_ready_host(exe, script, PORT_BAND_READY, no_args, lines) $(var host; port; ready) {
             t |> success(ready >= 0.0, "daslang-live did not serve /status within 30 s:\n{join(lines, "\n")}")
             if (ready >= 0.0) {
                 post_shutdown(port)
