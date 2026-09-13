@@ -1790,6 +1790,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     if (g_rdec_read_kv_bulk == null) {
         g_rdec_read_kv_bulk = @@rdec_unset_read_bulk
     }
+    if (g_rdec_set_ple_table == null) {
+        g_rdec_set_ple_table = @@rdec_unset_set_ple_table
+    }
     if (g_moe_gpu_dn_flush == null) {
         g_moe_gpu_dn_flush = @@moe_gpu_noop_dn_flush
     }
