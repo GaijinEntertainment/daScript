@@ -8625,9 +8625,8 @@ def test_vkd_kv16_readers(t0 : T?) {
                 return
             }
             let begin = VkCommandBufferBeginInfo()
-            // --- da_attn_f16: decode row over f16 mirrors (chunk boundary) ---
-            {
-                let hs = 64
+            // --- da_attn_f16: decode row over f16 mirrors (chunk boundary) - the scalar head (64), the one-word lane (256) and the two-word lane (512) ---
+            for (hs in [64, 256, 512]) {
                 let kv_mul = 2
                 let nheads = 4
                 let kvd = (nheads / kv_mul) * hs
@@ -8686,7 +8685,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                     attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_ref, hh * hs)
                 }
                 let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "da_attn_f16 matches the CPU oracle ({bad} of {nheads * hs} off)")
+                t |> success(bad == 0, "da_attn_f16 at head {hs} matches the CPU oracle ({bad} of {nheads * hs} off)")
                 delete qh
                 delete kh
                 delete vh

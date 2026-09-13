@@ -3373,8 +3373,10 @@ def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 // partial and the combine kernel finishes the head; unsplit it stores the head's row.
 [ |> template_struct_instance]
 class template DaAttnT {
+    @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
     @ssbo @binding = 1 kmir : array<KT>      // the K mirror plane
+    @ssbo @binding = 1 @role = "alias" @template_gate = KV16 kw4 : array<uint4>   //! the K mirror as 16-byte words
     @ssbo @binding = 2 vmir : array<KT>      // the V mirror plane
     @ssbo @binding = 3 y : array<float>      // attention out rows
     @ssbo @binding = 4 tok : array<TokMeta>  // the shared per-token block (element 0)
@@ -3386,6 +3388,18 @@ class template DaAttnT {
     @workgroup sc : float[256]     // chunk scores, then the cross-group V partial reduce
     @workgroup sgp : float[64]     // per-subgroup partials
     @workgroup ml : float[2]       // [0] = running max, [1] = running softmax denom
+
+    //! one V mirror element as f32
+    def vld(i : uint) : float => float(vmir[i])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+
+    //! eight halves of a K row word against the q row's slice at `qo`
+    def kdot8(w : uint4; qo : uint) : float {
+        let a = unpackHalf2x16(w.x)
+        let b = unpackHalf2x16(w.y)
+        let c = unpackHalf2x16(w.z)
+        let d = unpackHalf2x16(w.w)
+        return ((qrow[qo] * a.x + qrow[qo + 1u] * a.y) + (qrow[qo + 2u] * b.x + qrow[qo + 3u] * b.y)) + ((qrow[qo + 4u] * c.x + qrow[qo + 5u] * c.y) + (qrow[qo + 6u] * d.x + qrow[qo + 7u] * d.y))
+    }
 
     //! the finished row (o at dim `d` = tid, o2 at tid + 256 on a wide head) stored, and its requant when the push folds it:
     //! Q8_0 by the 32-lane group's amax, Q8_K by the workgroup's (one superblock a 256-wide head, two on a 512)
@@ -3481,21 +3495,48 @@ class template DaAttnT {
         let cend = min(cnt, cstart + (sp + 1u) * per)
         while (c0 < cend) {
             let clen = min(256u, cend - c0)
-            // chunk scores: a subgroup a key, the lanes across the dims
+            // chunk scores: a subgroup two keys a step, the lanes across the dims - both keys' loads in flight before
+            // either dot (the pass is latency-bound: a piece holds a few keys a subgroup, each a memory round trip)
             var kk = gl_SubgroupID
             while (kk < clen) {
+                let kk2 = kk + gl_NumSubgroups
+                let kkb = min(kk2, clen - 1u)   //! a lone last key reads a live row twice and stores once
                 let krow = pa.kbase + (c0 + kk) * pa.kvd + kvh * hs + lane * dpl
+                let krow2 = pa.kbase + (c0 + kkb) * pa.kvd + kvh * hs + lane * dpl
                 var pv = 0.0
-                var di = 0u
-                while (di < dpl) {
-                    pv += qrow[lane * dpl + di] * float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
-                    di++
+                var pv2 = 0.0
+                let vec = KV16 && dpl % 8u == 0u && (pa.kbase & 7u) == 0u   //! the f16 stamp on a head of 256 (one word a lane) or 512 (two), the row base on a word
+                static_if (KV16) {
+                    if (vec) {
+                        let nw = dpl / 8u
+                        var wi = 0u
+                        while (wi < nw) {
+                            let w0 = kw4[krow / 8u + wi]
+                            let w1 = kw4[krow2 / 8u + wi]
+                            pv += kdot8(w0, lane * dpl + wi * 8u)
+                            pv2 += kdot8(w1, lane * dpl + wi * 8u)
+                            wi++
+                        }
+                    }
+                }
+                if (!vec) {
+                    var di = 0u
+                    while (di < dpl) {
+                        let qv = qrow[lane * dpl + di]
+                        pv += qv * float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                        pv2 += qv * float(kmir[krow2 + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                        di++
+                    }
                 }
                 let sv = subgroupAdd(pv)
+                let sv2 = subgroupAdd(pv2)
                 if (lane == 0u) {
                     sc[kk] = attn_softcap(sv * pa.scale, pa.cap)
+                    if (kk2 < clen) {
+                        sc[kk2] = attn_softcap(sv2 * pa.scale, pa.cap)
+                    }
                 }
-                kk += gl_NumSubgroups
+                kk += 2u * gl_NumSubgroups
             }
             barrier()
             let s = tid < clen ? sc[tid] : -3.0e38
@@ -3537,18 +3578,51 @@ class template DaAttnT {
             // V accumulate: group g strides the chunk, rescaled by this chunk's alpha
             acc *= alpha
             acc2 *= alpha
+            // the loads of several keys leave before any add: a thread's keys are memory round trips, not bytes
+            let vb = pa.vbase + kvh * hs + c
             if (wide) {
                 var jj = 0u
+                while (jj + 3u < clen) {
+                    let r0 = vb + (c0 + jj) * pa.kvd
+                    let r1 = r0 + pa.kvd
+                    let r2 = r1 + pa.kvd
+                    let r3 = r2 + pa.kvd
+                    let v0 = vld(r0)
+                    let v1 = vld(r1)
+                    let v2 = vld(r2)
+                    let v3 = vld(r3)
+                    let u0 = vld(r0 + 256u)
+                    let u1 = vld(r1 + 256u)
+                    let u2 = vld(r2 + 256u)
+                    let u3 = vld(r3 + 256u)
+                    acc += (sc[jj] * v0 + sc[jj + 1u] * v1) + (sc[jj + 2u] * v2 + sc[jj + 3u] * v3)
+                    acc2 += (sc[jj] * u0 + sc[jj + 1u] * u1) + (sc[jj + 2u] * u2 + sc[jj + 3u] * u3)
+                    jj += 4u
+                }
                 while (jj < clen) {
-                    let vrow = pa.vbase + (c0 + jj) * pa.kvd + kvh * hs
-                    acc += sc[jj] * float(vmir[vrow + c])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
-                    acc2 += sc[jj] * float(vmir[vrow + c + 256u])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                    let vrow = vb + (c0 + jj) * pa.kvd
+                    acc += sc[jj] * vld(vrow)
+                    acc2 += sc[jj] * vld(vrow + 256u)
                     jj++
                 }
             } elif (tid < npart * hs) {
                 var jj = g
+                let step = npart * pa.kvd
+                while (jj + 7u * npart < clen) {
+                    let r0 = vb + (c0 + jj) * pa.kvd
+                    let v0 = vld(r0)
+                    let v1 = vld(r0 + step)
+                    let v2 = vld(r0 + 2u * step)
+                    let v3 = vld(r0 + 3u * step)
+                    let v4 = vld(r0 + 4u * step)
+                    let v5 = vld(r0 + 5u * step)
+                    let v6 = vld(r0 + 6u * step)
+                    let v7 = vld(r0 + 7u * step)
+                    acc += ((sc[jj] * v0 + sc[jj + npart] * v1) + (sc[jj + 2u * npart] * v2 + sc[jj + 3u * npart] * v3)) + ((sc[jj + 4u * npart] * v4 + sc[jj + 5u * npart] * v5) + (sc[jj + 6u * npart] * v6 + sc[jj + 7u * npart] * v7))
+                    jj += 8u * npart
+                }
                 while (jj < clen) {
-                    acc += sc[jj] * float(vmir[pa.vbase + (c0 + jj) * pa.kvd + kvh * hs + c])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                    acc += sc[jj] * vld(vb + (c0 + jj) * pa.kvd)
                     jj += npart
                 }
             }
@@ -3614,6 +3688,7 @@ class DaAttn : DaAttnT {
 [vk_dispatch(name = "da_attn_f16_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttnF16 : DaAttnT {
     typedef KT = float16
+    override KV16 = true
 }
 
 //! the split decode attention's combine: one wg a head over its nsplit partials - the running maxes
