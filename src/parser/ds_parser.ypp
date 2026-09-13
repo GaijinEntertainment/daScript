@@ -738,6 +738,12 @@ expr_reader
         if ( macros.size()==0 ) {
             das_yyerror(scanner,"reader macro " + *$mark + " not found",tokAt(scanner,@mark),
                 CompilationError::lookup_macro);
+            if ( yychar == '~' ) {
+                yyextra->g_ReaderMacro = das_unknown_reader_macro();
+                yyextra->g_ReaderExpr = new ExprReader(tokAt(scanner,@loc),yyextra->g_ReaderMacro);
+                yyclearin ;
+                das_yybegin_reader(scanner);
+            }
         } else if ( macros.size()>1 ) {
             string options;
             for ( auto & x : macros ) {

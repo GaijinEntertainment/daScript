@@ -9,6 +9,7 @@ require canonical
 require cluster
 require exchange
 require patterns
+require ../common/own_functions.das
 
 
 def public read_path_lines(f : FILE const?; var paths : array<string>) {
@@ -36,20 +37,10 @@ def public read_path_lines_from_file(path : string; var paths : array<string>;
 }
 
 
-def public is_daslib_skip(path : string; basename : string) : bool {
-    let normalized = normalize_path(path)
-    let prefix = "daslib/{basename}"
-    return normalized == prefix || normalized |> ends_with("/{prefix}")
-}
-
-
-//! Files no scan should compile: builtin.das, daslib debugger/profiler
-//! (thread-local agents abort a second in-process install), and the
-//! ast-fuzz selftest victims (deliberately broken; test_ast_fuzz.das owns them).
+// Files no scan should parse: builtin.das and the ast-fuzz selftest victims
+// (deliberately broken; test_ast_fuzz.das owns them).
 def public is_skip_file(path : string; basename : string) : bool {
-    if (basename == "builtin.das" || normalize_path(path) |> contains("ast-fuzz/selftest/")) return true
-    return (is_daslib_skip(path, "debugger.das")
-        || is_daslib_skip(path, "profiler.das"))
+    return basename == "builtin.das" || normalize_path(path) |> contains("ast-fuzz/selftest/")
 }
 
 
@@ -65,25 +56,6 @@ def public has_expect_directive(file : string) : bool {
     for (line in lines) {
         let trimmed = line |> strip
         if (trimmed |> starts_with("expect ")) return true
-    }
-    return false
-}
-
-
-//! True for a file whose COMPILATION installs a thread-local debug agent (`options debugger`
-//! / `options profiler`, or a direct installer call). The agent outlives compile_file, so a
-//! scan process that compiles two such files panics at the second install
-//! (`debugger.das: thread local debug agent already installed`) - they never enter a corpus.
-def public installs_debug_agent(file : string) : bool {
-    let text = fread(file)
-    if (empty(text)) return false
-    let lines <- text |> split("\n")
-    for (line in lines) {
-        let trimmed = line |> strip
-        if (trimmed |> starts_with("options debugger") || trimmed |> starts_with("options profiler")
-                || (find(trimmed, "install_new_thread_local_debug_agent") >= 0 && !(trimmed |> starts_with("//")))) {
-            return true
-        }
     }
     return false
 }
@@ -124,54 +96,72 @@ def public scan_das_files(path : string; var files : array<string>; var cache : 
 }
 
 
-def private collect_one_function(var func : FunctionPtr;
-                                 source_norm : string;
+// `loc` is the record's identity for the per-run dedup - `file:line` for a function, `file:line:column`
+// for a lambda, since one line can open several.
+def private push_record(var records : array<FuncRecord>; var seen_loc : table<string; void?>;
+                        loc : string; ref : MemberRef; canon : string;
+                        want_sigs : bool; min_tokens : int) {
+    if (empty(canon) || key_exists(seen_loc, loc)) return
+    seen_loc |> insert(loc, null)
+    records |> emplace(make_record(ref, canon, want_sigs, min_tokens))
+}
+
+
+def private collect_one_function(func : FunctionPtr;
                                  var records : array<FuncRecord>;
                                  var seen_loc : table<string; void?>;
-                                 lambdas_only : bool;
                                  want_sigs : bool;
                                  min_tokens : int) {
-    if (func.flags.builtIn) return
-    if (lambdas_only) {
-        if (!func.flags._lambda) return
-    } else {
-        if (func.flags.generated) return
+    let fn_file = string(func.at.fileInfo.name)
+    let line = int(func.at.line)
+    let ref = MemberRef(file = fn_file, name = string(func.name), line = line,
+        end_line = int((func.body != null) ? func.body.at.last_line : func.at.last_line), is_lambda = false)
+    push_record(records, seen_loc, "{fn_file}:{line}", ref, canonicalize(func), want_sigs, min_tokens)
+}
+
+
+class LambdaSiteCollector : AstVisitor {
+    sites : array<ExprMakeBlock?>
+
+    def override visitExprMakeBlock(var expr : ExprMakeBlock?) : ExpressionPtr {
+        sites |> push(expr)
+        return expr
     }
-    let fn_file = (func.at.fileInfo != null) ? string(func.at.fileInfo.name) : ""
-    if (normalize_path(fn_file) != source_norm) return
-    let loc = "{fn_file}:{int(func.at.line)}"
-    if (key_exists(seen_loc, loc)) return
-    seen_loc |> insert(loc, null)
-    let canon = canonicalize_function(func)
-    if (empty(canon)) return
-    var rec = FuncRecord()
-    rec.ref.file = fn_file
-    rec.ref.name = string(func.name)
-    rec.ref.line = int(func.at.line)
-    if (func.body != null) {
-        rec.ref.end_line = int(func.body.at.last_line)
-    } else {
-        rec.ref.end_line = int(func.at.last_line)
+}
+
+
+// Every `@(...) { ... }` / `$(...) { ... }` in the function, nested ones included, as its
+// own record named `<function>\`lambda@<column>` at the block's line - the column keeps two
+// blocks on one line apart in every identity the record has.
+def private collect_lambdas(func : FunctionPtr;
+                            var records : array<FuncRecord>;
+                            var seen_loc : table<string; void?>;
+                            want_sigs : bool;
+                            min_tokens : int) {
+    let fn_file = string(func.at.fileInfo.name)
+    var collector = new LambdaSiteCollector()
+    make_visitor(*collector) $(adapter) {
+        visit(func, adapter)
     }
-    rec.ref.is_lambda = func.flags._lambda
-    rec.canonical = canon
-    derive_sig_and_count(rec, want_sigs, min_tokens)
-    records |> emplace(rec)
+    for (mk in collector.sites) {
+        let line = int(mk.at.line)
+        let column = int(mk.at.column)
+        let ref = MemberRef(file = fn_file, name = "{func.name}`lambda@{column}", line = line,
+            end_line = int((mk._block != null) ? mk._block.at.last_line : mk.at.last_line), is_lambda = true)
+        let canon = canonicalize(mk)
+        push_record(records, seen_loc, "{fn_file}:{line}:{column}", ref, canon, want_sigs, min_tokens)
+    }
+    unsafe { delete collector; }
 }
 
 
 def public collect_from_program(program : ProgramPtr; source_file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; lambdas_only : bool; want_sigs : bool; min_tokens : int) {
-    let thisMod = get_this_module(program)
-    let source_norm = normalize_path(source_file)
-    if (!lambdas_only) {
-        for_each_generic(thisMod, "") $(func) {
-            collect_one_function(func, source_norm, records, seen_loc,
-                                 lambdas_only, want_sigs, min_tokens)
+    for_each_own_function(program, source_file) $(func) {
+        if (lambdas_only) {
+            collect_lambdas(func, records, seen_loc, want_sigs, min_tokens)
+        } else {
+            collect_one_function(func, records, seen_loc, want_sigs, min_tokens)
         }
-    }
-    for_each_function(thisMod, "") $(func) {
-        collect_one_function(func, source_norm, records, seen_loc,
-                             lambdas_only, want_sigs, min_tokens)
     }
 }
 
@@ -228,46 +218,34 @@ def public collect_candidate_refs(records : array<FuncRecord>) : array<MemberRef
 }
 
 
-def public compile_and_collect(file : string; var records : array<FuncRecord>;
-                               var seen_loc : table<string; void?>;
-                               verbose : bool; lambdas_only : bool;
-                               want_sigs : bool; min_tokens : int;
-                               quiet : bool = false;
-                               project : string = "") : bool {
-    var prereq_skipped = false
-    return compile_and_collect_ex(file, records, seen_loc, prereq_skipped, verbose, lambdas_only, want_sigs, min_tokens, quiet, project)
+// The grammar reports its abort as `invalid_expression` with a `syntax error, ...` text, the
+// lexer's as `syntax_error`; every other code is a recorded diagnostic the parse walked past.
+def private has_syntax_error(program : ProgramPtr) : bool {
+    for (e in program.errors) {
+        if (e.cerr == CompilationError.syntax_error || e.what |> starts_with("syntax error")) return true
+    }
+    return false
 }
 
-//! `compile_and_collect` with the environment-skip out-param: a file whose compile fails on
-//! `missing prerequisite` (a module this build/platform does not carry — Apple-only Metal
-//! benchmarks on Windows) sets `prereq_skipped` and returns true. That is an honest skip,
-//! not a broken file: the caller counts and reports it, never fails the corpus on it.
-//! Any other compile failure returns false and still collects: a failed infer leaves an AST, and its functions enter the corpus.
-def public compile_and_collect_ex(file : string; var records : array<FuncRecord>;
-                                  var seen_loc : table<string; void?>;
-                                  var prereq_skipped : bool&;
-                                  verbose : bool; lambdas_only : bool;
-                                  want_sigs : bool; min_tokens : int;
-                                  quiet : bool = false;
-                                  project : string = "") : bool {
+
+// One file, parsed alone: no prerequisite walk, no infer, no macro runs. A require,
+// annotation, parent class or reader macro the parse cannot resolve is recorded and ignored -
+// the shape survives either way. A syntax error ends the file's parse and returns false; the
+// functions parsed before it are still collected.
+def public parse_and_collect(file : string; var records : array<FuncRecord>;
+                             var seen_loc : table<string; void?>;
+                             verbose : bool; lambdas_only : bool;
+                             want_sigs : bool; min_tokens : int;
+                             quiet : bool = false;
+                             project : string = "") : bool {
     var inscope access <- make_file_access(project)
-    var ok_compile = true
-    prereq_skipped = false
+    var ok_parse = true
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            cop.ignore_shared_modules = true
-            cop.export_all = true
             cop.version_2_syntax = true
-            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
-                if (!ok) {
-                    if (find("{issues}", "missing prerequisite") >= 0) {
-                        prereq_skipped = true
-                        if (!quiet) {
-                            to_log(LOG_INFO, "SKIP {file} (missing prerequisite - module not in this build)\n")
-                        }
-                        return
-                    }
-                    ok_compile = false
+            parse_file_no_prerequisites(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+                if (!ok && has_syntax_error(program)) {
+                    ok_parse = false
                     if (!quiet) {
                         if (verbose) {
                             to_log(LOG_ERROR, "FAIL {file}\n  {issues}\n")
@@ -275,11 +253,10 @@ def public compile_and_collect_ex(file : string; var records : array<FuncRecord>
                             to_log(LOG_ERROR, "FAIL {file}\n")
                         }
                     }
-                    if (program == null) return
                 }
                 collect_from_program(program, file, records, seen_loc, lambdas_only, want_sigs, min_tokens)
             }
         }
     }
-    return ok_compile
+    return ok_parse
 }

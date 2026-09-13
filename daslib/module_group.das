@@ -9,7 +9,7 @@ module module_group shared private
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/fio
-require rtti
+require daslib/rtti
 require strings
 
 def public module_group_module_name(member : string) : string {

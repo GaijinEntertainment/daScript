@@ -10,6 +10,7 @@ require daslib/ast_boost
 require daslib/fio
 require daslib/strings_boost
 require strings
+require ../../common/own_functions.das
 
 
 [CommandLineArgs]
@@ -486,24 +487,6 @@ class AuditVisitor : AstVisitor {
 
 // ===== per-file driver =====
 
-// visit one module function if it belongs to the audited file; generic
-// templates and their reified instances share (line:column) — first wins
-def visit_one(func : FunctionPtr; var v : AuditVisitor?;
-              var seen_fn : table<string; void?>; file_norm : string) {
-    // generated functions (class ctors/finalizers, lifted lambdas) are
-    // desugar output — user-written lambda bodies are still covered via
-    // the ExprMakeBlock in the enclosing real function
-    if (func.flags.builtIn || func.flags.generated || func.at.fileInfo == null
-            || normalize_path(string(func.at.fileInfo.name)) != file_norm) return
-    let loc = "{int(func.at.line)}:{int(func.at.column)}"
-    if (key_exists(seen_fn, loc)) return
-    seen_fn |> insert(loc, null)
-    make_visitor(*v) $(adapter) {
-        visit(func, adapter)
-    }
-}
-
-
 def private audit_program(program : ProgramPtr; file : string; src_lines : array<string>; gen1 : bool;
                           var counts : table<string; int>;
                           var samples : table<string; array<string>>;
@@ -514,12 +497,10 @@ def private audit_program(program : ProgramPtr; file : string; src_lines : array
     v.src_lines := src_lines
     v.file_norm = file_norm
     v.gen1_mode = gen1
-    var seen_fn : table<string; void?>
-    for_each_generic(get_this_module(program), "") $(func) {
-        visit_one(func, v, seen_fn, file_norm)
-    }
-    for_each_function(get_this_module(program), "") $(func) {
-        visit_one(func, v, seen_fn, file_norm)
+    for_each_own_function(program, file) $(func) {
+        make_visitor(*v) $(adapter) {
+            visit(func, adapter)
+        }
     }
     for (viol in v.out) {
         let key = "{viol.check}/{viol.node}"

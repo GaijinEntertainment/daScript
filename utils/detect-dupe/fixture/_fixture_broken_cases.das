@@ -7,6 +7,5 @@ def case_broken_survivor(a, b : int) : int {
 
 
 def case_broken_offender(a : int) : int {
-    let s : string = a
-    return length(s)
+    return a +
 }

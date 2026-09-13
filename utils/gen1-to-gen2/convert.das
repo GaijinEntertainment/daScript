@@ -13,6 +13,7 @@ require patch
 require rules_make
 require rules_stmt
 require rules_decl
+require ../common/own_functions.das
 
 
 struct public ConvertOptions {
@@ -194,18 +195,6 @@ class ConvertVisitor : AstVisitor {
 }
 
 
-def private visit_once(var v : ConvertVisitor?; var fn : FunctionPtr; file : string;
-                       var walked : table<string; bool>) {
-    if (fn.flags.builtIn || fn.flags.generated || !same_file(fn.at, file)) return
-    let key = "{int(fn.at.line)}:{int(fn.at.column)}"
-    if (key_exists(walked, key)) return
-    walked |> insert(key, true)
-    make_visitor(*v) $(adapter) {
-        visit(fn, adapter)
-    }
-}
-
-
 def private same_file(at : LineInfo; file : string) : bool {
     if (at.fileInfo == null) return false
     return normalize(string(at.fileInfo.name)) |> replace("\\", "/") == normalize(file) |> replace("\\", "/")
@@ -258,12 +247,10 @@ def public collect_edits(src : Source; lex : Lexical; var program : ProgramPtr; 
     }
     v.file = file
     v.opt = opt
-    var walked : table<string; bool>
-    for_each_generic(get_this_module(program), "") $(var fn) {
-        visit_once(v, fn, file, walked)
-    }
-    for_each_function(get_this_module(program), "") $(var fn) {
-        visit_once(v, fn, file, walked)
+    for_each_own_function(program, file) $(fn) {
+        make_visitor(*v) $(adapter) {
+            visit(fn, adapter)
+        }
     }
     for_each_global(get_this_module(program)) $(var gvar) {
         if (gvar.init == null || !same_file(gvar.at, file)) return

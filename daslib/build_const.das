@@ -37,7 +37,7 @@ module build_const shared private
 //! ``env:<NAME>``), so under the AST module cache a changed flag or variable re-parses
 //! the requiring module instead of serving the constant an earlier compile folded.
 
-require fio
+require daslib/fio
 require strings
 require daslib/strings_boost
 require daslib/strings_convert

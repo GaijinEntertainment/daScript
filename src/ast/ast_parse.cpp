@@ -1266,6 +1266,9 @@ namespace das {
         parserState = DasParserState();
         myParseT = get_time_usec(time0);
         *totParse += myParseT;
+        if ( err && !program->failed() ) {
+            program->error("syntax error", "", "", LineInfo(), CompilationError::syntax_error);
+        }
         if ( err || program->failed() ) {
             daScriptEnvironment::getBound()->g_Program.reset();
             daScriptEnvironment::getBound()->g_compilerLog = nullptr;

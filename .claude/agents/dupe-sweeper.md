@@ -2,7 +2,7 @@
 name: dupe-sweeper
 description: Standalone sweep of a file set for duplicated and parameterizable code - reads EVERY function in the set in full, runs detect-dupe as one tool among several, and reports duplicates of existing daslib/module/utils helpers, sibling sets that differ only on a type/constant/shape/format/helper (with the fold), and copy-pasted local blocks (procedure in skills/dupe_audit.md). Two roles, chosen by the prompt - SHARD (read an assigned file set, return findings plus a one-line-per-function inventory) and MERGE (read the shards' inventories and the sweep report, return the cross-shard sets). The orchestrator shards a set past roughly six thousand lines and runs one MERGE after the shards. Read-only. Note - a NEW definition file hot-loads mid-session, but a file present at session start can be skipped by the initial scan - if this type is absent from the registry, run general-purpose instead - read this file first as the charter, pin this model.
 model: opus
-tools: Bash, Read, Grep, Glob
+tools: Bash, Read, Grep, Glob, mcp__daslang__discover
 color: yellow
 ---
 

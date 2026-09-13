@@ -39,7 +39,7 @@ struct public ExportEnvelope {
 // by `utils/find-dupe/`. v1 readers reject v2 files (and vice
 // versa) via the explicit version check in `read_import` /
 // `load_baseline_canonicals`.
-let public EXCHANGE_SCHEMA_VERSION = 2
+let public EXCHANGE_SCHEMA_VERSION = 3
 
 
 // Single source of truth for "given a canonical string, finish
@@ -50,6 +50,17 @@ let public EXCHANGE_SCHEMA_VERSION = 2
 // Always (re)sets `sig`: when `want_sigs` is false (or token_count
 // is below the floor), `sig` is cleared so a reused record can't
 // carry a stale signature into fuzzy_pairs.
+// One record from its identity and canonical text, signed and counted the way every producer -
+// the parse, the import, a test - needs it.
+def public make_record(ref : MemberRef; canon : string; want_sigs : bool; min_tokens : int) : FuncRecord {
+    var rec = FuncRecord()
+    rec.ref := ref
+    rec.canonical = canon
+    derive_sig_and_count(rec, want_sigs, min_tokens)
+    return <- rec
+}
+
+
 def public derive_sig_and_count(var rec : FuncRecord; want_sigs : bool; min_tokens : int) {
     let tokens <- tokenize_canonical(rec.canonical)
     rec.token_count = length(tokens)
@@ -248,15 +259,8 @@ def public read_import(path : string; var records : array<FuncRecord>;
             skipped++
             continue
         }
-        var rec = FuncRecord()
-        rec.ref.name = ef.name
-        rec.ref.file = ef.file
-        rec.ref.line = ef.line
-        rec.ref.end_line = ef.end_line
-        rec.ref.is_lambda = ef.is_lambda
-        rec.canonical = ef.canonical
-        derive_sig_and_count(rec, want_sigs, min_tokens)
-        records |> emplace(rec)
+        records |> emplace(make_record(MemberRef(file = ef.file, name = ef.name, line = ef.line,
+            end_line = ef.end_line, is_lambda = ef.is_lambda), ef.canonical, want_sigs, min_tokens))
     }
     if (skipped > 0 && !quiet) {
         to_log(LOG_WARNING, "warning: skipped {skipped} malformed function record(s) during import\n")
