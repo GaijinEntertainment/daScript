@@ -983,11 +983,17 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
     let pg = arena_planes(fmt, g_rd.layers[l].bpg)
     let pp = arena_planes(fmt, g_rd.layers[l].bpp)
     //! every step runs the whole window, the FFN's last-layer row slice included: the branch is 256 wide, and the sliced rows' results go unread
-    var pcx = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
-    enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 16], pcx, (wlen * dim / 4l + 255l) / 256l)
+    let x6 = pf_f16_feed(fmt)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their Q8_0 blocks
+    if (x6) {
+        var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+        enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 16], pcc, (wlen * dim / 4l + 255l) / 256l)
+    } else {
+        var pcx = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
+        enc_cls_dn_rq(raw, h, g_rd.pf_sets[b + 16], pcx, (wlen * dim / 4l + 255l) / 256l)
+    }
     pfq_ts(raw)
-    pf_gemm_enc(raw, h, b + 17, fmt, pg.wq, pg.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_gate,
-        pg.wqb, pg.wsb, np * dim, np * (dim / 32l) * 4l, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, g_rd.layers[l].bpg, wlen, false)
+    pf_gemm_enc(raw, h, b + 17, fmt, pg.wq, pg.ws, x6 ? g_rd.pf_xf : g_rd.pf_xq, x6 ? g_rd.dummy : g_rd.pf_xs, g_rd.pf_gate,
+        pg.wqb, pg.wsb, x6 ? np * dim * 2l : np * dim, x6 ? 256l : np * (dim / 32l) * 4l, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, g_rd.layers[l].bpg, wlen, x6)
     var pca = ActArgs(nelem = uint(wlen * ple), gelu = 1u, nblk = uint(wlen * ple / 32l),
         ubase = uint(l * ple), ustride = all, ulen = uint(ple))
     enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple / 4l + 255l) / 256l)
@@ -1319,12 +1325,16 @@ def private pf_setup {
                 fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, normbytes),
                 fixed_array(VHZ_Q, VHZ_KVK, 0u))
         }
-        // 16 ple_x: the stream rows as they are -> pf_xq/pf_xs; 18 ple_act: gelu(gate rows) x the side rows -> hq/hs (17 / 19 are GEMM roles: sets on the encode)
+        // 16 ple_x: the stream rows as they are -> pf_xf (the f16 feed) or pf_xq/pf_xs; 18 ple_act: gelu(gate rows) x the side rows -> hq/hs (17 / 19 are GEMM roles: sets on the encode)
         if (L.ple) {
             let ple = g_rd.ple
-            g_rd.pf_sets[b + 16] = set_rq_cls(fixed_array(g_rd.pf_x, g_rd.pf_xq, g_rd.pf_xs),
-                fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
-                fixed_array(VHZ_X, VHZ_XQ, VHZ_XQ))
+            g_rd.pf_sets[b + 16] = (pf_f16_feed(L.fpg)
+                ? set_f16cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_xf),
+                    fixed_array(np * dim * 4l, np * dim * 2l),
+                    fixed_array(VHZ_X, VHZ_XQ))
+                : set_rq_cls(fixed_array(g_rd.pf_x, g_rd.pf_xq, g_rd.pf_xs),
+                    fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
+                    fixed_array(VHZ_X, VHZ_XQ, VHZ_XQ)))
             g_rd.pf_sets[b + 18] = set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_gpu.hq_dev, g_gpu.hs_dev),
                 fixed_array(np * ple * 4l, np * g_rd.n_layers * ple * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
                 fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
