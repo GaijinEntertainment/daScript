@@ -6407,6 +6407,137 @@ def test_vkd_q8_gemv_gu(t0 : T?) {
     }
 }
 
+//! the fused per-layer-embedding tail: gelu(gate) x the side row, its Q8_0 blocks and the proj GEMV in one dispatch,
+//! against the same chain in the scalar order; the bar is the dot envelope (a one-step quant flip at a rounding tie
+//! sits far under it), with a poisoned expectation that must red
+def private q8_gemv_pleact_run(t : T?; n, d : int) {
+    let nb = n / 32
+    let totblk = d * nb
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    var wqh : array<uint>
+    var wsh : array<uint>
+    var gh : array<float>
+    var sh : array<float>
+    wqh |> resize(totblk * 8)
+    wsh |> resize(totblk / 2 + 1)
+    gh |> resize(n)
+    sh |> resize(3 * n)   // three layers' side rows: the cell reads the middle one
+    for (i in range(totblk * 8)) {
+        wqh[i] = hash_word(uint(i) * 5u + 19u)
+    }
+    for (i in range(totblk / 2 + 1)) {
+        wsh[i] = ws_word(uint(i) * 3u + 7u)
+    }
+    for (i in range(n)) {
+        gh[i] = float((i * 37) % 101) * 0.06 - 3.0
+    }
+    for (i in range(3 * n)) {
+        sh[i] = float((i * 29) % 83) * 0.05 - 2.0
+    }
+    let g_bytes = int64(n) * 4l
+    let s_bytes = int64(3 * n) * 4l
+    let y_bytes = int64(d) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let gd = make_device_buf(g_bytes)
+    let sd = make_device_buf(s_bytes)
+    let yd = make_device_buf(y_bytes)
+    var host = make_host_buf(y_bytes, true, [cached = true])
+    var y_cls : array<float>
+    y_cls |> resize(d)
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+        upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
+        upload_region_at(sd, 0l, addr<uint8 const?>(sh[0]), s_bytes)
+        nan_sentinel_upload(yd, y_bytes)
+        var s_cls = set_q8_gemv_pleact_cls(fixed_array(wqd, wsd, gd, sd, yd),
+            fixed_array(wq_bytes, ws_bytes, g_bytes, s_bytes, y_bytes),
+            fixed_array(1u, 2u, 4u, 8u, 16u))
+        var raw2 = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw2, begin), null)
+        var h2 : VkHaz
+        var pc = PleActArgs(n = uint(n), d = uint(d), wblk = 0u, ubase = uint(n), gelu = 1u)
+        let rpw = 4l * g_gpu.rows_per_wg
+        enc_q8_gemv_pleact_cls(raw2, h2, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
+        vhz_dep(raw2, h2, 16u, 0u, true)
+        cmd_copy_whole(raw2, yd, host.buf, y_bytes)
+        vk_check(vkEndCommandBuffer(raw2), null)
+        submit_wait(raw2)
+        memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+    }
+    // the oracle: the activated row, its Q8_0 blocks, then each row's dot in the scalar block order
+    var xq : array<int>
+    var xs : array<float>
+    xq |> resize(n)
+    xs |> resize(nb)
+    for (b in range(nb)) {
+        var m = 0.0
+        for (e in range(32)) {
+            m = max(m, abs(act_mul_ref(gh[b * 32 + e], sh[n + b * 32 + e], true)))
+        }
+        let dq = m / 127.0
+        xs[b] = dq
+        let id = dq != 0.0 ? 1.0 / dq : 0.0
+        for (e in range(32)) {
+            xq[b * 32 + e] = int(round(act_mul_ref(gh[b * 32 + e], sh[n + b * 32 + e], true) * id))
+        }
+    }
+    var bad = 0
+    var pbad = 0
+    for (row in range(d)) {
+        var acc = 0.0
+        var env = 0.0
+        for (b in range(nb)) {
+            let wb = row * nb + b
+            let ws16 = wb % 2 == 0 ? unpackHalf2x16(wsh[wb / 2]).x : unpackHalf2x16(wsh[wb / 2]).y
+            var idot = 0
+            var ienv = 0
+            for (j in range(32)) {
+                let w = int(int8(uint8((wqh[wb * 8 + j / 4] >> uint((j % 4) * 8)) & 0xFFu)))
+                idot += w * xq[b * 32 + j]
+                ienv += abs(w * xq[b * 32 + j])
+            }
+            acc += float(idot) * ws16 * xs[b]
+            env += float(ienv) * abs(ws16) * xs[b]
+        }
+        let bar = 2e-3 * env + 1e-6
+        if (abs(y_cls[row] - acc) > bar) {
+            bad++
+        }
+        if (abs(y_cls[row] - (acc + 3.0 * bar)) <= bar) {   // the control: the expectation pushed three bars must miss
+            pbad++
+        }
+    }
+    t |> success(bad == 0, "q8 pleact n {n} d {d}: the proj row matches the CPU chain ({bad} of {d} rows off)")
+    t |> success(pbad == 0, "q8 pleact n {n} d {d}: the bar reds a poisoned expectation on every row ({pbad} passed)")
+    delete wqh
+    delete wsh
+    delete gh
+    delete sh
+    delete xq
+    delete xs
+    delete y_cls
+}
+
+[test]
+def test_vkd_q8_gemv_pleact(t0 : T?) {
+    t0 |> run("fused per-layer-embedding act + Q8_0 requant + q8 proj GEMV == the CPU chain (256 and 128 wide)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_gemv_pleact_cls()) {
+                feint("no Vulkan device - skipping\n")
+                return
+            }
+            q8_gemv_pleact_run(t, 256, 200)   // the E-series side row: eight blocks, a partial last workgroup
+            q8_gemv_pleact_run(t, 128, 64)    // a narrower row: the idle upper lanes of the build
+        } else {
+            feint("dasVulkan not present - skipping\n")
+        }
+    }
+}
+
 [test]
 def test_vkd_q8_gemv_pair(t0 : T?) {
     t0 |> run("q8 GEMV class kernel == the CPU oracle") <| @(t : T?) {

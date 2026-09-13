@@ -46,6 +46,7 @@ struct ArArgs {
     pwoff : uint
     p2off : uint     //! the gemma-4 MoE combine: the routed sum's post norm row (`pwoff` is the dense branch's)
     p3off : uint     //! ... and the post norm over the two branches' sum
+    raw : uint       //! the requant twins: quantize the updated row as it is (no norm) - the E-series residual feeding its per-layer-embedding gate
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -166,9 +167,17 @@ class ArRqBase : ArBase {
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def rq_row(rbase, qb0 : uint) {
         let ss = accum_row(rbase)
-        let inv = rms_inv(ss)
-        quant32(qb0, inv)
+        quant32(qb0, row_inv(ss))
     }
+
+    //! the row's norm inverse - one under `raw` (the reduce still runs: its barrier is every thread's)
+    def row_inv(ss : float) : float {
+        let inv = rms_inv(ss)
+        return pa.raw != 0u ? 1.0 : inv
+    }
+
+    //! the norm weight at `e`, one under `raw`
+    def nw(e : uint) : float => pa.raw != 0u ? 1.0 : wn[pa.woff + e]
 
     def quant32(qb0 : uint; inv : float) {
         let tid = gl_LocalInvocationID.x
@@ -177,10 +186,10 @@ class ArRqBase : ArBase {
         var b = tid / 8u
         while (b < nblk) {
             let base = b * 32u + lane8 * 4u
-            let v0 = wn[pa.woff + base] * (row[base] * inv)
-            let v1 = wn[pa.woff + base + 1u] * (row[base + 1u] * inv)
-            let v2 = wn[pa.woff + base + 2u] * (row[base + 2u] * inv)
-            let v3 = wn[pa.woff + base + 3u] * (row[base + 3u] * inv)
+            let v0 = nw(base) * (row[base] * inv)
+            let v1 = nw(base + 1u) * (row[base + 1u] * inv)
+            let v2 = nw(base + 2u) * (row[base + 2u] * inv)
+            let v3 = nw(base + 3u) * (row[base + 3u] * inv)
             let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
             let d = m / 127.0
             let id = d != 0.0 ? 1.0 / d : 0.0
@@ -231,7 +240,7 @@ class template ArRqT : ArRqBase {
             var m = 0.0
             for [unroll] (r in range(8)) {
                 let e = base + uint(r) * 32u
-                let v = wn[pa.woff + e] * (row[e] * inv)
+                let v = nw(e) * (row[e] * inv)
                 vals[r] = v
                 m = max(m, abs(v))
             }
@@ -250,11 +259,11 @@ class template ArRqT : ArRqBase {
     [spirv_kernel(local_size_x = 256)]
     def run {
         let ss = accum_row(0u)
-        let inv = rms_inv(ss)
+        let inv = row_inv(ss)
         static_if (STOREX) {
             var k = gl_LocalInvocationID.x
             while (k < pa.dim) {
-                yo[k] = wn[pa.woff + k] * (row[k] * inv)
+                yo[k] = nw(k) * (row[k] * inv)
                 k += 256u
             }
         }
@@ -8825,6 +8834,78 @@ class Q8GemvGu {
             }
             if (lane < 32u) {
                 outq[row0 + lane] = q8_quant1(a, id)
+            }
+        }
+    }
+}
+
+struct PleActArgs {
+    n : uint      //! the side row's width (the reduction; at most 256, a 32-multiple)
+    d : uint      //! the output rows (the model dim)
+    wblk : uint   //! the proj plane's block base in its slab
+    ubase : uint  //! this layer's row base in the side plane
+    gelu : uint   //! activation select: 0 = silu, else tanh-gelu
+}
+
+//! the per-layer-embedding branch's activation, its Q8_0 requant and the proj GEMV in one dispatch: every workgroup
+//! builds the (at most 256-wide) x in workgroup memory - gelu(gate) x the side row, a block's scale by its 32-lane amax,
+//! the quants or-ed into words - then each of its subgroups dots one output row in the q8 GEMV's lane form; the
+//! act+requant hop goes, the redundant build costs 256 elements a workgroup
+[vk_dispatch(name = "q8_gemv_pleact_cls", grid = "wgs", params = "wgs : int64")]
+class Q8GemvPleAct {
+    @ssbo @binding = 0 wq4 : array<uint4>     // proj quant words, vec4 view
+    @ssbo @binding = 1 wsh : array<float16>   // proj per-block f16 scales
+    @ssbo @binding = 2 gate : array<float>    // the gate GEMV's row
+    @ssbo @binding = 3 side : array<float>    // the side plane (every layer's row)
+    @ssbo @binding = 4 y : array<float>       // the proj row out
+    @push_constant pa : PleActArgs
+    @workgroup xw : uint[64]    //! the built x's Q8_0 quant words
+    @workgroup xs : float[8]    //! ... and its block scales
+
+    [spirv_kernel(local_size_x = 256, name = "q8_gemv_pleact_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        if (tid < 64u) {
+            xw[tid] = 0u
+        }
+        barrier()
+        let e = min(tid, pa.n - 1u)
+        let v = tid < pa.n ? act_mul_sel(gate[e], side[pa.ubase + e], pa.gelu) : 0.0
+        let d = q8k_amax5(abs(v)) / 127.0   //! a block is a 32-lane group
+        let id = d != 0.0 ? 1.0 / d : 0.0
+        let q = uint(int(round(v * id))) & 0xFFu
+        atomicOr(xw[tid / 4u], q << ((tid % 4u) * 8u))
+        if ((tid & 31u) == 0u) {
+            xs[tid / 32u] = d
+        }
+        barrier()
+        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (row < pa.d) {
+            let nb = pa.n / 32u
+            let wb0 = pa.wblk + row * nb
+            let lane = gl_SubgroupInvocationID
+            let bpp = gl_SubgroupSize / 2u
+            var acc = 0.0
+            var bi0 = 0u
+            while (bi0 < nb) {
+                let b = bi0 + lane / 2u
+                if (b < nb) {
+                    let wv = wq4[(wb0 + bi0) * 2u + lane]
+                    let xbase = bi0 * 8u + lane * 4u
+                    var idot = sdot4(wv.x, xw[xbase])
+                    idot += sdot4(wv.y, xw[xbase + 1u])
+                    idot += sdot4(wv.z, xw[xbase + 2u])
+                    idot += sdot4(wv.w, xw[xbase + 3u])
+                    idot += subgroupShuffleXor(idot, 1u)
+                    if (lane % 2u == 0u) {
+                        acc += float(idot) * float(wsh[wb0 + b]) * xs[b]
+                    }
+                }
+                bi0 += bpp
+            }
+            let total = subgroupAdd(acc)
+            if (subgroupElect()) {
+                y[row] = total
             }
         }
     }

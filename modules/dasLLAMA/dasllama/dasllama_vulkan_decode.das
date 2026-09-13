@@ -787,6 +787,13 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
         L.s_ple_proj = gemv_cls_set(fmt, fixed_array(pp.wq, pp.ws, L.m_pp.buf, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.ffnout_dev),
             fixed_array(pp.wqb, pp.wsb, META_BYTES, ple, (ple / 32l) * 4l, dim * 4l),
             fixed_array(0u, 0u, 0u, VHZ_HQ, VHZ_HQ, VHZ_FFO))
+        L.ple_fused = vk_fuse_on() && fmt == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l && ensure_cls_ar_rq() && ensure_q8_gemv_pleact_cls()
+        if (L.ple_fused) {
+            L.s_ple_ar_rq = set_ar_rq_stamp(RqStamp.rq, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
+            L.s_ple_pa = set_q8_gemv_pleact_cls(fixed_array(pp.wq, pp.ws, g_rd.pleg_dev, g_rd.ple_dev, g_rd.ffnout_dev),
+                fixed_array(pp.wqb, pp.wsb, ple * 4l, g_rd.n_layers * ple * 4l, dim * 4l),
+                fixed_array(0u, 0u, VHZ_GATE, VHZ_COS, VHZ_FFO))
+        }
     }
     g_rd.tok_recorded = false
 }
@@ -1200,12 +1207,21 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer) 
 def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64) {
     let dim = g_rd.dim
     let ple = g_rd.ple
-    var pcx = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
-    enc_cls_dn_rq(raw, h, L.s_ple_x, pcx, (dim / 4l + 255l) / 256l)
-    rd_ts(raw, "p:rq_x")
+    if (!L.ple_fused) {   //! fused, the residual step quantized the row it wrote
+        var pcx = RqArgs(inbase = 0u, nblk = uint(dim / 32l))
+        enc_cls_dn_rq(raw, h, L.s_ple_x, pcx, (dim / 4l + 255l) / 256l)
+        rd_ts(raw, "p:rq_x")
+    }
     var pcg = GemvArgs(n = uint(dim), d = uint(ple), nreg = 1u, ybase = 0u)
     gemv_enc(L.fpg, raw, h, L.s_ple_gate, pcg, ple)
     rd_ts(raw, "p:gate")
+    if (L.ple_fused) {
+        var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), gelu = 1u)
+        let rpw = 4l * g_gpu.rows_per_wg   //! a 256-thread workgroup: a row a subgroup
+        enc_q8_gemv_pleact_cls(raw, h, L.s_ple_pa, pcf, (dim + rpw - 1l) / rpw)
+        rd_ts(raw, "p:actproj")
+        return
+    }
     var pca = ActArgs(nelem = uint(ple), gelu = 1u, nblk = uint(ple / 32l), ubase = uint(l * ple))
     enc_q8_actrq_cls(raw, h, L.s_ple_act, pca, (ple / 4l + 255l) / 256l)
     rd_ts(raw, "p:act")
@@ -1363,8 +1379,14 @@ def private rd_encode_token {
                 // the FFN residual first (no scale, the normed output unused); the branch leaves its projection in ffnout for the step below
                 var pc14a = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
                     pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
-                enc_cls_ar(raw, h, L.s_addr_next, pc14a, 1l)
-                rd_ts(raw, "{tpfx}ar2a")
+                if (L.ple_fused) {   //! the step quantizes the row it writes, as it is: the gate's feed
+                    pc14a.raw = 1u
+                    enc_ar_rq_stamp(RqStamp.rq, raw, h, L.s_ple_ar_rq, pc14a)
+                    rd_ts(raw, "{tpfx}ar2a_rq")
+                } else {
+                    enc_cls_ar(raw, h, L.s_addr_next, pc14a, 1l)
+                    rd_ts(raw, "{tpfx}ar2a")
+                }
                 rd_encode_ple(raw, h, L, l)
             }
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,

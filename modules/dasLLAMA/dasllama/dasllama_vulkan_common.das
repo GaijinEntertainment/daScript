@@ -2288,6 +2288,9 @@ struct RLayer {
     s_ple_x : VkDescriptorSet       //! the residual row requantized as it is (the gate GEMV's feed)
     s_ple_gate, s_ple_proj : VkDescriptorSet
     s_ple_act : VkDescriptorSet     //! gelu(gate) x this layer's side-input row, requantized (the proj GEMV's feed)
+    ple_fused : bool                //! the branch in three dispatches: the FFN residual step quantizes the row it writes (the gate's feed), the act rides the proj GEMV
+    s_ple_ar_rq : VkDescriptorSet   //! the residual step + raw Q8_0 requant (`ArArgs.raw`)
+    s_ple_pa : VkDescriptorSet      //! the act + requant + proj GEMV (`Q8GemvPleAct`)
     m_pg, m_pp : HostBuf
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
     recurrent : bool

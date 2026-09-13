@@ -68,9 +68,9 @@ that a question answered for one backend has an obvious address in the other. Th
   as the CPU-loop fallback and the warm/MTP edge); an override without the seat declines
   deepstack quanta by name, so Metal serves them and Vulkan does not.
 - **Per-layer FFN widths (MatFormer E-series, at most two - `ffn_second_hidden`) serve on Metal
-  only**: the decode and prefill drivers bind the width per layer (dense trunks, no MTP; batch
-  keeps the layer-0 hoist behind its uniformity decline). The Vulkan tier has no PLE arm, so
-  E-series never reaches its width question.
+  and on the Vulkan whole-model driver**: the Metal decode and prefill drivers bind the width per
+  layer (dense trunks, no MTP; batch keeps the layer-0 hoist behind its uniformity decline), and
+  the Vulkan driver's per-layer geometry (`RLayer.hid`) carries it beside the PLE branch.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.
