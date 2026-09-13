@@ -49,6 +49,13 @@ on unasked for an ordinary run; ungated, each of those lines would be output eve
 an ordinary edit. An explicit `-module-cache` leaves the flag off, so those runs get the lines
 together with the host's verdict.
 
+A served record's time splits three ways: the decode, the finalize (`finalizeModule` -
+annotations, macro-module re-simulation, `gc_collect`) and the setup `Program::serialize` runs
+after the stream (symbol marking, stack allocation). The serializer accumulates the last two over
+every program it read, das reading them back through `ast_serializer_finalize_usec` and
+`ast_serializer_setup_usec`, and the decode is the read minus both; `-log-compile-time`'s cache
+line prints decode against finalize, with the macro simulate named inside finalize.
+
 ## 2. The module scan and the descriptor manifest (`dyn_modules.cpp`)
 
 `require_dynamic_modules` walks `<dasroot>/modules/`, then the project root's, then each

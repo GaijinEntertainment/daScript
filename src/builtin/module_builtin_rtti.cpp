@@ -2046,6 +2046,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
                 SideEffects::modifyExternal, "rtti_ast_serializer_get_data")
                     ->args({"serializer","block","context","line"});
+            addExtern<DAS_BIND_FUN(rtti_ast_serializer_finalize_usec)>(*this, lib, "ast_serializer_finalize_usec",
+                SideEffects::none, "rtti_ast_serializer_finalize_usec")
+                    ->args({"serializer"});
+            addExtern<DAS_BIND_FUN(rtti_ast_serializer_setup_usec)>(*this, lib, "ast_serializer_setup_usec",
+                SideEffects::none, "rtti_ast_serializer_setup_usec")
+                    ->args({"serializer"});
             addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",
                 SideEffects::modifyExternal, "introduceFile")
                     ->args({"access","fileName","text","context","line"});

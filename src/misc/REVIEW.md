@@ -18,9 +18,15 @@ switches either to `size` is a defect - the constant length is what the compiler
 `DAS_F2S_BUFFER_SIZE` (`include/daScript/misc/float2string.h`), which sizes every caller's
 buffer.**
 
-**Never call `isfinite`, `isnan`, or `signbit` in `luau_float2string.cpp` - classify special
-values from the IEEE bits instead.** A build with `-ffinite-math-only` folds those calls to
-constants.
+**Never classify a float in `luau_float2string.cpp` through libc - `isfinite`, `isnan`,
+`isinf`, `fpclassify`, `signbit` - read the IEEE bits instead: the exponent bits for NaN and
+infinity, the sign bit for the sign.** A build with `-ffinite-math-only` folds a NaN or infinity
+test to a constant.
+
+**A diff in `daScriptC.cpp` that hands a writing `SerializationStorageVector`'s `buffer` out to
+a caller calls `flush()` on the storage first.** The writer grows the vector by doubling and
+counts the written bytes in `writePos`, so before a flush the vector is longer than the stream
+and the caller gets trailing garbage.
 
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing the files or
 lines a check scans, or rewriting a finding text so it no longer names what failed.**

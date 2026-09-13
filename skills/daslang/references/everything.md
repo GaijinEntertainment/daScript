@@ -3419,7 +3419,9 @@ The RTTI module exposes runtime type information and program introspection facil
 
 ### Compilation and simulation
 
+- `ast_serializer_finalize_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent inside finalizeModule - the annotations, the macro-module re-simulation and the gc_collect of every program it restored; the decode is the read minus this and `ast_serializer_setup_usec`.
 - `ast_serializer_get_data` - Returns content of serializer.
+- `ast_serializer_setup_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent in the program setup that follows the stream - symbol marking and stack allocation - over every program it restored.
 - `create_ast_deserializer` - Creates deserializer.
 - `create_ast_serializer` - Creates serializer object.
 - `delete_ast_serializer` - Frees memory for ast_serializer.

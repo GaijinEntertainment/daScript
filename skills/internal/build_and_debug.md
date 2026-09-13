@@ -110,6 +110,7 @@ Dev-tier rails that cut the edit-compile-run loop. Never benchmark through `--ji
 - **`deser: partial`** - a record that cannot deserialize in a cold process (`modules/dasLLVM/bindings/llvm_func.das`, whose `[dasbind]` externs register into the dasbind builtin module during compile) reparses in place (~0.03s) without cutting the stream; so does a record written by a compile with different policies (above).
 - **`-ser <path>` / `-deser <path>`** are the explicit write and read halves - the round-trip test instrument.
 - **Composes with the split obj cache:** a warm `-jit` edit deserializes the unchanged prefix and re-emits only the tail partitions. The cache is one file you own - delete it when in doubt.
+- **Size and time breakdown of a record:** set `DAS_SERIALIZE_PROFILE` to 1 in `include/daScript/ast/ast_serializer.h` (compile-time, off by default; rebuild `daslang` - ten TUs) and run with an explicit `-module-cache <path>`: `ModuleFileCache::finish` prints, for the writer and the reader, self and inclusive bytes per serializer frame, a frame tree, the string and TypeDecl histograms with their table-dedup estimates, and per-record sizes. The frames cost ~30% of serialization time, so profile speed with the rail off - a native sampler over a loop of `serialize_program`/`deserialize_program` (the `rtti` das API) sees the real distribution.
 
 ## Build configurations (module flags)
 

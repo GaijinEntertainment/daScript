@@ -434,13 +434,14 @@ def test_default_cache_evicts_to_the_limit(t : T?) {
     let enter = win ? "cd /d {tmp} && set \"DAS_MODULE_CACHE_LIMIT=1\"&&" : "cd {tmp} && DAS_MODULE_CACHE_LIMIT=1"
     let base = "{enter} {get_full_file_name(das_exe())} -dasroot {get_das_root()}"
     let cacheDir = path_join(tmp, ".jitted_scripts/module_cache")
+    let sizeBallast = "require daslib/strings_boost\nrequire daslib/fio\nrequire daslib/ast\n"
     for (stem in ["ev_a", "ev_b", "ev_c", "ev_d"]) {
-        fwrite(path_join(tmp, "{stem}.das"), "options gen2\n[export]\ndef main \{\n    print(\"MARK_{stem}\\n\")\n\}\n")
+        fwrite(path_join(tmp, "{stem}.das"), "options gen2\n{sizeBallast}[export]\ndef main \{\n    print(\"MARK_{stem}\\n\")\n\}\n")
     }
     var out : string
     t |> success(run_reported(t, "evict a", "{base} {path_join(tmp, "ev_a.das")}", out, "MARK_ev_a"), "the first root writes its record")
     let one = record_size_in(cacheDir, "ev_a")
-    t |> success(one > 0ul && 2ul * one <= 1048576ul && 3ul * one > 1048576ul, "a hello record ({one} bytes) sizes so that two fit the 1 MB limit and three do not - retune the limit if daslib grew")
+    t |> success(one > 0ul && 2ul * one <= 1048576ul && 3ul * one > 1048576ul, "a record ({one} bytes) sizes so that two fit the 1 MB limit and three do not - retune the fixture's ballast requires if daslib or the stream format moved")
     sleep(1100u)    //! past the mtime's one-second grain, so the records order by age
     t |> success(run_reported(t, "evict b", "{base} {path_join(tmp, "ev_b.das")}", out, "MARK_ev_b"), "the second root writes its record")
     sleep(1100u)

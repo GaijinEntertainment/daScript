@@ -1045,6 +1045,7 @@ das_serialized_data * das_program_serialize_n ( das_program * program, const voi
         ((Program *)program)->serialize(ser);
         ser.moduleLibrary = nullptr;
     }
+    storage->flush();
     *out_data = storage->buffer.data();
     *out_size = storage->buffer.size();
     return (das_serialized_data *) storage;
