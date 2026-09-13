@@ -108,7 +108,7 @@ if(TARGET libDaScriptDyn_runtime AND NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     add_library(standalone_init_fixture_shared SHARED
         "${STANDALONE_CTX_GEN}/standalone_init_fixture.das.cpp")
     target_link_libraries(standalone_init_fixture_shared PRIVATE
-        libDaScriptDyn_runtime ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
+        libDaScriptDyn_runtime ${SRC_LIBRARIES})
     target_include_directories(standalone_init_fixture_shared PRIVATE
         "${STANDALONE_CTX_GEN}" ${NEED_MODULES_PATH})
     target_compile_definitions(standalone_init_fixture_shared PRIVATE
