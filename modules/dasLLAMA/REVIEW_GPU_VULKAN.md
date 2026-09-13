@@ -58,7 +58,7 @@ serves without it, in the same change.** The device-init log prints the roster, 
 says which route each capability decided.
 
 **A prefill GEMM whose output rows start above row 0 encodes unsplit, whatever splitter it
-uses - `cm2_split_k` or the small f16 GEMM's `F16G_SPLIT` chunks.** The split-k reduce sums
+uses - `cm2_gemm_pick` or the small f16 GEMM's `F16G_SPLIT` chunks.** The split-k reduce sums
 partial planes counted from row 0, so a dispatch starting above row 0 would reduce the wrong
 rows.
 

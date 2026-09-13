@@ -62,14 +62,13 @@ the CPU oracle, and a kernel body can call it on the plane element itself - `dec
 
 ### 2.2l The cm2 tile pick and the coopmat default ladder {#cm2-tile-pick-and-default}
 
-**The l/m tile pick is a wave-efficiency comparison.** For a GEMM of width `d` over `cnt` rows the
-l tile (256-row columns) and the m tile (128-row columns) each take some number of workgroups. Each
-grid runs in whole waves over the device's SM count, so a grid's wave count times that SM count is
-the slots it allocates. The pick takes the tile whose workgroups fill the larger share of its
-allocated slots, the two ratios compared by cross-multiplying; the m tile wins only when its share
-beats l's by more than a quarter, since l's bigger tile carries twice the arithmetic intensity (the margin naming the
-measured winner at eighteen gemma shapes on the RTX PRO 4500: E4B's 16384-wide gate l 424 us against m 474, E2B's 6144-wide gate l 126 against m 112). Four rules sit
-ahead of the comparison: a region of 64 rows or fewer takes the s tile (32-row columns - the per-op
+**The l/m tile pick and the split-k pick are one wave model** (`cm2_gemm_pick`). For a GEMM of
+width `d` over `cnt` rows the l tile (256-row columns) and the m tile (128-row columns) each take
+some number of workgroups; a grid runs in whole waves over the device's SM count, and a wave costs
+its k steps at the column's step weight - m 10, l 16, s 5 - since the l column does twice m's work
+in 1.6 times its step (RTX PRO 4500: an m step 1.4 us, an l step 2.24). The whole GEMM takes the
+column of fewer units, a tie to l (E4B's 16384-wide gate l 424 us against m 474, E2B's 6144-wide
+gate l 126 against m 112). Four rules sit ahead of the comparison: a region of 64 rows or fewer takes the s tile (32-row columns - the per-op
 tier's MoE expert-bucket shape, where a 512-token window routes ~32 rows to each of 128 experts on
 average), a window of 128 rows or fewer takes m (the l column would run half empty), a GEMM whose m columns fill a quarter of the SMs or fewer takes s (gemma-3-1b's k and v, 8 m tiles on 82 SMs: 805 -> 574 us a window), and a device
 that reports no SM count takes l and never splits k. Beyond `(d, cnt, sm_count)` the pick reads only
@@ -95,30 +94,31 @@ the K-quants, q4_0, q8 and the 4-bit LUT formats, and 32 on the s and e stamps o
 grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; the e stamp is `<Fmt>Cm2EBatch`, the
 `cm2e_cls_*` ladder beside the KHR one); a stamp's `AT`/`BT` carry its depth. A grid decode is
 occupancy-bound - a 64-deep column holds twice the A tile, and with the codebook lookup's live range
-a workgroup fewer fits an SM: at 32 the iq2xxs gate/up plane reads 0.611 against 0.730 ms with the
-four-wide twin and 0.99 against 1.33 without (`moe:<fmt>`, RTX 5060 Ti). A light decode is
-step-bound: the k4 s tile reads 0.744 against 0.679 at 32 (`moesk:k4`), the dense k4 l and m tiles
-44.2 against 48.8 and 38.5 against 48.6 TFLOP/s (`cm2:k4`), the Qwen1.5-MoE Q4_K_M twin 4330
-against 5443 pp512 - and a whole-model row settles a step (the 35B: 2996 -> 3236 twin, 2049 ->
-2391 scalar). The unroll (`UNR`: 4 steps of 64, 8 of 32 - 256 elements either way) is written
-out, since the driver leaves a rolled loop rolled whatever control its `OpLoopMerge` carries
-(`[unroll]` and `[partial_count = 4]` read the k6 tiles at half rate, RTX 5060 Ti), and the block
-is one superblock because the decode inlines once per copy: an eight-copy 64-deep stamp's code,
-refetched after each window's weight stream had passed the L2, cost a 64-workgroup GEMM 16 us of
-its 27 on the RTX 5080 (`cold:k6`'s flush row), and four copies run its m tiles 10-14% faster hot
-(`cm2:k6`); the 32-deep e stamps read alike at 8 and 1 (`moesk:`).
+a workgroup fewer fits an SM (the iq2xxs gate/up plane 0.611 against 0.730 ms at 32, `moe:<fmt>`,
+RTX 5060 Ti) - while a light decode is step-bound (the k4 s tile 0.744 against 0.679 at 32, its
+dense l and m tiles 44 against 49 TFLOP/s, the 35B whole-model row 2996 -> 3236 at 32). The unroll
+(`UNR`: 4 steps of 64, 8 of 32 - 256 elements either way) is written out, since the driver leaves a
+rolled loop rolled whatever control its `OpLoopMerge` carries (`[unroll]` read the k6 tiles at half
+rate), and the block is one superblock because the decode inlines once per copy: an eight-copy
+stamp's code, refetched after each window's weight stream had passed the L2, cost a 64-workgroup
+GEMM 16 us of its 27 (`cold:k6`'s flush row, RTX 5080), and four copies run its m tiles 10-14%
+faster hot (`cm2:k6`); the 32-deep e stamps read alike at 8 and 1 (`moesk:`).
 
-**The dispatch group decides whether k splits; the role's own grid decides into how many.** With
-long K (2048 and up), a group that fills at most half the SMs splits each of its roles' reduction
-across f32 partial planes that `SplitKReduce` sums, into as many chunks as fill the device with the
-role alone (SM count over its workgroups); a group past half the SMs runs whole; eight is the ceiling, three the floor (two chunks never pay: gemma-3-1b's 36-tile down on 82 SMs read 176 us in two against 157 whole; three over a group past half the SMs lose too - E2B's 48-tile down at K 12288 365 against 268, the 12B's 120-tile down 1198 against 587 - since the split arm's loop bounds are not literal and its k loop runs rolled); a chunk is 256-aligned, and a count whose last chunk would be empty drops by one.
-The group is the role's workgroups plus its chain neighbours' - q with k and v, gate with up -
-because the hazard-mask rail lets independent roles co-run, while every split role serializes
-through the one scratch plane (`VHZ_SK`): a group that fills the device runs whole and co-runs; one
-that cannot gives the co-run up to the split, and each role then fills the device alone. So k and v
-beside q run whole on 36 SMs, and the 35B's shared expert gate and up (16 m tiles each) run whole
-there but split in four on 84 SMs (64 workgroups of K 512, 27 us against 55 at two chunks);
-otherwise split-k is the lone role's - wo, down, a small model's classifier (`cold:k6`, RTX 5080).
+**The split-k pick weighs the same units over one to eight 256-aligned chunks of K, at both
+columns where the whole pick chose between them.** A split's units add its reduce - 9 us behind
+the barrier and 2.5 MB a us over the partial planes and the sum (`SplitKReduce`, 7 to 18 us
+measured) - and serves only under eleven twelfths of the whole; K under 2048 never splits, the planes
+stay within the scratch (256 KiB an SM), and a count whose last chunk would start past K is skipped.
+The split arm's k offset is masked to the chunk alignment so the compiler knows what k = 0 tells it
+on a whole GEMM: unmasked, the same loop ran at half the rate (gemma-3-1b's down through one chunk
+304 us against 152 whole), so every earlier split lost; the whole GEMM keeps its literal-bound loop (the l
+stamp through the split loop's variables ran the E4B, 12B and gemma-3-4b gates a sixth slower). Measured at 512 rows, whole against the pick with its reduce: gemma-3-1b's down (36 m tiles,
+K 6912) 152 -> 78 us in four l chunks (llama.cpp b10660: 93), E2B's 12288-deep down 268 -> 162 in
+three, E4B's 16384-deep down 398 -> 350 and gemma-2's 214 -> 182 in two; the 12B's 15360-deep down
+stays whole. The group is the role's workgroups plus its chain neighbours' - q with k and v, gate with
+up - because the hazard-mask rail lets independent roles co-run while every split role serializes
+through the one scratch plane (`VHZ_SK`): the whole GEMM's waves count the group, and a split's units
+scale by the group's size over the role's own; so k and v beside q run whole, and the split is the lone role's - wo, down, a classifier.
 
 **The f16 feed admits q8 and every kq superblock format** (`kq_sb`) - the set the cm2 decode
 callbacks cover (sec.2.2k) - and each (format, tile) pair has ONE stamped class, reached through

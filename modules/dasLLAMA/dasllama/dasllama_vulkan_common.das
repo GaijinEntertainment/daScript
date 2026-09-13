@@ -163,10 +163,19 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     if (tiles_m * 4l <= cores) {   //! a narrow GEMM whose m columns leave three quarters of the card idle takes the s column (gemma-3-1b's k/v: 8 m tiles on 82 SMs, 805 -> 574 us a window)
         return 32l
     }
-    let waves_l = (tiles_l + cores - 1l) / cores
-    let waves_m = (tiles_m + cores - 1l) / cores
-    //! m wins only when its share of its wave slots beats l's by more than a quarter: the l column's double arithmetic intensity is worth that much (RTX PRO 4500, eighteen gemma shapes)
-    return 4l * tiles_m * waves_l > 5l * tiles_l * waves_m ? 128l : 256l
+    return cm2_wave_units(tiles_m, 1l, cores, 128l) < cm2_wave_units(tiles_l, 1l, cores, 256l) ? 128l : 256l
+}
+
+//! the wave model the tile and split picks share: a grid runs in whole waves over the SMs, and a wave costs its k steps at the column's step weight - m 10, l 16 (the l column does twice m's work in 1.6x its step), s 5
+def private cm2_wave_units(wgs, steps, cores, tc : int64) : int64 => ((wgs + cores - 1l) / cores) * steps * (tc == 256l ? 16l : (tc == 128l ? 10l : 5l))
+
+//! the split-k reduce in wave units: 9 us behind the barrier and 2.5 MB a us over the partial planes and the sum; an m step is 1.4 us, ten units (RTX PRO 4500)
+def private cm2_reduce_units(nsplit, cnt, d : int64) : int64 => (9l + ((nsplit + 1l) * cnt * d * 4l) / 2_500_000l) * 7l
+
+//! the 256-aligned chunk `nsplit` pieces cut K into; 0 when the last piece would start past K
+def cm2_chunk(n, nsplit : int64) : int64 {
+    let ck = ((n + nsplit - 1l) / nsplit + 255l) & ~255l
+    return ck * (nsplit - 1l) < n ? ck : 0l
 }
 
 //! workgroups a (d, cnt) GEMM takes at the token column `tc`
@@ -179,37 +188,57 @@ def cm2_tiles_at(d, cnt, tc : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tiles(d, cnt : int64) : int64 => cm2_tiles_at(d, cnt, cm2_tile_cols(d, cnt))
 
-//! returns (chunks, 256-aligned chunk); (1, 0) = off; `sib_tiles` = the workgroups of the roles this one co-runs beside - it decides whether to split, never how far
+//! one dense GEMM's column and split-k, picked together: (tc, chunks, 256-aligned chunk), chunks 1 and chunk 0 = whole. `sib_tiles` = the workgroups of the roles this one co-runs beside; `scratch_bytes` bounds the partial planes
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2_split_k(d, cnt, n, tc : int64; sib_tiles : int64 = 0l) : tuple<nsplit : int64; ksplit : int64> {
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        return (nsplit = 1l, ksplit = 0l)
+def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int64 = 9_223_372_036_854_775_807l) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
+    let tc0 = cm2_tile_cols(d, cnt)
+    let cores = int64(g_gpu.sm_count)
+    if (g_gpu.coopmat_mode == COOPMAT_MM || cores == 0l) {
+        return (tc = tc0, nsplit = 1l, ksplit = 0l)
     }
     let forced = cm2_splitk_env()
-    let cores = int64(g_gpu.sm_count)
-    var sk = 1l
     if (forced > 0l) {
-        sk = forced
-    } elif (cores != 0l && n >= 2048l && d >= 128l && cnt >= tc) {
-        let own = cm2_tiles_at(d, cnt, tc)
-        let tiles = own + sib_tiles
-        if (tiles <= cores / 2l) {   //! a group past half the SMs runs whole: three chunks over 48 to 120 m tiles read 1.4x to 1.9x the whole GEMM (the E2B, E4B and 12B downs on 82 SMs)
-            sk = cores / own
+        var sk = min(forced, 8l)
+        while (sk > 1l && cm2_chunk(n, sk) == 0l) {
+            sk--
         }
-        sk = min(sk, 8l)
-        if (sk < 3l) {   //! two chunks never pay: the reduce and the halved k loop cost more than the second wave returns (gemma-3-1b's down on 82 SMs: 176 us in two against 157 whole)
-            sk = 1l
+        return (tc = tc0, nsplit = sk, ksplit = sk > 1l ? cm2_chunk(n, sk) : 0l)
+    }
+    if (n < 2048l || d < 128l || cnt < tc0) {
+        return (tc = tc0, nsplit = 1l, ksplit = 0l)
+    }
+    // the whole GEMM's column is the tile pick's own; the l and m columns weigh in together for the split candidates where that pick chose between them (the s column and a forced tile stand alone)
+    let twin = (tc0 == 128l || tc0 == 256l) && cnt > 128l && cm2_tile_env() <= 0l
+    let ntc = twin ? 2 : 1
+    let tcs = fixed_array(twin ? 256l : tc0, 128l)
+    var best_tc = tc0
+    var best_sk = 1l
+    var best_ck = 0l
+    //! the siblings ride the whole GEMM's waves, never its column: a sibling's fixed count added to both columns favours m on a wide gate (E4B's 16384-wide gate beside up read m, 474 us against l's 424)
+    let whole = cm2_wave_units(cm2_tiles_at(d, cnt, tc0) + sib_tiles, n / 64l, cores, tc0)
+    var best = whole
+    for (sk in range64(2l, 9l)) {
+        let ck = cm2_chunk(n, sk)
+        if (ck == 0l) {
+            continue
+        }
+        if (sk * cnt * d * 4l > scratch_bytes) {
+            break
+        }
+        let red = cm2_reduce_units(sk, cnt, d)
+        for (i in range(ntc)) {
+            let own = cm2_tiles_at(d, cnt, tcs[i])
+            //! a split gives the co-run up, so the group's roles run one after another, each split alike: the group's units scale with its size
+            let u = (cm2_wave_units(own * sk, (ck + 63l) / 64l, cores, tcs[i]) + red) * (own + sib_tiles) / own
+            if (u * 12l < whole * 11l && u < best) {   //! a split serves only a twelfth under the whole - a barrier and a reduce for a wash is a loss (E2B's wo sits at 290 against 320 and measures 50 -> 43 us)
+                best = u
+                best_tc = tcs[i]
+                best_sk = sk
+                best_ck = ck
+            }
         }
     }
-    // 256-align the chunk; shed splits a rounded-up chunk would strand past the end of K
-    while (sk > 1l) {
-        let ck = ((n + sk - 1l) / sk + 255l) & ~255l
-        if (ck * (sk - 1l) < n) {
-            return (nsplit = sk, ksplit = ck)
-        }
-        sk--
-    }
-    return (nsplit = 1l, ksplit = 0l)
+    return (tc = best_tc, nsplit = best_sk, ksplit = best_ck)
 }
 
 // a batch dispatch's tile pick + (rows, cols) edges — one source so wg counts, meta fills, and

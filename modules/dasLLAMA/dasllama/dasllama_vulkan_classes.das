@@ -6189,7 +6189,7 @@ class template KqCm2BatchT : MoeCmBase {
             k1 = min(pa.n, (ks + 1u) * pa.ksplit)
             ybase = ks * (row0 + cnt) * pa.d
         }
-        let k0 = ks * pa.ksplit
+        let k0 = (ks * pa.ksplit) & ~(BK * UNR - 1u)   //! the chunk is 256-aligned by the pick; the mask tells the compiler so, as the literal k = 0 tells it on the whole GEMM's own loop - without it the same loop ran at half the rate
         let xt = tix % ttiles             // token BN-tile (fastest)
         let wt = tix / ttiles             // weight 128-tile
         if (gl_LocalInvocationID.x == 0u) {

@@ -2919,6 +2919,8 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
     sched[2] = uint(cnt)   // one region: [wblk0 = 0, row0 = 0, cnt, wg0 = 0], map all zeros; the tile reads its split plane and tile off its own workgroup id
     var cm2l_us : double
     var cm2m_us : double
+    var red_us : double
+    var chain_us : double
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(b.wq[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(b.ws[0]), ws_bytes)
@@ -2949,11 +2951,42 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
         }
         vk_check(vkEndCommandBuffer(rawm), null)
         cm2m_us = usec_per_dispatch(rawm)
+        let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, scl, pc, lwgs)
+        red_us = tr.red
+        chain_us = tr.chain
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
-    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s  timing-only, no reduce\n")
+    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, l + reduce chained {chain_us} us\n")
     delete sched
     delete b
+}
+
+//! the split-k reduce over `nsplit` partial planes in `yd`: alone, then behind the l GEMM in one command buffer (the hazard rail's barrier between them, as the chain pays); us a dispatch (a pair, chained)
+def private time_split_reduce(yd : uint64; y_bytes : int64; rows, d, nsplit : int; var scl : VkDescriptorSet; var pc : BatchArgs; lwgs : int) : tuple<red : double; chain : double> {
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
+    let out_bytes = int64(rows * d) * 4l
+    let outd = make_device_buf(out_bytes)
+    var sr = set_splitk_reduce_cls(fixed_array(yd, outd), fixed_array(y_bytes, out_bytes), fixed_array(16u, 32u))
+    var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit))
+    let rwgs = int64(rows * d + 1023) / 1_024l
+    let begin = VkCommandBufferBeginInfo()
+    var rawr = alloc_cmd()
+    vk_check(vkBeginCommandBuffer(rawr, begin), null)
+    var hzr : VkHaz
+    for (_k in range(DISPATCHES)) {
+        enc_splitk_reduce_cls(rawr, hzr, sr, pcr, rwgs)
+    }
+    vk_check(vkEndCommandBuffer(rawr), null)
+    let red = usec_per_dispatch(rawr)
+    var rawc = alloc_cmd()
+    vk_check(vkBeginCommandBuffer(rawc, begin), null)
+    var hzc : VkHaz
+    for (_k in range(DISPATCHES)) {
+        enc_q8_batch_cm2l_cls(rawc, hzc, scl, pc, int64(lwgs))
+        enc_splitk_reduce_cls(rawc, hzc, sr, pcr, rwgs)
+    }
+    vk_check(vkEndCommandBuffer(rawc), null)
+    return (red = red, chain = usec_per_dispatch(rawc))
 }
 
 // ===== the last-arriving-workgroup hand-off (arg "lastwg") =====
@@ -3690,7 +3723,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "splitk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -3953,6 +3986,26 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             run_shape_split("e2b down12k", 1536, 12288, 512, sk)
             run_shape_split("e4b down16k", 2560, 16384, 512, sk)
             run_shape_split("g12 down   ", 3840, 15360, 512, sk)
+        }
+        return
+    }
+    if (only == "splitk") {
+        // the split arm against the whole GEMM at the same chunk count: one chunk through the split arm (ksplit = K) isolates the arm's own cost from the extra workgroups
+        run_shape("g3 down    ", 1152, 6912, 512)
+        run_shape("e2b down12k", 1536, 12288, 512)
+        for (sk in [1, 2, 3, 4]) {
+            run_shape_split("g3 down    ", 1152, 6912, 512, sk)
+            run_shape_split("e2b down12k", 1536, 12288, 512, sk)
+            run_shape_split("e4b down16k", 2560, 16384, 512, sk)
+        }
+        // the short-K and the one-wave shapes the wave model calls close: E2B's wo at K 2048, gemma-2's down, E4B's 8192-deep down
+        run_shape("e2b wo     ", 1536, 2048, 512)
+        run_shape("g2 down    ", 2304, 9216, 512)
+        run_shape("e4b down8k ", 2560, 8192, 512)
+        for (sk in [2, 3]) {
+            run_shape_split("e2b wo     ", 1536, 2048, 512, sk)
+            run_shape_split("g2 down    ", 2304, 9216, 512, sk)
+            run_shape_split("e4b down8k ", 2560, 8192, 512, sk)
         }
         return
     }

@@ -511,12 +511,10 @@ def pf_ffn_slice_row0(l, n_layers, wlen : int64; f16_gate, f16_down : bool) : in
 //! A cm2 role's tile column and split pick; a region starting above row 0 never splits
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def pf_split_pick(fmt : int; d, rows, n, row0, sib_tiles : int64) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
-    let tc = batch_tile_edges(fmt, d, rows, true).tc
     if (row0 != 0l) {
-        return (tc = tc, nsplit = 1l, ksplit = 0l)
+        return (tc = batch_tile_edges(fmt, d, rows, true).tc, nsplit = 1l, ksplit = 0l)
     }
-    let sp = cm2_split_k(d, rows, n, tc, sib_tiles)
-    return (tc = tc, nsplit = sp.nsplit, ksplit = sp.ksplit)
+    return cm2_gemm_pick(d, rows, n, sib_tiles, g_rd.pf_splitk_bytes)
 }
 
 // one prefill GEMM role on the class rail: schedule fill + a per-(role, variant) cached set +
@@ -536,7 +534,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         nsplit = sp.nsplit
         ksplit = sp.ksplit
     }
-    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, rows, fmt, f16feed, nsplit, row0))
+    let groups = int64(fill_arena_batch_sched(g_rd.pf_meta[idx], d, blk, rows, fmt, f16feed, nsplit, row0, cm2_tc))
     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = nsplit > 1l ? uint(ksplit) : 0u)
     if (f16feed) {
         // native fmt-0 decode-in-load; a split pick reroutes the GEMM into the scratch planes
@@ -2152,13 +2150,13 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
     }
 }
 
-// single-region batch schedule over an arena block: 4-word record at 0, all tiles map to region
-// 0 at map_off = 4. Returns the dispatch workgroup count. `cm2l` must match the dispatched
-// class's tile rule; `nsplit` stacks split-k planes; `row0` (word 1) never pairs with `nsplit > 1`.
-def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int; cm2l : bool = false; nsplit : int64 = 1l; row0 : int64 = 0l) : uint {
+// single-region batch schedule over an arena block: 4-word record at 0, all tiles map to region 0 at
+// map_off = 4. Returns the dispatch workgroup count. `cm2l` must match the dispatched class's tile rule
+// and `tc` its column where the joint pick chose one (0 = the whole pick's); `nsplit` stacks split-k planes; `row0` (word 1) never pairs with `nsplit > 1`
+def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int; cm2l : bool = false; nsplit : int64 = 1l; row0 : int64 = 0l; tc : int64 = 0l) : uint {
     let te = batch_tile_edges(fmt, d, npos, cm2l)
     let wtiles = (d + te.td - 1l) / te.td
-    let rtiles = (npos + te.tc - 1l) / te.tc
+    let rtiles = (npos + (tc > 0l ? tc : te.tc) - 1l) / (tc > 0l ? tc : te.tc)
     let total = rtiles * wtiles * nsplit
     assert((4l + total) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan arena: batch schedule exceeds capacity")
     unsafe {

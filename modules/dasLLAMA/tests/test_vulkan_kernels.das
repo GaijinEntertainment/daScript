@@ -9728,6 +9728,9 @@ def test_vkd_ar_rq_fused(t0 : T?) {
     }
 }
 
+//! a GEMM pick as "column x chunks x chunk", so a miss prints all three
+def private pick_str(p : tuple<tc : int64; nsplit : int64; ksplit : int64>) : string => "{p.tc}x{p.nsplit}x{p.ksplit}"
+
 [test]
 def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
     t0 |> run("the resolved coopmat default ladder and the cm2 tile pick (pure functions)") <| @(t : T?) {
@@ -9756,29 +9759,44 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             g_gpu.coopmat_mode = COOPMAT_MM
             t |> equal(cm2_tile_cols(8192l, 512l), 128l)                       // the KHR arm has one tile geometry
             t |> equal(cm2_tile_cols(768l, 32l), 128l)                         // ... the bucket rule included
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l).nsplit, 1l)        // ... and no split-k scratch
+            t |> equal(cm2_gemm_pick(512l, 512l, 2048l).nsplit, 1l)            // ... and no split-k scratch
             g_gpu.coopmat_mode = COOPMAT_CM2
             t |> equal(cm2_tile_cols(3072l, 128l), 128l)    // a short window never takes the half-empty l column
-            t |> equal(cm2_tile_cols(3072l, 512l), 128l)    // the 3B q/down shape: m on a strict wave win (96 tiles in 3 waves vs 48 in 2)
-            t |> equal(cm2_tile_cols(8192l, 512l), 256l)    // the 3B gate/up shape: a wave tie goes to l
-            t |> equal(cm2_tile_cols(5632l, 512l), 128l)    // the tinyllama gate shape: m on a strict win
+            t |> equal(cm2_tile_cols(3072l, 512l), 128l)    // the 3B q/down shape: m on a strict wave win (96 tiles in 3 waves, 30 units, vs 48 in 2, 32)
+            t |> equal(cm2_tile_cols(8192l, 512l), 256l)    // the 3B gate/up shape: l (128 tiles in 4 waves, 64 units, vs 256 in 8, 80)
+            t |> equal(cm2_tile_cols(5632l, 512l), 256l)    // the tinyllama gate shape: l (88 tiles in 3 waves, 48 units, vs 176 in 5, 50)
             t |> equal(cm2_tile_cols(768l, 32l), 32l)       // the expert-bucket shape (30B-A3B pp512: ~32 rows per region) takes s
             t |> equal(cm2_tile_cols(768l, 64l), 32l)       // ... up to the half-m edge
             t |> equal(cm2_tile_cols(768l, 65l), 128l)      // past it an m column is more than half full
             t |> equal(cm2_tiles(512l, 512l), 16l)                             // the 1B k/v shape: four m columns of four
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l).nsplit, 1l)        // ... alone it fills under half the SMs, but two chunks never pay: whole
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 80l).nsplit, 1l)   // ... beside q and the other kv projection (96 in the group): never
-            t |> equal(cm2_split_k(2048l, 512l, 2048l, 128l).nsplit, 1l)       // the 1B q shape: 64 workgroups, no split
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 1l)   // the 35B shexp gate beside up (32 in the group): whole, the pair co-runs
+            t |> equal(pick_str(cm2_gemm_pick(512l, 512l, 2048l)), "256x4x512")   // ... alone it fills under half the SMs: four l chunks (32 workgroups of 8 steps, 205 units with the reduce, against 320 whole)
+            t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 80l).nsplit, 1l)       // ... beside q and the other kv projection (96 in the group): never
+            t |> equal(cm2_gemm_pick(2048l, 512l, 2048l).nsplit, 1l)           // the 1B q shape: 32 l tiles in one wave, no split pays
+            t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 16l).nsplit, 1l)       // the 35B shexp gate beside up (32 in the group): whole, the pair co-runs
             g_gpu.sm_count = 84
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 16l).nsplit, 4l, "on 84 SMs the pair engages the split and the role's own 16 set the chunks: five, shed to four by the 256-aligned chunk")
-            t |> equal(cm2_split_k(512l, 512l, 2048l, 128l, 144l).nsplit, 1l, "k beside q's 128 and v's 16 workgroups: never")
-            t |> equal(cm2_split_k(1152l, 512l, 6912l, 128l).nsplit, 1l, "gemma-3-1b's down (36 m tiles of 84): two chunks would fill the card, and two never pay - whole")
+            t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 16l).nsplit, 1l, "on 84 SMs the pair takes the s column - 64 workgroups beside up's 16 fill the card in one wave: whole")
+            t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 144l).nsplit, 1l, "k beside q's 128 and v's 16 workgroups: never")
+            let g3d = cm2_gemm_pick(1152l, 512l, 6912l)
+            t |> equal(g3d.tc, 256l, "gemma-3-1b's down (36 m tiles of 84): the l column under the split")
+            t |> equal(g3d.nsplit, 4l, "... in four chunks of 1792 (72 l tiles in one wave: 448 units and the reduce's 96 against 1080 whole)")
+            t |> equal(g3d.ksplit, 1792l)
             t |> equal(cm2_tile_cols(256l, 512l), 32l, "gemma-3-1b's k/v shape (8 m tiles of 84): the s column")
             t |> equal(cm2_tile_cols(1024l, 512l), 128l, "... its q shape (32 m tiles): m")
+            g_gpu.sm_count = 82
+            let pod_scratch = 262_144l * 82l   // the split-k scratch the prefill allocates: 256 KiB an SM
+            t |> equal(pick_str(cm2_gemm_pick(1536l, 512l, 12288l, 0l, pod_scratch)), "256x3x4096", "E2B's 12288-deep down on the RTX PRO 4500: three l chunks (268 -> 162 us measured)")
+            t |> equal(pick_str(cm2_gemm_pick(2560l, 512l, 16384l, 0l, pod_scratch)), "256x2x8192", "E4B's 16384-deep down: two l chunks (398 -> 350)")
+            t |> equal(pick_str(cm2_gemm_pick(2560l, 512l, 8192l, 0l, pod_scratch)), "256x2x4096", "E4B's 8192-deep down: two l chunks (196 -> 168)")
+            t |> equal(pick_str(cm2_gemm_pick(2304l, 512l, 9216l, 0l, pod_scratch)), "256x2x4608", "gemma-2's down: two l chunks (214 -> 182)")
+            t |> equal(pick_str(cm2_gemm_pick(1536l, 512l, 2048l, 0l, pod_scratch)), "256x3x768", "E2B's wo at K 2048: three l chunks (50 -> 43)")
+            t |> equal(pick_str(cm2_gemm_pick(3840l, 512l, 15360l, 0l, pod_scratch)), "256x1x0", "the 12B's 15360-deep down: 60 l tiles whole - two m chunks would save under a tenth")
+            t |> equal(pick_str(cm2_gemm_pick(16384l, 512l, 2560l, 0l, pod_scratch)), "256x1x0", "E4B's 16384-wide gate: l whole, the split's planes past the scratch anyway")
+            t |> equal(pick_str(cm2_gemm_pick(16384l, 512l, 2560l, 256l, pod_scratch)), "256x1x0", "... beside up's 256 tiles still l: the siblings ride the whole GEMM's waves, never its column (m measured 474 us against l's 424)")
+            t |> equal(pick_str(cm2_gemm_pick(10240l, 512l, 2560l, 160l, pod_scratch)), "256x1x0", "gemma-3-4b's 10240-wide gate beside up: l whole")
+            t |> equal(cm2_gemm_pick(1152l, 512l, 1024l, 0l, pod_scratch).nsplit, 1l, "gemma-3-1b's wo at K 1024: under 2048 never splits")
             g_gpu.sm_count = 36
-            t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 0l, 0l).nsplit, 1l)     // the sliced down shape from row 0: 16 s tiles of 36 would take two chunks, which never pay - whole
-            t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 480l, 0l).nsplit, 1l)   // ... from row 480 it never splits
+            t |> equal(pick_str(cm2_gemm_pick(2048l, 32l, 8192l, 0l, 262_144l * 36l)), "32x2x4096")   // the sliced down shape from row 0: 16 s tiles of 36 take two chunks (383 units against 640 whole)
+            t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 480l, 0l).nsplit, 1l)         // ... from row 480 it never splits (the window chain's pick reads the driver's scratch only from row 0)
             t |> equal(pf_ffn_slice_row0(15l, 16l, 512l, true, true), 480l)   // the last layer on the f16 route starts 32 rows below the window's end
             t |> equal(pf_ffn_slice_row0(15l, 16l, 20l, true, true), 0l)      // a window under 32 rows runs whole
             t |> equal(pf_ffn_slice_row0(14l, 16l, 512l, true, true), 0l)     // an earlier layer runs whole
