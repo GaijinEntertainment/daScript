@@ -6,17 +6,15 @@ chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer,
 shared descriptor set layout, the recurrent block of the prefill window, the roster of Vulkan
 capabilities the tier keys its routes on, how the `[vk_dispatch]` lens derives `readonly` from a
 class family's accesses, and the token command's attention key split. The MoE block of that
-window and the token command's routed twin are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s sections
-2.2af and 2.2ag. The cooperative-matrix
-tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and the coopmat mode
-ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and the KHR arm's
-hand-staged kq tile - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and
-2.2ae, and the decode GEMV family's lane split by row length its section 2.2ah. What a model has to fit on
-the card before any of this runs - the residency plan, and the marks swap that lets one GPU
-slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The
-decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections
-2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md`
-sec.1.5.
+window, the token command's routed twin and their gemma-4 form are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s
+sections 2.2af, 2.2ag and 2.2ak. The cooperative-matrix tiles the chain's GEMMs run on - the cm2
+decode spelling, the tile pick and the coopmat mode ladder, the class-pipeline build seat, the MoE
+expert chain on those tiles, and the KHR arm's hand-staged kq tile - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s
+sections 2.2k-2.2m, 2.2q and 2.2ae, and the decode GEMV family's lane split by row length its
+section 2.2ah. What a model has to fit on the card before any of this runs - the residency plan,
+and the marks swap that lets one GPU slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s
+sections 2.2n-2.2o. The decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s
+sections 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
 The module gate's six Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
 reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses no names: its
@@ -287,14 +285,16 @@ writing every binding, so a body the classifier cannot read loses the decoration
 carrying a false one. A declared `@readonly` on a binding a kernel writes is the one shape that
 yields a module the validator rejects, and the lens refuses it.
 
-### 2.2al The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
+### 2.2al The attention passes split a head's keys across workgroups {#vk-decode-attn-split}
 
-**The decode attention (`DaAttnT`) dispatches a workgroup per (head, key split) and a combine per
-head.** One workgroup a head leaves a low-head model's attention on a few SMs (four heads of
-eighty-two), so the pass cuts the attended span into `nsplit` 32-aligned pieces (`da_nsplit`:
-enough (head, split) workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`; one where
-the count is unknown or the heads alone cover it), each workgroup running the online softmax over
-its piece into an unnormalized partial (max, denominator, accumulators; an empty piece's weighs
-nothing), and `DaAttnComb` aligning a head's partials by their maxes, normalizing, gating and
-storing the row; unsplit, the pass stores the row itself. The scores go a subgroup a key with the
-lanes across the dims - one coalesced K row, the dot closed in a subgroup add; the V pass keeps a thread a dim.
+**Both attention passes dispatch a workgroup per (head, key split) and a combine per head.** One
+workgroup a head leaves a low-head model's attention on a few SMs (four heads of eighty-two), so the
+decode pass (`DaAttnT`) cuts the attended span into `nsplit` 32-aligned pieces (`da_nsplit`: enough
+workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`, one where the count is unknown or the
+heads alone cover it), each running the online softmax over its piece into an unnormalized partial
+(max, denominator, accumulators; an empty piece's weighs nothing); `DaAttnComb` aligns a head's
+partials by their maxes, normalizes, gates and stores the row (unsplit, the pass stores it), and the
+store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax, Q8_K
+superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. The scores
+go a subgroup a key, lanes across the dims (one coalesced K row, the dot a subgroup add); the V pass
+keeps a thread a dim. The flash tile (`FaCm2T`) splits the same way per (head, 64-row q tile) (`pf_fa_nsplit`, at most `FA_NSPLIT_MAX`); `FaCm2CombT` finishes the tile from the pieces' O and (max | denom) partials, f32 or f16, gated.

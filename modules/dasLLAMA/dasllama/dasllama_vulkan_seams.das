@@ -135,11 +135,11 @@ def private ensure_da_state {
     g_gpu.da_q_dev = make_device_buf(RKS_MAX_QD * 4l)
     g_gpu.da_out_dev = make_device_buf(RKS_MAX_QD * 4l)
     g_gpu.da_out_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
-    g_gpu.da_set = set_da_attn_cls(   //! the unsplit pass: the out rows fill the partials binding, never read
-        fixed_array(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.da_out_dev, g_gpu.rks_tok.buf, g_gpu.da_out_dev),
+    g_gpu.da_set = set_da_attn_cls(   //! the unsplit, unfolded pass: the out rows fill the partials and quant bindings, never read or written
+        fixed_array(g_gpu.da_q_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.da_out_dev, g_gpu.rks_tok.buf, g_gpu.da_out_dev, g_gpu.da_out_dev, g_gpu.da_out_dev),
         fixed_array(RKS_MAX_QD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l,
-            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_QD * 4l, 16l, RKS_MAX_QD * 4l),
-        fixed_array(0u, 0u, 0u, VHG_YO, 0u, VHG_YO))   // q/mirrors fill pre-cmd (fence-ordered)
+            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_QD * 4l, 16l, RKS_MAX_QD * 4l, RKS_MAX_QD * 4l, RKS_MAX_QD * 4l),
+        fixed_array(0u, 0u, 0u, VHG_YO, 0u, VHG_YO, VHG_YO, VHG_YO))   // q/mirrors fill pre-cmd (fence-ordered)
     g_gpu.da_ready = true
 }
 
@@ -159,7 +159,7 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
         var pc = DaAttnArgs(kvd = uint(kv_dim), hs = uint(head_size),
-            kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale)
+            kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
         enc_da_attn_cls(raw, h, g_gpu.da_set, pc, int64(n_heads))
         vhz_dep(raw, h, VHG_YO, 0u, true)
         cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
