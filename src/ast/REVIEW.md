@@ -9,23 +9,26 @@
   What the gate enforces is read from the gate itself.
 
 - **A diff that adds a module-cache read diagnostic outside `trySerializeProgramModule`
-  (`ast_parse.cpp`), or moves one out of it - into a helper it calls, or another function -
-  extends `REVIEW.das`'s scan to the new home in the same change, and prints the line only when
-  the serializer's `quietCache` is off or `log_module_compile_time` is set.** A module-cache read
+  (`ast_parse.cpp`), or moves one out of it - into a helper it calls, or another function in this
+  folder - extends `REVIEW.das`'s scan to the new home in the same change.** A module-cache read
   diagnostic is a line reporting one record read of the module cache, the kind
   `trySerializeProgramModule` prints; the module scan's `[module]` trace is not one. A print the
-  gate does not scan is a print nobody checks, and an ungated line there is output every user of
-  the default cache sees.
+  gate does not scan is a print nobody checks.
+
+- **A `string` local that `trySerializeProgramModule` (`ast_parse.cpp`) reads from the
+  module-cache record header - the bytes read before the record payload - goes through the
+  serializer's `serializeTemp`, never plain `operator<<`.** The serializer's string table keeps a
+  pointer to the string it read into, so a header local read plainly is a dead pointer at the
+  next mention.
 
 - **A diff that adds a `[module]` line to the module scan's trace (`dyn_modules.cpp`) prints it
   only behind `trace_scan()`, the switch `DAS_TRACE_MODULE_LOAD` sets.** The scan runs on every
   start, so a line outside the switch is output every user sees.
 
-- **A diff that changes what a manifest written by an earlier binary replays to - a field added,
-  removed, reordered or re-typed in `read_manifest` or `write_manifest` (`dyn_modules.cpp`), a
-  line added beside the key lines `stamp`, `dll`, `root`, `dasroot`, `target` and `dep`, or a
-  change to what an existing row registers - bumps the version in `MANIFEST_HEADER` in the same
-  change.** A reader accepts a manifest whose first line equals `MANIFEST_HEADER`, so without the
+- **A diff that changes what a manifest written by an earlier binary replays to - what
+  `read_manifest` and `write_manifest` (`dyn_modules.cpp`) carry, in what order, in what encoding,
+  a key line the manifest did not carry before, or a change to what an existing row registers -
+  bumps the version in `MANIFEST_HEADER` in the same change.** A reader accepts a manifest whose first line equals `MANIFEST_HEADER`, so without the
   bump an older manifest decodes the changed bytes as a wrong registration with no diagnostic.
 
 - **A diff that gives `read_manifest` a new kind of row - one it pushes into `rows` - gives the
@@ -37,8 +40,8 @@
   whitespace a form allows - or changes when a guarded require or a guarded group member is
   skipped, teaches every site that decides it the same spelling and the same skip-or-take
   decision, in the same change: the text collector `getAllRequireReq` (`ast_parse.cpp`), the
-  parser's `ast_requireGuardAvailable` (`parser_impl.cpp`), and the member walk
-  `moduleGroupMemberAvailable` (`module_builtin_rtti.cpp`).** The prerequisite walk collects
+  parser's `ast_requireGuardAvailable` (`src/parser/parser_impl.cpp`), and the member walk
+  `moduleGroupMemberAvailable` (`src/builtin/module_builtin_rtti.cpp`).** The prerequisite walk collects
   requires from the source text before any parse, so a spelling only the parser reads is a
   module the walk never compiles, a decision the two make differently is a require the parse
   takes with no module behind it, and a member the calls take but the require did not is a call
@@ -49,20 +52,16 @@
   late walk runs mid-parse of another module, and a field restored by a plain statement after
   the walk is not restored by an unwind through it.
 
-- **A diff that changes the module-cache record header `writebackModules` writes and
-  `trySerializeProgramModule` reads (`ast_parse.cpp`) - a field added, removed, reordered or
-  re-typed - bumps `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`,
-  repo root) in the same change.** A reader accepts a stream whose stored version equals
-  `getVersion()`, so without the bump an older cache decodes the changed header as the old one
-  with no diagnostic.
+- **A diff that changes the bytes the module-cache record header `writebackModules` writes and
+  `trySerializeProgramModule` reads (`ast_parse.cpp`) - their content, order or encoding - bumps
+  `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo root) in the same
+  change.** A reader accepts a stream whose stored version equals `getVersion()`, so without the
+  bump an older cache decodes the changed header as the old one with no diagnostic.
 
-- **Removing the `setDeferredModuleLoader` call from `require_dynamic_modules`
-  (`dyn_modules.cpp`) is a defect.** A descriptor compiled during the scan can require a module
-  an earlier replay deferred, and with no loader installed that require fails.
-
-- **A diff that moves the `setDeferredModuleLoader` call in `require_dynamic_modules` keeps it
-  above the first `init_modules_for_folder` call, in the same change.** That call compiles the
-  descriptors, and a descriptor can require a module an earlier replay deferred.
+- **The `setDeferredModuleLoader` call in `require_dynamic_modules` (`dyn_modules.cpp`) stays,
+  and stays above the first `init_modules_for_folder` call - removing it or moving it below is a
+  defect.** That call compiles the descriptors, and a descriptor can require a module an earlier
+  replay deferred, which fails with no loader installed.
 
 - **A diff that changes how `Function::getMangledName` (`ast.cpp`) forms a name, or which module
   `Module::addFunction` (`ast_module.cpp`) files a builtin function under, bumps

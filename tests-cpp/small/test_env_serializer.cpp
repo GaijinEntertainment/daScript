@@ -46,6 +46,42 @@ void warmUp ( const char * relPath ) {
     REQUIRE_FALSE(program->failed());
 }
 
+// every expression's position and its type's position, in visit order - what the packed
+// LineInfo, the type table's per-reference `at` and the deep copy must all preserve
+struct PositionCensus : Visitor {
+    vector<uint64_t> positions;
+    void record ( const LineInfo & at ) {
+        positions.push_back(at.line);
+        positions.push_back(at.last_line);
+        positions.push_back(at.column);
+        positions.push_back(at.last_column);
+        positions.push_back(uint64_t(hash_blockz64((const uint8_t *) (at.fileInfo ? at.fileInfo->name.c_str() : ""))));
+    }
+    void preVisitExpression ( Expression * expr ) override {
+        record(expr->at);
+        if ( expr->type ) record(expr->type->at);
+    }
+    void preVisit ( Function * fn ) override {
+        record(fn->at);
+        for ( auto & arg : fn->arguments ) {
+            record(arg->at);
+            if ( arg->type ) record(arg->type->at);
+        }
+    }
+};
+
+// the program's own module and the modules the record carries for it (the fixture's
+// required module among them); the builtins are not in the stream
+vector<uint64_t> positionCensus ( const ProgramPtr & program ) {
+    PositionCensus census;
+    for ( auto m : program->library.getModules() ) {
+        if ( m->builtIn && !m->promoted ) continue;
+        if ( m->name != program->thisModule->name && m->name != "test_env_serializer_module" ) continue;
+        m->functions.foreach([&](FunctionPtr fn) { fn->visit(census); });
+    }
+    return census.positions;
+}
+
 } // namespace
 
 TEST_CASE("env serializer: module cache round trip") {
@@ -55,6 +91,7 @@ TEST_CASE("env serializer: module cache round trip") {
     REQUIRE(env.serializer_write == nullptr);
     warmUp("/tests-cpp/small/test_env_serializer.das");
     SerializationStorageVector storage;
+    vector<uint64_t> coldPositions;
     // cold pass — modules written into the cache
     {
         TextWriter logs;
@@ -66,8 +103,10 @@ TEST_CASE("env serializer: module cache round trip") {
         writer.moduleLibrary = nullptr;
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());
+        coldPositions = positionCensus(program);
     }
     CHECK(storage.buffer.size() > 0);
+    CHECK(storage.buffer.size() == storage.writingSize());  // flushed: the vector is exactly the stream, not its growth
     // warm pass — modules read back instead of parsed
     {
         TextWriter logs;
@@ -80,6 +119,8 @@ TEST_CASE("env serializer: module cache round trip") {
         REQUIRE_FALSE(program->failed());
         CHECK_FALSE(reader.failed);                              // no fallback to reparse
         CHECK(logs.str().find("ser:") == string::npos);          // no cache-miss diagnostics
+        CHECK(coldPositions.size() > 8);
+        CHECK(positionCensus(program) == coldPositions);         // every line, column and file survives the record
         reader.moduleLibrary = nullptr;
         // the cache-fed program must actually run
         Context ctx(program->getContextStackSize());

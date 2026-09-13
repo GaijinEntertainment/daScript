@@ -12,6 +12,10 @@
 #define DAS_SERIALIZE_DTAG      0
 #endif
 
+#ifndef DAS_SERIALIZE_PROFILE
+#define DAS_SERIALIZE_PROFILE   0
+#endif
+
 namespace das {
     struct SerializationStorage {
         vector<uint8_t> buffer;
@@ -53,12 +57,17 @@ namespace das {
         // seek keeps the default false — record lengths then stay 0 and the reader falls
         // back to the legacy stop-at-first-failure cutoff instead of skip-and-resume.
         virtual bool patch ( size_t /*at*/, const void * /*data*/, size_t /*size*/ ) { return false; }
+        //! called at the end of every program's bytes: a storage that buffers ahead settles what it holds here; a storage that never wrote is left alone
+        virtual void flush () {}
+        virtual struct SerializationStorageVector * asVector () { return nullptr; }
         virtual ~SerializationStorage() {}
     };
 
     struct SerializationStorageVector : SerializationStorage {
+        size_t writePos = 0;
+        bool   wrote = false;
         virtual size_t writingSize() const override {
-            return buffer.size();
+            return writePos;
         }
         virtual bool readOverflow ( void * data, size_t size ) override {
             if ( bufferPos + size > buffer.size() ) return false;
@@ -66,13 +75,30 @@ namespace das {
             bufferPos += size;
             return true;
         }
-        virtual void write ( const void * data, size_t size ) override {
-            auto at = buffer.size();
-            buffer.resize(at + size);
-            memcpy(buffer.data() + at, data, size);
+        void grow ( size_t need ) {
+            size_t cap = buffer.size();
+            size_t next = cap ? cap : 4096;
+            while ( next < need ) {
+                if ( next > (size_t(-1) >> 1) ) { next = need; break; }
+                next *= 2;
+            }
+            buffer.resize(next);
         }
+        __forceinline void append ( const void * data, size_t size ) {
+            if ( writePos + size > buffer.size() ) grow(writePos + size);
+            memcpy(buffer.data() + writePos, data, size);
+            writePos += size;
+            wrote = true;
+        }
+        virtual void write ( const void * data, size_t size ) override {
+            append(data, size);
+        }
+        virtual void flush () override {
+            if ( wrote ) buffer.resize(writePos);
+        }
+        virtual SerializationStorageVector * asVector () override { return this; }
         virtual bool patch ( size_t at, const void * data, size_t size ) override {
-            if ( at + size > buffer.size() ) return false;
+            if ( at + size > writePos ) return false;
             memcpy(buffer.data() + at, data, size);
             return true;
         }
@@ -107,8 +133,8 @@ namespace das {
         Module *            astModule = nullptr;
         bool                writing = false;
         bool                failed = false;
-        size_t              readOffset = 0;
         SerializationStorage * buffer = nullptr;
+        SerializationStorageVector * bufferAsVector = nullptr;
         bool                seenNewModule = false;
     // module-cache resume state (trySerializeProgramModule)
         bool                checkedStreamHeader = false;
@@ -128,8 +154,48 @@ namespace das {
     // file info clean up
         vector<FileInfo*>         deleteUponFinish; // these pointers are for builtins (which we don't serialize) and need to be cleaned manually
         das_hash_set<FileInfo*>   doNotDelete;
+    // per-record tables, cleared in clearNodeIds (src/builtin/ARCHITECTURE.md sec.6)
+        das_hash_map<FileInfo *, uint32_t>          writeFileInfos;
+        vector<FileInfo *>                          readFileInfos;
+        FileInfo *          lastWriteFileInfo = nullptr;
+        uint32_t            lastWriteFileInfoNumber = 0;
+        FileInfo *          lineBaseFile = nullptr;
+        uint32_t            lineBaseLine = 0;
+        struct TypeHash  { size_t operator () ( const TypeDecl * t ) const noexcept; };
+        struct TypeEqual { bool operator () ( const TypeDecl * a, const TypeDecl * b ) const noexcept; };
+        das_hash_map<const TypeDecl *, uint32_t, TypeHash, TypeEqual>  writeTypes;
+        uint32_t                                    writeFreshTypeCount = 0;
+        vector<TypeDecl *>                          readTypes;
+        das_hash_map<uint32_t, uint32_t>            writeExprClasses;
+        vector<Annotation *>                        readExprClasses;
+        das_hash_map<Module *, uint32_t>            writeModules;
+        vector<pair<Module *, uint64_t>>            readModules;
+        das_hash_map<Function *, string>            writeMangledNames;
+        struct StringView {
+            const char *    data = nullptr;
+            uint32_t        length = 0;
+        };
+        struct StringViewHash {
+            size_t operator () ( const StringView & v ) const noexcept { return size_t(hash_block64((const uint8_t *) v.data, v.length)); }
+        };
+        struct StringViewEqual {
+            bool operator () ( const StringView & a, const StringView & b ) const noexcept {
+                return a.length == b.length && memcmp(a.data, b.data, a.length) == 0;
+            }
+        };
+        das_hash_map<StringView, uint32_t, StringViewHash, StringViewEqual>  writeStrings;
+        int32_t                                     emptyStringNumber = -1;
+        vector<StringView>                          readStrings;
+        vector<unique_ptr<string>>                  stringArena;
+        AstSerializer & serializeString ( string & str, bool temp );
+        //! a string with no home past the call: the table gets a copy of it; any other value streams as usual
+        AstSerializer & serializeTemp ( string & str ) { return serializeString(str, true); }
+        template <typename T>
+        void serializeTemp ( T & value ) { *this << value; }
     // profile data
         uint64_t totMacroTime = 0;
+        uint64_t totFinalizeTime = 0;
+        uint64_t totSetupTime = 0;
     // node identity (SerializeNodeId): the writer numbers a node at its first mention and
     // remembers which numbers have had their payload written; the reader keeps the node
     // each number resolved to, null until its payload is read (a forward reference is
@@ -138,9 +204,6 @@ namespace das {
         vector<uint8_t>                             writtenIds;     // indexed by SerializeNodeId::index
         vector<void *>                              readNodes;      // indexed by SerializeNodeId::index
         vector<pair<void *, SerializeNodeId>>       pendingRefs;    // storage of a TT * slot, and the number it waits for
-        using DataOffset = uint64_t;
-        das_hash_map<FileInfo*, DataOffset>                writingFileInfoMap;
-        das_hash_map<DataOffset, FileInfo*>                readingFileInfoMap;
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
         // parsedModules record: fileName, source content hash, source size, program, thisModule, the collector's require names
@@ -150,6 +213,51 @@ namespace das {
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
         void tag   ( const char * name, uint32_t hash );
+#if DAS_SERIALIZE_PROFILE
+        struct ProfAgg {
+            uint64_t selfBytes = 0;
+            uint64_t outermostInclBytes = 0;
+            uint64_t count = 0;
+            int64_t  outermostInclTicks = 0;
+        };
+        struct ProfNode {
+            uint32_t nameId = 0;
+            uint32_t parent = 0;
+            uint64_t inclBytes = 0;
+            uint64_t count = 0;
+            int64_t  inclTicks = 0;
+            vector<uint32_t> children;
+        };
+        struct ProfFrame {
+            uint32_t nameId;
+            uint32_t node;
+            uint64_t startBytes;
+            uint64_t childBytes;
+            int64_t  startTicks;
+        };
+        struct ProfRecord {
+            string   file;
+            uint64_t lengthWordBytes = 0;
+            uint64_t payloadBytes = 0;
+            int64_t  usec = 0;
+        };
+        vector<pair<const char *, uint32_t>>    profNameIds;
+        vector<string>                          profNames;
+        vector<ProfAgg>                         profAgg;
+        vector<ProfNode>                        profNodes;
+        vector<ProfFrame>                       profStack;
+        das_hash_map<string, uint32_t>          profStrings;
+        das_hash_map<string, uint32_t>          profTypes;
+        uint64_t                                profTypeBytes = 0;
+        vector<ProfRecord>                      profRecords;
+        int64_t                                 profStartTicks = 0;
+        uint64_t profPosition () const { return writing ? buffer->writingSize() : buffer->bufferPos; }
+        void profBegin ( const char * name );
+        void profEnd ();
+        void profString ( const string & str );
+        void profType ( const TypeDecl * type, uint64_t bytes );
+        void profReport ( TextWriter & tw ) const;
+#endif
 #if DAS_SERIALIZE_DTAG
         __forceinline void dtag ( const char * name, uint32_t hash ) { tag(name,hash); }
 #else
@@ -164,7 +272,10 @@ namespace das {
         }
         void read  ( void * data, size_t size );
         [[noreturn]] void onReadFailure ();     // throws dasException ("read overflow")
-        void write ( const void * data, size_t size );
+        __forceinline void write ( const void * data, size_t size ) {
+            if ( bufferAsVector ) bufferAsVector->append(data, size);
+            else buffer->write(data, size);
+        }
         template<typename T>
         void serialize ( T & data ) {
             if ( writing ) {
@@ -176,23 +287,45 @@ namespace das {
         void serialize ( void * data, size_t size );
         void serializeAdaptiveSize64 ( uint64_t & size );
         void serializeAdaptiveSize32 ( uint32_t & size );
+        //! encodes into a caller's buffer of at least 5 bytes and answers the bytes used
+        static __forceinline uint32_t zigzag32 ( int32_t v ) { return (uint32_t(v) << 1) ^ uint32_t(v >> 31); }
+        static __forceinline int32_t unzigzag32 ( uint32_t v ) { return int32_t(v >> 1) ^ -int32_t(v & 1); }
+        static __forceinline size_t encodeAdaptiveSize32 ( uint8_t * out, uint32_t size ) {
+            size_t n = 0;
+            while ( size >= 0x80 ) {
+                out[n++] = uint8_t(size) | 0x80;
+                size >>= 7;
+            }
+            out[n++] = uint8_t(size);
+            return n;
+        }
         // reject a deserialized element count that exceeds the bytes left in the stream
         // BEFORE it gates an allocation (throws; reading only)
         void verifyLength ( uint64_t size );
         void collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos );
         void getCompiledModules ( );
         void patch ();
-        AstSerializer & operator << ( string & str );
+        AstSerializer & operator << ( string & str ) { return serializeString(str, false); }
         AstSerializer & operator << ( const char * & value );
         AstSerializer & operator << ( bool & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( vec4f & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( float & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( void * & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( uint8_t & value ) { serialize(value); return *this; }
-        AstSerializer & operator << ( int32_t & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( int32_t & value ) {
+            if ( writing ) {
+                uint32_t z = zigzag32(value);
+                serializeAdaptiveSize32(z);
+            } else {
+                uint32_t z = 0;
+                serializeAdaptiveSize32(z);
+                value = unzigzag32(z);
+            }
+            return *this;
+        }
         AstSerializer & operator << ( int64_t & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( uint16_t & value ) { serialize(value); return *this; }
-        AstSerializer & operator << ( uint32_t & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( uint32_t & value ) { serializeAdaptiveSize32(value); return *this; }
         AstSerializer & operator << ( uint64_t & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( pair<uint32_t,uint32_t> & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( pair<uint64_t,uint64_t> & value ) { serialize(value); return *this; }
@@ -232,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 210;   // 210: module_cache joins the policy stream; `options no_optimizations` is read (209: a record written by a recompile that served a dasbind registrar could carry a dependent's calls to the extern stubs unrewritten - the format is unchanged, the bump discards those records (208: a node reference is the writer's first-mention number as a varint, not a pointer-and-epoch word; 207: neither Function nor Variable flags carry a used bit, and neither streams an index; 206: the record header carries the requires the parse took; 205: a vector of a handled element streams under the element's module; 204: the record header stamps the source by content hash; the policy stream carries every CodeOfPolicies field)
+            return 211;   // 211: strings stream through a per-record first-mention table, adaptive sizes are seven bits a byte, a FileInfo is a per-record number, a LineInfo is coded against the previous one, a TypeDecl is a per-record content number, 32-bit integers are adaptive sizes, an expression class and a module are per-record numbers (210: module_cache joins the policy stream; `options no_optimizations` is read (209: a record written by a recompile that served a dasbind registrar could carry a dependent's calls to the extern stubs unrewritten - the format is unchanged, the bump discards those records (208: a node reference is the writer's first-mention number as a varint, not a pointer-and-epoch word; 207: neither Function nor Variable flags carry a used bit, and neither streams an index; 206: the record header carries the requires the parse took; 205: a vector of a handled element streams under the element's module; 204: the record header stamps the source by content hash; the policy stream carries every CodeOfPolicies field)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -249,6 +382,9 @@ namespace das {
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
             dtag("Vector",hash_tag("Vector"));
+#if DAS_SERIALIZE_PROFILE
+            profBegin("Vector");
+#endif
             if ( writing ) {
                 uint64_t size = value.size();
                 serializeAdaptiveSize64(size);
@@ -261,6 +397,9 @@ namespace das {
             for ( TT & v : value ) {
                 *this << v;
             }
+#if DAS_SERIALIZE_PROFILE
+            profEnd();
+#endif
             return *this;
         }
 
@@ -366,6 +505,19 @@ namespace das {
         }
     };
 
+#if DAS_SERIALIZE_PROFILE
+    struct SerProfileScope {
+        AstSerializer & ser;
+        SerProfileScope ( AstSerializer & s, const char * name ) : ser(s) { ser.profBegin(name); }
+        ~SerProfileScope () { ser.profEnd(); }
+    };
+    #define DAS_SER_PROFILE_CAT2(a,b)   a##b
+    #define DAS_SER_PROFILE_CAT(a,b)    DAS_SER_PROFILE_CAT2(a,b)
+    #define DAS_SER_PROFILE(ser, name)  das::SerProfileScope DAS_SER_PROFILE_CAT(_serProfScope_, __LINE__)((ser), (name))
+#else
+    #define DAS_SER_PROFILE(ser, name)
+#endif
+
     // File-backed driver for the env module-cache rail (daScriptEnvironment::serializer_read
     // / serializer_write): install() binds a reader (when the file exists and is non-empty)
     // and/or a writer around a compile; finish() unbinds, classifies what the reader saw,
@@ -446,4 +598,9 @@ namespace das {
             AstSerializerState * state,
             const TBlock<void,TTemporary<TArray<uint8_t> const>> & block,
             Context * context, LineInfoArg * at );
+
+    //! microseconds this state's reads spent inside finalizeModule, over every program it read
+    int64_t rtti_ast_serializer_finalize_usec ( AstSerializerState * state );
+    //! microseconds this state's reads spent in the setup Program::serialize runs after the stream
+    int64_t rtti_ast_serializer_setup_usec ( AstSerializerState * state );
 }

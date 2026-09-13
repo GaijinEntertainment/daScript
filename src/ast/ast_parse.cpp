@@ -620,6 +620,7 @@ namespace das {
     static DAS_THREAD_LOCAL(int64_t) totCacheRead;
     static DAS_THREAD_LOCAL(int64_t) cntCacheRead;
     static DAS_THREAD_LOCAL(int64_t) totCacheMacroSim;
+    static DAS_THREAD_LOCAL(int64_t) totCacheFinalize;
 
     // deserialization may have left the active gc root pointing at (or the old program
     // owning) a module root that dies with the old program — repoint around the swap so
@@ -766,14 +767,14 @@ namespace das {
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer << saved_hash;
             serializer << saved_size;
-            serializer << saved_filename;
+            serializer.serializeTemp(saved_filename);
             // macro file dependencies (Program::moduleCacheDependencies) ride the record
             // header, not the payload: they must be validated BEFORE the payload is trusted
             serializer << depCount;
             if ( depCount <= SER_MAX_MACRO_DEPS ) {
                 savedDeps.resize(depCount);
                 for ( auto & dep : savedDeps ) {
-                    serializer << get<0>(dep);
+                    serializer.serializeTemp(get<0>(dep));
                     serializer << get<1>(dep);
                     serializer << get<2>(dep);
                 }
@@ -782,7 +783,7 @@ namespace das {
             if ( depCount <= SER_MAX_MACRO_DEPS && reqCount <= SER_MAX_MACRO_DEPS ) {
                 savedReq.resize(reqCount);
                 for ( auto & req : savedReq ) {
-                    serializer << req;
+                    serializer.serializeTemp(req);
                 }
             }
             serializer << payload_size;
@@ -849,11 +850,17 @@ namespace das {
         // failure branches below carry everything a human needs
         deriveSourcePolicies(access, fileName, program->policies);
         serializer_read->readingRecord ++;
+#if DAS_SERIALIZE_PROFILE
+        auto profT0 = ref_time_ticks();
+#endif
         bool read_ok = serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer.thisModuleGroup = &libGroup;
             serializer.fileAccess = access.get();
             serializer.serializeProgram(program, libGroup);
         });
+#if DAS_SERIALIZE_PROFILE
+        serializer_read->profRecords.push_back({fileName, 0, payload_size, get_time_usec(profT0)});
+#endif
         serializer_read->readingRecord --;
 
         if ( read_ok && !program->failed() && !serializer_read->failed ) {
@@ -1149,12 +1156,15 @@ namespace das {
         program->inferPassesUsed = 0;  // reset once per module; inferTypesDirty accumulates across all inferTypes legs (incl. restartInfer)
         program->policies = policies;   // before the cache read: the reader compares the record's policies against this compile's
 
+        // ARCHITECTURE.md sec.1
         auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
         uint64_t macroSim0 = serializer_read ? serializer_read->totMacroTime : 0;
+        uint64_t finalize0 = serializer_read ? serializer_read->totFinalizeTime : 0;
         if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
             program->access = access;   // the read replaced the program object
             auto readT = get_time_usec(time0);
             auto macroSimT = int64_t(serializer_read->totMacroTime - macroSim0);
+            *totCacheFinalize += int64_t(serializer_read->totFinalizeTime - finalize0);
             *totCacheRead += readT;
             *cntCacheRead += 1;
             *totCacheMacroSim += macroSimT;
@@ -1628,6 +1638,11 @@ namespace das {
             size_t len_at = serializer_write->buffer->writingSize();
             *serializer_write << payload_size;
             size_t payload_start = serializer_write->buffer->writingSize();
+#if DAS_SERIALIZE_PROFILE
+            AstSerializer::ProfRecord profRecord;
+            profRecord.file = fileName;
+            auto profT0 = ref_time_ticks();
+#endif
             if ( program->thisModule )  {
                 // the program owns its module (entry script) - write as is, never mutate it
                 serializer_write->serializeProgram(program, libGroup);
@@ -1639,6 +1654,12 @@ namespace das {
             }
             payload_size = uint64_t(serializer_write->buffer->writingSize() - payload_start);
             serializer_write->buffer->patch(len_at, &payload_size, sizeof(payload_size));
+#if DAS_SERIALIZE_PROFILE
+            profRecord.usec = get_time_usec(profT0);
+            profRecord.payloadBytes = payload_size;
+            profRecord.lengthWordBytes = uint64_t(payload_start - len_at);
+            serializer_write->profRecords.push_back(profRecord);
+#endif
         }
         serializer_write->writtenModules = serializer_write->parsedModules.size();
     }
@@ -2049,6 +2070,7 @@ namespace das {
         *totCacheRead = 0;
         *cntCacheRead = 0;
         *totCacheMacroSim = 0;
+        *totCacheFinalize = 0;
         daScriptEnvironment::getBound()->macroTimeTicks = 0;
         vector<ModuleInfo> req;
         vector<MissingRecord> missing;
@@ -2182,7 +2204,7 @@ namespace das {
                 auto totT = get_time_usec(time0);
                 logs << "total compile took " << (totT  / 1000000.) << ", " << fileName << " -- " << res->totalFunctions << " functions\n"
                      << "\trequire  " << (preqT    / 1000000.) << "\n"
-                     << "\tcache read " << (*totCacheRead / 1000000.) << " (" << *cntCacheRead << " modules, macro simulate " << (*totCacheMacroSim / 1000000.) << ")\n"
+                     << "\tcache read " << (*totCacheRead / 1000000.) << " (" << *cntCacheRead << " modules, decode " << ((*totCacheRead - *totCacheFinalize) / 1000000.) << ", finalize " << (*totCacheFinalize / 1000000.) << " of which macro simulate " << (*totCacheMacroSim / 1000000.) << ")\n"
                      << "\tparse    " << (*totParse / 1000000.) << "\n"
                      << "\tinfer    " << (*totInfer / 1000000.) << "\n"
                      << "\toptimize " << (*totOpt   / 1000000.) << "\n"
