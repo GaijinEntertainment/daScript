@@ -3144,6 +3144,91 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
     delete out_fused
 }
 
+// ===== the dependent-dispatch gap by barrier form (arg "barform") =====
+//! `cls_ar` chained through hand-placed barriers of five forms - the hazard rail's (a global memory barrier, compute and
+//! transfer stages both ways), compute-only stages, shader access bits alone, a buffer memory barrier on the row, an
+//! execution-only barrier (no memory barrier: the visibility test, not a serving form) - and the dependent chain with
+//! no barrier at all (the wrong-but-fast floor), each timed a dispatch
+def private run_barrier_forms(dim : int) {
+    let nb = int64(dim) * 4l
+    let xd = make_device_buf(nb)
+    let ad = make_device_buf(nb)
+    let wnd = make_device_buf(nb)
+    let yd = make_device_buf(nb)
+    var ones : array<float>
+    ones |> resize(dim)
+    for (i in range(dim)) {
+        ones[i] = 0.001 * float(i % 17) + 0.5
+    }
+    unsafe {
+        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
+    }
+    var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    let begin = VkCommandBufferBeginInfo()
+    let names = fixed_array("rail (global, compute+transfer)", "global, compute only", "global, shader bits only", "buffer barrier on the row", "execution only", "no barrier")
+    for (form in range(6)) {
+        var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(0u, 0u, 0u, 0u))   //! the rail sees no bits: the barriers below are the probe's own
+        var raw = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_cls_ar(raw, hz, sc, pc, 1l)
+            probe_barrier(raw, form, xd, nb)
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        print("barform dim={dim} {names[form]}: cls_ar {us} us/dispatch\n")
+    }
+    delete ones
+}
+
+//! one barrier of the form `form` after a dispatch that wrote `buf`
+def private probe_barrier(raw : VkCommandBuffer; form : int; buf : uint64; bytes : int64) {
+    if (form == 5) {
+        return
+    }
+    var sstage : VkPipelineStageFlags
+    var dstage : VkPipelineStageFlags
+    sstage.compute_shader = true
+    dstage.compute_shader = true
+    if (form == 0) {
+        sstage.transfer = true
+        dstage.transfer = true
+    }
+    let dflags : VkDependencyFlags
+    unsafe {
+        if (form == 4) {
+            vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 0u, null, 0u, null, 0u, null)
+            return
+        }
+        if (form == 3) {
+            var bb = VkBufferMemoryBarrier()
+            bb.srcAccessMask.shader_write = true
+            bb.dstAccessMask.shader_read = true
+            bb.dstAccessMask.shader_write = true
+            bb.srcQueueFamilyIndex = 0xFFFFFFFFu
+            bb.dstQueueFamilyIndex = 0xFFFFFFFFu
+            bb.buffer = reinterpret<VkBuffer>(buf)
+            bb.offset = 0ul
+            bb.size = uint64(bytes)
+            vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 0u, null, 1u, addr(bb), 0u, null)
+            return
+        }
+        var mb = VkMemoryBarrier()
+        mb.srcAccessMask.shader_write = true
+        mb.dstAccessMask.shader_read = true
+        mb.dstAccessMask.shader_write = true
+        if (form == 0) {
+            mb.srcAccessMask.transfer_write = true
+            mb.dstAccessMask.transfer_read = true
+            mb.dstAccessMask.transfer_write = true
+        }
+        vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 1u, addr(mb), 0u, null, 0u, null)
+    }
+}
+
 //! the token command's small-kernel floor: the add+rms step (`cls_ar`) and its fused requant twin (`cls_ar_rq`) at
 //! a row width, 64 dispatches chained through the hazard rail (each reads what the last wrote, a barrier between)
 //! against the same 64 with no dependency declared - the per-dispatch cost of a one-workgroup row kernel, with
@@ -3600,7 +3685,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "small" || a == "lastwg" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -3842,6 +3927,12 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         for (dim in [1152, 2560, 3840]) {
             run_small_kernels(dim)
         }
+        return
+    }
+    if (only == "barform") {
+        verify(ensure_cls_ar(), "the add+rms class rail must engage")
+        run_barrier_forms(1152)
+        run_barrier_forms(2560)
         return
     }
     if (only == "lastwg") {

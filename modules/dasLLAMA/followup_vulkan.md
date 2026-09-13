@@ -1390,5 +1390,14 @@ module) is independent and can land any time - it is pure structure.
     (an f32 row GEMV then `cls_ar` against the GEMV whose last workgroup runs the epilogue): about
     2 us a step at dims 1152 to 3840 - so the `ArRq` epilogue riding the q8 GEMVs (wo into the
     post-attention step, down into the post-FFN one, the E-series proj into its) is the form still
-    worth building, two to three hops a layer on every gemma; a llama.cpp build with
-    `GGML_VULKAN_PERF` would show what their hop costs (the prebuilt b10660 compiles it out).
+    worth building, two to three hops a layer on every gemma (`Q8GemvAr` is that form: gemma-3-1b's
+    tg128 358.5 -> 370.1, past llama.cpp's 362.9). The barrier's form is not a lever: the probe's
+    `barform` arm chains `cls_ar` through the rail's global compute+transfer barrier, a compute-only
+    one, shader access bits alone, a buffer barrier on the row and an execution-only barrier, and on
+    the RTX PRO 4500 every form costs the same 4.7 us a dispatch at dim 1152 (6.7 to 8.1 at 2560)
+    against 0.8 with no barrier; the RTX 5060 Ti alone charges the rail's form 1.4 us more than a
+    compute-only one (7.1 against 5.7). llama.cpp b10660 built from source with its per-op logger
+    (`GGML_VK_PERF_LOGGER=1`; apt's glslang 15.1 compiles neither its coopmat2 nor its integer-dot
+    shaders, so those kernels are not the reference's) reads its small decode ops at 2.5 to 4.2 us
+    each in isolation - the same class as ours - and its q8 mat-vecs at our rates; the logger fences
+    every op, so what their chained gap costs it cannot say.
