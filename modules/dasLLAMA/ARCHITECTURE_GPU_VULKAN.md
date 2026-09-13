@@ -285,9 +285,9 @@ writing every binding, so a body the classifier cannot read loses the decoration
 carrying a false one. A declared `@readonly` on a binding a kernel writes is the one shape that
 yields a module the validator rejects, and the lens refuses it.
 
-### 2.2al The attention passes split a head's keys across workgroups {#vk-decode-attn-split}
+### 2.2al The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
 
-**Both attention passes dispatch a workgroup per (head, key split) and a combine per head.** One
+**The decode attention dispatches a workgroup per (head, key split) and a combine per head.** One
 workgroup a head leaves a low-head model's attention on a few SMs (four heads of eighty-two), so the
 decode pass (`DaAttnT`) cuts the attended span into `nsplit` 32-aligned pieces (`da_nsplit`: enough
 workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`, one where the count is unknown or the
@@ -297,4 +297,4 @@ partials by their maxes, normalizes, gates and stores the row (unsplit, the pass
 store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax, Q8_K
 superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. The scores
 go a subgroup a key, lanes across the dims (one coalesced K row, the dot a subgroup add); the V pass
-keeps a thread a dim. The flash tile (`FaCm2T`) splits the same way per (head, 64-row q tile) (`pf_fa_nsplit`, at most `FA_NSPLIT_MAX`); `FaCm2CombT` finishes the tile from the pieces' O and (max | denom) partials, f32 or f16, gated. A model that softcaps its attention logits (gemma-2) takes the tile's `CAP` leaves at head size 256: every scaled score through `cap * tanh(s / cap)` before the mask, the 8-row tile serving any other capped shape.
+keeps a thread a dim. The flash tile (`FaCm2T`) runs one workgroup a (head, 64-row q tile) unsplit: a key split there costs more in partial stores and a combine than the shorter key loop returns on every gemma shape measured (`followup_vulkan.md` item 50). A model that softcaps its attention logits (gemma-2) takes the tile's `CAP` leaves at head size 256: every scaled score through `cap * tanh(s / cap)` before the mask, the 8-row tile serving any other capped shape.

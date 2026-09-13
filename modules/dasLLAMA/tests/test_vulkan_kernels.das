@@ -5147,12 +5147,12 @@ def test_vkd_fa_cm2(t0 : T?) {
                         fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
                     var scv = set_f16cvt_cls(fixed_array(vdev, vhdev),
                         fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-                    var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd, yd),   //! unsplit: the out plane fills the partials binding
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes, q_bytes),
-                        fixed_array(1u, 16u, 32u, 4u, 4u))
-                    var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16_fused, yh16_fused),
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes, h16_bytes),
-                        fixed_array(1u, 16u, 32u, 64u, 64u))
+                    var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
+                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
+                        fixed_array(1u, 16u, 32u, 4u))
+                    var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16_fused),
+                        fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
+                        fixed_array(1u, 16u, 32u, 64u))
                     var scy = set_f16cvt_cls(fixed_array(yd, yh16_split),
                         fixed_array(q_bytes, h16_bytes), fixed_array(4u, 128u))
                     var raw2 = alloc_cmd()
@@ -5217,54 +5217,13 @@ def test_vkd_fa_cm2(t0 : T?) {
                 }
                 let bad = mismatch_approx(y_cls, y_ref)
                 t |> success(bad == 0, "fa_cm2 hs {hs} matches the CPU oracle ({bad} of {rows * qd} off)")
-                //! the split arm: three pieces of every (head, q tile)'s keys (the 141-key range cuts unevenly, a piece of the
-                //! first tile empty), the partials combined by the second kernel, on a sentinel out plane
-                let nsplit = 3
-                let qtiles = (rows + 63) / 64
-                let ntiles = nheads * qtiles * nsplit
-                let p_bytes = int64(ntiles * 64 * (hs + int(FA_ML_COLS))) * 4l
-                let partd = make_device_buf(p_bytes)
-                verify(ensure_fa_cm2_comb_cls(), "the split flash pass's combine class rail must engage")
-                unsafe {
-                    nan_sentinel_upload(yd, q_bytes)
-                    nan_sentinel_upload(partd, p_bytes)
-                    var sfs = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd, partd),
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes, p_bytes),
-                        fixed_array(1u, 16u, 32u, 4u, 256u))
-                    var scb = set_fa_cm2_comb_cls(fixed_array(qdev, partd, yd),
-                        fixed_array(q_bytes, p_bytes, q_bytes), fixed_array(1u, 256u, 4u))
-                    var raw3 = alloc_cmd()
-                    let begin3 = VkCommandBufferBeginInfo()
-                    vk_check(vkBeginCommandBuffer(raw3, begin3), null)
-                    var h3 : VkHaz
-                    var pcs = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
-                        kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, ksplit = uint(nsplit), hs = uint(hs))
-                    let swgs = int64(nheads * qtiles * nsplit)
-                    if (hs == 64) {
-                        enc_fa_cm2_h64_cls(raw3, h3, sfs, pcs, swgs)
-                    } elif (hs == 128) {
-                        enc_fa_cm2_h128_cls(raw3, h3, sfs, pcs, swgs)
-                    } elif (hs == 256) {
-                        enc_fa_cm2_h256_cls(raw3, h3, sfs, pcs, swgs)
-                    } else {
-                        enc_fa_cm2_h512_cls(raw3, h3, sfs, pcs, swgs)
-                    }
-                    enc_fa_cm2_comb_cls(raw3, h3, scb, pcs, int64(nheads * qtiles))
-                    vhz_dep(raw3, h3, 4u, 0u, true)
-                    cmd_copy_whole(raw3, yd, host.buf, q_bytes)
-                    vk_check(vkEndCommandBuffer(raw3), null)
-                    submit_wait(raw3)
-                    memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
-                }
-                let bads = mismatch_approx(y_cls, y_ref)
-                t |> success(bads == 0, "fa_cm2 hs {hs} split {nsplit} ways + the combine matches the CPU oracle ({bads} of {rows * qd} off)")
                 var bad16 = 0
                 for (i in range(rows * qd)) {
                     if (float(y16_fused[i]) != float(y16_split[i])) {
                         bad16++
                     }
                 }
-                t |> success(bad16 == 0, "fa_cm2 hs {hs} f16-out twin == the split pair's f16cvt ({bad16} of {rows * qd} off)")
+                t |> success(bad16 == 0, "fa_cm2 hs {hs} f16-out twin == the f32 stamp's f16cvt ({bad16} of {rows * qd} off)")
                 delete qh
                 delete kh
                 delete vh
@@ -5332,10 +5291,10 @@ def private fa_h256_gated_run(nheads, kv_mul, rows, w0 : int) : tuple<bad : int;
             upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
             var sck = set_f16cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
             var scv = set_f16cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-            var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd, yd),
-                fixed_array(qp_bytes, sh_bytes, sh_bytes, o_bytes, o_bytes), fixed_array(1u, 16u, 32u, 4u, 4u))
-            var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16, yh16),
-                fixed_array(qp_bytes, sh_bytes, sh_bytes, o16_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u, 64u))
+            var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
+                fixed_array(qp_bytes, sh_bytes, sh_bytes, o_bytes), fixed_array(1u, 16u, 32u, 4u))
+            var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16),
+                fixed_array(qp_bytes, sh_bytes, sh_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u))
             var raw2 = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)
@@ -5473,10 +5432,10 @@ def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float) : t
             upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
             var sck = set_f16cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
             var scv = set_f16cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-            var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd, yd),
-                fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes, q_bytes), fixed_array(1u, 16u, 32u, 4u, 4u))
-            var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16, yh16),
-                fixed_array(q_bytes, sh_bytes, sh_bytes, o16_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u, 64u))
+            var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
+                fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes), fixed_array(1u, 16u, 32u, 4u))
+            var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16),
+                fixed_array(q_bytes, sh_bytes, sh_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u))
             var raw2 = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)

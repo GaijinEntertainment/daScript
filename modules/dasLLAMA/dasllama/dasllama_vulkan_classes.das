@@ -2713,9 +2713,6 @@ struct FaCm2Args {
     qstride : uint  // the q panel's row stride when it is not qd (a gated q plane: [q | gate] per head); 0 = qd
     qhs : uint      // the q panel's per-head stride (2 x hs on a gated plane); 0 = hs
     window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
-    ksplit : uint   //! the key range of a (head, q tile) cut across this many workgroups, each storing a partial for `FaCm2Comb`; 0 or 1 = one workgroup finishes the tile
-    gated : uint    //! the combine's gate: multiply the sigmoid of the head's gate half into the row (the pass reads its GATED stamp instead)
-    hs : uint       //! the head width, for the combine (the pass reads its HS stamp)
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50), read by the CAP stamps; 0 = none
 }
 
@@ -2723,26 +2720,15 @@ struct FaCm2Args {
 [spirv_per_element, unused_argument(r, c)]
 def facm2_softcap(r, c : uint; v : float; cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
 
-//! a flash partial's rows in the partials plane: the 64-row O tile (HS wide) in the O region, the 64-row (max | denom)
-//! tile in the ML region that follows every O tile - the max tile at column 0, the denom tile at column 64, each
-//! BC wide (64 on the h64 stamp, 32 above), the row 128 wide
-let FA_ML_COLS = 128u
-let FA_ML_DENOM = 64u
-//! the partials plane's O region: `ntiles` (head x q tile x split) tiles of 64 x hs floats; the ML region follows it
-def fa_part_ml_base(ntiles, hs : uint) : uint => ntiles * 64u * hs
-
 // The cm2 flash pass over the f16 K/V shadows: ONE class template over the head size. The head
 // template sizes the eight coopmat typedefs: QACC/QA the q and o tiles (64 x HS), SACC/PA the
 // score tiles (64 x BC), KB/VB the K^T and V steps, ONE the rowsum ones-matrix, OF the f16 store.
-// Split across keys (`ksplit`), a workgroup runs its piece of the key range and stores its
-// unnormalized O tile and its (max | denom) rows into the partials plane for the combine.
 [ |> template_struct_instance]
 class template FaCm2T {
     @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
     @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
     @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
-    @ssbo @binding = 4 part : array<float>       //! the split form's partials; unsplit, any buffer (unwritten)
     @push_constant pa : FaCm2Args
     @template_constant HS : uint = 64u           // the head width
     @template_constant BC : uint = 64u           // the K/V step: 64 at hs 64, 32 above (the head-size cut: K^T, V and the softmax state at 32 columns)
@@ -2753,10 +2739,8 @@ class template FaCm2T {
     [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qtiles = (pa.rows + 63u) / 64u
-        let nsplit = max(pa.ksplit, 1u)
-        let h = gl_WorkGroupID.x / (qtiles * nsplit)
-        let qt = (gl_WorkGroupID.x / nsplit) % qtiles
-        let sp = gl_WorkGroupID.x % nsplit
+        let h = gl_WorkGroupID.x / qtiles
+        let qt = gl_WorkGroupID.x % qtiles
         let q0 = qt * 64u
         let kvh = h / pa.kv_mul
         let kvlen = pa.w0 + pa.rows
@@ -2785,15 +2769,9 @@ class template FaCm2T {
         coopmatFill(mrow, -1.7e38)
         var lrow : SACC
         var o : QACC
-        var kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
         // a sliding layer's first step: the step below the tile's first query's window start
         var j = (pa.window != 0u && pa.w0 + q0 > pa.window) ? ((pa.w0 + q0 - pa.window) / BC) * BC : 0u
-        if (nsplit > 1u) {   // this workgroup's piece of the tile's key range, in whole steps (a piece past the end is empty)
-            let per = ((kmax - j + nsplit - 1u) / nsplit + BC - 1u) / BC * BC
-            let kend = min(kmax, j + (sp + 1u) * per)
-            j = min(kmax, j + sp * per)
-            kmax = kend
-        }
         while (j < kmax) {
             var s : SACC
             var kt : KB
@@ -2828,23 +2806,6 @@ class template FaCm2T {
             coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, BC, kvh * HS, HS)
             o = coopmatMulAdd(pf, vt, o)                                // O = eMdiag*O + P @ V
             j += BC
-        }
-        if (nsplit > 1u) {   // the piece's partial: the unnormalized O tile, then its (max | denom) rows
-            let ntiles = (pa.qd / HS) * qtiles * nsplit
-            let pr = (h * qtiles + qt) * nsplit + sp
-            var tlp : tensorLayout2D
-            tensorLayoutCreate(tlp)
-            tensorLayoutSetDimension(tlp, ntiles * 64u, HS)
-            tensorLayoutSetStride(tlp, HS, 1u)
-            coopmatStoreTensor(o, part, 0u, tlp, pr * 64u, 64u, 0u, HS)
-            var tlm : tensorLayout2D
-            tensorLayoutCreate(tlm)
-            tensorLayoutSetDimension(tlm, ntiles * 64u, FA_ML_COLS)
-            tensorLayoutSetStride(tlm, FA_ML_COLS, 1u)
-            let mlb = fa_part_ml_base(ntiles, HS)
-            coopmatStoreTensor(mrow, part, mlb, tlm, pr * 64u, 64u, 0u, BC)
-            coopmatStoreTensor(lrow, part, mlb, tlm, pr * 64u, 64u, FA_ML_DENOM, BC)
-            return
         }
         var ld : QACC
         coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@facm2_smear)
@@ -2995,90 +2956,6 @@ class FaCm2H512 : FaCm2H512T {
 
 [vk_dispatch(name = "fa_cm2_h512_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H512F16 : FaCm2H512T {
-    typedef OT = float16
-    override OUT16 = true
-}
-
-//! the split flash pass's combine: one workgroup a (head, q tile), the split partials aligned by their row maxes,
-//! summed, normalized, gated where the head carries a gate half, and stored as the tile's rows (the partials
-//! plane's layout is the pass's: O tiles, then (max | denom) tiles)
-[ |> template_struct_instance]
-class template FaCm2CombT {
-    @ssbo @binding = 0 qpanel : array<float>   //! the q rows, for the gate half
-    @ssbo @binding = 1 part : array<float>
-    @ssbo @binding = 2 outp : array<OT>        //! attention out plane (rows x qd)
-    @push_constant pa : FaCm2Args
-    @template_constant OUT16 : bool = false
-    @workgroup wm : float[64]   //! the tile's aligned row maxes
-    @workgroup wl : float[64]   //! ... and denominators
-
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
-    def run {
-        let hs = pa.hs
-        let qtiles = (pa.rows + 63u) / 64u
-        let nsplit = max(pa.ksplit, 1u)
-        let h = gl_WorkGroupID.x / qtiles
-        let qt = gl_WorkGroupID.x % qtiles
-        let tid = gl_LocalInvocationID.x
-        let hsz = pa.qhs == 0u ? hs : pa.qhs
-        let ntiles = (pa.qd / hs) * qtiles * nsplit
-        let mlb = fa_part_ml_base(ntiles, hs)
-        let pr0 = (h * qtiles + qt) * nsplit
-        if (tid < 64u) {   // row tid's max and denom over the splits
-            var m = -1.7e38
-            var s = 0u
-            while (s < nsplit) {
-                m = max(m, part[mlb + ((pr0 + s) * 64u + tid) * FA_ML_COLS])
-                s++
-            }
-            var l = 0.0
-            s = 0u
-            while (s < nsplit) {
-                let mb = mlb + ((pr0 + s) * 64u + tid) * FA_ML_COLS
-                l += part[mb + FA_ML_DENOM] * exp(part[mb] - m)
-                s++
-            }
-            wm[tid] = m
-            wl[tid] = l
-        }
-        barrier()
-        let qstride = pa.qstride == 0u ? pa.qd : pa.qstride
-        var idx = tid
-        while (idx < 64u * hs) {   // the tile's (row, dim) pairs, dims fastest
-            let r = idx / hs
-            let d = idx % hs
-            let row = qt * 64u + r
-            if (row < pa.rows) {
-                var acc = 0.0
-                var s = 0u
-                while (s < nsplit) {
-                    let pr = pr0 + s
-                    let mv = part[mlb + (pr * 64u + r) * FA_ML_COLS]
-                    acc += part[(pr * 64u + r) * hs + d] * exp(mv - wm[r])
-                    s++
-                }
-                var o = acc / wl[r]
-                if (pa.gated != 0u) {
-                    o = o / (1.0 + exp(-qpanel[row * qstride + h * hsz + hs + d]))
-                }
-                static_if (OUT16) {
-                    outp[row * pa.qd + h * hs + d] = float16(o)
-                } else {
-                    outp[row * pa.qd + h * hs + d] = o
-                }
-            }
-            idx += 256u
-        }
-    }
-}
-
-[vk_dispatch(name = "fa_cm2_comb_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2Comb : FaCm2CombT {
-    typedef OT = float
-}
-
-[vk_dispatch(name = "fa_cm2_comb_f16_cls", grid = "wgs", params = "wgs : int64")]
-class FaCm2CombF16 : FaCm2CombT {
     typedef OT = float16
     override OUT16 = true
 }

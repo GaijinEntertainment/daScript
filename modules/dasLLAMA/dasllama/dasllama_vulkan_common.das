@@ -2416,9 +2416,6 @@ struct RDec {
     // cm2 flash attention (armed by pf_setup when the device carries the fa trio and the mirror
     // is f16 — the fa tiles bind the mirrors directly, no shadow planes)
     pf_facm2 : bool
-    pf_fa_nsplit : int64          //! the flash tile's key splits a (head, q tile) (`pf_fa_nsplit`); 1 = unsplit
-    pf_fapart : uint64            //! the split flash pass's partials plane (O tiles, then (max | denom) tiles), sized to the split
-    pf_fa_comb_set, pf_fa_comb_f16_set : VkDescriptorSet   //! the combine over the partials into pf_attn (f32) or pf_af (f16), one set for every layer (the head width rides the push)
     pf_logits_host : HostBuf
     pf_midx_host : HostBuf        //! the last MoE layer's picks, read back for the profile's bucket report
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
@@ -2477,15 +2474,6 @@ let F16G_SPLIT = 8l    //! its k chunks into the split-k scratch
 def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && dim % (int64(F16G_BK) * F16G_SPLIT) == 0l
 
 var g_rd : RDec?
-
-let FA_NSPLIT_MAX = 8l   //! the flash tile's key splits a (head, q tile), at most
-
-//! the window chain's key splits a (head, q tile): enough workgroups over a whole window to cover the card's SM count twice, at most FA_NSPLIT_MAX; one where the count is unknown or the tiles alone cover it
-def pf_fa_nsplit(n_heads, qtiles, sm_count : int64) : int64 {
-    let tiles = n_heads * qtiles
-    if (sm_count <= 0l || tiles <= 0l || tiles >= 2l * sm_count) return 1l
-    return min((2l * sm_count + tiles - 1l) / tiles, FA_NSPLIT_MAX)
-}
 
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
 
