@@ -1580,10 +1580,16 @@
     between the August 30 record and master's head, not in a branch. The short-clip bias (a
     larger loss the shorter the clip) points at per-call overhead - a wake, a prep, or a
     kernel winner that lost its small-shape arm - rather than a GEMM's steady-state rate.
-    Unquirked: first replicate the August 30 numbers - a worktree at the recording commit
-    (013a151f4) beside master's head, the same cell on both, side by side on a quiet box - then
-    bisect the CPU ASR cell (parakeet jfk.wav, 11 s) across the merges between them under one
-    manifest, and re-record the board.
+    Replicated on the M5 box after a reboot with a worktree at the recording commit (013a151f4)
+    beside master's head, the parakeet jfk.wav cell interleaved, eight reps a run, five runs a
+    tree: best reps equal (146 vs 143 ms), medians 158.5 vs 162.5 (2.5%). An 11% step would show
+    in one run of eight; none did. The spread is placement: the box's six Super cores stay
+    saturated while the twelve Performance cores take 35% of the run when fast and 55% when
+    slow, per rep, on both trees and both affinity modes. The oracle's shortfall is a record
+    minted as a best-of-two on a fresh box read against a placement-scattered box; the residual
+    2.5% between the two commits sits inside that scatter and no bisect resolves it. Unquirked:
+    the oracle's CPU rows carry a placement-aware instrument (the median of many reps, the
+    Performance-cluster residency beside it) before any CPU row is re-recorded or gated.
 141. **Four tower sites release a pool buffer under a byte count that is not its acquire's.** In
     `dasllama_metal_tower.das` the K panel `bk` is acquired at `bytes_rowk` (the 64-padded key
     rows) and released at `bytes_row` / `bytes_rowp` (the 32-padded rows) at four self-attention
