@@ -67,9 +67,8 @@ l tile (256-row columns) and the m tile (128-row columns) each take some number 
 grid runs in whole waves over the device's SM count, so a grid's wave count times that SM count is
 the slots it allocates. The pick takes the tile whose workgroups fill the larger share of its
 allocated slots, the two ratios compared by cross-multiplying; the m tile wins only when its share
-beats l's by more than a quarter, since l's bigger tile carries twice the arithmetic intensity (the
-margin that names the measured winner at eighteen gemma shapes on the RTX PRO 4500: E4B's
-16384-wide gate l 424 us against m 474, E2B's 6144-wide gate l 126 against m 112). Four rules sit
+beats l's by more than a quarter, since l's bigger tile carries twice the arithmetic intensity (the margin naming the
+measured winner at eighteen gemma shapes on the RTX PRO 4500: E4B's 16384-wide gate l 424 us against m 474, E2B's 6144-wide gate l 126 against m 112). Four rules sit
 ahead of the comparison: a region of 64 rows or fewer takes the s tile (32-row columns - the per-op
 tier's MoE expert-bucket shape, where a 512-token window routes ~32 rows to each of 128 experts on
 average), a window of 128 rows or fewer takes m (the l column would run half empty), a GEMM whose m columns fill a quarter of the SMs or fewer takes s (gemma-3-1b's k and v, 8 m tiles on 82 SMs: 805 -> 574 us a window), and a device
@@ -112,8 +111,7 @@ its 27 on the RTX 5080 (`cold:k6`'s flush row), and four copies run its m tiles 
 **The dispatch group decides whether k splits; the role's own grid decides into how many.** With
 long K (2048 and up), a group that fills at most half the SMs splits each of its roles' reduction
 across f32 partial planes that `SplitKReduce` sums, into as many chunks as fill the device with the
-role alone (SM count over its workgroups); a group past half the SMs runs whole; eight
-is the ceiling, three the floor (two chunks never pay: gemma-3-1b's 36-tile down on 82 SMs read 176 us in two against 157 whole - the reduce and the halved k loop cost more than the second wave returns; three over a group past half the SMs lose too - E2B's 48-tile down at K 12288 365 us against 268 whole, E4B's 80-tile down 753 against 400, the 12B's 120-tile down 1198 against 587: the split arm's loop bounds are not literal, so its k loop runs rolled); a chunk is 256-aligned, and a count whose last chunk would be empty drops by one.
+role alone (SM count over its workgroups); a group past half the SMs runs whole; eight is the ceiling, three the floor (two chunks never pay: gemma-3-1b's 36-tile down on 82 SMs read 176 us in two against 157 whole; three over a group past half the SMs lose too - E2B's 48-tile down at K 12288 365 against 268, the 12B's 120-tile down 1198 against 587 - since the split arm's loop bounds are not literal and its k loop runs rolled); a chunk is 256-aligned, and a count whose last chunk would be empty drops by one.
 The group is the role's workgroups plus its chain neighbours' - q with k and v, gate with up -
 because the hazard-mask rail lets independent roles co-run, while every split role serializes
 through the one scratch plane (`VHZ_SK`): a group that fills the device runs whole and co-runs; one
