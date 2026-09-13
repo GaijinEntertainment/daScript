@@ -2909,6 +2909,11 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
     let lwgs = ((cnt + 255) / 256) * ((d + 127) / 128) * nsplit
     let mwgs = ((cnt + 127) / 128) * ((d + 127) / 128) * nsplit
     let ck = ((n + nsplit - 1) / nsplit + 255) & ~255   // the 256-aligned chunk the serving pick takes
+    if (ck * (nsplit - 1) >= n) {   //! a chunk that starts past K: the serving pick sheds the split, and a tile handed one never finishes
+        print("{name} split{nsplit} (chunk {ck}): the last chunk starts past K {n} - the pick sheds this split, skipped\n")
+        delete b
+        return
+    }
     var sched : array<uint>
     sched |> resize(4 + lwgs)
     sched[2] = uint(cnt)   // one region: [wblk0 = 0, row0 = 0, cnt, wg0 = 0], map all zeros; the tile reads its split plane and tile off its own workgroup id
@@ -3685,7 +3690,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -3921,6 +3926,34 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             run_shape_split("g3 down", 1152, 6912, 512, sk)
         }
         run_shape_split("g3 wo  ", 1152, 1024, 512, 2)
+        return
+    }
+    if (only == "gemma") {
+        // the other gemma carriers' q8 role shapes at 512 tokens: E2B (dim 1536, hidden 6144 / 12288, qd 2048), E4B (2560, 8192 / 16384, 2048),
+        // gemma-2-2b (2304, 9216, 2048) and gemma-4-12B (3840, 15360, 4096) - the tile each shape wants
+        run_shape("e2b gate6k ", 6144, 1536, 512)
+        run_shape("e2b gate12k", 12288, 1536, 512)
+        run_shape("e2b down6k ", 1536, 6144, 512)
+        run_shape("e2b down12k", 1536, 12288, 512)
+        run_shape("e2b q      ", 2048, 1536, 512)
+        run_shape("e2b wo     ", 1536, 2048, 512)
+        run_shape("e4b gate8k ", 8192, 2560, 512)
+        run_shape("e4b gate16k", 16384, 2560, 512)
+        run_shape("e4b down8k ", 2560, 8192, 512)
+        run_shape("e4b down16k", 2560, 16384, 512)
+        run_shape("e4b q      ", 2048, 2560, 512)
+        run_shape("e4b wo     ", 2560, 2048, 512)
+        run_shape("g2 gate    ", 9216, 2304, 512)
+        run_shape("g2 down    ", 2304, 9216, 512)
+        run_shape("g2 q       ", 2048, 2304, 512)
+        run_shape("g12 gate   ", 15360, 3840, 512)
+        run_shape("g12 down   ", 3840, 15360, 512)
+        run_shape("g12 q      ", 4096, 3840, 512)
+        for (sk in [3, 4]) {
+            run_shape_split("e2b down12k", 1536, 12288, 512, sk)
+            run_shape_split("e4b down16k", 2560, 16384, 512, sk)
+            run_shape_split("g12 down   ", 3840, 15360, 512, sk)
+        }
         return
     }
     if (only == "small") {
