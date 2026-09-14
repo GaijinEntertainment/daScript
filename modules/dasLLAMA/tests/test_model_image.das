@@ -2735,8 +2735,8 @@ def test_devw_bake_tables(t : T?) {
         tt |> equal(long_length(m.devwf16_n), 2l, "nor the length table")
         // an expert stack's slice (the per-expert fused gate/up split, or a whole down stack) has no
         // dev-W reader: the routed block reads the quantized planes, so the bake leaves it out. The
-        // routed block's SHARED expert reaches dev-W through enc_gemm_mm like any dense site, and
-        // the exclusion's "_exps.weight" suffix is what keeps it in
+        // routed block's SHARED expert reaches dev-W through enc_gemm_mm like any dense site: the
+        // exclusion matches "_exps.weight" and not "_shexp.weight", so the shared expert still bakes
         var routed <- [ FillJob(name = "blk.0.attn_q.weight", woff = 64l, n = 256l, src_off = 0l, fmt = KqFmt.q8),
                         FillJob(name = "blk.0.ffn_gate_shexp.weight", woff = 512l, n = 128l, src_off = 0l, fmt = KqFmt.q8),
                         FillJob(name = "blk.0.ffn_gate_up_exps.weight", woff = 1024l, n = 256l, src_off = 0l, fmt = KqFmt.q8),
