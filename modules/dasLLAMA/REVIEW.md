@@ -124,6 +124,9 @@ serves the same weights and shape, is a defect - call that twin instead.** A sit
 stay f32 for another reason is ledgered on its own file's sec.1 charter line in an
 `ARCHITECTURE_*.md` companion, not commented into compliance.
 
+**A caller never re-checks a guard its callee checks - drop the caller's copy and let the
+callee's check stand.**
+
 **A boot-path prompt (code that runs at startup, before the first request) that reads stdin
 without first proving both stdin and stdout are terminals is a defect - emit the question as
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.

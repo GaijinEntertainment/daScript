@@ -49,9 +49,6 @@ no shared file exists) - never a second copy: two spellings that can drift apart
 edit to one.** An enum-and-int pair of one predicate inside one file, and a test's CPU oracle
 that restates the arithmetic, are not copies.
 
-**A caller never re-checks a guard its callee checks - drop the caller's copy and let the
-callee's check stand.**
-
 **A piece two folders outside each other both need lands in the folder whose `ARCHITECTURE.md`
 sec.1 charter names the concern.**
 
@@ -103,9 +100,6 @@ program root forgot.
 **A `dasllama/` module whose `[init]` registers a hook the engine dispatches through gets its
 side-effect require in the same change that adds it** - a registration no engine file reaches
 never fires for a consumer of the `dasllama.das` facade.
-
-**An architecture file (`dasllama/dasllama_arch_*.das`) that changes a forward loop, or tests a
-family name on a shared path, is a defect - it carries declarative registration only.**
 
 **Platform-specific code - a device call, a `require` of a backend module, or a read of a
 backend's own state other than its `g_env_<backend>` knobs - in an engine file (`dasllama/`) lands only

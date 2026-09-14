@@ -8,9 +8,8 @@ docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**A hand-written Vulkan pipeline build is a defect, and so is weakening the `REVIEW.das` check
-that reports a `vkCreateComputePipelines(` call in `dasllama/`, `harness/` and `tests/` - a
-Vulkan pipeline is created only by a `[vk_dispatch]`-generated `ensure_*`.**
+**Weakening any check in the `REVIEW.das` beside this file is a defect.** Each check's error text
+names the rule it enforces; the checklist does not restate them.
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - adds every piece of state the family keeps per
@@ -122,18 +121,12 @@ member a `@template_gate` admits on the stamp is emitted whether or not its body
 (`harness/vk_gemm_probe.das`) or a `tests/test_gpu_resident_hybrid.das` run on a model in that
 format.**
 
-**Weakening `check_cm2_ladder_sets` in `REVIEW.das` (beside this file) is a defect.**
-
-**Weakening `check_cm2_stamp_tiles` in `REVIEW.das` (beside this file) is a defect.**
-
 **A diff that retires a shape a fixture under `tests/spirv/` (repo root) declares replaces that
 fixture's declaration in the same change.** The emitter suite validates the shapes it emits; a
 fixture left on a retired shape validates nothing the stamp runs.
 
 **A kq superblock format (`kq_sb`) that ships a KHR instantiation runs its KHR arm in that format's kernel cell,
 in the same change.**
-
-**Weakening `check_khr_stage16_abstract` in `REVIEW.das` (beside this file) is a defect.**
 
 **A kernel body that calls a `[spirv_decode]` method directly passes the plane element itself
 (`decode(wq[i], ...)`), never a local copy of it (`let blk = wq[i]` then `decode(blk, ...)`).**
@@ -178,5 +171,3 @@ prepare fails on the path that skipped the ensure.
 `dasllama/dasllama_vulkan_prefill.das` - updates `pf_roles_per_layer` and that file's
 `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
-
-**Weakening `check_ar_max_dim_triple` in `REVIEW.das` (beside this file) is a defect.**
