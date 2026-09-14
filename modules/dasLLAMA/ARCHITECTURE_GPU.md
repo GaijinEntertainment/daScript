@@ -69,7 +69,12 @@ that a question answered for one backend has an obvious address in the other. Th
   the offset-bound head restride, and encodes one `enc_add` at the slice offset after each
   tapped layer's residual - no new kernel (the CPU-side split, `ds_split_quantum`, survives
   as the CPU-loop fallback and the warm/MTP edge); an override without the seat declines
-  deepstack quanta by name, so Metal serves them and Vulkan does not.
+  deepstack quanta by name, so Metal serves them and Vulkan does not. The E-series PLE pre-step
+  is two gate seats, one per direction: `register_ple_gpu_gate` for a prefill override that builds
+  the side input on device off the stashed token ids (Metal and Vulkan register it),
+  `register_ple_gpu_decode_gate` for a decode override that gathers the token's row on device
+  (Vulkan alone); the hub skips the CPU pre-step only for the direction whose gate answers yes,
+  so the Metal decode keeps reading the CPU-built side input.
 - **Per-layer FFN widths (MatFormer E-series, at most two - `ffn_second_hidden`) serve on Metal
   and on the Vulkan whole-model driver**: the Metal decode and prefill drivers bind the width per
   layer (dense trunks, no MTP; batch keeps the layer-0 hoist behind its uniformity decline), and

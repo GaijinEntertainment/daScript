@@ -268,16 +268,23 @@ def active_prefill_override : string {
     return g_prefill_override_name
 }
 
-//! The GPU-PLE pre-step gate: a prefill override that can ALSO build the E-series PLE side input
-//! on its device registers a probe here. On true, forward_prefill stashes the token rows and skips
-//! the CPU gather+finish; the override consumes the stash (ple_pre_prefill = late-decline fallback).
+//! The GPU-PLE pre-step gates, one per direction: a prefill override that builds the E-series PLE
+//! side input on device registers the prefill gate, a decode override that gathers the token's row
+//! on device registers the decode gate; on true the hub skips the CPU pre-step for that call only.
 typedef PleGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
 var private g_ple_gpu_gate : PleGpuGateFn
 var private g_ple_gpu_gate_set = false
+var private g_ple_gpu_decode_gate : PleGpuGateFn
+var private g_ple_gpu_decode_gate_set = false
 
 def register_ple_gpu_gate(fn : PleGpuGateFn) {
     g_ple_gpu_gate = fn
     g_ple_gpu_gate_set = true
+}
+
+def register_ple_gpu_decode_gate(fn : PleGpuGateFn) {
+    g_ple_gpu_decode_gate = fn
+    g_ple_gpu_decode_gate_set = true
 }
 
 typedef EmbedGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
@@ -4504,8 +4511,8 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: build this token's per-(layer) side input before the stack
         let ts_ple = prof_ticks()
-        if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, 1l, pos)) {
-            s.ple_gpu_pending = true   //! the driver gathers the row off `token` itself and finishes the pre-step on device
+        if (g_ple_gpu_decode_gate_set && invoke(g_ple_gpu_decode_gate, t, s, 1l, pos)) {
+            s.ple_gpu_pending = true   //! the decode override gathers the row off `token` itself and finishes the pre-step on device
         } else {
             ple_pre_decode(t, s, token)
         }

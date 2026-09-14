@@ -453,3 +453,12 @@ the M5 Max classifier (d=151936) by 6%, so that site takes the slower form there
 wants the row form at n=2048 and d=4096 where the M5 wants the split (sec.9). Unquirked: a
 two-axis pick over n and d, raced per box in `metal_tensor_race_decode` at both the projection
 and the classifier widths. The bar is no loss on either box.
+
+## 13. The Metal decode builds the E-series PLE side input on the CPU
+
+The Metal decode reads the side input `ple_pre_decode` builds on the host - the token row's
+gather plus the model_proj GEMV (E2B 1536x8960 bf16, E4B 27 MB) and its norm - between the step
+wait and the next commit, while the Vulkan token command gathers the row and projects on device
+(`register_ple_gpu_decode_gate`). Unquirked: a decode-side twin of the prefill's `MetalPleGatherQ8`
++ `pf_enc_bf16_mm` + `MetalPleFinish` chain at one position, registered as the Metal decode gate.
+The bar is the E-series tg128 on both boxes, the served-pipeline fixture green.
