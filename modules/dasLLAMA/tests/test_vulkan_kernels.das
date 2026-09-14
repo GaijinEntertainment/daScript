@@ -247,12 +247,14 @@ def test_vkd_lens_readonly_gate(t0 : T?) {
     }
 }
 
-def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {
+//! one f16 GEMM shape through the cm2 tile (direct and split-k) or, under `khr`, the KHR tile (direct only; its output plane carries the fragment's spare rows past `rows`, as the prefill's does)
+def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         {
             let nsplit = 8
             let ybase = 16   // the rows land past a header the kernels must leave alone
-            let yn = ybase + rows * d
+            let rows_alloc = khr ? ((rows + 15) / 16) * 16 : rows
+            let yn = ybase + rows_alloc * d
             var wh : array<float16>
             var xh : array<float16>
             wh |> resize(d * n)
@@ -281,19 +283,24 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {
             unsafe {
                 upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
                 upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
-                var sd = set_f16_gemm_cm2_cls(fixed_array(wd, xd, yd), fixed_array(w_bytes, x_bytes, y_bytes), fixed_array(1u, 2u, 4u))
-                var sp = set_f16_gemm_cm2_cls(fixed_array(wd, xd, pd), fixed_array(w_bytes, x_bytes, part_bytes), fixed_array(1u, 2u, 8u))
-                var sr = set_splitk_reduce_cls(fixed_array(pd, yd2), fixed_array(part_bytes, y_bytes), fixed_array(8u, 16u))
                 var raw = alloc_cmd()
                 let begin = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw, begin), null)
                 var h : VkHaz
                 var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
-                enc_f16_gemm_cm2_cls(raw, h, sd, pc, tiles)
-                var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / nsplit))
-                enc_f16_gemm_cm2_cls(raw, h, sp, pc2, tiles * int64(nsplit))
-                var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit), ybase = uint(ybase))
-                enc_splitk_reduce_cls(raw, h, sr, pcr, int64(rows * d + 1023) / 1_024l)
+                if (khr) {
+                    var sk = set_f16_gemm_khr_cls(fixed_array(wd, xd, yd), fixed_array(w_bytes, x_bytes, y_bytes), fixed_array(1u, 2u, 4u))
+                    enc_f16_gemm_khr_cls(raw, h, sk, pc, int64(((rows + 63) / 64) * ((d + 63) / 64)))
+                } else {
+                    var sd = set_f16_gemm_cm2_cls(fixed_array(wd, xd, yd), fixed_array(w_bytes, x_bytes, y_bytes), fixed_array(1u, 2u, 4u))
+                    var sp = set_f16_gemm_cm2_cls(fixed_array(wd, xd, pd), fixed_array(w_bytes, x_bytes, part_bytes), fixed_array(1u, 2u, 8u))
+                    var sr = set_splitk_reduce_cls(fixed_array(pd, yd2), fixed_array(part_bytes, y_bytes), fixed_array(8u, 16u))
+                    enc_f16_gemm_cm2_cls(raw, h, sd, pc, tiles)
+                    var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / nsplit))
+                    enc_f16_gemm_cm2_cls(raw, h, sp, pc2, tiles * int64(nsplit))
+                    var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit), ybase = uint(ybase))
+                    enc_splitk_reduce_cls(raw, h, sr, pcr, int64(rows * d + 1023) / 1_024l)
+                }
                 vhz_dep(raw, h, 4u | 16u, 0u, true)
                 cmd_copy_range(raw, yd, 0l, host.buf, 0l, y_bytes)
                 cmd_copy_range(raw, yd2, 0l, host.buf, y_bytes, y_bytes)
@@ -316,8 +323,8 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int) {
             }
             let tol = amax * 2e-5   //! both operands are f16-exact, so every product is exact in f32 and the arms differ by f32 reassociation over K alone; 2e-5 of the max holds the cell's shapes with the poison leg red
             let poison = tol * 4.0
-            let arms = fixed_array("direct", "split-k")
-            for (arm in range(2)) {
+            let arms = fixed_array(khr ? "khr direct" : "direct", "split-k")
+            for (arm in range(khr ? 1 : 2)) {
                 let base = arm * yn
                 var header_ok = true
                 for (i in range(ybase)) {
@@ -357,6 +364,28 @@ def test_vkd_f16_gemm(t0 : T?) {
             f16_gemm_cell(t, "ba-like", 32, 512, 70)
             f16_gemm_cell(t, "router-like", 200, 1024, 130)
             f16_gemm_cell(t, "odd router", 61, 512, 41)   //! rows x d off every 4-multiple: the reduce's element-guarded tail
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+// the KHR twin (the per-layer-embedding projection on a card without cm2): whole K, d and n 16-multiples, rows off the fragment
+[test]
+def test_vkd_f16_gemm_khr(t0 : T?) {
+    t0 |> run("the small f16 GEMM on KHR fragments == the f32 dot, direct (the E-series projection's shapes)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!(g_gpu.has_coopmat && khr_kq_tile_on()) || !ensure_f16_gemm_khr_cls()) {
+                t |> skip("device lacks KHR cooperative matrices at subgroup 32")
+                return
+            }
+            f16_gemm_cell(t, "ba-like", 32, 512, 70, true)
+            f16_gemm_cell(t, "ple-like", 256, 1536, 77, true)   //! E2B's projection geometry over one layer slice, rows off the 16-row fragment
+            f16_gemm_cell(t, "one fragment", 16, 64, 16, true)
         } else {
             t |> skip("dasVulkan not present")
         }

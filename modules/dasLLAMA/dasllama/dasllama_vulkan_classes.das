@@ -8576,6 +8576,49 @@ class F16GemmCm2 {
     }
 }
 
+//! the same small f16 x f16 GEMM on KHR fragments for a card without cm2: whole K only, a 64 x 64 output tile a workgroup, each of the four subgroups a 32 x 32 quarter as four fragments, the x and w^T fragments loaded straight from the planes (n and d 16-multiples; rows past `rows` land in the plane's spare rows)
+[vk_dispatch(name = "f16_gemm_khr_cls", grid = "wgs", params = "wgs : int64")]
+class F16GemmKhr {
+    @ssbo @binding = 0 @role = "weight" w : array<float16>
+    @ssbo @binding = 1 xf16 : array<float16>
+    @ssbo @binding = 2 y : array<float>
+    @push_constant pa : F16GemmArgs
+
+    [spirv_kernel(local_size_x = 128, name = "f16_gemm_khr_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+    def run {
+        let wtiles = (pa.d + 63u) / 64u
+        let t0 = (gl_WorkGroupID.x / wtiles) * 64u
+        let m0 = (gl_WorkGroupID.x % wtiles) * 64u
+        let sg = gl_LocalInvocationID.x / 32u
+        let tr = t0 + (sg / 2u) * 32u
+        let mc = m0 + (sg % 2u) * 32u
+        var acc : coopmatAcc_f32_16x16[4]
+        var k = 0u
+        while (k < pa.n) {
+            var a0 : coopmatA_f16_16x16
+            var a1 : coopmatA_f16_16x16
+            coopmatLoad(a0, xf16, tr * pa.n + k, int(pa.n), 0)
+            coopmatLoad(a1, xf16, (tr + 16u) * pa.n + k, int(pa.n), 0)
+            var b0 : coopmatB_f16_16x16
+            var b1 : coopmatB_f16_16x16
+            coopmatLoad(b0, w, pa.woff + mc * pa.n + k, int(pa.n), 1)
+            coopmatLoad(b1, w, pa.woff + (mc + 16u) * pa.n + k, int(pa.n), 1)
+            acc[0] = coopmatMulAdd(a0, b0, acc[0])
+            acc[1] = coopmatMulAdd(a0, b1, acc[1])
+            acc[2] = coopmatMulAdd(a1, b0, acc[2])
+            acc[3] = coopmatMulAdd(a1, b1, acc[3])
+            k += 16u
+        }
+        for [unroll] (f in range(4)) {
+            let r = tr + uint(f / 2) * 16u
+            let c = mc + uint(f % 2) * 16u
+            if (r < pa.rows && c < pa.d) {
+                coopmatStore(acc[f], y, int(pa.ybase + r * pa.ystride + c), int(pa.ystride), 0)
+            }
+        }
+    }
+}
+
 // ===== rope + KV store + qk-norm =====
 
 struct QkRmsArgs {

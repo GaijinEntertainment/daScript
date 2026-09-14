@@ -1069,13 +1069,16 @@ def private pf_setup {
         g_rd.pf_ple = make_device_buf(np * all * 4l)
         if (g_rd.ple_gpu) {
             // the pre-step on device: f16 embedding rows -> the projected plane -> the side rows finished in place
-            verify(ensure_f16cvt_cls() && ensure_f16_gemm_cm2_cls() && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
+            let ple_cm2 = g_gpu.coopmat_mode == COOPMAT_CM2   //! the projection's tile: cm2 where the mode has it, the KHR fragments tile otherwise
+            verify(ensure_f16cvt_cls() && (ple_cm2 ? ensure_f16_gemm_cm2_cls() : ensure_f16_gemm_khr_cls()) && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
             g_rd.pf_plexf = make_device_buf(np * dim * 2l)
             g_rd.pf_plep = make_device_buf(np * all * 4l)
             g_rd.pf_ple_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_plexf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_X, VHZ_SK))
-            g_rd.pf_ple_gemm_set = set_f16_gemm_cm2_cls(fixed_array(g_rd.ple_w16_dev, g_rd.pf_plexf, g_rd.pf_plep),
-                fixed_array(g_rd.ple_w16_bytes, np * dim * 2l, np * all * 4l), fixed_array(0u, VHZ_SK, VHZ_MRT))
+            let gbufs = fixed_array(g_rd.ple_w16_dev, g_rd.pf_plexf, g_rd.pf_plep)
+            let gsizes = fixed_array(g_rd.ple_w16_bytes, np * dim * 2l, np * all * 4l)
+            let ggbits = fixed_array(0u, VHZ_SK, VHZ_MRT)
+            g_rd.pf_ple_gemm_set = ple_cm2 ? set_f16_gemm_cm2_cls(gbufs, gsizes, ggbits) : set_f16_gemm_khr_cls(gbufs, gsizes, ggbits)
             //! the residual step's kernel over [np x layers] rows of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2); its normed output lands in the projected plane, unread
             g_rd.pf_ple_ar_set = set_cls_ar(fixed_array(g_rd.pf_ple, g_rd.pf_plep, g_rd.ple_pnorm_dev, g_rd.pf_plep),
                 fixed_array(np * all * 4l, np * all * 4l, g_rd.ple * 4l, np * all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
@@ -1390,13 +1393,17 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows :
 
 //! The pre-step's projection on device (the cm2 route): the per-layer model projection as an f16 mirror and its norm row; the
 //! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before layer 0
+//! the per-layer-embedding projection's GEMM route: the cm2 f16 tile where the mode has it, else the KHR fragments tile (whole K, `dim` and the projected width 16-multiples)
+def ple_proj_shape_ok(dim, all : int64) : bool
+    => f16g_shape_ok(dim) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on() && dim % 16l == 0l && all % 16l == 0l)
+
 def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return false
     }
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_proj before set_ple")
-    if (!f16g_shape_ok(g_rd.dim) || long_length(w) != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready) {
-        return false   //! the f16 GEMM wants the cm2 tile and a 512-multiple width; the sets build with the prefill buffers
+    if (!ple_proj_shape_ok(g_rd.dim, all) || long_length(w) != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready) {
+        return false   //! the f16 GEMM wants a coopmat tile and a width its tile divides; the sets build with the prefill buffers
     }
     var half : array<uint16>
     half |> reserve(long_length(w))   // E4B: 27.5M halves - the guard wants the final size reserved first
@@ -1582,7 +1589,11 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                 enc_f16cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
                 var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
-                enc_f16_gemm_cm2_cls(raw, h, g_rd.pf_ple_gemm_set, pcg, ((wlen + 127l) / 128l) * ((all + 127l) / 128l))
+                if (g_gpu.coopmat_mode == COOPMAT_CM2) {
+                    enc_f16_gemm_cm2_cls(raw, h, g_rd.pf_ple_gemm_set, pcg, ((wlen + 127l) / 128l) * ((all + 127l) / 128l))
+                } else {
+                    enc_f16_gemm_khr_cls(raw, h, g_rd.pf_ple_gemm_set, pcg, ((wlen + 63l) / 64l) * ((all + 63l) / 64l))
+                }
                 var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
                 enc_cls_ar(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
             }

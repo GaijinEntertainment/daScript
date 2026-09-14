@@ -331,7 +331,9 @@ router logits, the deltanet beta/alpha rows) to the f32 dot of the same f16 valu
 shapes and one off every 4-multiple (the reduce's element-guarded tail), the direct store at a
 base and the eight-chunk split with the reduce at the same base, the header under the base kept
 as the sentinel and every bar with its added-value poison; it skips on a device without the cm2
-tile family, the only tile the class rides. `test_vkd_dn_family` holds the deltanet conv, the
+tile family, the only tile the class rides. `test_vkd_f16_gemm_khr` runs the same fixture's direct
+arm through the KHR twin (the E-series projection off cm2) at three shapes, one with rows off the
+16-row fragment, wherever the device has KHR cooperative matrices at subgroup 32. `test_vkd_dn_family` holds the deltanet conv, the
 fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the step's one-part
 and two-part state columns, the scan's four- and eight-lane clusters); `test_vkd_dn_scan_narrow`
 runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometry - 512 rows,
