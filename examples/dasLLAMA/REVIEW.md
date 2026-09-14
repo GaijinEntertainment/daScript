@@ -4,7 +4,7 @@
 `ARCHITECTURE.md`.
 
 A browser example is a subfolder here with a `web_shell.html` (`ARCHITECTURE.md` sec. 2); the
-rules below bind browser examples.
+rules below bind browser examples; a rule naming `library/` binds that folder instead.
 
 **A browser example reads its input inside its own frame - a `glfwSet*Callback` written in
 `.das` is a defect; an example that draws its own text polls each input every frame and
@@ -35,3 +35,14 @@ smoke tests match witness lines as substrings, so the words and their order are 
 location that cannot move - a Hugging Face repository, or a repo-relative path in this repository
 under `tree` - never a machine-local path or a branch name.** The deploy fetches by that name and
 refuses a file whose hash moved (`ARCHITECTURE.md` sec. 3.4).
+
+**A diff that changes how `library/` emits its standalone C++ context keeps `--disable-module
+dasLLVM` on that command.** The tune framework is a macro module with no AOT form and a
+standalone context links no interpreter, so with dasLLVM present the emission stops on it and
+writes nothing (`ARCHITECTURE.md` sec. 3.8).
+
+**A diff that adds an entry point to `library/dasllama_lib.das` gives it `[export_c]` and a
+result `daslib/c_api_header.das` can spell in C - a scalar, a string, a pointer, an enum, a
+vector or a POD struct, never an array, a fixed array, a table or a tuple.** An `[export_c]`
+whose signature that describer refuses is a hard emit error, not a skipped export
+(`ARCHITECTURE.md` sec. 3.8).

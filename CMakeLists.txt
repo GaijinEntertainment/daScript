@@ -1652,6 +1652,10 @@ if (NOT ${DAS_TOOLS_DISABLED})
     # `daslang -lib` libraries bound back into daslang through generated [extern] bindings.
     add_subdirectory(examples/c_api_library)
 
+    # dasLLAMA behind a C ABI through both standalone backends, driven from C, C++ and daslang.
+    # After the modules, which is where DAS_LLAMA_INCLUDED is set.
+    add_subdirectory(examples/dasLLAMA/library)
+
 endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.

@@ -8,8 +8,9 @@ require daslib/strings_boost
 
 // Drift detector for dasLLAMA program roots (tutorials, examples, server tools). Two invariants
 // this tree has broken before and repaired file by file:
-//  1. a program root that requires dasllama/ and exports main declares `options stack = 524288` —
-//     a required module cannot raise the program's stack, and the 16K default overflows;
+//  1. a program root that requires dasllama/ and exports main - or, for a library root, carries
+//     [export_c] entry points instead - declares `options stack = 524288` — a required module
+//     cannot raise the program's stack, and the 16K default overflows;
 //  2. a program root that loads a model declares its prefill intent — allow_cpu_prefill() or
 //     set_metal_mode() — or every Metal-capable build panics at the first real prompt.
 
@@ -57,12 +58,14 @@ def test_program_roots(t : T?) {
                 let lines <- read_lines(path)
                 var requires_dasllama = false
                 var has_main = false
+                var has_export_c = false
                 var has_stack = false
                 var loads_model = false
                 var has_intent = false
                 for (line in lines) {
                     requires_dasllama ||= line |> starts_with("require dasllama/")
                     has_main ||= (line |> starts_with("def main")) || (line |> starts_with("def main("))
+                    has_export_c ||= strip_comment(line) |> starts_with("[export_c")
                     has_stack ||= line |> starts_with(STACK_LINE)
                     // the loaders whose model prefills (LLM, ASR decoder, audio tower); a TTS
                     // carrier runs no prefill, so a TTS-only root owes no intent
@@ -75,7 +78,7 @@ def test_program_roots(t : T?) {
                         && (find(code, "MetalMode.when_available") >= 0 || find(code, "MetalMode.required") >= 0))
                     has_intent ||= find(code, "allow_cpu_prefill(") >= 0 || gpu_pin
                 }
-                continue if (!requires_dasllama || !has_main)
+                continue if (!requires_dasllama || !(has_main || has_export_c))
                 checked++
                 t |> success(has_stack, "{path}: a dasllama program root declares `{STACK_LINE}`")
                 if (loads_model) {
