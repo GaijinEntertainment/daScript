@@ -115,6 +115,51 @@ def private ev_gemma2() : ParityEvidence {
                 235248l, 235274l, 235318l, 235269l, 235248l, 235274l, 235324l, 235269l, 235248l, 235274l])
 }
 
+// the gemma counting fixture of the Metal sweep, "Count from 1 to 60, separated by commas: 1,
+// 2, ..., 23," (BOS=2): on a bare count gemma's greedy leaves the list after 10 on the E-series
+// (end-of-turn) and after 25 on the 26B files, and the instruction keeps every gemma-3 and
+// gemma-4 file counting through 40 tokens - one continuation per vocab, produced per file by
+// simple_ids
+def private ids_gemma_count_prompt() : array<int64> {
+    return <- [2l, 4377l, 699l, 236743l, 236770l, 531l, 236743l, 236825l, 236771l, 236764l, 15914l, 684l, 162760l,
+               236787l, 236743l, 236770l, 236764l, 236743l, 236778l, 236764l, 236743l, 236800l, 236764l, 236743l,
+               236812l, 236764l, 236743l, 236810l, 236764l, 236743l, 236825l, 236764l, 236743l, 236832l, 236764l,
+               236743l, 236828l, 236764l, 236743l, 236819l, 236764l, 236743l, 236770l, 236771l, 236764l, 236743l,
+               236770l, 236770l, 236764l, 236743l, 236770l, 236778l, 236764l, 236743l, 236770l, 236800l, 236764l,
+               236743l, 236770l, 236812l, 236764l, 236743l, 236770l, 236810l, 236764l, 236743l, 236770l, 236825l,
+               236764l, 236743l, 236770l, 236832l, 236764l, 236743l, 236770l, 236828l, 236764l, 236743l, 236770l,
+               236819l, 236764l, 236743l, 236778l, 236771l, 236764l, 236743l, 236778l, 236770l, 236764l, 236743l,
+               236778l, 236778l, 236764l, 236743l, 236778l, 236800l, 236764l]
+}
+
+def private ev_gemma_count(kq_native : bool = false) : ParityEvidence {
+    return <- ParityEvidence(prompt <- ids_gemma_count_prompt(),
+        gen <- [236743l, 236778l, 236812l, 236764l, 236743l, 236778l, 236810l, 236764l, 236743l, 236778l,
+                236825l, 236764l, 236743l, 236778l, 236832l, 236764l, 236743l, 236778l, 236828l, 236764l,
+                236743l, 236778l, 236819l, 236764l, 236743l, 236800l, 236771l, 236764l, 236743l, 236800l,
+                236770l, 236764l, 236743l, 236800l, 236778l, 236764l, 236743l, 236800l, 236800l, 236764l],
+        kq_native = kq_native)
+}
+
+// gemma-2's vocab spells the same fixture with its own ids
+def private ev_gemma2_count(kq_native : bool = false) : ParityEvidence {
+    return <- ParityEvidence(
+        prompt <- [2l, 3074l, 774l, 235248l, 235274l, 577l, 235248l, 235318l, 235276l, 235269l, 19597l, 731l, 150248l,
+                   235292l, 235248l, 235274l, 235269l, 235248l, 235284l, 235269l, 235248l, 235304l, 235269l, 235248l,
+                   235310l, 235269l, 235248l, 235308l, 235269l, 235248l, 235318l, 235269l, 235248l, 235324l, 235269l,
+                   235248l, 235321l, 235269l, 235248l, 235315l, 235269l, 235248l, 235274l, 235276l, 235269l, 235248l,
+                   235274l, 235274l, 235269l, 235248l, 235274l, 235284l, 235269l, 235248l, 235274l, 235304l, 235269l,
+                   235248l, 235274l, 235310l, 235269l, 235248l, 235274l, 235308l, 235269l, 235248l, 235274l, 235318l,
+                   235269l, 235248l, 235274l, 235324l, 235269l, 235248l, 235274l, 235321l, 235269l, 235248l, 235274l,
+                   235315l, 235269l, 235248l, 235284l, 235276l, 235269l, 235248l, 235284l, 235274l, 235269l, 235248l,
+                   235284l, 235284l, 235269l, 235248l, 235284l, 235304l, 235269l],
+        gen <- [235248l, 235284l, 235310l, 235269l, 235248l, 235284l, 235308l, 235269l, 235248l, 235284l,
+                235318l, 235269l, 235248l, 235284l, 235324l, 235269l, 235248l, 235284l, 235321l, 235269l,
+                235248l, 235284l, 235315l, 235269l, 235248l, 235304l, 235276l, 235269l, 235248l, 235304l,
+                235274l, 235269l, 235248l, 235304l, 235284l, 235269l, 235248l, 235304l, 235304l, 235269l],
+        kq_native = kq_native)
+}
+
 // TinyLlama-1.1B-v0.3 F16, "Once upon a time" (BOS=1) — the old gguf_run.das oracle. Loaded
 // fp32 (F16 -> fp32) to match how that oracle was produced.
 def private ev_tinyllama_v03() : ParityEvidence {
@@ -390,7 +435,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             serve_name = "gemma-4-e2b", serve_display = "Gemma 4 E2B", serve_default = true,
             serve_note = "the recommended default - fast, capable, runs everywhere",
             serve_ctx = 32768, serve_vram_gb = 4.0,
-            serve_vision = "mmproj-gemma-4-E2B-it-bf16.gguf"),
+            serve_vision = "mmproj-gemma-4-E2B-it-bf16.gguf",
+            parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "gemma-4-E4B-it-Q4_K_M.gguf",
             url = "{HF}/unsloth/gemma-4-E4B-it-GGUF/resolve/bfc15c382204943c3a8fff0c750b94ae2364d7a3/gemma-4-E4B-it-Q4_K_M.gguf",
             bytes = 4977171584l, sha256 = "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87",
@@ -464,10 +510,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // not board rows - resolve/main floats, so the bytes and sha256 pin the file
         ModelSpec(file = "gemma-4-12B-it-Q8_0.gguf",
             url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q8_0.gguf",
-            bytes = 12669646976l, sha256 = "abfc3044b93795f6a446fc1a04468ac2d5fc5e9c92e237f09a5b3384c5a433e4"),
+            bytes = 12669646976l, sha256 = "abfc3044b93795f6a446fc1a04468ac2d5fc5e9c92e237f09a5b3384c5a433e4",
+            parity <- ev_gemma_count()),
         ModelSpec(file = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
             url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
-            bytes = 11416548832l, sha256 = "3b7aec683e176e1d957d007e0fb590611d82aec4db358d99b7f9714b6bc7bfc2"),
+            bytes = 11416548832l, sha256 = "3b7aec683e176e1d957d007e0fb590611d82aec4db358d99b7f9714b6bc7bfc2",
+            parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "gemma-4-31B-it-Q4_K_M.gguf",
             url = "{HF}/lmstudio-community/gemma-4-31B-it-GGUF/resolve/main/gemma-4-31B-it-Q4_K_M.gguf",
             bytes = 18687063904l, sha256 = "8f3479643461601703f717931e399cc440dbd5ada598c025d6296c8165d94be9"),
@@ -524,7 +572,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             companions <- [
                 ProvEntry(name = "mmproj-gemma-3-12b-it-F16.gguf", root = "llm",
                     url = "{HF}/ggml-org/gemma-3-12b-it-GGUF/resolve/main/mmproj-model-f16.gguf",
-                    bytes = 854200224l, sha256 = "30c02d056410848227001830866e0a269fcc28aaf8ca971bded494003de9f5a5")]),
+                    bytes = 854200224l, sha256 = "30c02d056410848227001830866e0a269fcc28aaf8ca971bded494003de9f5a5")],
+            parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "gemma-4-12B-it-Q4_K_M.gguf", official = true,
             url = "{HF}/lmstudio-community/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q4_K_M.gguf",
             bytes = 7381382944l, sha256 = "95d83ba36642b1f385fb906b5962a71763361be3bac930a709945f72d97473f8",
@@ -578,7 +627,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_gemma4_26b_q4km()),
         // the QAT file rides the q40 KqFmt tier (native Q4_0 planes on the kq rails) — quant is
         // the loader mode (q8), the label the on-disk format, like the Q4_K_M rows
-        ModelSpec(file = "gemma-4-26B_q4_0-it.gguf", display = "gemma-4-26B-A4B-q40", quant_label = "q4_0"),
+        ModelSpec(file = "gemma-4-26B_q4_0-it.gguf", display = "gemma-4-26B-A4B-q40", quant_label = "q4_0",
+            parity <- ev_gemma_count([kq_native = true])),
         ModelSpec(file = "Qwen3.6-27B-MTP-Q4_K_M.gguf", official = true,
             url = "{HF}/unsloth/Qwen3.6-27B-MTP-GGUF/resolve/main/Qwen3.6-27B-Q4_K_M.gguf",
             bytes = 17106773120l, sha256 = "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
@@ -702,6 +752,27 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_llama_count([kq_native = true])),
         ModelSpec(file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", display = "Llama-3.2-1B-i1-iq3xxs", quant_label = "iq3_xxs",
             parity <- ev_llama_count([kq_native = true])),
+        // the Metal sweep's gemma format rows - the files the board does not show; the counting
+        // fixture is the correctness gate, no board row (the two lowercase-b 12B files match no
+        // current upload by size, so they carry no url)
+        ModelSpec(file = "gemma-2-2b-it-Q4_K_M.gguf", display = "gemma-2-2B-q4k", quant_label = "q4_k_m",
+            parity <- ev_gemma2_count([kq_native = true])),
+        ModelSpec(file = "gemma-4-12b-it-Q5_K_M.gguf", display = "gemma-4-12B-q5k", quant_label = "q5_k_m",
+            parity <- ev_gemma_count([kq_native = true])),
+        ModelSpec(file = "gemma-4-12b-it-Q6_K.gguf", display = "gemma-4-12B-q6k", quant_label = "q6_k",
+            parity <- ev_gemma_count([kq_native = true])),
+        ModelSpec(file = "gemma-4-E2B-it-Q4_0.gguf", display = "gemma-4-E2B-q40", quant_label = "q4_0",
+            url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_0.gguf",
+            bytes = 2841481184l, sha256 = "8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52",
+            parity <- ev_gemma_count([kq_native = true])),
+        ModelSpec(file = "gemma-4-26B-A4B-it-Q4_0.gguf", display = "gemma-4-26B-A4B-q40-ggml", quant_label = "q4_0",
+            url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-Q4_0.gguf",
+            bytes = 14618145824l, sha256 = "d208665ab1cd3a69f7a9a4bc59430e8448c8093d9b06334f566ac59d6d504a03",
+            parity <- ev_gemma_count([kq_native = true])),
+        ModelSpec(file = "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf", display = "gemma-4-26B-A4B-iq4xs", quant_label = "iq4_xs",
+            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+            bytes = 13597177568l, sha256 = "babd1e389d386352f71600765d37390f7dc993fbfad6725caccf996ffe34aecf",
+            parity <- ev_gemma_count([kq_native = true])),
         // the text-to-speech carriers: local conversions with no board row (followup_general.md
         // row 77); the front-end packs every TTS model loads ride the kitten-nano row, the
         // per-model oracle dumps ride their own rows
