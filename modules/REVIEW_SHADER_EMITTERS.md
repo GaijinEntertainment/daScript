@@ -62,8 +62,14 @@ declaration by name.** A declaration in that module is available to both emitter
 
 **A skippable read of a global-rooted array - a module global, a `@workgroup` array, or a
 `self.<member>` resource - in a `[spirv_kernel]` or `[compute_shader]` body, or in any `def` that
-body calls, stays skippable: a diff that widens the set of dispatches the read happens on, or
-drops the condition that kept it from happening where its index is out of range, is a defect -
-both arms of an if reading it, a clamped index, and a bare read are the shapes that takes.** The emitter lowers a `?:`, `&&` or `||` operand as
-a branch (`dasSpirv/ARCHITECTURE.md` sec.3.4), so the
-short-circuit form needs no rewrite.
+body calls, stays skippable: a diff that widens the set of dispatches an existing read happens
+on, or drops the condition that kept it from happening where its index is out of range, is a
+defect - both arms of an if reading it, a clamped index, and a bare read are the shapes that
+takes.** The emitter lowers a `?:`, `&&` or `||` operand as a branch (`dasSpirv/ARCHITECTURE.md`
+sec.3.4), so the short-circuit form needs no rewrite.
+
+**A read of a global-rooted array a diff adds to a kernel body is in range on every dispatch the
+body admits, or the buffer carries slack past the range the folder's `ARCHITECTURE*.md` names and
+the read stays inside it.** A whole-fragment load whose only guard is on the store reads past a
+plane that ends at the store's bound; the device declares no robust buffer access, so the read is
+undefined, not zero.

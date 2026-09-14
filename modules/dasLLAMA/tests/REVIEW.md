@@ -54,10 +54,10 @@ suite roster, carries nothing to correct; a file with no census entry owes none.
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
 
 **A diff that adds, changes, or drops a cell's skip condition - a `t |> skip` or an early
-return - updates the test file's own header - the top comment block carrying every fact a skip
-condition in the file keys on (model, tier, fixture, device, arm, knob) - in the same change,
-and adds or corrects the skip clause in that file's `CLAUDE.md` entry where `CLAUDE.md` carries
-one.**
+return - updates, where the test file carries a header (a top comment block carrying every fact a
+skip condition in the file keys on: model, tier, fixture, device, arm, knob), that header in the
+same change, and, where `CLAUDE.md` carries an entry for the file, adds or corrects that cell's
+skip clause in the entry.**
 
 **A diff that adds, moves, or removes a `[test]` file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -78,8 +78,9 @@ unreachable to whoever is choosing what to run.
 
 **A pinned gate's coverage never shrinks - not its asserts, not its bounds, not the corpus or
 sweep it covers, and not the set of runs that reach it; a diff that shrinks one is a defect.**
-A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
-that is not a shrink. The pinned set, each with what it pins:
+A shrink is an assert removed, a bound loosened, an input or a run dropped; a predicate widened
+to admit a value the folder's architecture doc names is not one. A pinned file that reaches a
+fixture root sits in `stocked`, where the per-PR run reaches it; that is not a shrink. The pinned set, each with what it pins:
 `test_run_suites.das` (the per-PR split, the folder census, the area tables, the `--exclude`
 filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill intent);
 `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
@@ -90,7 +91,7 @@ run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and th
 wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
-pages at `donate_stream`); `test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan
+pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick` (which tile the Vulkan
 matmul picks and whether that dispatch splits its reduction across partial planes, on every input
 of the prefill's tile-and-split pick; added rows on those inputs are not an axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries against the
 arming's fields); `utils/dasllama-server/test_worker_dispatch.das` (repo root) - worker-local

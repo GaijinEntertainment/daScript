@@ -1461,8 +1461,11 @@ module) is independent and can land any time - it is pure structure.
     0.30 - where the cm2 mode sits at 1.071 / 1.025; a card without `VK_NV_cooperative_matrix2`
     (every non-NVIDIA card) is that case unforced. The lever is a KHR arm of the schedule geometry -
     the 32-row expert pieces on 16x16x16 fragments with the `khr_stage16` steps the dense KHR arm
-    already has per format, the q51 stage added - measured first against llama.cpp's KHR
-    `mul_mm_id` (the same `mul_mm.comp` over an expert-id row gather) on the same card.
+    already has per format, the q51 stage added - measured first against llama.cpp b10660's KHR
+    `mul_mm_id` (the same `mul_mm.comp` over an expert-id row gather) on the same card:
+    `GGML_VK_DISABLE_COOPMAT2=1 llama-bench -m gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf -ngl 99 -fa 1 -t 16
+    -r 3 -p 512 -n 128` against `DASLLAMA_COOPMAT=mm DASLLAMA_IMAGE=0 lcpp_bench --for-debug-purposes
+    -r 5 -p 512 -n 128 -t 16`.
 58. **Under `mm` the KHR kq tile serves every f16-fed GEMM, where the q8-fed mul_mm L-tile is
     faster on the wide, shallow ones.** E2B's gate and up (1536 in, 6144 out) run 6204 / 6270 us a
     512-row window on the KHR tile against 5537 / 5647 on `MmBatch` - twelve percent - while its
@@ -1477,3 +1480,21 @@ module) is independent and can land any time - it is pure structure.
     the 128-head families (the qwens) have neither field set. The fix is the
     chunked tiles' mask and `attn_softcap` on the scores, with a kernel cell at the on-path values
     (item 56's shape).
+60. **The wave model prices the KHR arm in the cm2 tile's units.** `cm2_gemm_pick` weighs a split
+    with `cm2_wave_units` (a 128-column step at 10 units, k in 64-element steps) and
+    `cm2_reduce_units`, both calibrated on the cm2 tensor tile; under `mm` the same numbers decide
+    the KHR kq tile, whose k step is 32 and whose step costs several times the cm2 tile's, so the
+    mode-independent reduce is a smaller share of a KHR GEMM than the model says and the arm
+    under-splits (the 512 x 512 x 2048 pin on 36 SMs: two chunks at 230 units, four at 237, the
+    compute equal and the reduce the whole difference). A KHR unit set measured on the `khrsk`
+    probe rows (`harness/vk_gemm_probe.das`) is the lever, item 58's per-GEMM pick beside it.
+61. **The KHR tiles' lane maps rest on the device's advertised subgroup size, not a per-pipeline
+    one.** `khr_kq_tile_on` reads `subgroupSize` from the physical device; `FaKhrT` labels its four
+    16-key bands `tid / 32` and reduces each softmax row over eight lanes with `subgroupShuffleXor`,
+    and the KHR kq tile stages by the same rule, while no `fa_khr_*` or `*_khr_cls` pipeline pins
+    `requiredSubgroupSize` and `REQUIRE_FULL_SUBGROUPS` is off by default. A driver that picks a
+    shader's subgroup width per pipeline (Intel's SIMD8/16/32) can run a 128-thread workgroup at
+    16 lanes, where two subgroups write one score band and two bands stay unwritten - a wrong
+    answer, not a decline. Item 42's real-hardware pass on such a card is where it shows; the fix
+    is the pipeline's `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` at 32 on every KHR
+    stamp, or a decline where the device cannot pin it.

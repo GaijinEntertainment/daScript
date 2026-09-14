@@ -2382,8 +2382,9 @@ def coopmat_f16acc_kernel {
     var a : coopmatA_f16_16x16
     var b : coopmatB_f16_16x16
     var acc : coopmatAcc_f16_16x16
-    coopmatLoad(a, cmh_a, 0, 16, 0)   // A: 16x16 row-major, stride 16
-    coopmatLoad(b, cmh_b, 0, 16, 1)   // B: 16x16 column-major, stride 16
+    let tile0 = gl_WorkGroupID.x * 256u   //! a uint element index, as the engine's f16 K/V mirrors past 2 GB address their tiles
+    coopmatLoad(a, cmh_a, tile0, 16, 0)   // A: 16x16 row-major, stride 16
+    coopmatLoad(b, cmh_b, tile0, 16, 1)   // B: 16x16 column-major, stride 16
     acc = coopmatMulAdd(a, b, acc)
     var accw : coopmatAcc_f32_16x16
     coopmatConvert(accw, acc)
@@ -2417,6 +2418,38 @@ def coopmat_arr_kernel {
 
 def public coopmat_arr_words : array<uint> {
     return clone_to_move(coopmat_arr_spv)
+}
+
+//! the cooperative-matrix loads whose pointer chains through a uint-typed index: the ids of every value typed as the
+//! module's 32-bit unsigned int, then every OpAccessChain whose last index is one of them, then the loads on those chains
+def public count_uint_indexed_coopmat_loads(words : array<uint>) : int {
+    // `s` is the first operand's word, `n` the operand count: OpTypeInt is [id, width, signedness], a typed
+    // instruction [type, id, ...], OpAccessChain [type, id, base, indices...], the load [type, id, pointer, layout, ...]
+    var uint_type = 0u
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.TypeInt) && n >= 3 && w[s + 1] == 32u && w[s + 2] == 0u) {
+            uint_type = w[s]
+        }
+    }
+    var uints : table<uint>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (n >= 2 && w[s] == uint_type && opcode != uint(SpvOp.TypeInt)) {
+            uints |> insert(w[s + 1])
+        }
+    }
+    var chains : table<uint>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.AccessChain) && n >= 4 && key_exists(uints, w[s + n - 1])) {
+            chains |> insert(w[s + 1])
+        }
+    }
+    var loads = 0
+    foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
+        if (opcode == uint(SpvOp.CooperativeMatrixLoadKHR) && n >= 4 && key_exists(chains, w[s + 2])) {
+            loads++
+        }
+    }
+    return loads
 }
 
 def public count_function_storage_chains(words : array<uint>) : tuple<chains : int; dynamic_indices : int> {

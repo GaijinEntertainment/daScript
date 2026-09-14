@@ -22,7 +22,8 @@ require daslib/strings_boost
 // mirror sync/read seams, the deltanet decode step, the FFN GEMV / qkv-group / classifier
 // decode arms, and the heat-pinned expert cache.
 
-let RDEC_MIR_SLACK = 16l * 8192l   //! slack elements past each KV mirror's last plane: a flash fragment's 16 rows at the widest KV row this tier binds
+let RDEC_MIR_SLACK_ROWS = 16l   //! the KV rows a flash fragment may read past a window's end
+let RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * AR_MAX_DIM   //! slack elements past each KV mirror's last plane: one fragment at the widest KV row the prepare admits
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
 
 //! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
@@ -42,16 +43,18 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         return false
     }
     let esz = kv16 ? 2l : 4l
-    // each mirror side binds as ONE SSBO range: past maxStorageBufferRange (or the shaders' uint
-    // word index) every read is undefined. The ctx negotiation caps first; guard direct callers.
-    if (mir_elems * esz > vk_max_storage_range() || mir_elems > 4_294_967_295l) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_attn} layers x {seq_cap} positions, {mir_elems} elements a side) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index\n")
+    // each mirror side binds as ONE SSBO range, slack included: past maxStorageBufferRange (or the
+    // shaders' uint word index) every read is undefined. The ctx negotiation caps first; guard direct callers.
+    let mir_bound = mir_elems + RDEC_MIR_SLACK
+    if (mir_bound * esz > vk_max_storage_range() || mir_bound > 4_294_967_295l) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_attn} layers x {seq_cap} positions, {mir_elems} elements a side plus the {RDEC_MIR_SLACK} slack) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index\n")
         return false
     }
     // the residual-stream kernels stage a whole row in ar_row, and the per-head ones a whole head
-    // in their row slabs — over either slab they would write past the workgroup array with no diagnostic
-    if (dim > AR_MAX_DIM || head_size > 512l) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: dim {dim} > {AR_MAX_DIM} or head_size {head_size} > 512 exceeds the workgroup row slabs\n")
+    // in their row slabs — over either slab they would write past the workgroup array with no diagnostic;
+    // the mirror slack covers a flash fragment at a KV row up to AR_MAX_DIM wide
+    if (dim > AR_MAX_DIM || head_size > 512l || kv_dim > AR_MAX_DIM) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: dim {dim} or kv_dim {kv_dim} > {AR_MAX_DIM}, or head_size {head_size} > 512, exceeds the workgroup row slabs and the mirror slack\n")
         return false
     }
     let hybrid = dn.cd > 0l
@@ -72,20 +75,24 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the deltanet step class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
-    // all-or-nothing: pre-flight the SAME prefill-attention pick pf_setup will make (fa tile,
-    // h128 twin, or the chunked pair) so a declined kernel declines residency PRE-upload
+    // all-or-nothing: pre-flight every prefill-attention class pf_setup may pick for this head size
+    // (the fa tile with its cap stamp at 256, the h128 twin, the chunked pair - a capped or gated
+    // layer falls through the ladder) so a declined kernel declines residency PRE-upload
     let fa_hs_ok = head_size == 64l || head_size == 128l || head_size == 256l || head_size == 512l
-    let will_facm2 = g_gpu.has_coopmat2_fa && vk_fa_on() && kv16 && fa_hs_ok
-    let will_fakhr = !will_facm2 && g_gpu.has_coopmat && khr_kq_tile_on() && vk_fa_on() && kv16 && fa_hs_ok && !q_gated
-    if (!(will_facm2
-            ? (head_size == 64l ? ensure_fa_cm2_h64_cls() : (head_size == 128l ? ensure_fa_cm2_h128_cls()
-                : (head_size == 512l ? ensure_fa_cm2_h512_cls() : (q_gated ? ensure_fa_cm2_h256_g_cls() : ensure_fa_cm2_h256_cls()))))
-            : (will_fakhr
-                ? (head_size == 64l ? ensure_fa_khr_h64_cls() : (head_size == 128l ? ensure_fa_khr_h128_cls()
-                    : (head_size == 512l ? ensure_fa_khr_h512_cls() : ensure_fa_khr_h256_cls())))
-                : (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
-                    ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
-                    : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))))) {
+    let will_facm2 = cm2_fa_on() && vk_fa_on() && kv16 && fa_hs_ok
+    let will_fakhr = !will_facm2 && khr_kq_tile_on() && vk_fa_on() && kv16 && fa_khr_serves(head_size, 0.0, q_gated)
+    var fa_ok = true
+    if (will_facm2) {
+        fa_ok = (head_size == 64l ? ensure_fa_cm2_h64_cls() : (head_size == 128l ? ensure_fa_cm2_h128_cls()
+            : (head_size == 512l ? ensure_fa_cm2_h512_cls() : (q_gated ? ensure_fa_cm2_h256_g_cls() : (ensure_fa_cm2_h256_cls() && ensure_fa_cm2_h256_cap_cls())))))
+    } elif (will_fakhr) {
+        fa_ok = (head_size == 64l ? ensure_fa_khr_h64_cls() : (head_size == 128l ? ensure_fa_khr_h128_cls()
+            : (head_size == 512l ? ensure_fa_khr_h512_cls() : (ensure_fa_khr_h256_cls() && ensure_fa_khr_h256_cap_cls()))))
+    }
+    let chunked_ok = (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
+        ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
+        : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+    if (!(fa_ok && chunked_ok)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the prefill-attention class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
@@ -128,14 +135,15 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * r.mir_elems * esz) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
         return false
     }
-    {   //! the mirrors start at zero, never at garbage: zero times a masked probability stays zero in the slack rows a flash fragment reads
-        var rawz = alloc_cmd()
+    {   // the mirrors start at zero, never at garbage: a flash fragment straddling a window's end reads the unwritten rows past it - inside a plane and in the slack - and zero times a masked probability stays zero where a garbage NaN would not
+        var rawz = alloc_transient_cmd()
         let beginz = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(rawz, beginz), null)
         cmd_fill_zero(rawz, r.k_mirror, 0l, r.mir_elems * esz)
         cmd_fill_zero(rawz, r.v_mirror, 0l, r.mir_elems * esz)
         vk_check(vkEndCommandBuffer(rawz), null)
         submit_wait(rawz)
+        free_transient_cmd(rawz)
     }
     r.hybrid = hybrid
     if (hybrid) {

@@ -219,6 +219,7 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
         return khr_cls_ensure(fmt)
     }
     if (tc == CM2_TC_E) {
@@ -275,6 +276,7 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
 def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
         return khr_cls_set(fmt, bufs, sizes, gbits)
     }
     if (tc == CM2_TC_E) {
@@ -373,6 +375,7 @@ def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 con
 def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
         khr_cls_enc(fmt, raw, h, s, pc, groups)
     } elif (tc == CM2_TC_E) {
         cm2e_cls_enc(fmt, raw, h, s, pc, groups)
@@ -1134,13 +1137,14 @@ def private pf_setup {
         g_rd.pf_af = make_device_buf(np * qd * 2l)
         g_rd.pf_hf = make_device_buf(np * hid * 2l)
     }
-    if (any_f16_feed && g_gpu.coopmat_mode >= COOPMAT_MM) {
+    if (any_f16_feed) {
         var skb = 262_144l * int64(g_gpu.sm_count)
         let fsk = cm2_splitk_env()
         if (fsk > 1l) {
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_CM2_SPLITK={fsk} forces the k chunks of every coopmat GEMM the split admits (the cm2 tiles and the KHR arm alike)\n")
             skb = max(skb, np * wide * fsk * 4l)
         }
-        skb = min(skb, vk_max_storage_range())
+        skb = min(skb, vk_max_storage_range())   //! the split planes bind as one SSBO range: capped at the device range here, where the size is negotiated
         if (skb > 0l) {
             g_rd.pf_splitk = make_device_buf(skb)
             g_rd.pf_splitk_bytes = skb
@@ -1157,8 +1161,8 @@ def private pf_setup {
     let normbytes = g_rd.norms_bytes
     let kv16 = g_rd.kv16
     // the fa pick is per layer: a model's attention classes may differ in head size, and a class with no fa stamp takes the chunked pair
-    let fa_dev = g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
-    let fakhr_dev = !fa_dev && g_gpu.has_coopmat && khr_kq_tile_on() && vk_fa_on() && kv16 && !g_rd.q_gated
+    let fa_dev = cm2_fa_on() && vk_fa_on() && kv16
+    let fakhr_dev = !fa_dev && khr_kq_tile_on() && vk_fa_on() && kv16
     var fa_hs : table<int64>   //! the head sizes the fa tiles serve on this model
     var fakhr_hs : table<int64>   //! ... the KHR flash tile
     var chunked_hs : table<int64>   //! ... and the ones the chunked pair serves
@@ -1171,7 +1175,7 @@ def private pf_setup {
         let fa_hs_ok = L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l
         L.pf_fa = (fa_dev && fa_hs_ok && (!g_rd.q_gated || L.hs == 256l)
             && (L.attn_cap == 0.0 || (L.hs == 256l && !g_rd.q_gated)))
-        L.pf_fakhr = fakhr_dev && fa_hs_ok && (L.attn_cap == 0.0 || L.hs == 256l)
+        L.pf_fakhr = fakhr_dev && fa_khr_serves(L.hs, L.attn_cap, g_rd.q_gated)
         any_cap = any_cap || (L.pf_fa && L.attn_cap != 0.0)
         any_khr_cap = any_khr_cap || (L.pf_fakhr && L.attn_cap != 0.0)
         g_rd.pf_facm2 = g_rd.pf_facm2 || L.pf_fa
@@ -1393,18 +1397,19 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows :
     pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, logits)
 }
 
-//! The pre-step's projection on device: the per-layer model projection as an f16 mirror and its norm row; the
-//! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before layer 0
 def ple_proj_shape_ok(dim, all : int64) : bool
     => f16g_shape_ok(dim) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on() && dim % 16l == 0l && all % 16l == 0l)
 
+//! The pre-step's projection on device: the per-layer model projection as an f16 mirror and its norm row; the
+//! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before
+//! layer 0. Refused past `pf_ready`: these sets build with the prefill buffers.
 def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return false
     }
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_proj before set_ple")
     if (!ple_proj_shape_ok(g_rd.dim, all) || long_length(w) != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready) {
-        return false   //! refused past `pf_ready` too: these sets build with the prefill buffers
+        return false
     }
     var half : array<uint16>
     half |> reserve(long_length(w))   // E4B: 27.5M halves - the guard wants the final size reserved first
@@ -1520,7 +1525,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let nlfin = rd_norm_final()
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let cos_elems = g_rd.cos_elems
-    let fa128s = !(g_gpu.has_coopmat2_fa && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
+    let fa128s = !(cm2_fa_on() && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
     unsafe {
         var w0 = 0l
         var last_wlen = 0l
@@ -1828,10 +1833,11 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
                 let attn_landed_f16 = fo6 && (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr)
-                if (attn_landed_f16) {
-                } elif (fo6) {
-                    var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
-                    enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                if (fo6) {
+                    if (!attn_landed_f16) {
+                        var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
+                        enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                    }
                 } elif (fok) {
                     var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 256l))
                     enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 8l + 255l) / 256l)
@@ -2951,7 +2957,7 @@ def private ensure_at_state {
 //! or 128, and no gate (this chain wires neither the h256 stamps nor their gated epilogue - gated models keep at_attn).
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def private at_fa_serves(hs : int64; gated : bool) : bool {
-    return !gated && g_gpu.has_coopmat2_fa && vk_fa_on() && (hs == 64l || hs == 128l)
+    return !gated && cm2_fa_on() && vk_fa_on() && (hs == 64l || hs == 128l)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]

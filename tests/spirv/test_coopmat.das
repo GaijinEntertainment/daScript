@@ -72,6 +72,8 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         var words <- coopmat_f16acc_words()
         t |> success(count_op(words, SpvOp.TypeCooperativeMatrixKHR) == 4,
             "four OpTypeCooperativeMatrixKHR (A, B, f16 accumulator, f32 widened)")
+        t |> equal(count_uint_indexed_coopmat_loads(words), 2,
+            "both f16 A/B loads chain their pointer through a uint-typed element index (the widened `idx : int | uint`)")
         t |> success(count_op(words, SpvOp.CooperativeMatrixMulAddKHR) == 1,
             "one OpCooperativeMatrixMulAddKHR (f16 accumulate, no operands mask)")
         t |> success(count_op(words, SpvOp.FConvert) == 1,

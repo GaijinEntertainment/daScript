@@ -52,9 +52,10 @@ prompt, drafter and settle state, and the acceptance rate it implies is not the 
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
 benchmark process.**
 
-**A checked-in document that states a `--for-debug-purposes` reading for a model and served-turn
-leg (prefill, decode, or the turn end to end) that a committed board row covers cites that row
-and marks the reading `debug-jit`.** A
+**A checked-in document that states a `--for-debug-purposes` reading for a model, served-turn
+leg (prefill, decode, or the turn end to end) and backend that a committed board row covers -
+the same three, a row on another backend covers nothing - cites that row and marks the reading
+`debug-jit`.** A
 `--for-debug-purposes` row is the `-jit` script's own output.
 
 **A figure tagged `external` in `PERF_LEDGER.md` names the source and the report it came from.**

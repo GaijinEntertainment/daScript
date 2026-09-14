@@ -663,15 +663,14 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the E-series per-layer-embedding tail (the act, its requant and the proj GEMV in one): its carriers are the
     // gemma-4 E2B / E4B, no zoo row; its coverage is test_vkd_q8_gemv_pleact in test_vulkan_kernels.das
     "q8_gemv_pleact_cls_spv",
-    // the KHR flash-attention tile: a coopmat2 card serves the cm2 flash under the default mode, so no zoo row reaches
-    // these stamps there; their coverage is test_vkd_fa_khr and test_vkd_fa_khr_h256_softcap in test_vulkan_kernels.das
-    "fa_khr_h64_cls_spv", "fa_khr_h64_f16_cls_spv", "fa_khr_h128_cls_spv", "fa_khr_h128_f16_cls_spv",
+    // the KHR flash-attention tile's 256 and 512 heads: the mode sweep's mm row reaches the 64 and 128 heads through the
+    // zoo's qwens, and no zoo row carries a wider head (the gemmas sit above the tier); their coverage is test_vkd_fa_khr
+    // and test_vkd_fa_khr_h256_softcap in test_vulkan_kernels.das
     "fa_khr_h256_cls_spv", "fa_khr_h256_f16_cls_spv", "fa_khr_h256_cap_cls_spv", "fa_khr_h256_cap_f16_cls_spv",
     "fa_khr_h512_cls_spv", "fa_khr_h512_f16_cls_spv",
-    // the KHR f16 GEMM (the E-series projection off cm2): the same default-mode reason; its coverage is test_vkd_f16_gemm_khr
+    // the KHR f16 GEMM (the E-series projection off cm2): no zoo row carries a per-layer embedding; its coverage is
+    // test_vkd_f16_gemm_khr
     "f16_gemm_khr_cls_spv",
-    // the q8 KHR kq tile (a KHR-mode card's dense q8 GEMMs): the same reason; its coverage is test_vkd_q8_khr_batch
-    "q8_batch_khr_cls_spv",
     // the gemma-4 MoE combine (the two normed branches' residual step, f32 and f16 normed-row forms):
     // its carrier is the 26B-A4B, above the zoo's tier; its coverage is test_vkd_moe_routing's gemma-4
     // combine arm in test_vulkan_kernels.das

@@ -179,9 +179,9 @@ template strings any of them look up, records a run of this folder's
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.**
 An override is an environment knob, an exported runtime setter, or an on-disk state file - one
 a run writes or a user places, never data a build ships - that moves a gate, policy, or
-threshold off its default and so changes what the run writes, reads, mints, or computes (a
-timing knob is one only when it moves a number other than a measured time); a CLI flag never
-is one. The announce is a line printed where the override changes the outcome, naming it by
+threshold off its default and so changes what the run writes, reads, mints, or computes - one is
+an override when a run with it set can produce different bytes or select different code, whatever
+the wall clock (an A/B instrument that reroutes a GEMM is; one that only times is not); a CLI flag never is one. The announce is a line printed where the override changes the outcome, naming it by
 the spelling a user would set (the env variable, the sidecar or file key, the setter's name)
 and, for one that is on unless turned off, the spelling that turns it off; one with no off
 spelling says so. Per-site repeats are fine; a set-but-inert override is silent.

@@ -247,26 +247,26 @@ def test_vkd_lens_readonly_gate(t0 : T?) {
     }
 }
 
-//! one f16 GEMM shape through the cm2 tile (direct and split-k) or, under `khr`, the KHR tile (direct only; its output plane carries the fragment's spare rows past `rows`, as the prefill's does)
+//! the KHR arm loads and stores whole 16-row fragments, so the cell sizes its x and y planes past `rows` the way the prefill's are
 def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         {
             let nsplit = 8
             let ybase = 16   // the rows land past a header the kernels must leave alone
-            let rows_alloc = khr ? ((rows + 15) / 16) * 16 : rows
+            let rows_alloc = khr ? ((rows + 15) / 16) * 16 : rows   //! the KHR tile loads and stores whole 16-row fragments: the x and y planes carry the spare rows, as the prefill's do
             let yn = ybase + rows_alloc * d
             var wh : array<float16>
             var xh : array<float16>
             wh |> resize(d * n)
-            xh |> resize(rows * n)
+            xh |> resize(rows_alloc * n)
             for (i in range(d * n)) {
                 wh[i] = float16(float((i * 7) % 61) * 0.02 - 0.6)
             }
-            for (i in range(rows * n)) {
+            for (i in range(rows_alloc * n)) {
                 xh[i] = float16(float((i * 11) % 53) * 0.03 - 0.8)
             }
             let w_bytes = int64(d * n) * 2l
-            let x_bytes = int64(rows * n) * 2l
+            let x_bytes = int64(rows_alloc * n) * 2l
             let y_bytes = int64(yn) * 4l
             let part_bytes = int64(nsplit * rows * d) * 4l
             let wd = make_device_buf(w_bytes)
@@ -378,12 +378,12 @@ def test_vkd_f16_gemm_khr(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            if (!(g_gpu.has_coopmat && khr_kq_tile_on()) || !ensure_f16_gemm_khr_cls()) {
+            if (!khr_kq_tile_on() || !ensure_f16_gemm_khr_cls()) {
                 t |> skip("device lacks KHR cooperative matrices at subgroup 32")
                 return
             }
             f16_gemm_cell(t, "ba-like", 32, 512, 70, true)
-            f16_gemm_cell(t, "ple-like", 256, 1536, 77, true)   //! E2B's projection geometry over one layer slice, rows off the 16-row fragment
+            f16_gemm_cell(t, "ple-like", 256, 1536, 77, true)   // E2B's projection geometry over one layer slice, rows off the 16-row fragment
             f16_gemm_cell(t, "one fragment", 16, 64, 16, true)
         } else {
             t |> skip("dasVulkan not present")
@@ -2455,6 +2455,59 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
             y_poison[0] += 1.0 + 2.0 * max_abs(y_ref)
             t |> success(mismatch_bars(y_poison, y_ref, 2e-2, 4e-3 * max_abs(y_ref)) > 0, "the q8 KHR bar reds a poisoned element")
+            // the split arm: the first region alone under two 256-aligned k chunks (512 and 64 deep) into the partial
+            // planes, then the reduce into the y plane - the k0 / k1 / ybase prologue the KHR stamp shares with the cm2 tiles
+            verify(ensure_splitk_reduce_cls(), "the split-k reduce's class rail must engage")
+            let nsplit = 2
+            let ck = ((n + nsplit - 1) / nsplit + 255) & ~255
+            let swgs = ((cnt0 + 127) / 128) * wtiles * nsplit
+            var ssched : array<uint>
+            ssched |> resize(4 + swgs)
+            ssched[2] = uint(cnt0)   // one region at row 0 over the first weight plane; the map stays zero
+            let y0_bytes = int64(cnt0 * d) * 4l
+            let part_bytes = y0_bytes * int64(nsplit)
+            let pd = make_device_buf(part_bytes)
+            let yd_s = make_device_buf(y0_bytes)
+            var host_s = make_host_buf(y0_bytes, true, [cached = true])
+            var y_split : array<float>
+            y_split |> resize(cnt0 * d)
+            unsafe {
+                nan_sentinel_upload(pd, part_bytes)
+                nan_sentinel_upload(yd_s, y0_bytes)
+                let ssc_bytes = int64(4 + swgs) * 4l
+                let sscd = make_device_buf(ssc_bytes)
+                upload_region_at(sscd, 0l, addr<uint8 const?>(ssched[0]), ssc_bytes)
+                var scs = set_q8_batch_khr_cls(fixed_array(wqd, wsd, sscd, xfd, pd),
+                    fixed_array(wq_bytes, ws_bytes, ssc_bytes, xf_bytes, part_bytes), fixed_array(1u, 2u, 0u, 4u, 8u))
+                var srd = set_splitk_reduce_cls(fixed_array(pd, yd_s), fixed_array(part_bytes, y0_bytes), fixed_array(8u, 16u))
+                var raw3 = alloc_cmd()
+                let begin3 = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw3, begin3), null)
+                var h3 : VkHaz
+                var pcs = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+                enc_q8_batch_khr_cls(raw3, h3, scs, pcs, int64(swgs))
+                var pcr = SkRedArgs(nelem = uint(cnt0 * d), k = uint(nsplit), ybase = 0u)
+                enc_splitk_reduce_cls(raw3, h3, srd, pcr, int64(cnt0 * d + 1023) / 1_024l)
+                vhz_dep(raw3, h3, 16u, 0u, true)
+                cmd_copy_whole(raw3, yd_s, host_s.buf, y0_bytes)
+                vk_check(vkEndCommandBuffer(raw3), null)
+                submit_wait(raw3)
+                memcpy(addr<void?>(y_split[0]), host_s.mapped, y0_bytes)
+            }
+            var y_ref0 : array<float>
+            y_ref0 |> resize(cnt0 * d)
+            for (i in range(cnt0 * d)) {
+                y_ref0[i] = y_ref[i]   // the oracle's first region is the split arm's whole answer
+            }
+            let bad_s = mismatch_bars(y_split, y_ref0, 2e-2, 4e-3 * max_abs(y_ref0))
+            t |> success(bad_s == 0, "q8 KHR tile split in two k chunks + the reduce matches the CPU oracle ({bad_s} of {cnt0 * d} off)")
+            var y_poison_s := y_split
+            y_poison_s[cnt0 * d - 1] += 1.0 + 2.0 * max_abs(y_ref0)
+            t |> success(mismatch_bars(y_poison_s, y_ref0, 2e-2, 4e-3 * max_abs(y_ref0)) > 0, "the split arm's bar reds a poisoned element")
+            delete y_poison_s
+            delete y_ref0
+            delete y_split
+            delete ssched
             delete y_poison
             delete sched
             delete y_ref
@@ -5417,7 +5470,7 @@ def test_vkd_at_attn(t0 : T?) {
 }
 
 //! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
-let FA_SHADOW_SLACK_ROWS = 16
+let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes
 
 //! one flash family's set: the cm2 tile's or the KHR tile's, the same four bindings (q, K shadow, V shadow, out)
 def private set_fa_tile(khr : bool; bufs : uint64[4]; sizes : int64[4]; gbits : uint[4]) : VkDescriptorSet
@@ -5465,7 +5518,7 @@ def private enc_fa_cm2_stamp(hs : int; cap, f16 : bool; raw : VkCommandBuffer; v
     }
 }
 
-//! one flash family's head sizes and window arm against the CPU oracle, its f16-out twin against the f32 stamp's f16cvt: `khr` picks the KHR tile, else the cm2 one
+//! the f16-out twin is held to the f32 stamp's output through f16cvt, not to the oracle: the two stamps must agree bit for bit
 def private fa_tile_run(t : T?; khr : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
@@ -5490,9 +5543,13 @@ def private fa_tile_run(t : T?; khr : bool) {
             for (i in range(rows * qd)) {
                 qh[i] = float((i * 41) % 73) * 0.05 - 1.8
             }
-            for (i in range(kpos * kvd)) {   // the slack rows stay zero
+            for (i in range(kpos * kvd)) {
                 kh[i] = float((i * 17) % 97) * 0.03 - 1.4
                 vh[i] = float((i * 53) % 89) * 0.04 - 1.7
+            }
+            for (i in range(kpos * kvd, kpad * kvd)) {   //! the slack rows carry a large finite value, not zero: a masked probability that is not exactly zero would drag it into the output
+                kh[i] = 10000.0
+                vh[i] = 10000.0
             }
             let q_bytes = int64(rows * qd) * 4l
             let m_bytes = int64(kpad * kvd) * 4l
@@ -5525,6 +5582,7 @@ def private fa_tile_run(t : T?; khr : bool) {
                 upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
                 upload_region_at(yh16_fused, 0l, addr<uint8 const?>(y16_fused[0]), h16_bytes)
                 upload_region_at(yh16_split, 0l, addr<uint8 const?>(y16_split[0]), h16_bytes)
+                nan_sentinel_upload(yd, q_bytes)
                 var sck = set_f16cvt_cls(fixed_array(kdev, khdev),
                     fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
                 var scv = set_f16cvt_cls(fixed_array(vdev, vhdev),
@@ -5645,12 +5703,15 @@ def test_vkd_fa_khr(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            if (!(g_gpu.has_coopmat && khr_kq_tile_on())) {
+            if (!khr_kq_tile_on()) {
                 t |> skip("device lacks KHR cooperative matrices at subgroup 32")
                 return
             }
-            verify(ensure_fa_khr_h64_cls() && ensure_fa_khr_h128_cls() && ensure_fa_khr_h256_cls() && ensure_fa_khr_h512_cls(), "KHR fa class rails must engage on a coopmat device")
-            verify(ensure_fa_khr_h64_f16_cls() && ensure_fa_khr_h128_f16_cls() && ensure_fa_khr_h256_f16_cls() && ensure_fa_khr_h512_f16_cls(), "KHR fa f16-out twins must engage on a coopmat device")
+            if (!(ensure_fa_khr_h64_cls() && ensure_fa_khr_h128_cls() && ensure_fa_khr_h256_cls() && ensure_fa_khr_h512_cls()
+                    && ensure_fa_khr_h64_f16_cls() && ensure_fa_khr_h128_f16_cls() && ensure_fa_khr_h256_f16_cls() && ensure_fa_khr_h512_f16_cls())) {
+                t |> skip("the KHR fa stamps decline on this device: their 38912 B of workgroup memory is past its floor")
+                return
+            }
             fa_tile_run(t, true)
         } else {
             t |> skip("dasVulkan not present")
@@ -9988,12 +10049,20 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             let saved_mode = g_gpu.coopmat_mode
             g_gpu.sm_count = 36
             g_gpu.coopmat_mode = COOPMAT_MM
+            t |> success(pf_f16_feed(int(KqFmt.q8)), "under mm the f16 feed admits Q8_0: its dense GEMMs take the KHR kq tile")
+            t |> success(!cm2_fa_on(), "under mm the cm2 flash pick follows the mode, whatever the card supports")
+            t |> success(ple_proj_shape_ok(1536l, 8960l), "under mm the per-layer-embedding projection takes the KHR f16 GEMM at 16-multiples")
+            t |> success(!ple_proj_shape_ok(1536l, 8968l), "... and stays on the CPU off them")
             t |> equal(cm2_tile_cols(8192l, 512l), 128l)                       // the KHR arm has one tile geometry
             t |> equal(cm2_tile_cols(768l, 32l), 128l)                         // ... the bucket rule included
             let khr_kv = cm2_gemm_pick(512l, 512l, 2048l)
             t |> equal(khr_kv.tc, 128l)                                        // ... under the split too
             t |> equal(khr_kv.nsplit, 2l)                                      // ... and the wave model's k chunks: the 1B k/v shape's 16 tiles under-fill 36 SMs
             t |> equal(cm2_gemm_pick(2048l, 512l, 2048l).nsplit, 1l)           // ... where its q shape's 64 tiles run whole
+            g_gpu.coopmat_mode = COOPMAT_SDOT4
+            t |> success(!pf_f16_feed(int(KqFmt.q8)), "under sdot4 Q8_0 keeps the requant feed - the reference arm's quant path")
+            t |> success(fa_khr_serves(256l, 50.0, false) && fa_khr_serves(512l, 0.0, false), "the KHR flash pick: a 256 head under the softcap, a 512 head")
+            t |> success(!fa_khr_serves(128l, 50.0, false) && !fa_khr_serves(128l, 0.0, true) && !fa_khr_serves(96l, 0.0, false), "... not a capped 128 head, a gated model, or a 96 head")
             g_gpu.coopmat_mode = COOPMAT_CM2
             t |> equal(cm2_tile_cols(3072l, 128l), 128l)    // a short window never takes the half-empty l column
             t |> equal(cm2_tile_cols(3072l, 512l), 128l)    // the 3B q/down shape: m on a strict wave win (96 tiles in 3 waves, 30 units, vs 48 in 2, 32)

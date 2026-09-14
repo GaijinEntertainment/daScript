@@ -2766,9 +2766,11 @@ def facm2_smear(a, b : float) : float => a
 [spirv_per_element, unused_argument(r, c)]
 def facm2_exp(r, c : uint; v : float) : float => exp(v)
 
-//! the running row max, biased by 3 ln 2 so every P = e^(S - M) sits at an eighth or under and the f16 O accumulator cannot overflow; L carries the same bias and the final divide cancels it
+//! the flash tiles' row-max bias, 3 ln 2: every P = e^(S - M) sits at an eighth or under, so a step's f16 P x V accumulator cannot overflow; L carries the same bias and the final divide cancels it
+let FA_MAX_BIAS = 2.0794415
+
 [spirv_per_element, unused_argument(r, c)]
-def facm2_pick(r, c : uint; v, o : float) : float => max(v + 2.0794415, o)
+def facm2_pick(r, c : uint; v, o : float) : float => max(v + FA_MAX_BIAS, o)
 
 // causal: key kbase+c may not exceed query w0+q0+r (-FLT_MAX/2 keeps Mold-M NaN-free), nor sit
 // below the query's window on a sliding layer (win 0 = every position); padding rows keep their
@@ -3431,10 +3433,10 @@ class template FaKhrT {
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
     @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
     @push_constant pa : FaCm2Args
-    @template_constant HS : uint = 64u           // the head width (64, 128, 256 or 512)
+    @template_constant HS : uint = 64u           // the head width
     @template_constant OUT16 : bool = false      // the o store as f16
     @template_constant CAP : bool = false        //! the softcap stamps: every scaled score through cap * tanh(s / cap) before the mask (gemma-2)
-    @workgroup fq : uint[4096]     // the 16-row q tile, scaled, f16 pairs: HS / 2 words a row (the 512 head fills it)
+    @workgroup fq : uint[4096]     // the 16-row q tile, scaled, f16 pairs: HS / 2 words a row (sized for the 512 head on every stamp)
     @workgroup fs : float[1024]    // the 16 x 64 score tile, row stride 64
     @workgroup fp : uint[512]      // P as f16 pairs, 16 x 64: 32 words a row
     @workgroup fpv : uint[4096]    // the step's P x V as f16 pairs, 16 x HS: HS / 2 words a row
@@ -3463,21 +3465,21 @@ class template FaKhrT {
             }
             i += 128u
         }
-        let srow = tid / 8u           // the softmax lanes: eight a row, eight keys each
-        let cb = (tid % 8u) * 8u
+        let srow = tid / 8u           // the softmax lanes: eight a row
+        let key_col0 = (tid % 8u) * 8u
         let gq = pa.w0 + q0 + srow
         let o_dim0 = (tid % 8u) * (HS / 8u)
         var m = -3.0e38
         var l = 0.0
         var o : float[64]
-        for (z in range(int(HS / 8u))) {
+        for [unroll] (z in range(int(HS / 8u))) {
             o[z] = 0.0
         }
         let qbase = pa.w0 + q0
-        let kmax = pa.w0 + min(q0 + 16u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        let kend = pa.w0 + min(q0 + 16u, pa.rows)
         var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / 64u) * 64u : 0u
         barrier()
-        while [dont_unroll] (j < kmax) {
+        while [dont_unroll] (j < kend) {
             let krow = j + sg * 16u
             if (krow < kvlen) {
                 var s : coopmatAcc_f32_16x16
@@ -3496,8 +3498,8 @@ class template FaKhrT {
             let m_old = m
             var mloc = -3.0e38
             for [unroll] (c in range(8)) {
-                let idx = srow * 64u + cb + uint(c)
-                let gk = j + cb + uint(c)
+                let idx = srow * 64u + key_col0 + uint(c)
+                let gk = j + key_col0 + uint(c)
                 let v = CAP ? softcap_exp(fs[idx], pa.cap) : fs[idx]
                 let sv = (gk > gq || gk >= kvlen || (pa.window != 0u && gk + pa.window <= gq)) ? -3.0e38 : v
                 fs[idx] = sv
@@ -3506,10 +3508,10 @@ class template FaKhrT {
             mloc = max(mloc, subgroupShuffleXor(mloc, 1u))
             mloc = max(mloc, subgroupShuffleXor(mloc, 2u))
             mloc = max(mloc, subgroupShuffleXor(mloc, 4u))
-            let mt = max(m_old, mloc)
+            let mt = max(m_old, mloc + FA_MAX_BIAS)
             var lloc = 0.0
             for [unroll] (c2 in range(4)) {
-                let idx = srow * 64u + cb + uint(c2) * 2u
+                let idx = srow * 64u + key_col0 + uint(c2) * 2u
                 let e0 = exp(fs[idx] - mt)
                 let e1 = exp(fs[idx + 1u] - mt)
                 fp[idx / 2u] = packHalf2x16(float2(e0, e1))
@@ -3529,7 +3531,7 @@ class template FaKhrT {
                 if (j + kc < kvlen) {
                     var pf : coopmatA_f16_16x16
                     coopmatLoad(pf, fp, int(kc / 2u), 32, 0)
-                    for (f in range(int(HS / 64u))) {
+                    for [unroll_full] (f in range(int(HS / 64u))) {
                         var vb : coopmatB_f16_16x16
                         coopmatLoad(vb, vh, pa.kvbase + (j + kc) * pa.kvd + kvh * HS + sg_col0 + uint(f) * 16u, int(pa.kvd), 0)
                         acc[f] = coopmatMulAdd(pf, vb, acc[f])
@@ -3537,11 +3539,11 @@ class template FaKhrT {
                 }
                 kc += 16u
             }
-            for (f2 in range(int(HS / 64u))) {
+            for [unroll_full] (f2 in range(int(HS / 64u))) {
                 coopmatStore(acc[f2], fpv, int((sg_col0 + uint(f2) * 16u) / 2u), int(hw), 0)
             }
             barrier()
-            for (z2 in range(int(HS / 16u))) {
+            for [unroll] (z2 in range(int(HS / 16u))) {
                 let pair = unpackHalf2x16(fpv[srow * hw + (o_dim0 + uint(z2) * 2u) / 2u])
                 o[z2 * 2] = o[z2 * 2] * alpha + pair.x
                 o[z2 * 2 + 1] = o[z2 * 2 + 1] * alpha + pair.y
@@ -3552,7 +3554,7 @@ class template FaKhrT {
         if (q0 + srow < pa.rows) {
             let inv = 1.0 / l
             let ob = (q0 + srow) * pa.qd + h * HS + o_dim0
-            for (z3 in range(int(HS / 8u))) {
+            for [unroll] (z3 in range(int(HS / 8u))) {
                 static_if (OUT16) {
                     outp[ob + uint(z3)] = float16(o[z3] * inv)
                 } else {
@@ -6777,7 +6779,7 @@ class template Q8Cm2T : KqCm2BatchT {
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {
-            let w4 = wq4[blk * 2u + (e0 >> 4u)]   //! the block's low or high 16 weights, four words of int8
+            let w4 = wq4[blk * 2u + (e0 >> 4u)]   // the block's low or high 16 weights, four words of int8
             let d = float(ws[blk])
             for [unroll_full] (c in range(4)) {
                 let q = float4(int4(unpack8(int(w4[c])))) * d
@@ -8602,22 +8604,33 @@ class F16GemmKhr {
     [spirv_kernel(local_size_x = 128, name = "f16_gemm_khr_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
         let wtiles = (pa.d + 63u) / 64u
-        let t0 = (gl_WorkGroupID.x / wtiles) * 64u
-        let m0 = (gl_WorkGroupID.x % wtiles) * 64u
+        let tile_row0 = (gl_WorkGroupID.x / wtiles) * 64u
+        let tile_col0 = (gl_WorkGroupID.x % wtiles) * 64u
         let sg = gl_LocalInvocationID.x / 32u
-        let tr = t0 + (sg / 2u) * 32u
-        let mc = m0 + (sg % 2u) * 32u
+        let sg_row0 = tile_row0 + (sg / 2u) * 32u
+        let sg_col0 = tile_col0 + (sg % 2u) * 32u
+        //! a fragment past `rows` or `d` is neither loaded nor stored: the planes end at their 16-multiples, and the store guard below discards its product
+        let a1_on = sg_row0 + 16u < pa.rows
+        let b1_on = sg_col0 + 16u < pa.d
         var acc : coopmatAcc_f32_16x16[4]
         var k = 0u
         while (k < pa.n) {
             var a0 : coopmatA_f16_16x16
             var a1 : coopmatA_f16_16x16
-            coopmatLoad(a0, xf16, tr * pa.n + k, int(pa.n), 0)
-            coopmatLoad(a1, xf16, (tr + 16u) * pa.n + k, int(pa.n), 0)
             var b0 : coopmatB_f16_16x16
             var b1 : coopmatB_f16_16x16
-            coopmatLoad(b0, w, pa.woff + mc * pa.n + k, int(pa.n), 1)
-            coopmatLoad(b1, w, pa.woff + (mc + 16u) * pa.n + k, int(pa.n), 1)
+            if (sg_row0 < pa.rows) {
+                coopmatLoad(a0, xf16, sg_row0 * pa.n + k, int(pa.n), 0)
+            }
+            if (a1_on) {
+                coopmatLoad(a1, xf16, (sg_row0 + 16u) * pa.n + k, int(pa.n), 0)
+            }
+            if (sg_col0 < pa.d) {
+                coopmatLoad(b0, w, pa.woff + sg_col0 * pa.n + k, int(pa.n), 1)
+            }
+            if (b1_on) {
+                coopmatLoad(b1, w, pa.woff + (sg_col0 + 16u) * pa.n + k, int(pa.n), 1)
+            }
             acc[0] = coopmatMulAdd(a0, b0, acc[0])
             acc[1] = coopmatMulAdd(a0, b1, acc[1])
             acc[2] = coopmatMulAdd(a1, b0, acc[2])
@@ -8625,8 +8638,8 @@ class F16GemmKhr {
             k += 16u
         }
         for [unroll] (f in range(4)) {
-            let r = tr + uint(f / 2) * 16u
-            let c = mc + uint(f % 2) * 16u
+            let r = sg_row0 + uint(f / 2) * 16u
+            let c = sg_col0 + uint(f % 2) * 16u
             if (r < pa.rows && c < pa.d) {
                 coopmatStore(acc[f], y, int(pa.ybase + r * pa.ystride + c), int(pa.ystride), 0)
             }

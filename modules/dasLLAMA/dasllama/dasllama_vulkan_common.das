@@ -138,6 +138,13 @@ def cm2_splitk_env : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 
+//! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
+def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
+
+//! the KHR flash tile serves a head of 64, 128, 256 or 512 on an ungated model, the softcap at 256 alone (its cap stamps); the pre-flight and the window chain pick from this one predicate
+def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
+    => (hs == 64l || hs == 128l || hs == 256l || hs == 512l) && !gated && (cap == 0.0 || hs == 256l)
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
@@ -1183,16 +1190,16 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode) and the flash-attention twin; without it the sdot4 tiles serve"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the KHR flash tile and the KHR f16 GEMM off cm2 (at subgroup 32), and the h128 attention twin; without it the sdot4 tiles and the chunked attention serve"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
             present = has_cm2 && cooperative_matrix2_fa_supported(phys),
             knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
-            rides = "the cm2 flash-attention stamps, on a device created in cm2 mode; without them the KHR h128 twin and the chunked attention tiles serve"),
+            rides = "the cm2 flash-attention stamps, on a device created in cm2 mode; without them the KHR flash tile serves at subgroup 32, and the h128 twin and the chunked attention tiles where it declines"),
         VkExtEntry(name = "VK_NV_cooperative_matrix_decode_vector", present = has_cm2 && cooperative_matrix2_decode_vector_supported(phys),
-            knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec,
+            knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec || resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
             rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
         VkExtEntry(name = "VK_NV_shader_sm_builtins", present = device_extension_available(phys, "VK_NV_shader_sm_builtins") && sm > 0,
             rides = "the SM count the dense tile pick and split-k read ({sm} here); without it the l tile serves every dense GEMM and nothing splits k"),
@@ -1292,9 +1299,9 @@ def vk_moe_init : bool {
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
     g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
-    //! a device created off cm2 mode (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, so this flag reads false whatever the card supports
+    // the mode conjunct stays: a device created off cm2 mode (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, and the feature probe alone would say yes
     g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && cooperative_matrix2_fa_supported(g_gpu.phys)
-    g_gpu.decvec_on = g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
+    g_gpu.decvec_on = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
     g_gpu.sm_count = query_sm_count(g_gpu.phys)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
     var xfam = -1

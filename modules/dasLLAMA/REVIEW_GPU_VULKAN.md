@@ -110,10 +110,10 @@ that dispatches that stamp - `cm2:<fmt>` or `cm2g:<fmt>` for the l and m stamps
 **A diff that answers a probe-row or kernel-cell duty with a claim that a stamp's emitted words
 did not move carries that stamp's `DASLLAMA_VK_SPV_DUMP` words diffed against master's.**
 
-**A diff that changes what a kq superblock format's KHR tile emits - its `khr_stage16`
-override, a constant or a gated member the KHR stamp emits, or the shared `khr_tile` or `run`
-of `KqCm2BatchT` - puts that format's kernel cell - that format's test block in
-`tests/test_vulkan_kernels.das` - run on its KHR arm in the PR body.** A KHR tile is the
+**A diff that changes what a format's KHR tile emits - a format the f16 feed admits on a
+KHR-mode card, its `khr_stage16` override, a constant or a gated member the KHR stamp emits, or
+the shared `khr_tile` or `run` of `KqCm2BatchT` - puts that format's kernel cell - that format's
+test block in `tests/test_vulkan_kernels.das` - run on its KHR arm in the PR body.** A KHR tile is the
 `<Fmt>KhrBatch` class stamped per weight format in `dasllama/dasllama_vulkan_classes.das`; a
 member a `@template_gate` admits on the stamp is emitted whether or not its body reads it.
 
@@ -125,8 +125,8 @@ format.**
 fixture's declaration in the same change.** The emitter suite validates the shapes it emits; a
 fixture left on a retired shape validates nothing the stamp runs.
 
-**A kq superblock format (`kq_sb`) that ships a KHR instantiation runs its KHR arm in that format's kernel cell,
-in the same change.**
+**A format that ships a KHR instantiation - a `<Fmt>KhrBatch` stamp - runs its KHR arm in that
+format's kernel cell, in the same change.**
 
 **A kernel body that calls a `[spirv_decode]` method directly passes the plane element itself
 (`decode(wq[i], ...)`), never a local copy of it (`let blk = wq[i]` then `decode(blk, ...)`).**

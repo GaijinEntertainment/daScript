@@ -1322,7 +1322,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             mir_base += seq_cap * g.kvd
         }
     }
-    if (ple > 0l) {   //! the pre-step's projection on device where the driver takes it (the cm2 route); the CPU pre-step serves otherwise
+    if (ple > 0l) {   //! the pre-step's projection on device where the driver takes it (the cm2 f16 GEMM, or the KHR twin off cm2); the CPU pre-step serves otherwise
         let all = c.n_layers * ple
         var w : array<float>
         w |> reserve(all * dim)   // E4B: 27.5M floats - the guard wants the final size reserved first
