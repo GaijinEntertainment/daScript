@@ -611,7 +611,7 @@ def private pf_f16g_on() : bool => (g_rd.pf_splitk != 0ul && f16g_shape_ok(g_rd.
 def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : VkDescriptorSet; n, d, rows, woff, ybase : int64) {
     verify(F16G_SPLIT * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the f16 GEMM's partial planes exceed the split-k scratch")
     var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = uint(woff), ybase = 0u, ystride = uint(d), ksplit = uint(n / F16G_SPLIT))
-    enc_f16_gemm_cm2_cls(raw, h, gset, pc, f16_gemm_wgs(false, rows, d) * F16G_SPLIT)
+    enc_f16_gemm_cm2_cls(raw, h, gset, pc, f16_gemm_wgs(false, rows, d) * F16G_SPLIT)   //! the split-k route is cm2-only (`f16g_shape_ok`), so the cm2 builder and its grid times the split
     var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(F16G_SPLIT), ybase = uint(ybase))
     enc_splitk_reduce_cls(raw, h, rset, pcr, (rows * d + 1_023l) / 1_024l)
 }
@@ -648,7 +648,7 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
             fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
     }
     if (g_rd.dn_ba_f32 && pf_dnx6(l) && pf_f16g_on()) {
-        L.pf_f16g_ba_set = set_f16_gemm_cm2_cls(fixed_array(g_rd.dn_ba_dev, g_rd.pf_xf, g_rd.pf_splitk),
+        L.pf_f16g_ba_set = f16_gemm_set(false, fixed_array(g_rd.dn_ba_dev, g_rd.pf_xf, g_rd.pf_splitk),
             fixed_array(g_rd.dn_ba_bytes, np * dim * 2l, g_rd.pf_splitk_bytes), fixed_array(0u, VHZ_XQ, VHZ_SK))
         L.pf_f16g_ba_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, L.dn.smalls_dev),
             fixed_array(g_rd.pf_splitk_bytes, DND_SMALLS_BYTES), fixed_array(VHZ_SK, VHZ_DNSM))
@@ -866,10 +866,10 @@ def private pf_moe_layer_sets(l : int64) {
     L.pf_router_set = set_router_gemm_cls(fixed_array(g_rd.router_dev, g_rd.pf_xb, g_rd.pf_mlog),
         fixed_array(g_rd.router_bytes, np * dim * 4l, np * ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
     if (pf_f16g_on()) {
-        verify(ensure_f16_gemm_cm2_cls() && ensure_splitk_reduce_cls() && ensure_f16cvt_cls(), "vk prefill: the router's f16 GEMM rails must engage")
+        verify(f16_gemm_ensure(false) && ensure_splitk_reduce_cls() && ensure_f16cvt_cls(), "vk prefill: the router's f16 GEMM rails must engage")
         L.pf_router_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
             fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
-        L.pf_f16g_router_set = set_f16_gemm_cm2_cls(fixed_array(g_rd.router16_dev, g_rd.pf_xf, g_rd.pf_splitk),
+        L.pf_f16g_router_set = f16_gemm_set(false, fixed_array(g_rd.router16_dev, g_rd.pf_xf, g_rd.pf_splitk),
             fixed_array(g_rd.router16_bytes, np * dim * 2l, g_rd.pf_splitk_bytes), fixed_array(0u, VHZ_XQ, VHZ_SK))
         L.pf_f16g_router_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, g_rd.pf_mlog),
             fixed_array(g_rd.pf_splitk_bytes, np * ner * 4l), fixed_array(VHZ_SK, VHZ_MRT))
@@ -1242,7 +1242,7 @@ def private pf_setup {
         ensure_dn_state()   // dn_ws_dev (the scan workspace) + the staging buffers the reset/handoff ride
         verify(ensure_dn_conv_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls()
             && ensure_dn_tail_cls() && (!g_rd.dn_ba_f32 || ensure_dn_ba_cls())
-            && (!(g_rd.dn_ba_f32 && pf_f16g_on()) || (ensure_f16_gemm_cm2_cls() && ensure_splitk_reduce_cls())),
+            && (!(g_rd.dn_ba_f32 && pf_f16g_on()) || (f16_gemm_ensure(false) && ensure_splitk_reduce_cls())),
             "vk prefill: the deltanet class rails must engage on a live device")
         let cd = g_rd.dn_cd
         let di = g_rd.dn_di
@@ -1293,7 +1293,7 @@ def private pf_setup {
             let fbufs = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, wo6 ? g_rd.pf_af : g_rd.pf_attn)
             let fsizes = fixed_array(np * qrow * 4l, mirbytes, mirbytes, wo6 ? np * qd * 2l : np * qd * 4l)
             let fgbits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, wo6 ? VHZ_AQ : VHZ_ATT)
-            g_rd.pf_sets[b + 5] = fa_stamp_set(!L.pf_fa, fbufs, fsizes, fgbits)
+            g_rd.pf_sets[b + 5] = fa_stamp_set(L.pf_fakhr, fbufs, fsizes, fgbits)
         } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l)
@@ -1593,7 +1593,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                 enc_f16cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
                 var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
-                f16_gemm_enc(g_gpu.coopmat_mode != COOPMAT_CM2, raw, h, g_rd.pf_ple_gemm_set, pcg, wlen, all)
+                let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
+                f16_gemm_enc(ple_khr, raw, h, g_rd.pf_ple_gemm_set, pcg, wlen, all)
                 var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
                 enc_cls_ar(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
             }
@@ -1722,8 +1723,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
                 if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
-                    let khr = !g_rd.layers[l].pf_fa
-                    var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
+                    let khr = g_rd.layers[l].pf_fakhr
+                    var pcf = FaArgs(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
                         scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap)
                     fa_stamp_enc(khr, hs, hs == 256l && g_rd.q_gated, pcf.cap != 0.0, fo6, raw, h, g_rd.pf_sets[b + 5], pcf,
@@ -2887,7 +2888,7 @@ def private ensure_at_fa_state(hs : int64) {
     if (g_gpu.at_fa_ready) {
         return
     }
-    verify(ensure_f16cvt_cls() && (hs == 64l ? ensure_fa_cm2_h64_cls() : ensure_fa_cm2_h128_cls()),
+    verify(ensure_f16cvt_cls() && fa_stamp_ensure(false, hs, false, false, false),
         "vk attention chain: the fa class rails must engage on a live device")
     let kvbytes = AT_CTX * AT_MAX_KV * 4l
     let kv16bytes = AT_CTX * AT_MAX_KV * 2l
@@ -2897,7 +2898,7 @@ def private ensure_at_fa_state(hs : int64) {
         fixed_array(kvbytes, kv16bytes), fixed_array(VHB_ATK, VHB_ATK16))
     g_gpu.at_v16cvt_set = set_f16cvt_cls(fixed_array(g_gpu.at_v_dev, g_gpu.at_v16_dev),
         fixed_array(kvbytes, kv16bytes), fixed_array(VHB_ATV, VHB_ATV16))
-    g_gpu.at_fa_set = set_fa_cm2_cls(
+    g_gpu.at_fa_set = fa_stamp_set(false,
         fixed_array(g_gpu.at_q_dev, g_gpu.at_k16_dev, g_gpu.at_v16_dev, g_gpu.at_g_dev),
         fixed_array(AT_WINDOW * AT_MAX_QD * 4l, kv16bytes, kv16bytes, AT_WINDOW * AT_MAX_QD * 4l),
         fixed_array(VHB_ATQ, VHB_ATK16, VHB_ATV16, VHB_ATG))
@@ -2970,14 +2971,9 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
             DL.filled = true
             g_dat_mirror_fills++
         }
-        var pcf = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kv_dim),
+        var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kv_dim),
             kv_mul = uint(kv_mul), kvbase = 0u, scale = scale)
-        let fawgs = n_heads * ((rows + 63l) / 64l)
-        if (hs == 64l) {
-            enc_fa_cm2_h64_cls(raw, h, g_gpu.at_fa_set, pcf, fawgs)
-        } else {
-            enc_fa_cm2_h128_cls(raw, h, g_gpu.at_fa_set, pcf, fawgs)
-        }
+        fa_stamp_enc(false, hs, false, false, false, raw, h, g_gpu.at_fa_set, pcf, fa_stamp_wgs(false, n_heads, rows))
     } else {
         var pca = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kv_dim),
             hs = uint(hs), kv_mul = uint(kv_mul), flags = gated ? 1u : 0u, dpl = uint(hs / 32l), scale = scale)

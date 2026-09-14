@@ -2876,6 +2876,11 @@ def vkd_pipes_rebuild() {
     g_vkd_pipe_epoch++
 }
 
+//! PROBE SEAM: with `g_vkd_spv_keep` on, every class pipeline built keeps its EMITTED words under its kernel name in
+//! `g_vkd_spv_kept` - the kernel cells read a stamp's words back (its Workgroup variables, its capabilities); off, nothing is kept
+var g_vkd_spv_keep = false
+var g_vkd_spv_kept : table<string; array<uint>>
+
 // once-per-class named decline log for the workgroup-footprint gate below
 var private g_wg_declined : table<string>
 
@@ -3006,6 +3011,9 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
         c.pipe_epochs |> resize(ord + 1)
     }
     spv_dump_save(kernel, spv)   // the EMITTED words, before an override replaces them
+    if (g_vkd_spv_keep) {
+        g_vkd_spv_kept[kernel] := spv
+    }
     spv_override_load(kernel, spv)
     var shader : ShaderModule
     if (g_gpu.decvec_on) {

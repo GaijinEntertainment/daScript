@@ -1282,10 +1282,7 @@ module) is independent and can land any time - it is pure structure.
     byte-identical to their m twins (only the five grid formats' e stamps differ, in k step) - alias
     the e ladder to the m stamp where they agree, moving the module gate, the census rows and the
     docs together; (2) a MoE layer with a dense triple on the f16 feed converts `pf_xb` to `pf_xf`
-    twice a window - skip the second convert; (3) the module gate's image layout stamp closure hashes
-    every function named `*_prepare` under `dasllama/`, so an edit to the resident decode's
-    `vk_rdec_prepare*` moves the stamp though no image layout moved - narrow the match to the image
-    layout's own prepare functions; (4) `spawn_readonly_fixture`, the lens refusal gate's child
+    twice a window - skip the second convert; (4) `spawn_readonly_fixture`, the lens refusal gate's child
     compile, passes no `-dasroot`, so the gate audits the binary's own tree rather than the tree under
     test - pass the test's root; (5) no cell pins the f16 router route against the f32 router GEMM
     (logits within an f16 bar, the top-k picks equal off near-ties) - an arm in
@@ -1511,3 +1508,19 @@ module) is independent and can land any time - it is pure structure.
     path and never reaches `vk_moe_attn_dec`, or `fill_stack_acts` declines on a null buffer with
     the reason in the log; either ships a large-tier cell that loads the IQ2_XXS 30B under `mm` and
     decodes one token.
+63. **Two of the prefill's class pick ladders sit outside the ladders' home.** `REVIEW_PLACEMENT.md`
+    lands a host-side pick ladder over Vulkan kernel classes in `dasllama_vulkan_classes.das`, where
+    `gemv_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*` and `f16_gemm_*` live, while the cm2
+    tile ladder (`cm2_cls_*`, its `khr_cls_*` and `cm2e_cls_*` arms) sits in
+    `dasllama_vulkan_prefill.das`, pinned there by `REVIEW.das`'s `check_cm2_ladder_set`, which reads
+    that file's bodies. Move the six ladders to the classes file and retarget the check's
+    `function_bodies` and its two findings at `VK_CLASSES` in the same change; the cells, the probe
+    harness and the prefill call them by name, so no caller moves.
+64. **The folded flash template's KHR stamps carry two constants their arm never reads.** `FaT`
+    declares `BC` (the cm2 arm's K/V step) and `GATED` (the cm2 arm's gate multiply), and the
+    head-size templates set `BC` for both arms, so every `fa_khr_*` stamp inherits a `BC` and a
+    `GATED` its compiled `static_if (KHR)` arm ignores - an `override GATED = true` on a KHR leaf
+    compiles to an ungated kernel with no diagnostic, and only the host ladders'
+    `fa_stamp_refuse` keep such a stamp off the device. The arms share one `run` because the
+    SPIR-V emitter emits a method call as an `OpFunction` it never inlines; once the emitter inlines
+    device-side calls, each arm becomes a method on its own template and the constants move with it.

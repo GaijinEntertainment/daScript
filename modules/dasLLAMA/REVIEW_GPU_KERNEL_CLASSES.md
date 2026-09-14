@@ -9,13 +9,22 @@ with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling
 twin, or shifts a shared field to a different binding number, is a defect - even where one
-twin ignores that field.** Kernel twins are kernel classes whose bodies differ on one stamp
-axis - one compile-time choice, such as single/batch, format, or single-pass/chunked.
+twin ignores that field.** Kernel twins are kernel classes whose bodies differ on one
+compile-time choice fixed by the stamp - one instance of a class template.
 
 **A copy-pasted kernel twin, or a kernel split into hand instances where a `static_if` on a
 `@template_constant` serves, is a defect - kernel twins stamp one `class template`.** Body
 divergence is carried by a `@template_constant`, or by an overridden method spliced flat at
 emission.
+
+**A `@template_constant` a stamp sets, that no `static_if` arm of that stamp's compiled body reads,
+is a defect - move the constant to the template whose arms read it, or make the arm read it.**
+Setting a constant no compiled arm reads changes nothing.
+
+**A diff that folds kernel classes onto one template, or retargets a dispatch class at another
+template, carries in the PR body, for each affected stamp, its generated source diffed against the
+pre-change tree - the `*_msl` global, or the SPIR-V dump - with an empty diff, or names there the
+difference and the compile-time choice that carries it.**
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
 base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
@@ -61,9 +70,9 @@ with no `tgmem=` spec - or weakening any test cell that holds such a refusal
 binding a column tile of a wider row would leave the rest of each row outside the tracked
 hazard range.
 
-**A NEW hand-written `enc_*` body that binds a buffer or a kargs field itself is a defect -
-declare the class so the `[metal_dispatch]` / `[vk_dispatch]` lens generates the builder.** A
-body that only picks, defaults or composes generated builders binds nothing.
+**A NEW hand-written encode or descriptor-set helper that binds a buffer or a kargs field itself
+is a defect - declare the class so the `[metal_dispatch]` / `[vk_dispatch]` lens generates the
+builder.** A body that only picks, defaults or composes generated builders binds nothing.
 
 **A hand-rolled bind list on a dispatch that serves a user call, in `dasllama/` or
 `performance/`, is a defect: dispatch through the kernel's `enc_*` builder instead.**

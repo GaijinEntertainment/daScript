@@ -4,23 +4,25 @@
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md` for the Metal tier,
 `followup_vulkan.md` for the Vulkan tier, `followup_general.md` for everything else.
 
-Figure rules here bind any text this change adds - in the repo, in a commit message, or in its PR body - outside the
-pages a `site*/` or `utils/` folder checklist owns (repo root); those pages answer to their own
-checklist. The naming a figure rule asks for sits in
-the figure's own sentence, in a table heading that covers the table's rows, in a section-level
-provenance line that covers the paragraphs under it, or in a citation of the passage whose
-provenance line covers it. An arm is one side of a pair held against the other. Flags are the
-tier (`-jit` or not), the `DAS_TUNE_POLICY` value in force, and the kernel backend the run served
-on; for a run served on a GPU backend, the device and the coopmat mode (which cooperative-matrix
-path the run compiled: sdot4, f16, int8, mul_mm or cm2).
+A figure is any number a run produced - a rate, a wall, a count, a byte size. A figure rule below
+binds a figure this change writes or changes - in the repo, in a commit message, or in its PR
+body. It does not bind a figure a changed line carries unchanged. A figure on a page a `site*/`
+or `utils/` folder checklist owns (repo root) answers to that checklist instead of this one. The
+naming a figure rule asks for sits in the figure's own sentence, in a table heading that covers
+the table's rows, in a section-level provenance line that covers the paragraphs under it, or in
+a citation of the passage whose provenance line covers it. An arm is one side of a pair held
+against the other. Flags are the tier (`-jit` or not), the `DAS_TUNE_POLICY` value in force, and
+the kernel backend the run served on; for a run served on a GPU backend, the device and the
+coopmat mode in force (`DASLLAMA_COOPMAT` - which cooperative-matrix path the run compiled). An
+environment override is an env variable a run was given that changes what it compiles, tunes, or
+serves, other than the ones named above.
 
 **A `PERF_LEDGER.md` entry states a served-turn figure of the engine this repository builds - a
 tok/s rate or a turn wall - only when the released `lcpp_bench` exe (`benchmarks/lcpp_bench.das`
 built by `daspkg release`) or a board cell produced it.** A served turn is one whole request an
 engine serves, whatever the modality; a turn wall is its wall.
 
-**A `-jit` A/B pair enters `PERF_LEDGER.md` as its ratio, with the arms' absolute rates left in
-the run's report.** The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under
+**A `-jit` A/B pair's arms keep their absolute rates in the run's report.** The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under
 `-jit` rather than as the released exe.
 
 **A `PERF_LEDGER.md` entry stating a figure no cell, script, or exe of this repository produced

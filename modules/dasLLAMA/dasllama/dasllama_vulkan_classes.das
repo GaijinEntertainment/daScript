@@ -2784,7 +2784,7 @@ def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
 [spirv_per_element, unused_argument(r, c)]
 def facm2_sigmoid(r, c : uint; v : float) : float => 1.0 / (1.0 + exp(-v))
 
-struct FaCm2Args {
+struct FaArgs {
     rows : uint     // window query rows
     w0 : uint       // window base (queries attend positions [0, w0 + row])
     qd : uint       // o row stride (n_heads * hs); the q row's too unless qrow says otherwise
@@ -2803,21 +2803,21 @@ struct FaCm2Args {
 def facm2_softcap(r, c : uint; v : float; cap : float) : float => softcap_exp(v, cap)
 
 // The flash pass over the f16 K/V shadows: ONE class template over the head size and the cooperative-matrix arm (KHR). The head
-// template sizes the eight coopmat typedefs: QACC/QA the q and o tiles (64 x HS), SACC/PA the
-// score tiles (64 x BC), KB/VB the K^T and V steps, ONE the rowsum ones-matrix, OF the f16 store.
+// template sizes the eight coopmat typedefs of the cm2 arm: QACC/QA the q and o tiles (64 x HS), SACC/PA the
+// score tiles (64 x BC), KB/VB the K^T and V steps, ONE the rowsum ones-matrix, OF the f16 store; the KHR leaves inherit them unread.
 [ |> template_struct_instance]
 class template FaT {
     @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
     @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
     @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
-    @push_constant pa : FaCm2Args
+    @push_constant pa : FaArgs
     @template_constant HS : uint = 64u           // the head width
     @template_constant BC : uint = 64u           // the cm2 arm's K/V step: 64 at hs 64, 32 above (the head-size cut: K^T, V and the softmax state at 32 columns)
     @template_constant OUT16 : bool = false      // the o store as f16
     @template_constant GATED : bool = false      // the cm2 arm: multiply the sigmoid of the gate half of a [q | gate] head into o; qstride/qhs describe that panel and read as qd/HS when unset
     @template_constant CAP : bool = false        //! the softcap stamps: every scaled score through cap * tanh(s / cap) before the mask (gemma-2)
-    @template_constant KHR : bool = false        //! the KHR cooperative-matrix arm: the same pass on subgroup-scope 16x16x16 fragments through shared memory, sixteen query rows a workgroup
+    @template_constant KHR : bool = false        //! the KHR cooperative-matrix arm; its lane map is the cited section's
     @workgroup @template_gate = KHR fq : uint[4096]     // the 16-row q tile, scaled, f16 pairs: HS / 2 words a row (sized for the 512 head on every stamp)
     @workgroup @template_gate = KHR fs : float[1024]    // the 16 x 64 score tile, row stride 64
     @workgroup @template_gate = KHR fp : uint[512]      // P as f16 pairs, 16 x 64: 32 words a row
@@ -3043,8 +3043,7 @@ class template FaT {
     }
 }
 
-// hs=64 (tinyllama-class): the whole head is one K/V step on the cm2 arm; every head-size template carries the cm2
-// arm's tile typedefs, which the KHR leaves inherit unread
+// hs=64 (tinyllama-class): the whole head is one K/V step on the cm2 arm
 [ |> template_struct_instance]
 class template FaH64T : FaT {
     override HS = 64u
@@ -3250,13 +3249,24 @@ def fa_stamp_wgs(khr : bool; nheads, rows : int64) : int64 {
     return nheads * ((rows + qrows_per_wg - 1l) / qrows_per_wg)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, f16 : bool) : bool {   // nolint:STYLE037 — one pick over the twenty stamps; a split per arm is the twin ladder this replaces
-    verify(!(khr && gated), "vk flash: the KHR flash tile has no gated stamp")
+//! the refusals are `panic`s, not `verify`s: a `verify` prints a stack walk before it throws, and the refusal cell probes them under `recover`
+def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap : bool) {
+    if (khr && gated) {
+        panic("vk flash: the KHR flash tile has no gated stamp")
+    }
+    if (cap && hs != 256l) {
+        panic("vk flash: the softcap stamps serve head size 256 alone")
+    }
+    if (hs != 64l && hs != 128l && hs != 256l && hs != 512l) {
+        panic("vk flash: a stamp for a head size the tile never serves")
+    }
+}
+
+def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, f16 : bool) : bool {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
+    fa_stamp_refuse(khr, hs, gated, cap)
     if (hs == 64l) return khr ? (f16 ? ensure_fa_khr_h64_f16_cls() : ensure_fa_khr_h64_cls()) : (f16 ? ensure_fa_cm2_h64_f16_cls() : ensure_fa_cm2_h64_cls())
     if (hs == 128l) return khr ? (f16 ? ensure_fa_khr_h128_f16_cls() : ensure_fa_khr_h128_cls()) : (f16 ? ensure_fa_cm2_h128_f16_cls() : ensure_fa_cm2_h128_cls())
     if (hs == 512l) return khr ? (f16 ? ensure_fa_khr_h512_f16_cls() : ensure_fa_khr_h512_cls()) : (f16 ? ensure_fa_cm2_h512_f16_cls() : ensure_fa_cm2_h512_cls())
-    verify(hs == 256l, "vk flash: a stamp for a head size the tile never serves")
     if (gated) return f16 ? ensure_fa_cm2_h256_g_f16_cls() : ensure_fa_cm2_h256_g_cls()
     if (cap) return khr ? (f16 ? ensure_fa_khr_h256_cap_f16_cls() : ensure_fa_khr_h256_cap_cls()) : (f16 ? ensure_fa_cm2_h256_cap_f16_cls() : ensure_fa_cm2_h256_cap_cls())
     return khr ? (f16 ? ensure_fa_khr_h256_f16_cls() : ensure_fa_khr_h256_cls()) : (f16 ? ensure_fa_cm2_h256_f16_cls() : ensure_fa_cm2_h256_cls())
@@ -3265,47 +3275,42 @@ def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, f16 : bool) : bool {   /
 def fa_stamp_pair_ensure(khr : bool; hs : int64; gated, cap, with_f16 : bool) : bool
     => fa_stamp_ensure(khr, hs, gated, cap, false) && (!with_f16 || fa_stamp_ensure(khr, hs, gated, cap, true))
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def fa_stamp_set(khr : bool; bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet
     => khr ? set_fa_khr_cls(bufs, sizes, gbits) : set_fa_cm2_cls(bufs, sizes, gbits)
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def fa_stamp_enc(khr : bool; hs : int64; gated, cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaCm2Args; wgs : int64) {   // nolint:STYLE037 — one pick over the twenty stamps; a split per arm is the twin ladder this replaces
-    verify(!(khr && gated), "vk flash: the KHR flash tile has no gated stamp")
+def fa_stamp_enc(khr : bool; hs : int64; gated, cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
+    fa_stamp_refuse(khr, hs, gated, cap)
     if (hs == 64l) {
-        if (f16) {
-            if (khr) { enc_fa_khr_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_f16_cls(raw, h, s, pc, wgs) }
+        if (khr) {
+            if (f16) { enc_fa_khr_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h64_cls(raw, h, s, pc, wgs) }
         } else {
-            if (khr) { enc_fa_khr_h64_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_cls(raw, h, s, pc, wgs) }
+            if (f16) { enc_fa_cm2_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_cls(raw, h, s, pc, wgs) }
         }
     } elif (hs == 128l) {
-        if (f16) {
-            if (khr) { enc_fa_khr_h128_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_f16_cls(raw, h, s, pc, wgs) }
+        if (khr) {
+            if (f16) { enc_fa_khr_h128_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h128_cls(raw, h, s, pc, wgs) }
         } else {
-            if (khr) { enc_fa_khr_h128_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_cls(raw, h, s, pc, wgs) }
+            if (f16) { enc_fa_cm2_h128_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_cls(raw, h, s, pc, wgs) }
         }
     } elif (hs == 512l) {
-        if (f16) {
-            if (khr) { enc_fa_khr_h512_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h512_f16_cls(raw, h, s, pc, wgs) }
+        if (khr) {
+            if (f16) { enc_fa_khr_h512_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h512_cls(raw, h, s, pc, wgs) }
         } else {
-            if (khr) { enc_fa_khr_h512_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h512_cls(raw, h, s, pc, wgs) }
-        }
-    } elif (gated) {
-        verify(hs == 256l, "vk flash: a stamp for a head size the tile never serves")
-        if (f16) { enc_fa_cm2_h256_g_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_g_cls(raw, h, s, pc, wgs) }
-    } elif (cap) {
-        verify(hs == 256l, "vk flash: a stamp for a head size the tile never serves")
-        if (f16) {
-            if (khr) { enc_fa_khr_h256_cap_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cap_f16_cls(raw, h, s, pc, wgs) }
-        } else {
-            if (khr) { enc_fa_khr_h256_cap_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cap_cls(raw, h, s, pc, wgs) }
+            if (f16) { enc_fa_cm2_h512_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h512_cls(raw, h, s, pc, wgs) }
         }
     } else {
-        verify(hs == 256l, "vk flash: a stamp for a head size the tile never serves")
-        if (f16) {
-            if (khr) { enc_fa_khr_h256_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_f16_cls(raw, h, s, pc, wgs) }
+        if (gated) {
+            if (f16) { enc_fa_cm2_h256_g_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_g_cls(raw, h, s, pc, wgs) }
+        } elif (cap) {
+            if (khr) {
+                if (f16) { enc_fa_khr_h256_cap_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h256_cap_cls(raw, h, s, pc, wgs) }
+            } else {
+                if (f16) { enc_fa_cm2_h256_cap_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cap_cls(raw, h, s, pc, wgs) }
+            }
+        } elif (khr) {
+            if (f16) { enc_fa_khr_h256_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h256_cls(raw, h, s, pc, wgs) }
         } else {
-            if (khr) { enc_fa_khr_h256_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cls(raw, h, s, pc, wgs) }
+            if (f16) { enc_fa_cm2_h256_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cls(raw, h, s, pc, wgs) }
         }
     }
 }
@@ -8705,10 +8710,11 @@ def f16_gemm_set(khr : bool; bufs : uint64 const[3]; sizes : int64 const[3]; gbi
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def f16_gemm_enc(khr : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : F16GemmArgs; rows, d : int64) {
+    let wgs = f16_gemm_wgs(khr, rows, d)
     if (khr) {
-        enc_f16_gemm_khr_cls(raw, h, s, pc, f16_gemm_wgs(true, rows, d))
+        enc_f16_gemm_khr_cls(raw, h, s, pc, wgs)
     } else {
-        enc_f16_gemm_cm2_cls(raw, h, s, pc, f16_gemm_wgs(false, rows, d))
+        enc_f16_gemm_cm2_cls(raw, h, s, pc, wgs)
     }
 }
 

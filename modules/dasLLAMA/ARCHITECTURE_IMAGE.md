@@ -212,7 +212,8 @@ result against the two constants the gate carries, `IMAGE_LAYOUT_STAMP_HASH` and
 `IMAGE_LAYOUT_STAMP_VERSION`.
 
 The closure, per file in sorted name order: every `Archive` serializer body (a top-level
-`def serialize*` taking an `Archive`), `build_image`, `parse_image`, every `*_prepare` mint of `dasllama_image.das`, the
+`def serialize*` taking an `Archive`), `build_image`, `parse_image`, every `*_prepare` mint of
+`dasllama_tts_blocks.das` (the TTS blocks' plane packers; a driver's `*_prepare` places no image byte), the
 layout helpers `pad_to_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
 `w_header`, `store_u32` and `store_u64`, and the declaration lines of the layout constants
 `IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND` and
