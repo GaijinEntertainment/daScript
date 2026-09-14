@@ -193,9 +193,10 @@ def cm2_tiles(d, cnt : int64) : int64 => cm2_tiles_at(d, cnt, cm2_tile_cols(d, c
 def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int64 = 9_223_372_036_854_775_807l) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
     let tc0 = cm2_tile_cols(d, cnt)
     let cores = int64(g_gpu.sm_count)
-    if (g_gpu.coopmat_mode == COOPMAT_MM || cores == 0l) {
+    if (cores == 0l) {
         return (tc = tc0, nsplit = 1l, ksplit = 0l)
     }
+    let khr = g_gpu.coopmat_mode == COOPMAT_MM   //! the KHR arm has the one 128-column geometry, so the pick weighs its k chunks alone
     let forced = cm2_splitk_env()
     if (forced > 0l) {
         var sk = min(forced, 8l)
@@ -207,7 +208,7 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
     if (n < 2048l || d < 128l || cnt < tc0) {
         return (tc = tc0, nsplit = 1l, ksplit = 0l)
     }
-    let two_cols = (tc0 == 128l || tc0 == 256l) && cnt > 128l && cm2_tile_env() <= 0l
+    let two_cols = !khr && (tc0 == 128l || tc0 == 256l) && cnt > 128l && cm2_tile_env() <= 0l
     let ntc = two_cols ? 2 : 1
     let tcs = fixed_array(two_cols ? 256l : tc0, 128l)
     var best_tc = tc0

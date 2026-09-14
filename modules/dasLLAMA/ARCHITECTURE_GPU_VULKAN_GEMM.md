@@ -213,9 +213,8 @@ cm2 mode, since a forced mode enables no coopmat2 extension - the fa knob is on,
 not gated - this chain wires neither the h256 stamps nor their gated epilogue, so gated models
 keep the flash-style `at_attn` pass. The tile reads f16 K/V: the chain keeps its f32 roped-k /
 raw-v planes at absolute positions for the host readback the CPU cache store consumes, and
-fills f16 shadows of them with the base-less `f16cvt` over the whole attended prefix each
-window; the fa output lands in the same out plane `at_attn` writes, so the requant and `wo`
-stages never learn which pass ran.
+fills f16 shadows of them with the base-less `f16cvt` over the whole attended prefix each window; the fa
+output lands in the same out plane `at_attn` writes, so the requant and `wo` stages never learn which pass ran.
 
 **The per-op attention chain adds a q/k/v projection bias (qwen2moe) in its prep stage.** The
 layer's `[q | k | v]` row uploads to one device buffer per call and binds to `AtPrep`, whose q
@@ -223,9 +222,8 @@ and k passes add their slice (`boff` 0 and `qd`) to each projection element befo
 the rope - where the CPU chain adds it. v has no prep pass of its own, so a biased layer runs a
 third `AtPrep` over the raw v window with the rope half 0 and the norm off, which makes the
 kernel a copy plus bias in place (`boff` `qd + kv_dim`); the copy into the absolute-position v
-plane and the host readback then both carry the bias. A model without the bias runs the two
-passes with `hasb` 0 and never reads the binding, and the attention-quad rail's `arch_ok` test
-does not name the bias.
+plane and the host readback then both carry the bias. A model without the bias runs the two passes with
+`hasb` 0 and never reads the binding, and the attention-quad rail's `arch_ok` test does not name the bias.
 
 ### 2.2ae The KHR arm's hand-staged kq tile {#khr-mm-kq-tile}
 
@@ -240,9 +238,8 @@ reads the row's scale words once, and writes the 16 values into the stage as f16
 activations come straight from the f16 plane as two 16-byte words (that plane aliased as
 `uint4` on its binding), stored as they arrive. Both land in `@workgroup` `uint` arrays at a
 stride of 20 words (16 plus 4 pad, so the fragment loads spread across banks). q8 arrives here too
-(`Q8KhrBatch`, its stage a block's 16-weight half as four int8 words under the block's f16 scale), so
-a KHR-mode card's dense q8 GEMMs take the f16 feed; the q8-fed mul_mm L-tile serves the sdot4 and
-int8 modes.
+(`Q8KhrBatch`, its stage a block's 16-weight half as four int8 words under the block's f16 scale), so a KHR-mode
+card's dense q8 GEMMs take the f16 feed; the q8-fed mul_mm L-tile serves the sdot4 and int8 modes.
 
 **The eight subgroups tile the 128 x 128 step two by four.** Each owns 64 weight rows against
 32 tokens as eight 16x16 f16 accumulators (a `coopmatAcc_f16_16x16[8]` walked under
@@ -268,8 +265,9 @@ reaches the 49152 B of workgroup memory the tier requires of a device. The tile 
 that 49152 B floor; a device that offers less workgroup memory is not a target.
 
 **The arm exists at one geometry** - 128 weights by 128 tokens, k step 32 - so in mm mode the
-tile pick answers 128 and split-k never engages, and `cm2_cls_ensure/set/enc` route to the
-`khr_cls_*` ladders, the same `(fmt)` key on both. The f16 feed admits a kq format in mm mode
+tile pick answers 128 and the wave model weighs its k chunks alone (a deep, narrow GEMM splits k
+into the same scratch planes and reduce the cm2 tiles use), and `cm2_cls_ensure/set/enc` route to
+the `khr_cls_*` ladders, the same `(fmt)` key on both. The f16 feed admits a kq format in mm mode
 only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile, so
 a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4 tile.
 

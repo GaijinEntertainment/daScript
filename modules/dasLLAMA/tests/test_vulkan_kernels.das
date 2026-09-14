@@ -9996,7 +9996,10 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             g_gpu.coopmat_mode = COOPMAT_MM
             t |> equal(cm2_tile_cols(8192l, 512l), 128l)                       // the KHR arm has one tile geometry
             t |> equal(cm2_tile_cols(768l, 32l), 128l)                         // ... the bucket rule included
-            t |> equal(cm2_gemm_pick(512l, 512l, 2048l).nsplit, 1l)            // ... and no split-k scratch
+            let khr_kv = cm2_gemm_pick(512l, 512l, 2048l)
+            t |> equal(khr_kv.tc, 128l)                                        // ... under the split too
+            t |> equal(khr_kv.nsplit, 2l)                                      // ... and the wave model's k chunks: the 1B k/v shape's 16 tiles under-fill 36 SMs
+            t |> equal(cm2_gemm_pick(2048l, 512l, 2048l).nsplit, 1l)           // ... where its q shape's 64 tiles run whole
             g_gpu.coopmat_mode = COOPMAT_CM2
             t |> equal(cm2_tile_cols(3072l, 128l), 128l)    // a short window never takes the half-empty l column
             t |> equal(cm2_tile_cols(3072l, 512l), 128l)    // the 3B q/down shape: m on a strict wave win (96 tiles in 3 waves, 30 units, vs 48 in 2, 32)

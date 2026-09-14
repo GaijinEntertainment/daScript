@@ -1134,8 +1134,8 @@ def private pf_setup {
         g_rd.pf_af = make_device_buf(np * qd * 2l)
         g_rd.pf_hf = make_device_buf(np * hid * 2l)
     }
-    // cm2 split-k scratch (one SSBO range): cap at the device range HERE where the size is negotiated
-    if (any_f16_feed && g_gpu.coopmat_mode == COOPMAT_CM2) {
+    // the coopmat tiles' split-k scratch (one SSBO range): cap at the device range HERE where the size is negotiated
+    if (any_f16_feed && g_gpu.coopmat_mode >= COOPMAT_MM) {
         var skb = 262_144l * int64(g_gpu.sm_count)
         let fsk = cm2_splitk_env()
         if (fsk > 1l) {
