@@ -6781,6 +6781,18 @@ class template Q8Cm2T : KqCm2BatchT {
         let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
         return ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            let w4 = wq4[blk * 2u + (e0 >> 4u)]   //! the block's low or high 16 weights, four words of int8
+            let d = float(ws[blk])
+            for [unroll_full] (c in range(4)) {
+                let q = float4(int4(unpack8(int(w4[c])))) * d
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(q.xy)
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(q.zw)
+            }
+        }
+    }
 }
 
 [ |> template_struct_instance]
@@ -8317,6 +8329,18 @@ class Iq2xxsCm2EBatch : Iq2xxsCm2T {
 // body and are never materialized
 [vk_dispatch(name = "kq_batch_k4_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K4KhrBatch : K4Cm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+// the per-32 Q8_0 plane on the KHR tile: the dense q8 GEMMs of a KHR-mode card take the f16 feed here instead of the mul_mm family's requant feed
+[vk_dispatch(name = "q8_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8KhrBatch : Q8Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true

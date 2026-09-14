@@ -239,8 +239,10 @@ as `uint4` on its binding; the byte-granular grid formats read 32-bit words thro
 reads the row's scale words once, and writes the 16 values into the stage as f16 pairs. The
 activations come straight from the f16 plane as two 16-byte words (that plane aliased as
 `uint4` on its binding), stored as they arrive. Both land in `@workgroup` `uint` arrays at a
-stride of 20 words (16 plus 4 pad, so the fragment loads spread across banks). q8 never arrives
-here - its mm-mode GEMM is the q8-fed mul_mm L-tile.
+stride of 20 words (16 plus 4 pad, so the fragment loads spread across banks). q8 arrives here too
+(`Q8KhrBatch`, its stage a block's 16-weight half as four int8 words under the block's f16 scale), so
+a KHR-mode card's dense q8 GEMMs take the f16 feed; the q8-fed mul_mm L-tile serves the sdot4 and
+int8 modes.
 
 **The eight subgroups tile the 128 x 128 step two by four.** Each owns 64 weight rows against
 32 tokens as eight 16x16 f16 accumulators (a `coopmatAcc_f16_16x16[8]` walked under

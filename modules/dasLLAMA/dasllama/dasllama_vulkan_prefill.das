@@ -45,7 +45,7 @@ def public pf_f16_feed(f : int) : bool {
     if (g_gpu.coopmat_mode == COOPMAT_CM2) {
         return f == int(KqFmt.q8) || f == int(KqFmt.q51) || kq_sb(f)
     }
-    return g_gpu.coopmat_mode == COOPMAT_MM && kq_sb(f) && khr_kq_tile_on()
+    return g_gpu.coopmat_mode == COOPMAT_MM && (kq_sb(f) || f == int(KqFmt.q8)) && khr_kq_tile_on()
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
@@ -68,6 +68,7 @@ let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds her
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_ensure(fmt : int) : bool {
+    if (fmt == int(KqFmt.q8)) return ensure_q8_batch_khr_cls()
     if (fmt == int(KqFmt.k4)) return ensure_kq_batch_k4_khr_cls()
     if (fmt == int(KqFmt.k5)) return ensure_kq_batch_k5_khr_cls()
     if (fmt == int(KqFmt.k6)) return ensure_kq_batch_k6_khr_cls()
@@ -86,6 +87,7 @@ def khr_cls_ensure(fmt : int) : bool {
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.q8)) return set_q8_batch_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.k4)) return set_kq_batch_k4_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.k5)) return set_kq_batch_k5_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.k6)) return set_kq_batch_k6_khr_cls(bufs, sizes, gbits)
@@ -104,7 +106,9 @@ def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    if (fmt == int(KqFmt.k4)) {
+    if (fmt == int(KqFmt.q8)) {
+        enc_q8_batch_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k4)) {
         enc_kq_batch_k4_khr_cls(raw, h, s, pc, groups)
     } elif (fmt == int(KqFmt.k5)) {
         enc_kq_batch_k5_khr_cls(raw, h, s, pc, groups)

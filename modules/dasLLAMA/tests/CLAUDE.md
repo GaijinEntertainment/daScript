@@ -292,7 +292,8 @@ per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs 
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
-which carry no KHR arm; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
+and its KHR arm is `test_vkd_q8_khr_batch`, the per-32 plane through the hand-staged KHR tile over the
+same two regions; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
 only, on a cm2 device, over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
 its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408) run five
 arms: the cm2 l/m/s tiles and the
