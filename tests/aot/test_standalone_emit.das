@@ -87,6 +87,40 @@ def private brace_balance(text : string) : int {
     return balance
 }
 
+//! every `{ 0x<hash>, ` row of the generated AOT factory table
+def private factory_hashes(source : string) : table<string> {
+    var out : table<string>
+    for (line in split(source, "\n")) {
+        let s = strip(line)
+        continue if (!starts_with(s, "\{ 0x"))
+        let comma = find(s, ",")
+        continue if (comma < 0)
+        out |> insert(strip(slice(s, 1, comma)))
+    }
+    return <- out
+}
+
+//! the AOT hash of every FunctionInfo row - the 2nd `0x` argument; the strings ahead of it may
+//! carry commas, so it is read positionally
+def private row_aot_hashes(source : string) : array<string> {
+    var out : array<string>
+    for (line in split(source, "\n")) {
+        let at = find(line, "FunctionInfo(")
+        continue if (at < 0)
+        let tail = slice(line, at)
+        let first = find(tail, ", 0x")
+        continue if (first < 0)
+        let rest = slice(tail, first + 2)
+        let second = find(rest, ", 0x")
+        continue if (second < 0)
+        let hash_at = slice(rest, second + 2)
+        let comma = find(hash_at, ",")
+        continue if (comma < 0)
+        out |> push(slice(hash_at, 0, comma))
+    }
+    return <- out
+}
+
 [test]
 def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subcases
     var tmp_err : string
@@ -230,6 +264,15 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
 
     t |> run("a used [no_aot] function is a collected error, not a runtime crash") @(t : T?) {
         expect_emit_failure(t, "_standalone_no_aot_fixture", out_dir)
+    }
+
+    t |> run("every function-table row names a body the factory table registers") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_cross_module_fixture", out_dir)
+        let factory <- factory_hashes(source)
+        let rows <- row_aot_hashes(source)
+        t |> success(!empty(factory) && !empty(rows), "the emission has a factory table and rows ({length(factory)} / {length(rows)})")
+        let unbound <- [for (h in rows); h; where !(factory |> key_exists(h))]
+        t |> equal(length(unbound), 0, "rows whose AOT hash no factory entry registers: {join(unbound, " ")}")
     }
 
     t |> run("a required module's [init] is called from the constructor too") @(t : T?) {

@@ -4406,12 +4406,12 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         write(*logs, "\n#ifdef _MSC_VER\n#pragma optimize(\"\", off)\n#endif\n");
         write(*logs, "struct AotFunction \{ uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); \};\n");
         write(*logs, "static AotFunction functions[] = \{\n");
-        var listed : table<string>
+        var listed : table<uint64>
         for (fn in fnn) {
             let is_cmres = fn.flags.copyOnReturn || fn.flags.moveOnReturn ? "true" : "false";
             let fn_name = aotFuncName(fn);
-            if (listed |> key_exists(fn_name)) continue
-            listed |> insert(fn_name)
+            if (listed |> key_exists(fn.aotHash)) continue
+            listed |> insert(fn.aotHash)
             write(*logs, "    // {get_aot_hash_comment(fn)}\n");
             write(*logs, "    \{ {fn.aotHash}, {is_cmres}, (void*)&{fn_name}, &__wrap_{fn_name} \},\n");
         }
