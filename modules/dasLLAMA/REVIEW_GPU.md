@@ -11,8 +11,8 @@ than to serve a call - wherever the diff puts it, applies `REVIEW_GPU_RACE.md` t
 
 **A diff changing a property of a kernel class that a timing arm or a gate restates rather than
 reads - a binding number, the kargs layout, threadgroup memory, a staging shape, the grid or
-threadgroup geometry - applies `tests/REVIEW_KERNEL_CELLS.md` for the gates that hand-dispatch
-or hand-bind the class.**
+threadgroup geometry - applies the `tests/` subfolder's `REVIEW_KERNEL_CELLS.md` for the gates
+that hand-dispatch or hand-bind the class.**
 
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
 builder the tower dispatches, the `[metal_dispatch]` emission those builders are generated
@@ -107,7 +107,8 @@ operand - stage it as zero, or bound the walk at the live row count.** Pad rows 
 pool bytes, so a pad row used as B multiplies stale values (NaN included) into every real row
 of the tile.
 
-**A prefill K/V panel - the per-layer device K/V slab the prefill GEMMs write; the Vulkan resident mirror is one - is sized from the padded write extent, never from the live key count.**
+**A prefill K/V panel - the per-layer device K/V slab the prefill GEMMs write; the Vulkan
+resident mirror is one - is sized from the padded write extent, never from the live key count.**
 The K/V GEMMs write full M-tile rows at the chunk's row offset, so a panel sized to the live
 count is overrun silently into whatever the pool put next to it.
 
@@ -121,9 +122,13 @@ its previous write is encoded - rotate through as many buffers as the chain has 
 flight between a write and its read.** One shared scratch serializes the whole chain through
 its write-after-read hazards.
 
-**A diff that turns one dispatch on an encoder path into two or more also gates that path in the same change - on the extent the
-added dispatch divides (the site's own K, key span or row count), or on the path's work size when the split divides no extent - and
-the threshold comes from a measurement at the smallest and at the largest value that extent takes on the path, both measurements in the PR body.** The small-work regression hides behind the big-work win.
+**A diff that turns one dispatch on an encoder path into two or more also gates that path in the
+same change - on the extent the
+added dispatch divides (the site's own K, key span or row count), or on the path's work size when
+the split divides no extent - and
+the threshold comes from a measurement at the smallest and at the largest value that extent takes
+on the path, both measurements in the PR body.** The small-work regression hides behind the
+big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
 constant's authoritative site, in the same change.** An in-body tile constant is confirmed
@@ -242,8 +247,8 @@ expert plane, to `moe_fmt_metal_served` (both `dasllama/dasllama_metal_shapes.da
 same change.** Those predicates are what declines an unserved format, so an unlisted format
 decodes under the layout of the ladder's last arm.
 
-**A diff that gives the Metal PLE token-table gather an arm for a weight format adds that
-format to every per-format site of the pre-step - the gate's alignment arm
+**A diff that gives the Metal PLE (per-layer embedding) token-table gather an arm for a weight
+format adds that format to every per-format site of that gather - the gate's alignment arm
 (`metal_ple_pre_gpu_gate`), the PSO pick (`ple_gather_pso_of`) and the encode ladder
 (`pf_enc_ple_gather_fmt`), all in `dasllama/dasllama_metal_prefill.das` - in the same change.**
 A format one site admits and another lacks is dispatched under a layout or a kernel that is

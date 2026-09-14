@@ -33,8 +33,9 @@ no-`[init]` check is a defect.** `test_run_suites.das` and `test_run_summary.das
 by bare same-dir name, so anything that fires on require fires inside every one of those test
 processes.
 
-**A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
-thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the first turn.**
+**A cell - a `t |> run` block, or a helper call that issues asserts on `t` - asserting a chat
+template's INSTRUCT wire - a closed empty thought block and no thinking gate - calls
+`set_thinking(c, false)` on its `ChatSession` before the first turn.**
 `ChatTemplate.think_default` is `true` unless a family clears it, so an un-opted-out turn 1
 renders the thinking gate and the cell asserts the wrong wire.
 
@@ -255,9 +256,10 @@ not exact-value: it is not float-portable.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A diff that adds an assert carrying a tolerance bar - a new bar value or an existing one on a
-new carrier - or loosens one, ships in the same change a control that lands outside the bar.** A
-bar nothing has ever exceeded is not known to discriminate.
+**A diff that adds an assert carrying a tolerance bar - a bar value new to the file, or one already
+used there applied at an assert site that did not carry it - or loosens one, ships in the same
+change a control that lands outside the bar.** A bar nothing has ever exceeded is not known to
+discriminate.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's
