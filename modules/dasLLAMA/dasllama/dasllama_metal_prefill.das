@@ -6065,7 +6065,7 @@ def private pf_moe_split_enc(enc : MetalComputeEncoder?; fmt : KqFmt; form : Moe
         }
         return
     }
-    if (fmt == KqFmt.q40) {   //! compact scale plane: the f16 d row starts at soff, so both scale binds take soff (never doff, which is 0 here)
+    if (fmt == KqFmt.q40) {
         if (form == MoeSplitForm.t) {
             pf_enc_moe_mm_q40_t_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
         } elif (form == MoeSplitForm.th) {
@@ -6361,9 +6361,6 @@ def private pf_enc_slab_gemv_b(enc : MetalComputeEncoder?; bw, bx, by, bn, bd, b
 }
 
 
-//! The PLE token table's gather stamp, or null where the table's format has none. The gate admits
-//! a model only where this is live, and `pf_enc_ple_gather_fmt`'s ladder closes over the SAME four
-//! formats - every other one keeps the CPU pre-step.
 def private ple_gather_pso_of(fmt : KqFmt) : MetalComputePipeline? {
     if (fmt == KqFmt.q8) return g_pf_pso_ple_gather
     if (fmt == KqFmt.k4) return g_pf_pso_ple_gather_k4
@@ -6372,8 +6369,6 @@ def private ple_gather_pso_of(fmt : KqFmt) : MetalComputePipeline? {
     return null
 }
 
-//! The device PLE gather: q8 off the 34B blob, a K-quant or Q4_0 table off its native planes,
-//! both bound at the TABLE's own base so the kernel's `el / 256` IS the plane superblock.
 def private pf_enc_ple_gather_fmt(enc : MetalComputeEncoder?; t : Model; btok, by : MetalBuffer?;
                                   var ka : PleArgs; nlayers, npos, ple : int64) {
     let fmt = t.ple_emb_fmt
@@ -6401,8 +6396,7 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
     }
     let ple = t.config.n_embd_per_layer
     let all = t.config.n_layers * ple
-    //! a kq table is gathered off planes bound at its base, so that base and the per-token row
-    //! stride both land on a superblock boundary - that is what makes the kernel's el/256 the one
+    //! the kq planes bind at the table's base, so base and row stride must both be whole superblocks - that is what makes the kernel's el/256 its plane superblock
     let kq_aligned = t.ple_emb_fmt == KqFmt.q8 || (all % 256l == 0l && t.ple_emb_off % 256l == 0l)
     if (ple % 32l != 0l || ple > 1024l || all % 64l != 0l || !kq_aligned ||
             prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {

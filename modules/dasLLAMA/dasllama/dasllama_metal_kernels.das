@@ -4282,7 +4282,6 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
         } elif (fmt == KqFmt.iq4xs) {
             enc_moe_gemv_iq4xs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } elif (fmt == KqFmt.q40) {
-            // the compact scale plane keeps the per-32-block f16 d AT soff, so the d bind is soff too (doff is 0)
             enc_moe_gemv_q40_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } else {
             panic("metal moe decode: expert plane format {fmt} has no Metal expert kernel - moe_metal_ok admitted it (moe_fmt_metal_served)")

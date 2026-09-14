@@ -241,3 +241,8 @@ format - an arm for a weight format adds that format to `kq_fmt_gpu_supported`, 
 expert plane, to `moe_fmt_metal_served` (both `dasllama/dasllama_metal_shapes.das`), in the
 same change.** Those predicates are what declines an unserved format, so an unlisted format
 decodes under the layout of the ladder's last arm.
+
+**A diff that gives the Metal PLE token-table gather an arm for a weight format adds that
+format to both `ple_gather_pso_of` and `pf_enc_ple_gather_fmt` (`dasllama/dasllama_metal_prefill.das`),
+in the same change.** The first decides which models the pre-step gate admits; a format in it
+alone reaches the second's ladder, falls off every arm, and the device gather writes nothing.

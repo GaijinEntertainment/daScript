@@ -2467,7 +2467,7 @@ def test_kq_q40_repacked_planes(t : T?) {
             var wu <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, (e * 2l * nfe + nfe) * dim)
             mm_f(y, tr, fmt_at(tr.we1_fmt, 0l), tr.we1_offs[0] + e * ege, x, xq, xs, xbs, dim, nfe)
             gatebad = max(gatebad, rows_dot_dev(wg, x, y, dim, rows))
-            mustred = max(mustred, rows_dot_dev(wu, x, y, dim, rows))   // the up half must NOT match the gate region
+            mustred = max(mustred, rows_dot_dev(wu, x, y, dim, rows))
             mm_f(y, tr, fmt_at(tr.we3_fmt, 0l), tr.we3_offs[0] + e * ege, x, xq, xs, xbs, dim, nfe)
             upbad = max(upbad, rows_dot_dev(wu, x, y, dim, rows))
             delete wu

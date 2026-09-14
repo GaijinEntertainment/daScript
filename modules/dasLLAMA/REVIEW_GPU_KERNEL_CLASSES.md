@@ -45,6 +45,12 @@ model when none does, or names it in that file's blind-spot list for its backend
 `CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
 stocked model reaches it and the model-less test cell that dispatches it.**
 
+**A `CENSUS_NEVER_DISPATCHED` or `VK_CENSUS_NEVER_DISPATCHED` entry names the key the census
+records - the shader entry name for a class that names its own (`[metal_kernel(name = ...)]`,
+or a `[metal_dispatch]` carrying `kernel =`), or `<Class>_<kernel method>` for one stamp of a
+shared kernel - never the bare class name.** A bare class name matches nothing, so the entry can
+never drain, and it prefix-matches the sibling stamps a stocked model does dispatch.
+
 **Weakening a refusal the `[metal_dispatch]` / `[vk_dispatch]` lens makes at compile time - an
 `@ssbo` field with no `@binding`, an unaccessed `@ssbo` field declaring no `@role`, a
 `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, a `@workgroup` field

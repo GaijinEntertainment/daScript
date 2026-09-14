@@ -135,8 +135,6 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // Their coverage is moe_mulmm_split_gate(fmt 40) in test_metal_gemm_kernels.das
     "MetalMoeMulMmQ40T_metal_moe_mulmm_iq4xs_t", "MetalMoeMulMmQ40TH128", "MetalMoeMulMmQ40THR",
     // the expert-indexed GEMVs of the same formats, on the same expert planes nothing stocks.
-    // These classes name their MSL kernel outright, so the census key is that kernel name, not
-    // the class - a class-named entry here would match nothing and could never drain.
     // Their coverage is moe_kq_gemv_gate in test_metal_gemv_kernels.das
     "metal_moe_gemv_k3", "metal_moe_gemv_iq4xs", "metal_moe_gemv_iq3s", "metal_moe_gemv_iq3xxs",
     "metal_moe_gemv_iq2s", "metal_moe_gemv_iq2xs", "metal_moe_gemv_iq2xxs",

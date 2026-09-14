@@ -2172,8 +2172,8 @@ def private ple_gather_kq_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npo
             : pipeline_from_source(dev, MetalPleGatherQ40_metal_ple_gather_kq_msl, MetalPleGatherQ40_metal_ple_gather_kq_msl_entry, MetalPleGatherQ40_metal_ple_gather_kq_msl_fastmath, err)))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
-    let rowlen = nlayers * ple        // elements per token row
-    let rowsb = rowlen / 256          // ... and its superblocks (the gate's all % 256 clause)
+    let rowlen = nlayers * ple
+    let rowsb = rowlen / 256          // superblocks per token row - the gate's `all % 256` clause
     let nsb = sb0 + vocab * rowsb
     var kq : array<uint8>
     var ks : array<uint8>
@@ -2206,9 +2206,9 @@ def private ple_gather_kq_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npo
     let qoff = uint64(int64(sb0) * kq_qsb(fmt))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bks, soff, 0)   // scale plane, half view
+        metal_set_buffer(enc, bks, soff, 0)
         if (fmt != 40) {
-            metal_set_buffer(enc, bks, soff, 1)   // the same 16B block, uint4 view (q40 gates it off)
+            metal_set_buffer(enc, bks, soff, 1)   // the uint4 view of the same 16B block - `@template_gate = "!Q40"` drops it on q40
         }
         metal_set_buffer(enc, bkq, qoff, 2)
         metal_set_buffer(enc, btok, 0ul, 3)

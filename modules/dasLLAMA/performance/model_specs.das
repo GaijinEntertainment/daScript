@@ -115,11 +115,9 @@ def private ev_gemma2() : ParityEvidence {
                 235248l, 235274l, 235318l, 235269l, 235248l, 235274l, 235324l, 235269l, 235248l, 235274l])
 }
 
-// the gemma counting fixture of the Metal sweep, "Count from 1 to 60, separated by commas: 1,
-// 2, ..., 23," (BOS=2): on a bare count gemma's greedy leaves the list after 10 on the E-series
-// (end-of-turn) and after 25 on the 26B files, and the instruction keeps every gemma-3 and
-// gemma-4 file counting through 40 tokens - one continuation per vocab, produced per file by
-// simple_ids
+// the gemma counting fixture, "Count from 1 to 60, separated by commas: 1, 2, ..., 23," (BOS=2):
+// a bare count leaves the list after 10 on the E-series (end-of-turn) and after 25 on the 26B
+// files, and the instruction keeps every gemma-3/gemma-4 file counting through all 40 tokens
 def private ids_gemma_count_prompt() : array<int64> {
     return <- [2l, 4377l, 699l, 236743l, 236770l, 531l, 236743l, 236825l, 236771l, 236764l, 15914l, 684l, 162760l,
                236787l, 236743l, 236770l, 236764l, 236743l, 236778l, 236764l, 236743l, 236800l, 236764l, 236743l,
