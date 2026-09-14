@@ -42,8 +42,8 @@ def private d_reserve(fmt : int; cap_blocks : int64) : bool {
 [unused_argument(wq, ws, n, rows, fmt)]
 def private d_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => 7l
 
-[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm)]
-def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom) : bool {
+[unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, mir_elems, cos_elems)]
+def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems : int64) : bool {
     g_prepared = true
     g_prepared_kv16 = kv16
     g_prepared_n_attn = n_attn
@@ -56,8 +56,8 @@ def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hid
 [unused_argument(norms)]
 def private d_norms(norms : array<float>) {}
 
-[unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2)]
-def private d_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int) {}
+[unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
+def private d_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) {}
 
 [unused_argument(bqkv, bz, bout, bbeta, balpha, b1, b3, b2, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp)]
 def private d_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) {
@@ -82,11 +82,11 @@ def private d_dn_prefill_own(l : int64; stp : float?; histp : float?) {
     g_dn_prefill_own_l = l
 }
 
-[unused_argument(cls_block, cls_fmt)]
-def private d_set_cls(cls_block : int64; cls_fmt : int) {}
+[unused_argument(cls_block, cls_fmt, cap, supp)]
+def private d_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {}
 
-[unused_argument(x, cossin, cnt)]
-def private d_token(x : array<float>; cossin : array<float>; pos, cnt : int64; var logits : array<float>) {
+[unused_argument(x, cossin, ple_row, cnt)]
+def private d_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) {
     g_token_pos = pos
     g_token_cnt = cnt
     if (!empty(logits)) {
@@ -94,8 +94,8 @@ def private d_token(x : array<float>; cossin : array<float>; pos, cnt : int64; v
     }
 }
 
-[unused_argument(x_batch, cos_batch, npos, logits)]
-def private d_prefill(x_batch : array<float>; cos_batch : array<float>; npos : int64; var logits : array<float>) {}
+[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, logits)]
+def private d_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; var logits : array<float>) {}
 
 [unused_argument(l, kp, vp, npos)]
 def private d_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
@@ -175,7 +175,7 @@ def test_gpu_tier_contract(t : T?) {
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 512l, 2l, 5), 7l)
         t |> success(rdec_prepare(2l, 1l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, true, true, 4l,
-            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true)))
+            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l))
         t |> success(g_prepared, "prepare double must have run")
         t |> success(g_prepared_kv16, "kv16 must forward to the double")
         t |> equal(g_prepared_n_attn, 1l)
@@ -184,9 +184,10 @@ def test_gpu_tier_contract(t : T?) {
         t |> equal(g_prepared_dn_cd, 96l)
         var x : array<float>
         var cs : array<float>
+        var ple : array<float>
         var logits : array<float>
         logits |> resize(4)
-        rdec_token(x, cs, 9l, 10l, logits)
+        rdec_token(x, cs, ple, 9l, 10l, logits)
         t |> equal(g_token_pos, 9l)
         t |> equal(g_token_cnt, 10l)
         t |> equal(logits[0], 42.0)
@@ -194,6 +195,7 @@ def test_gpu_tier_contract(t : T?) {
         delete ws
         delete x
         delete cs
+        delete ple
         delete logits
     }
     t |> run("want state round-trips through the accessors") @(t : T?) {

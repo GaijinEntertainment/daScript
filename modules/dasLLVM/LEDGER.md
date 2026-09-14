@@ -6,6 +6,12 @@ leaves when it lands or is refuted.
 
 ## Entries
 
+- **The vector `log` returns finite values for zero and negative inputs on an AVX2 box.**
+  `tests/llvm_vector_math.das`'s `test_vector_log_special_values` reads `log(0) = -127` and
+  `log(-x) = 2` where the scalar answers are `-inf` and NaN - the shape of an exponent-field
+  extraction with no special-value select on that lane path (a Zen 2 3990X; CI's lane reads the
+  cell green). Its own small change: the select over the special inputs in the vector rail's
+  `log`, proven by the same cell on an AVX2 box.
 - **Cross-target handled-type layouts from the target, not the host.** Today a cross-compiled
   exe bakes the host's `sizeof`/`offsetof` of every handled type (`BasicStructureAnnotation`
   fields, `TypeDecl::getSizeOf`/`getAlignOf` for `tHandle`), so any platform-sized member ahead

@@ -61,6 +61,10 @@ No preflight tier runs the two per-PR suites: `preflight -- --only dasllama-mode
 - Before launching any suite, state what the change can affect. A default-off knob or a
   comment edit does not need a rerun.
 - Fixing or adding one arm runs exactly that arm: `--arm arm12 --suite decode`.
+- A cell of `test_vulkan_kernels.das` (model-free, so dastest may run it directly) has no arm: a
+  kernel edit runs its own cells through dastest's name filter, `--test-names <prefix>`
+  (repeatable, a `[test]` function-name prefix) - the whole file (~15 min) runs once before the
+  commit, never per edit. The Metal kernel files sit in the `kernels` suite and run through the runner.
 - Coverage is a cell in a suite, never a scratchpad probe. A probe proves nothing after the
   session that wrote it, and its setup diverges from the suite's silently. If covering a path
   needs a large model, it needs a large model.
@@ -283,7 +287,10 @@ per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs 
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
-which carry no KHR arm, and q51 carries no tile cell) run five arms: the cm2 l/m/s tiles and the
+which carry no KHR arm; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
+only, on a cm2 device, over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
+its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408) run five
+arms: the cm2 l/m/s tiles and the
 expert schedule's e column (the format's own 128-row e stamp, whose k step is the stamp's - 32 on
 iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
@@ -324,7 +331,16 @@ fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the s
 and two-part state columns, the scan's four- and eight-lane clusters); `test_vkd_dn_scan_narrow`
 runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometry - 512 rows,
 one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate arrays' exact
-bound).
+bound). The gemma arc's cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
+its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
+`test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
+`test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant) and
+`test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths),
+`test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
+the pass and the combine), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
+restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
+the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
+f32 stamp).
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the
@@ -445,6 +461,74 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
+`test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
+`gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
+`gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
+loads ONE model at a time, never a chain) - stocked suite, `-jit` only; the whole-model resident
+driver on the gemma dense base (gemma-3-1b-it-Q8_0, `DASLLAMA_GPU=1`): the sandwich norms (the residual steps
+norm their add partner first), the sliding-window layers beside the global ones with their own rope
+class, the GeGLU FFN and the sqrt(dim) embed scale - the hybrid file's forced-feed logits-tolerance
+form at the 16% bar this model's rounding sensitivity sets (its CPU chain's own prefill and decode
+kernels land 6-10% of the max logit apart on the same tokens; the resident prefill feeds the GEMMs
+f16 rows where the CPU quantizes Q8 blocks), with the one-step-off control (reads 5 to 19), at one
+window, eight tokens, 520 tokens (two windows, the window engaged on the last eight positions) and
+600 tokens (every sliding layer masking below its window on the prefill tiles and the decode
+chunks); plus the agreement cells - the window chain and the token command on the same eight and
+forty tokens, held within 6x of the CPU chain's own two paths' gap. Every cell feeds ordinary
+prose through the model's own tokenizer (`prose_tokens`), never a synthetic id ramp: on a ramp
+gemma's logits saturate the softcap and the CPU chain's own prefill and decode land twenty points
+apart at 300 positions, so a bar on them measures nothing. The gemma-4 dense rows (large tier,
+`DASLLAMA_PARITY_FULL=1`): gemma-4-12B Q8_0 in the forced-feed form at forty tokens (the weightless
+v-norm, the V-from-K global layers at head 512 beside the sliding 256s, the per-layer output scale,
+the final softcap and the suppressed ids - the bar's max logit skips the pinned ids) and in the
+perplexity form (`ppl_compare`: `n` ids prefilled, `steps` teacher-forced, the resident's
+perplexity within 5% of the CPU chain's and its argmax hits within three, the one-position-off
+targets the control) at 150 + 150 and at 520 + 80 (two prefill windows, the second eight rows
+deep; this cell's ratio is 1.3: over its 80 targets the CPU chain reads 1.97, the resident 2.37
+and llama.cpp b10660 2.51, hits 72, 72 and 71, so the resident sits between the two references);
+the 12B Q4_K_M in the agreement form at eight and 300 tokens. The perplexity form exists
+because the 12B's logits sit within a few points of each other at whole stretches of positions
+(llama.cpp's own margins on the same text read 0.6 to 16), so a maxdiff bar at one position
+measures the model's flatness, not the driver; the CPU chain's own two paths land 13% to 44% of
+the max logit apart there. The E-series rows: gemma-4-E2B Q8_0 (stocked tier) in the forced-feed
+form at forty tokens, the perplexity form at 150 + 150 and at 520 + 80 (two windows, the 512
+sliding window engaged on the last eight) and the agreement form at eight tokens - the per-layer
+embedding branch after every FFN residual (the CPU pre-step's side rows ride the token command
+and the window chain), twenty layers attending over the K/V of the fifteen below them, and the two
+dense FFN widths; gemma-4-E4B Q8_0 (large tier) at forty tokens and 150 + 150; gemma-3-4b Q8_0
+(the dense base at width 2560 and four kv heads) at forty tokens and 150 + 150; gemma-2-2b Q8_0
+(the attention logit softcap on every score - the 8-row prefill tile and the token command take
+it, and the cm2 flash tile's softcap stamps at its 256-wide heads) at forty tokens, 150 + 150 and
+the eight-token agreement form. The MoE row (large tier): gemma-4-26B-A4B UD-IQ3_XXS - the
+routed block in its gemma-4 form (the parallel dense shared expert as the layer's own FFN triple,
+the routed feed and the router off their own norms of x, the per-expert down scale folded into
+the routing weights, the combine norming both branches and their sum under the layer's output
+scale) in the perplexity form at 150 + 150 and at 520 + 80 (two windows) with an argmax slack of
+eight (twelve on the Q4_K_M file, whose hits read 125 to 128 against the CPU chain's 134 as the
+token command's summation orders change) and a perplexity ratio of 1.45 on both files (a kernel
+rounding order alone moves the 150 + 150 cell: the Q4_K_M file's routed gate and up GEMVs - their
+lane split, the fused gate-up twin - across 4.05, 4.48 and 4.67 against the CPU chain's 3.38; the
+IQ3_XXS file 2.58 -> 4.30 with the flash tile's f16 O accumulator, its hits 129 -> 130 against
+133): a router near-tie flips whole positions between the arms,
+and either arm lands the farther one (per-position log-probs against llama.cpp b10660 on the
+same prose, mean gap on its confident positions: the IQ3_XXS file CPU 0.36 / resident 0.18, the
+Q4_K_M file CPU 0.21 / resident 0.28 to 0.56 across those orders; perplexities 3.36 / 2.58 and
+3.38 / 3.92 to 4.72, llama.cpp itself 3.87 on the Q4_K_M positions), so a
+forced-feed maxdiff against the CPU chain is no instrument here. Its planes alone pass a 16 GB
+card (the 704-wide down-expert rows demote to q8), so the cells skip there on the memory decline
+and run on a 32 GB card. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on
+the model table's official UD-Q4_K_M file, whose 704-wide down stacks are native Q5_1 and ride
+the q51 expert rail (the s and e stamps, the Q8_0-activation decode GEMV) beside the k4 gate and
+up stacks. `test_gpu_resident_gemma4_31b.das` holds the largest dense carrier, gemma-4-31B Q4_K_M
+(large tier, a 32 GB card), in the 12B Q4_K_M's agreement form at eight tokens - one cell, since the
+CPU control of a dense 31B on the reference kernel bodies runs half an hour on an untuned box. Arms: `g2`
+(gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
+(gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
+`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B IQ3_XXS), `g4mk` (the
+26B-A4B Q4_K_M), `g31` (the 31B) - the tokens share no substring, so one arm selects one file. Skips
+without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
+the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
+under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.
 `test_gpu_resident_moe.das` - stocked suite, `-jit` only; the whole-model resident driver on a MoE
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, `DASLLAMA_GPU=1`): the expert stacks in the arena, the window
 chain's routed block and the token command's routed block - the hybrid file's forced-feed

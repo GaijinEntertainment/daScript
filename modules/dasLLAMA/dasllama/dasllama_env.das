@@ -102,6 +102,10 @@ struct public GpuTierEnv {
     @clarg_doc = "Lower the context floor for arming the resident decode driver, for a short-context session on a small card."
     gpu_min_ctx : int64 = 0l
 
+    @clarg_default_doc = "the model's context"
+    @clarg_doc = "Cap the resident driver's KV mirror at this many positions (the card's room and the 4 GiB binding cap still bound it); 0 follows the model's context; a server keeps the model's."
+    gpu_ctx_max : int64 = 0l
+
     @clarg_doc = "The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever)."
     gpu_resident : bool = true
 
@@ -337,6 +341,9 @@ struct public VulkanEnv {
     @clarg_doc = "Fused add+rms+requant on every site of the decode token command and the prefill's batch pairs, plus the fused qk-norm+rope; 0 pins the split dispatches for a same-build A/B."
     vk_fuse : bool = true
 
+    @clarg_doc = "The resident prefill's FFN GEMMs (gate, up, down) take the f16 activation feed where the tile family admits it; 0 pins the FFN group to the Q8 activation blocks the CPU chain quantizes, while the attention group keeps its own pick - the A/B rail that takes the feed's rounding out of a resident-vs-CPU compare (gemma's logits move with it)."
+    vk_f16_ffn : bool = true
+
     @clarg_doc = "Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail."
     vk_xferq : bool = true
 
@@ -376,10 +383,10 @@ struct public VulkanEnv {
     @clarg_doc = "Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served)."
     vk_kv32 : int64 = 0l
 
-    @clarg_doc = "cm2 prefill tile pick: 0 = occupancy heuristic, 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry."
+    @clarg_doc = "cm2 prefill tile pick: 0 = the wave model's pick (`cm2_gemm_pick`), 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry."
     cm2_tile : int64 = 0l
 
-    @clarg_doc = "cm2 split-k: 0 = occupancy heuristic, 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). Inert on the KHR arm, whose kq tile carries no split-k scratch."
+    @clarg_doc = "cm2 split-k: 0 = the wave model's pick (`cm2_gemm_pick`), 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). Inert on the KHR arm, whose kq tile carries no split-k scratch."
     cm2_splitk : int64 = 0l
 
     @clarg_path

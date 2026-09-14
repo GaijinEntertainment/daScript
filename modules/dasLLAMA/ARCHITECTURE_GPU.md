@@ -68,9 +68,9 @@ that a question answered for one backend has an obvious address in the other. Th
   as the CPU-loop fallback and the warm/MTP edge); an override without the seat declines
   deepstack quanta by name, so Metal serves them and Vulkan does not.
 - **Per-layer FFN widths (MatFormer E-series, at most two - `ffn_second_hidden`) serve on Metal
-  only**: the decode and prefill drivers bind the width per layer (dense trunks, no MTP; batch
-  keeps the layer-0 hoist behind its uniformity decline). The Vulkan tier has no PLE arm, so
-  E-series never reaches its width question.
+  and on the Vulkan whole-model driver**: the Metal decode and prefill drivers bind the width per
+  layer (dense trunks, no MTP; batch keeps the layer-0 hoist behind its uniformity decline), and
+  the Vulkan driver's per-layer geometry (`RLayer.hid`) carries it beside the PLE branch.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent.
@@ -90,8 +90,8 @@ that a question answered for one backend has an obvious address in the other. Th
   per token - the resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, its MoE seats
   `install_moe_gpu_resident_moe` (the tile admission per expert triple, the routing geometry with the router plane, an
   MoE layer, and the routed block on a layer another seat built) behind the route lever `set_gpu_resident_route` /
-  `gpu_want_resident`, the OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, and the
-  weight-bytes seat `install_rdec_note_weight_bytes` the decode warm-up guard reads). The
+  `gpu_want_resident`, the OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the
+  weight-bytes seat `install_rdec_note_weight_bytes` the decode warm-up guard reads, and the per-layer-embedding seats `install_rdec_ple` - the branch's width, its per-layer gate and proj planes, the pre-step's projection and the token table on the device). The
   installs are one-way: a test that arms the tier installs the seats and never restores them,
   because no uninstall exists and none is needed - a seat serves whatever model loads next; Metal
   deliberately does not, because UMA makes residency moot there and Metal
@@ -261,9 +261,9 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 and why they lose.
 
 The Vulkan resident driver's sections live in its companions, each head saying what it holds: 2.2j,
-2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
+2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai, 2.2aj and 2.2al in `ARCHITECTURE_GPU_VULKAN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
 `ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2r-2.2v in
-`ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af and 2.2ag in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 

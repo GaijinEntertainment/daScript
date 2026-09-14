@@ -28,6 +28,16 @@ kernel body itself on the CPU computes nothing. A reduction width known only at 
 a SPIR-V kernel through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
 `tensorLayoutSetDimension` sets - that layout is this emitter's runtime-extent descriptor.
 
+**A flash-attention head width is one tile set.** A head width H declares `coopmatWgA_f16_64xH`
+(Q), `coopmatWgB_f16_Hx32` (K^T), `coopmatWgB_f16_32xH` (V) and the `coopmatWgAcc_f16_64xH` /
+`coopmatWgAcc_f32_64xH` pair (O), plus the two `coopmatMulAdd` overloads typing S = Q @ K^T and
+O += P @ V and the `coopmatConvert` widening the f16 O to f32. The row block is 64 at every
+width. The column block is 64 at head width 64 and 32 above it, where a 64-wide KV tile beside
+the wider O accumulator spills the workgroup staging budget; the 32-wide widths share one P tile
+(`coopmatWgA_f16_64x32`), one S accumulator and one rowsum `P @ One` overload. O accumulates in
+f16 beside f32 because the consumer biases its running row max so every P sits at an eighth or
+under, which an f16 accumulator cannot overflow.
+
 ### 3.3 The four-wide decode twin {#cm2-decode-vector}
 
 `SPV_NV_cooperative_matrix_decode_vector` adds no opcode. It adds one capability and the

@@ -1610,3 +1610,23 @@
     Nothing reaches it below `g_attn_single_max` rows of context. Unquirked: one chunk-count
     formula over the deepest row, used both to size `bpart` and to dispatch, with a cell that
     verifies at a context depth crossing a 64-row boundary.
+143. **The CPU chain's gemma-4-12B perplexity trails the resident driver's, and more so past one
+    prefill window.** Measured 2026-09-12 on the RTX 5060 Ti box, gemma-4-12B Q8_0, ordinary
+    prose through the model's tokenizer, teacher-forced after a prefill (`test_gpu_resident_gemma.das`,
+    the perplexity cells): 150 prefilled + 150 scored reads CPU 1.516 (137 argmax hits) against
+    the resident 1.449 (139) and llama.cpp b10660 1.390 on the same split; 520 prefilled + 80 scored
+    reads CPU 2.784 (67 of 80) against the resident 2.006 (72). The CPU chain's own prefill-in-one
+    and teacher-forced decode also land 13% (8 positions) to 44% (300) of the max logit apart on
+    this file where gemma-3-1b's land 3%. The suspects are the CPU prefill's Q8 activation blocks
+    on the 12B's widths (the resident feeds f16 rows) and its blocked attention over the 512-wide
+    V-from-K heads; the instrument is the perplexity cell's `forced_nll` against llama.cpp's
+    `--save-all-logits` file (a parser sits with the arc's notes). The 26B-A4B reads the same way
+    (2026-09-12, RunPod RTX PRO 4500 Blackwell, the UD-IQ3_XXS file, 150 + 150): against llama.cpp's
+    per-position log-probs the CPU chain's mean gap is 0.36 nats (worst 16.2) where the resident's
+    is 0.18 (worst 6.9) over the 130 positions llama.cpp is confident on, the chunk perplexities
+    llama.cpp 3.304 / CPU 3.357 / resident 2.579 (argmax hits 132 / 133 / 129); on this model the
+    routed near-ties add to the suspects, and the UD-Q4_K_M file (its Q5_1 down experts on their
+    own rail) reads the other way round on the same prose - mean gap CPU 0.21 nats, resident 0.37,
+    perplexities CPU 3.378 / resident 3.922 against llama-perplexity's 3.186, each arm with its own
+    whole-position misses where the other two agree - so the 26B cells hold a 1.25 perplexity
+    ratio. Unquirked: the CPU chain's chunk perplexity within 2% of llama.cpp's on both files.

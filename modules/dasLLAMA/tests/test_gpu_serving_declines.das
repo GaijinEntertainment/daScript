@@ -95,12 +95,9 @@ def test_attn_chain_unserved_features(t : T?) {
 def test_resident_layer_decline(t : T?) {
     t |> run("a recurrent layer without deltanet planes is named by number; the attention layers around it pass") @(t : T?) {
         var m <- shell(3l, 2ul)
-        let hid0 = layer_hidden(m, 0l)
-        let hs = layer_head_size(m.config, 0l)
-        let kvd = layer_kv_dim(m.config, 0l)
-        t |> equal(resident_layer_decline(m, 0l, hid0, hs, kvd), "")
-        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1 lacks a deltanet plane"), "layer 1 named")
-        t |> equal(resident_layer_decline(m, 2l, hid0, hs, kvd), "")
+        t |> equal(resident_layer_decline(m, 0l), "")
+        t |> success(says(resident_layer_decline(m, 1l), "layer 1 lacks a deltanet plane"), "layer 1 named")
+        t |> equal(resident_layer_decline(m, 2l), "")
         m.dnqkv_offs <- [-1l, 0l, -1l]
         m.dngate_offs <- [-1l, 0l, -1l]
         m.dnout_offs <- [-1l, 0l, -1l]
@@ -111,27 +108,42 @@ def test_resident_layer_decline(t : T?) {
         m.dnqkv_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
         m.dngate_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
         m.dnout_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
-        let sq = resident_layer_decline(m, 1l, hid0, hs, kvd)
+        let sq = resident_layer_decline(m, 1l)
         t |> success(!says(sq, "kq-tagged") && !says(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
         m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
-        let so = resident_layer_decline(m, 1l, hid0, hs, kvd)
+        let so = resident_layer_decline(m, 1l)
         t |> success(!says(so, "out plane"), "a K-quant out plane is no format decline: '{so}'")
         //! an inner width off the format's block leaves the out plane untileable - the decline names it
         m.config.ssm_d_inner = 100l
-        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
+        t |> success(says(resident_layer_decline(m, 1l), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
         delete m
     }
-    t |> run("shared K/V, a missing plane and a differing FFN width each name the layer") @(t : T?) {
+    t |> run("shared K/V, a missing plane and a head size off the kernels' shape each name the layer; a differing FFN width or a sliding window is served") @(t : T?) {
         var m <- shell(3l, 0ul)
-        let hid0 = layer_hidden(m, 0l)
-        let hs = layer_head_size(m.config, 0l)
-        let kvd = layer_kv_dim(m.config, 0l)
         m.kv_src[2] = 1l
-        t |> success(says(resident_layer_decline(m, 2l, hid0, hs, kvd), "layer 2 shares layer 1's K/V"), "shared K/V named")
+        t |> equal(resident_layer_decline(m, 2l), "", "a layer sharing the K/V of a layer below it is served (Q only, the donor's rows)")
+        m.kv_src[1] = 2l
+        t |> success(says(resident_layer_decline(m, 1l), "layer 1 shares layer 2's K/V, a layer above it"), "a donor above the sharing layer is named")
+        m.kv_src[1] = 1l
+        m.kv_src[2] = 2l
         m.wq_offs[0] = -1l
-        t |> success(says(resident_layer_decline(m, 0l, hid0, hs, kvd), "layer 0 lacks a q/k/v plane"), "missing plane named")
+        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a q/k plane"), "missing plane named")
+        m.wq_offs[0] = 0l
+        m.wv_offs[0] = -1l
+        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a v plane"), "a missing v plane is named where the layer is not V-from-K")
+        m.config.v_from_k_mask = 1ul
+        t |> equal(resident_layer_decline(m, 0l), "", "a V-from-K layer needs no v plane: V is its k row at its own rms")
         m.ffn_w <- [64l, 96l, 64l]
-        t |> success(says(resident_layer_decline(m, 1l, hid0, hs, kvd), "layer 1's dense FFN width 96"), "FFN width named")
+        t |> equal(resident_layer_decline(m, 1l), "", "a layer's own dense FFN width is its registration's, not a decline")
+        m.config.sliding_window = 128l
+        m.config.swa_pattern = 2l
+        t |> equal(resident_layer_decline(m, 1l), "", "a sliding layer is served (its window rides the attention push)")
+        m.config.head_size = 512l
+        t |> equal(resident_layer_decline(m, 1l), "", "a 512 head is served (two elements a thread)")
+        m.config.head_size = 544l
+        t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 544"), "a head past the kernels' 512 is named by layer")
+        m.config.head_size = 40l
+        t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 40"), "a head off the 32-multiple is named by layer")
         delete m
     }
     t |> run("a MoE layer's dense width is its shared expert's; a layer past the dense lead without expert planes is named") @(t : T?) {
@@ -148,10 +160,8 @@ def test_resident_layer_decline(t : T?) {
         t |> success(!layer_is_moe(m, 0l) && layer_is_moe(m, 1l) && !layer_is_moe(m, 2l), "a layer routes only past the dense lead with all three expert planes")
         t |> equal(resident_dense_width(m, 0l), 64l, "the dense-lead layer's width is its FFN's")
         t |> equal(resident_dense_width(m, 1l), 512l, "an MoE layer's width is the shared expert's")
-        let hs = layer_head_size(m.config, 0l)
-        let kvd = layer_kv_dim(m.config, 0l)
-        t |> success(says(resident_layer_decline(m, 2l, 512l, hs, kvd), "layer 2 lacks an expert plane"), "a layer past the dense lead without its expert planes is named")
-        t |> success(says(resident_layer_decline(m, 0l, 512l, hs, kvd), "layer 0's dense FFN width 64 differs"), "the dense-lead layer's width differs from the shared expert's - named")
+        t |> success(says(resident_layer_decline(m, 2l), "layer 2 lacks an expert plane"), "a layer past the dense lead without its expert planes is named")
+        t |> equal(resident_layer_decline(m, 0l), "", "the dense-lead layer's own width is its registration's, whatever the shared expert's")
         delete m
     }
 }
@@ -182,11 +192,20 @@ def test_resident_unserved_moe_features(t : T?) {
         c.ffn_act = FfnAct.swiglu_oai
         c.layer_out_scale = true
         let e = resident_unserved_features(c)
-        t |> success(says(e, "biased expert stacks") && says(e, "the clamped swiglu expert activation") && says(e, "a layer output scale"),
-            "the expert stack's bias, the clamped activation and the layer output scale named together: {e}")
+        t |> success(says(e, "biased expert stacks") && says(e, "the clamped swiglu expert activation") && !says(e, "output scale"),
+            "the expert stack's bias and the clamped activation named together, the layer output scale served: {e}")
+        c.moe_exps_bias = false
+        c.ffn_act = FfnAct.gelu
+        c.moe_dense_shexp = true
+        t |> equal(resident_unserved_features(c), rdec_moe_installed() ? "" : "dense shared expert",
+            "gemma-4's parallel dense shared expert is served where a backend installed the MoE seats, named where none did (installed here: {rdec_moe_installed()})")
         var d = Config()
         d.moe_gate = MoeGate.sigmoid
         t |> equal(resident_unserved_features(d), "", "a dense model's router field is no feature")
+        var p = Config()
+        p.n_embd_per_layer = 256l
+        t |> equal(resident_unserved_features(p), rdec_ple_installed() ? "" : "per-layer embeddings",
+            "the E-series per-layer embeddings are served where a backend installed the ple seats, named where none did (installed here: {rdec_ple_installed()})")
     }
 }
 

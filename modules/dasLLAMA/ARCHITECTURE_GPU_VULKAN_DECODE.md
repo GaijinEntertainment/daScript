@@ -196,8 +196,8 @@ once.
 
 **A recurrent layer rides the same recorded token command as an attention layer.** The
 whole-model driver (`ARCHITECTURE_GPU.md` sec.1.5, `dasllama_gpu_resident.das`) records one
-command per model whose per-layer body is one of two heads followed by the shared FFN tail: an
-attention head (q/k/v GEMVs, the fused qk-norm and rope storing the mirror row, decode attention
+command per model whose per-layer body is one of two heads followed by the shared FFN tail (a q8 triple with a Q8_0 feed runs `Q8GemvGu` - the gate and up dots, the activation and the hidden row's Q8_0 requant in one dispatch, a workgroup a 32-row block - else the gate GEMV, the up GEMV and the act+requant kernel; then the down GEMV; a q8 wo or down GEMV whose residual step quantizes to Q8_0 carries that step as its last-arriving workgroup's epilogue (`Q8GemvAr`: the rows into a `@coherent` plane, an arrival counter, the `ArRq` math over the whole row by the last workgroup) so no dependent dispatch follows it; an E-series layer's per-layer-embedding branch follows in three dispatches - the FFN residual step quantizes the row it writes as it is (`ArArgs.no_norm`, the gate's feed), the gate GEMV, and `Q8GemvPleAct`, which builds gelu(gate) x the side row and its Q8_0 blocks in workgroup memory and runs the proj GEMV over them, `DASLLAMA_VK_FUSE=0` keeping the five; where the driver holds the pre-step's projection (`RDec.ple_gpu`, the window chain's f16 mirror) the token command opens with the pre-step's finish too - the f16 row GEMV over the embedded row (`RouterGemvF16`, a workgroup a projected element row) and the residual step's kernel over the [layers] slices of ple, so the host gathers the table row alone and the `forward()` gate takes the same offer the prefill's does): an
+attention head (the q, k and v GEMVs as ONE region dispatch where the three planes share a format and a slab - q in kv-width pieces, then k, then v, the projection row landing whole, the ungated q buffer being that row's front - else a GEMV a plane; the fused qk-norm and rope storing the mirror row, decode attention
 over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
 GEMV into one projection row (z at offset `cd`; the two halves under their own hazard classes,
 `VHZ_DNP` and `VHZ_DNZ`, so the GEMVs co-run and the step waits on both), the beta and alpha rows as ONE `RouterGemvF16`
@@ -247,7 +247,7 @@ attention layer's - on qwen35 layer 0 is recurrent.
 
 **A q/k/v projection bias (qwen2) folds into the rope stage.** The biased models' bias rows
 upload once as one row per layer in the projection buffer's own `[q | k | v]` layout
-(`vk_rdec_upload_bias`, a recurrent layer's row zero), bound at the last binding of the three
+(`vk_rdec_upload_bias`, a recurrent layer's row zero) - every layer's rows one after another, each at its own attention class's widths, so a layer's base is the sum of the widths below it (`resident_bias_off`) - bound at the last binding of the three
 rope kernels - the decode rope+store, the prefill's batched twin and the fused qk-norm+rope -
 which add the bias to each element as they read it, before the rotation (or the norm) and
 before the v copy, so no dispatch is added: the CPU chain adds the bias between the projection

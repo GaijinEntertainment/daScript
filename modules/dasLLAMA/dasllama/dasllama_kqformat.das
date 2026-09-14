@@ -50,6 +50,12 @@ def kq_fmt_of_name(name : string; var out : KqFmt&) : bool {
     return false
 }
 
+//! The per-32 formats: 32-weight blocks with Q8_0-form activations (q8, q51), off the kq lattice.
+def kq_block32(f : KqFmt) : bool => f == KqFmt.q8 || f == KqFmt.q51
+
+//! The same predicate over the int id space the GPU drivers carry per stack/plane.
+def kq_block32(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51)
+
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
 def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3) || fmt == int(KqFmt.iq3s) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.k2) || fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs)
 

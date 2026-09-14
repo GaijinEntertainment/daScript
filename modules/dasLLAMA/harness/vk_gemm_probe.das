@@ -7,10 +7,14 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP ts:|cold: - the stamp overheads: a timestamp or a barrier between two m stamps, a cold cache.
 // ATTRIBUTION SWEEP dec - the decode head's small kernels (the f16 GEMV, the deltanet step) in isolation.
 // ATTRIBUTION SWEEP moe:|moesk: - the expert schedule's s and e stamps by schedule form.
+// ATTRIBUTION SWEEP cm2g:<fmt> - a format's dense role shapes at 512 rows, overlapped and one dispatch at a time.
+// ATTRIBUTION SWEEP g3|gemma|splitk - the gemma role shapes and the down's split-k ladder, whole against split.
+// ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
 // RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
-// Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle);
+// Args: gate|down|q|kv|kvm|qkv|tl pin a shape (the long-window ngfx GPU Trace vehicle); g3 the gemma-3-1b
+// role shapes with the down's split-k ladder; small the token command's one-workgroup row kernels' floor;
 // k4|k6 the K-quant tiles; cm2:<fmt> any kq format's l/m/s stamps, its s stamp's other-depth twin
 // and the kq batch tile, cm2d:<fmt> the same over the 4096-wide dense hybrid's shapes, cm2w:<fmt>
 // its l stamp's wave sweep; dec the decode head's small kernels; moe:<fmt> its s and e stamps over
@@ -546,7 +550,8 @@ def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp_only : bool = false) {
+//! `serial`: one hazard rail and one output plane across the dispatches, so a barrier separates them and the row reads a single dispatch's latency - the chain's cost - instead of the throughput of sixteen overlapping ones
+def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp_only : bool = false; serial : bool = false) {
     let dv = cm2_shape_upload(fmt, d, n, cnt)
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     //! the l/m/s stamps, the s stamp's other-depth twin where the format has one, and the kq batch tile
@@ -562,9 +567,10 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        //! every arm alike: the two output planes alternate across the dispatches, each under a fresh hazard rail
+        //! every arm alike: the two output planes alternate across the dispatches, each under a fresh hazard rail (the serial row keeps one of each)
         let sizes5 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes)
         let gbits5 = fixed_array(1u, 2u, 0u, 4u, 16u)
+        var hzs : VkHaz
         if (v == 4) {
             let sizes6 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes)
             let gbits6 = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
@@ -572,27 +578,27 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
             var sb = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd_b), sizes6, gbits6)
             for (k in range(DISPATCHES)) {
                 var hz : VkHaz
-                kq_batch_cls_enc_for(fmt, false, raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
+                kq_batch_cls_enc_for(fmt, false, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
             }
         } elif (v == 3) {
             var sa = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
             var sb = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
             for (k in range(DISPATCHES)) {
                 var hz : VkHaz
-                probe_stwin_enc(fmt, raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
+                probe_stwin_enc(fmt, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
             }
         } else {
             var sa = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
             var sb = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
             for (k in range(DISPATCHES)) {
                 var hz : VkHaz
-                cm2_cls_enc(fmt, int64(ttile), raw, hz, k % 2 == 0 ? sa : sb, pc, int64(wgs))
+                cm2_cls_enc(fmt, int64(ttile), raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
             }
         }
         vk_check(vkEndCommandBuffer(raw), null)
         let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
-        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
+        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only{serial ? ", one dispatch at a time" : ""}\n")
     }
 }
 
@@ -624,7 +630,7 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
         }
-        var s = set_router_gemv_f16_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
+        var s = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
         var raw = alloc_cmd()
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -2890,6 +2896,480 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
     delete b
 }
 
+//! the cm2 l and m stamps under a split-k of `nsplit` (the GEMM alone: the partial planes land, the reduce is not timed)
+def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
+    let nbb = n / 32
+    let rows = cnt
+    let totblk = d * nbb
+    var b : ShapeBufs
+    fill_fixture(b, totblk, rows, nbb)
+    let wq_bytes = int64(totblk) * 32l
+    let ws_bytes = int64(totblk) * 2l
+    let xf_bytes = int64(rows * nbb) * 64l
+    let y_bytes = int64(nsplit) * int64(rows * d) * 4l
+    let wqd = make_device_buf(wq_bytes)
+    let wsd = make_device_buf(ws_bytes)
+    let xfd = make_device_buf(xf_bytes)
+    let yd = make_device_buf(y_bytes)
+    let lwgs = ((cnt + 255) / 256) * ((d + 127) / 128) * nsplit
+    let mwgs = ((cnt + 127) / 128) * ((d + 127) / 128) * nsplit
+    let ck = ((n + nsplit - 1) / nsplit + 255) & ~255   // the 256-aligned chunk the serving pick takes
+    if (ck * (nsplit - 1) >= n) {   //! a chunk that starts past K: the serving pick sheds the split, and a tile handed one never finishes
+        print("{name} split{nsplit} (chunk {ck}): the last chunk starts past K {n} - the pick sheds this split, skipped\n")
+        delete b
+        return
+    }
+    var sched : array<uint>
+    sched |> resize(4 + lwgs)
+    sched[2] = uint(cnt)   // one region: [wblk0 = 0, row0 = 0, cnt, wg0 = 0], map all zeros; the tile reads its split plane and tile off its own workgroup id
+    var cm2l_us : double
+    var cm2m_us : double
+    var red_us : double
+    var chain_us : double
+    unsafe {
+        upload_region_at(wqd, 0l, addr<uint8 const?>(b.wq[0]), wq_bytes)
+        upload_region_at(wsd, 0l, addr<uint8 const?>(b.ws[0]), ws_bytes)
+        upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
+        let sc_bytes = int64(4 + lwgs) * 4l
+        let scd = make_device_buf(sc_bytes)
+        upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
+        let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
+        let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+        let begin = VkCommandBufferBeginInfo()
+        var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
+        var rawl = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(rawl, begin), null)
+        var hzl : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
+        }
+        vk_check(vkEndCommandBuffer(rawl), null)
+        cm2l_us = usec_per_dispatch(rawl)
+        var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
+        var rawm = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(rawm, begin), null)
+        var hzm : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
+        }
+        vk_check(vkEndCommandBuffer(rawm), null)
+        cm2m_us = usec_per_dispatch(rawm)
+        let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, scl, pc, lwgs)
+        red_us = tr.red
+        chain_us = tr.chain
+    }
+    let flop = 2.0lf * double(rows) * double(d) * double(n)
+    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, l + reduce chained {chain_us} us | timing-only\n")
+    delete sched
+    delete b
+}
+
+//! the kq cm2 l and m stamps under `nsplit` 256-aligned k chunks, one dispatch at a time (a heavy decode's single-dispatch latency, the chain's cost), then the l stamp chained into its reduce
+def private run_kq_shape_split(fmt : int; name : string; d, n, cnt, nsplit : int) {
+    let ck = nsplit > 1 ? ((n + nsplit - 1) / nsplit + 255) & ~255 : n
+    if (nsplit > 1 && ck * (nsplit - 1) >= n) {
+        print("{name} split{nsplit} (chunk {ck}): the last chunk starts past K {n} - skipped\n")
+        return
+    }
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let y_bytes = int64(nsplit) * int64(cnt * d) * 4l
+    let yd = make_device_buf(y_bytes)
+    let flop = 2.0lf * double(cnt) * double(d) * double(n)
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = nsplit > 1 ? uint(ck) : 0u)
+    var lus = 0.0lf
+    var mus = 0.0lf
+    var chain = 0.0lf
+    var lwgs = 0
+    for (v in range(2)) {
+        let ttile = v == 0 ? 256 : 128
+        let wgs = ((cnt + ttile - 1) / ttile) * ((d + 127) / 128) * nsplit
+        let sc = one_region_sched(cnt, wgs)
+        var s = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, yd),
+            fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        for (_k in range(DISPATCHES)) {
+            cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        if (v == 0) {
+            lus = us
+            lwgs = wgs
+            chain = time_split_reduce(yd, y_bytes, cnt, d, nsplit, s, pc, wgs, fmt, 256l).chain
+        } else {
+            mus = us
+        }
+    }
+    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {lus} us  {flop / (lus * 1000000.0lf)} TFLOP/s | cm2m {mus} us  {flop / (mus * 1000000.0lf)} TFLOP/s | l + reduce chained {chain} us | timing-only, one dispatch at a time\n")
+}
+
+//! the split-k reduce over `nsplit` partial planes in `yd`: alone, then behind the l GEMM in one command buffer (the hazard rail's barrier between them, as the chain pays); us a dispatch (a pair, chained)
+def private time_split_reduce(yd : uint64; y_bytes : int64; rows, d, nsplit : int; var scl : VkDescriptorSet; var pc : BatchArgs; lwgs : int; fmt : int = 0; tc : int64 = 256l) : tuple<red : double; chain : double> {
+    verify(ensure_splitk_reduce_cls(), "the split-k reduce's probe pipeline must engage")
+    let out_bytes = int64(rows * d) * 4l
+    let outd = make_device_buf(out_bytes)
+    var sr = set_splitk_reduce_cls(fixed_array(yd, outd), fixed_array(y_bytes, out_bytes), fixed_array(16u, 32u))
+    var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit))
+    let rwgs = int64(rows * d + 1023) / 1_024l
+    let begin = VkCommandBufferBeginInfo()
+    var rawr = alloc_cmd()
+    vk_check(vkBeginCommandBuffer(rawr, begin), null)
+    var hzr : VkHaz
+    for (_k in range(DISPATCHES)) {
+        enc_splitk_reduce_cls(rawr, hzr, sr, pcr, rwgs)
+    }
+    vk_check(vkEndCommandBuffer(rawr), null)
+    let red = usec_per_dispatch(rawr)
+    var rawc = alloc_cmd()
+    vk_check(vkBeginCommandBuffer(rawc, begin), null)
+    var hzc : VkHaz
+    for (_k in range(DISPATCHES)) {
+        cm2_cls_enc(fmt, tc, rawc, hzc, scl, pc, int64(lwgs))
+        enc_splitk_reduce_cls(rawc, hzc, sr, pcr, rwgs)
+    }
+    vk_check(vkEndCommandBuffer(rawc), null)
+    return (red = red, chain = usec_per_dispatch(rawc))
+}
+
+// ===== the last-arriving-workgroup hand-off (arg "lastwg") =====
+// An f32 row GEMV (a subgroup a row, eight rows a workgroup) whose workgroups each write their rows of y; under LASTWG
+// every workgroup publishes its rows (memoryBarrierBuffer) and bumps a counter, and the one that arrives last runs the
+// row epilogue itself - the residual add, the rms norm and the normed row the next GEMV reads - so the chain is one
+// dispatch a step where the split form is the GEMV then `cls_ar`, a dependent-dispatch hop between. Both forms chain
+// their steps through the normed row; the probe times a step of each and checks the two forms' rows agree.
+struct PxLwArgs {
+    n : uint
+    d : uint
+    eps : float
+}
+
+[ |> template_struct_instance]
+class template PxLwGemvT {
+    @template_constant LASTWG : bool = false
+    @ssbo @binding = 0 @readonly w : array<float>    // the plane, [d x n]
+    @ssbo @binding = 1 xn : array<float>             // the normed row the GEMV reads (and, last, writes)
+    @ssbo @binding = 2 @coherent y : array<float>    // the rows out: the last workgroup reads every other's
+    @ssbo @binding = 3 cnt : array<uint>             // the arrival counter, reset by the last workgroup
+    @ssbo @binding = 4 xres : array<float>           // the residual row the epilogue adds y into
+    @ssbo @binding = 5 @readonly wn : array<float>   // the norm weights
+    @push_constant pa : PxLwArgs
+    @workgroup last : uint[1]
+    @workgroup part : float[8]   //! no row stash: a 32 KB workgroup array would cap the GEMV's resident workgroups; the epilogue re-reads its own residual writes
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let r = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (r < pa.d) {
+            var acc = 0.0
+            var i = gl_SubgroupInvocationID
+            while (i < pa.n) {
+                acc += w[r * pa.n + i] * xn[i]
+                i += gl_SubgroupSize
+            }
+            let s = subgroupAdd(acc)
+            if (subgroupElect()) {
+                y[r] = s
+            }
+        }
+        static_if (LASTWG) {
+            let tid = gl_LocalInvocationID.x
+            memoryBarrierBuffer()
+            barrier()
+            if (tid == 0u) {
+                last[0] = atomicAdd(cnt[0], 1u)
+            }
+            barrier()
+            if (last[0] + 1u == gl_NumWorkGroups.x) {
+                memoryBarrierBuffer()
+                var ss = 0.0
+                var k = tid
+                while (k < pa.d) {
+                    let v = xres[k] + y[k]
+                    xres[k] = v
+                    ss += v * v
+                    k += 256u
+                }
+                let sg = subgroupAdd(ss)
+                if (gl_SubgroupInvocationID == 0u) {
+                    part[gl_SubgroupID] = sg
+                }
+                barrier()
+                var tot = 0.0
+                var sgi = 0u
+                while (sgi < gl_NumSubgroups) {
+                    tot += part[sgi]
+                    sgi++
+                }
+                let inv = 1.0 / sqrt(tot / float(pa.d) + pa.eps)
+                k = tid
+                while (k < pa.d) {
+                    xn[k] = wn[k] * (xres[k] * inv)
+                    k += 256u
+                }
+                if (tid == 0u) {
+                    cnt[0] = 0u
+                }
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "px_lw_gemv", grid = "wgs", params = "wgs : int64")]
+class PxLwGemv : PxLwGemvT {}
+
+[vk_dispatch(name = "px_lw_gemv_last", grid = "wgs", params = "wgs : int64")]
+class PxLwGemvLast : PxLwGemvT {
+    override LASTWG = true
+}
+
+//! one square row width: the split chain (GEMV, then `cls_ar` over y into the normed row) against the fused one, a step
+//! of each timed over the chained dispatches, the two forms' normed rows compared after the same number of steps
+def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurement body
+    let nb = int64(dim) * 4l
+    let w_bytes = int64(dim) * int64(dim) * 4l
+    let wd = make_device_buf(w_bytes)
+    let wnd = make_device_buf(nb)
+    var wh : array<float>
+    var wnh : array<float>
+    var x0 : array<float>
+    wh |> resize(dim * dim)
+    wnh |> resize(dim)
+    x0 |> resize(dim)
+    for (i in range(dim * dim)) {
+        wh[i] = (float(hash_word(uint(i) + 3u) % 2001u) - 1000.0) * 0.00005 / float(dim) * 1152.0
+    }
+    for (i in range(dim)) {
+        wnh[i] = 0.9 + 0.2 * float(i % 7) / 7.0
+        x0[i] = 0.001 * float(i % 17) + 0.5
+    }
+    unsafe {
+        upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), nb)
+    }
+    let wgs = (int64(dim) + 4l * g_gpu.rows_per_wg - 1l) / (4l * g_gpu.rows_per_wg)
+    var pc = PxLwArgs(n = uint(dim), d = uint(dim), eps = 1.0e-6)
+    var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    var out_split : array<float>
+    var out_fused : array<float>
+    out_split |> resize(dim)
+    out_fused |> resize(dim)
+    var us_split = 0.0lf
+    var us_fused = 0.0lf
+    var cnt_after = 0u
+    for (form in range(2)) {
+        // fresh state a form: xn = xres = x0, y and the counter zero
+        let xnd = make_device_buf(nb)
+        let xresd = make_device_buf(nb)
+        let yd = make_device_buf(nb)
+        let cntd = make_device_buf(16l)
+        var zero : array<uint>
+        zero |> resize(4)
+        var host = make_host_buf(nb + 16l, true, [cached = true])
+        unsafe {
+            upload_region_at(xnd, 0l, addr<uint8 const?>(x0[0]), nb)
+            upload_region_at(xresd, 0l, addr<uint8 const?>(x0[0]), nb)
+            upload_region_at(yd, 0l, addr<uint8 const?>(x0[0]), nb)
+            upload_region_at(cntd, 0l, addr<uint8 const?>(zero[0]), 16l)
+        }
+        var raw = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        if (form == 0) {
+            var sg = set_px_lw_gemv(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
+                fixed_array(0u, 1u, 2u, 0u, 0u, 0u))
+            var sa = set_cls_ar(fixed_array(xresd, yd, wnd, xnd), fixed_array(nb, nb, nb, nb), fixed_array(4u, 2u, 0u, 1u))
+            for (_k in range(DISPATCHES)) {
+                enc_px_lw_gemv(raw, hz, sg, pc, wgs)
+                enc_cls_ar(raw, hz, sa, pca, 1l)
+            }
+        } else {
+            var sf = set_px_lw_gemv_last(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
+                fixed_array(0u, 1u, 2u, 8u, 4u, 0u))
+            for (_k in range(DISPATCHES)) {
+                enc_px_lw_gemv_last(raw, hz, sf, pc, wgs)
+            }
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)   //! per step: the split form's step is two dispatches
+        var rawc = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(rawc, begin), null)
+        var hc : VkHaz
+        vhz_dep(rawc, hc, 1u | 8u, 0u, true)
+        cmd_copy_whole(rawc, xnd, host.buf, nb)
+        cmd_copy_range(rawc, cntd, 0l, host.buf, nb, 16l)
+        vk_check(vkEndCommandBuffer(rawc), null)
+        submit_wait(rawc)
+        unsafe {
+            if (form == 0) {
+                memcpy(addr<void?>(out_split[0]), host.mapped, nb)
+                us_split = us
+            } else {
+                memcpy(addr<void?>(out_fused[0]), host.mapped, nb)
+                us_fused = us
+                cnt_after = *reinterpret<uint?>(intptr(host.mapped) + uint64(nb))
+            }
+        }
+        delete zero
+    }
+    var maxd = 0.0
+    var maxa = 0.0
+    for (i in range(dim)) {
+        maxd = max(maxd, abs(out_split[i] - out_fused[i]))
+        maxa = max(maxa, abs(out_split[i]))
+    }
+    let bound = 2.0e-3 * maxa   //! the two forms sum the same row in a different order
+    if (maxd > bound) {
+        g_probe_exit = 1
+    }
+    print("lastwg dim={dim} wgs={wgs}: split (GEMV + cls_ar) {us_split} us/step, fused (last workgroup's epilogue) {us_fused} us/step; rows max |diff| {maxd} {maxd <= bound ? "within" : "PAST"} the bound {bound}, counter after {cnt_after}\n")
+    delete wh
+    delete wnh
+    delete x0
+    delete out_split
+    delete out_fused
+}
+
+// ===== the dependent-dispatch gap by barrier form (arg "barform") =====
+//! `cls_ar` chained through hand-placed barriers of five forms - the hazard rail's (a global memory barrier, compute and
+//! transfer stages both ways), compute-only stages, shader access bits alone, a buffer memory barrier on the row, an
+//! execution-only barrier (no memory barrier: the visibility test, not a serving form) - and the dependent chain with
+//! no barrier at all (the wrong-but-fast floor), each timed a dispatch
+def private run_barrier_forms(dim : int) {
+    let nb = int64(dim) * 4l
+    let xd = make_device_buf(nb)
+    let ad = make_device_buf(nb)
+    let wnd = make_device_buf(nb)
+    let yd = make_device_buf(nb)
+    var ones : array<float>
+    ones |> resize(dim)
+    for (i in range(dim)) {
+        ones[i] = 0.001 * float(i % 17) + 0.5
+    }
+    unsafe {
+        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
+    }
+    var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    let begin = VkCommandBufferBeginInfo()
+    let names = fixed_array("rail (global, compute+transfer)", "global, compute only", "global, shader bits only", "buffer barrier on the row", "execution only", "no barrier")
+    for (form in range(6)) {
+        var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(0u, 0u, 0u, 0u))   //! the rail sees no bits: the barriers below are the probe's own
+        var raw = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_cls_ar(raw, hz, sc, pc, 1l)
+            probe_barrier(raw, form, xd, nb)
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        print("barform dim={dim} {names[form]}: cls_ar {us} us/dispatch | timing-only\n")
+    }
+    delete ones
+}
+
+//! one barrier of the form `form` after a dispatch that wrote `buf`
+def private probe_barrier(raw : VkCommandBuffer; form : int; buf : uint64; bytes : int64) {
+    if (form == 5) {
+        return
+    }
+    var sstage : VkPipelineStageFlags
+    var dstage : VkPipelineStageFlags
+    sstage.compute_shader = true
+    dstage.compute_shader = true
+    if (form == 0) {
+        sstage.transfer = true
+        dstage.transfer = true
+    }
+    let dflags : VkDependencyFlags
+    unsafe {
+        if (form == 4) {
+            vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 0u, null, 0u, null, 0u, null)
+            return
+        }
+        if (form == 3) {
+            var bb = VkBufferMemoryBarrier()
+            bb.srcAccessMask.shader_write = true
+            bb.dstAccessMask.shader_read = true
+            bb.dstAccessMask.shader_write = true
+            bb.srcQueueFamilyIndex = 0xFFFFFFFFu
+            bb.dstQueueFamilyIndex = 0xFFFFFFFFu
+            bb.buffer = reinterpret<VkBuffer>(buf)
+            bb.offset = 0ul
+            bb.size = uint64(bytes)
+            vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 0u, null, 1u, addr(bb), 0u, null)
+            return
+        }
+        var mb = VkMemoryBarrier()
+        mb.srcAccessMask.shader_write = true
+        mb.dstAccessMask.shader_read = true
+        mb.dstAccessMask.shader_write = true
+        if (form == 0) {
+            mb.srcAccessMask.transfer_write = true
+            mb.dstAccessMask.transfer_read = true
+            mb.dstAccessMask.transfer_write = true
+        }
+        vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 1u, addr(mb), 0u, null, 0u, null)
+    }
+}
+
+//! the token command's small-kernel floor: the add+rms step (`cls_ar`) and its fused requant twin (`cls_ar_rq`) at
+//! a row width, 64 dispatches chained through the hazard rail (each reads what the last wrote, a barrier between)
+//! against the same 64 with no dependency declared - the per-dispatch cost of a one-workgroup row kernel, with
+//! and without the barrier
+def private run_small_kernels(dim : int) {
+    let nb = int64(dim) * 4l
+    let xd = make_device_buf(nb)
+    let ad = make_device_buf(nb)
+    let wnd = make_device_buf(nb)
+    let yd = make_device_buf(nb)
+    let xqd = make_device_buf(int64(dim))
+    let xsd = make_device_buf(int64(dim / 32) * 4l)
+    var ones : array<float>
+    ones |> resize(dim)
+    for (i in range(dim)) {
+        ones[i] = 0.001 * float(i % 17) + 0.5
+    }
+    unsafe {
+        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
+    }
+    verify(ensure_cls_ar() && ensure_cls_ar_rq(), "the add+rms class rails must engage")
+    var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
+    let begin = VkCommandBufferBeginInfo()
+    for (dep in range(2)) {
+        let bit = dep == 1 ? 1u : 0u   //! the dependency: x read and written by every dispatch, so the rail barriers between them
+        var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(bit, 0u, 0u, 2u * bit))
+        var raw = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var hz : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_cls_ar(raw, hz, sc, pc, 1l)
+        }
+        vk_check(vkEndCommandBuffer(raw), null)
+        let us = usec_per_dispatch(raw)
+        var scq = set_cls_ar_rq(fixed_array(xd, ad, wnd, xqd, xsd), fixed_array(nb, nb, nb, int64(dim), int64(dim / 32) * 4l), fixed_array(bit, 0u, 0u, 2u * bit, 2u * bit))
+        var rawq = alloc_cmd()
+        vk_check(vkBeginCommandBuffer(rawq, begin), null)
+        var hzq : VkHaz
+        for (_k in range(DISPATCHES)) {
+            enc_cls_ar_rq(rawq, hzq, scq, pc, 1l)
+        }
+        vk_check(vkEndCommandBuffer(rawq), null)
+        let usq = usec_per_dispatch(rawq)
+        print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq {usq} us/dispatch | timing-only\n")
+    }
+    delete ones
+}
+
 // the decode-cost bisect: the shipped cm2l against the three probe variants, one shape
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
@@ -3296,7 +3776,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "splitk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -3314,6 +3794,10 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             only = "moe:"
             var pf : KqFmt
             cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
+        } elif (a |> starts_with("cm2g:")) {
+            only = "cm2g:"
+            var pf : KqFmt
+            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
         } elif (a |> starts_with("moesk:")) {
             only = "moesk:"
             var pf : KqFmt
@@ -3347,7 +3831,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_dec_small_kernels()
         return
     }
-    if (only == "cm2:" || only == "cm2d:" || only == "cm2w:") {
+    if (only == "cm2:" || only == "cm2d:" || only == "cm2w:" || only == "cm2g:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
             return
@@ -3390,6 +3874,32 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                     && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
                     && kq_batch_cls_ensure(cm2_fmt, false), "the cm2 sweeps' probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
                 let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
+                if (only == "cm2g:") {
+                    // gemma-4-26B-A4B's dense role shapes (dim 2816, shared expert 2112, q 4096, kv 2048): the file's K-quant planes against the q8 tiles below
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_down", 2816, 2112, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} wo     ", 2816, 4096, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v    ", 2048, 2816, 512)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512, false, true)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2176", 2176, 2816, 512, false, true)   //! the shared expert's width padded to whole weight tiles: the partial 17th tile's cost
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2048", 2048, 2816, 512, false, true)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512, false, true)
+                    if (round == 1) {
+                        for (sk in [1, 2, 3, 4, 6]) {
+                            run_kq_shape_split(cm2_fmt, "{tag} sh_gate", 2112, 2816, 512, sk)
+                        }
+                        for (sk in [1, 2, 4]) {
+                            run_kq_shape_split(cm2_fmt, "{tag} q      ", 4096, 2816, 512, sk)
+                            run_kq_shape_split(cm2_fmt, "{tag} k/v    ", 2048, 2816, 512, sk)
+                        }
+                    }
+                    if (round == 1 && arm == arms - 1) {
+                        run_shape("q8 sh_gate", 2112, 2816, 512)
+                        run_shape("q8 q      ", 4096, 2816, 512)
+                    }
+                    continue
+                }
                 if (only == "cm2d:") {
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
                     run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down ", 4096, 12288, 512)
@@ -3519,6 +4029,86 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_shape("tl down", 2048, 5632, 512)
         run_shape("tl q/wo", 2048, 2048, 512)
         run_shape("tl k/v ", 256, 2048, 512)
+        return
+    }
+    if (only == "g3") {
+        // gemma-3-1b role shapes (dim 1152, hidden 6912, qd 1024, kvd 256): the skinny-output down and wo, and the down under the split-k ladder
+        run_shape("g3 gate", 6912, 1152, 512)
+        run_shape("g3 down", 1152, 6912, 512)
+        run_shape("g3 q   ", 1024, 1152, 512)
+        run_shape("g3 wo  ", 1152, 1024, 512)
+        run_shape("g3 k/v ", 256, 1152, 512)
+        for (sk in [2, 4, 8]) {
+            run_shape_split("g3 down", 1152, 6912, 512, sk)
+        }
+        run_shape_split("g3 wo  ", 1152, 1024, 512, 2)
+        return
+    }
+    if (only == "gemma") {
+        // the other gemma carriers' q8 role shapes at 512 tokens: E2B (dim 1536, hidden 6144 / 12288, qd 2048), E4B (2560, 8192 / 16384, 2048),
+        // gemma-2-2b (2304, 9216, 2048) and gemma-4-12B (3840, 15360, 4096) - the tile each shape wants
+        run_shape("e2b gate6k ", 6144, 1536, 512)
+        run_shape("e2b gate12k", 12288, 1536, 512)
+        run_shape("e2b down6k ", 1536, 6144, 512)
+        run_shape("e2b down12k", 1536, 12288, 512)
+        run_shape("e2b q      ", 2048, 1536, 512)
+        run_shape("e2b wo     ", 1536, 2048, 512)
+        run_shape("e4b gate8k ", 8192, 2560, 512)
+        run_shape("e4b gate16k", 16384, 2560, 512)
+        run_shape("e4b down8k ", 2560, 8192, 512)
+        run_shape("e4b down16k", 2560, 16384, 512)
+        run_shape("e4b q      ", 2048, 2560, 512)
+        run_shape("e4b wo     ", 2560, 2048, 512)
+        run_shape("g2 gate    ", 9216, 2304, 512)
+        run_shape("g2 down    ", 2304, 9216, 512)
+        run_shape("g2 q       ", 2048, 2304, 512)
+        run_shape("g12 gate   ", 15360, 3840, 512)
+        run_shape("g12 down   ", 3840, 15360, 512)
+        run_shape("g12 q      ", 4096, 3840, 512)
+        for (sk in [3, 4]) {
+            run_shape_split("e2b down12k", 1536, 12288, 512, sk)
+            run_shape_split("e4b down16k", 2560, 16384, 512, sk)
+            run_shape_split("g12 down   ", 3840, 15360, 512, sk)
+        }
+        return
+    }
+    if (only == "splitk") {
+        // the split arm against the whole GEMM at the same chunk count: one chunk through the split arm (ksplit = K) isolates the arm's own cost from the extra workgroups
+        run_shape("g3 down    ", 1152, 6912, 512)
+        run_shape("e2b down12k", 1536, 12288, 512)
+        for (sk in [1, 2, 3, 4]) {
+            run_shape_split("g3 down    ", 1152, 6912, 512, sk)
+            run_shape_split("e2b down12k", 1536, 12288, 512, sk)
+            run_shape_split("e4b down16k", 2560, 16384, 512, sk)
+        }
+        // the short-K and the one-wave shapes the wave model calls close: E2B's wo at K 2048, gemma-2's down, E4B's 8192-deep down
+        run_shape("e2b wo     ", 1536, 2048, 512)
+        run_shape("g2 down    ", 2304, 9216, 512)
+        run_shape("e4b down8k ", 2560, 8192, 512)
+        for (sk in [2, 3]) {
+            run_shape_split("e2b wo     ", 1536, 2048, 512, sk)
+            run_shape_split("g2 down    ", 2304, 9216, 512, sk)
+            run_shape_split("e4b down8k ", 2560, 8192, 512, sk)
+        }
+        return
+    }
+    if (only == "small") {
+        for (dim in [1152, 2560, 3840]) {
+            run_small_kernels(dim)
+        }
+        return
+    }
+    if (only == "barform") {
+        verify(ensure_cls_ar(), "the add+rms class rail must engage")
+        run_barrier_forms(1152)
+        run_barrier_forms(2560)
+        return
+    }
+    if (only == "lastwg") {
+        verify(ensure_px_lw_gemv() && ensure_px_lw_gemv_last() && ensure_cls_ar(), "the last-workgroup probe's class rails must engage")
+        for (dim in [1152, 2560, 3840]) {
+            run_lastwg(dim)
+        }
         return
     }
     if (only == "mmqx") {

@@ -1184,6 +1184,42 @@ def public cbufbar_words : array<uint> {
     return clone_to_move(cbufbar_spv)
 }
 
+// cossbo: @coherent -> Coherent on the SSBO OpVariable (not the block member); the last-arriving-workgroup hand-off is a body that needs the decoration
+var @ssbo @coherent @binding = 0 co_rows : array<uint>
+var @ssbo @binding = 1 co_arrived : array<uint>
+var @ssbo @binding = 2 co_out : array<uint>
+var @workgroup co_arrival : uint[1]
+
+[compute_shader(local_size_x=64, name="cossbo_spv"), marker(no_coverage)]
+def cossbo {
+    let lid = gl_LocalInvocationID.x
+    let wg = gl_WorkGroupID.x
+    co_rows[wg * 64u + lid] = wg + lid
+    memoryBarrierBuffer()
+    barrier()
+    if (lid == 0u) {
+        co_arrival[0] = atomicAdd(co_arrived[0], 1u)
+    }
+    barrier()
+    if (co_arrival[0] + 1u == gl_NumWorkGroups.x) {
+        memoryBarrierBuffer()
+        var s = 0u
+        var w = 0u
+        while (w < gl_NumWorkGroups.x) {
+            s += co_rows[w * 64u + lid]
+            w++
+        }
+        co_out[lid] = s
+        if (lid == 0u) {
+            co_arrived[0] = 0u
+        }
+    }
+}
+
+def public cossbo_words : array<uint> {
+    return clone_to_move(cossbo_spv)
+}
+
 // catomics: the rest of the atomic family on @workgroup int + uint scalar counters (Workgroup
 // scope). Both signednesses are present so atomicMin/Max emit BOTH the signed (SMin/SMax) and
 // unsigned (UMin/UMax) opcodes; atomicCompSwap is the OpAtomicCompareExchange CAS. The results feed
@@ -2815,6 +2851,84 @@ def public coopmat2fa256_words : array<uint> {
     return clone_to_move(coopmat2fa256_spv)
 }
 
+// ===== The h512 flash tiles (Br=64, Bc=32): the loop at head size 512 with the O accumulated in f16 beside f32 =====
+[compute_shader(local_size_x=128, name="coopmat2fa512_spv"), marker(no_coverage)]
+def coopmat2fa512_kernel {
+    let n = fa_meta[0u]
+    let kv = fa_meta[1u]
+    let ti = gl_WorkGroupID.x
+    var tlq : tensorLayout2DPad
+    tensorLayoutCreate(tlq)
+    tensorLayoutSetDimension(tlq, n, 512u)
+    tensorLayoutSetStride(tlq, 512u, 1u)
+    var tlk : tensorLayout2DPad
+    tensorLayoutCreate(tlk)
+    tensorLayoutSetDimension(tlk, kv, 512u)
+    tensorLayoutSetStride(tlk, 512u, 1u)
+    var tlo : tensorLayout2D
+    tensorLayoutCreate(tlo)
+    tensorLayoutSetDimension(tlo, n, 512u)
+    tensorLayoutSetStride(tlo, 512u, 1u)
+    var tv : tensorView2Dt
+    tensorViewCreate(tv)
+    var q : coopmatWgAcc_f32_64x512
+    coopmatLoadTensor(q, fa_q, 0u, tlq, ti * 64u, 64u, 0u, 512u)
+    coopmatScale(q, 0.044194173)
+    var qf : coopmatWgA_f16_64x512
+    coopmatConvert(qf, q)
+    var mrow : coopmatWgAcc_f32_64x32
+    coopmatFill(mrow, -1.7e38)
+    var lrow : coopmatWgAcc_f32_64x32
+    var o : coopmatWgAcc_f32_64x512
+    var o16 : coopmatWgAcc_f16_64x512
+    var j = 0u
+    while (j < kv) {
+        var s : coopmatWgAcc_f32_64x32
+        var kt : coopmatWgB_f16_512x32
+        coopmatLoadTensor(kt, fa_k, 0u, tlk, j, 32u, 0u, 512u, tv)
+        s = coopmatMulAdd(qf, kt, s)
+        coopmatPerElement(s, s, @@fa_mask, ti * 64u, j)
+        var rmax : coopmatWgAcc_f32_64x32
+        coopmatReduce(rmax, s, COOPMAT_REDUCE_ROW, @@fa_max)
+        var mold : coopmatWgAcc_f32_64x32
+        coopmatCopy(mold, mrow)
+        coopmatPerElement(mrow, rmax, @@fa_pick_max, mold)
+        coopmatSub(s, s, mrow)
+        coopmatPerElement(s, s, @@fa_exp)
+        var em : coopmatWgAcc_f32_64x32
+        coopmatSub(em, mold, mrow)
+        coopmatPerElement(em, em, @@fa_exp)
+        var pa : coopmatWgA_f16_64x32
+        coopmatConvert(pa, s)
+        var rsum : coopmatWgAcc_f32_64x32
+        var one : coopmatWgB_f16_32x32
+        coopmatFill(one, 1.0)
+        rsum = coopmatMulAdd(pa, one, rsum)
+        coopmatMulElem(lrow, em, lrow)
+        coopmatAdd(lrow, lrow, rsum)
+        var emd : coopmatWgAcc_f32_64x512
+        coopmatReduce(emd, em, COOPMAT_REDUCE_ROW, @@fa_smear)
+        coopmatMulElem(o, emd, o)
+        var vt : coopmatWgB_f16_32x512
+        coopmatLoadTensor(vt, fa_v, 0u, tlk, j, 32u, 0u, 512u)
+        o = coopmatMulAdd(pa, vt, o)
+        o16 = coopmatMulAdd(pa, vt, o16)
+        j += 32u
+    }
+    var o16w : coopmatWgAcc_f32_64x512
+    coopmatConvert(o16w, o16)
+    coopmatAdd(o, o, o16w)
+    var ld : coopmatWgAcc_f32_64x512
+    coopmatReduce(ld, lrow, COOPMAT_REDUCE_ROW, @@fa_smear)
+    coopmatPerElement(ld, ld, @@fa_recip)
+    coopmatMulElem(o, ld, o)
+    coopmatStoreTensor(o, fa_o, 0u, tlo, ti * 64u, 64u, 0u, 512u)
+}
+
+def public coopmat2fa512_words : array<uint> {
+    return clone_to_move(coopmat2fa512_spv)
+}
+
 // The cm2 fixture adds the tensor-addressing type/builder opcodes, the tensor-addressed coopmat
 // load/store, OpCooperativeMatrixLengthKHR, and OpPhi (coopmatClamp's hand-emitted element loop is
 // the emitter's ONLY OpPhi — das loops lower through Function-storage locals). The decode function's
@@ -2922,6 +3036,17 @@ def public spv_const_uint(words : array<uint>; id : uint) : uint {
         }
     }
     return v
+}
+
+//! the memory scope of every OpMemoryBarrier in a module, in order, resolved through its OpConstant (SpvScope values); empty when none is emitted
+def public spv_memory_barrier_scopes(words : array<uint>) : array<uint> {
+    var scopes : array<uint>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; opStart : int; opCount : int) {
+        if (opcode == uint(SpvOp.MemoryBarrier) && opCount >= 2) {
+            scopes |> push(spv_const_uint(words, w[opStart]))
+        }
+    }
+    return <- scopes
 }
 
 //! every OpTypeCooperativeMatrixKHR of a module as "rows x cols", sorted - the shape set a fixture declares, whatever the declaration order

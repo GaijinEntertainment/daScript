@@ -615,6 +615,28 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // coverage is the e arm of each format's cell in test_vulkan_kernels.das
     "kq_batch_k5_cm2e_cls_spv", "kq_batch_k6_cm2e_cls_spv", "kq_batch_q40_cm2e_cls_spv",
     "kq_batch_k3_cm2e_cls_spv", "kq_batch_iq4nl_cm2e_cls_spv", "kq_batch_k2_cm2e_cls_spv",
+    // the q51 expert rail (the 32-block down planes of the 26B-A4B's Q4_K_M: a carrier above the zoo's tier) -
+    // its s and e stamps and its decode GEMV; their coverage is test_vkd_q51_cm2_batch and test_vkd_q51_gemv
+    "q51_batch_cm2s_cls_spv", "q51_batch_cm2e_cls_spv", "q51_gemv_cls_spv",
+    // the Q4_K experts' gate+up+act twin (the 26B-A4B Q4_K_M's routed stacks feeding its Q5_1 down, above the zoo's
+    // tier; the zoo's k4 MoE carrier feeds a k4 down): its coverage is test_vkd_kq_gemv_k4_gu in test_vulkan_kernels.das
+    "kq_gemv_k4_gu_cls_spv",
+    // the E-series per-layer-embedding tail (the act, its requant and the proj GEMV in one): its carriers are the
+    // gemma-4 E2B / E4B, no zoo row; its coverage is test_vkd_q8_gemv_pleact in test_vulkan_kernels.das
+    "q8_gemv_pleact_cls_spv",
+    // the gemma-4 MoE combine (the two normed branches' residual step, f32 and f16 normed-row forms):
+    // its carrier is the 26B-A4B, above the zoo's tier; its coverage is test_vkd_moe_routing's gemma-4
+    // combine arm in test_vulkan_kernels.das
+    "cls_ar_comb_g4_spv", "cls_ar_comb_g4_f16_b_spv", "cls_ar_comb_g4_rq_spv",
+    // the gemma-2 softcap flash tile (the attention logits through cap * tanh(s / cap)) and the h512 flash tile
+    // (gemma-4's global heads), each with its f16 twin: their carriers are gemma-2-2b and the gemma-4 dense files,
+    // no zoo row; their coverage is test_vkd_fa_cm2_h256_softcap and test_vkd_fa_cm2's h512 arm in test_vulkan_kernels.das
+    "fa_cm2_h256_cap_cls_spv", "fa_cm2_h256_cap_f16_cls_spv", "fa_cm2_h512_cls_spv", "fa_cm2_h512_f16_cls_spv",
+    // the batched windowed decode attention and its f16 twin (a sliding window over the batch rows: the gemma
+    // carriers, no zoo row); its coverage is test_vkd_da_attn_bw in test_vulkan_kernels.das
+    "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
+    // the q51 routed down GEMV's summing twin (the 26B-A4B Q4_K_M, above the zoo's tier); its coverage is test_vkd_q51_gemv
+    "q51_gemv_sum_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das

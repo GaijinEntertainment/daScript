@@ -3,8 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 
-**This list is routed to - by `REVIEW.md` beside it and by the `dasMetal/` and `dasSpirv/`
-checklists - and is never reached by the folder walk on its own.**
+**This list is reached only through the checklists that route to it, never by the folder walk on
+its own.**
 
 A device-side value is one whose storage exists only on the device: a tile or tensor, a layout
 or view over one, a sampler, an image. A struct that stands for one on the CPU is a marker
@@ -29,31 +29,31 @@ of its tile or of its cooperating lane group.
 
 **A SPIR-V kernel that loads its operands with `coopmatLoadTensor*` receives a run-time-only
 matmul reduction width through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
-`tensorLayoutSetDimension` sets, and no other way.** The reduction width is the K dimension -
-the length of the loop the kernel accumulates over; it does not fix tiling, so it is not a
-shape constant.
+`tensorLayoutSetDimension` sets - the load takes the width from that layout alone; the
+accumulation loop's own bound may read it from the push constants.** The reduction width is the K
+dimension - the length of the loop the kernel accumulates over; it does not fix tiling, so it is
+not a shape constant.
 
 **A Metal kernel that loads its operands with the `tmm2d_*` family receives a run-time-only
-matmul reduction width through a `matmul2d_descriptor` whose K extent is `dynamic_extent`, and
-no other way.** The reduction width is the K loop's bound - the length of the loop the kernel
-accumulates over; the per-step chunk a `tmm2d_*` call takes is a shape constant.
+matmul reduction width through a `matmul2d_descriptor` whose K extent is `dynamic_extent` - the
+load takes the width from that descriptor alone; the accumulation loop's own bound may read it
+from the kernel's arguments.** The per-step chunk a `tmm2d_*` call takes is a shape constant.
 
 **A diff that makes a kernel need a shape constant known only at run time ships a
-specialization path, or records in an `ARCHITECTURE*.md` at the root of the module the kernel
-ships in that the kernel cannot have one.** A specialization path is one compiled variant per
-constant shape.
+specialization path - one compiled variant per constant shape - or records the kernel as having
+none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 
 **Never check a claim about emitted shape against the das source - check it in the emitted
-words or text.** Emitted shape is the structure of the emitted kernel - its signature, its
+words or text, the SPIR-V words one emitter builds and the MSL text the other writes.** Emitted shape is the structure of the emitted kernel - its signature, its
 parameter attributes, its statement forms - and its stamped shape values (tile, grid,
 threadgroup sizes).
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
 shared ledger (`dasMetal/ARCHITECTURE.md`) naming that capability - covered by the row that
 names its family, or by a row the diff adds.** A kernel-model capability is present on an
-emitter when a kernel source that uses it compiles there, and a family is the set of constructs
-one ledger row names. A diff that leaves every kernel source compiling exactly as it did before
-changed lowering alone, and answers to that emitter folder's own checklist.
+emitter when the emitted text or words carry its effect - an emitter that accepts the construct
+and emits nothing for it does not have it - and a family is the set of constructs one ledger row
+(`dasMetal/ARCHITECTURE.md` sec.5) names.
 
 **A diff that puts a `daslib/shader_lingua_franca` declaration into a kernel body or fixture an
 emitter compiles, where that emitter does not handle it, ships, in the same change, either
@@ -62,7 +62,8 @@ declaration by name.** A declaration in that module is available to both emitter
 
 **A skippable read of a global-rooted array - a module global, a `@workgroup` array, or a
 `self.<member>` resource - in a `[spirv_kernel]` or `[compute_shader]` body, or in any `def` that
-body calls, stays skippable: a diff that makes it unconditional - both arms of an if reading it,
-a clamped index, a bare read - is a defect.** The emitter lowers a `?:`, `&&` or `||` operand as
-a branch (`dasSpirv/ARCHITECTURE.md`, "Operand laziness follows the language"), so the
+body calls, stays skippable: a diff that widens the set of dispatches the read happens on, or
+drops the condition that kept it from happening where its index is out of range, is a defect -
+both arms of an if reading it, a clamped index, and a bare read are the shapes that takes.** The emitter lowers a `?:`, `&&` or `||` operand as
+a branch (`dasSpirv/ARCHITECTURE.md` sec.3.4), so the
 short-circuit form needs no rewrite.

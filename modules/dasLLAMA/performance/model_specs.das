@@ -431,6 +431,17 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // PLE + cross-layer KV sharing as the E4B, plus per-layer FFN width (the elastic
             // MatFormer sub-model); dense, so the full 40 hold
             parity <- ev_gemma4_dense()),
+        // the resident gates' large-tier carriers (tests/test_gpu_resident_gemma4_12b_q8 / _26b / _31b): provenance rows,
+        // not board rows - resolve/main floats, so the bytes and sha256 pin the file
+        ModelSpec(file = "gemma-4-12B-it-Q8_0.gguf",
+            url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q8_0.gguf",
+            bytes = 12669646976l, sha256 = "abfc3044b93795f6a446fc1a04468ac2d5fc5e9c92e237f09a5b3384c5a433e4"),
+        ModelSpec(file = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
+            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
+            bytes = 11416548832l, sha256 = "3b7aec683e176e1d957d007e0fb590611d82aec4db358d99b7f9714b6bc7bfc2"),
+        ModelSpec(file = "gemma-4-31B-it-Q4_K_M.gguf",
+            url = "{HF}/lmstudio-community/gemma-4-31B-it-GGUF/resolve/main/gemma-4-31B-it-Q4_K_M.gguf",
+            bytes = 18687063904l, sha256 = "8f3479643461601703f717931e399cc440dbd5ada598c025d6296c8165d94be9"),
         ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf",   // parity-only carrier
             // the routed-experts arch (softmax router -> top-4 of 60 with un-renormalized
             // weights + a sigmoid-gated shared expert; QKV bias, NEOX rope); the fixture runs

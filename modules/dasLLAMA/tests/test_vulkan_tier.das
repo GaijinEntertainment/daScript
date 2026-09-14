@@ -1866,7 +1866,11 @@ let ATK_WOFF = 22000000l
 let ATV_WOFF = 23000000l
 let ATO_WOFF = 24000000l
 let ATO4_WOFF = 25000000l
-let AT_REL_TOL = 3e-3
+//! of the chain's max |out|: the cm2 flash tile accumulates O in f16 under the row-max bias (every P at an eighth or under, the
+//! row a convex combination of f16-rounded V rows), so its rounding rides the running sum's magnitude - 2^-11 relative a step,
+//! a few steps a row - and the wo GEMM then quantizes that out through Q8 blocks; the bias arm reads 3.4e-3 (RTX 5060 Ti,
+//! maxref 9641) where the f32 accumulator read under 3e-3. The tile itself is held to 2e-3 by test_vulkan_kernels.das's fa cells.
+let AT_REL_TOL = 5e-3
 
 // deinterleave (gated) + per-head rms + partial NEOX rope of one projection plane — the CPU
 // mirror of at_prep. rows out d-wide; a gated q also returns the raw gate plane.

@@ -312,13 +312,27 @@ def register_ple_pre_prefill_pad(fn : PlePrePrefillPadFn) {
     g_ple_pre_prefill_pad = fn
 }
 
+//! the gather half of the pre-step alone: every position's per-layer table row, scaled by sqrt(ple), position-major into `dst` - a device driver finishing the pre-step on its side takes these rows
+typedef PleGatherRowsFn = function<(t : Model; tokens : array<int64>; npos : int64; var dst : array<float>) : void>
+var private g_ple_gather_rows : PleGatherRowsFn
+
+def register_ple_gather_rows(fn : PleGatherRowsFn) {
+    g_ple_gather_rows = fn
+}
+
+def ple_gather_rows(t : Model; tokens : array<int64>; npos : int64; var dst : array<float>) {
+    if (g_ple_gather_rows == null) ple_rail_missing()
+    invoke(g_ple_gather_rows, t, tokens, npos, dst)
+}
+
 // Every call site is behind has_ple(config), so an unset rail means this program was built without
 // dasllama/dasllama_ple yet loaded a model that needs it — say which require is missing, loudly.
 def private ple_rail_missing() {
     panic("dasLLAMA: this model needs the PLE rail - the program must require dasllama/dasllama_ple")
 }
 
-def private ple_pre_decode(t : Model; var s : Session; token : int64) {
+//! Public as the late-decline fallback for a driver that claimed the token's pre-step via the gate.
+def ple_pre_decode(t : Model; var s : Session; token : int64) {
     if (g_ple_pre_decode == null) ple_rail_missing()
     invoke(g_ple_pre_decode, t, s, token)
 }
@@ -541,17 +555,21 @@ var private g_layout_repack_q8 : ModelRepackFn
 var private g_layout_repack_kq : ModelRepackFn
 var private g_layout_repack_mx4 : ModelRepackFn
 var private g_layout_repack_q51 : ModelRepackFn
+typedef GatherStackQ51Fn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
+                                     repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) : void>
 var private g_layout_gather : GatherStackFn
 var private g_layout_gather_kq : GatherStackKqFn
+var private g_layout_gather_q51 : GatherStackQ51Fn
 var private g_layout_hooks_set = false
 
-def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn) {
+def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51 : GatherStackQ51Fn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
     g_layout_repack_mx4 = rmx4
     g_layout_repack_q51 = rq51
     g_layout_gather = gs
     g_layout_gather_kq = gskq
+    g_layout_gather_q51 = gsq51
     g_layout_hooks_set = true
 }
 
@@ -594,6 +612,12 @@ def layout_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_
                            repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     layout_hooks_check()
     invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+}
+
+def layout_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
+                            repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    layout_hooks_check()
+    invoke(g_layout_gather_q51, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
 // ===== whole-model GPU residency hook (registered by dasllama_gpu_resident at [init]) =====
@@ -4481,7 +4505,11 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     prof_add("embed", ts_embed)
     if (has_ple(c)) {  // gemma-4 E-series: build this token's per-(layer) side input before the stack
         let ts_ple = prof_ticks()
-        ple_pre_decode(t, s, token)
+        if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, 1l, pos)) {
+            s.ple_gpu_pending = true   //! the driver gathers the row off `token` itself and finishes the pre-step on device
+        } else {
+            ple_pre_decode(t, s, token)
+        }
         prof_add("ple", ts_ple)
     }
 

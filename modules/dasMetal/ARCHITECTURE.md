@@ -158,6 +158,11 @@ than a second GPU. Cross-GPU parity of one source is secondary. Current entries:
   position) and lowers plain class members to kernel-entry thread-locals (scalar-with-init,
   fixed array, carried pointer walk - the state contract is per-thread); `spirv_emit` rejects
   an unannotated member and lowers method calls as calls. The asymmetry is deliberate.
+- **The SSBO access decorations - `@readonly`, `@maybe_readonly`, `@coherent` - are Vulkan-only, and
+  the asymmetry is deliberate.** `spirv_emit` decorates the `OpVariable` (`NonWritable`, `Coherent`);
+  MSL has no per-buffer qualifier for either - a `device` buffer's stores reach another threadgroup
+  through the device-scope fence the kernel already issues, so the last-arriving-workgroup hand-off
+  needs no decoration there, and `msl_emit` reads the three annotations as no-ops.
 - **The tmm2d tensor-GEMM builtin family is Metal-only; the asymmetry is pending, not
   deliberate.** The family - whole-GEMM helpers plus the staged threadgroup protocol - lowers
   MPP `matmul2d` cooperative tensors, and the CPU-replay bodies are its only cross-checked

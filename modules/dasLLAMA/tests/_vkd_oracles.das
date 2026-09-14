@@ -854,6 +854,36 @@ def q40f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
     }
 }
 
+//! Q5_1 x f16 GEMM oracle (the q51 s and e stamps' shape): per weight d * q + m off the per-32 plane - q the nibble
+//! (byte j: element j low, j + 16 high) with the qh word's bit e as its fifth - rounded f16 as the decode rounds,
+//! f16 activations, block order - approx bars
+def q51f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nbb = n / 32
+    for (rr in range(nrec)) {
+        let wblk0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (b in range(nbb)) {
+                    let wb = wblk0 + c * nbb + b
+                    let dm = unpackHalf2x16(wsw[wb])
+                    let qh = wq[wb * 5 + 4]
+                    for (e in range(32)) {
+                        let by = byte_u8(wq, wb * 20 + e % 16)
+                        let q = ((by >> ((e / 16) * 4)) & 0xF) | (int((qh >> uint(e)) & 1u) << 4)
+                        let w = float(float16(dm.x * float(q) + dm.y))
+                        acc += w * half_at(xf, (row0 + r) * n + b * 32 + e)
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
 def iq4xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
                          recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     let nsb = n / 256

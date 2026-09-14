@@ -11,6 +11,29 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-13) - the gemma family at parity on the Vulkan resident driver.** Every gemma
+  carrier the model table stocks sits at or above 0.95 of llama.cpp b10660 on both rows, seven of
+  nine prefills and two decodes ahead of it (pp512 / tg128 ratios, five reps, one model a process):
+  gemma-3-1b Q8_0 0.974 / 1.038, gemma-2-2b Q8_0 1.023 / 0.970, gemma-3-4b Q8_0 1.017 / 0.988,
+  gemma-4-E2B Q8_0 1.038 / 0.981, gemma-4-E4B Q8_0 0.994 / 0.950, gemma-4-12B Q4_K_M 1.026 / 0.950,
+  gemma-4-12B Q8_0 1.010 / 0.987, gemma-4-26B-A4B UD-IQ3_XXS 1.071 / 1.025, gemma-4-26B-A4B UD-Q4_K_M
+  1.128 / 0.950. The last three prefill levers of the arc, each pod-confirmed: the split-k arm's k
+  offset masked to its chunk alignment (unmasked, one chunk of gemma-3-1b's down ran 304 us against
+  the whole GEMM's 152, the probe's `splitk` arm on the pod, so every split lost) with the tile and split picks folded into one wave model (`cm2_gemm_pick`; gemma-3-1b's
+  down 152 -> 78 us in four l chunks, E2B's 12288-deep down 268 -> 162 in three); the flash tile's
+  f16 O accumulator under a 3 ln 2 row-max bias, its mask pass gated to the edge steps and a
+  `[dont_unroll]` KV loop (E4B's attention 6868 -> 4014 us a window, gemma-3-1b's 2671 -> 1844);
+  and a partial last weight tile served on the fast path over the plane's last whole 128 rows with
+  Q6_K's scales staged (the 26B's 2112-wide shared expert 300 -> 71 us a dispatch, its 704-wide
+  experts 26.6 -> 20.5 ms a window). The three decodes at 0.950 (E4B, the two Q4_K_M files) are
+  `followup_vulkan.md` item 51's dependent-dispatch gap. Provenance, direction-grade: the RunPod
+  RTX PRO 4500 Blackwell 32 GB (82 SMs, driver without `VK_NV_cooperative_matrix_decode_vector`,
+  the scalar decode arm), `lcpp_bench --for-debug-purposes -r 5 -p 512 -n 128 -t 16` under
+  `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048 DASLLAMA_GPU_VRAM_MB=31000`, against the
+  prebuilt llama.cpp b10660 Vulkan `llama-bench -ngl 99 -fa 1 -t 16 -r 3` on the same pod; the
+  per-dispatch figures from `harness/vk_gemm_probe.das`'s `gemma`, `splitk` and `cm2g:k6` arms and
+  the resident prefill's `DASLLAMA_GPU_PROF=1` window profile.
+
 - **LANDED (2026-09-10) - a browser's job queue workers park instead of spinning.** The
   engine's 30 ms spin-before-park window (`g_jobque_spin_us`) was unconditional, and in Chrome
   the 8 spinning web workers cost the caller its core: Pocket TTS (the parrot page's poem, four
@@ -86,7 +109,7 @@ what it costs today and what the fix would change.
   from 0.86x to 1.00x of its scalar arm [direction-grade - one commit].
 
 - **LANDED (2026-09-10) - a split role takes as many k chunks as fill the device by itself.**
-  `cm2_split_k` still lets the dispatch group (a role plus the neighbours it co-runs beside)
+  The split pick (since folded into `cm2_gemm_pick`) still lets the dispatch group (a role plus the neighbours it co-runs beside)
   decide whether k splits, but the chunk count is the SM count over the role's own workgroups,
   since a split role serializes its group through the one scratch plane anyway
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l). On a Linux RTX 5080 (84 SMs, driver 580.173,

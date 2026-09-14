@@ -545,7 +545,7 @@ let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 // in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 36
-let private IMAGE_LAYOUT_STAMP_HASH = 0x9ef1ee3be9f09dbaul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x3e3af75be08fdc56ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
@@ -838,9 +838,9 @@ def private check_ar_max_dim_triple {
     }
 }
 
-// q8 is no superblock format: its cm2 tiles are the fmt-0 cells with no KHR arm, and the KHR
-// mode serves q8 through its own tile - the one template the KHR set does not reach.
-var private CM2_KHR_EXEMPT <- {"Q8Cm2T"}
+// q8 and q51 are no superblock formats: their cm2 tiles are the fmt-0 cells with no KHR arm, and
+// the f16 feed admits neither on a KHR-mode card - the two templates the KHR set does not reach.
+var private CM2_KHR_EXEMPT <- {"Q8Cm2T", "Q51Cm2T"}
 var private CM2_NO_EXEMPT : table<string>
 
 def private cm2_format_templates(exempt : table<string>) : array<string> {
@@ -858,13 +858,13 @@ def private cm2_format_templates(exempt : table<string>) : array<string> {
 //! one class ladder trio every format template on the cm2 base joins
 struct private LadderTrio {
     suffix : string     //! the stamp's class suffix: `<Fmt>` + suffix
-    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail, `q8_batch_` + tail for q8
+    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51) spells `<fmt>_batch_` + tail
     ladder : string     //! the ladder functions' prefix: ladder + `ensure` / `set` / `enc`
     why : string        //! what a missing arm does at run time
 }
 
 def private cm2_dispatch_name(fmt, tail : string) : string {
-    return fmt == "q8" ? "q8_batch_{tail}" : "kq_batch_{fmt}_{tail}"
+    return fmt == "q8" || fmt == "q51" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 }
 
 def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
@@ -901,7 +901,7 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
 
 def private check_cm2_ladder_sets {
     check_cm2_ladder_set(LadderTrio(suffix = "KhrBatch", tail = "khr_cls", ladder = "khr_cls_",
-        why = "the f16 feed admits the format on a KHR-mode card, where the KHR ladders panic"), CM2_KHR_EXEMPT)
+        why = "the f16 feed admits the format on a KHR-mode card, where the KHR ladders panic; a per-32 format the feed never admits there joins CM2_KHR_EXEMPT in this file and the licensed set ARCHITECTURE_GPU_VULKAN.md names, in the same change"), CM2_KHR_EXEMPT)
     check_cm2_ladder_set(LadderTrio(suffix = "Cm2EBatch", tail = "cm2e_cls", ladder = "cm2e_cls_",
         why = "the expert schedule takes the format's planes, and the e ladders panic on the first resident MoE window"), CM2_NO_EXEMPT)
 }

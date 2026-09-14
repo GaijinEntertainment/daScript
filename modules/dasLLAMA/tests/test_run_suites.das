@@ -24,9 +24,26 @@ def private file_text(path : string) : string {
     return text
 }
 
-def private reaches_fixture_root(text : string) : bool {
+def private text_reaches_fixture_root(text : string) : bool {
     for (root in FIXTURE_ROOTS) {
         if (find(text, root) >= 0) {
+            return true
+        }
+    }
+    return false
+}
+
+//! a test reaches a fixture root through its own text or through a shared fixture module beside it - a same-folder
+//! `require _<fixture>` (the one-model gemma files reach `model_available` through `_gemma_resident` alone)
+def private reaches_fixture_root(file : string) : bool {
+    let text = file_text(file)
+    if (text_reaches_fixture_root(text)) {
+        return true
+    }
+    for (line in split(text, "\n")) {
+        continue if (!(line |> starts_with("require _")))
+        let name <- split_by_chars(slice(line, length("require ")), " \t/\r")
+        if (text_reaches_fixture_root(file_text(path_join(dir_name(file), "{name[0]}.das")))) {
             return true
         }
     }
@@ -38,15 +55,13 @@ def test_suite_split_matches_the_files(t : T?) {
     var seen : table<string; void?>
     for (file in suite_files("model-free")) {
         continue if (base_name(file) == "test_run_suites.das")   //! this file names the roots as strings and reaches none
-        let text = file_text(file)
-        t |> success(!empty(text), "model-free file exists and reads: {file}")
-        t |> success(!reaches_fixture_root(text), "a model-free file reaches no fixture root - move it to `stocked`: {file}")
+        t |> success(!empty(file_text(file)), "model-free file exists and reads: {file}")
+        t |> success(!reaches_fixture_root(file), "a model-free file reaches no fixture root - move it to `stocked`: {file}")
         seen |> insert(file, null)
     }
     for (file in suite_files("stocked")) {
-        let text = file_text(file)
-        t |> success(!empty(text), "stocked file exists and reads: {file}")
-        t |> success(reaches_fixture_root(text), "a stocked file reaches a fixture root - move it to `model-free`: {file}")
+        t |> success(!empty(file_text(file)), "stocked file exists and reads: {file}")
+        t |> success(reaches_fixture_root(file), "a stocked file reaches a fixture root - move it to `model-free`: {file}")
         t |> success(!key_exists(seen, file), "a file sits in one per-PR list only: {file}")
     }
 }

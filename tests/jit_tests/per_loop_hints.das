@@ -48,6 +48,16 @@ def countdown_while_annotated(start : int) {
     return iters
 }
 
+def countdown_while_dont_unroll(start : int) {
+    var x = start
+    var iters = 0
+    while [dont_unroll] (x > 0) {
+        x--
+        iters++
+    }
+    return iters
+}
+
 def countdown_while_bare(start : int) {
     var x = start
     var iters = 0
@@ -71,5 +81,8 @@ def test_per_loop_hints(t : T?) {
     }
     t |> run("while [unroll_disable] matches bare") @(t : T?) {
         t |> equal(countdown_while_annotated(50), countdown_while_bare(50))
+    }
+    t |> run("while [dont_unroll] (the SPIR-V spelling) matches bare") @(t : T?) {
+        t |> equal(countdown_while_dont_unroll(50), countdown_while_bare(50))
     }
 }

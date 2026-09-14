@@ -1,23 +1,20 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj - the Vulkan resident driver's
-prefill chain, its byte stores, the tile probe's set layout, the device-init roster and the
-lens's readonly derivation: the prefill window chain, the Q8 requant byte store, the decode GEMV
-family's grid codebook buffer, the tile probe's shared descriptor set layout, the recurrent block
-of the prefill window, the roster of Vulkan capabilities the tier keys its routes on, and how the
-`[vk_dispatch]` lens derives `readonly` from a class family's accesses. The MoE block of that
-window and the token command's routed twin are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s sections
-2.2af and 2.2ag. The cooperative-matrix
-tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and the coopmat mode
-ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and the KHR arm's
-hand-staged kq tile - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and
-2.2ae, and the decode GEMV family's lane split by row length its section 2.2ah. What a model has to fit on
-the card before any of this runs - the residency plan, and the marks swap that lets one GPU
-slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o. The
-decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections
-2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md`
-sec.1.5.
+carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai, 2.2aj and 2.2al: the prefill window
+chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer, the tile probe's
+shared descriptor set layout, the recurrent block of the prefill window, the roster of Vulkan
+capabilities the tier keys its routes on, how the `[vk_dispatch]` lens derives `readonly` from a
+class family's accesses, and the token command's attention key split. The MoE block of that
+window, the token command's routed twin and their gemma-4 form are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s
+sections 2.2af, 2.2ag and 2.2ak. The cooperative-matrix tiles the chain's GEMMs run on - the cm2
+decode spelling, the tile pick and the coopmat mode ladder, the class-pipeline build seat, the MoE
+expert chain on those tiles, and the KHR arm's hand-staged kq tile - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s
+sections 2.2k-2.2m, 2.2q and 2.2ae, and the decode GEMV family's lane split by row length its
+section 2.2ah. What a model has to fit on the card before any of this runs - the residency plan,
+and the marks swap that lets one GPU slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s
+sections 2.2n-2.2o. The decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s
+sections 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
 
 The module gate's six Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
 reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses no names: its
@@ -27,10 +24,10 @@ reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses
 numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
 `dasllama_vulkan_classes.das` twice: for the KHR trio it requires `<Fmt>KhrBatch`, its
 `kq_batch_<fmt>_khr_cls` stamp and an arm in each of `khr_cls_ensure`, `khr_cls_set` and
-`khr_cls_enc` in `dasllama_vulkan_prefill.das`, licensing `Q8Cm2T` alone - q8 is no `kq_sb`
-format, its cm2 tiles carry no KHR arm, and the KHR mode serves q8 through its own tile; for the
-e trio it requires `<Fmt>Cm2EBatch`, its `kq_batch_<fmt>_cm2e_cls` stamp (`q8_batch_cm2e_cls` for
-q8) and an arm in each of `cm2e_cls_ensure`, `cm2e_cls_set` and `cm2e_cls_enc`, licensing none.
+`khr_cls_enc` in `dasllama_vulkan_prefill.das`, licensing `Q8Cm2T` and `Q51Cm2T` alone - the two
+per-32 formats are no `kq_sb` format, their cm2 tiles carry no KHR arm, and the f16 feed admits neither on a KHR-mode card;
+for the e trio it requires `<Fmt>Cm2EBatch`, its `kq_batch_<fmt>_cm2e_cls` stamp (`<fmt>_batch_cm2e_cls` for the per-32
+formats) and an arm in each of `cm2e_cls_ensure`, `cm2e_cls_set` and `cm2e_cls_enc`, licensing none.
 `check_cm2_stamp_tiles` reads every `[vk_dispatch]` stamp of those templates - in
 `dasllama_vulkan_classes.das`, the probe's twins in `harness/vk_gemm_probe.das` and the bring-up
 fixture `tests/_vkd_toy.das` - and requires its `AT`, `BT`, `ACC` and `ACCW` typedefs to follow
@@ -120,20 +117,20 @@ residual row and b+0 converts or requantizes it. The fused twins never write the
 the last layer always takes the split arm - the final requant reads `xb`. The addr_ffn site
 fuses the same way for the gate/up feed. Bit-identity with the split pair is a suite gate.
 
-**The cm2 flash-attention tile lands its output f16 when the `wo` feed is f16.** The tile
-template carries an `OUT16` stamp: the f16 instance converts the O accumulator in-kernel and
-writes the `wo` feed plane directly, so the per-layer attn-to-f16 convert never encodes; the
-f32 instance serves the quant route. The two device converts agree bit for bit; the CPU's
-`float16()` rounds ties differently, so the twin's gate compares device against device.
+**The cm2 flash-attention tile (`FaCm2T`) accumulates O in f16 under a biased row max, masks only
+its edge steps, and lands its output f16 when the `wo` feed is f16.** The running row max carries
+3 ln 2, so every P = e^(S - M) sits at an eighth or under and the f16 O accumulator (half the P @ V
+step) cannot overflow; L carries the same bias, the final divide cancels it, and S, L and M stay f32.
+The mask pass runs only on the steps that cross the causal diagonal or the tile's last window start,
+and the KV loop carries `[dont_unroll]`, which the JIT reads too since the body compiles for the CPU
+oracle (RTX PRO 4500, a 512-row window: E4B's attention 6868 -> 4014 us, gemma-3-1b's 2671 -> 1844).
+The `OUT16` instance converts O in-kernel and writes the `wo` feed plane directly, so the per-layer
+attn-to-f16 convert never encodes; the f32 instance serves the quant route (the twin's gate compares
+device against device: the CPU's `float16()` rounds ties differently).
 
-**A hybrid's gated attention rides the batch kernels through a per-head q stride** (`qhs = 2
-x hs`, twice the head size): the q GEMM writes `[q | gate]` per head, qk-rms and rope read q
-head-strided in place, and the mirror attention gates on the sigmoid of the gate half. A
-partial-rope model rotates the first `rot` elements of a head, and the kernels read the count
-as the `half = rot / 2` argument word. At head size 256 the window takes the h256 cm2 flash
-stamps (Br 64, Bc 32, the h128 loop with the head-shaped tiles doubled): the gated twins load
-q at the head's q stride and scale the normalized output by the sigmoid of the gate half
-before the store; the h128 coopmat twin stays 128-only.
+**A hybrid's gated attention rides the batch kernels through a per-head q stride** (`qhs = 2 x hs`):
+the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
+attention gates on the sigmoid of the gate half, a partial-rope model rotates a head's first `rot` elements, and at head size 256 the gated twins take the h256 cm2 flash stamps (Br 64, Bc 32), q at the head's q stride, the normalized output gated before the store.
 
 ### 2.2p The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
 
@@ -287,3 +284,17 @@ view protects its same-binding aliases. A method body the access classifier refu
 writing every binding, so a body the classifier cannot read loses the decoration rather than
 carrying a false one. A declared `@readonly` on a binding a kernel writes is the one shape that
 yields a module the validator rejects, and the lens refuses it.
+
+### 2.2al The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
+
+**The decode attention dispatches a workgroup per (head, key split) and a combine per head.** One
+workgroup a head leaves a low-head model's attention on a few SMs (four heads of eighty-two), so the
+decode pass (`DaAttnT`) cuts the attended span into `nsplit` 32-aligned pieces (`da_nsplit`: enough
+workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`, one where the count is unknown or the
+heads alone cover it), each running the online softmax over its piece into an unnormalized partial
+(max, denominator, accumulators; an empty piece's weighs nothing); `DaAttnComb` aligns a head's
+partials by their maxes, normalizes, gates and stores the row (unsplit, the pass stores it), and the
+store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax, Q8_K
+superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. The scores
+go a subgroup two keys a step, lanes across the dims (one coalesced K row, the dot a subgroup add; on the f16 mirror a lane's eight halves are one 16-byte word, `KV16`, and both keys' words are in flight before either dot - a piece holds a few keys a subgroup, so the pass is the memory round trips it chains); the V pass
+keeps a thread a dim, eight keys' loads issued before their adds (four a key pair on a 512 head) for the same reason - on the RTX PRO 4500 the two together read gemma-3-1b's attention 384 -> 178 us a token at 128 tokens. The flash tile (`FaCm2T`) runs one workgroup a (head, 64-row q tile) unsplit: a key split there costs more in partial stores and a combine than the shorter key loop returns on every gemma shape measured (`followup_vulkan.md` item 50). A model that softcaps its attention logits (gemma-2) takes the tile's `CAP` leaves at head size 256: every scaled score through `cap * tanh(s / cap)` before the mask, the 8-row tile serving any other capped shape. Every kernel that stages a head does it in a 256-thread workgroup, 32 dims to a lane and a second element a thread past 256, so the driver serves head sizes that are 32-multiples up to 512 and `resident_layer_decline` names any other by layer.

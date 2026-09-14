@@ -1,8 +1,9 @@
 # dasLLAMA Architecture - the Vulkan resident driver's MoE block
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2af and 2.2ag - the resident driver's routed block in its two eras:
-the MoE block of the prefill window, and the whole-model driver's MoE token command. The window
+document carries sections 2.2af, 2.2ag and 2.2ak - the resident driver's routed block in its two eras:
+the MoE block of the prefill window, and the whole-model driver's MoE token command, and the
+gemma-4 form both eras take. The window
 chain the prefill block runs inside (sec.2.2j), the recurrent block beside it (sec.2.2ad), the Q8
 requant byte store (sec.2.2p), the decode GEMV family's grid codebook buffer (sec.2.2ab) and the
 tile probe's shared descriptor set layout (sec.2.2ac) are `ARCHITECTURE_GPU_VULKAN.md`'s. The
@@ -115,7 +116,10 @@ site (the fused twins never store `xb`), and the last-layer FFN slice of
 the normed rows feeds the dense triple alone - the gather takes the f32 rows - so a layer with
 no shared expert skips it. The tile family is the f16-fed cm2 tiles, so the plan admits a MoE
 only in cm2 mode on a coopmat2 device with every expert format the f16 feed admits
-(`rdec_moe_ok`).
+(`rdec_moe_ok`). Q5_1 is admitted as a routed expert plane alone: its rail is the schedule's s and
+e stamps (`Q51Cm2T`, the per-32 plane verbatim, `BLKW` 32) and the token command's `Q51Gemv` over
+Q8_0 activations (`vk_fmt_b32`, one lane a block), so a 704-wide down stack rides its own format
+where the K-quant rails' 256-multiple rule would demote it to q8; a dense q51 plane stays declined.
 
 ### 2.2ag The whole-model driver's MoE token command {#resident-moe-token}
 
@@ -127,7 +131,9 @@ the driver's router plane - every MoE layer's rows and, when the shared expert i
 row last - into one logits row; the top-k (`TopK`, the span's kernel over the decode's core)
 writes the k routing weights and the three expert GEMVs' slot regions, each a `(block, feed
 block)` pair whose block is the expert plane's slab-local base plus the pick's stride; gate and
-up run the class GEMV over k regions, the act writes k hidden rows, down runs k regions into the
+up run the class GEMV over k regions, the act writes k hidden rows (Q4_K gate and up stacks in one
+slab feeding a Q8_0 down take `KqGemvK4Gu` for the three - both dots, the act and its requant a
+32-row block a workgroup, one dispatch where three ran; `RLayer.egu`), down runs k regions into the
 routed rows; and the residual step that follows folds the combine in (`ClsArComb`, the prefill's
 sec.2.2af kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
 logit, the k weighted routed rows through the top-k's slot map, then the next layer's norm - a
@@ -163,3 +169,40 @@ normed row those twins never store. The MoE seats install separately
 (`install_moe_gpu_resident_moe`), so a tier without them declines a MoE by name, and the plan
 declines a router the top-k kernels do not serve - a non-softmax gate, a router or selection
 bias, biased or mx4 expert stacks, more than 256 experts or 64 routed slots - by name too.
+
+### 2.2ak The gemma-4 form of the routed block {#vk-gemma4-moe-block}
+
+**A gemma-4 MoE layer (`RdecLayerGeom.moe_g4`, the config's dense shared expert) is the routed
+block of sec.2.2af and sec.2.2ag with three of its rows re-sourced and its combine re-normed; no
+kernel of the block changes but the combine.** The dense triple is the layer's own FFN planes
+(`ffn_gate` / `ffn_up` / `ffn_down` at the FFN width, placed on the dense rail like a dense
+layer's) and runs as the sec.2.2ag dense tail: x under the FFN norm, requantized, gate, up, act,
+down into `ffnout`. The routed branch does not read that normed row: its feed is x under the
+layer's own routed pre norm, so the feed is always the experts' own image (`xe_own`) - the norm
+step reuses the layer's add+rms set with the add off and the pre-norm row named in the push
+(`RD_NORM_PRE_FFN2`), then the experts' requant (the token command) or the f16 gather (the window
+chain) reads it - the token command takes the norm and the requant as one `ArRq` stamp with the add
+off (`RLayer.pre2_fused`). The router reads a third row: a weightless rms of x under the router's
+learned input scale over sqrt(dim), which the norms plane carries as one weight row
+(`RD_NORM_ROUTER`: scale[i] / sqrt(dim)); the window chain produces it with the add+rms kernel, the
+token command's router GEMV takes that rms itself, every expert workgroup over the same x
+(`RouterArgs.norm_on`, `rtn_fused`), so no norm dispatch precedes it.
+The top-k folds the checkpoint's per-expert down scale into each routing weight after the
+renormalization (`TopkArgs.dsoff` / `TopkRowsArgs.dsoff` name the layer's row in the
+`[n_moe x ne]` scale plane `rdec_prepare_moe` uploads; `NO_DSCALE` on every other model, the
+binding filled and never read), where the CPU chain scales the picked weights before the expert
+GEMVs. The combine (`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step
+of the CPU chain's `gemma4_moe_ffn`: the k weighted routed rows summed and normed under the
+routed post norm (`ArArgs.routed_post_off`), the dense row in `ffnout` normed under the dense post norm
+(`pwoff`), the two added and normed under the layer's post-FFN norm (`sum_post_off`), the residual
+`(x + that) * out_scale`, then the next layer's norm - four workgroup reductions over one row
+stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are
+Q5_1 the token command's down GEMV folds the k rows itself (`Q51GemvSum`: a subgroup a row of the
+model dim, the k regions' dots summed under the routing weights), so the combine reads one row
+(`ArArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
+the token command's combine quantizes it itself (`ClsArCombG4Rq`, `RLayer.comb_rq`), so the requant
+dispatch that opened the next layer (or the classifier) goes. The norms plane grows by the
+four rows (`RDEC_NORM_ROWS` 9; zero on every other model). The plan's unserved list names the
+dense shared expert only where no backend installed the MoE seats; the plan sizes an MoE layer
+at its expert triple plus the FFN triple, and the layer decline reads the FFN triple's formats on
+the dense rail.

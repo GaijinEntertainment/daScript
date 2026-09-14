@@ -106,7 +106,7 @@ def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff 
 }
 
 // Decode pre-step: gather the single token's per-layer embedding row, then finish.
-def private ple_pre_decode(t : Model; var s : Session; token : int64) {
+def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
     ple_gather_row(t, token, s.ple_inp, 0l)
     ple_pre_finish(t, s, s.x, 1l)
 }
@@ -625,9 +625,26 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
     prof_add("act_resid", ts_resid)
 }
+def private ple_gather_rows_impl(t : Model; tokens : array<int64>; npos : int64; var dst : array<float>) {
+    let all = t.config.n_layers * t.config.n_embd_per_layer
+    assert(long_length(dst) >= npos * all, "ple_gather_rows: the destination is short of the positions")
+    unsafe {   // each position's row lands in its own range of the destination, so the jobs never race
+        let tp = addr(t)
+        let idp = addr(tokens)
+        var dp = addr(dst)
+        maybe_parallel_for(npos >= 64l, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            for (p in range(rb, re)) {
+                ple_gather_row(*tp, (*idp)[p], *dp, int64(p) * all)
+            }
+        }
+    }
+    scale_inplace(unsafe(addr(dst[0])), sqrt(float(t.config.n_embd_per_layer)), npos * all)
+}
+
 [init]
 def private ple_hooks_register() {
-    register_ple_pre_decode(@@ple_pre_decode)
+    register_ple_pre_decode(@@ple_pre_decode_impl)
     register_ple_pre_prefill(@@ple_pre_prefill_impl)
     register_ple_pre_prefill_pad(@@ple_pre_prefill_pad_impl)
+    register_ple_gather_rows(@@ple_gather_rows_impl)
 }

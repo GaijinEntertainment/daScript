@@ -926,6 +926,7 @@ def private local_size_dims(local_size : int3) : uint3 {
 }
 
 // ===== global variable classification + emission =====
+[arch(at="../ARCHITECTURE.md#ssbo-variable-decorations")]
 def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : VariablePtr; stage : ShaderStage; var reflection : SpirvReflection; var errors : array<string>) {
     let vname = "{v.name}"
     // gl_WorkGroupSize is the one workgroup builtin that is a CONSTANT, not a dispatch input: it is the
@@ -1623,17 +1624,14 @@ def private classify_global(var m : SpirvModule; var ctx : EmitCtx; v : Variable
         }
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.DescriptorSet), uint(set))
         emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Binding), uint(binding))
-        // @readonly -> NonWritable on the VARIABLE, not the block member: the
-        // block struct type is deduped, so a member decoration would leak to a
-        // writable SSBO sharing the same element type.
-        // @maybe_readonly is the GLSL MAYBE_READONLY macro: NonWritable only in a rendering (vertex /
-        // fragment) stage, writable in compute / RT -- mirrors `readonly` expanding only under the GLSL
-        // RENDERING define, so a buffer shared by both rails matches each stage's glslang reference.
         let ssbo_read_only = v.annotation |> find_arg("readonly") is tBool
         let ssbo_maybe_read_only = v.annotation |> find_arg("maybe_readonly") is tBool
         let ssbo_is_render = stage == ShaderStage.Vertex || stage == ShaderStage.Fragment
         if (ssbo_read_only || (ssbo_maybe_read_only && ssbo_is_render)) {
             emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.NonWritable))
+        }
+        if (v.annotation |> find_arg("coherent") is tBool) {
+            emit(m, SEC_DECOR, SpvOp.Decorate, vid, uint(SpvDecoration.Coherent))
         }
         ctx.globals |> insert(intptr(v), GlobalInfo(var_id = vid, storage = SpvStorageClass.StorageBuffer, value_type = st, is_ssbo = true, is_block = true, elem_type = el.elem_type))
         reflection.bindings |> push(SpirvDescriptorBinding(set = set, binding = binding,

@@ -37,6 +37,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |
 | `DASLLAMA_GPU_VRAM_MB` | number | probed | Override the detected VRAM budget in MiB that sizes the resident expert stacks; a pinned cap takes no headroom and reads no OS room. |
 | `DASLLAMA_GPU_MIN_CTX` | number | built-in floor | Lower the context floor for arming the resident decode driver, for a short-context session on a small card. |
+| `DASLLAMA_GPU_CTX_MAX` | number | the model's context | Cap the resident driver's KV mirror at this many positions (the card's room and the 4 GiB binding cap still bound it); 0 follows the model's context; a server keeps the model's. |
 | `DASLLAMA_GPU_RESIDENT` | flag | on | The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever). |
 | `DASLLAMA_GPU_DN` | flag | follows DASLLAMA_GPU | DeltaNet rail on the GPU. |
 | `DASLLAMA_GPU_DND` | flag | follows DASLLAMA_GPU | DeltaNet decode rail on the GPU. |
@@ -126,6 +127,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_MM_SMALL` | text | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
 | `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
 | `DASLLAMA_VK_FUSE` | flag | on | Fused add+rms+requant on every site of the decode token command and the prefill's batch pairs, plus the fused qk-norm+rope; 0 pins the split dispatches for a same-build A/B. |
+| `DASLLAMA_VK_F16_FFN` | flag | on | The resident prefill's FFN GEMMs (gate, up, down) take the f16 activation feed where the tile family admits it; 0 pins the FFN group to the Q8 activation blocks the CPU chain quantizes, while the attention group keeps its own pick - the A/B rail that takes the feed's rounding out of a resident-vs-CPU compare (gemma's logits move with it). |
 | `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore; 0 keeps the single-queue rail. |
 | `DASLLAMA_VK_DECVEC` | flag | on | Run the cm2 tiles' four-wide decode callback where the device has VK_NV_cooperative_matrix_decode_vector; 0 strips it and serves the scalar callback - the same-build A/B and the fallback probe. |
 | `DASLLAMA_VK_IMPORT` | flag | on | Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path. |
@@ -139,8 +141,8 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_VK_FULLSG` | flag | off | Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default). |
 | `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
 | `DASLLAMA_VK_KV32` | number | 0 | Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served). |
-| `DASLLAMA_CM2_TILE` | number | 0 | cm2 prefill tile pick: 0 = occupancy heuristic, 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry. |
-| `DASLLAMA_CM2_SPLITK` | number | 0 | cm2 split-k: 0 = occupancy heuristic, 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). Inert on the KHR arm, whose kq tile carries no split-k scratch. |
+| `DASLLAMA_CM2_TILE` | number | 0 | cm2 prefill tile pick: 0 = the wave model's pick (`cm2_gemm_pick`), 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry. |
+| `DASLLAMA_CM2_SPLITK` | number | 0 | cm2 split-k: 0 = the wave model's pick (`cm2_gemm_pick`), 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). Inert on the KHR arm, whose kq tile carries no split-k scratch. |
 | `DASLLAMA_VK_SPV_OVERRIDE` | path | unset | Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument). |
 | `DASLLAMA_VK_SPV_DUMP` | path | unset | Directory to write each kernel's emitted words as <kernel>.spv at pipeline creation (the override instrument's capture half). |
 | `DASLLAMA_VK_HAZARD_PARANOID` | flag | off | Barrier at every dispatch (correctness bisect). |
