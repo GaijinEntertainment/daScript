@@ -468,7 +468,7 @@ mechanisms landed on the way:
 | gemma-4-26B-A4B-it-UD-IQ3_XXS | 729 | 797 | 1.09 | 59.5 | 66.8 | 1.12 | 40/40 |
 | gemma-4-26B-A4B-it-UD-IQ4_XS | 741 | 778 | 1.05 | 53.8 | 54.8 | 1.02 | 40/40 |
 | gemma-4-26B-A4B-it-Q4_K_M | 731 | 818 | 1.12 | 53.9 | 60.4 | 1.12 | 40/40 |
-| gemma-4-26B-A4B-it-Q4_0 | - | - | - | - | - | - | not re-measured (b) |
+| gemma-4-26B-A4B-it-Q4_0 | 758 | 790 | 1.04 | 68.9 | 70.3 | 1.02 | 40/40 (b) |
 | gemma-4-26B_q4_0-it (QAT) | - | - | - | - | - | - | CPU pregate red (c) |
 
 (a) The M5's decode sits at 0.96 on the k5 file - sec.10's gap at a third width (n=3840). Its
@@ -478,12 +478,12 @@ now run kdim 3840); the token gate is no instrument for that row (`followup_gene
 the fixture margin floor). (b) The routed block serves thirteen expert-plane formats, q40 among
 them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside q8 down stacks (a 704-wide
 down row is no multiple of 256, so the loader demotes that plane) and runs the routed block on
-both boxes through the q40 split twins and the q40 expert GEMV. The M4 row is `-` until the sweep
-re-measures it. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
+both boxes through the q40 split twins and the q40 expert GEMV. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
 byte-identical; only the token table's format and the Q4_0 rounding differ) and diverges on the
 CPU kq-native rails at one token: a top-8 router pick at layer 29 on an 8e-5 margin, which the
 arm64-sdot backend lands the other way - the CPU pregate refuses the file, so its rows stay
-unmeasured (`followup_general.md` row 151 has the activation form behind the margin).
+unmeasured (`followup_general.md` row 151 has the activation form behind the margin); on Metal,
+whose GEMVs read the f32 activation, the same fixture holds 40/40 through the q40 expert twins.
 
 ## 8. The M4 Pro's routed iquant files prefill at 0.97 of llama.cpp
 
