@@ -177,14 +177,14 @@ template strings any of them look up, records a run of this folder's
 `tests/test_tokenizer.das` with its cases EXECUTED, not skipped.**
 
 **A diff that adds an override, or gives one a new effect, without the announce is a defect.**
-An override is an environment knob, an exported runtime setter, or an on-disk state file - one
-a run writes or a user places, never data a build ships - that moves a gate, policy, or
-threshold off its default and so changes what the run writes, reads, mints, or computes - one is
-an override when a run with it set can produce different bytes or select different code, whatever
-the wall clock (an A/B instrument that reroutes a GEMM is; one that only times is not); a CLI flag never is one. The announce is a line printed where the override changes the outcome, naming it by
-the spelling a user would set (the env variable, the sidecar or file key, the setter's name)
-and, for one that is on unless turned off, the spelling that turns it off; one with no off
-spelling says so. Per-site repeats are fine; a set-but-inert override is silent.
+An override is an environment knob, an exported runtime setter, or an on-disk state file - one a
+run writes or a user places, never data a build ships - that moves a gate, policy, or threshold
+off its default and so changes which code the run takes or what it writes, reads, mints, or
+computes; a measured time and the run's own duration are not such a change, a CLI flag never is one.
+
+**An announce names the override by the spelling a user would set - the env variable, the sidecar
+or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
+(none: it says so).** It prints where the override changes the outcome; a set-but-inert override is silent.
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or checked-in document
 outside this folder left showing the old call, flag, or default after a change to user-facing API

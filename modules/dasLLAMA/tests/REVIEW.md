@@ -46,18 +46,17 @@ a run of skips is not the coverage the suite owes.
 `run.das` suite listing is the only registration these files get.**
 
 **A diff that changes what a file covers - a cell added, removed or moved, its suite, an axis or
-bar a cell the census entry names asserts - corrects that file's `CLAUDE.md` census entry,
-numbers included, in the same change.** A `{a,b}` shorthand naming several files at once, or a
+bar a cell the census entry names asserts, a cell's skip condition added, changed or dropped -
+corrects that file's `CLAUDE.md` census entry, numbers and skip clauses included, in the same
+change.** A `{a,b}` shorthand naming several files at once, or a
 suite roster, carries nothing to correct; a file with no census entry owes none.
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
 
 **A diff that adds, changes, or drops a cell's skip condition - a `t |> skip` or an early
-return - updates, where the test file carries a header (a top comment block carrying every fact a
-skip condition in the file keys on: model, tier, fixture, device, arm, knob), that header in the
-same change, and, where `CLAUDE.md` carries an entry for the file, adds or corrects that cell's
-skip clause in the entry.**
+return - updates the test file's header in the same change.** A header is the file's top comment
+block; it names every fact a skip condition in the file keys on.
 
 **A diff that adds, moves, or removes a `[test]` file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -76,11 +75,11 @@ to a flag that no longer does what the text says.
 filter mechanics" section in the same change** - an arm the census does not name is
 unreachable to whoever is choosing what to run.
 
-**A pinned gate's coverage never shrinks - not its asserts, not its bounds, not the corpus or
-sweep it covers, and not the set of runs that reach it; a diff that shrinks one is a defect.**
-A shrink is an assert removed, a bound loosened, an input or a run dropped; a predicate widened
-to admit a value the folder's architecture doc names is not one. A pinned file that reaches a
-fixture root sits in `stocked`, where the per-PR run reaches it; that is not a shrink. The pinned set, each with what it pins:
+**A pinned gate's coverage never shrinks: a diff that removes one of its asserts, loosens one of
+its bounds, or drops an input or a run that reaches it is a defect.** Changing what a pinned
+predicate answers on an input the gate already asserts on is not a shrink; dropping the input is.
+A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
+that is not a shrink. The pinned set, each with what it pins:
 `test_run_suites.das` (the per-PR split, the folder census, the area tables, the `--exclude`
 filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill intent);
 `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`

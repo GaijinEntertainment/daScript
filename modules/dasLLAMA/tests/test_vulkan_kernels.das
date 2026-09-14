@@ -10049,10 +10049,15 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             let saved_mode = g_gpu.coopmat_mode
             g_gpu.sm_count = 36
             g_gpu.coopmat_mode = COOPMAT_MM
-            t |> success(pf_f16_feed(int(KqFmt.q8)), "under mm the f16 feed admits Q8_0: its dense GEMMs take the KHR kq tile")
             t |> success(!cm2_fa_on(), "under mm the cm2 flash pick follows the mode, whatever the card supports")
-            t |> success(ple_proj_shape_ok(1536l, 8960l), "under mm the per-layer-embedding projection takes the KHR f16 GEMM at 16-multiples")
-            t |> success(!ple_proj_shape_ok(1536l, 8968l), "... and stays on the CPU off them")
+            if (khr_kq_tile_on()) {
+                t |> success(pf_f16_feed(int(KqFmt.q8)), "under mm the f16 feed admits Q8_0: its dense GEMMs take the KHR kq tile")
+                t |> success(ple_proj_shape_ok(1536l, 8960l), "under mm the per-layer-embedding projection takes the KHR f16 GEMM at 16-multiples")
+                t |> success(!ple_proj_shape_ok(1536l, 8968l), "... and stays on the CPU off them")
+            } else {   //! a device without KHR cooperative matrices at subgroup 32 refuses both routes under mm too
+                t |> success(!pf_f16_feed(int(KqFmt.q8)), "without the KHR kq tile Q8_0 keeps the requant feed under mm")
+                t |> success(!ple_proj_shape_ok(1536l, 8960l), "... and the projection stays on the CPU")
+            }
             t |> equal(cm2_tile_cols(8192l, 512l), 128l)                       // the KHR arm has one tile geometry
             t |> equal(cm2_tile_cols(768l, 32l), 128l)                         // ... the bucket rule included
             let khr_kv = cm2_gemm_pick(512l, 512l, 2048l)

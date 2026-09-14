@@ -6,17 +6,15 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_COOPMAT.md`. Shared emitter rules:
 that compiles a shader and asserts on its emitted words - answers to `tests/spirv/REVIEW.md`
 (repo root), wherever the diff puts it.
 
-**A diff under this folder that changes the set of das programs the emitter accepts or the words
-it emits for one - a lowering in `spirv/spirv_emit.das`, or a builtin declaration in
-`spirv/spirv_builtins.das` gaining an accepted argument type or overload - adds a fixture under
-`tests/spirv/` (repo root) for each such difference, in the same change, that compiles a program
-showing it and asserts on the emitted words.** Emitted words no fixture asserts are produced by nothing the suite
+**A diff under this folder that changes the set of das programs the emitter accepts, or the words
+it emits for one, adds a fixture under `tests/spirv/` (repo root) for each such difference, in
+the same change, that compiles a program showing it and asserts on the emitted words.** Emitted words no fixture asserts are produced by nothing the suite
 runs. The fixture forms are `ARCHITECTURE.md` section 4.
 
 **A diff that declares a struct the emitter recognizes by name and lowers to a type whose storage
-exists only on the device - a tile, tensor, layout, sampler, or image - or a builtin overload over
-one, adds a fixture under `tests/spirv/` (repo root) that exercises the declaration and asserts on
-the emitted words, in the same change.** A declaration no fixture
+exists only on the device - a tile, tensor, layout, sampler, or image - adds a fixture under
+`tests/spirv/` (repo root) that exercises the declaration and asserts on the emitted words, in the
+same change.** A declaration no fixture
 drives is lowered by nothing the suite runs.
 
 **A diff that adds emitter code refusing a construct a `.das` program can compile to also adds
