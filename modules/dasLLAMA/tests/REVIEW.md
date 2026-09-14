@@ -4,9 +4,10 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-**A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
-output - or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it,
-applies `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
+**A kernel-unit cell - a model-less cell (a cell is a `t |> run` block, or a helper call that
+issues asserts on `t`) that dispatches one kernel class and asserts on its output - or a gate
+that hand-dispatches or hand-binds a kernel, wherever the diff puts it, applies
+`REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -24,7 +25,7 @@ joins the exempt list of `test_run_suites.das`'s suite-membership gate in the sa
 weakening that gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every
 suite.
 
-**Invoking dastest directly on a test file in a `run.das` suite other than `model-free` and
+**Invoking dastest directly on a test file that no `run.das` suite lists under `model-free` or
 `stocked` is a defect - run it through `run.das`.**
 
 **`run.das` declares no global whose initializer spawns, logs, writes the environment or
@@ -33,9 +34,8 @@ no-`[init]` check is a defect.** `test_run_suites.das` and `test_run_summary.das
 by bare same-dir name, so anything that fires on require fires inside every one of those test
 processes.
 
-**A cell - a `t |> run` block, or a helper call that issues asserts on `t` - asserting a chat
-template's INSTRUCT wire - a closed empty thought block and no thinking gate - calls
-`set_thinking(c, false)` on its `ChatSession` before the first turn.**
+**A cell asserting a chat template's INSTRUCT wire - a closed empty thought block and no
+thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the first turn.**
 `ChatTemplate.think_default` is `true` unless a family clears it, so an un-opted-out turn 1
 renders the thinking gate and the cell asserts the wrong wire.
 

@@ -123,12 +123,10 @@ flight between a write and its read.** One shared scratch serializes the whole c
 its write-after-read hazards.
 
 **A diff that turns one dispatch on an encoder path into two or more also gates that path in the
-same change - on the extent the
-added dispatch divides (the site's own K, key span or row count), or on the path's work size when
-the split divides no extent - and
-the threshold comes from a measurement at the smallest and at the largest value that extent takes
-on the path, both measurements in the PR body.** The small-work regression hides behind the
-big-work win.
+same change - on the extent the added dispatch divides (the site's own K, key span or row
+count), or on the path's work size when the split divides no extent - and the threshold comes
+from a measurement at the smallest and at the largest value that extent takes on the path, both
+measurements in the PR body.** The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
 constant's authoritative site, in the same change.** An in-body tile constant is confirmed
@@ -247,9 +245,11 @@ expert plane, to `moe_fmt_metal_served` (both `dasllama/dasllama_metal_shapes.da
 same change.** Those predicates are what declines an unserved format, so an unlisted format
 decodes under the layout of the ladder's last arm.
 
-**A diff that gives the Metal PLE (per-layer embedding) token-table gather an arm for a weight
-format adds that format to every per-format site of that gather - the gate's alignment arm
-(`metal_ple_pre_gpu_gate`), the PSO pick (`ple_gather_pso_of`) and the encode ladder
-(`pf_enc_ple_gather_fmt`), all in `dasllama/dasllama_metal_prefill.das` - in the same change.**
-A format one site admits and another lacks is dispatched under a layout or a kernel that is
-not its own.
+**A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format lands,
+in the same change, the format's compiled pipeline (its `g_pf_pso_ple_gather*` global with its
+compile and release lines), its arm in the PSO pick `ple_gather_pso_of` and its arm in the
+encode ladder `pf_enc_ple_gather_fmt` (all in `dasllama/dasllama_metal_prefill.das`), and
+`metal_ple_pre_gpu_gate` admits the format only where the table's base and row stride are whole
+superblocks of that format's own block size.** A format with a pick and no pipeline declines to
+the CPU gather silently; one with a pipeline and no encode arm, or a base off its own lattice,
+is gathered under a layout that is not its own.

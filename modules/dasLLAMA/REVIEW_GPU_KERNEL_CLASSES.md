@@ -27,9 +27,11 @@ body reads any field declared on it - fields in the stamp or in the shell may sh
 `@role = "alias"` marks such a view - including a field read only under a run-time flag.
 
 **A diff that forks a kernel class out of a shared template shows, in the forked class's
-generated source (its `*_msl` global, or the SPIR-V dump), that its body no longer differs
-from its former siblings' on the compile-time choice the template carried, and names that
-choice on the forked class's `[metal_dispatch]` / `[vk_dispatch]` declaration.**
+generated source (its `*_msl` global, or the SPIR-V dump), that its body differs from its
+former siblings' on more than the compile-time choice the template carried, and names that
+choice in a `//!` line above the forked class's `[metal_dispatch]` / `[vk_dispatch]`
+declaration.** A fork whose body still differs on that choice alone is a twin, and twins stamp
+the template.
 
 **A `[metal_dispatch]` / `[vk_dispatch]` binding whose memory is never written after arming at
 every site that binds it is a defect unless a field at that binding carries `@role = "weight"`.**
