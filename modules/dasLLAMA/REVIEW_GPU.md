@@ -1,8 +1,8 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN.md`. Planned
-work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan - never `followup_general.md`.
+doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md`
+for Vulkan - never `followup_general.md`.
 
 **Routed from `REVIEW.md`: a diff it routes here applies this list together with it.**
 
@@ -16,13 +16,19 @@ or hand-bind the class.**
 
 **A diff touching the tower driver (`dasllama/dasllama_metal_tower.das`), a kernel class or
 builder the tower dispatches, the `[metal_dispatch]` emission those builders are generated
-from (`dasllama/dasllama_metal_lens.das`), or the Metal ASR decoder
-(`dasllama/dasllama_metal_asr_dec.das`) applies `REVIEW_TOWER.md` too.**
+from (`dasllama/dasllama_metal_lens.das`), the Metal ASR decoder
+(`dasllama/dasllama_metal_asr_dec.das`), a kernel class it dispatches or a builder it borrows,
+or `dasllama/dasllama_metal_common.das` applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu_resident.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
 cm2 tile class (an NV_cooperative_matrix2 GEMM class stamped per weight format and column) -
 wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
+
+**A diff that adds or changes a GPU kernel class - a `[metal_kernel]` def, a class carrying
+`[metal_dispatch]` or `[vk_dispatch]`, a base shell one derives from, or a class template one
+stamps - or a dispatch's bind list, generated or hand-rolled, wherever the diff puts it,
+applies `REVIEW_GPU_KERNEL_CLASSES.md` too.**
 
 **A kernel body that emits a function pointer or a vtable into the shader is a defect - splice
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
@@ -39,16 +45,16 @@ Stamped means the guard is carried by a `@template_constant` - a `static_if` blo
 select on the constant. The instance stamped without the guard shows no guard in its generated
 `*_msl` global or its SPIR-V dump.
 
-**A `[metal_dispatch]` kernel whose main loop steps one fixed-size chunk at a time and never
-checks for a partial last chunk declares each alignment it assumes on a value the builder
-receives - a `params=` name or a kargs (kernel-argument struct) field - as one `<lhs> % N` item
-in `requires =`, comma-separated.** The generated builder then trips on the first misaligned
-dispatch instead of reading the next row.
+**A chunk-stepping `[metal_dispatch]` kernel - one whose main loop steps one fixed-size chunk at
+a time and never checks for a partial last chunk - declares each alignment it assumes on a value
+the builder receives - a `params=` name or a kargs (kernel-argument struct) field - as one
+`<lhs> % N` item in `requires =`, comma-separated.** The generated builder then trips on the
+first misaligned dispatch instead of reading the next row.
 
-**A driver that keeps misaligned shapes off a chunk-stepping kernel - one whose main loop
-steps a fixed-size chunk and never checks for a partial last chunk - gates each dispatch site
-of that kernel on that site's own K, the extent that site's loop steps along, never on one
-gate covering every site.**
+**A driver that keeps misaligned shapes off a chunk-stepping kernel - its main loop steps
+fixed-size chunks with no partial-last-chunk check - gates each dispatch site of that kernel on
+that site's own K, the extent that site's loop steps along, never on one gate covering every
+site.**
 
 **A dispatch site's alignment gate whose divisor is neither the chunk the kernel that site
 dispatches steps nor a multiple of that chunk the site forces by splitting its K extent across
@@ -127,75 +133,6 @@ writes every class kernel's words). A grid constant is read off the class's
 CEIL-divide; a threadgroup constant off Metal's `tg=` spec or Vulkan's
 `[spirv_kernel(local_size_x=)]`. A uniform's value is read at the single writer that fills
 its buffer.
-
-**A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling
-twin, or shifts a shared field to a different binding number, is a defect - even where one
-twin ignores that field.** Kernel twins are kernel classes whose bodies differ on one stamp
-axis - one compile-time choice, such as single/batch, format, or single-pass/chunked.
-
-**A copy-pasted kernel twin - one of two kernel classes whose bodies differ on one compile-time
-choice - or a kernel split into hand instances where a `static_if` on a `@template_constant`
-serves, is a defect - kernel twins stamp one `class template`, whatever that choice is.** Body
-divergence is carried by a `@template_constant`, or by an overridden method spliced flat at
-emission.
-
-**A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
-base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
-binding whose fields its compiled body, inherited code included, never reads - a dummy bind that
-exists only to fill the slot - is a defect: gate the field with `@template_gate` where a
-template constant decides it, and where the family shares one set layout on purpose, name that
-case in `ARCHITECTURE_GPU.md` sec.1.5's ledgered kernel-binding asymmetries (Metal) or
-`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ac (Vulkan).** Several fields, declared in the stamp or in
-the shell, may share one binding - `@role = "alias"` marks such a view - so the binding counts
-as read when the compiled body reads any of them. A field the body reads under a run-time flag
-is read, and its unread arm binds a placeholder the kernel never touches.
-
-**A diff that forks a kernel class out of a shared template shows that the bodies no longer
-differ on the compile-time choice the template carried, and names that choice in the
-surviving template's comment.**
-
-**A `[metal_dispatch]` / `[vk_dispatch]` binding whose memory is never written after arming at
-every site that binds it - a model plane, an `upload_region` upload - is a defect unless a field
-at that binding carries `@role = "weight"`, even when the kernel compiles and passes parity.**
-A field the kernel reads under a run-time flag takes the role of its read arm; the placeholder
-its unread arm binds is never read, so its lifetime does not decide the role.
-
-**`@role = "weight"` on per-encode data the kernel reads - a pooled buffer the host refills
-each encode - is a defect; a per-encode field either omits `@role` or names the access its body
-performs.** `weight` tells the generated builder the buffer needs no per-encode hazard tracking.
-
-**A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
-`[vk_dispatch]` declaration, or a new instance of a template carrying one - either shows a
-census row in `tests/test_kernel_coverage.das` that dispatches it, adding the row or the census
-model when none does, or names it in that file's blind-spot list for its backend -
-`CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
-stocked model reaches it and the model-less test cell that dispatches it.**
-
-**Weakening the `[metal_dispatch]` / `[vk_dispatch]` lens's refusal to compile an `@ssbo` field
-with no `@binding`, an `@ssbo` field the kernel body never accesses that declares no `@role`, or
-a `[vk_dispatch]` `@readonly` field on a binding a kernel of its class writes, is a defect.**
-
-**Weakening `[metal_dispatch]`'s refusal to compile a `@workgroup` field with no `tgmem=` spec,
-or its gate `test_lens_tgmem_gate` (`tests/test_metal_misc_kernels.das`), is a defect.**
-
-**A kernel field carries `@span` only when every caller binds whole output rows.** A caller
-binding a column tile of a wider row passes the tile width as the kernel's n while its rows
-stride the full output width, so a span computed from the tile width leaves the rest of
-every row outside the tracked hazard range.
-
-**A NEW hand-written `enc_*` body is a defect unless it is a wrapper - a format or twin pick, a
-default-filling wrapper, or a composite over generated builders - declare the class so the
-`[metal_dispatch]` / `[vk_dispatch]` lens generates the builder instead.**
-
-**A hand-rolled bind list on a dispatch that serves a user call, in `dasllama/` or
-`performance/`, is a defect: dispatch through the kernel's `enc_*` builder instead.**
-
-**A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
-and as a kargs field - is a defect.** A `params=` value that the `grid=`/`tg=` spec consumes
-host-side never reaches the device, so it does not count.
-
-**Never bind a scalar that the other bound scalars already determine - derive it in the
-builder instead.** Binding it separately adds a second place to get it wrong.
 
 **A cache key covers every input the cached result depends on: a host address, an offset, or a
 handle alone is not a key - carry the span and the form, the element type and layout the upload
@@ -298,3 +235,9 @@ runtime state - the active kernel backend, a mode toggle - on its mint-time path
 runs only where the gate's `mint_time` flag is false, and the mint-time verdict tests the
 model's own fields.** The load selects the repacking CPU backend before the GPU backend is
 decided, so a mint-time read bakes a verdict the drivers do not share.
+
+**A diff that gives a Metal dispatch ladder - a flat per-format pick whose last arm is another
+format - an arm for a weight format adds that format to `kq_fmt_gpu_supported`, or, for an
+expert plane, to `moe_fmt_metal_served` (both `dasllama/dasllama_metal_shapes.das`), in the
+same change.** Those predicates are what declines an unserved format, so an unlisted format
+decodes under the layout of the ladder's last arm.

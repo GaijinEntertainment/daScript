@@ -628,9 +628,9 @@
     five hand-split copies of one scaffold -
     `MetalMoeMulMmQ8/K45/K6/Mx4/Q51TensorT` share the expert prologue, the `while (work < 256u)`
     staging shell, the barrier pair, and the `tmm2d_tg_begin/step/store` epilogue verbatim,
-    diverging only on the weight-format decode block and its buffer views (`REVIEW_GPU.md`:
-    "kernel twins stamp one `class template`, whatever the stamp axis is"; the q5_1 twin made
-    the count five). Done = one base class template
+    diverging only on the weight-format decode block and its buffer views
+    (`REVIEW_GPU_KERNEL_CLASSES.md`: "kernel twins stamp one `class template`, whatever the
+    stamp axis is"; the q5_1 twin made the count five). Done = one base class template
     carrying the scaffold with the decode behind an abstract method spliced flat at emission -
     the `MetalMoeMulMmBase` pattern - with every format's bit-exact gate green and the MSL of
     the pre-existing four stamps unchanged.
@@ -1156,8 +1156,8 @@
    knob deleted rather than left as a permanent lever.
 96. **Fold the k4 two-row register tile into the K4 twin template.** `MetalKqMvB2K4R2`
    (`dasllama/dasllama_metal_kernels.das`) is the k4 twin body written a second time by hand for two
-   weight rows per thread; `REVIEW_GPU.md`'s twin rule wants one `class template` with rows-per-thread
-   as the stamp axis. The tile is crowned and measured as it stands (the m4 mint), so the fold is a
+   weight rows per thread; `REVIEW_GPU_KERNEL_CLASSES.md`'s twin rule wants one `class template`
+   with rows-per-thread as the stamp axis. The tile is crowned and measured as it stands (the m4 mint), so the fold is a
    refactor plus a re-race, not a kernel change. Done = one template stamps `MetalKqMvB2K4` and the
    tile, and the tile's emitted MSL is byte-identical or both boxes re-race it.
 97. **The K-quant crown races time one width and check no CPU reference.** `race_kq_rows` and
@@ -1630,3 +1630,52 @@
     perplexities CPU 3.378 / resident 3.922 against llama-perplexity's 3.186, each arm with its own
     whole-position misses where the other two agree - so the 26B cells hold a 1.25 perplexity
     ratio. Unquirked: the CPU chain's chunk perplexity within 2% of llama.cpp's on both files.
+144. **A 16-bit weight file never serves in its own format.** A bf16 or f16 GGUF (Qwen3-8B-BF16
+    on the M5) is requantized to q8 at load under the default mode, and the fp32 mode widens it
+    to f32, which the Metal blob form declines, so it serves on the CPU alone; the only native
+    16-bit region is the gemma-4 E-series per-layer-embedding projection, which the
+    `metal_bf16_mulmm` stamps serve. The Metal sweep's bf16 row therefore has no like-for-like
+    pair: llama.cpp runs the bf16 weights, das the q8 requant (`followup_metal.md` sec.7).
+    Unquirked, one day, because a bf16 file is what a model ships as before anyone quantizes it:
+    the loader keeps bf16/f16 planes in their format under a 16-bit quant mode, the dense prefill
+    takes the bf16 tensor stamps that exist, and a 16-bit decode GEMV joins them on Metal and
+    Vulkan, with the sweep's bf16 row as the gate.
+145. **The Metal sweep's Qwen and Llama-1B quant-matrix rows carry no board row and no model
+    card.** `performance/model_specs.das`'s two sweep blocks (the Qwen quant matrix, the
+    Llama-3.2-1B format matrix) are stocked-file rows with `official` unset: the counting
+    fixture gates their correctness, but nothing pins provenance and nothing publishes them.
+    Done = each row that earns a board seat gets `official = true`, its `url`/`bytes`/`sha256`
+    (or a `recipe`) and its card, and the rows that do not are ruled sweep-only in one line
+    here.
+146. **ACCEPTED, not planned: the dev-W bake set follows the minting program, not the box.** The
+    split-scale `devwf16` panels bake only where the Metal prefill module registered its CPU
+    mirror (`ARCHITECTURE_IMAGE.md` sec.2.1h), so a program on the same box built without that
+    module mints a thinner image at the SAME identity and every site it skipped serves off the
+    runtime dequant until a program carrying the mirror re-mints. Ruled acceptable: a `.dlim` is
+    a box-local cache, so the thinner image costs a dequant pass and never a different answer.
+    This row exists so the next reader who finds a thin image stops looking for a bug; nothing
+    is owed unless a minting program that should carry the mirror stops carrying it.
+147. **Checklist grooming - the structural findings the rule-document round did not open a file
+    for.** Each is a followability class from `skills/review_md.md` (repo root), named by file
+    and rule head; none blocks a verdict today, and each is settled by a rewrite, not a ruling.
+    (a) `REVIEW_GPU.md` "A change that can alter what a served GPU decode or prefill path
+    computes or selects" - the criterion is carried by an enumeration of the things that count
+    and a second enumeration of the things that do not; state the property instead. (b)
+    `REVIEW_GPU.md` "A diff that changes a tile, grid, threadgroup, or uniform constant shows
+    the value at that constant's authoritative site" - four sentences of where to read each
+    constant kind; the how-to belongs in `ARCHITECTURE_GPU.md`. (c) `REVIEW_GPU.md` "Never
+    decide a kernel row's validity or owner by scanning the per-bucket base and count arrays"
+    and "Never test the validity of a row in the bucket-ordered buffer ... against the pad
+    sentinel" - the reviewer checks the same per-row bucket entry twice; merge into the sharper
+    one. (d) `REVIEW_GPU_KERNEL_CLASSES.md` "A kernel-family stamp ... that binds a real buffer
+    to a binding whose fields its compiled body ... never reads" - one paragraph carrying the
+    ban, two ledger addresses and three carve-out mechanisms; split it. (e) `REVIEW_GPU_RACE.md`
+    opening - the race / knockout / overhead-arm / A/B-lab definitions are a mechanism
+    paragraph ahead of the rules; the terms belong in
+    `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` with the checklist defining each in a dozen words
+    at first use. (f) `REVIEW_GPU_RACE.md` "An arm that survives a port of an A/B lab's winning
+    variant" and "A diff deletes an A/B lab's driver and its remaining arm" - one retained-arm
+    criterion stated twice. (g) `REVIEW_MEASUREMENT.md` "A rate or wall of any leg of a served
+    turn", "A figure below a leg of a served turn" and "A figure whose value is the same on
+    every box" - three rules over one provenance criterion that differ only in what the figure
+    scales with.

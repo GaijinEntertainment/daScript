@@ -76,6 +76,16 @@ def private apply_backend_pin(flag : string) : bool {
     return known
 }
 
+//! What served this run: GEN_BACKEND names the CPU kernel backend, and under --ngl GEN_CROWNS
+//! names the Metal tensor crowns apply_box_profile_runtime armed - so a PASS records which
+//! kernel set it covered, not just the CPU half.
+def private print_gen_receipt(ngl : int) {
+    print("GEN_BACKEND: {active_kernel_backend()} (batch: {active_batch_backend()})\n")
+    return if (ngl == 0)
+    let crowns = get_metal_tensor_crowns()
+    print("GEN_CROWNS: {empty(crowns) ? "simdgroup (no tensor crown)" : crowns}\n")
+}
+
 def private parse_ids(s : string) : array<int64> {
     var ids <- [for (part in split(s, ",")); to_int64(part, false); where !empty(part)]
     return <- ids
@@ -103,11 +113,10 @@ def main : int {
         return 2
     }
 
-    if (cfg.kquant_native >= 0) {   // load-time layout decision, must precede load_gguf
-        set_kquant_native(cfg.kquant_native != 0)
-    }
+    set_kquant_native(cfg.kquant_native != 0) if (cfg.kquant_native >= 0)   // load-time layout decision, must precede load_gguf
     if (cfg.ngl != 0) {   // before load_model — pins the portable backend, activates the metal overrides
         set_metal_mode(MetalMode.required)
+        apply_box_profile_runtime()   // the box's Metal crowns (DAS_TUNE_MANIFEST names the sidecar): the gate then runs the served route, twins included
     }
     return 2 if (!apply_backend_pin(cfg.backend))
     var t <- load_gguf(cfg.model, cfg.quant)
@@ -120,7 +129,7 @@ def main : int {
     if (t.config.seq_len > 2048l) {
         t.config.seq_len = 2048l
     }
-    print("GEN_BACKEND: {active_kernel_backend()} (batch: {active_batch_backend()})\n")
+    print_gen_receipt(cfg.ngl)
     var s = make_run_state(t.config, cfg.kv, cfg.kv)
     var rc = 0
     with_job_que() {

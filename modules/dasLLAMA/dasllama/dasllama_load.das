@@ -152,6 +152,7 @@ def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
 
 
 var private g_blob_scale_plane : BlobScalePlaneFn
+var private g_devw_kq_mirror : DevwKqMirrorFn
 
 // Fill the dense FFN offset tables (w1/w2/w3), each a contiguous per-layer region. Per-layer FFN
 // width (gemma-4 E2B) reads t.ffn_w; empty = uniform `hidden`. dense_below >= 0 limits the dense
@@ -701,6 +702,7 @@ struct FillJob {
     n : int64
     src_off : int64
     fmt : KqFmt
+    kdim : int64   // the source tensor's row width (dims[0]), so n / kdim is the panel's row count; 0 = the plan resolved no tensor
 }
 
 //! One repack region over a plane (element offset + 2D shape). fmt ids follow the repack
@@ -716,6 +718,7 @@ typedef StreamCollectFn = function<(t : Model; var regs : array<StreamReg>) : vo
 typedef StreamRepackFn = function<(fmt : int; qp, sp : void?; n, d : int64) : void>
 typedef BlobEligibleFn = function<(t : Model) : bool>
 typedef BlobScalePlaneFn = function<(var t : Model; name : string) : bool>
+typedef DevwKqMirrorFn = function<(fmt : KqFmt; kq : array<uint8>; ks : array<uint8>; d, kdim : int64; var dst : array<float16>) : bool>
 
 [unused_argument(t, regs)]
 def private stream_no_collect(t : Model; var regs : array<StreamReg>) {
@@ -745,6 +748,10 @@ def register_stream_layout(cq8, ckq, cq51 : StreamCollectFn; rr : StreamRepackFn
     g_blob_eligible = be
     g_blob_scale_plane = bsp
     g_blob_hooks_set = true
+}
+
+def register_devw_kq_mirror(f : DevwKqMirrorFn) {
+    g_devw_kq_mirror = f
 }
 
 //! Can this model's streamed build mint the metal blob flavor? False on an unregistered layout
@@ -1043,21 +1050,48 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
     return true
 }
 
+//! a k3/k6 source row carries its strip first and the d last; every other split format the d first and the strip at 4
+def kq_split_scale_plane(f : KqFmt; sp : uint8 const?; nsb : int64; var dst : array<uint8>) {
+    let ssb = kq_ssb(f)
+    let tail = f == KqFmt.k2 ? 4l : 2l
+    let strip_at = f == KqFmt.k3 || f == KqFmt.k6 ? 0l : 4l
+    let tail_at = f == KqFmt.k3 || f == KqFmt.k6 ? 16l : 0l
+    dst |> reserve_resize(nsb * (16l + tail))
+    unsafe {
+        var dp = addr(dst[0])
+        for (sb in range64(nsb)) {
+            memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * ssb + strip_at), 16)
+            for (h in range64(tail)) {
+                dp[nsb * 16l + sb * tail + h] = sp[sb * ssb + tail_at + h]
+            }
+        }
+    }
+}
+
 //! mirrors the prefill DEVW_BIG_PANEL knee: a panel past it never serves the dev-W route,
 //! so baking it would only grow the image
 let DEVW_BAKE_PANEL_MAX = 48ul * 1024ul * 1024ul
 
-//! The bake set: q8 blob and k4/k5/k6 plane jobs whose f16 panel fits the dev-W ceiling,
-//! ascending woff — the ONE order both the table build and the plane fill walk. q40/q51 stay
-//! out: the prefill dev-W route has no dequant kernel for them
+//! ascending woff — the ONE order both the table build and the plane fill walk
 def private devw_bake_jobs(t : Model; jobs : array<FillJob>) : array<FillJob> {
-    var mine <- [for (j in jobs); j; where devw_bake_covers(stream_field_of(t, j.fmt)) && uint64(j.n * 2l) <= DEVW_BAKE_PANEL_MAX]
+    var mine <- [for (j in jobs); j; where devw_bake_covers(t, j) && uint64(j.n * 2l) <= DEVW_BAKE_PANEL_MAX]
     mine |> sort() $(a, b : FillJob) => a.woff < b.woff
     return <- mine
 }
 
-def private devw_bake_covers(field : string) : bool {
-    return field == "mblob" || field == "k4q" || field == "k5q" || field == "k6q"
+//! The split-scale mirror refuses a panel whose row width is not a whole superblock or whose row
+//! count is not a multiple of 64, and one refusal aborts the whole image save - so a site the
+//! mirror would refuse is never covered. The hand-written q8 and k4/k5/k6 mirrors take any shape.
+def private devw_bake_covers(t : Model; j : FillJob) : bool {
+    let field = stream_field_of(t, j.fmt)
+    if (field == "mblob" || field == "k4q" || field == "k5q" || field == "k6q") {
+        return true
+    }
+    if (g_devw_kq_mirror == null || j.kdim <= 0l || (j.kdim % 256l) != 0l || ((j.n / j.kdim) % 64l) != 0l) {
+        return false
+    }
+    return (field == "iq4xsq" || field == "iq4nlq" || field == "q40q" || field == "k3q" || field == "iq3sq"
+        || field == "iq3xxsq" || field == "k2q" || field == "iq2sq" || field == "iq2xsq" || field == "iq2xxsq")
 }
 
 //! Fill the site tables (fmt/key/off/n) for the panels the plane fill will write — call BEFORE
@@ -1131,8 +1165,20 @@ def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
             unsafe {
                 if (j.fmt == KqFmt.k6) {
                     devw_dequant_k6_core(addr(temp_kq[0]), addr(temp_ks[0]), K6_SSB, addr(temp_ks[16]), K6_SSB, nsb, addr(panel[0]))
-                } else {
+                } elif (j.fmt == KqFmt.k4 || j.fmt == KqFmt.k5) {
                     devw_dequant_k45_core(addr(temp_kq[0]), addr(temp_ks[0]), K4_SSB, nsb, j.fmt == KqFmt.k5, addr(panel[0]))
+                } else {
+                    // the mirror eats the plane pair as the kernel binds it: the split scale plane, d rows of kdim
+                    var split : array<uint8>
+                    if (j.fmt == KqFmt.iq4nl || j.fmt == KqFmt.q40) {
+                        split := temp_ks
+                    } else {
+                        kq_split_scale_plane(j.fmt, addr < uint8 const? >(temp_ks[0]), nsb, split)
+                    }
+                    if (!invoke(g_devw_kq_mirror, j.fmt, temp_kq, split, j.n / j.kdim, j.kdim, panel)) {
+                        ok = false
+                        break
+                    }
                 }
             }
         }
@@ -1272,9 +1318,16 @@ def private transcode_q8_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : s
     return "q8 REQUANT (dequant+quant)"
 }
 
+//! the row width a fill job records; 0 where the name resolves to no tensor of this meta
+def private fill_job_kdim(m : GGUFMeta; name : string) : int64 {
+    let ti = gguf_find_tensor(m, name)
+    return ti >= 0 ? m.tensors[ti].dims[0] : 0l
+}
+
 def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l; fmt : KqFmt = KqFmt.q8) {
     if (g_fill_plan_mode) {
-        g_fill_plan |> push(FillJob(name = name, woff = woff, n = n, src_off = src_off, fmt = fmt))
+        g_fill_plan |> push(FillJob(name = name, woff = woff, n = n, src_off = src_off, fmt = fmt,
+            kdim = fill_job_kdim(m, name)))
         return
     }
     let t0 = g_conv_prof ? ref_time_ticks() : 0l

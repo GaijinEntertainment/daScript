@@ -1,6 +1,11 @@
 # dasLLAMA Architecture - the Metal prefill driver
 
-Companion to `ARCHITECTURE.md`; section numbers are that document's.
+Companion to `ARCHITECTURE.md`; section numbers are that document's. This document carries
+sections 2.2c-2.2f, 2.2h-2.2i, 2.2u-2.2v and 2.2aa: the GEMM form ladder, the dev-W panel knee
+map, the GEMV tail peel, the attention slab, the pad-row and cooperative-op constraints, chunked
+submission, the f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm
+scaffold. The driver's routed block - the MoE bucket rail, its tensor-twin scaffold and the
+split-format expert twins - is `ARCHITECTURE_GPU_PREFILL_MOE.md` section 2.2g.
 
 ### 2.2c The prefill GEMM form ladder {#prefill-gemm-ladder}
 
@@ -68,8 +73,14 @@ f16 copy alongside its f32 output takes its panel from `pf_twin_panel` directly 
 rounds to the f16 tile - so the E-series `per_layer_model_proj` GEMM serves straight off the
 kept-bf16 blob with no resident f32 copy.
 
-**The occupancy floor guards the tall stamp.** A tall grid is taken only when
-`rows/128 * (d/64) >= TALL_OCC_FLOOR` (default 64, a sidecar knob). An under-occupied tall grid
+**The tall stamp is a per-box crown behind an occupancy floor.** Every tall arm (the dev-W
+panel GEMM, the q8 and K-quant tensor twins, the tower's f16 route) opens only where the mint
+crowned `hmm_tall`: the race (`race_hmm_tall`) times the 128-row half GEMM against its 32-row
+form at a 1B-class site (512 rows, 2048 x 2048), and the M5 Max crowns it while the M4 Pro
+declines - its tensor tiles idle in the tall grid and Llama-1B prefill reads 5% under the 32-row
+form there, the 30B 1% (`PERF_LEDGER.md`, the M4 Metal pass). Crowned, a tall grid is taken
+only when
+`rows/128 * (d/64) >= TALL_OCC_FLOOR` (default 64, a sidecar knob): an under-occupied tall grid
 starves the GPU and small prompts regress hard without the floor.
 
 ### 2.2d The dev-W panel knee map {#devw-panel-knees}
@@ -156,44 +167,7 @@ SLIDING class; the loader guarantees at most two. Buffers size to the class maxi
 binds its own class's uniform set - a uniform model leaves the sliding twins null and binds the
 base set everywhere.
 
-### 2.2g The prefill MoE bucket rail {#prefill-moe-buckets}
-
-Routing is atomics-free: a router GEMV and a select pass, then a per-expert count kernel, then
-one bucket kernel that computes the padded prefix and fills the buckets. Each expert's bucket
-PADS to a whole 32-row tile, every threadgroup computes the same padded prefix, and threadgroup
-`e` publishes `basep[e]` for the mm and activation consumers. The bucket fill splits the entry
-range into contiguous ascending per-lane chunks and scans the chunk counts, which reproduces the
-serial entry order exactly, so the ordered weighted reduce is bit-stable against the CPU path
-that parks each routed expert's rows and reduces them in entry order. The selection is read
-GPU-side by the kernels; nothing reads back to the CPU, so encode-ahead and speculation stay
-compatible.
-
-Pad rows inside each expert's padded bucket carry a stamped sentinel and the reduce never
-references them; rows past the last expert's stamped tail are unstamped stale pool bytes, which
-is why validity tests compare the per-row entry against the live count, never the sentinel.
-
-The MoE tensor twins ride one scaffold: `MetalMoeMulMmKqTensorBase` carries the expert
-prologue, the staged K walk with its barrier pair, and the store; a weight format derives,
-owns its weight-view bindings, and overrides the staged decode (`stage_block`) - mx4 also the
-store (its per-expert bias) and the chunk shape (32-deep, 128-item quota). The q8 twin is not
-a copy of this scaffold: its whole body is the tuned `tmm2d_q8u_f32` staged helper, a
-different staging mechanism, so it stays its own template. The scaffold fixes its own binding numbers - `xf` at 3, `y` at 4, kargs at 5, `cnt` at 6,
-`basep` at 7 - and every derived twin inherits them. Those are NOT the family tail's numbers
-(`kn_moe_mm_family_tail` binds `cnt` at 7, `basep` at 8, `bkt` at 9), so a race harness
-hand-binding a tensor twin follows the scaffold's declaration and its base arm follows the
-tail's; binding a twin at the base's numbers hands the kernel the OUTPUT buffer as X, and the
-race then crowns whichever arm computed nothing. The gather-X pass
-copies the bucket's token rows into a CONTIGUOUS f16 panel with pad rows zeroed, which lets the up
-and gate sites ride the contiguous tensor twins instead of the in-kernel gather form; the panel is
-minted once per layer and shared by both sites. An X read through the bucket index can never
-form a tensor view, which is why every tensor twin of the MoE family serves contiguous rows
-only.
-
-**The staging form that wins inside the gathered mul_mm kernels is per format, not universal.**
-The gathered q8 form carries its scale and quant pointers across k-blocks; the stateless index
-form measures 3.4-3.6% slower (`benchmarks/matmul/bench_metal_moe_lab.das`, gmm8 section). The
-gathered Q6_K is the opposite: a superblock-scalar cache measures 2.4% slower per mm than
-reloading per k-block (same lab, gmm6 section), so its stage is stateless.
+Section 2.2g, the prefill MoE bucket rail, is `ARCHITECTURE_GPU_PREFILL_MOE.md`.
 
 ### 2.2h Pad rows and cooperative-op constraints {#prefill-pad-rows-and-coop}
 
@@ -266,15 +240,15 @@ narrowing is the default.
 
 ### 2.2aa The dense-KQ tensor mul_mm scaffold {#prefill-kq-tensor-scaffold}
 
-Nine iquant and split-scale formats - iq4xs, iq4nl, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs -
-share ONE tensor mul_mm body, `MetalKqMulMmSplitTensorBase`. The base holds the k6 tensor
+Ten iquant and split-scale formats - iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs
+- share ONE tensor mul_mm body, `MetalKqMulMmSplitTensorBase`. The base holds the k6 tensor
 shell: the `tmm2d_tg_*` accumulate loop, the 6144-half `twb` W chunk, the store. It exposes
 exactly one overridable stage, `stage16` - 16 elements per work item, decoded into `twb`. A
 format derives, binds its own weight views, and overrides `stage16` alone. 16 is not an
-arbitrary granularity: it is the base GEMV arm's own granularity, so each format's decode ports
-into its `stage16` verbatim, the arm's `va[]` store becoming a `twb` store. This is the shape
-sec.2.2g's MoE tensor twins ride, applied to the dense sites; as there, the q8 twin stays its
-own template because its body is a different staging mechanism.
+arbitrary granularity: it is the base GEMV arm's own, so each format's decode ports into its
+`stage16` verbatim, the arm's `va[]` store becoming a `twb` store - the MoE twins' shape
+(`ARCHITECTURE_GPU_PREFILL_MOE.md` sec.2.2g) applied to the dense sites; as there, the q8 twin
+stays its own template (a different staging).
 
 Each format's `stage16` takes one of three forms, inherited from that format's base GEMV arm:
 
@@ -285,10 +259,26 @@ Each format's `stage16` takes one of three forms, inherited from that format's b
 - **staged-grid slab** (iq3s, iq3xxs) - the 2 KB / 1 KB grid staged into threadgroup memory
   once per threadgroup.
 - **direct constant-table gather** (iq2s, iq2xs, iq2xxs) - the u64 grid pair read straight off
-  the hoisted tables, no slab.
+  the hoisted tables, no slab. q40 is iq4nl's stamp (`Q40`) with the linear map in the LUT slot.
 
-Each format stamps two instances, `T` (`XT = float`) and `TH` (`XT = float16`); this family has
-no tall or double-buffered twins. Every stamp compiles only behind its own crown
-(`metal_tensor_crowned("kq_mulmm_<fmt>")`) in `pf_compile_kq_iquant_tensor_twins`, and
-`pf_enc_kq_site_mm` dispatches a twin only when both the crown flag and the PSO are live, so a
-box with no tensor toolchain never leaves the base kernels.
+Each format stamps `T` (`XT = float`) and `TH` (`XT = float16`); iq3s and iq3xxs add the `TH128`
+tall stamp (form 1), the rest have no tall twin yet, none is double-buffered. Every stamp
+compiles only behind its own crown (`metal_tensor_crowned("kq_mulmm_<fmt>")`) in
+`pf_compile_kq_iquant_tensor_twins`, and `pf_enc_kq_site_mm` dispatches a twin only when both
+the crown flag and the PSO are live. The crown is a RACE verdict (tensor stamp vs simdgroup base
+at one dense shape); whether the box can run tensor kernels at all is a separate fact, the
+toolchain probe `g_pf_tensor_ok` (one quiet compile of the dev-W GEMM at init). A box whose
+Metal has no mpp kernels fails the probe and keeps every base form whatever its sidecar says.
+
+The same classes carry the family's dev-W dequant pass (form 2): `MetalKqDequant<Fmt>` derives
+from the format's tensor class, adds the f16 panel binding, and runs the inherited `stage16`
+over one 64x64 chunk per threadgroup into `twb`, then stores the tile into the panel; the
+site dispatcher offers these formats the dev-W arm ahead of their staged stamps. The staged
+stamp re-dequantizes W per 32-row tile, the whole gap on a small model: the 1B split-scale files
+read 0.85-0.93 of llama.cpp's prefill staged, 1.05 on scratch dev-W, 1.23-1.24 resident
+(`followup_metal.md` sec.7, the Llama-3.2-1B format matrix on the M5 Max).
+The dev-W arm rides the toolchain probe alone, never a crown: the shared all-device half GEMM
+and every format's dequant pass compile wherever `g_pf_tensor_ok` holds, and `pf_enc_kq_site_mm`
+offers the arm before it reads any `kq_mulmm_<fmt>` crown. The q8 site takes the same arm through
+`pf_q8_devw` while the q8 tensor twins stay behind their own crown. Dev-W's win is the one-time
+dequant, not the tensor lane, so a box whose dense race crowned nothing still gets it.

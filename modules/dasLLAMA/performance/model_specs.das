@@ -138,6 +138,30 @@ def private ev_llama32_1b() : ParityEvidence {
                 11l, 449l, 264l, 4851l, 2539l, 315l, 5895l, 323l, 264l, 4059l])
 }
 
+// Llama-3.2-1B-Instruct, the counting fixture [BOS]+"1, 2, 3, 4, 5, 6, 7," - the Metal format
+// sweep's gate over the 1B requant family
+def private ids_llama_count_prompt() : array<int64> {
+    return <- [128000l, 16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l, 11l, 220l, 20l, 11l,
+               220l, 21l, 11l, 220l, 22l, 11l]
+}
+
+def private ev_llama_count(kq_native : bool = false) : ParityEvidence {
+    return <- ParityEvidence(prompt <- ids_llama_count_prompt(),
+        gen <- [220l, 23l, 11l, 220l, 24l, 11l, 220l, 605l, 11l, 220l, 806l, 11l, 220l, 717l, 11l,
+                220l, 1032l, 11l, 220l, 975l, 11l, 220l, 868l, 11l, 220l, 845l, 11l, 220l, 1114l,
+                11l, 220l, 972l, 11l, 220l, 777l, 11l, 220l, 508l, 11l, 220l],
+        kq_native = kq_native)
+}
+
+// the IQ2_XS requant skips 19 on llama.cpp too - its own continuation
+def private ev_llama_count_iq2xs() : ParityEvidence {
+    return <- ParityEvidence(prompt <- ids_llama_count_prompt(),
+        gen <- [220l, 23l, 11l, 220l, 24l, 11l, 220l, 605l, 11l, 220l, 806l, 11l, 220l, 717l, 11l,
+                220l, 1032l, 11l, 220l, 975l, 11l, 220l, 868l, 11l, 220l, 845l, 11l, 220l, 1114l,
+                11l, 220l, 972l, 11l, 220l, 508l, 11l, 220l, 1691l, 11l, 220l],
+        kq_native = true)
+}
+
 // SmolLM2-1.7B-Instruct Q8, "Once upon a time" (BPE, no BOS) — the unmodified llama arch.
 def private ev_smollm2() : ParityEvidence {
     return <- ParityEvidence(
@@ -308,7 +332,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "tinystories-instruct-27M-Q8_0.gguf", url = "{STORIES_HF}/tinystories-instruct-27M-Q8_0.gguf", bytes = 31467200l,
             sha256 = "92c2b775070b76ee31b9921f7f339ec9fc0e08b54be0616418414d4eec65d282", recipe = STORYWISH_RECIPE),   // the request-taking story writer behind examples/dasLLAMA/storywish; profiled nowhere
         ModelSpec(file = "SmolLM2-135M-Instruct-Q8_0.gguf", display = "SmolLM2-135M"),
-        ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q8_0.gguf", display = "Qwen2.5-0.5B"),
+        ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q8_0.gguf", display = "Qwen2.5-0.5B",
+            parity <- ev_qwen_count()),
         ModelSpec(file = "Qwen3-0.6B-Q8_0.gguf", display = "Qwen3-0.6B",
             parity <- ev_qwen_count()),   // the QK-norm arch (per-head Q/K RMSNorm before RoPE)
         ModelSpec(file = "Qwen3.5-0.8B-Q8_0.gguf", display = "Qwen3.5-0.8B",
@@ -319,10 +344,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // (tests/test_gpu_resident_hybrid.das): qkv q6_K, z q4_K, beta/alpha q4_K, the deltanet
         // out plane q4_K - the step leaves the o row f32 for the superblock out plane's requant
         ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M.gguf",
-            recipe = "llama-quantize --allow-requantize Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M.gguf Q4_K_M"),
+            recipe = "llama-quantize --allow-requantize Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M.gguf Q4_K_M",
+            parity <- ev_qwen_count([kq_native = true, dn_chunked = true, require_dn_kq = true])),
         // the mixed twin: the deltanet out plane at Q8_0 (the unsloth UD shape) - the one carrier whose x and o feeds part ways
         ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M-q8out.gguf",
-            recipe = "llama-quantize --allow-requantize --tensor-type ssm_out=q8_0 Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M-q8out.gguf Q4_K_M"),
+            recipe = "llama-quantize --allow-requantize --tensor-type ssm_out=q8_0 Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M-q8out.gguf Q4_K_M",
+            parity <- ev_qwen_count([kq_native = true, dn_chunked = true])),
         // the 9B hybrid with its in-file MTP block, the whole-model driver's parity carrier
         // (head 256 gated attention, partial rope, Q5_K/Q6_K deltanet planes) and the vulkan
         // serving census's head-256 row; the local name carries the MTP tag the release's does not
@@ -334,7 +361,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // arm FAILS (not skips) when they are absent, so every box gets them provisioned here
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q5_K_M.gguf",
             url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q5_K_M.gguf",
-            bytes = 911503488l, sha256 = "4f22f95fb1679ef8e2fd6f1659d23f06cd1dbedb79ff291db7413a7ae509e2a9"),
+            bytes = 911503488l, sha256 = "4f22f95fb1679ef8e2fd6f1659d23f06cd1dbedb79ff291db7413a7ae509e2a9",
+            parity <- ev_llama_count([kq_native = true])),
         ModelSpec(file = "tinyllama-1.1b-v0.3-f16.gguf",   // parity-only carrier (F16 -> fp32 load)
             parity <- ev_tinyllama_v03()),
         ModelSpec(file = "gemma-3-1b-it-Q8_0.gguf", display = "gemma-3-1B",
@@ -384,7 +412,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 16464440224l, sha256 = "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
             serve_name = "qwen3.8-27b", serve_display = "Qwen 3.8 27B",
             serve_note = "the newest dense Qwen - thinking model, strong at code",
-            serve_ctx = 262144, serve_vram_gb = 18.5),
+            serve_ctx = 262144, serve_vram_gb = 18.5,
+            parity <- ev_qwen_count([dn_chunked = true])),
         ModelSpec(file = "gemma-3-4b-it-Q8_0.gguf", display = "gemma-3-4B",
             // the vision mmproj rides as a companion: the gemma3v tower tests and the image chat
             // load it beside this decoder (the tower itself is size-invariant; 4B is the tested pair)
@@ -450,7 +479,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the small twin of the routed-experts arch for the resident MoE chain's cells
         // (tests/test_gpu_moe_shexp.das): 9.5 GB, whole on a 16 GB card with room to spare
         ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf",
-            recipe = "llama-quantize --allow-requantize Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf Q4_K_M"),
+            recipe = "llama-quantize --allow-requantize Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf Q4_K_M",
+            parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
         // the qwen vision pairs (the qwen3vl arc): parity-less provenance carriers —
         // test_vision_chat's deepstack/qwen25o legs and the qwen tier-1 suites are their coverage
         ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B", official = true,
@@ -565,10 +595,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // shared expert, and the 35B deltanet hybrid with a gated one - the whole-model fits the UD-Q4_K_M cannot make
         ModelSpec(file = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf",
             url = "{HF}/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/eea7b2be5805a5f151f8847ede8e5f9a9284bf77/Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf",
-            bytes = 10341814688l, sha256 = "aa0b04ac05f71aa94b542b074500b3de956608365e74f0e1d97ae0d6a6380269"),
+            bytes = 10341814688l, sha256 = "aa0b04ac05f71aa94b542b074500b3de956608365e74f0e1d97ae0d6a6380269",
+            parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
         ModelSpec(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf",
             url = "{HF}/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/a483e9e6cbd595906af30beda3187c2663a1118c/Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf",
-            bytes = 10756586464l, sha256 = "2e8f5f705355c56311432d0a8a5d14a696dbb7e4b197d05c75ba805fc1857bef"),
+            bytes = 10756586464l, sha256 = "2e8f5f705355c56311432d0a8a5d14a696dbb7e4b197d05c75ba805fc1857bef",
+            parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
         ModelSpec(file = "Qwen3.8-27B-Q4_K_M.gguf", display = "Qwen3.8-27B", quant_label = "q4_k_m", official = true,
             url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-Q4_K_M.gguf",
             bytes = 18973870432l, sha256 = "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
@@ -594,12 +626,82 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // plain evidence only (verified per-file 40/40, 2026-08-18): the qwen35moe arm
             // coverage (chunked deltanet + reference MoE prefill) lives on the plain-stem twin
             parity <- ev_qwen_count()),
-        ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display = "Qwen3-Coder-30B"),
-        ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display = "Qwen3-Coder-30B-q4k", quant_label = "q4_k_m"),
+        ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display = "Qwen3-Coder-30B",
+            parity <- ev_qwen_count([moe_reference = true])),
+        ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display = "Qwen3-Coder-30B-q4k", quant_label = "q4_k_m",
+            parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
         ModelSpec(file = "Qwen3-Coder-Next-Q4_K_M.gguf", display = "Qwen3-Coder-Next-q4k", quant_label = "q4_k_m",
             // arch qwen3next: the FILE layout differs from qwen35 (fused Q4_K ssm_ba, HF
             // grouped v-head order) — this fixture proves the loader's grouped->tiled permutes
             parity <- ev_qwen_count([dn_chunked = true])),
+        // the Metal sweep's Qwen quant matrix - every Qwen text file the M5 box stocks that the
+        // rows above do not name; no board row, no provenance, the counting fixture as the
+        // correctness gate
+        ModelSpec(file = "Qwen2.5-1.5B-Instruct-IQ3_XS.gguf", display = "Qwen2.5-1.5B-iq3xs", quant_label = "iq3_xs",
+            parity <- ev_qwen_count([kq_native = true])),
+        ModelSpec(file = "Qwen3-8B-BF16.gguf", display = "Qwen3-8B-bf16", quant_label = "bf16",
+            parity <- ev_qwen_count()),
+        ModelSpec(file = "Qwen3.5-4B-Q8_0.gguf", display = "Qwen3.5-4B",
+            parity <- ev_qwen_count([dn_chunked = true])),
+        ModelSpec(file = "Qwen3.5-9B-Q8_0.gguf", display = "Qwen3.5-9B",
+            parity <- ev_qwen_count([dn_chunked = true])),
+        ModelSpec(file = "Qwen3.5-9B-IQ4_XS.gguf", display = "Qwen3.5-9B-iq4xs", quant_label = "iq4_xs",
+            parity <- ev_qwen_count([kq_native = true, dn_chunked = true])),
+        ModelSpec(file = "Qwen3.8-27B-UD-IQ4_XS.gguf", display = "Qwen3.8-27B-iq4xs", quant_label = "iq4_xs",
+            parity <- ev_qwen_count([dn_chunked = true])),
+        ModelSpec(file = "Qwen3.8-27B-UD-Q3_K_XL.gguf", display = "Qwen3.8-27B-q3kxl", quant_label = "q3_k_xl",
+            parity <- ev_qwen_count([dn_chunked = true])),
+        ModelSpec(file = "Qwen3.8-27B.i1-IQ3_S.gguf", display = "Qwen3.8-27B-iq3s", quant_label = "iq3_s",
+            parity <- ev_qwen_count([dn_chunked = true])),
+        ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat.Q6_K.gguf", display = "Qwen1.5-MoE-q6k", quant_label = "q6_k",
+            parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
+        ModelSpec(file = "Qwen3-30B-A3B-Q8_0.gguf", display = "Qwen3-30B-A3B-q8",
+            parity <- ev_qwen_count([moe_reference = true])),
+        ModelSpec(file = "Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf", display = "Qwen3-30B-A3B-q3kxl", quant_label = "q3_k_xl",
+            parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
+        ModelSpec(file = "Qwen3-30B-A3B-Thinking-2507-UD-Q3_K_XL.gguf", display = "Qwen3-30B-A3B-thinking-q3kxl", quant_label = "q3_k_xl",
+            parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
+        ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-UD-Q3_K_XL.gguf", display = "Qwen3-Coder-30B-q3kxl", quant_label = "q3_k_xl",
+            parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
+        ModelSpec(file = "Qwen3.5-35B-A3B-UD-IQ2_XXS.gguf", display = "Qwen3.5-35B-A3B-iq2xxs", quant_label = "iq2_xxs",
+            parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
+        ModelSpec(file = "Qwen3.5-35B-A3B-UD-IQ3_S.gguf", display = "Qwen3.5-35B-A3B-iq3s", quant_label = "iq3_s",
+            parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
+        ModelSpec(file = "Qwen3.6-35B-A3B-UD-IQ3_S.gguf", display = "Qwen3.6-35B-A3B-iq3s", quant_label = "iq3_s",
+            parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
+        ModelSpec(file = "Qwen3.6-35B-A3B-Q8_0.gguf", display = "Qwen3.6-35B-A3B-q8",
+            parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
+        // the Metal sweep's Llama-3.2-1B format matrix - every weight format on one small dense
+        // model; the -local files are requants of the bartowski Q8_0, the rest bartowski's and
+        // mradermacher's own; the counting fixture is the correctness gate, no board row
+        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ2_XS-local.gguf", display = "Llama-3.2-1B-iq2xs", quant_label = "iq2_xs",
+            recipe = "llama-quantize --allow-requantize --imatrix llama32_1b.imatrix Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-IQ2_XS-local.gguf IQ2_XS (the imatrix is bartowski's Llama-3.2-1B-Instruct.imatrix; a requant is size-exact but not byte-exact across boxes)",
+            parity <- ev_llama_count_iq2xs()),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf", display = "Llama-3.2-1B-iq2xxs", quant_label = "iq2_xxs",
+            recipe = "llama-quantize --allow-requantize --imatrix llama32_1b.imatrix Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-IQ2_XXS-local.gguf IQ2_XXS",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf", display = "Llama-3.2-1B-iq3xxs", quant_label = "iq3_xxs",
+            recipe = "llama-quantize --allow-requantize --imatrix llama32_1b.imatrix --tensor-type attn_k=iq3_xxs --tensor-type attn_q=iq3_xxs Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-IQ3_XXS-local.gguf IQ3_XXS (llama.cpp's own ftype puts IQ2_S on attn_k/q)",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ4_NL-local.gguf", display = "Llama-3.2-1B-iq4nl", quant_label = "iq4_nl",
+            recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-IQ4_NL-local.gguf IQ4_NL",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-Q2_K-local.gguf", display = "Llama-3.2-1B-q2k", quant_label = "q2_k",
+            recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q2_K-local.gguf Q2_K",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-Q4_0-local.gguf", display = "Llama-3.2-1B-q40", quant_label = "q4_0",
+            recipe = "llama-quantize --allow-requantize Llama-3.2-1B-Instruct-Q8_0.gguf Llama-3.2-1B-Instruct-Q4_0-local.gguf Q4_0",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ3_M.gguf", display = "Llama-3.2-1B-iq3m", quant_label = "iq3_m",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-IQ4_XS.gguf", display = "Llama-3.2-1B-iq4xs", quant_label = "iq4_xs",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-Q3_K_L.gguf", display = "Llama-3.2-1B-q3kl", quant_label = "q3_k_l",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct-Q4_K_M.gguf", display = "Llama-3.2-1B-q4km", quant_label = "q4_k_m",
+            parity <- ev_llama_count([kq_native = true])),
+        ModelSpec(file = "Llama-3.2-1B-Instruct.i1-IQ3_XXS.gguf", display = "Llama-3.2-1B-i1-iq3xxs", quant_label = "iq3_xxs",
+            parity <- ev_llama_count([kq_native = true])),
         // the text-to-speech carriers: local conversions with no board row (followup_general.md
         // row 77); the front-end packs every TTS model loads ride the kitten-nano row, the
         // per-model oracle dumps ride their own rows
@@ -744,6 +846,12 @@ def llm_catalog() : array<ModelSpec> {
 //! people run THIS year). Absent files skip with a warning, so one list serves every box.
 def official_catalog() : array<ModelSpec> {
     return <- spec_view() $(s : ModelSpec) : bool { return s.official; }
+}
+
+//! Every row of [[model_specs]] - the sweep view: gen_bench_records `--catalog all` visits each
+//! stocked file, board row or not (absent files skip with a warning like the board view's).
+def full_catalog() : array<ModelSpec> {
+    return <- spec_view() $(s : ModelSpec) : bool { return !empty(s.file); }
 }
 
 //! The spec's vision mmproj companion basename ("" = no vision pairing) — the image-chat

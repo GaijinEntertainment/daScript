@@ -121,18 +121,32 @@ lane and reap each other's image on every switch.
 
 ### 2.1h The baked dev-W f16 panel plane {#image-devw-plane}
 
-A metal-flavor image carries `devwf16`: every dev-W-eligible q8 and k4/k5/k6 weight (a plane
-job whose f16 panel fits `DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror) pre-dequantized at
-mint into one concatenated f16 plane, with parallel site tables (`devwf16_fmt/key/off/n`)
-serialized as ordinary planes. The mint dequant is the format's CPU mirror of the runtime
-dev-W dequant kernel, and every mirror is bit-exact by construction: each f32 product fits
-the 24-bit significand exactly (the widest, k6's `dsc*q`, needs 24), so only the final f16
-round exists and contraction cannot move it - a baked panel is bit-equal to a runtime one.
-The first served prefill seeds the resident-panel cache with zero-copy `(buffer, offset)`
-views over the mapped plane, so a baked site never dispatches a dequant and holds no
-dedicated memory; sites the bake does not cover (q40/q51 - the dev-W route has no dequant
-kernel for them - and owned gguf loads) stay on the runtime path, resident under
-`DASLLAMA_METAL_DEVW_RESIDENT` or scratch.
+A metal-flavor image carries `devwf16`: every dev-W-eligible q8, k4/k5/k6 and split-scale
+(iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs) weight - a plane job whose f16 panel
+fits `DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror - pre-dequantized at mint into one
+concatenated f16 plane, with parallel site tables (`devwf16_fmt/key/off/n`) serialized as
+ordinary planes. The mint dequant is the format's CPU mirror of the runtime dev-W dequant
+kernel. The q8 and K-quant mirrors are hand-written and bit-exact by construction: each f32
+product fits the 24-bit significand exactly (the widest, k6's `dsc*q`, needs 24), so only the
+final f16 round exists and contraction cannot move it. The split-scale mirror is the dequant
+class itself run on the CPU (`devw_dequant_kq_mirror`, registered into the loader by the
+Metal prefill at init - a build with no Metal tier bakes none of those formats): its
+`stage16` decodes the same 64x64 chunk into the same tile the kernel stages, and the
+kernel-gate cell holds the two bit-equal per format. Either way a baked panel is bit-equal
+to a runtime one. The first served prefill seeds the resident-panel cache with zero-copy
+`(buffer, offset)` views over the mapped plane, so a baked site never dispatches a dequant
+and holds no dedicated memory; sites the bake does not cover (q51 - the dev-W route has no
+dequant kernel for it - and owned gguf loads) stay on the runtime path, resident under
+`DASLLAMA_METAL_DEVW_RESIDENT` or scratch. On a 1B every panel sits under the knee, and the
+resident form is the difference between 1.05x and 1.24x of llama.cpp's prefill on the
+split-scale files (`followup_metal.md` sec.7, the Llama-3.2-1B format matrix on the M5 Max).
+
+The bake set is the minting PROGRAM's, not the box's: the split-scale formats bake only where
+the Metal prefill module registered its mirror, so a program on the same box whose module graph
+lacks that module mints a thinner image at the SAME identity, and every split-scale site it
+skipped serves off the runtime dequant until a program carrying the mirror re-mints. The
+asymmetry is accepted rather than designed away: a `.dlim` is a box-local cache, so a thinner
+image costs a dequant pass and never a different answer.
 
 The k6 dequant writes its value as `dsc * (q - 32)` at every site - the runtime kernel, its
 double-buffered twin, and the mint's CPU mirror. The factored spelling costs nothing, since the

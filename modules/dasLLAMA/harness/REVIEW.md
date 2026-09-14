@@ -1,10 +1,9 @@
 # dasLLAMA harness Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_metal.md` for anything about
-the Metal backend, `../followup_vulkan.md` for anything about the Vulkan backend,
-`../PERF_LEDGER.md` for any other performance followup, `../followup_general.md` for everything
-else.
+docs: `../ARCHITECTURE_MEASUREMENT.md`, `../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned
+work: `../followup_metal.md` for anything about the Metal backend, `../followup_vulkan.md` for
+anything about the Vulkan backend, `../followup_general.md` for everything else.
 
 **A diff that adds or moves a timing in `tune_kernels.das` keeps `dot_q8q8_laneq4x4` the LAST
 row of the `benches` list, and adds no CPU timing that runs after it.** Running that bench pins one
@@ -25,5 +24,7 @@ the report.
 
 **A diff that adds a timed row to a file in this folder that prints timed rows, or changes which
 kernel an existing row times, ships that row's alternate - a row of the same run, at the same
-shape, that the new number is read against - or records in `../ARCHITECTURE_MEASUREMENT.md`
-sec.2.5 the reference-engine row it is read against, with the command that produced it.** A number with no alternate beside it ranks nothing.
+shape, that the new number is read against - or records the reference-engine row it is read
+against, with the command that produced it: in `../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`
+sec.2.5a for a row of `vk_gemm_probe.das` or `vk_gemv_probe.das`, in `../ARCHITECTURE_MEASUREMENT.md` sec.2.5
+for every other row.** A number with no alternate beside it ranks nothing.

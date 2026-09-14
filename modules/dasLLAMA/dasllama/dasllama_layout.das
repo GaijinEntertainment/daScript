@@ -186,16 +186,8 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq4xss") {
         if (!empty(t.iq4xss)) {
             var @exact_size xc : array<uint8>
-            let nsb = long_length(t.iq4xss) / IQ4XS_SSB
-            xc |> reserve_resize(nsb * 18l)
             unsafe {
-                var dp = addr(xc[0])
-                let sp = addr < uint8 const? >(t.iq4xss[0])
-                for (sb in range64(nsb)) {
-                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ4XS_SSB + 4l), 16)
-                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ4XS_SSB]
-                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ4XS_SSB + 1l]
-                }
+                kq_split_scale_plane(KqFmt.iq4xs, addr < uint8 const? >(t.iq4xss[0]), long_length(t.iq4xss) / kq_ssb(KqFmt.iq4xs), xc)
             }
             t.iq4xss <- xc
         }
@@ -203,147 +195,81 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     }
     if (name == "iq3ss") {
         if (!empty(t.iq3ss)) {
-            var @exact_size i3c : array<uint8>
-            let nsb = long_length(t.iq3ss) / IQ3S_SSB
-            i3c |> reserve_resize(nsb * 18l)
+            var @exact_size xc : array<uint8>
             unsafe {
-                var dp = addr(i3c[0])
-                let sp = addr < uint8 const? >(t.iq3ss[0])
-                for (sb in range64(nsb)) {
-                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ3S_SSB + 4l), 16)
-                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ3S_SSB]
-                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ3S_SSB + 1l]
-                }
+                kq_split_scale_plane(KqFmt.iq3s, addr < uint8 const? >(t.iq3ss[0]), long_length(t.iq3ss) / kq_ssb(KqFmt.iq3s), xc)
             }
-            t.iq3ss <- i3c
+            t.iq3ss <- xc
         }
         return true
     }
     if (name == "iq3xxss") {
         if (!empty(t.iq3xxss)) {
-            var @exact_size i3xc : array<uint8>
-            let nsb = long_length(t.iq3xxss) / IQ3XXS_SSB
-            i3xc |> reserve_resize(nsb * 18l)
+            var @exact_size xc : array<uint8>
             unsafe {
-                var dp = addr(i3xc[0])
-                let sp = addr < uint8 const? >(t.iq3xxss[0])
-                for (sb in range64(nsb)) {
-                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ3XXS_SSB + 4l), 16)
-                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ3XXS_SSB]
-                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ3XXS_SSB + 1l]
-                }
+                kq_split_scale_plane(KqFmt.iq3xxs, addr < uint8 const? >(t.iq3xxss[0]), long_length(t.iq3xxss) / kq_ssb(KqFmt.iq3xxs), xc)
             }
-            t.iq3xxss <- i3xc
+            t.iq3xxss <- xc
         }
         return true
     }
     if (name == "iq2ss") {
         if (!empty(t.iq2ss)) {
-            var @exact_size i2c : array<uint8>
-            let nsb = long_length(t.iq2ss) / IQ2S_SSB
-            i2c |> reserve_resize(nsb * 18l)
+            var @exact_size xc : array<uint8>
             unsafe {
-                var dp = addr(i2c[0])
-                let sp = addr < uint8 const? >(t.iq2ss[0])
-                for (sb in range64(nsb)) {
-                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ2S_SSB + 4l), 16)
-                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ2S_SSB]
-                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ2S_SSB + 1l]
-                }
+                kq_split_scale_plane(KqFmt.iq2s, addr < uint8 const? >(t.iq2ss[0]), long_length(t.iq2ss) / kq_ssb(KqFmt.iq2s), xc)
             }
-            t.iq2ss <- i2c
+            t.iq2ss <- xc
         }
         return true
     }
     if (name == "iq2xss") {
         if (!empty(t.iq2xss)) {
-            var @exact_size i2xc : array<uint8>
-            let nsb = long_length(t.iq2xss) / IQ2XS_SSB
-            i2xc |> reserve_resize(nsb * 18l)
+            var @exact_size xc : array<uint8>
             unsafe {
-                var dp = addr(i2xc[0])
-                let sp = addr < uint8 const? >(t.iq2xss[0])
-                for (sb in range64(nsb)) {
-                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ2XS_SSB + 4l), 16)
-                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ2XS_SSB]
-                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ2XS_SSB + 1l]
-                }
+                kq_split_scale_plane(KqFmt.iq2xs, addr < uint8 const? >(t.iq2xss[0]), long_length(t.iq2xss) / kq_ssb(KqFmt.iq2xs), xc)
             }
-            t.iq2xss <- i2xc
+            t.iq2xss <- xc
         }
         return true
     }
     if (name == "iq2xxss") {
         if (!empty(t.iq2xxss)) {
-            var @exact_size i2xxc : array<uint8>
-            let nsb = long_length(t.iq2xxss) / IQ2XXS_SSB
-            i2xxc |> reserve_resize(nsb * 18l)
+            var @exact_size xc : array<uint8>
             unsafe {
-                var dp = addr(i2xxc[0])
-                let sp = addr < uint8 const? >(t.iq2xxss[0])
-                for (sb in range64(nsb)) {
-                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * IQ2XXS_SSB + 4l), 16)
-                    dp[nsb * 16l + sb * 2l] = sp[sb * IQ2XXS_SSB]
-                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * IQ2XXS_SSB + 1l]
-                }
+                kq_split_scale_plane(KqFmt.iq2xxs, addr < uint8 const? >(t.iq2xxss[0]), long_length(t.iq2xxss) / kq_ssb(KqFmt.iq2xxs), xc)
             }
-            t.iq2xxss <- i2xxc
+            t.iq2xxss <- xc
         }
         return true
     }
     if (name == "k2s") {
         if (!empty(t.k2s)) {
-            var @exact_size k2c : array<uint8>
-            let nsb = long_length(t.k2s) / K2_SSB
-            k2c |> reserve_resize(nsb * K2_SSB)
+            var @exact_size xc : array<uint8>
             unsafe {
-                var dp = addr(k2c[0])
-                let sp = addr < uint8 const? >(t.k2s[0])
-                for (sb in range64(nsb)) {
-                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * K2_SSB + 4l), 16)
-                    for (h in range64(4l)) {
-                        dp[nsb * 16l + sb * 4l + h] = sp[sb * K2_SSB + h]
-                    }
-                }
+                kq_split_scale_plane(KqFmt.k2, addr < uint8 const? >(t.k2s[0]), long_length(t.k2s) / kq_ssb(KqFmt.k2), xc)
             }
-            t.k2s <- k2c
+            t.k2s <- xc
         }
         return true
     }
     if (name == "k3s") {
         if (!empty(t.k3s)) {
-            var @exact_size k3c : array<uint8>
-            let nsb = long_length(t.k3s) / K3_SSB
-            k3c |> reserve_resize(nsb * K3_SSB)
+            var @exact_size xc : array<uint8>
             unsafe {
-                var dp = addr(k3c[0])
-                let sp = addr < uint8 const? >(t.k3s[0])
-                for (sb in range64(nsb)) {
-                    memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * 18l), 16)
-                    dp[nsb * 16l + sb * 2l] = sp[sb * 18l + 16l]
-                    dp[nsb * 16l + sb * 2l + 1l] = sp[sb * 18l + 17l]
-                }
+                kq_split_scale_plane(KqFmt.k3, addr < uint8 const? >(t.k3s[0]), long_length(t.k3s) / kq_ssb(KqFmt.k3), xc)
             }
-            t.k3s <- k3c
+            t.k3s <- xc
         }
         return true
     }
     if (name != "k6s") {
         return false
     }
-    // k6: the GPU split form — [nsb x 16B sub-scale strips][nsb x f16 d halfwords]
     if (!empty(t.k6s)) {
         var @exact_size k6c : array<uint8>
-        let nsb = long_length(t.k6s) / K6_SSB
-        k6c |> reserve_resize(nsb * K6_SSB)   // a 27B-class q6 region is a ~120 MB strip — one grow
         unsafe {
-            var dp = addr(k6c[0])
-            let sp = addr < uint8 const? >(t.k6s[0])
-            for (sb in range64(nsb)) {
-                memcpy(reinterpret<void?>(dp + sb * 16l), reinterpret<void const?>(sp + sb * 18l), 16)
-                dp[nsb * 16l + sb * 2l] = sp[sb * 18l + 16l]
-                dp[nsb * 16l + sb * 2l + 1l] = sp[sb * 18l + 17l]
-            }
+            kq_split_scale_plane(KqFmt.k6, addr < uint8 const? >(t.k6s[0]), long_length(t.k6s) / K6_SSB, k6c)
         }
         t.k6s <- k6c
     }

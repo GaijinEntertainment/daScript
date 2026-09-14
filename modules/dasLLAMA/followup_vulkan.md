@@ -516,7 +516,7 @@ module) is independent and can land any time - it is pure structure.
     and `K6Cm2LBatch`/`K6Cm2MBatch` are six hand-stamped bodies over two axes (tile width
     128/256, decode format) - nine since the MoE s tiles (`*Cm2SBatch`, 32-row columns with
     the semi-fast partial-column path) joined them, generated from the m bodies by a script;
-    `REVIEW_GPU.md`'s twin rule asks for one `class template` with a
+    `REVIEW_GPU_KERNEL_CLASSES.md`'s twin rule asks for one `class template` with a
     `@template_constant` for the width, typedefs for the block/coopmat types, and a
     `def override decode_*` per format - the shape `harness/vk_gemm_probe.das`'s `K6PxBase`
     already proves. Gate: the nine oracle cells in `tests/test_vulkan_kernels.das` stay 0-off,

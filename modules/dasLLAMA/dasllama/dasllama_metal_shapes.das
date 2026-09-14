@@ -103,6 +103,7 @@ enum MetalPrefillDecline {
     gpu_error           // dispatch failed at execution time
     planar              // weights not in the blob-image form (the drivers are blob-only)
     dn_state            // recurrent state not GPU-resident and no CPU prefix to sync from
+    moe_twin            // an expert plane format whose only Metal kernels are the tensor twins, and this box compiled none
 }
 
 //! Layer-stack features a model's graph needs beyond the base llama dense block — ONE derivation
@@ -176,11 +177,11 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
     if (missing.qd_neq_dim) { tab["need_qd_neq_dim"]++ }
 }
 
-// the kq formats the Metal kernels implement — anything else (the q4_0 QAT tier, future
-// formats) must DECLINE kquant_native instead of falling into a wrong-layout kernel branch
-// (the dispatchers below treat "not k4/k6" as k5)
+// the kq formats the Metal kernels implement — anything else (a future format) must DECLINE
+// kquant_native instead of falling into a wrong-layout kernel branch (the dispatchers below
+// treat "not k4/k6" as k5)
 def kq_fmt_gpu_supported(f : KqFmt) : bool {
-    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
+    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
 }
 
 def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
@@ -253,6 +254,12 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     return false
 }
 
+//! the expert plane formats the Metal routed block has kernels for (mx4 rides its own gpt-oss arm)
+def moe_fmt_metal_served(f : KqFmt) : bool {
+    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3
+        || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
+}
+
 // The MoE serve gate — covered graph shapes: plain routed FFN (qwen3moe, silu, no biases)
 // + optional sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared dual branch, and
 // gpt-oss's mx4 experts (softmax_weight, biases, disk-order). No dense-lead / selection bias.
@@ -298,8 +305,8 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
     let k = c.n_expert_used
     let nfe = c.n_ff_exp
     let ege = c.dim * nfe
-    // select holds 8 logits per lane (ne <= 256); %64 dims = the gathered mul_mm C tiles
-    if (ne < 1l || ne > 256l || k < 1l || k > 16l || k > ne || nfe <= 0l ||
+    // the select stamps hold 8 or 16 logits per lane (ne <= 512); %64 dims = the gathered mul_mm C tiles
+    if (ne < 1l || ne > 512l || k < 1l || k > 16l || k > ne || nfe <= 0l ||
             (c.dim % 64l) != 0l || (nfe % 64l) != 0l ||
             ne * ege > 3800000000l ||   // uint32 in-kernel indices (q8 byte view = elements * 34/32)
             t.router_off < 0l || empty(t.we1_offs) || empty(t.we2_offs) || empty(t.we3_offs)) {
@@ -323,6 +330,9 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)
+        if (!moe_fmt_metal_served(f1) || !moe_fmt_metal_served(f2) || !moe_fmt_metal_served(f3)) {
+            return false
+        }
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
         // q51 whole 32-blocks (+ the mul_mm's 64-col output tiles)
         let sb1 = kq_sb(f1)
@@ -350,6 +360,23 @@ let DECODE_NEEDS_OK = (MetalNeed.neox | MetalNeed.qkv_bias | MetalNeed.qk_norm |
 // q_gated/partial_rope only occur on hybrid models (attn_is_std false), which batch graph-declines;
 // ple (E-series) has no batch arm either — batched steps decline `feature` and fall back per-row
 let BATCH_NEEDS_OK = DECODE_NEEDS_OK & ~MetalNeed.ple   // clear ple explicitly (XOR would re-add it if DECODE ever drops it)
+
+//! a routed model with no dense lead and no dense shared branch dispatches none, so its file's dense width gates nothing
+def has_dense_ffn(t : Model) : bool => t.blocks.ffn_is_dense || t.config.n_layer_dense_lead > 0l || t.config.moe_dense_shexp
+
+//! The mul_mm tile gate: every served width on the 64 lattice - the dense FFN width only where
+//! a dense FFN dispatches, the second MatFormer width where one exists, both attention widths
+//! on both head classes
+def mm_tile_widths_64_ok(t : Model) : bool {
+    let c = t.config
+    let hs_sw = c.head_size_swa > 0l ? c.head_size_swa : c.head_size
+    let kvh_sw = c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads
+    let h1 = ffn_second_hidden(t)
+    return ((c.dim % 64l) == 0l && (!has_dense_ffn(t) || (layer_hidden(t, 0l) % 64l) == 0l) &&
+        h1 >= 0l && (h1 % 64l) == 0l &&
+        ((c.n_heads * c.head_size) % 64l) == 0l && ((c.n_kv_heads * c.head_size) % 64l) == 0l &&
+        ((c.n_heads * hs_sw) % 64l) == 0l && ((kvh_sw * hs_sw) % 64l) == 0l)
+}
 
 //! The second distinct per-layer FFN width (MatFormer E-series: a prefix at one width, the rest
 //! at another). 0 = uniform; -1 = more than two widths — no served form.
@@ -398,7 +425,7 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
         return MetalDecodeDecline.layers
     }
     // sliding masking lives on the CHUNKED path only — window >= 128 (the single-form depth ceiling's clamp max) guarantees the single form never sees a masked row; decline tighter
-    if (((c.dim % 32l) != 0l || (hidden % 32l) != 0l || (h1 > 0l && (h1 % 32l) != 0l)) ||
+    if (((c.dim % 32l) != 0l || (has_dense_ffn(t) && (hidden % 32l) != 0l) || (h1 > 0l && (h1 % 32l) != 0l)) ||
             (c.sliding_window > 0l && c.sliding_window < 128l)) {
         return MetalDecodeDecline.shape
     }

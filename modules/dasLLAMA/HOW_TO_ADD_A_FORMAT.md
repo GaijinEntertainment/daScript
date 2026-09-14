@@ -365,10 +365,14 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    globals + `compile_pso` + `release_pso` lines in the three ladders; every `g_pso_*` global is
    declared by hand in `dasllama_metal_common.das`, since `[metal_dispatch(pso = ...)]` only
    names it.
-4. **Ladders:** `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`
-   (the base mul_mm only - no tensor / tall / dev-W twins: those are the M5 kernel pass),
-   `pf_devw_panel_kq` (returns false - its `dq` pick would otherwise be k5's), `enc_site_gemv`
-   (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3` predicates (shapes), and last the gate.
+4. **Ladders:** `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`,
+   `enc_site_gemv` (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3`
+   predicates (shapes), and last the gate. The tensor side is one class: a `stage16` override on
+   `MetalKqMulMmSplitTensorBase` (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2aa) gives the format its T/TH
+   mul_mm twins, its dev-W dequant pass (`MetalKqDequant<Fmt>`, plus the bake mirror and the split
+   set in `pf_kq_split_fmt`), and its routed expert twins (`MetalMoeMulMm<Fmt>SplitT`,
+   `ARCHITECTURE_GPU_PREFILL_MOE.md`); the decode GEMV derives from `MetalGemvSiteT` so the
+   dense and the expert-indexed stamps share one body (`enc_moe_gemv`, `moe_fmt_metal_served`).
 5. **Tests:** `dequant_iq4xs_plane_superblock_at` (`dasllama_convert.das`, the split-layout
    twin the CPU row now calls), fixtures at fmt 44 in `tests/_metal_kernel_common.das`, the
    ladders + calls in `test_metal_gemv_kernels.das` (GEMV, B2/B4/B8) and

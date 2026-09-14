@@ -1,11 +1,12 @@
 # dasLLAMA Measurement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `PERF_LEDGER.md`.
+doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md` for the Metal tier,
+`followup_vulkan.md` for the Vulkan tier, `followup_general.md` for everything else.
 
 Figure rules here bind any text this change adds - in the repo, in a commit message, or in its PR body - outside the
 pages a `site*/` or `utils/` folder checklist owns (repo root); those pages answer to their own
-checklist. The ledger rules key on `PERF_LEDGER.md`. The naming a figure rule asks for sits in
+checklist. The naming a figure rule asks for sits in
 the figure's own sentence, in a table heading that covers the table's rows, in a section-level
 provenance line that covers the paragraphs under it, or in a citation of the passage whose
 provenance line covers it. An arm is one side of a pair held against the other. Flags are the
@@ -24,14 +25,14 @@ the run's report.** The `-jit` script is `benchmarks/lcpp_bench.das` run as a sc
 
 **A `PERF_LEDGER.md` entry stating a figure no cell, script, or exe of this repository produced
 tags it `external`; a figure one of them produced carries no such tag, whatever binary the run
-timed - a ratio whose own side came from a cell, script or exe of this repository included.**
+timed - a ratio with either side produced by a cell, script or exe of this repository included.**
 
 **A `PERF_LEDGER.md` ratio against a third-party engine names that engine's exe and the command
 line it ran under.**
 
-**A difference, ratio, or percentage of two measured figures - a wall or a rate - neither
-produced by the `-jit` script, written into `PERF_LEDGER.md` carries both raw figures in the
-entry.**
+**A difference, ratio, or percentage of two measured figures - a wall or a rate - written into
+`PERF_LEDGER.md` carries the raw figure of every side the `-jit` script did not produce; only a
+pair with both sides from the `-jit` script enters as its ratio alone.**
 
 **A `-jit` ratio written into `PERF_LEDGER.md` names the arm it is measured against.**
 
@@ -106,9 +107,8 @@ model, never spawning a child process.** A shipped exe carries no vehicle model 
 file a harness run drives - and no harness script, so a model or a child there is a hang or a
 silent skip.
 
-**A shipped exe's startup race never races a `[tune]` kernel family; a GPU pipeline-state twin
-race, which only sets a runtime knob, is what a first start may do**
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a). A `[tune]` winner needs a recompiled clone the
+**A shipped exe's startup race races only a GPU pipeline-state twin, which sets a runtime knob -
+never a `[tune]` kernel family** (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a). A `[tune]` winner needs a recompiled clone the
 shipped exe does not carry.
 
 **A diff never adds a confirm - an end-to-end A/B served on a vehicle model in a spawned

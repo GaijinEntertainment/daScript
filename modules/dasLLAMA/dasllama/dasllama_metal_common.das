@@ -146,7 +146,8 @@ var @scratch g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorte
 // builders — co-located with their kernel class, some in prefill.das — see the pipeline they
 // dispatch; compile_pso() assignments + shutdown releases stay in kernels' metal_decode_init) =====
 var g_pso_gemv : MetalComputePipeline?
-var g_gemv_rows = 4l                       // rows (simdgroups) per MoE router/expert GEMV threadgroup (the dense GEMV geometry is fixed)
+var g_pso_gemv_sg : MetalComputePipeline?    // the row-per-simdgroup q8 GEMV (n <= GEMV_SG_MAX_N sites)
+var g_gemv_rows = 4l                      // rows (simdgroups) per MoE router/expert GEMV threadgroup (the dense GEMV geometry is fixed)
 var g_pso_rms : MetalComputePipeline?
 var g_pso_rms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel
 var g_pso_add : MetalComputePipeline?
@@ -155,6 +156,10 @@ var g_pso_addrms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twi
 var g_pso_preaddrms : MetalComputePipeline?
 var g_pso_swiglu : MetalComputePipeline?
 var g_pso_swiglu_hx : MetalComputePipeline?   // dual-store stamp
+var g_pso_swiglu_hxb : MetalComputePipeline?   // the routed block's activation, guard off the bucket rail's padded total
+var g_pso_swiglu_b : MetalComputePipeline?
+var g_pso_geglu_hxb : MetalComputePipeline?
+var g_pso_geglu_b : MetalComputePipeline?
 var g_pso_geglu : MetalComputePipeline?
 var g_pso_geglu_hx : MetalComputePipeline?    // dual-store stamp
 // ===== tower primitives (compiled in the tower driver's init) =====
@@ -207,8 +212,16 @@ var g_pso_emb : MetalComputePipeline?
 var g_pso_emb_k6 : MetalComputePipeline?     // tied-k6 spec chain's embed gather
 var g_pso_moe_router : MetalComputePipeline?   // MoE (Wave C): router GEMV over the fp32 slab
 var g_pso_moe_select : MetalComputePipeline?   // softmax + top-k + renorm (one simdgroup)
+var g_pso_moe_select_512 : MetalComputePipeline?   // the 16-deep ladder past 256 experts
 var g_pso_moe_gemv_q8 : MetalComputePipeline?  // expert-indexed GEMV twins (grid.y = slot)
 var g_pso_moe_kq_k4 : MetalComputePipeline?
+var g_pso_moe_kq_k3 : MetalComputePipeline?
+var g_pso_moe_kq_iq3s : MetalComputePipeline?
+var g_pso_moe_kq_iq3xxs : MetalComputePipeline?
+var g_pso_moe_kq_iq2s : MetalComputePipeline?
+var g_pso_moe_kq_iq2xs : MetalComputePipeline?
+var g_pso_moe_kq_iq2xxs : MetalComputePipeline?
+var g_pso_moe_kq_iq4xs : MetalComputePipeline?
 var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
@@ -229,6 +242,7 @@ var g_pso_axpy_sig : MetalComputePipeline?     // y += x ⊙ σ(g[row]) — the 
 var g_pso_qkvrs16 : MetalComputePipeline?   // fused QKV+rope+store (s16 path)
 var g_pso_qkvrs32 : MetalComputePipeline?
 var g_pso_w13sw : MetalComputePipeline?
+var g_pso_w13sw_sg : MetalComputePipeline?   // its row-per-simdgroup form
 var g_pso_kq_k4 : MetalComputePipeline?
 var g_pso_kq_k5 : MetalComputePipeline?
 var g_pso_kq_k5c : MetalComputePipeline?   // the select-form nr0=1 twin — n < 3072 / small-d sites
@@ -267,6 +281,11 @@ var g_pso_kq_mvb2_iq4nl : MetalComputePipeline?
 var g_pso_kq_mvb4_iq4nl : MetalComputePipeline?
 var g_pso_kq_mvb8_iq4nl : MetalComputePipeline?
 var g_pso_kq_mm_b45 : MetalComputePipeline?
+var g_pso_kq_q40 : MetalComputePipeline?
+var g_pso_kq_mvb2_q40 : MetalComputePipeline?
+var g_pso_kq_mvb4_q40 : MetalComputePipeline?
+var g_pso_kq_mvb8_q40 : MetalComputePipeline?
+var g_pso_kq_mm_b40 : MetalComputePipeline?
 var g_pso_kq_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb2_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb4_iq2s : MetalComputePipeline?

@@ -1077,6 +1077,100 @@ def private rms_hx_gate(t : T?; dev, queue; dim, nrows : int; eps : float) {
     delete want
 }
 
+// The bound-total ew2 stamps (TOTB): a launch over the CPU's padded bound touches nothing past
+// totb[0] * row_elems - the tail keeps its sentinel on both g and gh
+def private ew2_totb_gate(t : T?; dev, queue; geglu, hx : bool; rows, row_elems, bound_rows : int) {
+    let tag = "{geglu ? "geglu" : "swiglu"}{hx ? "_hx" : ""}_b rows={rows} elems={row_elems} bound={bound_rows}"
+    var err : string
+    var pso : MetalComputePipeline?
+    if (geglu && hx) {
+        pso = pipeline_from_source(dev, MetalGegluHXB_metal_ew2_msl, MetalGegluHXB_metal_ew2_msl_entry, MetalGegluHXB_metal_ew2_msl_fastmath, err)
+    } elif (geglu) {
+        pso = pipeline_from_source(dev, MetalGegluB_metal_ew2_msl, MetalGegluB_metal_ew2_msl_entry, MetalGegluB_metal_ew2_msl_fastmath, err)
+    } elif (hx) {
+        pso = pipeline_from_source(dev, MetalSwigluHXB_metal_ew2_msl, MetalSwigluHXB_metal_ew2_msl_entry, MetalSwigluHXB_metal_ew2_msl_fastmath, err)
+    } else {
+        pso = pipeline_from_source(dev, MetalSwigluB_metal_ew2_msl, MetalSwigluB_metal_ew2_msl_entry, MetalSwigluB_metal_ew2_msl_fastmath, err)
+    }
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let total = bound_rows * row_elems
+    let live = rows * row_elems
+    var sg : array<float>
+    var su : array<float>
+    var want : array<float>
+    sg |> resize(total)
+    su |> resize(total)
+    want |> resize(total)
+    for (k in range(total)) {
+        sg[k] = 0.21 * float(k % 43) - 4.3
+        su[k] = 0.31 * float(k % 17) - 2.5
+    }
+    for (k in range(total)) {
+        let a = sg[k]
+        if (k >= live) {
+            want[k] = a   // past the rail's total: untouched
+        } elif (geglu) {
+            want[k] = 0.5 * a * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.7978845608028654 * (a + 0.044715 * a * a * a))))) * su[k]
+        } else {
+            want[k] = (a / (1.0 + exp(-a))) * su[k]
+        }
+    }
+    var bsg = buf_upload(dev, sg)
+    var bsu = buf_upload(dev, su)
+    var btot = buf_u32(dev, uint(total))
+    var bgh = buf_fill(dev, total, float16(-1000.0))
+    var totv : array<uint>
+    totv |> push(0xFFFFFFFFu)   // the row count sits at the bind offset, past a poison word - the basep[ne] shape
+    totv |> push(uint(rows))
+    var btb = buf_upload(dev, totv)
+    var btm = buf_u32(dev, uint(row_elems))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bsg, 0ul, 0)
+        metal_set_buffer(enc, bsu, 0ul, 1)
+        metal_set_buffer(enc, btot, 0ul, 2)
+        if (hx) {
+            metal_set_buffer(enc, bgh, 0ul, 4)
+        }
+        metal_set_buffer(enc, btb, 4ul, 5)
+        metal_set_buffer(enc, btm, 0ul, 6)
+        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: dispatch: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bsg, want, tag), 0)
+        // the control for the TOTB stamps: the approx compare must RED on a poisoned expectation -
+        // an added abs(want[0])*0.1 + 1.0, past buf_mismatch_approx's 1e-4*max(1, |v|) band at any
+        // magnitude, so the bar is known to discriminate on this arm
+        var wantp := want
+        wantp[0] += abs(want[0]) * 0.1 + 1.0
+        t |> success(buf_mismatch_approx(bsg, wantp, "{tag} CONTROL(expected-red)") != 0, "{tag}: poison control reds")
+        delete wantp
+        if (hx) {
+            let ggpu <- buf_download(bsg, total, type<float>)
+            var wanth : array<float16>
+            wanth |> resize(total)
+            for (k in range(total)) {
+                wanth[k] = k < live ? float16(ggpu[k]) : float16(-1000.0)
+            }
+            t |> equal(buf_mismatch_exact(bgh, wanth, tag), 0)
+            delete wanth
+        }
+    }
+    metal_release(bsg)
+    metal_release(bsu)
+    metal_release(btot)
+    metal_release(bgh)
+    metal_release(btb)
+    metal_release(btm)
+    metal_release(pso)
+    delete sg
+    delete su
+    delete want
+    delete totv
+}
+
 // The dual-store ew2 stamps (swiglu/geglu HX): g must match the base combine and gh must be
 // the RNE narrow of the value the same thread stored.
 def private ew2_hx_gate(t : T?; dev, queue; geglu : bool; total : int) {
@@ -1945,6 +2039,11 @@ def test_metal_misc_kernels(t : T?) {
                 rms_hx_gate(t, dev, queue, 2048, 3, 1.0e-6)
                 ew2_hx_gate(t, dev, queue, false, 2048 * 3)
                 ew2_hx_gate(t, dev, queue, true, 2048 * 3)
+                // the bound-total stamps: 40 live rows of 64 inside a 96-row launch, all four combine/twin arms
+                ew2_totb_gate(t, dev, queue, false, true, 40, 64, 96)
+                ew2_totb_gate(t, dev, queue, false, false, 40, 64, 96)
+                ew2_totb_gate(t, dev, queue, true, true, 40, 64, 96)
+                ew2_totb_gate(t, dev, queue, true, false, 40, 64, 96)
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
                 clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail
@@ -2089,7 +2188,7 @@ def test_kq_rows_race_verdicts(t : T?) {
                 t |> success(r.base_ms > 0.0lf && r.twin_ms > 0.0lf, "{r.family}: both arms timed (twin {r.base_ms:.3f} ms, passes {r.twin_ms:.3f} ms) {r.note}")
                 t |> success(r.winner == "tensor" || r.winner == "simdgroup", "{r.family}: a verdict, not a dispatch failure ({r.winner}: {r.note})")
             }
-            t |> equal(seen, 12, "every K-quant format with a small-batch twin raced")
+            t |> equal(seen, 13, "every K-quant format with a small-batch twin raced")
             t |> equal(form, 1, "the k4 twin's two-row tile raced its two-column form")
         } else {
             t |> skip("das_metal is not built on this platform")

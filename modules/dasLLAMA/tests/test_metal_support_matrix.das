@@ -856,7 +856,7 @@ def private tensor_twin_row(t : T?; path, tag : string; optional : bool = false)
             "kq_mulmm_k5,kq_mulmm_k6,moe_mulmm_mx4,moe_mulmm_q8,mulmm_bf16,mulmm_q8," +
             "kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs," +
             "kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs," +
-            "kq_gemv_iq3s_f4,kq_gemv_iq3xxs_f4,kq_gemv_iq2xxs_f4")
+            "kq_gemv_iq3s_f4,kq_gemv_iq3xxs_f4,kq_gemv_iq2xxs_f4,hmm_tall")
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         var trg <- blob_twin(t, path, 512l)

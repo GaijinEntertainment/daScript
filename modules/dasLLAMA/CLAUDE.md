@@ -4,7 +4,8 @@ dasLLAMA is the daslang LLM / ASR / vision engine, in-tree at `modules/dasLLAMA/
 built and why is the `ARCHITECTURE*.md` set beside this file** (`ARCHITECTURE.md` routes to the
 engine, image, GPU, Vulkan, Metal, measurement and media companions) - read the section you
 are about to work in before writing code here. The rules binding a diff are `REVIEW*.md`;
-`ENVIRONMENT.md` lists every knob; `followup_general.md` / `followup_vulkan.md` are the ledgers;
+`ENVIRONMENT.md` lists every knob; `followup_general.md` / `followup_metal.md` /
+`followup_vulkan.md` are the ledgers;
 `PERF_LEDGER.md` is the measured record; `tests/CLAUDE.md` is the test discipline (run suites
 ONLY through `tests/run.das`).
 

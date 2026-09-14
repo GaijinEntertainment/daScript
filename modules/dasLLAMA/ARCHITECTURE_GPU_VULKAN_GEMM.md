@@ -254,9 +254,9 @@ and its 2560 words hold the eight subgroups' 256-word fragments - and writes und
 column bounds through a bit cast. Moving any of the three levers back - the word stage, the f16
 accumulator width, the two-by-four tiling - costs rate: the word stage the most, the
 accumulator width next, the tiling least; the probe's `khrx` arms measure them
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.5) and `followup_vulkan.md` item 42 keeps the figures. On
-a partial token column the edge store costs nothing beyond the padded rows: per computed row a
-300-token window runs at the whole-window rate.
+(`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a) and `followup_vulkan.md` item 42 keeps
+the figures. On a partial token column the edge store costs nothing beyond the padded rows: per
+computed row a 300-token window runs at the whole-window rate.
 
 **The two staging arrays are the whole footprint by design.** A third array for the bounce
 costs the tile a seventh of its rate, because 8 KB more shared memory per workgroup is one

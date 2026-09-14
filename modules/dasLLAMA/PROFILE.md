@@ -126,6 +126,11 @@ DASLLAMA_BOX=<box> bin/daslang modules/dasLLAMA/performance/gen_bench_records.da
   restored it; llama.cpp refs never moved). The cv retry cannot catch a stable-low cell - only
   cool-slot entry can. Refs get no cool slot on purpose: they are insensitive, and skipping it
   saves hours.
+- `--catalog all` visits every `model_specs.das` row the box stocks instead of the public board's
+  `official` rows - the sweep form, one model at a time with `-o <substring>`; each row still
+  runs the parity pregate, so a row needs evidence. `--store <path>` reads and writes that file
+  instead of `records/<box>.json`, keeping a sweep's rows out of the site merge and the store
+  sweeps.
 - `--oracle-settle <seconds>` (default 60) idles before every timed oracle cell, GPU and CPU
   legs alike. The previous cell's heat outlives the 12 s reclaim settle: on the M5 Max
   (`powermetrics --samplers gpu_power,thermal` beside the Metal cells) the GPU still runs a

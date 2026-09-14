@@ -11,6 +11,7 @@ require ?das_metal dasllama/dasllama_metal_prefill  // the mul_mm twins (bf16 + 
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers, kq plane builders + eyeball-dump compares
 require dasllama/dasllama_convert         // devw_dequant_*_core — the image mint's dev-W bake mirrors
+require dasllama/dasllama_gemm_schema     // kq_qsb — the ONE per-format quant-plane stride source
 require math
 require strings
 
@@ -33,32 +34,32 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     var err : string
     let src = (tensor
         ? (tall
-            ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl))
+            ? (fmt == 34 ? MetalKqMulMmIq3xxsTH128_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sTH128_metal_kq_mulmm_iq3s_t_msl : (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl))))
         : halfx
-            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl)))))))))))
-            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl))))))))))))
-        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : MetalKqMulMmK6_metal_kq_mulmm_msl))))))))))))
+            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl : (fmt == 40 ? MetalKqMulMmQ40TH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl))))))))))))
+            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl : (fmt == 40 ? MetalKqMulMmQ40T_metal_kq_mulmm_iq4xs_t_msl : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl)))))))))))))
+        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl : (fmt == 40 ? MetalKqMulMmQ40_metal_kq_mulmm_msl : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : MetalKqMulMmK6_metal_kq_mulmm_msl)))))))))))))
     let entry = (tensor
         ? (tall
-            ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry))
+            ? (fmt == 34 ? MetalKqMulMmIq3xxsTH128_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sTH128_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry))))
         : halfx
-            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_entry : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry)))))))))))
-            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_entry : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry))))))))))))
-        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_entry : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_entry : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_entry : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_entry : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_entry : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : MetalKqMulMmK6_metal_kq_mulmm_msl_entry))))))))))))
+            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_entry : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_entry : (fmt == 40 ? MetalKqMulMmQ40TH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry))))))))))))
+            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_entry : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_entry : (fmt == 40 ? MetalKqMulMmQ40T_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry)))))))))))))
+        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_entry : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_entry : (fmt == 40 ? MetalKqMulMmQ40_metal_kq_mulmm_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_entry : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_entry : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_entry : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_entry : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : MetalKqMulMmK6_metal_kq_mulmm_msl_entry)))))))))))))
     let fm = (tensor
         ? (tall
-            ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath))
+            ? (fmt == 34 ? MetalKqMulMmIq3xxsTH128_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sTH128_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath))))
         : halfx
-            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath)))))))))))
-            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath))))))))))))
-        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath))))))))))))
+            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_fastmath : (fmt == 40 ? MetalKqMulMmQ40TH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath))))))))))))
+            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_fastmath : (fmt == 40 ? MetalKqMulMmQ40T_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath)))))))))))))
+        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_fastmath : (fmt == 40 ? MetalKqMulMmQ40_metal_kq_mulmm_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath)))))))))))))
     let tgm = (tensor
         ? (tall
-            ? (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_tgmem))
+            ? (fmt == 34 ? MetalKqMulMmIq3xxsTH128_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sTH128_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_tgmem))))
         : halfx
-            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem)))))))))))
-            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem))))))))))))
-        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem))))))))))))
+            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_tgmem : (fmt == 40 ? MetalKqMulMmQ40TH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem))))))))))))
+            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_tgmem : (fmt == 40 ? MetalKqMulMmQ40T_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem)))))))))))))
+        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_tgmem : (fmt == 40 ? MetalKqMulMmQ40_metal_kq_mulmm_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem)))))))))))))
     var pso = pipeline_from_source(dev, src, entry, fm, err)
     if (tensor && pso == null && !metal4_tensor_available(dev)) {
         t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
@@ -114,9 +115,9 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
     // the 32-row TH covers the rest at its x/y byte offsets - the nonzero-offset arm's binding
     let r0 = tall ? m / 128 * 128 : m
     var rem_pso = (tall && r0 != m) ? pipeline_from_source(dev,
-            fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl),
-            fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry),
-            fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath),
+            fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl))),
+            fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry))),
+            fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath))),
             err) : null
     if (tall && r0 != m) {
         t |> success(rem_pso != null, "{tag}: remainder pipeline: {err}")
@@ -134,7 +135,7 @@ def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim,
         metal_dispatch_threadgroups(enc, uint3(uint(m / (tall ? 128 : 32)), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
         if (rem_pso != null) {
             metal_set_pipeline(enc, rem_pso)
-            metal_set_threadgroup_memory_length(enc, fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem), 0)
+            metal_set_threadgroup_memory_length(enc, fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem))), 0)
             metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)
             metal_set_buffer(enc, bks, 0ul, 1)
             metal_set_buffer(enc, bkq, 0ul, 2)
@@ -428,16 +429,61 @@ def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 32)
     delete wdeq
 }
 
-// the kq dev-W chains: the format's superblock dequant into a device f16 panel, then the
-// SAME all-device GEMM as q8's - per-format truth via kq_row_ref, plus the shared
-// poison-panel negative control (dequant skipped must miss the oracle)
+//! one format's dev-W dequant kernel, with the threadgroup memory the split-scale chunk passes need
+def private kq_dq_kernel(fmt) : tuple<src : string; entry : string; fm : bool; tgm : uint64> {
+    if (fmt == 4) return (src = MetalDequantK4H_metal_dequant_k45_msl, entry = MetalDequantK4H_metal_dequant_k45_msl_entry, fm = MetalDequantK4H_metal_dequant_k45_msl_fastmath, tgm = 0ul)
+    if (fmt == 5) return (src = MetalDequantK5H_metal_dequant_k45_msl, entry = MetalDequantK5H_metal_dequant_k45_msl_entry, fm = MetalDequantK5H_metal_dequant_k45_msl_fastmath, tgm = 0ul)
+    if (fmt == 6) return (src = metal_dequant_k6h_msl, entry = metal_dequant_k6h_msl_entry, fm = metal_dequant_k6h_msl_fastmath, tgm = 0ul)
+    if (fmt == 44) return (src = MetalKqDequantIq4xs_metal_kq_dequant_iq4xs_msl, entry = MetalKqDequantIq4xs_metal_kq_dequant_iq4xs_msl_entry, fm = MetalKqDequantIq4xs_metal_kq_dequant_iq4xs_msl_fastmath, tgm = MetalKqDequantIq4xs_metal_kq_dequant_iq4xs_msl_tgmem)
+    if (fmt == 45) return (src = MetalKqDequantIq4nl_metal_kq_dequant_iq4xs_msl, entry = MetalKqDequantIq4nl_metal_kq_dequant_iq4xs_msl_entry, fm = MetalKqDequantIq4nl_metal_kq_dequant_iq4xs_msl_fastmath, tgm = MetalKqDequantIq4nl_metal_kq_dequant_iq4xs_msl_tgmem)
+    if (fmt == 40) return (src = MetalKqDequantQ40_metal_kq_dequant_iq4xs_msl, entry = MetalKqDequantQ40_metal_kq_dequant_iq4xs_msl_entry, fm = MetalKqDequantQ40_metal_kq_dequant_iq4xs_msl_fastmath, tgm = MetalKqDequantQ40_metal_kq_dequant_iq4xs_msl_tgmem)
+    if (fmt == 3) return (src = MetalKqDequantK3_metal_kq_dequant_k3_msl, entry = MetalKqDequantK3_metal_kq_dequant_k3_msl_entry, fm = MetalKqDequantK3_metal_kq_dequant_k3_msl_fastmath, tgm = MetalKqDequantK3_metal_kq_dequant_k3_msl_tgmem)
+    if (fmt == 33) return (src = MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl, entry = MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl_entry, fm = MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl_fastmath, tgm = MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl_tgmem)
+    if (fmt == 34) return (src = MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl, entry = MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl_entry, fm = MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl_fastmath, tgm = MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl_tgmem)
+    if (fmt == 2) return (src = MetalKqDequantK2_metal_kq_dequant_k2_msl, entry = MetalKqDequantK2_metal_kq_dequant_k2_msl_entry, fm = MetalKqDequantK2_metal_kq_dequant_k2_msl_fastmath, tgm = MetalKqDequantK2_metal_kq_dequant_k2_msl_tgmem)
+    if (fmt == 23) return (src = MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl, entry = MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl_entry, fm = MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl_fastmath, tgm = MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl_tgmem)
+    if (fmt == 24) return (src = MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl, entry = MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl_entry, fm = MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl_fastmath, tgm = MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl_tgmem)
+    if (fmt == 25) return (src = MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl, entry = MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl_entry, fm = MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl_fastmath, tgm = MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl_tgmem)
+    panic("kq_dq_kernel: no dev-W dequant kernel for format {fmt}")
+    return (src = "", entry = "", fm = false, tgm = 0ul)
+}
+
+//! one dequant dispatch of W rows [tbase, tbase+td) into bwh - the plane offsets stride per
+//! superblock as pf_enc_kq_dq's do (16B strips, the d tail past the strips, kq_qsb quant bytes)
+def private kq_dq_dispatch(enc; fmt : int; dq_pso; tgm : uint64;
+                           bks, bkq, bwh, bk, bn; nsb, nb, tbase, td, kdim : int) {
+    let split = fmt != 4 && fmt != 5 && fmt != 6
+    let compact = fmt == 4 || fmt == 5 || fmt == 45 || fmt == 40
+    let so = uint64(tbase * nb * 16)
+    let d0 = compact ? so : uint64(nsb * 16 + tbase * nb * (fmt == 2 ? 4 : 2))
+    metal_set_pipeline(enc, dq_pso)
+    metal_set_buffer(enc, bks, d0, 0)
+    metal_set_buffer(enc, bks, so, 1)
+    metal_set_buffer(enc, bkq, uint64(tbase) * uint64(nb) * uint64(kq_qsb(fmt)), 2)
+    if (split) {
+        metal_set_threadgroup_memory_length(enc, tgm, 0)
+        metal_set_buffer(enc, bwh, 0ul, 3)
+        metal_set_buffer(enc, bwh, 0ul, 4)
+        metal_set_buffer(enc, bk, 0ul, 5)
+        metal_set_buffer(enc, bn, 0ul, 6)
+        metal_set_buffer(enc, bwh, 0ul, 7)
+        metal_dispatch_threadgroups(enc, uint3(uint(kdim / 64), uint(td / 64), 1u), uint3(128u, 1u, 1u))
+    } else {
+        var ka = CvtArgs(total = uint(td * (kdim / 32)))
+        metal_set_buffer(enc, bwh, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        metal_dispatch_threadgroups(enc, uint3(uint((td * (kdim / 32) + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+    }
+}
+
+// the kq dev-W chains: the format's dequant into a device f16 panel, then the SAME all-device
+// GEMM as q8's - per-format truth via kq_row_ref, plus the shared poison-panel negative
+// control (dequant skipped must miss the oracle)
 def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     let tag = "kq_devw_k{fmt} m={m} k={kdim} n={ndim}"
     var err : string
-    let dsrc = fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl : metal_dequant_k6h_msl)
-    let dentry = fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_entry : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_entry : metal_dequant_k6h_msl_entry)
-    let dfm = fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_fastmath : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_fastmath : metal_dequant_k6h_msl_fastmath)
-    var dq_pso = pipeline_from_source(dev, dsrc, dentry, dfm, err)
+    let dk = kq_dq_kernel(fmt)
+    var dq_pso = pipeline_from_source(dev, dk.src, dk.entry, dk.fm, err)
     var mm_pso = pipeline_from_source(dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, err)
     if (mm_pso == null && !metal4_tensor_available(dev)) {
         to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
@@ -447,7 +493,6 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     return if (dq_pso == null || mm_pso == null)
     let nb = kdim / 256
     let nsb = ndim * nb
-    let nblk = ndim * (kdim / 32)
     var kq : array<uint8>
     var ks : array<uint8>
     kq_fill_planes(fmt, nsb, kq, ks)
@@ -488,15 +533,8 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     var by = buf_fill(dev, m * ndim, -1000.0)
     var bk = buf_u32(dev, uint(kdim))
     var bn = buf_u32(dev, uint(ndim))
-    var dka = CvtArgs(total = uint(nblk))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, dq_pso)
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
-        metal_set_buffer(enc, bks, 0ul, 1)
-        metal_set_buffer(enc, bkq, 0ul, 2)
-        metal_set_buffer(enc, bwh, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(dka)), uint64(typeinfo sizeof(dka)), 4)
-        metal_dispatch_threadgroups(enc, uint3(uint((nblk + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        kq_dq_dispatch(enc, fmt, dq_pso, dk.tgm, bks, bkq, bwh, bk, bn, nsb, nb, 0, ndim, kdim)
         metal_set_pipeline(enc, mm_pso)
         metal_set_buffer(enc, bwh, 0ul, 0)
         metal_set_buffer(enc, bx, 0ul, 1)
@@ -509,27 +547,17 @@ def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
     if (ran) {
         t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
     }
-    // the N-TILED chain: per-format tile plane offsets (16B scales, 128/160/192B quant
-    // superblocks, the k6 2B d tail) - same math as pf_devw_panel_kq
+    // the N-TILED chain: per-format tile plane offsets - same math as pf_devw_panel_kq
     if (ndim % 128 == 0) {
         let td = ndim / 2
-        let qstride = fmt == 4 ? 128 : (fmt == 5 ? 160 : 192)
         var by_t = buf_fill(dev, m * ndim, -500.0)
         var bwh_t = buf_fill(dev, td * kdim, float16(-100.0))
         var bwh_t2 = buf_fill(dev, td * kdim, float16(-100.0))
-        var tka = CvtArgs(total = uint(td * (kdim / 32)))
         let rant = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
             for (ti in range(2)) {
                 let tbase = ti * td
                 var bwh_ti = ti == 0 ? bwh_t : bwh_t2
-                let so = uint64(tbase * nb * 16)
-                metal_set_pipeline(enc, dq_pso)
-                metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16 + tbase * nb * 2) : so, 0)
-                metal_set_buffer(enc, bks, so, 1)
-                metal_set_buffer(enc, bkq, uint64(tbase * nb * qstride), 2)
-                metal_set_buffer(enc, bwh_ti, 0ul, 3)
-                metal_set_bytes(enc, unsafe(addr<void?>(tka)), uint64(typeinfo sizeof(tka)), 4)
-                metal_dispatch_threadgroups(enc, uint3(uint((td * (kdim / 32) + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+                kq_dq_dispatch(enc, fmt, dq_pso, dk.tgm, bks, bkq, bwh_ti, bk, bn, nsb, nb, tbase, td, kdim)
                 metal_set_pipeline(enc, mm_pso)
                 metal_set_buffer(enc, bwh_ti, 0ul, 0)
                 metal_set_buffer(enc, bx, 0ul, 1)
@@ -803,10 +831,19 @@ def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
 def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : int) {
     let tag = "devw_bake_mirror fmt{fmt} n={ndim} k={kdim}"
     var err : string
-    let dsrc = fmt == 0 ? metal_dequant_q8h_msl : (fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl : metal_dequant_k6h_msl))
-    let dentry = fmt == 0 ? metal_dequant_q8h_msl_entry : (fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_entry : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_entry : metal_dequant_k6h_msl_entry))
-    let dfm = fmt == 0 ? metal_dequant_q8h_msl_fastmath : (fmt == 4 ? MetalDequantK4H_metal_dequant_k45_msl_fastmath : (fmt == 5 ? MetalDequantK5H_metal_dequant_k45_msl_fastmath : metal_dequant_k6h_msl_fastmath))
-    var dq_pso = pipeline_from_source(dev, dsrc, dentry, dfm, err)
+    var dq_pso : MetalComputePipeline?
+    var dtgm = 0ul
+    if (fmt == 0) {
+        dq_pso = pipeline_from_source(dev, metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, err)
+    } else {
+        let dk = kq_dq_kernel(fmt)
+        dq_pso = pipeline_from_source(dev, dk.src, dk.entry, dk.fm, err)
+        dtgm = dk.tgm
+    }
+    if (dq_pso == null && fmt != 0 && fmt != 4 && fmt != 5 && fmt != 6 && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
+        return
+    }
     t |> success(dq_pso != null, "{tag}: pipeline: {err}")
     return if (dq_pso == null)
     let nblk = ndim * (kdim / 32)
@@ -856,23 +893,25 @@ def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : in
         unsafe {
             if (fmt == 6) {
                 devw_dequant_k6_core(addr(kq[0]), addr(ks[0]), 16l, addr(ks[nsb * 16]), 2l, int64(nsb), addr(mir[0]))
-            } else {
+            } elif (fmt == 4 || fmt == 5) {
                 devw_dequant_k45_core(addr(kq[0]), addr(ks[0]), 16l, int64(nsb), fmt == 5, addr(mir[0]))
+            } else {
+                var kf : KqFmt
+                t |> success(kq_fmt_of_stream_code(fmt == 2 ? K2_STREAM_TAG : fmt, kf), "{tag}: format id {fmt} names a KqFmt")
+                t |> success(devw_dequant_kq_mirror(kf, kq, ks, int64(ndim), int64(kdim), mir), "{tag}: the mirror serves the shape")
             }
         }
         var bks = buf_upload(dev, ks)
         var bkq = buf_upload(dev, kq)
+        var bk = buf_u32(dev, uint(kdim))
+        var bn = buf_u32(dev, uint(ndim))
         ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, dq_pso)
-            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   //! k6 keeps its f16 d scales in a tail past the 16B blocks
-            metal_set_buffer(enc, bks, 0ul, 1)
-            metal_set_buffer(enc, bkq, 0ul, 2)
-            metal_set_buffer(enc, bwh, 0ul, 3)
-            metal_set_bytes(enc, unsafe(addr<void?>(dka)), uint64(typeinfo sizeof(dka)), 4)
-            metal_dispatch_threadgroups(enc, uint3(uint((nblk + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+            kq_dq_dispatch(enc, fmt, dq_pso, dtgm, bks, bkq, bwh, bk, bn, nsb, kdim / 256, 0, ndim, kdim)
         }
         metal_release(bks)
         metal_release(bkq)
+        metal_release(bk)
+        metal_release(bn)
         delete kq
         delete ks
     }
@@ -1605,6 +1644,183 @@ def private moe_mulmm_kq_gate(t : T?; dev, queue; fmt : int; kdim, ndim : int; c
     delete env
 }
 
+//! the split-format expert twins (k3 and the iquants ride their dense split classes under the
+//! MoE shell): per form - th, th128, thr - the kernel source, entry, fastmath and tgmem
+def private moe_split_twin(fmt; form) : tuple<src : string; entry : string; fm : bool; tgm : uint64> {
+    if (fmt == 3) {
+        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmK3TH_metal_moe_mulmm_k3_t_msl, entry = MetalMoeMulMmK3TH_metal_moe_mulmm_k3_t_msl_entry, fm = MetalMoeMulMmK3TH_metal_moe_mulmm_k3_t_msl_fastmath, tgm = MetalMoeMulMmK3TH_metal_moe_mulmm_k3_t_msl_tgmem)
+        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmK3TH128_metal_moe_mulmm_k3_t_msl, entry = MetalMoeMulMmK3TH128_metal_moe_mulmm_k3_t_msl_entry, fm = MetalMoeMulMmK3TH128_metal_moe_mulmm_k3_t_msl_fastmath, tgm = MetalMoeMulMmK3TH128_metal_moe_mulmm_k3_t_msl_tgmem)
+        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmK3THR_metal_moe_mulmm_k3_t_msl, entry = MetalMoeMulMmK3THR_metal_moe_mulmm_k3_t_msl_entry, fm = MetalMoeMulMmK3THR_metal_moe_mulmm_k3_t_msl_fastmath, tgm = MetalMoeMulMmK3THR_metal_moe_mulmm_k3_t_msl_tgmem)
+    }
+    if (fmt == 44) {
+        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl_tgmem)
+        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_tgmem)
+        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_tgmem)
+    }
+    if (fmt == 33) {
+        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl, entry = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_entry, fm = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_fastmath, tgm = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_tgmem)
+        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl, entry = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_entry, fm = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_fastmath, tgm = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_tgmem)
+        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq3sTHR_metal_moe_mulmm_iq3s_t_msl, entry = MetalMoeMulMmIq3sTHR_metal_moe_mulmm_iq3s_t_msl_entry, fm = MetalMoeMulMmIq3sTHR_metal_moe_mulmm_iq3s_t_msl_fastmath, tgm = MetalMoeMulMmIq3sTHR_metal_moe_mulmm_iq3s_t_msl_tgmem)
+    }
+    if (fmt == 34) {
+        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq3xxsTH_metal_moe_mulmm_iq3xxs_t_msl, entry = MetalMoeMulMmIq3xxsTH_metal_moe_mulmm_iq3xxs_t_msl_entry, fm = MetalMoeMulMmIq3xxsTH_metal_moe_mulmm_iq3xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq3xxsTH_metal_moe_mulmm_iq3xxs_t_msl_tgmem)
+        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq3xxsTH128_metal_moe_mulmm_iq3xxs_t_msl, entry = MetalMoeMulMmIq3xxsTH128_metal_moe_mulmm_iq3xxs_t_msl_entry, fm = MetalMoeMulMmIq3xxsTH128_metal_moe_mulmm_iq3xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq3xxsTH128_metal_moe_mulmm_iq3xxs_t_msl_tgmem)
+        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq3xxsTHR_metal_moe_mulmm_iq3xxs_t_msl, entry = MetalMoeMulMmIq3xxsTHR_metal_moe_mulmm_iq3xxs_t_msl_entry, fm = MetalMoeMulMmIq3xxsTHR_metal_moe_mulmm_iq3xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq3xxsTHR_metal_moe_mulmm_iq3xxs_t_msl_tgmem)
+    }
+    if (fmt == 23) {
+        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq2sTH_metal_moe_mulmm_iq2s_t_msl, entry = MetalMoeMulMmIq2sTH_metal_moe_mulmm_iq2s_t_msl_entry, fm = MetalMoeMulMmIq2sTH_metal_moe_mulmm_iq2s_t_msl_fastmath, tgm = MetalMoeMulMmIq2sTH_metal_moe_mulmm_iq2s_t_msl_tgmem)
+        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq2sTH128_metal_moe_mulmm_iq2s_t_msl, entry = MetalMoeMulMmIq2sTH128_metal_moe_mulmm_iq2s_t_msl_entry, fm = MetalMoeMulMmIq2sTH128_metal_moe_mulmm_iq2s_t_msl_fastmath, tgm = MetalMoeMulMmIq2sTH128_metal_moe_mulmm_iq2s_t_msl_tgmem)
+        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq2sTHR_metal_moe_mulmm_iq2s_t_msl, entry = MetalMoeMulMmIq2sTHR_metal_moe_mulmm_iq2s_t_msl_entry, fm = MetalMoeMulMmIq2sTHR_metal_moe_mulmm_iq2s_t_msl_fastmath, tgm = MetalMoeMulMmIq2sTHR_metal_moe_mulmm_iq2s_t_msl_tgmem)
+    }
+    if (fmt == 24) {
+        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq2xsTH_metal_moe_mulmm_iq2xs_t_msl, entry = MetalMoeMulMmIq2xsTH_metal_moe_mulmm_iq2xs_t_msl_entry, fm = MetalMoeMulMmIq2xsTH_metal_moe_mulmm_iq2xs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xsTH_metal_moe_mulmm_iq2xs_t_msl_tgmem)
+        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq2xsTH128_metal_moe_mulmm_iq2xs_t_msl, entry = MetalMoeMulMmIq2xsTH128_metal_moe_mulmm_iq2xs_t_msl_entry, fm = MetalMoeMulMmIq2xsTH128_metal_moe_mulmm_iq2xs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xsTH128_metal_moe_mulmm_iq2xs_t_msl_tgmem)
+        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq2xsTHR_metal_moe_mulmm_iq2xs_t_msl, entry = MetalMoeMulMmIq2xsTHR_metal_moe_mulmm_iq2xs_t_msl_entry, fm = MetalMoeMulMmIq2xsTHR_metal_moe_mulmm_iq2xs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xsTHR_metal_moe_mulmm_iq2xs_t_msl_tgmem)
+    }
+    if (fmt == 25) {
+        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq2xxsTH_metal_moe_mulmm_iq2xxs_t_msl, entry = MetalMoeMulMmIq2xxsTH_metal_moe_mulmm_iq2xxs_t_msl_entry, fm = MetalMoeMulMmIq2xxsTH_metal_moe_mulmm_iq2xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xxsTH_metal_moe_mulmm_iq2xxs_t_msl_tgmem)
+        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq2xxsTH128_metal_moe_mulmm_iq2xxs_t_msl, entry = MetalMoeMulMmIq2xxsTH128_metal_moe_mulmm_iq2xxs_t_msl_entry, fm = MetalMoeMulMmIq2xxsTH128_metal_moe_mulmm_iq2xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xxsTH128_metal_moe_mulmm_iq2xxs_t_msl_tgmem)
+        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq2xxsTHR_metal_moe_mulmm_iq2xxs_t_msl, entry = MetalMoeMulMmIq2xxsTHR_metal_moe_mulmm_iq2xxs_t_msl_entry, fm = MetalMoeMulMmIq2xxsTHR_metal_moe_mulmm_iq2xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xxsTHR_metal_moe_mulmm_iq2xxs_t_msl_tgmem)
+    }
+    panic("moe_split_twin: no expert twin for format {fmt} form {form}")
+    return (src = "", entry = "", fm = false, tgm = 0ul)
+}
+
+//! one split-format expert twin dispatch over the contiguous fixtures: the dense binding layout
+//! (weights, X, y, the kdim/ndim uniforms) plus the bucket counts and bases at 7/8
+def private moe_split_dispatch(enc; fmt : int; pso; tgm : uint64;
+                               bks, bkq, bxh, by, bk, bn, bcnt, bbase; nsb : int; tiles, ndim, ne : int) {
+    metal_set_pipeline(enc, pso)
+    metal_set_threadgroup_memory_length(enc, tgm, 0)
+    metal_set_buffer(enc, bks, fmt == 45 || fmt == 40 ? 0ul : uint64(nsb * 16), 0)
+    metal_set_buffer(enc, bks, 0ul, 1)
+    metal_set_buffer(enc, bkq, 0ul, 2)
+    metal_set_buffer(enc, bxh, 0ul, 3)
+    metal_set_buffer(enc, by, 0ul, 4)
+    metal_set_buffer(enc, bk, 0ul, 5)
+    metal_set_buffer(enc, bn, 0ul, 6)
+    metal_set_buffer(enc, bcnt, 0ul, 7)
+    metal_set_buffer(enc, bbase, 0ul, 8)
+    metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+}
+
+// the split-format expert twins against the same per-expert oracle as the K-quant MoE gate: the
+// TH stamp, then the tall pair (128-floor stamp + remainder) where the counts cross 128
+def private moe_mulmm_split_gate(t : T?; dev, queue; fmt : int; kdim, ndim : int; counts : array<int>) {
+    let tag = "moe_mulmm_split_k{fmt} k={kdim} n={ndim}"
+    var err : string
+    let th = moe_split_twin(fmt, MoeSplitForm.th)
+    var tw_pso = pipeline_from_source(dev, th.src, th.entry, th.fm, err)
+    if (tw_pso == null && !metal4_tensor_available(dev)) {
+        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain - skipped\n")
+        return
+    }
+    t |> success(tw_pso != null, "{tag}: pipeline: {err}")
+    return if (tw_pso == null)
+    let ne = length(counts)
+    let nb = kdim / 256
+    let eplane = ndim * nb
+    let nsb = ne * eplane
+    var kq : array<uint8>
+    var ks : array<uint8>
+    kq_fill_planes(fmt, nsb, kq, ks)
+    let nk = 2
+    var fx <- moe_fix(counts, false, nk, 24)
+    var xf : array<float>
+    xf |> resize(fx.pad * kdim)
+    for (i in range(length(xf))) {
+        xf[i] = float((i * 5) % 9 - 4)
+    }
+    var wdeq : array<float>
+    wdeq |> resize(ne * ndim * kdim)
+    var wrow : array<float>
+    wrow |> resize(kdim)
+    for (e in range(ne)) {
+        for (j in range(ndim)) {
+            kq_row_ref(fmt, e * eplane + j * nb, nb, nsb, kq, ks, wrow)
+            for (c in range(kdim)) {
+                wdeq[(e * ndim + j) * kdim + c] = wrow[c]
+            }
+        }
+    }
+    var wb : array<float>
+    var want : array<float>
+    var env : array<float>
+    moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
+    var xh <- [for (v in xf); float16(v)]
+    var bks = buf_upload(dev, ks)
+    var bkq = buf_upload(dev, kq)
+    var bxh = buf_upload(dev, xh)
+    var by = buf_fill(dev, fx.pad * ndim, -500.0)
+    var bk = buf_u32(dev, uint(kdim))
+    var bn = buf_u32(dev, uint(ndim))
+    var bcnt = buf_upload(dev, fx.cnt)
+    var bbase = buf_upload(dev, fx.basep)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        moe_split_dispatch(enc, fmt, tw_pso, th.tgm, bks, bkq, bxh, by, bk, bn, bcnt, bbase, nsb, fx.maxtiles, ndim, ne)
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    // the control for the split stamps: the 2e-4 compare must RED on a poisoned expectation.
+    // The added delta env[0]*0.1 + 1.0 exceeds the bar's own max(2e-4*env[0], 1e-3) at every
+    // envelope, so a bar that cannot discriminate shows up here rather than as a silent pass
+    var wantp := want
+    wantp[0] += env[0] * 0.1 + 1.0
+    if (ran) {
+        t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
+        t |> success(buf_mismatch_env(by, wantp, env, 2e-4, "{tag} CONTROL(expected-red)") != 0, "{tag}: poison control reds")
+    }
+    var maxce = 0
+    for (c in fx.cnt) {
+        maxce = max(maxce, int(c))
+    }
+    if (maxce >= 128) {
+        let tl = moe_split_twin(fmt, MoeSplitForm.th128)
+        let rm = moe_split_twin(fmt, MoeSplitForm.thr)
+        var tl_pso = pipeline_from_source(dev, tl.src, tl.entry, tl.fm, err)
+        var rm_pso = pipeline_from_source(dev, rm.src, rm.entry, rm.fm, err)
+        t |> success(tl_pso != null && rm_pso != null, "{tag} tall pair: pipeline: {err}")
+        if (tl_pso != null && rm_pso != null) {
+            var by_p = buf_fill(dev, fx.pad * ndim, -700.0)
+            let ranp = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+                moe_split_dispatch(enc, fmt, tl_pso, tl.tgm, bks, bkq, bxh, by_p, bk, bn, bcnt, bbase, nsb, (maxce + 127) / 128, ndim, ne)
+                moe_split_dispatch(enc, fmt, rm_pso, rm.tgm, bks, bkq, bxh, by_p, bk, bn, bcnt, bbase, nsb, 4, ndim, ne)
+            }
+            t |> success(ranp, "{tag} tall pair: encode: {err}")
+            if (ranp) {
+                t |> equal(buf_mismatch_env(by_p, want, env, 2e-4, "{tag} tall pair"), 0)
+                t |> success(buf_mismatch_env(by_p, wantp, env, 2e-4, "{tag} tall pair CONTROL(expected-red)") != 0, "{tag} tall pair: poison control reds")
+            }
+            metal_release(by_p)
+        }
+        if (tl_pso != null) {
+            metal_release(tl_pso)
+        }
+        if (rm_pso != null) {
+            metal_release(rm_pso)
+        }
+    }
+    metal_release(bks)
+    metal_release(bkq)
+    metal_release(bxh)
+    metal_release(by)
+    metal_release(bk)
+    metal_release(bn)
+    metal_release(bcnt)
+    metal_release(bbase)
+    metal_release(tw_pso)
+    delete kq
+    delete ks
+    delete fx
+    delete xf
+    delete xh
+    delete wdeq
+    delete wrow
+    delete wb
+    delete want
+    delete wantp
+    delete env
+}
+
 // The gathered q8 mul_mm (MetalMoeMulMmQ8) and its tensor twin — the twin serves CONTIGUOUS
 // (gather=0, down-site) shapes only and never binds bkt.
 def private moe_mulmm_q8_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : int; counts : array<int>; gather : bool; halfx : bool = false) {
@@ -2076,10 +2292,18 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 3, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 33, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 33, false, 32, 256, 128)
+                // the iq3s tall stamp (form 1, the deep-K arm the K-quant sites take): two tall
+                // tiles, then off the 128 floor with the 32-row remainder at nonzero x/y offsets
+                kq_mulmm_gate(t, dev, queue, 33, true, 256, 512, 64, halfx = true, tall = true)
+                kq_mulmm_gate(t, dev, queue, 33, true, 320, 512, 64, halfx = true, tall = true)
                 kq_mulmm_gate(t, dev, queue, 34, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 34, false, 32, 256, 128)
+                kq_mulmm_gate(t, dev, queue, 34, true, 256, 512, 64, halfx = true, tall = true)
+                kq_mulmm_gate(t, dev, queue, 34, true, 320, 512, 64, halfx = true, tall = true)
                 kq_mulmm_gate(t, dev, queue, 45, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 45, false, 32, 256, 128)
+                kq_mulmm_gate(t, dev, queue, 40, false, 64, 512, 64)
+                kq_mulmm_gate(t, dev, queue, 40, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 2, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 2, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 23, false, 64, 512, 64)
@@ -2089,7 +2313,7 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 25, false, 32, 256, 128)
                 //! the iquant tensor twins (T + TH stamps; twins feint without Metal-4)
-                for (fmt in [44, 45, 3, 33, 34, 2, 23, 24, 25]) {
+                for (fmt in [44, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)
                 }
@@ -2102,11 +2326,11 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_devw_gate(t, dev, queue, 64, 256, 64)
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
                 q8_devw_gate(t, dev, queue, 128, 256, 128, mt = 128)   // tall dev-W GEMM stamp
-                for (fmt in [4, 5, 6]) {
+                for (fmt in [4, 5, 6, 44, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
                     kq_devw_gate(t, dev, queue, fmt, 32, 512, 128)   // ndim%128: the tiled leg runs
                 }
-                for (fmt in [0, 4, 5, 6]) {
+                for (fmt in [0, 4, 5, 6, 44, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
                     devw_bake_mirror_gate(t, dev, queue, fmt, 64, 512)
                 }
                 q8_dbuf_gate(t, dev, queue, 128, 256, 64)
@@ -2149,6 +2373,10 @@ def test_metal_gemm_kernels(t : T?) {
                 moe_mulmm_kq_gate(t, dev, queue, 5, 256, 128, [8, 33], false)   // twin legs per format
                 moe_mulmm_kq_gate(t, dev, queue, 6, 256, 128, [8, 33], false)
                 moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [130, 40, 200], false)   // tall pair: counts cross 128
+                for (fmt in [3, 44, 33, 34, 23, 24, 25]) {
+                    moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [8, 33])
+                    moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [130, 40, 200])
+                }
                 moe_mulmm_q8_gate(t, dev, queue, false, 96, 64, [32, 40, 8], true)
                 moe_mulmm_q8_gate(t, dev, queue, false, 128, 64, [8, 33], false)
                 moe_mulmm_q8_gate(t, dev, queue, true, 128, 64, [8, 33], false)

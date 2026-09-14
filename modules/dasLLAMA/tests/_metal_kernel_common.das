@@ -9,6 +9,7 @@ module _metal_kernel_common shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the kq reference dequant
+require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
 require daslib/f16_cvt              // f32_to_f16 — packing synthetic scale planes
 require ?das_metal metal/das_metal_boost
 
@@ -173,8 +174,8 @@ let KQ_SAFE_SCALES = fixed_array(0.25, 0.5, 1.0, 0.125, 2.0, 0.75, 1.5, 0.375)
 // quant plane = hash bytes (any bit pattern is valid); scale plane K4/K5 = [d f16][dmin f16]
 // [12 packed 6-bit bytes] per superblock, K6 = [16B sub-scales] x nsb + f16 d tail, IQ4_XS (44) =
 // the same split form with [8 signed sub-scales in -31..31][8 zero] strips, Q3_K (3) = the k6 form over 96B quants
-def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>) {   // nolint:STYLE037 - the flat per-format fill ladder is the honest shape
-    let qsb = fmt == 2 || fmt == 24 || fmt == 25 ? 64 : (fmt == 23 ? 72 : (fmt == 4 || fmt == 44 || fmt == 45 ? 128 : (fmt == 5 ? 160 : (fmt == 3 ? 96 : (fmt == 33 ? 104 : (fmt == 34 ? 96 : 192))))))
+def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>) {
+    let qsb = int(kq_qsb(fmt))
     kq |> resize(nsb * qsb)
     for (i in range(nsb * qsb)) {
         kq[i] = kq_hash_byte(i * 3 + fmt)
@@ -193,8 +194,8 @@ def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>)
             ks[nsb * 16 + b * 4 + 2] = uint8(mbits & 0xFFu)
             ks[nsb * 16 + b * 4 + 3] = uint8(mbits >> 8u)
         }
-    } elif (fmt == 45) {
-        // iq4nl: 16B/sb = 8 per-32-block f16 d's, verbatim (no strips)
+    } elif (fmt == 45 || fmt == 40) {
+        // iq4nl and q40: 16B/sb = 8 per-32-block f16 d's, verbatim (no strips)
         ks |> resize(nsb * 16)
         for (b in range(nsb * 8)) {
             let dbits = f32_to_f16(KQ_SAFE_SCALES[(b + (b / 8) * 3) % 8])
@@ -281,6 +282,8 @@ def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wro
                 int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
         } elif (fmt == 45) {
             dequant_iq4nl_plane_superblock(kq, int64(sb * 128), ks, int64(sb * 16), wrow, int64(ib * 256))
+        } elif (fmt == 40) {
+            dequant_q40_plane_superblock(kq, int64(sb * 128), ks, int64(sb * 16), wrow, int64(ib * 256))
         } elif (fmt == 2) {
             dequant_k2_plane_superblock_at(kq, int64(sb * 64), ks, int64(sb * 16),
                 int64(nsb_total * 16 + sb * 4), wrow, int64(ib * 256))

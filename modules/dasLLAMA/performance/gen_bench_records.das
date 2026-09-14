@@ -10,6 +10,7 @@ require dasllama/dasllama_image   // dlim_wipe + dlim_inventory — the batch li
 require daslib/tune             // [tune_policy]: the orchestrator never measures — it must never self-tune
 require llvm/daslib/llvm_tune   // the framework the annotation forwards to, and the visibility the auto-policy pass needs
 require daslib/clargs
+require daslib/command_line   // get_das_exe - the --jit child's daslang
 require daslib/fio
 require math
 
@@ -38,6 +39,15 @@ struct Args {
     @clarg_short = "o"
     @clarg_doc = "Only catalog entries whose filename contains this substring"
     only : string
+
+    @clarg_doc = "Which rows to visit: official (default - the public board) | all (every model_specs row the box stocks - the sweep form, which needs --store: a sweep visits rows the board does not show, so its rows never enter records/<box>.json)"
+    catalog : string = "official"
+
+    @clarg_doc = "Record store to read and write instead of records/<box>.json - a sweep's scratch store outside records/, so the site merge and the store sweeps never see it"
+    store : string
+
+    @clarg_doc = "Run every das child as the bench script under this daslang's -jit (--for-debug-purposes: the bench stamps each row debug-jit) instead of the released exe - the dev-loop sweep, never a board mint"
+    jit : bool
 
     @clarg_doc = "Backends to measure: cpu | metal | all (default: all — metal on Apple boxes only)"
     backend : string = "all"
@@ -148,6 +158,49 @@ def private rig_exe_path() : string {
 
 def private rig_build_line() : string {
     return "bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out {RIG_EXE_OUT}"
+}
+
+var private g_jit_bench = false
+
+//! The child's argv head: the released exe takes its rest after a bare `--`, while the `--jit` dev
+//! loop runs the bench SOURCE under this daslang and adds `--for-debug-purposes`, the flag the
+//! bench child turns into its own debug-jit row stamp.
+def das_child_args(exe : string; jit : bool; rest : array<string>) : array<string> {
+    var args <- jit ? [exe, "-jit", RIG_BENCH_SRC, "--", "--for-debug-purposes"] : [exe, "--"]
+    args |> push_from(rest)
+    return <- args
+}
+
+def private das_args(exe : string; rest : array<string>) : array<string> {
+    return <- das_child_args(exe, g_jit_bench, rest)
+}
+
+//! The rows `--catalog` selects: `official` (the public board) or `all` (every `model_specs` row
+//! the box stocks - the sweep form). False = a spelling the caller refuses.
+def catalog_known(catalog : string) : bool {
+    return catalog == "official" || catalog == "all"
+}
+
+//! A store path whose parent folders read `performance/records/` - the folder the site merge
+//! publishes - relative or absolute, dot segments not collapsed; "" is the default store, which
+//! is the box's board file.
+def store_is_board(store : string) : bool {
+    return empty(store) || (base_name(dir_name(store)) == "records" && base_name(dir_name(dir_name(store))) == "performance")
+}
+
+//! The guard on `records/<box>.json`, the store the site merge publishes: a debug-jit run stamps
+//! rows no board may carry, and a `--catalog all` sweep mints rows for models the board does not
+//! show, so each needs an explicit `--store` outside `records/`. Returns the refusal text, or ""
+//! when the run may write the box store.
+def board_store_refusal(catalog : string; jit : bool; store : string) : string {
+    return "" if (!empty(store) && !store_is_board(store))
+    if (jit) {
+        return "--jit needs --store <path> - debug-jit rows never enter the box store"
+    }
+    if (catalog == "all") {
+        return "--catalog all needs --store <path> - a sweep visits rows the board does not show, and records/<box>.json is what the site merge publishes"
+    }
+    return ""
 }
 
 // The exe bakes the whole ENGINE, not just the bench driver, so the bench source alone is not the
@@ -294,9 +347,8 @@ def private absorb_cell(var models : array<BenchModel>; var cell : array<BenchMo
             debug_stamped ||= r.flavor |> starts_with("debug-jit")
             unstamped ||= das_run_unstamped(r)
         }
-        if (debug_stamped) {
-            // belt + braces: the rig only spawns the released exe, but a debug-stamped row
-            // must never survive into the store no matter how it arrived
+        if (debug_stamped && !g_jit_bench) {
+            // belt + braces: a debug-stamped row never survives into the box store, however it arrived
             to_log(LOG_ERROR, "gen_bench_records: DROPPING debug-jit cell for {c.gguf} - debug runs are not records\n")
             continue
         }
@@ -333,15 +385,53 @@ def private settle(seconds : int) {
     }
 }
 
+//! What one das cell measured, split by board axis: `pp` sums the prefill rows' tok/s, `tg` the
+//! emission rows', and `worst_cv` is the highest coefficient of variation any timed row read.
+//! Split because one summed rate IS the pp number - pp reads hundreds of tok/s where tg reads
+//! tens, so a tg collapse hides inside the sum.
+struct CellRates {
+    pp : double
+    tg : double
+    worst_cv : double
+}
+
+//! Every `das` row of a cell folded onto the two board axes. A `tg`-keyed row is the emission
+//! axis and every other timed row the prefill axis, so no measured row falls outside the guard.
+def cell_rates(cell : array<BenchModel>) : CellRates {
+    var res = CellRates()
+    for (c in cell) {
+        for (r in c.runs) {
+            continue if (r.engine != "das")
+            for (k, tv in keys(r.tests), values(r.tests)) {
+                continue if (tv.tok_s <= 0.0lf)
+                res.worst_cv = max(res.worst_cv, tv.stddev / tv.tok_s)
+                if (k |> starts_with("tg")) {
+                    res.tg += tv.tok_s
+                } else {
+                    res.pp += tv.tok_s
+                }
+            }
+        }
+    }
+    return res
+}
+
+//! The warm re-run keeps its cell only when it reads at least as fast as the cold one on BOTH
+//! axes. Map warming can only make a re-run faster, so slower on either axis is heat: the cold
+//! cell is the honest one, and `--das-settle` is short for that tier.
+def keep_cold(cold, warm : CellRates) : bool {
+    return warm.pp < cold.pp || warm.tg < cold.tg
+}
+
 // One lcpp_bench child with the cold-map cv retry — the shared engine of das_cell and the oracle
 // cells. Fills `cell` from the child's --json-path records; false = the child failed or its
 // records did not parse (already logged).
+[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
 def private run_das_child(file, path, be, tag, exe : string; accel, frozen : bool; cfg : Args; threads : int;
                           cellPath : string; var cell : array<BenchModel>) : bool {
     let t0 = ref_time_ticks()
-    var args <- [exe, "--",
-                 "-m", path, "-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}",
-                 "-t", "{threads}", "-o", "json", "--json-path", cellPath]
+    var args <- das_args(exe, ["-m", path, "-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}",
+                               "-t", "{threads}", "-o", "json", "--json-path", cellPath])
     if (be == "metal") {
         args |> push_from(["--ngl", "99"])
     }
@@ -351,6 +441,8 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
     if (frozen) {
         args |> push("--frozen")
     }
+    var coldCell : array<BenchModel>
+    var coldRates = CellRates()
     for (attempt in range(2)) {
         var out = ""
         let rc = run_and_stream(args, out)
@@ -366,28 +458,29 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
         // next process reads a flat 212 ± 1.7 — one in-process warmup pass cannot absorb a
         // 19GB map fighting page-cache eviction). A >3% cv cell is that signature: re-run the
         // child once — its predecessor just became the warmer — and keep the retry.
-        var worst = 0.0lf
-        for (c in cell) {
-            for (r in c.runs) {
-                if (r.engine != "das") {
-                    continue
-                }
-                for (tv in values(r.tests)) {
-                    if (tv.tok_s > 0.0lf) {
-                        worst = max(worst, tv.stddev / tv.tok_s)
-                    }
-                }
-            }
+        let attemptRates = cell_rates(cell)
+        // the rate verdict outranks the cv, and is read per axis: a heat-soaked re-run lands LOW
+        // with a clean cv, so a cv-first break would keep it, and a summed rate lets pp carry a
+        // collapsed tg past the guard
+        if (attempt > 0 && keep_cold(coldRates, attemptRates)) {
+            to_log(LOG_WARNING, "gen_bench_records: HEAT {file} das {tag} - the warm re-run read pp {attemptRates.pp:.1f} / tg {attemptRates.tg:.1f} against the cold run's pp {coldRates.pp:.1f} / tg {coldRates.tg:.1f} tok/s; keeping the cold run, raise --das-settle for this tier\n")
+            logger_warning("bench.records", "warm re-run slower - heat, cold run kept", JV({"model" => JV(file), "leg" => JV(tag), "cold_pp" => JV(coldRates.pp), "cold_tg" => JV(coldRates.tg), "retry_pp" => JV(attemptRates.pp), "retry_tg" => JV(attemptRates.tg)}))
+            delete cell
+            cell <- coldCell
+            break
         }
-        if (worst <= 0.03lf) {
+        if (attemptRates.worst_cv <= 0.03lf) {
             break
         }
         if (attempt == 0) {
-            to_log(LOG_WARNING, "gen_bench_records: HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) - cold-map warming suspect, re-running the cell warm\n")
-            logger_warning("bench.records", "high variance - warm re-run", JV({"model" => JV(file), "leg" => JV(tag), "cv_pct" => JV(worst * 100.0lf)}))
+            to_log(LOG_WARNING, "gen_bench_records: HIGH VARIANCE {file} das {tag} (cv {attemptRates.worst_cv * 100.0lf:.1f}%) - cold-map warming suspect, re-running the cell warm\n")
+            logger_warning("bench.records", "high variance - warm re-run", JV({"model" => JV(file), "leg" => JV(tag), "cv_pct" => JV(attemptRates.worst_cv * 100.0lf)}))
+            delete coldCell
+            coldCell <- cell
+            coldRates = attemptRates
             settle(cfg.settle)
         } else {
-            to_log(LOG_WARNING, "gen_bench_records: STILL HIGH VARIANCE {file} das {tag} (cv {worst * 100.0lf:.1f}%) after a warm re-run - keeping it, treat with suspicion\n")
+            to_log(LOG_WARNING, "gen_bench_records: STILL HIGH VARIANCE {file} das {tag} (cv {attemptRates.worst_cv * 100.0lf:.1f}%) after a warm re-run - keeping it, treat with suspicion\n")
         }
     }
     return true
@@ -473,8 +566,8 @@ def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; leg : string
     }
     to_log(LOG_INFO, "gen_bench_records: ORACLE START {spec.display} das {leg_tag}\n")
     logger_info("bench.records", "oracle asr cell start", JV({"model" => JV(spec.display), "leg" => JV(leg_tag)}))
-    var args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
-                 "--json-path", cellPath]
+    var args <- das_args(exe, ["--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+                               "--json-path", cellPath])
     if (leg == "accel") {
         args |> push("--accel")
     } elif (leg == "metal") {
@@ -525,8 +618,8 @@ def private oracle_image_cell(gguf, mm, pic : string; stored : BenchRun; leg : s
     }
     to_log(LOG_INFO, "gen_bench_records: ORACLE START {gguf} das {leg_tag}\n")
     logger_info("bench.records", "oracle image cell start", JV({"model" => JV(gguf), "leg" => JV(leg_tag)}))
-    var args <- [exe, "--", "-m", path, "--image-mmproj", "{models_dir()}{mm}", "--image", pic,
-                 "-r", "{cfg.image_reps}", "-t", "{threads}", "--json-path", cellPath]
+    var args <- das_args(exe, ["-m", path, "--image-mmproj", "{models_dir()}{mm}", "--image", pic,
+                               "-r", "{cfg.image_reps}", "-t", "{threads}", "--json-path", cellPath])
     if (leg == "accel") {
         args |> push("--accel")
     } elif (leg == "metal") {
@@ -567,9 +660,8 @@ def private oracle_image_cell(gguf, mm, pic : string; stored : BenchRun; leg : s
 def private oracle_prepare(gguf, be, tag, exe : string; accel : bool; threads : int; cellPath : string) {
     let path = "{models_dir()}{gguf}"
     return if (!stat(path).is_valid)   // the timed cell reports the missing model
-    var args <- [exe, "--",
-                 "-m", path, "-p", "8", "-n", "1", "-r", "1",
-                 "-t", "{threads}", "-o", "json", "--json-path", cellPath]
+    var args <- das_args(exe, ["-m", path, "-p", "8", "-n", "1", "-r", "1",
+                               "-t", "{threads}", "-o", "json", "--json-path", cellPath])
     if (be == "metal") {
         args |> push_from(["--ngl", "99"])
     }
@@ -901,8 +993,8 @@ def private image_das_cell(file, path, mm, pic : string; cfg : Args; threads : i
     }
     to_log(LOG_INFO, "gen_bench_records: START {file} das {log_leg}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(file), "engine" => JV("das"), "leg" => JV(log_leg)}))
-    var args <- [exe, "--", "-m", path, "--image-mmproj", mm, "--image", pic,
-                 "-r", "{cfg.image_reps}", "-t", "{threads}", "-o", "json", "--json-path", cellPath]
+    var args <- das_args(exe, ["-m", path, "--image-mmproj", mm, "--image", pic,
+                               "-r", "{cfg.image_reps}", "-t", "{threads}", "-o", "json", "--json-path", cellPath])
     if (leg == "accel") {
         args |> push("--accel")
     } elif (leg == "metal") {
@@ -1026,8 +1118,8 @@ def private asr_das_cell(spec : AsrModelSpec; cfg : Args; threads : int; cellPat
     let log_leg = "asr{leg_tag}"
     to_log(LOG_INFO, "gen_bench_records: START {spec.display} das asr{leg_tag}\n")
     logger_info("bench.records", "cell start", JV({"model" => JV(spec.display), "engine" => JV("das"), "leg" => JV(log_leg)}))
-    var args <- [exe, "--", "--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
-                 "--json-path", cellPath]
+    var args <- das_args(exe, ["--asr", "-m", spec.das_model, "-r", "{cfg.asr_reps}", "-t", "{threads}",
+                               "--json-path", cellPath])
     if (leg == "accel") {
         args |> push("--accel")
     } elif (leg == "metal") {
@@ -1321,18 +1413,32 @@ def main : int {
         to_log(LOG_ERROR, "gen_bench_records: no legs selected (--backend {cfg.backend} --legs {cfg.legs})\n")
         return 1
     }
+    if (!catalog_known(cfg.catalog)) {
+        to_log(LOG_ERROR, "gen_bench_records: --catalog {cfg.catalog} - official | all\n")
+        return 1
+    }
+    g_jit_bench = cfg.jit
+    let storeRefusal = board_store_refusal(cfg.catalog, cfg.jit, cfg.store)
+    if (!empty(storeRefusal)) {
+        to_log(LOG_ERROR, "gen_bench_records: {storeRefusal}\n")
+        return 1
+    }
+    if (cfg.jit && !g_env_bench.allow_untuned) {
+        to_log(LOG_ERROR, "gen_bench_records: --jit needs DASLLAMA_ALLOW_UNTUNED=1 in the environment - the script children measure on the class profile, not this box's mint, and every row stamps untuned:debug-jit\n")
+        return 1
+    }
     if (cfg.oracle) {
         // GATE 1: no refs run (binaries not even required); GATE 2: one das pass per stored row
         // (the cv warm-retry stays — it REPLACES a bad cold measure); GATE 3: the timed cell is
         // frozen — its image is baked by the prepare pass, and tune_sha carries the pin-set proof.
-        let ostore = bench_records_path()
+        let ostore = empty(cfg.store) ? bench_records_path() : cfg.store
         var omodels : array<BenchModel>
         if (!read_bench_records(ostore, omodels)) {
             to_log(LOG_ERROR, "gen_bench_records: --oracle needs an existing store - {ostore} is absent/unreadable\n")
             return 1
         }
         let othreads = cfg.threads > 0 ? cfg.threads : profile_threads()
-        let oexe = rig_exe_checked()
+        let oexe = cfg.jit ? get_das_exe() : rig_exe_checked()
         if (empty(oexe)) {
             return 1
         }
@@ -1374,14 +1480,16 @@ def main : int {
             to_log(LOG_INFO, "gen_bench_records: image refs - cpu llama-mtmd-cli = {cm} (MTMD_BIN)\n")
         }
     }
-    let exe = rig_exe_checked()
+    let exe = cfg.jit ? get_das_exe() : rig_exe_checked()
     if (empty(exe)) {
         return 1
     }
     batch_start_wipe(cfg.workload)
     mkdir_rec("modules/dasLLAMA/performance/records")
-    snapshot_tune_generation(exe)
-    let store = bench_records_path()
+    if (!cfg.jit) {
+        snapshot_tune_generation(exe)
+    }
+    let store = empty(cfg.store) ? bench_records_path() : cfg.store
     var models : array<BenchModel>
     read_bench_records(store, models)
     let hw = gather_hardware()
@@ -1391,7 +1499,7 @@ def main : int {
     let cellPath = "modules/dasLLAMA/performance/records/_cell_{box}.json"
     var failed : array<string>
     var refSkipped : array<string>
-    var cat <- official_catalog()
+    var cat <- cfg.catalog == "all" ? full_catalog() : official_catalog()
     for (ent in cat) {
         if (!doLlm && !doImage) {
             continue
@@ -1413,7 +1521,7 @@ def main : int {
         // evidence, the same rows test_parity gates); the verdict stamps every das row as `parity`
         to_log(LOG_INFO, "gen_bench_records: PARITY PREGATE {file}\n")
         var out = ""
-        if (run_and_stream([exe, "--", "--parity", "-m", path], out) != 0) {
+        if (run_and_stream(das_args(exe, ["--parity", "-m", path]), out) != 0) {
             to_log(LOG_ERROR, "gen_bench_records: PARITY PREGATE failed for {file} - skipping every cell of this model (pregate output above)\n")
             logger_error("bench.records", "parity pregate failed", JV({"model" => JV(file)}))
             failed |> push("{file} parity")
