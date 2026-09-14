@@ -109,3 +109,12 @@ jobs:
           ./bin/daslang utils/lint/main.das -- \
             daslib utils modules tutorials examples tests src \
             -q --silent -j 1
+
+  nightly_issue:
+    needs: [lint]
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: nightly_lint.yml

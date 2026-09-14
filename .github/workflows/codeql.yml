@@ -89,3 +89,12 @@ jobs:
       with:
         sarif_file: sarif-results/cpp.sarif
         category: "/language:c-cpp"
+
+  nightly_issue:
+    needs: [analyze]
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: codeql.yml

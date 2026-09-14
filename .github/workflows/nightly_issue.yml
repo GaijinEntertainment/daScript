@@ -1,0 +1,55 @@
+name: Nightly failure issue
+
+on:
+  workflow_call:
+    inputs:
+      lane:
+        description: "workflow file of the failing lane"
+        required: true
+        type: string
+
+concurrency:
+  group: nightly-issue
+  cancel-in-progress: false
+
+jobs:
+  open_issue:
+    if: github.repository == 'GaijinEntertainment/daScript'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: "File the nightly failure issue, unless one is already open"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LANE: ${{ inputs.lane }}
+          TITLE: "The nightly is red"
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          set -euo pipefail
+
+          gh label create nightly-failure --force \
+            --color B60205 \
+            --description "the nightly is red"
+
+          OPEN=$(gh issue list --state open --label nightly-failure --limit 100 \
+                   --json number,title \
+                   --jq '[.[] | select(.title == env.TITLE)] | .[0].number // empty')
+
+          if [ -n "$OPEN" ]; then
+            echo "#$OPEN is still open - filing nothing for $LANE"
+            exit 0
+          fi
+
+          BODY="$RUNNER_TEMP/nightly_issue_body.md"
+          {
+            printf -- '`%s` failed on the nightly cron.\n\n' "$LANE"
+            printf -- '* run: %s\n' "$RUN_URL"
+            printf -- '* commit: `%s`\n\n' "$GITHUB_SHA"
+            printf 'One issue for the whole nightly: while this one is open nothing else '
+            printf 'is filed, whichever lane fails. Close it once the nightly is green again.\n'
+          } > "$BODY"
+
+          gh issue create --title "$TITLE" --label nightly-failure --body-file "$BODY"

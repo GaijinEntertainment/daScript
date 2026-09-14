@@ -156,3 +156,12 @@ jobs:
           set -eux
           ./bin/daslang modules/dasVulkan/examples/smoke.das | tee /tmp/smoke.out
           grep -i "Vulkan instance version" /tmp/smoke.out
+
+  nightly_issue:
+    needs: [integration_linux, build_macos]
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: nightly_vulkan.yml
