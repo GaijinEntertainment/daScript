@@ -477,7 +477,7 @@ mechanisms landed on the way:
 (a) The M5's decode sits at 0.96 on the k5 file - sec.10's gap at a third width (n=3840). Its
 fixture flips at token 21 on a 0.03-logit near-tie the Metal chain lands on with no crown armed
 (the k5 tensor twin holds the double-precision oracle at the production width - the kernel cells
-now run kdim 3840); the token gate is no instrument for that row (`followup_general.md` row 150,
+now run kdim 3840); the token gate is no instrument for that row (`followup_general.md` row 151,
 the fixture margin floor). (b) The routed block serves thirteen expert-plane formats, q40 among
 them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside q8 down stacks (a 704-wide
 down row is no multiple of 256, so the loader demotes that plane) and runs the routed block on
@@ -485,7 +485,7 @@ both boxes through the q40 split twins and the q40 expert GEMV. (c) The Google Q
 byte-identical; only the token table's format and the Q4_0 rounding differ) and diverges on the
 CPU kq-native rails at one token: a top-8 router pick at layer 29 on an 8e-5 margin, which the
 arm64-sdot backend lands the other way - the CPU pregate refuses the file, so its rows stay
-unmeasured (`followup_general.md` row 151 has the activation form behind the margin); on Metal,
+unmeasured (`followup_general.md` row 152 has the activation form behind the margin); on Metal,
 whose GEMVs read the f32 activation, the same fixture holds 40/40 through the q40 expert twins.
 
 ## 8. The M4 Pro's routed iquant files prefill at 0.97 of llama.cpp

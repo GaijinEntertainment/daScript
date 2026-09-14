@@ -1695,7 +1695,7 @@
 
 149. Moved: `followup_metal.md` sec.15 (the two Metal review gates).
 
-149. **The streamed image save walks the carrier twice on a declined write.** `load_model`'s
+150. **The streamed image save walks the carrier twice on a declined write.** `load_model`'s
     streamed rail runs `save_model_image_streaming` over the streamed `Model`, and on a decline
     (the writer died mid-plane - a full volume past the preallocation) runs
     `image_from_model_streaming` over the same carrier: the whole plane set is transcoded and the
@@ -1706,7 +1706,7 @@
     takes), with the memory-sink decline dropping to the eager rail. The bar is one transcode per
     load on either outcome.
 
-150. **A parity fixture carries no margin floor.** The gemma-4-12b Q5_K_M counting continuation
+151. **A parity fixture carries no margin floor.** The gemma-4-12b Q5_K_M counting continuation
     flips at its 21st token on Metal - the CPU chain's top-2 margin there is 6 logits, the Metal
     chain's 0.03 with no tensor crown armed, and the box's crowns move the position by 0.18 - so
     the token gate reports the side of a razor the chain lands on, not a kernel (the k5 tensor
@@ -1720,7 +1720,7 @@
     position 117 of the counting fixture; the kernel error from
     `tests/test_metal_gemm_kernels.das`'s production-width cells.
 
-151. **The q40 and iq4nl native dots read the per-256 Q8_K activation image.** `kq_sb` puts the
+152. **The q40 and iq4nl native dots read the per-256 Q8_K activation image.** `kq_sb` puts the
     two per-32 weight formats on the Q8_K activation form `mm_kq` quantizes, and the Vulkan decode
     GEMV reads the same form (one activation scale per superblock); the sibling per-32 format q51
     reads the per-32 Q8_0 image and llama.cpp dots Q4_0 against Q8_0; the Vulkan cm2 prefill takes
