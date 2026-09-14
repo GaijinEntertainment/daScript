@@ -3,6 +3,7 @@
 //   dasllama_host_c_jit <model.gguf> ["prompt"] [tokens]      the -lib backend
 //   dasllama_host_c_ctx <model.gguf> ["prompt"] [tokens]      the -ctx backend
 //   dasllama_host_c_ctx --asr <asr-model> <audio-file>        speech to text, either backend
+//   dasllama_host_c_ctx --tts <tts-model> "text" <out.wav>    speech synthesis, either backend
 
 #if defined(DASLLAMA_LIB_STANDALONE_CTX)
 #include "dasllama_lib.das.h"
@@ -36,18 +37,38 @@ static int transcribe_file ( dasllama_lib_ctx * ctx, const char * model, const c
     return 0;
 }
 
+static int say_to_wav ( dasllama_lib_ctx * ctx, const char * model, const char * text, const char * out ) {
+    if ( !dasllama_lib_tts_open(ctx, model) ) {
+        printf("tts_open failed: %s\n", why(ctx));
+        return 1;
+    }
+    const double seconds = dasllama_lib_tts_say(ctx, text, out);
+    if ( seconds <= 0.0 ) {
+        printf("tts_say failed: %s\n", why(ctx));
+        dasllama_lib_tts_close(ctx);
+        return 1;
+    }
+    printf("%s: %.2f s as %s [%.1fx realtime]\n", out, seconds, dasllama_lib_tts_voice(ctx),
+           dasllama_lib_tts_speed(ctx));
+    dasllama_lib_tts_close(ctx);
+    return 0;
+}
+
 int main ( int argc, char * argv [] ) {
     if ( argc < 2 ) {
         printf("usage: %s <model.gguf> [\"prompt\"] [tokens]\n", argv[0]);
         printf("       %s --asr <asr-model> <audio-file>\n", argv[0]);
+        printf("       %s --tts <tts-model> \"text\" <out.wav>\n", argv[0]);
         return 2;
     }
     const int asr = strcmp(argv[1], "--asr") == 0;
-    if ( asr && argc < 4 ) {
+    const int tts = strcmp(argv[1], "--tts") == 0;
+    if ( (asr && argc < 4) || (tts && argc < 5) ) {
         printf("usage: %s --asr <asr-model> <audio-file>\n", argv[0]);
+        printf("       %s --tts <tts-model> \"text\" <out.wav>\n", argv[0]);
         return 2;
     }
-    const char * model = asr ? argv[2] : argv[1];
+    const char * model = (asr || tts) ? argv[2] : argv[1];
     const char * prompt = argc > 2 ? argv[2] : "Once upon a time";
     const int want = argc > 3 ? atoi(argv[3]) : 48;
 
@@ -56,8 +77,9 @@ int main ( int argc, char * argv [] ) {
         printf("create failed: %s\n", dasllama_lib_last_error(NULL));
         return 1;
     }
-    if ( asr ) {
-        const int rc = transcribe_file(ctx, model, argv[3]);
+    if ( asr || tts ) {
+        const int rc = asr ? transcribe_file(ctx, model, argv[3])
+                           : say_to_wav(ctx, model, argv[3], argv[4]);
         dasllama_lib_destroy(ctx);
         dasllama_lib_shutdown_runtime();
         return rc;

@@ -3,6 +3,7 @@
 //
 //   dasllama_host_cpp_ctx <model.gguf> ["prompt"] [tokens]
 //   dasllama_host_cpp_ctx --asr <asr-model> <audio-file>       speech to text
+//   dasllama_host_cpp_ctx --tts <tts-model> "text" <out.wav>   speech synthesis
 
 #include "daScript/daScript.h"
 #include "dasllama_lib.das.h"
@@ -32,24 +33,46 @@ static int transcribe_file ( das::ctx_dasllama_lib::Standalone & ctx, char * mod
     return 0;
 }
 
+static int say_to_wav ( das::ctx_dasllama_lib::Standalone & ctx, char * model, char * text, char * out ) {
+    if ( !ctx.tts_open(model) ) {
+        printf("tts_open failed: %s\n", why(ctx));
+        return 1;
+    }
+    const double seconds = ctx.tts_say(text, out);
+    if ( seconds <= 0.0 ) {
+        printf("tts_say failed: %s\n", why(ctx));
+        ctx.tts_close();
+        return 1;
+    }
+    printf("%s: %.2f s as %s [%.1fx realtime]\n", out, seconds, ctx.tts_voice(), ctx.tts_speed());
+    ctx.tts_close();
+    return 0;
+}
+
 int main ( int argc, char * argv [] ) {
     if ( argc < 2 ) {
         printf("usage: %s <model.gguf> [\"prompt\"] [tokens]\n", argv[0]);
         printf("       %s --asr <asr-model> <audio-file>\n", argv[0]);
+        printf("       %s --tts <tts-model> \"text\" <out.wav>\n", argv[0]);
         return 2;
     }
     const bool asr = strcmp(argv[1], "--asr") == 0;
-    if ( asr && argc < 4 ) {
+    const bool tts = strcmp(argv[1], "--tts") == 0;
+    if ( (asr && argc < 4) || (tts && argc < 5) ) {
         printf("usage: %s --asr <asr-model> <audio-file>\n", argv[0]);
+        printf("       %s --tts <tts-model> \"text\" <out.wav>\n", argv[0]);
         return 2;
     }
-    char * model = asr ? argv[2] : argv[1];
+    char * model = (asr || tts) ? argv[2] : argv[1];
     char * prompt = argc > 2 ? argv[2] : (char *) "Once upon a time";
     const int want = argc > 3 ? atoi(argv[3]) : 48;
 
     das::ctx_dasllama_lib::Standalone ctx;
     if ( asr ) {
         return transcribe_file(ctx, model, argv[3]);
+    }
+    if ( tts ) {
+        return say_to_wav(ctx, model, argv[3], argv[4]);
     }
     if ( !ctx.open(model) ) {
         printf("open failed: %s\n", why(ctx));

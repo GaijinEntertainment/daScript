@@ -1,8 +1,9 @@
 # library/ - dasLLAMA behind a C ABI
 
 One daslang source, `dasllama_lib.das`, built by **both** standalone backends and driven from
-C, C++ and daslang. It carries two surfaces over the one engine - a text model that completes a
-prompt token by token, and a speech-to-text model that turns an audio file into its transcript.
+C, C++ and daslang. It carries three surfaces over the one engine - a text model that completes a
+prompt token by token, a speech-to-text model that turns an audio file into its transcript, and a
+text-to-speech model that writes a WAV.
 Nothing in it is dasLLAMA-specific machinery: it is the shape any daslang engine takes when a
 foreign host has to call into it.
 
@@ -23,7 +24,7 @@ main.das           a daslang host    (the -lib backend, through generated bindin
 | C host | yes | yes |
 | C++ host | proxies over C | yes - the context's own class, in native C++ types |
 | daslang host | yes, through the generated bindings | needs a shared build of the generated TU |
-| build cost here | ~1 min of codegen | ~4 min and ~3 GB to compile a ~33 MB TU |
+| build cost here | ~2 min of codegen | ~10 min and ~6 GB to compile a ~50 MB TU |
 
 The C surface is identical either way, because one describer writes both headers. The C++
 surface is not: a jitted library has no C++ source to put underneath, so its C++ half is inline
@@ -50,7 +51,11 @@ bin/dasllama_host_c_ctx <model.gguf> "Once upon a time" 64
 
 # speech to text, on either backend
 bin/dasllama_host_c_ctx --asr <ggml-whisper.bin> modules/dasLLAMA/models/jfk_ask_not.wav
-bin/daslang examples/dasLLAMA/library/main.das -- --model <ggml-whisper.bin> --audio <audio-file>
+bin/daslang examples/dasLLAMA/library/main.das -- --asr <ggml-whisper.bin> --audio <audio-file>
+
+# speech synthesis, on either backend
+bin/dasllama_host_cpp_ctx --tts <pocket-tts.gguf> "Hello from a daslang library." hello.wav
+bin/daslang examples/dasLLAMA/library/main.das -- --tts <pocket-tts.gguf> --text "Hello." --out hello.wav
 ```
 
 Any GGUF the engine reads works; the small ones are the quickest way to see it run - the
@@ -70,15 +75,18 @@ struct - so the library exposes a flat surface over the facade instead of re-exp
 - `prefill_tps`, `gen_tps`, `reason` - the numbers, and why a call said no
 - `asr_open` / `asr_close` / `asr_transcribe` / `asr_speed` - speech to text: an audio file in,
   its whole transcript out
+- `tts_open` / `tts_close` / `tts_say` / `tts_voice` / `tts_set_voice` / `tts_speed` - speech
+  synthesis: text in, a PCM16 WAV out
 
 Streaming is a **pull**, not a callback: a daslang `block` cannot cross a C ABI, so the caller
 loops on `next_piece` instead of handing the engine a sink. The raw completion path carries no
 stop token either - the caller decides when it has read enough, the way a chat program stops on
 its template's stop ids. The same constraint is why `asr_transcribe` answers with the whole
-transcript rather than a segment stream: the engine's segment form takes a block.
+transcript rather than a segment stream, and why `tts_say` writes a WAV instead of handing back
+PCM: the engine's streaming forms take a block, and an array does not cross as a result.
 
-Both surfaces share one job queue. It is opened by whichever one opens first and destroyed when
-neither model is open, so a host can hold a text model and an ASR model at once.
+All three surfaces share one job queue. It is opened by whichever one opens first and destroyed
+when no model is open, so a host can hold all three at once.
 
 Three details a host has to respect, all of them in the generated header:
 

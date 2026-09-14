@@ -5,9 +5,10 @@ require dasllama/dasllama
 require daslib/export_c
 require daslib/jobque_boost
 require daslib/fio
+require daslib/strings_boost
 require jobque
 
-// dasLLAMA behind a C ABI - text completion and speech to text. Both standalone backends build
+// dasLLAMA behind a C ABI - text completion, speech to text and speech synthesis. Both backends build
 // this one file; README.md says how. A C caller reads each entry point as
 // <library name>_<def name>: dasllama_lib_open, and so on.
 
@@ -27,6 +28,12 @@ var g_asr_session = AsrSession()
 var g_asr_loaded = false
 var g_asr_us = 0l
 var g_audio_seconds = 0.0lf
+var g_tts = TtsModel()
+var g_tts_loaded = false
+var g_tts_voice : string = ""
+var g_tts_rate = 1.0
+var g_tts_us = 0l
+var g_tts_seconds = 0.0lf
 
 def private refuse(why : string) : bool {
     g_reason = why
@@ -44,7 +51,7 @@ def private queue_acquire() {
 }
 
 def private queue_release() {
-    if (g_owns_queue && !g_loaded && !g_asr_loaded) {
+    if (g_owns_queue && !g_loaded && !g_asr_loaded && !g_tts_loaded) {
         destroy_job_que()
         g_owns_queue = false
     }
@@ -219,6 +226,95 @@ def asr_transcribe(audio_path : string) : string {
 def asr_speed() : double {
     //! Seconds of audio transcribed per second of wall clock, 0 before a transcript has run.
     return g_asr_us > 0l ? g_audio_seconds * 1.0e6lf / double(g_asr_us) : 0.0lf
+}
+
+// ===== speech synthesis =====
+
+[export_c]
+def tts_open(model_path : string) : bool {
+    //! Load the text-to-speech model at `model_path` - a Pocket TTS, KittenTTS or Kokoro file -
+    //! and take its last voice as the default.
+    if (g_tts_loaded) {
+        return refuse("a TTS model is already open - call tts_close first")
+    }
+    if (!stat(model_path).is_valid) {
+        return refuse("no such file: {model_path}")
+    }
+    queue_acquire()
+    g_tts <- load_tts_model(model_path)   // nolint:PERF030 - tts_open refuses while loaded, tts_close deletes it
+    g_tts_loaded = true
+    let c <- caps(g_tts)
+    if (empty(c.voices)) {
+        tts_close()
+        return refuse("{model_path} offers no voice")
+    }
+    g_tts_voice = c.voices[length(c.voices) - 1]
+    g_reason = ""
+    return true
+}
+
+[export_c]
+def tts_close() {
+    //! Drop the synthesis model.
+    return if (!g_tts_loaded)
+    delete g_tts
+    g_tts_loaded = false
+    queue_release()
+}
+
+[export_c]
+def tts_voice() : string {
+    //! The voice `tts_say` speaks in, or "" while no model is open.
+    return g_tts_loaded ? g_tts_voice : ""
+}
+
+[export_c]
+def tts_set_voice(name : string; rate : float) : bool {
+    //! Pick a voice the model offers - "" keeps the current one - and a speech rate from 0.25 to 4.
+    if (!g_tts_loaded) {
+        return refuse("no TTS model is open")
+    }
+    g_tts_rate = rate > 0.0 ? rate : 1.0
+    if (empty(name)) {
+        return true
+    }
+    let c <- caps(g_tts)
+    if (find_index(c.voices, name) < 0) {
+        return refuse("{name} is not a voice this model offers: {join(c.voices, ", ")}")
+    }
+    g_tts_voice = name
+    g_reason = ""
+    return true
+}
+
+[export_c]
+def tts_say(text : string; out_wav : string) : double {
+    //! Synthesize `text` and write it to `out_wav` as PCM16. Returns the seconds of audio written,
+    //! or 0 with `reason` set.
+    if (!g_tts_loaded) {
+        refuse("no TTS model is open")
+        return 0.0lf
+    }
+    let started = ref_time_ticks()
+    let audio <- synthesize(g_tts, text, g_tts_voice, g_tts_rate)
+    g_tts_us = int64(get_time_usec(started))
+    if (empty(audio.pcm)) {
+        refuse("{text} synthesized to no audio")
+        return 0.0lf
+    }
+    g_tts_seconds = double(length(audio.pcm)) / double(audio.sample_rate)
+    if (!write_wav_pcm16(out_wav, audio.pcm, audio.sample_rate)) {
+        refuse("cannot write {out_wav}")
+        return 0.0lf
+    }
+    g_reason = ""
+    return g_tts_seconds
+}
+
+[export_c]
+def tts_speed() : double {
+    //! Seconds of speech synthesized per second of wall clock, 0 before a say has run.
+    return g_tts_us > 0l ? g_tts_seconds * 1.0e6lf / double(g_tts_us) : 0.0lf
 }
 
 //! the engine's own stats counters are filled by the one-call generate, which a pull loop never runs

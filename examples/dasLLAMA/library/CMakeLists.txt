@@ -1,7 +1,7 @@
 ###########################################################
 # dasLLAMA as a library, through both standalone backends. Opt-in (EXCLUDE_FROM_ALL): each one
-# compiles the whole engine - the -lib codegen about a minute, the -ctx translation unit ~33 MB,
-# four minutes and ~3 GB to compile. README.md lists the targets and how to run them.
+# compiles the whole engine - the -lib codegen about two minutes, the -ctx translation unit
+# ~50 MB, ten minutes and ~6 GB to compile. README.md lists the targets and how to run them.
 ###########################################################
 
 if(NOT DAS_LLAMA_INCLUDED)

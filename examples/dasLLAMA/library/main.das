@@ -7,12 +7,13 @@ require daslib/clargs
 // bindings, so this host declares nothing by hand and never requires dasllama.
 //
 //   bin/daslang examples/dasLLAMA/library/main.das -- --model <model.gguf> --prompt "..." --tokens 64
-//   bin/daslang examples/dasLLAMA/library/main.das -- --model <asr-model> --audio <audio-file>
+//   bin/daslang examples/dasLLAMA/library/main.das -- --asr <asr-model> --audio <audio-file>
+//   bin/daslang examples/dasLLAMA/library/main.das -- --tts <tts-model> --text "..." --out <out.wav>
 
 [CommandLineArgs]
 struct HostArgs {
     @clarg_short = "m"
-    @clarg_doc = "The model to load: a GGUF to continue text, a whisper .bin to transcribe"
+    @clarg_doc = "The GGUF whose prompt continuation to stream"
     model : string
 
     @clarg_short = "p"
@@ -23,9 +24,23 @@ struct HostArgs {
     @clarg_doc = "How many tokens to generate"
     tokens : int = 48
 
+    @clarg_doc = "Transcribe with this speech-to-text model instead of continuing a prompt"
+    asr : string
+
     @clarg_short = "a"
-    @clarg_doc = "Transcribe this audio file instead of continuing a prompt"
+    @clarg_doc = "The audio file --asr transcribes"
     audio : string
+
+    @clarg_doc = "Speak with this text-to-speech model instead of continuing a prompt"
+    tts : string
+
+    @clarg_short = "t"
+    @clarg_doc = "The text --tts speaks"
+    text : string = "Hello from a daslang library."
+
+    @clarg_short = "o"
+    @clarg_doc = "The WAV file --tts writes"
+    out : string = "speech.wav"
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -84,6 +99,22 @@ def private continue_prompt(ctx : void?; model, prompt : string; want : int) : i
     return 0
 }
 
+def private say_to_wav(ctx : void?; model, text, out : string) : int {
+    if (!dasllama_lib_tts_open(ctx, model)) {
+        print("tts_open failed: {why(ctx)}\n")
+        return 1
+    }
+    let seconds = dasllama_lib_tts_say(ctx, text, out)
+    if (seconds <= 0.0lf) {
+        print("tts_say failed: {why(ctx)}\n")
+        dasllama_lib_tts_close(ctx)
+        return 1
+    }
+    print("{out}: {seconds} s as {dasllama_lib_tts_voice(ctx)} [{dasllama_lib_tts_speed(ctx)}x realtime]\n")
+    dasllama_lib_tts_close(ctx)
+    return 0
+}
+
 [export]
 def main() : int {
     var inscope r <- parse_args(type<HostArgs>)
@@ -93,7 +124,7 @@ def main() : int {
         return 1
     }
     var inscope cfg <- r |> move_unwrap
-    if (cfg.help || empty(cfg.model)) {
+    if (cfg.help || (empty(cfg.model) && empty(cfg.asr) && empty(cfg.tts))) {
         print_help(get_command_info(type<HostArgs>), "main")
         return cfg.help ? 0 : 1
     }
@@ -102,7 +133,14 @@ def main() : int {
         print("create failed: {dasllama_lib_last_error(null)}\n")
         return 1
     }
-    let rc = empty(cfg.audio) ? continue_prompt(ctx, cfg.model, cfg.prompt, cfg.tokens) : transcribe_file(ctx, cfg.model, cfg.audio)
+    var rc = 0
+    if (!empty(cfg.asr)) {
+        rc = transcribe_file(ctx, cfg.asr, cfg.audio)
+    } elif (!empty(cfg.tts)) {
+        rc = say_to_wav(ctx, cfg.tts, cfg.text, cfg.out)
+    } else {
+        rc = continue_prompt(ctx, cfg.model, cfg.prompt, cfg.tokens)
+    }
     dasllama_lib_destroy(ctx)
     dasllama_lib_shutdown_runtime()
     return rc

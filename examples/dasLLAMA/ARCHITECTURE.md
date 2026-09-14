@@ -27,8 +27,8 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   `wasm/mint_models.py` - the deploy's staging step for a browser example's model set.
   `wasm/run_node.js` - runs the wasm64 engine host under node.
 - `library/` - the engine behind a C ABI, for a host that is not daslang: `dasllama_lib.das` is
-  the library (flat `[export_c]` entry points over the facade, two surfaces - text completion and
-  speech to text), and `main.c`, `main.cpp` and `main.das` are the three hosts that drive it. Its
+  the library (flat `[export_c]` entry points over the facade, three surfaces - text completion,
+  speech to text and speech synthesis), and `main.c`, `main.cpp` and `main.das` are the three hosts that drive it. Its
   `README.md` is the page a reader starts from.
 - `chat.das`, `run.das`, `speak.das`, `speak_server.das`, `transcribe.das`, `dictate.das`,
   `audio_chat.das` - desktop-only programs over the facade; nothing here ships them to a page.
@@ -193,7 +193,7 @@ whole has none.
 A library is entered and left once per call, which is what separates this program from the
 scripts beside it. `with_job_que()` is a scope no C caller can hold open, so the library opens
 the queue persistently (`create_job_que`) and destroys only a queue it made itself, and only once
-neither of its two surfaces holds a model; and the engine's `stats(session)` counters are filled
+none of its three surfaces holds a model; and the engine's `stats(session)` counters are filled
 by the one-call `generate`, which a caller pulling token by token never runs, so the library times
 its own calls instead.
 
