@@ -264,6 +264,9 @@ struct public MetalEnv {
     @clarg_doc = "Rows per MoE router/expert GEMV threadgroup, clamped 1..32 (the dense GEMV geometry is fixed)."
     gemv_tg : int = 4
 
+    @clarg_doc = "The single-row decode's step wait spins on the command buffer's GPU end time before the blocking wait: the calling thread owns the step and a blocking wake returns late on a box whose cores the jobque lanes fill (M4 Pro: 0.35 ms per token, a step every third step); 0 blocks in waitUntilCompleted alone - the A/B rail."
+    wait_spin : bool = true
+
     @clarg_doc = "Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail."
     kq_b8 : bool = true
 

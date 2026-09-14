@@ -84,13 +84,14 @@ tail-guard-free main loop and the DRIVER does the shape routing: the fixed-B mul
 K in 256 (B2) / 128 (B4) element chunks, and the batched decode driver gates each mv site on its
 own K (`mv_kdim`, `mv_wo`, `mv_w2`), falling to the tail-exact GEMV form where the alignment
 fails (gemma-4-26B-A4B's dense hidden 2112 on the w2 site). Every `[metal_dispatch]` GEMM form
-carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`, the K-quant
-mul_mm twins `mp % 32`, the 32- and 64-wide GEMM-B forms and their tensor twins `ka.ndim % 32|64` with the q8 block `ka.kdim % 32`,
+carries its grid divisors the same way - the production mul_mm `mp % 32, d % 64`, the non-tensor
+K-quant mul_mm builders `mp % 32`, the 32- and 64-wide GEMM-B forms and their tensor twins `ka.ndim % 32|64` with the q8 block `ka.kdim % 32`,
 the split-K pair `d % 32` - so a grid that would have truncated silently now names the site.
-The K-quant mul_mm twins declare `mp % 32` alone: their `rows % 64` half stays undeclared until
-the site census (followup 100) settles which sites clear it and which take a driver gate, and
-the drivers' own shape routing carries it meanwhile - the one contract these forms hold that the
-builder does not yet check.
+The non-tensor `enc_kq_mm_*_c` family (`dasllama/dasllama_metal_kernels.das`) declares `mp % 32`
+alone: its `rows % 64` half stays undeclared until the site census (followup 83) settles which
+sites clear it and which take a driver gate, and the drivers' own shape routing carries it
+meanwhile - the one contract these forms hold that the builder does not yet check. The prefill
+tensor twins and the MoE split stamps declare their `rows % 64` beside their own mp divisor.
 A contract on a value that reaches the builder only as a bound uniform BUFFER (the mul_mm's K)
 stays with the caller: the dispatch never pays a readback.
 
@@ -235,6 +236,19 @@ or a penalty at temp 0 (`sampler_is_argmax` is the negation) - and the driver ne
 session, because the chain predicts the raw argmax the penalty then rejects. Only a bare argmax
 sampler (temp 0, penalties off) and a caller feeding the argmax directly keep the adaptive chain.
 
+**The step wait spins on the GPU end time, then blocks.** `finish_step` polls the command
+buffer's `GPUEndTime` until it is set and only then enters `waitUntilCompleted`, because a
+blocking wake returns late on a box whose performance cores the jobque lanes fill: on the M4
+Pro (ten lanes on ten P-cores) the bench process pays 0.35 ms per token on every step and, with
+the greedy chain, a whole step before every third one (the GPU idle 3.3-3.6 ms with the next
+command buffer already queued, Llama-1B Q8 at 5.7 ms of GPU work per 6.4-6.7 ms token -
+`benchmarks/decode_step_trace.das -o`, M4 Pro; `PERF_LEDGER.md`, the M4 Metal pass), while a
+process with idle lanes wakes in time on either box. The calling thread owns the step and has
+nothing else to do while it runs, and the jobque's own workers spin between jobs by design, so
+the spin costs a core's idle and buys the wake's latency. `DASLLAMA_METAL_WAIT_SPIN=0` is the
+blocking wait alone, the A/B rail. The spin is capped at 200 ms so a stalled step still reaches
+the blocking wait that reports it.
+
 ### 2.39 The verify encodes on the serial encoder {#verify-serial-encoder}
 
 **The NextN round's verify builds its whole step on one serial compute encoder - the one decode
@@ -267,3 +281,16 @@ instead of copying it. Their weight site is the batch ladder under `rows_tier`, 
 with every arm off (`use_mm` and `use_gemm` false, `mp = nrows`, no split-K buffer): a row chain
 takes the K-quant plane GEMV or the row GEMVs, never the batch's tensor, mv, split-K or tile
 forms.
+
+**A dense q8 weight site picks its GEMV form by reduction width.** `enc_q8_site_gemv`
+(`dasllama/dasllama_metal_kernels.das`) takes the row-per-simdgroup form (`MetalQ8GemvSg`, 8 rows
+per 256-thread threadgroup, no cross-simdgroup reduce) at `n <= GEMV_SG_MAX_N` (1536) and the
+reduction-split `MetalQ8Gemv` above it; the fused W1|W3 twin (`enc_gemv_w13sw`) follows the same
+cut through its own `Sg` stamp. At a short reduction the split form's four simdgroups each see a
+handful of blocks and its two barriers per row pair dominate: on the M4 Pro the row form wins
+every short shape, and on the M5 Max it wins the projection shapes and loses the classifier by 6%
+(`benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B shapes, both boxes;
+`PERF_LEDGER.md`, the M4 Metal pass). At 2048, classifier width, the split form is back ahead on
+both parts, so `GEMV_SG_MAX_N` is a constant, not a crown. The pick reads n alone while the
+crossover moves on n and d, which is why the M5 classifier takes the slower form
+(`followup_metal.md` sec.12).

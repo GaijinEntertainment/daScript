@@ -2117,7 +2117,7 @@ def test_gemma4a_tower_metal(t : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
+[test, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def test_canary_tower_metal(t : T?) {
     t |> run("canary tower: the Metal FastConformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2305,7 +2305,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
 // The qwen3a f32-rail tower on the GPU (arm `mtower`): transcript equality with the knob off
 // vs on, blocks-counter delta derived from the loaded tower's own n_layer. The q8 SERVING
 // default declines by design (the whisper mtower cell above owns that assert).
-[test, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
+[test, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def test_qwen3a_metal_tower(tst : T?) {
     tst |> run("qwen3a f32 rail: the Metal tower blocks - transcript + counters") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2553,6 +2553,66 @@ def test_k6_scale_split_sizing(t : T?) {
         t |> equal(int(m.k6s[nsb * 16l + (nsb - 1l) * 2l]), 216, "last sb's d low byte closes the strip")
         delete m
     }
+    t |> run("the split-scale arms: k3/k6 lead with the 16-byte strip, every other split format leads with the d") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let nsb = 3l
+        for (f in [KqFmt.k6, KqFmt.k3, KqFmt.iq4xs, KqFmt.k2]) {
+            let ssb = kq_ssb(f)
+            let strip_first = f == KqFmt.k6 || f == KqFmt.k3
+            let tail = f == KqFmt.k2 ? 4l : 2l              // k2 carries d AND dmin; every other split format d alone
+            let strip_at = strip_first ? 0l : 4l            // the source offset the 16 sub-scale bytes start at
+            let tail_at = strip_first ? 16l : 0l            // and the one the d bytes start at
+            var src <- split_scale_src(ssb, nsb)
+            var dst : array<uint8>
+            unsafe {
+                kq_split_scale_plane(f, addr<uint8 const?>(src[0]), nsb, dst)
+            }
+            t |> equal(long_length(dst), nsb * (16l + tail), "{f}: the split plane is nsb x (16 + {tail})")
+            for (sb in range64(nsb)) {
+                t |> equal(int(dst[sb * 16l]), int(sb * 32l + strip_at), "{f}: sb{sb}'s strip opens at source byte {strip_at}")
+                t |> equal(int(dst[sb * 16l + 15l]), int(sb * 32l + strip_at + 15l), "{f}: sb{sb}'s strip closes 16 bytes on")
+                for (h in range64(tail)) {
+                    t |> equal(int(dst[nsb * 16l + sb * tail + h]), int(sb * 32l + tail_at + h),
+                        "{f}: sb{sb}'s tail byte {h} comes from source byte {tail_at + h}")
+                }
+            }
+            // the poison is a value ADDED to sb1's FIRST tail byte - a byte this arm reads only
+            // into the tail, and the other arm would read into the strip; it must move exactly
+            // one tail byte and nothing in the strip
+            var poisoned <- split_scale_src(ssb, nsb)
+            poisoned[ssb + tail_at] = uint8(int(poisoned[ssb + tail_at]) + 7)
+            var pdst : array<uint8>
+            unsafe {
+                kq_split_scale_plane(f, addr<uint8 const?>(poisoned[0]), nsb, pdst)
+            }
+            t |> equal(int(pdst[nsb * 16l + tail]), int(dst[nsb * 16l + tail]) + 7, "{f}: the poison lands in sb1's tail")
+            var strip_moved = 0l
+            for (i in range64(nsb * 16l)) {
+                if (pdst[i] != dst[i]) {
+                    strip_moved++
+                }
+            }
+            t |> equal(strip_moved, 0l, "{f}: and nowhere in the strip")
+            delete src
+            delete dst
+            delete poisoned
+            delete pdst
+        }
+    }
+}
+
+//! one scale plane's source superblocks, every byte naming its own (superblock, offset) pair
+def private split_scale_src(ssb, nsb : int64) : array<uint8> {
+    var @exact_size s : array<uint8>
+    s |> reserve_resize(nsb * ssb)
+    for (sb in range64(nsb)) {
+        for (b in range64(ssb)) {
+            s[sb * ssb + b] = uint8(sb * 32l + b)
+        }
+    }
+    return <- s
 }
 
 // ===== the meta-layout fingerprint (header byte 48) =====
@@ -2627,6 +2687,37 @@ def test_devw_bake_tables(t : T?) {
         tt |> equal(long_length(m.devwf16_off), 2l, "nor the offset table")
         tt |> equal(long_length(m.devwf16_n), 2l, "nor the length table")
         delete jobs
+        delete m
+    }
+    t |> run("a split-scale panel bakes only at a whole-superblock row width and a row count on the 64 lattice") @(tt : T?) {
+        if (!arm_on(tt, "mechanics")) {
+            return
+        }
+        var m = Model()
+        m.quant = QuantMode.q8
+        m.metal_blob = true
+        // iq4xs streams as its own split scale pair, so its bake runs through the registered
+        // split-scale mirror - and that mirror refuses a panel it cannot walk. One refusal aborts
+        // the whole image save, so a site the mirror would refuse is never covered.
+        var whole <- [ FillJob(name = "blk.0.ffn_down.weight", woff = 0l, n = 256l * 64l, src_off = 0l, fmt = KqFmt.iq4xs, kdim = 256l) ]
+        var odd_width <- [ FillJob(name = "blk.0.ffn_down.weight", woff = 0l, n = 384l * 64l, src_off = 0l, fmt = KqFmt.iq4xs, kdim = 384l) ]
+        var odd_rows <- [ FillJob(name = "blk.0.ffn_down.weight", woff = 0l, n = 256l * 32l, src_off = 0l, fmt = KqFmt.iq4xs, kdim = 256l) ]
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            tt |> equal(devw_bake_tables(m, whole), 256l * 64l * 2l, "256 wide x 64 rows: whole superblocks on the 64 lattice, baked")
+            tt |> equal(long_length(m.devwf16_key), 1l, "the admitted panel is the one site")
+            tt |> equal(devw_bake_tables(m, odd_width), 0l, "384 wide: not a whole superblock, refused")
+            tt |> equal(long_length(m.devwf16_key), 0l, "and the tables rebuild empty - never left carrying the admitted panel")
+            tt |> equal(devw_bake_tables(m, odd_rows), 0l, "32 rows: off the 64 lattice, refused")
+        } else {
+            // the mirror is the Metal prefill module's [init]; with no module there is no mirror,
+            // and the cover predicate refuses every split-scale panel whatever its shape
+            tt |> equal(devw_bake_tables(m, whole), 0l, "no split-scale mirror registered: a whole-superblock panel is refused too")
+            tt |> equal(devw_bake_tables(m, odd_width), 0l, "and so is an odd width")
+            tt |> equal(devw_bake_tables(m, odd_rows), 0l, "and an odd row count")
+        }
+        delete whole
+        delete odd_width
+        delete odd_rows
         delete m
     }
 }

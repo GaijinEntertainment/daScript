@@ -164,12 +164,12 @@ model's first kq set rebuilds it.
 ### 2.2ac The tile probe's arms share one descriptor set layout {#khrx-shared-set-layout}
 
 `khrx` is the lever sweep of the KHR kq tile (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ae) in
-`harness/vk_gemm_probe.das` (`ARCHITECTURE_MEASUREMENT.md` sec.2.5): eight arms timed over one
-shape. Two are shipped bodies - the KHR class, the reference each compared arm is checked
-against, and the sdot4 kq tile. `ship` is the KHR tile copied with no lever moved, the control
-the lever arms read against, and the four lever arms are that copy with one lever - the weight
-stage (`dec4`, the four-wide decode callback in place of the word stage), the accumulator
-width, the subgroup tiling, the workgroup size - moved back to its simpler form.
+`harness/vk_gemm_probe.das` (`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a): eight arms
+timed over one shape. Two are shipped bodies - the KHR class, the reference each compared arm
+is checked against, and the sdot4 kq tile. `ship` is the KHR tile copied with no lever moved,
+the control the lever arms read against, and the four lever arms are that copy with one lever -
+the weight stage (`dec4`, the four-wide decode callback in place of the word stage), the
+accumulator width, the subgroup tiling, the workgroup size - moved back to its simpler form.
 Every arm but the sdot4 one binds the same five-buffer descriptor set layout as the shipped
 class, so an arm's figure differs from the shipped class's by its body alone and never by a
 binding difference. The sdot4 arm reads its own Q8 activation fixture, so it binds that

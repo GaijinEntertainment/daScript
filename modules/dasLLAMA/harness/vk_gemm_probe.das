@@ -549,7 +549,7 @@ def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 
     return (buf = scd, bytes = sc_bytes)
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 //! `serial`: one hazard rail and one output plane across the dispatches, so a barrier separates them and the row reads a single dispatch's latency - the chain's cost - instead of the throughput of sixteen overlapping ones
 def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp_only : bool = false; serial : bool = false) {
     let dv = cm2_shape_upload(fmt, d, n, cnt)
@@ -604,7 +604,7 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
 
 // ===== the decode head's small kernels in isolation (arg "dec") =====
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measurement sweep
     verify(ensure_router_gemv_f16_cls() && ensure_dn_step_cls(), "dec probe pipelines must engage")
     for (shape in fixed_array(int2(64, 4096), int2(32, 1024), int2(64, 5120))) {   //! (rows, dim): the 9B's, the 0.8B's, the 27B's
@@ -730,7 +730,7 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
 // ===== the m stamp on planes the L2 cannot hold (arg "cold:<fmt>") =====
 let private COLD_COPIES = 96   //! copies of a shape's planes, 67 MB and up at the shared expert's shapes: past a 64 MB L2, so every dispatch reads its planes from VRAM
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {
     var dvs <- [for (_c in range(COLD_COPIES)); cm2_shape_upload(fmt, d, n, cnt)]
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
@@ -788,7 +788,7 @@ def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {
 }
 
 // ===== a timestamp between two independent dispatches (arg "ts:<fmt>") =====
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_ts_pair(fmt : int; d, n, cnt : int) {
     let dv = cm2_shape_upload(fmt, d, n, cnt)
     let yd2 = make_device_buf(dv.y_bytes)
@@ -900,7 +900,7 @@ def private moe_sched_words(cnt : array<int>; plane_blk, wtiles, tc, bound : int
     return <- sched
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool) {   // nolint:STYLE038 — one linear measurement sweep
     let unit = fmt == 0 ? 32 : 256
     let plane_blk = d * (n / unit)   //! one expert's plane, in blocks
@@ -1976,7 +1976,7 @@ def private khr_prof_submit(name : string; var raws : array<VkCommandBuffer>) {
     }
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {   // nolint:STYLE038 — one interleaved measurement sweep over eight arms, its compare and its CPU check
     let fmt = int(KqFmt.k4)
     let nsb = n / 256
@@ -2555,7 +2555,7 @@ def private mmq_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var
     }
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let fmt = int(KqFmt.k4)
     let nsb = n / 256
@@ -2664,7 +2664,7 @@ def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038
 
 // k6 (Q6_K) cm2 decode-in-load vs the serving kq tile - same instrument as run_k4_shape;
 // bisect adds the k6px decode-spelling variants
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) {   // nolint:STYLE037,STYLE038 — one linear measurement sweep
     let nsb = n / 256
     let totsb = d * nsb
@@ -3371,7 +3371,7 @@ def private run_small_kernels(dim : int) {
 }
 
 // the decode-cost bisect: the shipped cm2l against the three probe variants, one shape
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let rows = cnt
@@ -3661,7 +3661,7 @@ class Cm2PxMin {
 
 // gate shape at cnt = 256 (the reference grid is 2-D; one BN=256 column tile keeps it 1-D):
 // the reference interleaved q8 A plane, drain-free timing, our cm2l + mm rows alongside
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let totblk = d * nbb
@@ -3752,7 +3752,7 @@ def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear 
     delete xf
 }
 
-[arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
+[arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape dispatcher
     g_probe_exit = 1   //! every early return below is a run with no result row; the sweeps clear it
     if (!ensure_q8_batch_cls()) {

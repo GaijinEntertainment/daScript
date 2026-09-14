@@ -32,7 +32,7 @@ require strings
 require _model_tier
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
-// The KERNEL COVERAGE census (REVIEW_GPU.md: a Metal kernel class is dispatched by a census row here or named in
+// The KERNEL COVERAGE census (REVIEW_GPU_KERNEL_CLASSES.md: a Metal kernel class is dispatched by a census row here or named in
 // CENSUS_NEVER_DISPATCHED; a Vulkan kernel class by a census row or VK_CENSUS_NEVER_DISPATCHED): drive the small-model zoo across the
 // format / graph / batch-shape / KV-codec axes and report which compiled kernels were never
 // dispatched — LOUD WARNINGS, never an auto-dead verdict. A zero means "nothing this zoo runs
@@ -68,9 +68,11 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalMoeMulMmQ51T", "MetalMoeMulMmQ51TH",
     "MetalMoeMulMmQ51TH128", "MetalMoeMulMmQ51THR",
     // the dense tall in-kernel-dequant kq stamps: they engage only when a site's f16 panel
-    // would reach TALLKQ_MIN_PANEL (96 MiB) - the zoo's small carriers top out far below it.
+    // would reach TALLKQ_MIN_PANEL (96 MiB) - the zoo's small carriers top out far below it,
+    // and the iq3 pair additionally wants a plane in a format the zoo does not stock.
     // Their coverage is the tall kernel-unit leg in test_metal_gemm_kernels.das (kq_mulmm_gate)
     "MetalKqMulMmK4TH128", "MetalKqMulMmK5TH128", "MetalKqMulMmK6TH128",
+    "MetalKqMulMmIq3sTH128", "MetalKqMulMmIq3xxsTH128",
     // the nine formats the iquant arc added (Q2_K, Q3_K, IQ4_XS, IQ4_NL, IQ3_S, IQ3_XXS, IQ2_S,
     // IQ2_XS, IQ2_XXS): no stocked census carrier holds a plane in any of them - the zoo quants
     // are Q8_0 / Q5_K_M / Q4_K_M / mxfp4. Their coverage is the kernel-unit gates in
@@ -100,7 +102,44 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the kq_mvb2_k4_r2 crown. Their coverage is the argmax_rows gate in test_metal_misc_kernels.das,
     // the r2 arm of kq_mvb_gate plus the pair-walk gate in test_metal_gemv_kernels.das, and the
     // mtp suite's parity arms
-    "MetalArgmaxRows", "MetalKqMvB2K4R2"
+    "MetalArgmaxRows", "MetalKqMvB2K4R2",
+    // the Q4_0 family: no stocked Metal census carrier holds a Q4_0 plane (the zoo quants are
+    // Q8_0 / Q5_K_M / Q4_K_M / mxfp4; the Q4_0 requant is a vulkan-census fixture). Their coverage
+    // is kq_gemv_gate("q40") and kq_mvb_gate(fmt 40) in test_metal_gemv_kernels.das plus
+    // kq_mulmm_gate(fmt 40) in test_metal_gemm_kernels.das
+    "MetalKqGemvQ40", "MetalKqMvB2Q40", "MetalKqMvB4Q40", "MetalKqMvB8Q40",
+    "MetalKqMulMmQ40", "MetalKqMulMmQ40T", "MetalKqMulMmQ40TH",
+    // the dev-W dequant kernels of the split-scale and iquant formats: the image mint's dev-W bake
+    // runs one per format, and no stocked census carrier holds a plane in any of them (same zoo
+    // quants as above). Their coverage is kq_devw_gate in test_metal_gemm_kernels.das, whose
+    // kq_dq_kernel picks the stamp per format
+    "MetalKqDequantIq4xs", "MetalKqDequantIq4nl", "MetalKqDequantQ40", "MetalKqDequantK3",
+    "MetalKqDequantIq3s", "MetalKqDequantIq3xxs", "MetalKqDequantK2", "MetalKqDequantIq2s",
+    "MetalKqDequantIq2xs", "MetalKqDequantIq2xxs",
+    // the split-format MoE expert mul_mm stamps, all four forms (f32-X base, half-X twin, and the
+    // tall pair): no stocked MoE carrier holds an expert plane in these formats - the zoo's MoE
+    // carriers put Q4_K_M (k4/k6), Q8_0 and mxfp4 expert planes on the schedule. Their coverage is
+    // moe_mulmm_split_gate in test_metal_gemm_kernels.das
+    "MetalMoeMulMmK3T", "MetalMoeMulMmK3TH", "MetalMoeMulMmK3TH128", "MetalMoeMulMmK3THR",
+    "MetalMoeMulMmIq4xsT", "MetalMoeMulMmIq4xsTH", "MetalMoeMulMmIq4xsTH128", "MetalMoeMulMmIq4xsTHR",
+    "MetalMoeMulMmIq3sT", "MetalMoeMulMmIq3sTH", "MetalMoeMulMmIq3sTH128", "MetalMoeMulMmIq3sTHR",
+    "MetalMoeMulMmIq3xxsT", "MetalMoeMulMmIq3xxsTH", "MetalMoeMulMmIq3xxsTH128", "MetalMoeMulMmIq3xxsTHR",
+    "MetalMoeMulMmIq2sT", "MetalMoeMulMmIq2sTH", "MetalMoeMulMmIq2sTH128", "MetalMoeMulMmIq2sTHR",
+    "MetalMoeMulMmIq2xsT", "MetalMoeMulMmIq2xsTH", "MetalMoeMulMmIq2xsTH128", "MetalMoeMulMmIq2xsTHR",
+    "MetalMoeMulMmIq2xxsT", "MetalMoeMulMmIq2xxsTH", "MetalMoeMulMmIq2xxsTH128", "MetalMoeMulMmIq2xxsTHR",
+    // the expert-indexed GEMVs of the same formats, on the same expert planes nothing stocks.
+    // Their coverage is moe_kq_gemv_gate in test_metal_gemv_kernels.das
+    "MetalMoeGemvK3", "MetalMoeGemvIq4xs", "MetalMoeGemvIq3s", "MetalMoeGemvIq3xxs",
+    "MetalMoeGemvIq2s", "MetalMoeGemvIq2xs", "MetalMoeGemvIq2xxs",
+    // the 16-deep router select stamp: it serves past 256 experts, and the stocked MoE carriers top
+    // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
+    // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
+    "MetalMoeSelect512",
+    // the geglu arm of the bound-total MoE activation: the prefill picks it on moe_dense_shexp (the
+    // gemma-4 MoE shape) and the zoo's gemma-4 rows are the dense 12B and the E4B PLE model, so the
+    // swiglu twin runs on every MoE row here. Their coverage is ew2_totb_gate(geglu = true) in
+    // test_metal_misc_kernels.das
+    "MetalGegluB", "MetalGegluHXB"
 ]
 
 def private counting_prompt(start, last : int) : string {

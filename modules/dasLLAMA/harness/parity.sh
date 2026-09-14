@@ -10,7 +10,8 @@
 #   ctk     ORACLE KV-cache type: f16|q8_0 (default: llama.cpp's own default; pass q8_0 with kv=q8_0
 #           for the both-sides-quantized run — the oracle then also turns flash attention on)
 #
-# Env overrides: LLAMA_CPP (default ~/Work/llama.cpp), DASLANG (default <repo>/bin/daslang)
+# Env overrides: LLAMA_CPP (default ~/Work/llama.cpp), DASLANG (default <repo>/bin/daslang),
+#   NGL=99 runs the dasLLAMA side on Metal (the oracle stays llama.cpp's own build)
 # The oracle binary must be built once — see harness/oracle/simple_ids.cpp for the one-line recipe.
 set -euo pipefail
 
@@ -45,8 +46,12 @@ IDS_CSV="$(printf '%s' "$PROMPT_IDS" | tr ' ' ',')"
 # stderr dropped the whole script dies silently (set -e).
 KQ_FLAG=""
 [ -n "${KQ_NATIVE:-}" ] && KQ_FLAG="--kquant-native $KQ_NATIVE"
-DAS="$(DASLLAMA_CPU_PREFILL=1 "$DASLANG" -jit "$PARITY" -- -m "$MODEL" -n "$N" --quant "$QUANT" --kv "$KV" $KQ_FLAG --ids "$IDS_CSV" 2>/dev/null)"
+# NGL=99 (env) runs the dasLLAMA side on Metal - the whole graph, llama-bench spelling
+NGL_FLAG=""
+[ -n "${NGL:-}" ] && NGL_FLAG="--ngl $NGL"
+DAS="$(DASLLAMA_CPU_PREFILL=1 "$DASLANG" -jit "$PARITY" -- -m "$MODEL" -n "$N" --quant "$QUANT" --kv "$KV" $KQ_FLAG $NGL_FLAG --ids "$IDS_CSV" 2>/dev/null)"
 DAS_GEN="$(printf '%s\n' "$DAS" | sed -n 's/^GEN_IDS: //p')"
+DAS_TEXT="$(printf '%s\n' "$DAS" | sed -n 's/^GEN_TEXT: //p')"
 
 # 3. token-for-token diff
 read -ra R <<< "$REF_GEN"
@@ -65,6 +70,7 @@ echo "model:  $MODEL"
 echo "prompt: \"$PROMPT\"  (ids: $PROMPT_IDS)"
 echo "ref:    $REF_GEN"
 echo "das:    $DAS_GEN"
+echo "das text: $DAS_TEXT"
 if [ "$mismatch" -lt 0 ] && [ "${#D[@]}" -eq "${#R[@]}" ]; then
     echo "PASS: $matched/${#R[@]} token-for-token"
     exit 0

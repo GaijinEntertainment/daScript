@@ -1633,3 +1633,66 @@ direction-grade.
   The lanes agree within the rig's own spread; the small form loses nothing the rig can hear.
   Decision: taken - the browser pages read the small forms (storywish the one-voice file, parrot
   the 19-voice one), the q8 file stays the desktop default of the served set.
+
+### From the M4 Metal pass (2026-09-13)
+
+Instruments: `benchmarks/matmul/bench_metal_gemv_kernels.das` at the Qwen2.5-0.5B decode shapes
+(the `05b` set, plus an n-ladder at d=4096 and n=2048 at classifier width), best of 3 rounds,
+production `v0_gemv` against the lab's row-per-simdgroup forms, every arm interleaved in one
+process; `benchmarks/decode_step_trace.das` on the 0.5B Q8 file, whose step wall is read outside
+the benchmark process: out-of-process; the records rig's Metal pair, `benchmarks/lcpp_bench.das`
+under `-jit --for-debug-purposes --ngl 99 -p 512 -n 128`: debug-jit. The M4 Pro and the M5 Max,
+each on its own mint. The rows are in `followup_metal.md` sec.7.1. Every rig pair below is two
+builds or two knob settings in two processes - direction-grade - and enters as its ratio, the
+arms' rates left in the run's report. Qwen3-30B-A3B-Instruct-2507-Q4_K_M and
+Qwen3.8-27B-Q4_K_M carry committed board rows on both boxes (`performance/records/m4.json`,
+`performance/records/m5.json`); the debug-jit readings here are read beside those rows.
+
+- **The q8 GEMV at n=896, M4 Pro (ms, weight GB/s): split form vs row-per-simdgroup:** qkv
+  (d=1152) 0.0081 / 135 vs 0.0051 / 228; wo (896) 0.0068 / 126 vs 0.0044 / 208; w13 (4864)
+  0.032 / 145 vs 0.019 / 262; w2 (n=4864, d=896) 0.0129 / 360 vs 0.0186 / 263; cls (151936)
+  0.919 / 157 vs 0.574 / 267. The first lab pass read the split form 2-3x slower still (0.029
+  ms on qkv, 0.98 on cls): the M4's clocks idle between sparse dispatches, the interleaved
+  all-variant run is the honest one.
+- **The same on the M5 Max:** qkv 0.0055 vs 0.0047; wo 0.0050 vs 0.0044; w13 0.0110 vs
+  0.0075; w2 0.0078 vs 0.0072; cls 0.240 vs 0.255 - the row form wins or ties every short shape.
+- **The crossover, both boxes:** n=1536 (d=4096) row form 1.5x on both; n=2048 at d=4096 M4
+  +28% row form, M5 -9%; n=2048 at d=128256 split ahead on both (M5 0.464 vs 0.491, M4 1.169
+  vs 1.217); n=3072 split ahead on both. `GEMV_SG_MAX_N = 1536`.
+- **The 0.5B Q8 decode step, M4 Pro:** 4.2 ms per token (gpu 4.07, gap 0.02, sched 0.03;
+  197 serial nodes) before, 3.2 after; the fusion, spec-chain, concurrent-encoder and fused-
+  attention rails each moved the step under 2%. Rig tg128, the row form against the split: the
+  0.5B 1.27x (0.73 -> 0.94 of llama.cpp), the 0.6B 1.23x (0.80 -> 0.97), the 0.8B 1.25x (0.97
+  -> 1.21). M5: 0.99x, 1.00x, 0.99x and 1.00x on the 0.5B, 0.6B, 1.5B and Llama-1B Q8 - flat.
+- **dev-W on the raced M4 sidecar (no tensor crown):** Llama-1B IQ3_XXS pp 0.93 -> 1.00,
+  IQ2_XXS 0.93 -> 1.00, Q4_K_M 0.97 -> 1.02 - the same three rows the hand-crowned sidecar
+  gave, so the panel is the whole gain and the tensor stamp none of it. Qwen3-30B IQ2_XXS
+  serves at 0.95 / 1.09 where it declined to the CPU before.
+- **The bake's footprint pair (M5 Max, `utils/dasllama-convert -f metal --stream`, the
+  541 MB Llama-1B IQ3_XXS):** the image at IMAGE_VERSION 36 is 659 MB with a 32 MB dev-W plane
+  over 16 sites (the q8/k4/k5/k6 mirrors), at 37 it is 2571 MB with an 1856 MB plane over 112
+  sites; the mint's convert time 222 -> 1016 ms. The plane is 3.4x the model on a small
+  split-scale dense file - the per-panel cap keeps a 30B's expert planes out, so the cost
+  lands on the small files - and it buys the resident panel's prefill (1.05 scratch -> 1.23
+  resident on the M4 rows above). Decision: the bake stays on; the cap and a per-file
+  footprint knob are the ledger's if the disk cost bites.
+- **The step wait, Llama-1B Q8, M4 Pro (`decode_step_trace -o`, 96 steps):** GPU 5.73 ms per
+  token, wall 6.38-6.71, gap 0.61-0.98 ms per token averaged over a three-step cycle (two
+  steps at gap 0, then 3.3-3.6 ms; commits at +0.1, +6.0, +13.9 ms; waits 13.7, 0, 5.9 ms).
+  The same file on the M5 Max: wall 2.81 = GPU 2.80, one commit per step, gap 0.00. The 0.5B
+  Q8 on the M4: gap 0.02 on three processes, 1.46 (6 ms holes) on a fourth. The attention rail,
+  `taskpolicy -l 0 -t 0` and `DAS_JOBQUE_AFFINITY=2` each left the gap at 0.75-0.87. A spin on
+  `GPUEndTime` before the blocking wait: 5.66 ms per token, gap 0.007, 176.5 t/s, three runs
+  within 0.02 ms (llama-bench 167). Rig re-times, the spin against the blocking wait: Llama-1B
+  Q8 tg 1.06x (1.00 of llama.cpp), Q4_K_M 1.08x (1.00), Qwen2.5-0.5B Q8 1.10x (1.03), 1.5B Q8
+  1.07x (1.03); prefill unchanged. The adaptive form arms on the first hole (3.9 ms, both runs)
+  and the later buckets read gap 0.001. The rig's own process pays the wake on every unchained
+  step (IQ2_XXS 1.09x spinning over blocking) while the trace tool's does not, so the spin
+  ships on by default.
+- **The tall stamp on the M4 Pro (rig cells, the sidecar's `metal_tall_floor` at 100000 =
+  never tall, against 64):** Llama-1B Q4_0 pp 1.06x (0.97 -> 1.03 of llama.cpp), Llama-1B Q8
+  1.08x (0.98 -> 1.05), Qwen3-30B-A3B Q4_K_M 1.01x (1.02 -> 1.04; its board row is
+  `performance/records/m4.json`'s), Qwen3.5-9B Q8 1.00x (even); decode unchanged. The 1-D grid
+  twin, the double buffer off, the floor at 16, a re-mint and a re-baked image each left Q4_0
+  within 0.2% of the never-tall arm. The M5's tall win stands (its Llama-1B Q8 prefill reads
+  1.00x either way under the hand crown).

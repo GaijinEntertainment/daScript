@@ -163,8 +163,13 @@ batch cell asserts the `graph` DECLINE on the planar model - shexp has no batch 
 blob twin's CPU batch fallback would trip the blob-only panic).
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
-carrier, model-free - runs with no model stocked; also the layout fingerprint and the dev-W
-bake tables, whose rebuild-not-append contract and per-format key arithmetic are pure taxonomy
+carrier, model-free - runs with no model stocked; also the layout fingerprint; the split-scale
+plane's two arms against hand-built superblocks - k6 and k3 strip-first at `strip_at` 0 / `tail_at` 16,
+iq4xs and k2 d-first at `strip_at` 4 / `tail_at` 0 with k2's four-byte tail, each carrying an
+added-value poison in one tail byte that must move that byte and nothing in the strip, plus the
+k6 sizing leg at 4,000,000 superblocks - and the dev-W bake tables, whose rebuild-not-append
+contract, per-format key arithmetic and split-scale cover predicate - a 256-wide 64-row panel
+bakes, a 384-wide one and a 32-row one do not - are pure taxonomy
 over a job list) `smol untied metal metal-untied gemma tower whisper voxtral
 parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
 mtower kitten`; `kitten` is the TTS area's arm - the StyleTTS2 carrier (kitten-nano) through
@@ -220,10 +225,10 @@ Q4_K_M and UD-IQ2_XXS: the resident MoE block's s stamps (the 32-row column) and
 `VK_CENSUS_NEVER_DISPATCHED` entry in `test_kernel_coverage.das` naming its kernel-unit cell;
 every prefill tile family is reached through the qwen3 Q8_0 and Q4_K_M and the 1B llama
 requants, machine-local like the other fixtures - the `-local` ones are
-minted from the bartowski Q8_0 with `llama-quantize --allow-requantize <q8> <out> <type>` - each
+minted from the bartowski Q8_0 with `llama-quantize --allow-requantize [--imatrix llama32_1b.imatrix] <q8> <out> <type>` (the IQ2/IQ3 types need the imatrix; the exact recipes are the catalog rows in `performance/model_specs.das`) - each
 swept under the coopmat modes its planes have twins in: all five for q8 and q40, the box's mode,
 mm and sdot4 for the other kq formats) is the KERNEL COVERAGE census (the census-row obligation is
-`../REVIEW_GPU.md`'s): the small-model zoo swept across format/graph/batch/KV axes, then a
+`../REVIEW_GPU_KERNEL_CLASSES.md`'s): the small-model zoo swept across format/graph/batch/KV axes, then a
 report of per-kernel dispatch counts with LOUD WARNINGS for compiled-but-never-dispatched
 kernels - never an auto-dead verdict. A zero means "nothing THIS zoo runs dispatched it",
 never "unreachable". A kernel's dispatch predicate can be satisfiable by a servable model,
@@ -408,7 +413,19 @@ router shapes the routed block's kernels do not serve, the expert and slot count
 reach) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a layer routes only
 past the dense lead with all three expert planes, and its dense width is the shared expert's);
 plus the KV mirror's binding cap (`resident_binding_ctx`) on a hybrid shell whose layer 0 is
-recurrent, its dense twin, and a shell with no attention layer.
+recurrent, its dense twin, and a shell with no attention layer. The Metal serving gates ride the
+same synthetic shells: `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the twelve
+expert plane formats the routed block serves and the three it declines (q40, iq4nl, k2), one
+mixed-format model, and the drift guard walking all fifteen `KqFmt` members - the kernel roster
+(`moe_fmt_metal_served`) and the site-alignment gate (`moe_site_ok`) name ONE set, which is the
+only case that isolates the roster, since no format one admits the other refuses;
+`test_moe_metal_expert_count` pins the select stamps' ladder at 256 and 512 experts admitted,
+513 declined, the count alone deciding it; `test_mm_tile_widths_64_dense_width` and
+`test_decode_shape_dense_width` hold `has_dense_ffn`'s guard - a routed model with no dense lead
+carries an off-lattice dense width past `mm_tile_widths_64_ok` and past `decode_shape_decline`
+on both the decode and the batch needs mask, and the same width on a dense twin declines
+both. `test_plan_room` is the GPU plan's room arithmetic - the tier cap less headroom, capped by
+the OS's room where the OS answers.
 
 `test_gpu_resident_hybrid.das` - stocked suite, `-jit` only; the whole-model resident driver on a
 deltanet hybrid under `DASLLAMA_GPU=1`. Each fixture is a row in `../performance/model_specs.das`:
@@ -651,11 +668,17 @@ standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and r
 artifact - the rail where globals restore as DATA, so a function-typed global with no
 boot-restore `[init]` dies on its first invoke while every `-jit` suite stays green. ~90 s.
 `test_gen_records_args.das` - model-free: the measurement orchestrator's pure seams - the
-pybench args builder's per-tool arms (onnx carries the `--out` recovery file and never a
-device; nemo forwards `--device`), the `asr_gpu_pair_tool` roster, the
-`records_run_verdict` ZERO-cells refusal, and the `argv_receipt` form (every element
-shell-quoted where it must be, every home directory spelled `~` outside the quotes) - the
-branches that decide what lands on the public board, which no model suite reaches.
+pybench args builder's per-tool arms (onnx carries the `--out` recovery file and never a device;
+nemo forwards `--device`), the `asr_gpu_pair_tool` roster, the `records_run_verdict` ZERO-cells
+refusal, the `argv_receipt` form (every element shell-quoted where it must be, every home
+directory spelled `~` outside the quotes), the rig's `--catalog` scope (`official | all`, every
+other spelling refused), the two guards on `records/<box>.json` (`--jit` and `--catalog all` each
+need an explicit `--store`, each with its store-given control and the board-mint control), the
+das child's argv spelling on both arms (released exe vs the `--jit` bench source with
+`--for-debug-purposes`), and the cold/warm retry verdict - `cell_rates` folding a cell's das rows
+onto the pp and tg axes separately and `keep_cold` keeping the cold cell when the warm re-run is
+slower on either, each bar with its control - the branches that decide what lands on the public
+board, which no model suite reaches.
 `test_sizing_helpers.das` - model-free: the sizing helpers (`reserve_resize` exact capacity,
 `grow_resize` geometric reuse, `overwrite_resize` grow-only no-init) fed directly, including
 grows past the `max_unreserved_size` guard that must not panic.

@@ -857,3 +857,15 @@ def kq_stream_code(f : KqFmt) : int {
     }
     return kq_schema_id(f)
 }
+
+//! the stream code's format; false for a code no format carries
+def kq_fmt_of_stream_code(code : int; var out : KqFmt&) : bool {
+    for (f in type<KqFmt>) {
+        if (kq_stream_code(f) == code) {
+            out = f
+            return true
+        }
+    }
+    return false
+}
+

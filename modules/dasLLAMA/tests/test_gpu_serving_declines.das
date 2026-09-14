@@ -5,8 +5,10 @@ require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
+require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require strings
 require daslib/strings_boost
+require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt enum
 
 [unused_argument(rows)]
 def private test_upload_bias(rows : array<float>) {}
@@ -206,6 +208,127 @@ def test_resident_unserved_moe_features(t : T?) {
         p.n_embd_per_layer = 256l
         t |> equal(resident_unserved_features(p), rdec_ple_installed() ? "" : "per-layer embeddings",
             "the E-series per-layer embeddings are served where a backend installed the ple seats, named where none did (installed here: {rdec_ple_installed()})")
+    }
+}
+
+// a routed shell the Metal admission accepts: dim and expert width on the 256 lattice, offsets
+// on every plane's alignment, softmax router, silu experts, no shared expert
+def private moe_shell(fmt : KqFmt) : Model {
+    var m <- shell(2l, 0ul)
+    m.config.dim = 256l
+    m.config.moe = true
+    m.config.n_expert = 8l
+    m.config.n_expert_used = 2l
+    m.config.n_ff_exp = 256l
+    m.config.norm_topk_prob = true
+    m.router_off = 0l
+    m.we1_offs <- [0l, 0l]
+    m.we2_offs <- [0l, 0l]
+    m.we3_offs <- [0l, 0l]
+    m.we1_fmt <- [fmt, fmt]
+    m.we2_fmt <- [fmt, fmt]
+    m.we3_fmt <- [fmt, fmt]
+    return <- m
+}
+
+[test]
+def test_moe_metal_expert_formats(t : T?) {
+    t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
+        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.iq4xs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+            var m <- moe_shell(f)
+            t |> success(moe_metal_ok(m), "{f} expert planes are served")
+            delete m
+        }
+        for (f in [KqFmt.iq4nl, KqFmt.k2, KqFmt.q40]) {
+            var m <- moe_shell(f)
+            t |> success(!moe_metal_ok(m), "{f} expert planes decline the routed block")
+            delete m
+        }
+        var mixed <- moe_shell(KqFmt.k4)
+        mixed.we2_fmt[1] = KqFmt.k2
+        t |> success(!moe_metal_ok(mixed), "one Q2_K down plane declines a q4_K model")
+        delete mixed
+    }
+    t |> run("the kernel roster and the site-alignment gate name ONE format set - every KqFmt reads the same on both") @(t : T?) {
+        // No format the site gate admits is refused by the roster: the two lists are identical,
+        // so a roster that answered true for everything is caught only by walking the WHOLE enum -
+        // q40, iq4nl and k2 are the members that must read false on both. A format added to one
+        // list and not the other reds here.
+        for (f in type<KqFmt>) {
+            t |> equal(moe_fmt_metal_served(f), moe_site_ok(f, 0l, 512l), "{f}: the roster and the site gate agree")
+        }
+    }
+}
+
+[test]
+def test_moe_metal_expert_count(t : T?) {
+    t |> run("the select stamps' ladder reaches 512 experts and no further") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        m.config.n_expert = 256l
+        t |> success(moe_metal_ok(m), "256 experts ride the 8-deep select stamp")
+        m.config.n_expert = 512l
+        t |> success(moe_metal_ok(m), "512 experts ride enc_moe_select_512's 16-deep ladder")
+        m.config.n_expert = 513l
+        t |> success(!moe_metal_ok(m), "513 experts: no select stamp holds that many logits per lane, so the routed block declines")
+        m.config.n_expert = 512l
+        t |> success(moe_metal_ok(m), "and the count alone decided it - nothing else about the shell moved")
+        delete m
+    }
+}
+
+[test]
+def test_decode_shape_dense_width(t : T?) {
+    t |> run("the decode shape gate reads the dense FFN width only where a dense FFN dispatches") @(t : T?) {
+        let saved_rope = get_rope_table_mode()
+        set_rope_table_mode(true)   // the gate declines rope_mode off the table; this claim is about the width
+        var routed <- moe_shell(KqFmt.k4)
+        routed.quant = QuantMode.q8
+        routed.blocks.ffn_is_dense = false
+        routed.config.hidden_dim = 5488l   // off the 32 lattice the dense arm checks, dispatched by no layer
+        t |> success(!has_dense_ffn(routed), "a routed model with no dense lead and no dense shared branch has no dense FFN")
+        // mint_time skips the backend-repack clause, whose value this box decides
+        t |> equal(decode_shape_decline(routed, DECODE_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.none,
+            "the routed model's odd dense width gates nothing")
+        t |> equal(decode_shape_decline(routed, BATCH_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.none,
+            "and the batch gate reads the same width the same way")
+        delete routed
+        var dense <- shell(2l, 0ul)
+        dense.quant = QuantMode.q8
+        dense.config.dim = 256l
+        dense.config.hidden_dim = 5488l
+        t |> success(has_dense_ffn(dense), "a dense model dispatches its width")
+        t |> equal(decode_shape_decline(dense, DECODE_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.shape,
+            "the same odd width on a dense model declines shape")
+        t |> equal(decode_shape_decline(dense, BATCH_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.shape,
+            "the batch gate declines it too")
+        dense.config.hidden_dim = 5472l
+        t |> equal(decode_shape_decline(dense, DECODE_NEEDS_OK, true, false, false, mint_time = true), MetalDecodeDecline.none,
+            "and its lattice width passes - the width is what declined, not the rest of the shell")
+        delete dense
+        set_rope_table_mode(saved_rope)
+    }
+}
+
+[test]
+def test_mm_tile_widths_64_dense_width(t : T?) {
+    t |> run("the mul_mm tile gate reads the dense FFN width only where a dense FFN dispatches: a routed model's odd dense width gates nothing") @(t : T?) {
+        var routed <- moe_shell(KqFmt.k4)
+        routed.blocks.ffn_is_dense = false
+        routed.config.n_kv_heads = 2l   // the shell's one kv head x 32 sits off the 64 lattice the gate also checks
+        routed.config.hidden_dim = 5472l   // Qwen3-Coder-30B-A3B's feed_forward_length: off the 64 lattice, dispatched by no layer
+        t |> success(!has_dense_ffn(routed), "a routed model with no dense lead has no dense FFN")
+        t |> success(mm_tile_widths_64_ok(routed), "the routed model passes the tile gate on its odd dense width")
+        routed.config.n_layer_dense_lead = 1l
+        t |> success(has_dense_ffn(routed) && !mm_tile_widths_64_ok(routed), "a dense lead layer dispatches the width: the odd width declines")
+        delete routed
+        var dense <- shell(2l, 0ul)
+        dense.config.dim = 256l
+        dense.config.n_kv_heads = 2l
+        dense.config.hidden_dim = 5472l
+        t |> success(has_dense_ffn(dense) && !mm_tile_widths_64_ok(dense), "a dense model's odd FFN width declines")
+        dense.config.hidden_dim = 6144l
+        t |> success(mm_tile_widths_64_ok(dense), "and its lattice width passes")
+        delete dense
     }
 }
 

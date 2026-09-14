@@ -436,7 +436,7 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
 }
 
 // ===== the tower flash (the dk72 lifted flash + its per-head-contiguous f16 K/V restride) =====
-[arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
 def private tower_flash_kvhc_gate(t : T?; dev, queue) {
     let tag = "tower_flash"
     var err : string
@@ -599,7 +599,7 @@ def private tower_flash_kvhc_gate(t : T?; dev, queue) {
 }
 
 // ===== the qwen2.5 ViT per-window attention (block-diagonal, ragged last window) =====
-[arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
 def private tower_win_gate(t : T?; dev, queue) {
     let tag = "tower_win"
     var err : string
@@ -1434,7 +1434,9 @@ def test_metal_prefill_kernels(t : T?) {
                 // the proven site GEMVs') — their numeric coverage rides the fam-qwen3moe row.
                 moe_select_gate(t, dev, queue, 128, 8, 1, true)    // the qwen3moe shape + exact ties
                 moe_select_gate(t, dev, queue, 60, 4, 1, false)    // ne not a lane multiple — pad lanes
-                moe_select_gate(t, dev, queue, 256, 16, 1, false)  // the serve gate's caps
+                moe_select_gate(t, dev, queue, 256, 16, 1, false)  // the 8-deep stamp's cap
+                moe_select_gate(t, dev, queue, 512, 10, 1, false)  // the 16-deep stamp: the Coder-Next shape and the serve gate's cap
+                moe_select_gate(t, dev, queue, 300, 8, 2, true)    // past 256 with pad lanes and exact ties, two stream rows
                 moe_select_gate(t, dev, queue, 128, 8, 3, false)   // batch: one stream row per tg
                 moe_select_gate(t, dev, queue, 32, 4, 1, false, 1)  // gpt-oss softmax_weight mode
                 moe_router_gate(t, dev, queue, 64, 128)
@@ -1831,7 +1833,7 @@ def private moe_csr_gate(t : T?; dev, queue; npos, ne, nk : int) {
     var cntw : array<uint>
     var basew : array<uint>
     cntw |> resize(ne)
-    basew |> resize(ne)
+    basew |> resize(ne + 1)   // [ne] = the padded total the extra threadgroup publishes
     for (e in range(ne)) {
         var n = 0u
         for (tt in range(total)) {
@@ -1846,6 +1848,7 @@ def private moe_csr_gate(t : T?; dev, queue; npos, ne, nk : int) {
         basew[e] = uint(pad)
         pad += (int(cntw[e]) + 31) / 32 * 32
     }
+    basew[ne] = uint(pad)
     var bktw : array<uint>
     var invw : array<uint>
     bktw |> resize(pad)
@@ -1865,7 +1868,7 @@ def private moe_csr_gate(t : T?; dev, queue; npos, ne, nk : int) {
     }
     var bsel = buf_upload(dev, sel)
     var bcnt = buf_fill(dev, ne, 0xFFFFFFFF)
-    var bbase = buf_fill(dev, ne, 0xFFFFFFFF)
+    var bbase = buf_fill(dev, ne + 1, 0xFFFFFFFF)
     var bbkt = buf_fill(dev, pad, 0xEEEEEEEE)
     var binv = buf_fill(dev, total, 0xFFFFFFFF)
     var btot = buf_u32(dev, uint(total))
@@ -1887,7 +1890,7 @@ def private moe_csr_gate(t : T?; dev, queue; npos, ne, nk : int) {
         metal_set_buffer(enc, bnk, 0ul, 5)
         metal_set_buffer(enc, bcnt, 0ul, 6)
         metal_set_buffer(enc, bne, 0ul, 7)
-        metal_dispatch_threadgroups(enc, uint3(uint(ne), 1u, 1u), uint3(32u, 1u, 1u))
+        metal_dispatch_threadgroups(enc, uint3(uint(ne + 1), 1u, 1u), uint3(32u, 1u, 1u))   // + the total's threadgroup
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
@@ -2536,13 +2539,36 @@ def private mulmm_gate(t : T?; dev, queue; k, d, m : int) {
 
 // ===== MoE routing kernel gates (Wave C) =====
 
+//! the select buffer against one expectation pair - winner ids exact, weights within `approx`;
+//! the gate runs it twice, once on the reference and once on the poisoned control expectation
+def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k : int) : tuple<idx : int; w : int> {
+    var bidx = 0
+    var bw = 0
+    unsafe {
+        var pi = reinterpret<uint?>(metal_buffer_contents(bsel))
+        var pw = reinterpret<float?>(metal_buffer_contents(bsel))
+        for (s in range(nst)) {
+            for (j in range(k)) {
+                bidx += pi[s * 2 * k + j] != widx[s * k + j] ? 1 : 0
+                bw += approx(pw[s * 2 * k + k + j], ww[s * k + j]) ? 0 : 1
+            }
+        }
+    }
+    return (idx = bidx, w = bw)
+}
+
 // The select kernel vs an in-test moe_select_core mirror (softmax + top-k + norm_topk renorm),
 // one stream row per threadgroup ([k idx u32][k w f32] per row). idx must match EXACTLY — ties
 // are exact-equal logits, so both sides agree by the lowest-index rule; w compares within the
 // shared fp tolerance (hardware exp vs the CPU's exp).
 def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; gmode : int = 0) {
     var err : string
-    var pso = pipeline_from_source(dev, metal_moe_select_msl, metal_moe_select_msl_entry, metal_moe_select_msl_fastmath, err)
+    var pso : MetalComputePipeline?
+    if (ne > 256) {
+        pso = pipeline_from_source(dev, MetalMoeSelect512_metal_moe_select_msl, MetalMoeSelect512_metal_moe_select_msl_entry, MetalMoeSelect512_metal_moe_select_msl_fastmath, err)
+    } else {
+        pso = pipeline_from_source(dev, MetalMoeSelect_metal_moe_select_msl, MetalMoeSelect_metal_moe_select_msl_entry, MetalMoeSelect_metal_moe_select_msl_fastmath, err)
+    }
     t |> success(pso != null, "moe select pipeline: {err}")
     if (pso == null) {
         return
@@ -2632,24 +2658,20 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
         metal_dispatch_threadgroups(enc, uint3(uint(nst), 1u, 1u), uint3(32u, 1u, 1u))
     }
     t |> success(ran, "moe select dispatch ne={ne} k={k} nst={nst}: {err}")
-    var badidx = 0
-    var badw = 0
-    unsafe {
-        var pi = reinterpret<uint?>(metal_buffer_contents(bsel))
-        var pw = reinterpret<float?>(metal_buffer_contents(bsel))
-        for (s in range(nst)) {
-            for (j in range(k)) {
-                if (pi[s * 2 * k + j] != widx[s * k + j]) {
-                    badidx++
-                }
-                if (!approx(pw[s * 2 * k + k + j], ww[s * k + j])) {
-                    badw++
-                }
-            }
-        }
-    }
-    t |> equal(badidx, 0)
-    t |> equal(badw, 0)
+    let bad = moe_select_bad(bsel, widx, ww, nst, k)
+    t |> equal(bad.idx, 0)
+    t |> equal(bad.w, 0)
+    // the control: the same compares must RED on a poisoned expectation - the first winner moved
+    // to its neighbour id (no id can satisfy both) and its weight off by an added 1.0 + a tenth of
+    // itself, past any band `approx` admits on a renormalized weight
+    var pidx := widx
+    var pww := ww
+    pidx[0] = (pidx[0] + 1u) % uint(ne)
+    pww[0] += abs(ww[0]) * 0.1 + 1.0
+    let badp = moe_select_bad(bsel, pidx, pww, nst, k)
+    t |> success(badp.idx + badp.w > 0, "moe select ne={ne} k={k}: poison control reds")
+    delete pidx
+    delete pww
     metal_release(blg)
     metal_release(bsel)
     metal_release(bne)

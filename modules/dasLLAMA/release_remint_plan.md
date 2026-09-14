@@ -186,7 +186,7 @@ print shows the fast-tier-only pool, pp/tg spot-check against existing rows with
 - **Census numeric fixture claims**: assert-free by ledgered design (tests/CLAUDE.md, coverage
   suite: dispatch diversity, parity suites own truth) - "yes, ledgered".
 - **Twin binding divergence** (mx4 cnt@6/basep@7 vs k-quant cnt@7/basep@8): ledgered in
-  `ARCHITECTURE_GPU_PREFILL.md` sec.2.2g - "yes, ledgered".
+  `ARCHITECTURE_GPU_PREFILL_MOE.md` sec.2.2g - "yes, ledgered".
 - **url re-pins**: both new serve models AND their mmproj companions commit-pinned; each pinned
   url resolved live (HTTP 200 through the CDN redirect) at pin time.
 - **m4 canary run dates read 2026-08-31**: the box stamps UTC; minted the evening of 08-30 local.

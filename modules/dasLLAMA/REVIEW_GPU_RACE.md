@@ -1,8 +1,9 @@
 # dasLLAMA GPU Race Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEASUREMENT.md`,
+`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`, `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned
+work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
 A race times two implementations of one computation on one queue; a knockout skips a stage to
 measure that stage's cost; an overhead arm times one chain with and without an interposed stage -
@@ -31,11 +32,10 @@ statement catches a mis-numbered bind before it decides a ranking.
 **A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
 layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
 into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
-deletes, in the same change,
-every arm that mirrors that kernel's binding order by hand or by an ordered setter list and
-every arm ledgered as a retained reference in `ARCHITECTURE_GPU.md` sec.2.2b (Metal) or
-`ARCHITECTURE_MEASUREMENT.md` sec.2.5 (Vulkan).** An arm left dispatching stale geometry
-measures the wrong kernel silently.
+deletes, in the same change, every arm that mirrors that kernel's binding order by hand or by
+an ordered setter list and every arm ledgered as a retained reference in `ARCHITECTURE_GPU.md`
+sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan).** An arm
+left dispatching stale geometry measures the wrong kernel silently.
 
 **Race and knockout code inside the engine (`dasllama/`) sits in the file that owns the kernel
 family it races, or - for a knockout - the file that owns the stage whose cost it removes.**
@@ -71,7 +71,8 @@ production overlaps consecutive dispatches, so the race ranks the arms on a shap
 runs.
 
 **A race arm that holds one output across its chain - reading a dependent chain's cost, or one
-dispatch's latency - is ledgered as that form in `ARCHITECTURE_MEASUREMENT.md` sec.2.5.**
+dispatch's latency - is ledgered as that form in `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`
+sec.2.21 (Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan).**
 
 **Every arm of a kernel A/B race with a decided ranking handles the hazard between its
 dispatches the same way.** An arm serialized by a barrier races an arm that overlaps.
@@ -89,16 +90,11 @@ encoder that leaves gaps between its dispatches times an idle clock.
 **A diff that ports an A/B lab's winning variant into a kernel deletes, in the same change, that
 variant's class and any `*_variants.das` code that exists only for it and that neither dispatches
 the shipped kernel class's generated source nor is ledgered as a retained reference in
-`ARCHITECTURE_GPU.md` sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT.md` sec.2.5 (Vulkan).**
-
-**An arm that survives a port of an A/B lab's winning variant into a kernel dispatches the
-shipped kernel class's generated source, or is ledgered as a retained reference in the
-architecture doc that owns the kernel's
-tier: `ARCHITECTURE_GPU.md` sec.2.2b for Metal, `ARCHITECTURE_MEASUREMENT.md` sec.2.5 (the
-Vulkan GEMM probe's axes).** A decided arm that outlives its decision degrades into an
-unmaintained duplicate of the kernel it seeded.
+`ARCHITECTURE_GPU.md` sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a
+(Vulkan).** A decided arm that outlives its decision degrades into an unmaintained duplicate of
+the kernel it seeded.
 
 **The diff that leaves an A/B lab with no undecided arm, no arm dispatching the shipped kernel
 class's generated source and no arm ledgered as a retained reference in `ARCHITECTURE_GPU.md`
-sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT.md` sec.2.5 (Vulkan) deletes the lab's driver and
+sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan) deletes the lab's driver and
 its remaining arms in the same change.**

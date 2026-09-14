@@ -502,7 +502,7 @@ def private g4a_ctx_release(var c : G4aGpuCtx) {
 }
 
 //! The 12-block dispatch chain on an already-armed context - the blocks-only and whole-chunk drivers share it.
-[arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private g4a_blocks_body(enc : MetalComputeEncoder?; t : Gemma4aEncoder; c : G4aGpuCtx) {
     let d = t.d_model
     let ff = t.n_ff
@@ -635,7 +635,7 @@ def private cn_ctx_release(var c : CnGpuCtx) {
     tw_ctx_release(c)
 }
 
-[arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private cn_blocks_body(enc : MetalComputeEncoder?; t : CanaryEncoder; c : CnGpuCtx) {
     let d = t.d_model
     let ff = t.n_ff
@@ -736,7 +736,7 @@ def private metal_canary_blocks(t : CanaryEncoder; var st : CanaryState; npos, w
 //! The whole-chunk gemma4a driver: from the CPU-windowed st.xw frames, ONE command buffer runs
 //! DFT -> magnitude -> mel -> both subsample convs -> inproj -> the 12 blocks; st.x readback.
 //! Returns npos, or -1 declined.
-[hot_path, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len : int64) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower || t.q8 || !g4a_shape_ok(t) || n_len < 4l) {
         return -1l
@@ -1110,7 +1110,7 @@ def private metal_tower_serves() : bool => g_tw_env_tower
 // The gemma3v SigLIP block loop as ONE command buffer on the f32 blob — LN(w,b), biased f32 GEMMs,
 // scaled attention, GELU. The 72-wide heads restride to the attention tiles' 128 (zero pads exact,
 // scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. Stem/tail stay CPU; q8 declines.
-[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
+[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
 def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -1304,7 +1304,7 @@ def private tw_mm(enc : MetalComputeEncoder?; f16w, bf16w : bool; bwh, bblob : M
 // The qwen3vl ViT: gemma3v's chain + the vision NEOX rope (enc_rope on compact q/k) + the
 // fused qkv as three weight-offset GEMMs; tap chains encode inline over the live residual
 // (hazard-ordered), the tail merger follows, ONE readback lands proj outputs for the scatter.
-[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
+[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
 def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -1532,7 +1532,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
 
 //! The qwen25v window ViT as ONE command buffer: conv + window-sort gather stem, RMS-normed
 //! blocks, swiglu FFN at ff_pad, the merger tail; ONE readback lands sorted proj rows in s.mout.
-[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU.md#tower-attn-routes")]
+[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
 def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -1931,7 +1931,7 @@ def private q3a_stage(enc : MetalComputeEncoder?; bsrc : MetalBuffer?; soff : ui
 //! The qwen3a front for one WINDOW: chunk convs + feature shuffle + conv_out + bias/positions
 //! in one command buffer, s.x readback. The q8 cblob lane declines (the cout trio lives in
 //! qcblob).
-[hot_path, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var s : EncoderState) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     let nm = t.core.n_mel
     let nch = t.n_ch
@@ -2066,7 +2066,7 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
 //! The qwen3a mel: DFT (transposed-twiddle GEMM) -> power -> mel-filter GEMM -> the mel-major
 //! log10 store, one command buffer off the CPU-windowed xw frames; m.data readback. The global
 //! max−8 clamp stays with the caller.
-[hot_path, arch(at="../ARCHITECTURE_GPU.md#tower-encode-chains")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64;   // nolint:STYLE038 — the dispatch chain is the shape
                           twiddles, filters : array<float>; var m : WhisperMel) : bool {
     if (n_mel % 64l != 0l || n_len < 1l || !g_tw_env_tower || !metal_tower_init() || !pf_q3a_mel_ready()) {

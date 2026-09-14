@@ -736,7 +736,7 @@ def private attention_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
 def private w13_fused_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; hid_l : int64; u_hid_l : MetalBuffer?; geglu : bool; fg : MetalBuffer?) : bool {
     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
     enc_gemv_w13sw(enc, bw1.buf, bw1.boff, uint64((t.w3_offs[l] / 32l) * 34l),
-        e.r.bxb, fg, e.r.u_dim, u_hid_l, hid_l, geglu ? e.r.u_one32 : e.r.u_zero32)
+        e.r.bxb, fg, e.r.u_dim, u_hid_l, t.config.dim, hid_l, geglu ? e.r.u_one32 : e.r.u_zero32)
     return true
 }
 
@@ -1054,7 +1054,11 @@ struct template LayerEncT {
                 } else {
                     enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, nr)
                 }
-                enc_moe_select(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, nr)
+                if (c.n_expert > 256l) {
+                    enc_moe_select_512(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, nr)
+                } else {
+                    enc_moe_select(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, nr)
+                }
                 if (moe_with_dense) {
                     var bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                     enc_moe_wscale(enc, r.bmoe_sel, r.bmoe_sel, bw_ds, r.u_moe_k, nr)
@@ -1111,7 +1115,7 @@ struct template LayerEncT {
                     let bwsh1 = blob_of(g_dev, t, t.wsh1_off + l * she)
                     if (nr == 1l) {
                         enc_gemv_w13sw(enc, bwsh1.buf, bwsh1.boff, uint64(((t.wsh3_off + l * she) / 32l) * 34l),
-                            r.bxb, r.bh12s, r.u_dim, r.u_moe_nsh, nsh, r.u_zero32)
+                            r.bxb, r.bh12s, r.u_dim, r.u_moe_nsh, dim, nsh, r.u_zero32)
                         enc_site_gemv(enc, t, KqFmt.q8, t.wsh2_off + l * she, dim, nsh, r.bh12s, r.bxb2, r.u_moe_nsh, r.u_dim)
                     } else {
                         // the rows forms over bh12 (free after expert W2)
@@ -1942,7 +1946,7 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
     if (commit_now) {
         metal_commit(cb)
         r.committed = true
-        if (g_step_trace_cap > 0l) {
+        if (g_step_trace_cap > 0l) {   // an unarmed trace leaves g_step_trace_t0 at 0 — the stamp would read the epoch
             r.t_commit = int64(get_time_usec(g_step_trace_t0))
         }
     }
@@ -1953,6 +1957,10 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
 // cache (the CPU never re-encodes), s.logits when the GPU classifier ran, watermark advance
 def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
     let ts_wait = ref_time_ticks()
+    if (g_wait_spin) {
+        while (metal_command_buffer_gpu_end_time(r.cb) == 0.0lf && get_time_usec(ts_wait) < WAIT_SPIN_CAP_US) {   // clock: control — the spin's 200 ms bound, not a reported time
+        }
+    }
     metal_wait_until_completed(r.cb)
     let ok = !metal_command_buffer_failed(r.cb)
     g_gpu_ms += (metal_command_buffer_gpu_end_time(r.cb) - metal_command_buffer_gpu_start_time(r.cb)) * 1000.0lf
@@ -2149,6 +2157,10 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
     r.valid = false
 }
 
+//! the wait's spin bound: a step past it is a stall, and the blocking wait behind the spin reports it
+let private WAIT_SPIN_CAP_US = 200000
+var private g_wait_spin = true         //!< the step wait spins on the GPU end time before the blocking wait (DASLLAMA_METAL_WAIT_SPIN)
+
 // Retire the pre-encoded step. A poked-mode pre was never committed — releasing it drops the work.
 // A spec pre is already running: wait it out and SURFACE any execution error — an eaten fault here
 // would poison every later submission ("prior/excessive GPU errors") with no trace of the true site.
@@ -2282,7 +2294,7 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
         poke_step(s, r)
         metal_commit(r.cb)
         r.committed = true
-        if (g_step_trace_cap > 0l) {
+        if (g_step_trace_cap > 0l) {   // same unarmed-trace guard as encode_step's commit
             r.t_commit = int64(get_time_usec(g_step_trace_t0))
         }
     }
@@ -2394,15 +2406,8 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
     // kquant batch: B <= 8 rides per-stream plane GEMVs; each fused site must be format-uniform per layer (a mixed qkv/w13 site has no batched form)
     if (t.kquant_native) {
         if (nrows > 8l) {
-            // B >= 9 rides the kq mul_mm twins — needs %64 GEMM shapes on BOTH attention classes (+ vocab %64 for the batched kq classifier)
-            let ck = t.config
-            let hs2 = ck.head_size_swa > 0l ? ck.head_size_swa : ck.head_size
-            let kvh2 = ck.n_kv_heads_swa > 0l ? ck.n_kv_heads_swa : ck.n_kv_heads
-            if ((ck.dim % 64l) != 0l || ((ck.n_heads * ck.head_size) % 64l) != 0l ||
-                    ((ck.n_kv_heads * ck.head_size) % 64l) != 0l ||
-                    ((ck.n_heads * hs2) % 64l) != 0l || ((kvh2 * hs2) % 64l) != 0l ||
-                    (layer_hidden(t, 0l) % 64l) != 0l ||
-                    (ck.vocab_size % 64l) != 0l) {
+            // B >= 9 rides the kq mul_mm twins — needs %64 GEMM shapes on BOTH attention classes (+ vocab %64 for the batched kq classifier, which the shared tile gate does not cover)
+            if (!mm_tile_widths_64_ok(t) || (t.config.vocab_size % 64l) != 0l) {
                 return MetalDecodeDecline.kquant_native
             }
         }
@@ -3252,6 +3257,7 @@ def dasllama_metal_decode_register() {
     g_env_batch_mm = g_env_metal.batch_mm
     g_env_attn_d = g_env_metal.attn_d
     g_env_mtp_debug = g_env_metal.mtp_debug
+    g_wait_spin = g_env_metal.wait_spin   // the single-row finish_step reads it too, so it resolves here, not in the batch driver's knob loader
     if (!empty(g_env_metal.decode_skip)) {
         set_metal_decode_skip(g_env_metal.decode_skip)   // routes through the unknown-token guard
         to_log(LOG_WARNING, "dasLLAMA metal decode: SKIP={g_skip} - timing-attribution mode, output is GARBAGE\n")
