@@ -545,7 +545,7 @@ let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 // in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 38
-let private IMAGE_LAYOUT_STAMP_HASH = 0xb8b1e09e980b1e2ful
+let private IMAGE_LAYOUT_STAMP_HASH = 0x73404b423f45f861ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
@@ -574,7 +574,8 @@ def private is_meta_serializer(header : string) : bool {
     return is_archive_serializer(header) && find(header, "array<") < 0
 }
 
-def private is_layout_function(header : string) : bool {
+//! the `*_prepare` mints count in the image file alone: a driver's prepare (`vk_rdec_prepare`, `mirror_prepare`) places no image byte
+def private is_layout_function(file : string; header : string) : bool {
     return true if (is_archive_serializer(header))
     var rest = slice(header, 4)
     if (rest |> starts_with("private ")) {
@@ -582,7 +583,7 @@ def private is_layout_function(header : string) : bool {
     }
     let name = ident_prefix(rest)
     return true if (key_exists(LAYOUT_HELPERS, name))
-    return name == "build_image" || name == "parse_image" || find(name, "_prepare") >= 0
+    return name == "build_image" || name == "parse_image" || (find(name, "_prepare") >= 0 && "{DASLLAMA_DIR}/{file}" == IMAGE_FILE)
 }
 
 def private read_lf(path : string) : string {
@@ -725,7 +726,7 @@ def private check_image_layout_stamp {
             h = fnv1a("{name}\n{c.body}\n", h)
         }
         var inscope fns <- function_bodies(p) $(header) {
-            return is_layout_function(header)
+            return is_layout_function(name, header)
         }
         for (f in fns) {
             h = fnv1a("{name}\n{f.body}\n", h)
