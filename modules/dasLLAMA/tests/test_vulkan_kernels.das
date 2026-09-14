@@ -98,6 +98,21 @@ def private tile_fixture(n, blk_k : int; var wqh, wsh : array<uint>; xf_mul, xf_
     return <- f
 }
 
+//! the fixture's device planes, made and uploaded once the caller knows an arm is served; the output plane is left for the sentinel fill
+def private tile_fixture_upload(var f : TileFixture) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        f.wqd = make_device_buf(f.wq_bytes)
+        f.wsd = make_device_buf(f.ws_bytes)
+        f.xfd = make_device_buf(f.xf_bytes)
+        f.yd = make_device_buf(f.y_bytes)
+        unsafe {
+            upload_region_at(f.wqd, 0l, addr<uint8 const?>(f.wqh[0]), f.wq_bytes)
+            upload_region_at(f.wsd, 0l, addr<uint8 const?>(f.wsh[0]), f.ws_bytes)
+            upload_region_at(f.xfd, 0l, addr<uint8 const?>(f.xfh[0]), f.xf_bytes)
+        }
+    }
+}
+
 //! the q8 fmt-0 host planes: s8 quant bytes and f16 scale pairs from two seeds, K = n over both weight planes
 def private q8_planes(n : int; wq_seed, ws_seed : uint; var wqh, wsh : array<uint>) {
     let totblk = 2 * TILE_CELL_D * (n / 32)
@@ -124,15 +139,7 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
             t |> skip("the {tag} tiles need cooperative matrices (cm2 in mode 4 on an NV_coopmat2 device, or KHR coopmat at subgroup 32)")
             return <- y_ref
         }
-        f.wqd = make_device_buf(f.wq_bytes)
-        f.wsd = make_device_buf(f.ws_bytes)
-        f.xfd = make_device_buf(f.xf_bytes)
-        f.yd = make_device_buf(f.y_bytes)
-        unsafe {
-            upload_region_at(f.wqd, 0l, addr<uint8 const?>(f.wqh[0]), f.wq_bytes)
-            upload_region_at(f.wsd, 0l, addr<uint8 const?>(f.wsh[0]), f.ws_bytes)
-            upload_region_at(f.xfd, 0l, addr<uint8 const?>(f.xfh[0]), f.xf_bytes)
-        }
+        tile_fixture_upload(f)
         let d = TILE_CELL_D
         var host = make_host_buf(f.y_bytes, true, [cached = true])
         var y_cls : array<float>
@@ -444,13 +451,15 @@ def test_vkd_fa_stamp_words(t0 : T?) {
 
 [test]
 def test_vkd_fa_stamp_refusals(t0 : T?) {
-    t0 |> run("the flash stamp ladders refuse a gated KHR stamp, a softcap stamp off head size 256 and a head size no stamp serves, before any device work") <| @(t : T?) {
+    t0 |> run("the flash stamp ladders refuse a gated KHR stamp, a softcap or gated stamp off head size 256 and a head size no stamp serves, before any device work") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             t |> success(fa_ensure_panics(true, 256l, true, false), "the KHR arm has no gated stamp: the ensure ladder refuses")
             t |> success(fa_ensure_panics(false, 128l, false, true), "no softcap stamp off head size 256: the ensure ladder refuses")
+            t |> success(fa_ensure_panics(false, 128l, true, false), "no gated stamp off head size 256: the ensure ladder refuses")
             t |> success(fa_ensure_panics(false, 96l, false, false), "a head size no stamp serves: the ensure ladder refuses")
             t |> success(fa_enc_panics(true, 256l, true, false), "the KHR arm has no gated stamp: the encode ladder refuses")
             t |> success(fa_enc_panics(false, 128l, false, true), "no softcap stamp off head size 256: the encode ladder refuses")
+            t |> success(fa_enc_panics(false, 128l, true, false), "no gated stamp off head size 256: the encode ladder refuses")
             t |> success(fa_enc_panics(false, 96l, false, false), "a head size no stamp serves: the encode ladder refuses")
         } else {
             t |> skip("dasVulkan not present")
@@ -2765,6 +2774,7 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
             var wsh : array<uint>
             q8_planes(n, 17u, 991u, wqh, wsh)
             var f <- tile_fixture(n, 32, wqh, wsh, 3u, 5u)
+            tile_fixture_upload(f)   // no arm loop here: the pair dispatches the toy stamps itself
             let wtiles = (d + 127) / 128
             let wgs0 = ((TILE_CELL_ROWS0 + 255) / 256) * wtiles
             let wgs = wgs0 + ((TILE_CELL_ROWS1 + 255) / 256) * wtiles

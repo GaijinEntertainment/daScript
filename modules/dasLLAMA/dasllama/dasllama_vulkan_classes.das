@@ -3257,6 +3257,9 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap : bool) {
     if (cap && hs != 256l) {
         panic("vk flash: the softcap stamps serve head size 256 alone")
     }
+    if (gated && hs != 256l) {
+        panic("vk flash: the gated stamps serve head size 256 alone")
+    }
     if (hs != 64l && hs != 128l && hs != 256l && hs != 512l) {
         panic("vk flash: a stamp for a head size the tile never serves")
     }

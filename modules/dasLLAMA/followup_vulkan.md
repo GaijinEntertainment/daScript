@@ -1513,7 +1513,7 @@ module) is independent and can land any time - it is pure structure.
     `gemv_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*` and `f16_gemm_*` live, while the cm2
     tile ladder (`cm2_cls_*`, its `khr_cls_*` and `cm2e_cls_*` arms) sits in
     `dasllama_vulkan_prefill.das`, pinned there by `REVIEW.das`'s `check_cm2_ladder_set`, which reads
-    that file's bodies. Move the six ladders to the classes file and retarget the check's
+    that file's bodies. Move the nine ladders to the classes file and retarget the check's
     `function_bodies` and its two findings at `VK_CLASSES` in the same change; the cells, the probe
     harness and the prefill call them by name, so no caller moves.
 64. **The folded flash template's KHR stamps carry two constants their arm never reads.** `FaT`
