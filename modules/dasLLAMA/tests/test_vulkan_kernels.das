@@ -6584,26 +6584,18 @@ def private q8_gemv_gu_run(t : T?; n, hid : int; gelu : bool) {
         memcpy(addr<void?>(oq[0]), host.mapped, oq_bytes)
         memcpy(addr<void?>(os[0]), reinterpret<void?>(intptr(host.mapped) + uint64(oq_bytes)), os_bytes)
     }
-    // the oracle: both dots per row in the scalar block order, the activation, the block quant
+    // the oracle: the q8 GEMM oracle over one record with the x row as its one column, per plane, then the activation
+    let one_row <- [0u, 0u, 1u, 0u]
+    var g_ref : array<float>
+    var u_ref : array<float>
+    g_ref |> resize(hid)
+    u_ref |> resize(hid)
+    q8_gemm_oracle(gqh, gsh, xqh, xsh, one_row, 1, n, hid, g_ref)
+    q8_gemm_oracle(uqh, ush, xqh, xsh, one_row, 1, n, hid, u_ref)
     var act : array<float>
     act |> resize(hid)
     for (row in range(hid)) {
-        var g = 0.0
-        var u = 0.0
-        for (b in range(nb)) {
-            let wb = row * nb + b
-            var gd = 0
-            var ud = 0
-            for (j in range(8)) {
-                gd += sdot4(gqh[wb * 8 + j], xqh[b * 8 + j])
-                ud += sdot4(uqh[wb * 8 + j], xqh[b * 8 + j])
-            }
-            let gs = wb % 2 == 0 ? unpackHalf2x16(gsh[wb / 2]).x : unpackHalf2x16(gsh[wb / 2]).y
-            let us = wb % 2 == 0 ? unpackHalf2x16(ush[wb / 2]).x : unpackHalf2x16(ush[wb / 2]).y
-            g += float(gd) * gs * xsh[b]
-            u += float(ud) * us * xsh[b]
-        }
-        act[row] = act_mul_ref(g, u, gelu)
+        act[row] = act_mul_ref(g_ref[row], u_ref[row], gelu)
     }
     var bad = 0
     var bads = 0
@@ -6880,22 +6872,11 @@ def private q8_gemv_ar_run(t : T?; n, d : int; pre_on, raw : bool; ascale : floa
         memcpy(addr<void?>(os[0]), reinterpret<void?>(intptr(host.mapped) + uint64(r_bytes + oq_bytes)), os_bytes)
         memcpy(addr<void?>(cnt_after[0]), reinterpret<void?>(intptr(host.mapped) + uint64(r_bytes + oq_bytes + os_bytes)), 16l)
     }
-    // the oracle: the GEMV rows in the scalar block order, then the residual step's math
+    // the oracle: the q8 GEMM oracle over one record with the x row as its one column, then the residual step's math
+    let one_row <- [0u, 0u, 1u, 0u]
     var y : array<float>
     y |> resize(d)
-    for (row in range(d)) {
-        var acc = 0.0
-        for (b in range(nb)) {
-            let wb = row * nb + b
-            var idot = 0
-            for (j in range(8)) {
-                idot += sdot4(wqh[wb * 8 + j], xqh[b * 8 + j])
-            }
-            let ws16 = wb % 2 == 0 ? unpackHalf2x16(wsh[wb / 2]).x : unpackHalf2x16(wsh[wb / 2]).y
-            acc += float(idot) * ws16 * xsh[b]
-        }
-        y[row] = acc
-    }
+    q8_gemm_oracle(wqh, wsh, xqh, xsh, one_row, 1, n, d, y)
     var ainv = 0.0
     if (pre_on) {
         var sa = 0.0

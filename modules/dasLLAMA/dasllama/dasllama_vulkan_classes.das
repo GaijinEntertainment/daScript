@@ -833,9 +833,11 @@ struct ClsEpiArgs {
     nsupp : uint    //! suppressed token ids in `supp`
 }
 
-//! the classifier tail's epilogue in place: the final logit softcap (cap * tanh(v / cap) through the
-//! exp identity the CPU's softcap4 takes), then the checkpoint's suppressed ids pinned to -1e30 -
-//! after the cap, so the pin survives it
+//! gemma's logit softcap, cap * tanh(v / cap), in the exp form the CPU's softcap4 takes
+def softcap_exp(v, cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
+
+//! the classifier tail's epilogue in place: the final logit softcap, then the checkpoint's suppressed
+//! ids pinned to -1e30 - after the cap, so the pin survives it
 [vk_dispatch(name = "cls_epi", grid = "wgs", params = "wgs : int64")]
 class ClsEpilogue {
     @ssbo @binding = 0 y : array<float>      // the logits row
@@ -848,7 +850,7 @@ class ClsEpilogue {
         if (gid < pa.vocab) {
             var v = y[gid]
             if (pa.cap > 0.0) {
-                v = pa.cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / pa.cap)))
+                v = softcap_exp(v, pa.cap)
             }
             var j = 0u
             while (j < pa.nsupp) {
@@ -2794,9 +2796,9 @@ struct FaCm2Args {
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50), read by the CAP stamps; 0 = none
 }
 
-//! gemma-2's attention logit softcap on a scaled score tile: cap * tanh(s / cap) in the exp form the CPU's softcap4 takes
+//! gemma-2's attention logit softcap on a scaled score tile
 [spirv_per_element, unused_argument(r, c)]
-def facm2_softcap(r, c : uint; v : float; cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
+def facm2_softcap(r, c : uint; v : float; cap : float) : float => softcap_exp(v, cap)
 
 // The cm2 flash pass over the f16 K/V shadows: ONE class template over the head size. The head
 // template sizes the eight coopmat typedefs: QACC/QA the q and o tiles (64 x HS), SACC/PA the
@@ -3045,9 +3047,8 @@ class FaCm2H512F16 : FaCm2H512T {
     override OUT16 = true
 }
 
-//! gemma-2's attention logit softcap on a scaled score: cap * tanh(s / cap) in the exp form the CPU's softcap4 takes; 0 = none
-def private attn_softcap(s, cap : float) : float
-    => cap != 0.0 ? cap * (1.0 - 2.0 / (1.0 + exp(2.0 * s / cap))) : s
+//! gemma-2's attention logit softcap on a scaled score; 0 = none
+def private attn_softcap(s, cap : float) : float => cap != 0.0 ? softcap_exp(s, cap) : s
 
 struct DaAttnBArgs {
     npos : uint     // window query rows
@@ -9054,7 +9055,7 @@ class Q8GemvGu {
             let lane = gl_SubgroupInvocationID
             let li = min(lane, 31u)
             let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.gelu) : 0.0
-            let d = q8k_amax5(abs(a)) / 127.0
+            let d = da_q8_blk_d(a)
             let id = d != 0.0 ? 1.0 / d : 0.0
             if (lane == 0u) {
                 outs[gl_WorkGroupID.x] = d
@@ -9096,7 +9097,7 @@ class Q8GemvPleAct {
         barrier()
         let e = min(tid, pa.n - 1u)
         let v = tid < pa.n ? act_mul_sel(gate[e], side[pa.ubase + e], pa.gelu) : 0.0
-        let d = q8k_amax5(abs(v)) / 127.0   //! a block is a 32-lane group
+        let d = da_q8_blk_d(v)
         let id = d != 0.0 ? 1.0 / d : 0.0
         let q = uint(int(round(v * id))) & 0xFFu
         atomicOr(xw[tid / 4u], q << ((tid % 4u) * 8u))
@@ -9717,7 +9718,7 @@ class KqGemvK4Gu : KqGemvK4Base {
         if (gl_SubgroupID == 0u) {   // the block's activation and Q8_0 quant: one lane an output row
             let li = min(lane, 31u)
             let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.gelu) : 0.0
-            let dq = q8k_amax5(abs(a)) / 127.0
+            let dq = da_q8_blk_d(a)
             let id = dq != 0.0 ? 1.0 / dq : 0.0
             if (lane == 0u) {
                 outs[gl_WorkGroupID.x] = dq

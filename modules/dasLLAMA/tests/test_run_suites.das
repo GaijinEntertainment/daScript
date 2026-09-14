@@ -42,15 +42,8 @@ def private reaches_fixture_root(file : string) : bool {
     }
     for (line in split(text, "\n")) {
         continue if (!(line |> starts_with("require _")))
-        let rest = slice(line, length("require "))
-        var cut = length(rest)
-        for (stop in [" ", "\t", "/", "\r"]) {
-            let p = find(rest, stop)
-            if (p >= 0 && p < cut) {
-                cut = p
-            }
-        }
-        if (text_reaches_fixture_root(file_text(path_join(dir_name(file), "{slice(rest, 0, cut)}.das")))) {
+        let name <- split_by_chars(slice(line, length("require ")), " \t/\r")
+        if (text_reaches_fixture_root(file_text(path_join(dir_name(file), "{name[0]}.das")))) {
             return true
         }
     }
