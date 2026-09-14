@@ -227,30 +227,11 @@ def private ev_mistral7b() : ParityEvidence {
                 2723l, 29491l, 1418l, 1321l, 1032l, 3598l, 2913l, 1065l, 1040l, 6282l])
 }
 
-// gemma-3 counting fixtures (5-local:1-global SWA + dual RoPE θ). The 4B counts cleanly from
-// "1..7," (BOS=2); the 1B used to drop into prose after "10" — a prose tail that flipped a
-// genuine near-tie when the box profile's tuned kernel perms went live — so its prompt counts
-// to 23 and the continuation stays numeric for all 40 tokens (kernel-robust; oracle-refrozen
-// 2026-07-02, verified pinned 40/40 both with and without a live box profile). The sliding
-// MASK itself (kstart > 0) engages only past the 512-token window; validated separately with
-// a ~900-token counting prompt (40/40) — see the wave-2 notes.
-def private ev_gemma3_1b() : ParityEvidence {
-    return <- ParityEvidence(
-        prompt <- [2l, 236770l, 236764l, 236743l, 236778l, 236764l, 236743l, 236800l, 236764l, 236743l,
-                   236812l, 236764l, 236743l, 236810l, 236764l, 236743l, 236825l, 236764l, 236743l, 236832l,
-                   236764l, 236743l, 236828l, 236764l, 236743l, 236819l, 236764l, 236743l, 236770l, 236771l,
-                   236764l, 236743l, 236770l, 236770l, 236764l, 236743l, 236770l, 236778l, 236764l, 236743l,
-                   236770l, 236800l, 236764l, 236743l, 236770l, 236812l, 236764l, 236743l, 236770l, 236810l,
-                   236764l, 236743l, 236770l, 236825l, 236764l, 236743l, 236770l, 236832l, 236764l, 236743l,
-                   236770l, 236828l, 236764l, 236743l, 236770l, 236819l, 236764l, 236743l, 236778l, 236771l,
-                   236764l, 236743l, 236778l, 236770l, 236764l, 236743l, 236778l, 236778l, 236764l, 236743l,
-                   236778l, 236800l, 236764l],
-        gen <- [236743l, 236778l, 236812l, 236764l, 236743l, 236778l, 236810l, 236764l, 236743l, 236778l,
-                236825l, 236764l, 236743l, 236778l, 236832l, 236764l, 236743l, 236778l, 236828l, 236764l,
-                236743l, 236778l, 236819l, 236764l, 236743l, 236800l, 236771l, 236764l, 236743l, 236800l,
-                236770l, 236764l, 236743l, 236800l, 236778l, 236764l, 236743l, 236800l, 236800l, 236764l])
-}
-
+// gemma-3 counting fixture (5-local:1-global SWA + dual RoPE θ): the 4B counts cleanly from
+// "1..7," (BOS=2); the 1B rides the instructed fixture - on a bare count to 23 the bench's
+// pinned reference chain ends its list at "30." where llama.cpp writes "30,", a near-tie the
+// instruction removes. The sliding MASK itself (kstart > 0) engages only past the 512-token
+// window; validated separately with a ~900-token counting prompt (40/40).
 def private ev_gemma3_4b() : ParityEvidence {
     return <- ParityEvidence(
         prompt <- [2l, 236770l, 236764l, 236743l, 236778l, 236764l, 236743l, 236800l, 236764l, 236743l,
@@ -411,7 +392,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "tinyllama-1.1b-v0.3-f16.gguf",   // parity-only carrier (F16 -> fp32 load)
             parity <- ev_tinyllama_v03()),
         ModelSpec(file = "gemma-3-1b-it-Q8_0.gguf", display = "gemma-3-1B",
-            parity <- ev_gemma3_1b()),
+            parity <- ev_gemma_count()),
         ModelSpec(file = "tinyllama-1.1b-chat-v1.0.Q8_0.gguf", display = "TinyLlama-1.1B"),
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q8_0.gguf", display = "Llama-3.2-1B",
             url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf",
