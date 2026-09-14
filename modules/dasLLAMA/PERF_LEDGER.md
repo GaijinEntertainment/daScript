@@ -11,6 +11,54 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-14) - the gemma family at parity on the KHR cooperative-matrix arm.** A card
+  without `VK_NV_cooperative_matrix2` (or the mode forced, `DASLLAMA_COOPMAT=mm`) ran every gemma
+  prefill at 0.33 to 0.82 of llama.cpp b10660's own KHR path (`GGML_VK_DISABLE_COOPMAT2=1`, the
+  same card): the attention on the 8-row and 4-row scalar tiles, the E-series' per-layer-embedding
+  projection on the CPU, every Q8_0 plane on the q8-fed mul_mm L-tile in one k chunk. Four levers,
+  each pod-confirmed: the KHR flash tile (`FaKhrT`, 16x16x16 fragments; gemma-3-1b's attention
+  12578 -> 1857 us a 512-row window, E2B's 37392 -> 3547, the 12B's 83941 -> 5746), the KHR f16 GEMM
+  for the projection (`F16GemmKhr`; E2B's window 102 -> 44 ms), q8 on the KHR kq tile through
+  `khr_stage16` (E2B's down 14021 -> 5165 us with the split), and the wave model's k chunks on the
+  KHR arm (E2B's down 48 workgroups on 82 SMs before it). Every dense carrier now sits at or above
+  parity under `mm` (pp512 / tg128 ratios, five reps, one model a process): gemma-3-1b Q8_0 1.136 /
+  1.131, gemma-2-2b Q8_0 1.095 / 1.025, gemma-3-4b Q8_0 1.199 / 1.032, gemma-4-E2B Q8_0 1.092 /
+  1.057, gemma-4-E4B Q8_0 1.160 / 0.996, gemma-4-12B Q4_K_M 1.153 / 0.999, gemma-4-12B Q8_0 1.168 /
+  1.032, gemma-4-31B Q4_K_M 1.222 / 1.003. The 26B-A4B is the gap: its routed block is cm2-only, so
+  under `mm` the resident driver declines and the UD-IQ3_XXS reads 0.078 / 0.303 on the per-op rails
+  (`followup_vulkan.md` item 57; the UD-Q4_K_M file is not on the pod and takes the same decline).
+  Decode is mode-independent. Provenance, direction-grade: the RunPod RTX PRO 4500 Blackwell 32 GB
+  (82 SMs) with the device created in KHR mode, `lcpp_bench --for-debug-purposes -r 5 -p 512 -n 128
+  -t 16` under `DASLLAMA_COOPMAT=mm DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048
+  DASLLAMA_GPU_VRAM_MB=31000` (the image rail off: a forced mode re-mints the image per box identity),
+  against the prebuilt llama.cpp b10660 Vulkan `llama-bench -ngl 99 -fa 1 -t 16 -r 3` under
+  `GGML_VK_DISABLE_COOPMAT2=1` on the same pod; the per-role figures from the resident prefill's
+  `DASLLAMA_GPU_PROF=1` window profile. The same tip in the default cm2 mode reads gemma-3-1b at
+  0.979 of llama.cpp's cm2 path on the pod (34546 against 35284).
+
+- **LANDED (2026-09-14) - the gemma family at parity on the RTX 5060 Ti, no kernel work.** The
+  pod's levers carry to the 16 GB Blackwell consumer card as they stand: every gemma carrier that
+  fits sits at or above 0.95 of llama.cpp b10660 on both rows (pp512 / tg128 ratios, five reps,
+  one model a process, the box idle): gemma-3-1b Q8_0 1.062 to 1.079 / 1.159, gemma-2-2b Q8_0
+  0.999 to 1.033 / 1.037, gemma-3-4b Q8_0 1.070 / 1.040, gemma-4-E2B Q8_0 1.157 / 1.106,
+  gemma-4-E4B Q8_0 1.001 / 1.027, gemma-4-12B Q4_K_M 1.061 / 1.019, gemma-4-12B Q8_0 1.044 / 1.007
+  (the Q8_0 file at `DASLLAMA_GPU_MIN_CTX=1024`, its 11.8 GB against the card's 16; the 26B and
+  31B files do not fit and decline on memory). The small carriers' prefill on this box is bimodal
+  by the process: unconfined, seven of fourteen gemma-3-1b runs read 19.3 to 19.7 thousand tok/s
+  (0.91 to 0.93) and the rest 22.7 to 23.3 thousand, the rep spread inside a run small either way,
+  while llama.cpp holds 21.2 thousand across every run; the same process confined to sixteen
+  logical processors (`start /affinity`, either end of the 3990X's 128) reads the high level six
+  of six times (22.2 to 22.9 thousand) and gemma-2-2b 10.7 to 11.1 thousand against its
+  unconfined 10.3 +- 1.0. The ratios above are the confined runs for those two; the rest are the
+  unconfined record sweep. The cause is the host pacing of a 25 to 50 ms window over a many-CCD
+  part - `followup_general.md` item 148. Provenance, direction-grade: Boris's box (Threadripper
+  3990X, RTX 5060 Ti 16 GB, 36 SMs, driver 616.56, `VK_NV_cooperative_matrix2` with the decode
+  vector arm live), `lcpp_bench --for-debug-purposes -r 5 -p 512 -n 128 -t 16` under
+  `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048` against the local llama.cpp b10660 Vulkan
+  `llama-bench -ngl 99 -fa 1 -t 16 -r 3`; the 12B Q8_0 row from the pass's first sweep - in the
+  record sweep the desktop held 4.3 GB of the card and both sides spilled to host memory (ours
+  64 / 4.4, llama.cpp 793 / 4.9), a reading of nothing.
+
 - **LANDED (2026-09-13) - the gemma family at parity on the Vulkan resident driver.** Every gemma
   carrier the model table stocks sits at or above 0.95 of llama.cpp b10660 on both rows, seven of
   nine prefills and two decodes ahead of it (pp512 / tg128 ratios, five reps, one model a process):

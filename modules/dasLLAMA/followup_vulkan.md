@@ -1451,3 +1451,29 @@ module) is independent and can land any time - it is pure structure.
     kernel cell dispatches them at the off-path value. Each wants a kernel-unit arm at the on-path
     value with its CPU oracle taught the branch (`attn_row_oracle` takes a window start already; the
     qk-norm oracle does not know V from K).
+57. **The resident MoE block is cm2-only, so a KHR-mode card runs the 26B on the per-op rails.**
+    `vk_rdec_moe_ok` admits a routed layer only under `COOPMAT_CM2`: the expert-schedule tiles (the
+    thirty `<Fmt>Cm2SBatch` and `<Fmt>Cm2EBatch` stamps, the q51 down rail) exist on the cm2 tensor
+    API alone, where every dense GEMM, the flash attention and the PLE projection have their KHR
+    twins. On the RunPod RTX PRO 4500 under `DASLLAMA_COOPMAT=mm` the 26B UD-IQ3_XXS declines the
+    whole resident driver ("expert formats 12/12/0 are outside the resident MoE block's tile family")
+    and reads 328 pp512 / 39 tg128 against llama.cpp b10660's own KHR path at 4180 / 129 - 0.08 and
+    0.30 - where the cm2 mode sits at 1.071 / 1.025; a card without `VK_NV_cooperative_matrix2`
+    (every non-NVIDIA card) is that case unforced. The lever is a KHR arm of the schedule geometry -
+    the 32-row expert pieces on 16x16x16 fragments with the `khr_stage16` steps the dense KHR arm
+    already has per format, the q51 stage added - measured first against llama.cpp's KHR
+    `mul_mm_id` (the same `mul_mm.comp` over an expert-id row gather) on the same card.
+58. **Under `mm` the KHR kq tile serves every f16-fed GEMM, where the q8-fed mul_mm L-tile is
+    faster on the wide, shallow ones.** E2B's gate and up (1536 in, 6144 out) run 6204 / 6270 us a
+    512-row window on the KHR tile against 5537 / 5647 on `MmBatch` - twelve percent - while its
+    down ran three times faster on the KHR arm, and faster again split. The feed is a per-format
+    verdict (`pf_f16_feed`); a per-GEMM pick on the wave model's shape (a shallow k against a wide
+    n keeps the L-tile) is worth about five percent of E2B's window under `mm`.
+59. **The h128 coopmat twin reads neither `window` nor `cap`.** `DaAttnBH128T` masks on the causal
+    edge and the window's end alone (`gk <= gq && gk < kend`) while its `DaAttnBArgs` carry both
+    fields, so a sliding or softcapped 128-head layer that reaches it - a KHR-mode card where the
+    flash tile declines (a gated model) - attends every position uncapped. No stocked model hits
+    it: the sliding and softcapped families (gemma-2, gemma-3, gemma-4) run 256 and 512 heads, and
+    the 128-head families (the qwens) have neither field set. The fix is the
+    chunked tiles' mask and `attn_softcap` on the scores, with a kernel cell at the on-path values
+    (item 56's shape).
