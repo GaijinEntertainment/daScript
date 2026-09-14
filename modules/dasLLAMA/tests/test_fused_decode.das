@@ -29,6 +29,7 @@ def private models_dir() : string {
     return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
 }
 let N_STEPS = 24
+let FUSED_CTX = 64l   //! the GGUF sessions' context: N_STEPS positions and room; a CPU f32 K/V at a file's whole context runs to tens of GB (77 on the 262144-position Qwen3-4B)
 
 def private argmax_of(s : Session; vocab : int64) : int64 {
     var best = 0l
@@ -311,6 +312,7 @@ def test_fused_decode_pre_post_norm(t : T?) {
                     continue
                 }
                 var tr <- load_gguf(path, QuantMode.q8)
+                tr.config.seq_len = min(tr.config.seq_len, FUSED_CTX)
                 fused_vs_std_bit_exact(t, tr)
                 delete tr
             }
@@ -346,6 +348,7 @@ def test_fused_decode_kquant(t : T?) {
                     continue
                 }
                 var tr <- load_gguf(path, QuantMode.q8)
+                tr.config.seq_len = min(tr.config.seq_len, FUSED_CTX)
                 if (!tr.kq_repacked) {
                     t |> success(true, "skipped: active backend has no kq rows cores")
                 } else {
@@ -382,6 +385,7 @@ def test_fused_decode_moe_chain(t : T?) {
             setup_dasllama_jobque_()
             set_target_chunk_work(1l)
             var tr <- load_gguf(path, QuantMode.q8)
+            tr.config.seq_len = min(tr.config.seq_len, FUSED_CTX)
             if (!kernel_backend_has_mx4_rows()) {
                 t |> success(true, "skipped: active backend has no mx4 rows core")
             } else {
