@@ -25,9 +25,6 @@ def main() : int {
     print("shapes.dot((3,4),(1,2))          = {dot}\n")
     print("units.celsius_to_fahrenheit(100) = {fahrenheit}\n")
     print("greetings.greet(\"mundo\")         = {greeting}\n")
-    greetings_destroy(gr)
-    units_destroy(un)
-    shapes_destroy(sh)
     var bad = 0
     if (dot != 11.0) {
         bad++
@@ -35,9 +32,13 @@ def main() : int {
     if (fahrenheit != 212.0) {
         bad++
     }
+    //! greeting points into the instance's string heap, so it is read while that instance lives
     if (greeting != "hola mundo") {
         bad++
     }
+    greetings_destroy(gr)
+    units_destroy(un)
+    shapes_destroy(sh)
     print(bad == 0 ? "three daslang libraries, one process - ok\n" : "{bad} of three answered wrong\n")
     return bad
 }

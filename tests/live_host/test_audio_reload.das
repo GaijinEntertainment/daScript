@@ -34,14 +34,14 @@ def test_audio_survives_reloads(t : T?) {
         t |> skip("no daslang-live beside {get_das_exe()}")
         return
     }
-    if (free_port() < 0) {
-        t |> skip("a host answers on every port from {PORT_FIRST} to {PORT_FIRST + PORT_SPAN - 1}")
+    if (free_port(PORT_BAND_AUDIO) < 0) {
+        t |> skip("a host answers on every port from {PORT_BAND_AUDIO} to {PORT_BAND_AUDIO + PORT_SPAN - 1}")
         return
     }
     t |> run("two reloads, a full reload and a reset keep the audio system up, and /shutdown leaves nothing") @(t : T?) {
         let script = path_join(get_das_root(), "tests/live_host/_fixture_audio_reload.das")
         var lines : array<string>
-        let spawned = with_ready_host(exe, script, ["--", "--null-audio"], lines) $(var host; port; ready) {
+        let spawned = with_ready_host(exe, script, PORT_BAND_AUDIO, ["--", "--null-audio"], lines) $(var host; port; ready) {
             t |> success(ready >= 0.0, "daslang-live did not serve /status within 30 s:\n{join(lines, "\n")}")
             if (ready >= 0.0) {
                 var generation = 0

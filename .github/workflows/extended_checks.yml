@@ -627,7 +627,7 @@ jobs:
         python3 -m pip install markdown || python3 -m pip install --user markdown || python3 -m pip install --break-system-packages markdown
         python3 site-dasllama/build_news.py --root site-dasllama
         git diff --exit-code -- site-dasllama/index.html site-dasllama/stories.html site-dasllama/stories site-dasllama/feed.xml site-dasllama/sitemap.xml
-        test -z "$(git status --porcelain -- site-dasllama/stories)"   # a story page the generator wrote but nobody committed
+        test -z "$(git ls-files --others --exclude-standard -- site-dasllama/stories)"   # a story page the generator wrote but nobody committed
         python3 site-dasllama/test_metadata.py
 
     - name: "Test browser model-set mint (python)"

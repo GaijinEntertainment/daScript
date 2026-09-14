@@ -1010,6 +1010,10 @@ src/builtin/module_file_access.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
+IF((DAS_USE_SANITIZER STREQUAL "undefined" OR DAS_USE_SANITIZER STREQUAL "ubsan") AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    SET_PROPERTY(SOURCE src/builtin/module_builtin_dasbind.cpp
+        APPEND_STRING PROPERTY COMPILE_FLAGS " -fno-sanitize=function")
+ENDIF()
 
 SET(MISC_SRC
 include/daScript/misc/enums.h

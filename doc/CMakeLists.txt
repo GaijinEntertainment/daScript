@@ -2,15 +2,21 @@
 # daslang target exists (das2rst runs daslang). CMAKE_CURRENT_BINARY_DIR here is
 # <build>/doc, so stamps and generated HTML land under build/doc/.
 
-# Regenerate stdlib RST from daslib source comments. The freshness guards
-# (// stub / Uncategorized / untracked) stay inline in doc.yml. The HTML build
-# lives in build_doc below.
+# Regenerate stdlib RST from daslib source comments. The HTML build lives in
+# build_doc below; check_docs_fresh holds the guards that run once every
+# generator (das2rst, imgui2rst, vulkan2rst) has written its pages.
 if(NOT DAS_TOOLS_DISABLED)
     add_custom_target(check_docs_generated
         COMMAND $<TARGET_FILE:daslang> -documentation ${PROJECT_SOURCE_DIR}/doc/reflections/das2rst.das
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Regenerating stdlib RST (das2rst)"
+    )
+    add_custom_target(check_docs_fresh
+        COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR}
+                -P ${PROJECT_SOURCE_DIR}/doc/check_docs_fresh.cmake
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Checking generated documentation is fresh"
     )
 endif()
 

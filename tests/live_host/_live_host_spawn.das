@@ -15,7 +15,13 @@ require strings
 //! the reload endpoints with their generation wait, and the exit wait.
 
 let PORT_FIRST = 19390
-let PORT_SPAN = 20
+let PORT_SPAN = 10
+
+//! one band per spawning test: two tests of a parallel suite scanning one span both find the same
+//! port free, and then the loser's host dies on the single-instance lock while the winner's
+//! /status answers the loser's ready wait
+let PORT_BAND_READY = PORT_FIRST
+let PORT_BAND_AUDIO = PORT_FIRST + PORT_SPAN
 
 //! the daslang-live beside the daslang running dastest; empty where the tree has not built it
 def live_exe() : string {
@@ -44,15 +50,15 @@ def status_answers(port : int) : bool {
 
 //! the first port from `from` to the end of the span no host answers on, so a /status answer is
 //! this test's own child and its /shutdown reaches nothing else; -1 when every port has a host
-def free_port_from(from : int) : int {
-    for (port in range(from, PORT_FIRST + PORT_SPAN)) {
+def free_port_from(from, last : int) : int {
+    for (port in range(from, last)) {
         if (!status_answers(port)) return port
     }
     return -1
 }
 
-def free_port() : int {
-    return free_port_from(PORT_FIRST)
+def free_port(band : int) : int {
+    return free_port_from(band, band + PORT_SPAN)
 }
 
 //! spawns daslang-live on `script` with `extra_args` after the `--` on a free port and runs
@@ -62,13 +68,13 @@ def free_port() : int {
 //! free port, three attempts in all - the block then sees the last attempt, ready -1. The
 //! child is closed after the block; stdout is drained into `lines` throughout. False, with
 //! the block never run and a line in `lines`, when no port of the span is free
-def with_ready_host(exe, script : string; extra_args : array<string>; var lines : array<string>; blk : block<(var host : process; port : int; ready : float) : void>) : bool {
+def with_ready_host(exe, script : string; band : int; extra_args : array<string>; var lines : array<string>; blk : block<(var host : process; port : int; ready : float) : void>) : bool {
     let no_env : array<string>
-    var from = PORT_FIRST
+    var from = band
     for (attempt in range(3)) {
-        let port = free_port_from(from)
+        let port = free_port_from(from, band + PORT_SPAN)
         if (port < 0) {
-            lines |> push("no free port from {from} to {PORT_FIRST + PORT_SPAN - 1}")
+            lines |> push("no free port from {from} to {band + PORT_SPAN - 1}")
             return false
         }
         var args <- [exe, "--live-port={port}", script]

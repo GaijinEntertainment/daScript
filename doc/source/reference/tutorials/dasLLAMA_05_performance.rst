@@ -72,7 +72,6 @@ gaps; in a browser the default is 0, because a spinning web worker costs the
 caller its core (Pocket TTS in Chrome measured 1.1x real time spinning against
 1.4x parked). Like the cap, ``setup_dasllama_jobque()`` latches it:
 
-.. das-doc: given var m = Model()
 .. code-block:: das
 
    let spin_was = get_jobque_spin_us()

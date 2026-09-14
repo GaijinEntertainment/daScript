@@ -58,6 +58,7 @@ A Pocket file reads text, so no pack sits beside it. ``tts_needs_packs``
 answers that from the file's own architecture metadata, before any load, so a
 program can check the file set it is about to serve.
 
+.. das-doc: given let path = "kitten-nano.gguf"
 .. code-block:: das
 
    if (tts_needs_packs(path)) {

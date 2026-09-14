@@ -77,7 +77,7 @@ namespace das {
 
 #if DAS_BIND_EXTERNAL
 
-#ifdef _MSC_VER
+#ifdef _WIN32
     typedef uint64_t ( __stdcall * StdCallFunction )( ... );
     typedef uint64_t ( __cdecl * CdeclCallFunction )( ... );
     typedef uint64_t ( __stdcall * OpenglCallFunction )( ... );
@@ -155,7 +155,7 @@ namespace das {
     #define AX(i)   (*(uint64_t *)(args+(i)))
     #define AD(i)   (*(double *)(args+(i)))
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include "win_x86_64_wrapper.inc"
 #else
 #include "systemV_64_wrapper.inc"
@@ -495,7 +495,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             } else if ( arg.name=="late" ) {
                 result.late = true;
             }
-#ifdef _MSC_VER
+#ifdef _WIN32
             else if ( arg.name=="windows_library" && arg.type==Type::tString ) {
                 platform_library = arg.sValue;
             }
@@ -524,7 +524,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     }
 
     FastCallWrapper computeWrapper ( Function * fun ) {
-#ifdef _MSC_VER
+#ifdef _WIN32
         return getWrapper(fun, 4);
 #else
         if ( fun->arguments.size()>6 ) {
@@ -581,7 +581,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 err = "function returns vector type, which is currently not supported by the specified binding";
                 return false;
             }
-#ifndef _MSC_VER
+#ifndef _WIN32
             if ( fun->arguments.size()>6 && !DAS_BIND_ARM64_LAYOUT ) {
                 int perm=0;
                 int nargs = int(fun->arguments.size());

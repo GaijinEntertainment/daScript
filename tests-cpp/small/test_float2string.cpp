@@ -1,6 +1,12 @@
 #if defined(__FAST_MATH__) || defined(_M_FP_FAST)
 #error "test_float2string.cpp compares against fmt, whose float printing a fast-math TU folds; it is pinned to precise math in tests-cpp/CMakeLists.txt"
 #endif
+// fmt is header-only, so its float formatting is a weak symbol the linker may take from any TU
+// in the binary - under DAS_FAST_MATH those TUs fold NaN to inf and -0 to 0, and fmt stops being
+// an oracle however this one is compiled
+#ifndef DAS_FMT_ORACLE_IS_FAST_MATH
+#define DAS_FMT_ORACLE_IS_FAST_MATH 0
+#endif
 #include <doctest/doctest.h>
 #include "daScript/daScript.h"
 #include "daScript/misc/float2string.h"
@@ -54,7 +60,7 @@ static const uint32_t kFltMin = 0x00800000u, kFltMax = 0x7f7fffffu;
 static const uint32_t kOne = 0x3f800000u, kPointOne = 0x3dcccccdu, kOneE10 = 0x501502f9u;
 static const uint32_t kMantissaStride = 0x02467u;
 
-TEST_CASE("float2string matches the fmt spelling it replaced") {
+TEST_CASE("float2string matches the fmt spelling it replaced" * doctest::skip(DAS_FMT_ORACLE_IS_FAST_MATH != 0)) {
     std::string mismatch;
     const uint32_t specialAndBoundaryBits[] = {
         kPosZero, kNegZero, kPosInf, kNegInf, kNan, kNegNan,
@@ -89,7 +95,7 @@ static const uint64_t kDExpMask = 0x7ff0000000000000ull;
 static const uint64_t kLcgMul = 6364136223846793005ull, kLcgAdd = 1442695040888963407ull;
 static const int kDoubleSamples = 2000000;
 
-TEST_CASE("double2string matches the fmt spelling it replaced") {
+TEST_CASE("double2string matches the fmt spelling it replaced" * doctest::skip(DAS_FMT_ORACLE_IS_FAST_MATH != 0)) {
     std::string mismatch;
     const uint64_t specialAndBoundaryDoubleBits[] = {
         kDPosZero, kDNegZero, kDPosInf, kDNegInf, kDNan, kDNegNan,

@@ -47,7 +47,7 @@ def private static_artifact(stem : string) : string {
 
 def private build_lib(bin, source, stem, flags, jit_flags : string; var lines : array<string>) : int {
     mkdir_rec(OUTPUT_DIR)
-    return spawn("\"{bin}\" -lib \"{source}\" -output \"{OUTPUT_DIR}/{stem}\" {flags}" +
+    return spawn("cd \"{get_das_root()}\" && \"{bin}\" -lib \"{source}\" -output \"{OUTPUT_DIR}/{stem}\" {flags}" +
         " -- {jit_flags} --jit-lib-bindings \"{OUTPUT_DIR}/_{stem}_c.das\"", lines)
 }
 
