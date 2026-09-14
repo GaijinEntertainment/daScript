@@ -1719,3 +1719,13 @@
     walk into the in-memory chunk, then `write_chunk` to persist it (the shape `chunk_rail` already
     takes), with the memory-sink decline dropping to the eager rail. The bar is one transcode per
     load on either outcome.
+
+150. **A parity fixture carries no margin floor.** The gemma-4-12b Q5_K_M counting continuation
+    flips at its 21st token on Metal - the CPU chain's top-2 margin there is 6 logits, the Metal
+    chain's 0.03 with no tensor crown armed, and the box's crowns move the position by 0.18 - so
+    the token gate reports the side of a razor the chain lands on, not a kernel (the k5 tensor
+    twin holds the double-precision oracle at the production widths, 0.3% past the simdgroup
+    base). Unquirked: before a continuation joins `performance/model_specs.das`, run the CPU chain
+    over it and refuse a fixture whose top-2 margin at any step sits under a floor (2 logits),
+    a `test_model_specs` cell over the stocked fixtures. The bar is no parity row a rounding
+    order can flip.

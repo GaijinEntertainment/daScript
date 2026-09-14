@@ -2285,6 +2285,15 @@ def test_metal_gemm_kernels(t : T?) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 256, 512, 64, halfx = true, tall = true)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 320, 512, 64, halfx = true, tall = true)   // off the 128 floor: the remainder pair at nonzero x/y offsets
                 }
+                // the gemma-4 dense site width: kdim 3840 is 15 superblocks per row - an odd,
+                // non-power-of-two superblock count, off every other cell's 256/512 K. The K-quant
+                // stamps index the quant plane by superblock, so the stride arithmetic only ever
+                // divides evenly here by accident on a power-of-two K
+                for (fmt in [4, 5, 6]) {
+                    kq_mulmm_gate(t, dev, queue, fmt, false, 128, 3840, 128)
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 128, 3840, 128, halfx = true)
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 128, 3840, 128, halfx = true, tall = true)
+                }
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
                 kq_mulmm_gate(t, dev, queue, 44, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 44, false, 32, 256, 128)
