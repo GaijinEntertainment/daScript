@@ -1692,3 +1692,18 @@
     and the engine confine themselves on such a part (one CCD's worth of processors near the
     lanes' own), the rule measured on the 3990X, and the first read is which threads the
     `affinity hard` mode leaves to the OS.
+
+149. **Two Metal gates the M4 pass found the shape of.** (a) A `REVIEW.das` check that reads
+    every per-format dispatch ladder in `dasllama/dasllama_metal_kernels.das` and
+    `dasllama/dasllama_metal_prefill.das` (nine today - `enc_kq_gemv`, `enc_kq_mvb`,
+    `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`, `pf_moe_split_pso`, `pf_moe_th_pso`,
+    `pf_enc_kq_dq`, `pf_moe_split_enc`) against the served-format predicates
+    (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in
+    `dasllama/dasllama_metal_shapes.das`; `pf_kq_split_fmt`, `pf_moe_split_fmt` in the prefill)
+    and reports an arm whose format no predicate serves - today the ladders' `panic` default
+    arms are the only catch, at serve time; the gate retires `REVIEW_GPU.md`'s dispatch-ladder
+    rule to "weakening it is a defect". (b) A `tests/REVIEW.das` check over the hand-bound
+    kernel-cell sites (38 today) that pass a `*_tgmem` global to
+    `metal_set_threadgroup_memory_length` with no non-zero test: a stamp that gates its
+    `@workgroup` state off makes the global read 0 and the call throw, which the gate in
+    `test_metal_gemv_kernels.das`'s `w13sw_gate` now guards by hand.
