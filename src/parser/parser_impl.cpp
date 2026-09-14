@@ -820,11 +820,11 @@ namespace das {
                 das_yyerror(scanner,"can't override an operator " + func->getMangledName(),
                     func->at, CompilationError::invalid_function);
             }
+            func->privateFunction = isPrivate || yyextra->g_thisStructure->privateStructure;
             if ( isStatic ) {
                 func->isClassMethod = true;
                 func->isStaticClassMethod = true;
                 func->classParent = yyextra->g_thisStructure;
-                func->privateFunction = isPrivate || yyextra->g_thisStructure->privateStructure;
             } else {
                 modifyToClassMember(func, yyextra->g_thisStructure, false, cnst);
             }

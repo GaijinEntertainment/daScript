@@ -361,6 +361,11 @@ Class methods can be operators:
         }
     }
 
+An operator declared ``private`` is a private function of the declaring module, not a
+private member of the class: any code in that module can use it, and code in other modules
+cannot. A ``private`` property setter with a public getter makes the property read-only
+outside its module.
+
 Class fields can be declared static, i.e. shared between all instances of the class:
 
 .. code-block:: das

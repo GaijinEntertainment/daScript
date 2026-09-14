@@ -37,6 +37,21 @@ def test_operator_declaration_errors(t : T?) {
     }
 }
 
+// a property whose setter is private to another module reads as a plain rvalue
+// at the use site; the copy and clone errors name the setter they could not use
+[test]
+def test_private_property_setter_hint(t : T?) {
+    t |> run("copy into a property with a private setter") @(t : T?) {
+        t |> expect_issue("_private_setter_copy.das",
+            "property setter _private_setter_helper::operator .`flag`clone(self: _private_setter_helper::Gate; value: bool const): void at")
+        t |> expect_issue("_private_setter_copy.das", "is private")
+    }
+    t |> run("clone into a property with a private setter") @(t : T?) {
+        t |> expect_issue("_private_setter_clone.das", "can only clone to a reference")
+        t |> expect_issue("_private_setter_clone.das", "property setter _private_setter_helper::operator .`flag`clone")
+    }
+}
+
 // the `?` and `[` operator families lower to plain ExprCall, where a defaulted
 // trailing parameter pads like any call - the reject above must not catch them
 struct Boxed {

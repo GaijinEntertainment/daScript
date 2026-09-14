@@ -754,6 +754,26 @@ namespace das {
             return "";
         }
     }
+    string InferTypes::privateSetterInfo(ExprOp2 *expr) const {
+        if (!verbose || !reportPrivateFunctions) return "";
+        if (!expr->left->rtti_isCall()) return "";
+        auto getter = static_cast<ExprCall *>(expr->left);
+        if (getter->name.compare(0, 2, ".`") != 0 || getter->arguments.size() != 1) return "";
+        vector<TypeDeclPtr> types = { getter->arguments[0]->type, expr->right->type };
+        auto setterName = "_::" + getter->name + "`clone";
+        MatchingFunctions setters, generics;
+        findMatchingFunctionsAndGenerics(setters, generics, setterName, types, false, false);
+        string moduleName, funcName;
+        splitTypeName(setterName, moduleName, funcName);
+        auto inWhichModule = getSearchModule(moduleName);
+        TextWriter ss;
+        for (auto &setter : setters) {
+            if (setter->privateFunction && !canCallPrivate(setter, inWhichModule, thisModule)) {
+                ss << "property setter " << describeCandidate(setter) << " is private\n";
+            }
+        }
+        return ss.str();
+    }
     void InferTypes::preVisit(ExprCopy *expr) {
         Visitor::preVisit(expr);
         markTableStoreTarget(expr->left);
@@ -795,7 +815,7 @@ namespace das {
         if (!canCopyOrMoveType(expr->left->type, expr->right->type, TemporaryMatters::no, expr->right,
                                "can only copy compatible type", CompilationError::cant_copy, expr->at)) {
         } else if (!expr->left->type->isRef()) {
-            error("can only copy to a reference" + copyErrorInfo(expr), "", "",
+            error("can only copy to a reference" + copyErrorInfo(expr), privateSetterInfo(expr), "",
                   expr->at, CompilationError::cant_copy);
         } else if (!expr->allowConstantLValue && expr->left->type->constant) {
             error("can't write to a constant value" + copyErrorInfo(expr), "", "",
@@ -934,7 +954,7 @@ namespace das {
             error("can only clone the same type " + describeType(expr->left->type) + " vs " + describeType(expr->right->type), "", "",
                   expr->at, CompilationError::mismatching_clone_type);
         } else if (!expr->left->type->isRef()) {
-            error("can only clone to a reference", "", "",
+            error("can only clone to a reference", privateSetterInfo(expr), "",
                   expr->at, CompilationError::cant_clone);
         } else if (expr->left->type->constant) {
             error("can't write to a constant value " + expr->left->describe(), "type " + describeType(expr->left->type), "",
