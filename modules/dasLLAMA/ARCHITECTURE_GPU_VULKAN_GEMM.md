@@ -207,9 +207,9 @@ window on Qwen1.5-MoE-A2.7B (`benchmarks/lcpp_bench.das -p 512 --prof`, the Q4_K
 5060 Ti), the one term the arm exists to move.
 
 **The per-op attention chain runs the same cm2 flash-attention tile the resident chain runs**
-(`fa_cm2_h64` / `h128`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j) when the device reports the cm2
-flash-attention features (`has_coopmat2_fa` - cooperative-matrix reductions, conversions and
-per-element ops), the fa knob is on, the head size is 64 or 128, and the model's attention is
+(`fa_cm2_h64` / `h128`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j) when `has_coopmat2_fa` holds - the
+device reports the cm2 flash features (reductions, conversions, per-element ops) AND was created in
+cm2 mode, since a forced mode enables no coopmat2 extension - the fa knob is on, the head size is 64 or 128, and the model's attention is
 not gated - this chain wires neither the h256 stamps nor their gated epilogue, so gated models
 keep the flash-style `at_attn` pass. The tile reads f16 K/V: the chain keeps its f32 roped-k /
 raw-v planes at absolute positions for the host readback the CPU cache store consumes, and

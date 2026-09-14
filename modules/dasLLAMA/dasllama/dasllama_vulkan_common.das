@@ -549,7 +549,7 @@ struct GpuState {
     subgroup_size : int64    // the device's subgroupSize (32 on NVIDIA; the KHR kq tile gates on it)
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
-    has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops)
+    has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops), on a device created in cm2 mode
     has_bda : bool           // the device enabled bufferDeviceAddress (the coopmat2 creator alone does): storage buffers carry the device-address usage, allocation flag and query
     decvec_on : bool        // DASLLAMA_VK_DECVEC asked and the device reports the four-wide decode callback (a dry bake creates no pipelines and leaves it off)
     full_sg_on : bool        // DASLLAMA_VK_FULLSG asked and the device has the feature: every class pipeline pins REQUIRE_FULL_SUBGROUPS
@@ -1188,7 +1188,8 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
             present = has_cm2 && cooperative_matrix2_fa_supported(phys),
-            rides = "the cm2 flash-attention stamps; without them the KHR flash twin serves the attention"),
+            knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
+            rides = "the cm2 flash-attention stamps, on a device created in cm2 mode; without them the KHR h128 twin and the chunked attention tiles serve"),
         VkExtEntry(name = "VK_NV_cooperative_matrix_decode_vector", present = has_cm2 && cooperative_matrix2_decode_vector_supported(phys),
             knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec,
             rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
@@ -1289,9 +1290,10 @@ def vk_moe_init : bool {
     // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
-    g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && cooperative_matrix2_fa_supported(g_gpu.phys)
-    g_gpu.decvec_on = g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
     g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
+    //! the cm2 flash tiles ride a device created in cm2 mode: a mode forced off it (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, so the flag reads false there whatever the card supports
+    g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && cooperative_matrix2_fa_supported(g_gpu.phys)
+    g_gpu.decvec_on = g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
     g_gpu.sm_count = query_sm_count(g_gpu.phys)
     // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
     var xfam = -1
