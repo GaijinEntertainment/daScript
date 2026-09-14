@@ -44,9 +44,8 @@ walk as reference measurements of another engine's kernels.
 ### 2.2j The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
 **A prompt longer than `PF_WINDOW` rows runs as SEQUENTIAL windows over the same activation
-buffers.** Every window's rope and attention address the KV mirror at ABSOLUTE positions, so
-window w attends everything the earlier windows stored; only the last window runs the final
-requant and the classifier.
+buffers.** Every window's rope and attention address the KV mirror at ABSOLUTE positions, so window w attends
+everything the earlier windows stored; only the last window runs the final requant and the classifier.
 
 **The last layer's FFN runs on the window's last 32 rows only.** Nothing downstream of the
 final layer reads more than the last row - the classifier requantizes row `wlen - 1`, the KV
@@ -62,9 +61,8 @@ past the window - unlike the MoE chain's gathered image and hidden plane, which
 hidden and residual values that nothing reads. The sliced GEMMs do not split k: the split-k
 reduce sums partial planes from row 0, so a region starting below the window's end would reduce
 the wrong rows. The slice takes the f16-fed cm2 route only (`gu6 && dn6`); the other feeds run
-the full window. Only the plain residual step (`cls_ar`) and the f16 activation honor the row
-base: the fused residual twins feed the NEXT layer's projections and never run on the last
-layer, so they index from row 0 by design.
+the full window. Only the plain residual step (`cls_ar`) and the f16 activation honor the row base: the fused
+residual twins feed the NEXT layer's projections and never run on the last layer, so they index from row 0 by design.
 
 **The k and v GEMMs merge into ONE dispatch when the layer's q, k and v weight planes are all
 q8 and the k and v planes sit adjacent in the arena.** The bump allocator places them
@@ -117,16 +115,18 @@ residual row and b+0 converts or requantizes it. The fused twins never write the
 the last layer always takes the split arm - the final requant reads `xb`. The addr_ffn site
 fuses the same way for the gate/up feed. Bit-identity with the split pair is a suite gate.
 
-**The cm2 flash-attention tile (`FaCm2T`) accumulates O in f16 under a biased row max, masks only
-its edge steps, and lands its output f16 when the `wo` feed is f16.** The running row max carries
-3 ln 2, so every P = e^(S - M) sits at an eighth or under and the f16 O accumulator (half the P @ V
-step) cannot overflow; L carries the same bias, the final divide cancels it, and S, L and M stay f32.
-The mask pass runs only on the steps that cross the causal diagonal or the tile's last window start,
-and the KV loop carries `[dont_unroll]`, which the JIT reads too since the body compiles for the CPU
-oracle (RTX PRO 4500, a 512-row window: E4B's attention 6868 -> 4014 us, gemma-3-1b's 2671 -> 1844).
-The `OUT16` instance converts O in-kernel and writes the `wo` feed plane directly, so the per-layer
-attn-to-f16 convert never encodes; the f32 instance serves the quant route (the twin's gate compares
-device against device: the CPU's `float16()` rounds ties differently).
+**The cm2 flash-attention tile (`FaCm2T`) accumulates O in f16 under a biased row max, masks only its edge steps, and lands its
+output f16 when the `wo` feed is f16.** The running row max carries 3 ln 2, so every P = e^(S - M) sits at an eighth or under and
+the f16 O accumulator cannot overflow; L carries the same bias, the final divide cancels it, and S, L and M stay f32. The mask pass
+runs only on the steps that cross the causal diagonal or the tile's last window start; the KV loop carries `[dont_unroll]` (RTX PRO
+4500, a 512-row window: E4B's attention 6868 -> 4014 us, gemma-3-1b's 2671 -> 1844). The `OUT16` instance writes the `wo` feed
+plane directly, so no attn-to-f16 convert encodes; the f32 instance serves the quant route. **Without cm2 - a KHR-only card, or a
+mode forced off cm2 - the KHR flash tile (`FaKhrT`) serves the same head sizes, window and softcap from the same push constants on
+subgroup-scope 16x16x16 fragments:** sixteen query rows a workgroup, 64 keys a step, each subgroup owning one 16-key column of
+S = Q K^T (K^T a column-major load straight from the f16 shadow) and, after the softmax runs per element through shared memory, a
+quarter of the head's output columns of P V (f16 fragments a step, summed into each thread's f32 o row). A key chunk that starts past
+the window's end is skipped; the last one may load up to fifteen rows past it, so every KV mirror carries `RDEC_MIR_SLACK` zeroed
+elements past its planes.
 
 **A hybrid's gated attention rides the batch kernels through a per-head q stride** (`qhs = 2 x hs`):
 the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror

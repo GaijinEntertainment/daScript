@@ -2303,6 +2303,7 @@ struct RLayer {
     cbase : int64                   //! its rope class's row base inside a position's cos/sin plane
     boff : int64                    //! its row base in the q/k/v bias plane
     pf_fa : bool                    //! the window chain takes the cm2 flash tile on this layer (its head size has a stamp)
+    pf_fakhr : bool                 //! ... or the KHR flash tile, where the device has KHR cooperative matrices and no cm2 flash
     pre_post : bool                 //! the residual steps norm their add partner first (the post-attention and post-FFN norms of a gemma)
     gelu : bool                     //! the dense FFN's activation is the tanh gelu (GeGLU), else silu
     vfk : bool                      //! no v plane: V is the raw k row at its own rms (the v GEMV and its set stay unused)
@@ -2472,6 +2473,7 @@ struct RDec {
     // cm2 flash attention (armed by pf_setup when the device carries the fa trio and the mirror
     // is f16 — the fa tiles bind the mirrors directly, no shadow planes)
     pf_facm2 : bool
+    pf_fakhr : bool   //! the KHR flash tile armed instead (KHR cooperative matrices, no cm2 flash)
     pf_logits_host : HostBuf
     pf_midx_host : HostBuf        //! the last MoE layer's picks, read back for the profile's bucket report
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls

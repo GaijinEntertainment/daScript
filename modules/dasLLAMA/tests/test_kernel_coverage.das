@@ -663,6 +663,11 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the E-series per-layer-embedding tail (the act, its requant and the proj GEMV in one): its carriers are the
     // gemma-4 E2B / E4B, no zoo row; its coverage is test_vkd_q8_gemv_pleact in test_vulkan_kernels.das
     "q8_gemv_pleact_cls_spv",
+    // the KHR flash-attention tile: a coopmat2 card serves the cm2 flash under the default mode, so no zoo row reaches
+    // these stamps there; their coverage is test_vkd_fa_khr and test_vkd_fa_khr_h256_softcap in test_vulkan_kernels.das
+    "fa_khr_h64_cls_spv", "fa_khr_h64_f16_cls_spv", "fa_khr_h128_cls_spv", "fa_khr_h128_f16_cls_spv",
+    "fa_khr_h256_cls_spv", "fa_khr_h256_f16_cls_spv", "fa_khr_h256_cap_cls_spv", "fa_khr_h256_cap_f16_cls_spv",
+    "fa_khr_h512_cls_spv", "fa_khr_h512_f16_cls_spv",
     // the gemma-4 MoE combine (the two normed branches' residual step, f32 and f16 normed-row forms):
     // its carrier is the 26B-A4B, above the zoo's tier; its coverage is test_vkd_moe_routing's gemma-4
     // combine arm in test_vulkan_kernels.das

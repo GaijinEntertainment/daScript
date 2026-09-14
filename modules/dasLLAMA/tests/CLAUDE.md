@@ -345,7 +345,9 @@ its Q8_0 requant in one dispatch, against the three-kernel path byte for byte an
 the pass and the combine), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
 restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
 the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
-f32 stamp).
+f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
+(`fa_tile_run`, `fa_h256_softcap_run`) through the KHR flash tile wherever the device has KHR
+cooperative matrices at subgroup 32, so a coopmat2 card covers both families.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the

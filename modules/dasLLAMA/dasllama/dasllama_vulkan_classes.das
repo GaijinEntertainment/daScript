@@ -3424,6 +3424,229 @@ class DaAttnBH128F16 : DaAttnBH128T {
     typedef KT = float16
 }
 
+// The KHR flash pass over the f16 K/V shadows: FaCm2T's algorithm on subgroup-scope 16x16x16 fragments
+// for a card (or a mode) without coopmat2. A workgroup takes 16 query rows and steps 64 keys; each of
+// its four subgroups owns one 16-key column of the score tile and, after the softmax, one quarter of
+// the head's output columns. The softmax runs per element through shared memory (eight lanes a row),
+// K^T and V fragments load straight from the shadows (no staging, so the 512 head fits), P x V
+// accumulates in f16 fragments per step and lands in each thread's f32 o row. FaCm2Args ride as is.
+[ |> template_struct_instance]
+class template FaKhrT {
+    @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
+    @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
+    @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
+    @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
+    @push_constant pa : FaCm2Args
+    @template_constant HS : uint = 64u           // the head width (64, 128, 256 or 512)
+    @template_constant OUT16 : bool = false      // the o store as f16
+    @template_constant CAP : bool = false        //! the softcap stamps: every scaled score through cap * tanh(s / cap) before the mask (gemma-2)
+    @workgroup fq : uint[4096]     // the 16-row q tile, scaled, f16 pairs: HS / 2 words a row (the 512 head fills it)
+    @workgroup fs : float[1024]    // the 16 x 64 score tile, row stride 64
+    @workgroup fp : uint[512]      // P as f16 pairs, 16 x 64: 32 words a row
+    @workgroup fpv : uint[4096]    // the step's P x V as f16 pairs, 16 x HS: HS / 2 words a row
+
+    [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+    def run {   // nolint:STYLE037,STYLE038 — the whole flash pass, one kernel
+        let qtiles = (pa.rows + 15u) / 16u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 16u
+        let tid = gl_LocalInvocationID.x
+        let sg = tid / 32u
+        let kvh = h / pa.kv_mul
+        let kvlen = pa.w0 + pa.rows
+        let qstride = pa.qstride == 0u ? pa.qd : pa.qstride
+        let qhs = pa.qhs == 0u ? HS : pa.qhs
+        let hw = HS / 2u
+        var i = tid
+        while (i < 16u * hw) {   // the q tile once, scaled, as f16 pairs; padding rows zero
+            let qr = q0 + i / hw
+            let jp = (i % hw) * 2u
+            if (qr < pa.rows) {
+                let src = qr * qstride + h * qhs + jp
+                fq[i] = packHalf2x16(float2(qpanel[src] * pa.scale, qpanel[src + 1u] * pa.scale))
+            } else {
+                fq[i] = 0u
+            }
+            i += 128u
+        }
+        let srow = tid / 8u           // the softmax lanes: eight a row, eight keys each
+        let cb = (tid % 8u) * 8u
+        let gq = pa.w0 + q0 + srow
+        let oe = (tid % 8u) * (HS / 8u)   // this thread's dims of its o row
+        var m = -3.0e38
+        var l = 0.0
+        var o : float[64]
+        for (z in range(int(HS / 8u))) {
+            o[z] = 0.0
+        }
+        let qbase = pa.w0 + q0
+        let kmax = pa.w0 + min(q0 + 16u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        var j = (pa.window != 0u && qbase > pa.window) ? ((qbase - pa.window) / 64u) * 64u : 0u
+        barrier()
+        while [dont_unroll] (j < kmax) {
+            let krow = j + sg * 16u
+            if (krow < kvlen) {   // S[:, sg] = Q x K^T over the subgroup's 16 keys (a column past the shadow's end is never read)
+                var s : coopmatAcc_f32_16x16
+                var d = 0u
+                while (d < HS) {
+                    var qa : coopmatA_f16_16x16
+                    coopmatLoad(qa, fq, int(d / 2u), int(hw), 0)
+                    var kb : coopmatB_f16_16x16
+                    coopmatLoad(kb, kh, pa.kvbase + krow * pa.kvd + kvh * HS + d, int(pa.kvd), 1)
+                    s = coopmatMulAdd(qa, kb, s)
+                    d += 16u
+                }
+                coopmatStore(s, fs, int(sg * 16u), 64, 0)
+            }
+            barrier()
+            let m_old = m
+            var mloc = -3.0e38
+            for [unroll] (c in range(8)) {   // the cap, then the causal and window mask on the scaled scores
+                let idx = srow * 64u + cb + uint(c)
+                let gk = j + cb + uint(c)
+                let v = CAP ? softcap_exp(fs[idx], pa.cap) : fs[idx]
+                let sv = (gk > gq || gk >= kvlen || (pa.window != 0u && gk + pa.window <= gq)) ? -3.0e38 : v
+                fs[idx] = sv
+                mloc = max(mloc, sv)
+            }
+            mloc = max(mloc, subgroupShuffleXor(mloc, 1u))
+            mloc = max(mloc, subgroupShuffleXor(mloc, 2u))
+            mloc = max(mloc, subgroupShuffleXor(mloc, 4u))
+            let mt = max(m_old, mloc)
+            var lloc = 0.0
+            for [unroll] (c2 in range(4)) {   // P = e^(S - M) as f16 pairs
+                let idx = srow * 64u + cb + uint(c2) * 2u
+                let e0 = exp(fs[idx] - mt)
+                let e1 = exp(fs[idx + 1u] - mt)
+                fp[idx / 2u] = packHalf2x16(float2(e0, e1))
+                lloc += e0 + e1
+            }
+            lloc += subgroupShuffleXor(lloc, 1u)
+            lloc += subgroupShuffleXor(lloc, 2u)
+            lloc += subgroupShuffleXor(lloc, 4u)
+            let alpha = exp(m_old - mt)
+            l = l * alpha + lloc
+            m = mt
+            barrier()
+            let c0 = sg * (HS / 4u)   // this subgroup's output columns
+            var acc : coopmatAcc_f16_16x16[8]
+            var kc = 0u
+            while (kc < 64u) {
+                if (j + kc < kvlen) {
+                    var pf : coopmatA_f16_16x16
+                    coopmatLoad(pf, fp, int(kc / 2u), 32, 0)
+                    for (f in range(int(HS / 64u))) {
+                        var vb : coopmatB_f16_16x16
+                        coopmatLoad(vb, vh, pa.kvbase + (j + kc) * pa.kvd + kvh * HS + c0 + uint(f) * 16u, int(pa.kvd), 0)
+                        acc[f] = coopmatMulAdd(pf, vb, acc[f])
+                    }
+                }
+                kc += 16u
+            }
+            for (f2 in range(int(HS / 64u))) {
+                coopmatStore(acc[f2], fpv, int((c0 + uint(f2) * 16u) / 2u), int(hw), 0)
+            }
+            barrier()
+            for (z2 in range(int(HS / 16u))) {   // o = alpha * o + P x V, this thread's dims in pairs
+                let pair = unpackHalf2x16(fpv[srow * hw + (oe + uint(z2) * 2u) / 2u])
+                o[z2 * 2] = o[z2 * 2] * alpha + pair.x
+                o[z2 * 2 + 1] = o[z2 * 2 + 1] * alpha + pair.y
+            }
+            barrier()
+            j += 64u
+        }
+        if (q0 + srow < pa.rows) {
+            let inv = 1.0 / l
+            let ob = (q0 + srow) * pa.qd + h * HS + oe
+            for (z3 in range(int(HS / 8u))) {
+                static_if (OUT16) {
+                    outp[ob + uint(z3)] = float16(o[z3] * inv)
+                } else {
+                    outp[ob + uint(z3)] = o[z3] * inv
+                }
+            }
+        }
+    }
+}
+
+[ |> template_struct_instance]
+class template FaKhrH64T : FaKhrT {
+    override HS = 64u
+}
+
+[vk_dispatch(name = "fa_khr_h64_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64 : FaKhrH64T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_khr_h64_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64F16 : FaKhrH64T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
+[ |> template_struct_instance]
+class template FaKhrH128T : FaKhrT {
+    override HS = 128u
+}
+
+[vk_dispatch(name = "fa_khr_h128_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH128 : FaKhrH128T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_khr_h128_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH128F16 : FaKhrH128T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
+[ |> template_struct_instance]
+class template FaKhrH256T : FaKhrT {
+    override HS = 256u
+}
+
+[vk_dispatch(name = "fa_khr_h256_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256 : FaKhrH256T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_khr_h256_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256F16 : FaKhrH256T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
+// gemma-2's capped 256 heads
+[vk_dispatch(name = "fa_khr_h256_cap_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256Cap : FaKhrH256T {
+    typedef OT = float
+    override CAP = true
+}
+
+[vk_dispatch(name = "fa_khr_h256_cap_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256CapF16 : FaKhrH256T {
+    typedef OT = float16
+    override OUT16 = true
+    override CAP = true
+}
+
+[ |> template_struct_instance]
+class template FaKhrH512T : FaKhrT {
+    override HS = 512u
+}
+
+[vk_dispatch(name = "fa_khr_h512_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH512 : FaKhrH512T {
+    typedef OT = float
+}
+
+[vk_dispatch(name = "fa_khr_h512_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH512F16 : FaKhrH512T {
+    typedef OT = float16
+    override OUT16 = true
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {

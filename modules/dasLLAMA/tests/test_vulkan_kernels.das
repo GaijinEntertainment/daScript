@@ -5278,6 +5278,208 @@ def test_vkd_at_attn(t0 : T?) {
     }
 }
 
+//! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
+let FA_SHADOW_SLACK_ROWS = 16
+
+//! one flash family's set: the cm2 tile's or the KHR tile's, the same four bindings (q, K shadow, V shadow, out)
+def private set_fa_tile(khr : bool; bufs : uint64[4]; sizes : int64[4]; gbits : uint[4]) : VkDescriptorSet
+    => khr ? set_fa_khr_cls(bufs, sizes, gbits) : set_fa_cm2_cls(bufs, sizes, gbits)
+
+//! one flash family's dispatch by head size, cap and output width: the cm2 tile's 64-row workgroups or the KHR tile's 16-row ones
+def private enc_fa_tile(khr : bool; hs : int; cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaCm2Args; nheads, rows : int) {
+    let rpw = khr ? 16 : 64
+    let wgs = int64(nheads * ((rows + rpw - 1) / rpw))
+    if (khr) {
+        enc_fa_khr_stamp(hs, cap, f16, raw, h, s, pc, wgs)
+    } else {
+        enc_fa_cm2_stamp(hs, cap, f16, raw, h, s, pc, wgs)
+    }
+}
+
+def private enc_fa_khr_stamp(hs : int; cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaCm2Args; wgs : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (hs == 64) {
+            if (f16) { enc_fa_khr_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h64_cls(raw, h, s, pc, wgs) }
+        } elif (hs == 128) {
+            if (f16) { enc_fa_khr_h128_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h128_cls(raw, h, s, pc, wgs) }
+        } elif (hs == 512) {
+            if (f16) { enc_fa_khr_h512_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h512_cls(raw, h, s, pc, wgs) }
+        } elif (cap) {
+            if (f16) { enc_fa_khr_h256_cap_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h256_cap_cls(raw, h, s, pc, wgs) }
+        } else {
+            if (f16) { enc_fa_khr_h256_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h256_cls(raw, h, s, pc, wgs) }
+        }
+    }
+}
+
+def private enc_fa_cm2_stamp(hs : int; cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaCm2Args; wgs : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (hs == 64) {
+            if (f16) { enc_fa_cm2_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_cls(raw, h, s, pc, wgs) }
+        } elif (hs == 128) {
+            if (f16) { enc_fa_cm2_h128_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_cls(raw, h, s, pc, wgs) }
+        } elif (hs == 512) {
+            if (f16) { enc_fa_cm2_h512_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h512_cls(raw, h, s, pc, wgs) }
+        } elif (cap) {
+            if (f16) { enc_fa_cm2_h256_cap_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cap_cls(raw, h, s, pc, wgs) }
+        } else {
+            if (f16) { enc_fa_cm2_h256_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cls(raw, h, s, pc, wgs) }
+        }
+    }
+}
+
+// one flash family over its head sizes and the window arm against the CPU oracle, the f16-out twin against
+// the f32 stamp's f16cvt: `khr` picks the KHR tile, else the cm2 one
+def private fa_tile_run(t : T?; khr : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let tag = khr ? "fa_khr" : "fa_cm2"
+        let nheads = 4
+        let kv_mul = 2
+        let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run (the KHR tile: five 16-row tiles, the last 13 deep)
+        let w0 = 64      // nonzero window base: the causal bound crosses K tiles mid-window
+        let scale = 0.125
+        for (arm in fixed_array((hs = 64, window = 0), (hs = 128, window = 0), (hs = 256, window = 0), (hs = 512, window = 0), (hs = 128, window = 40))) {
+            let hs = arm.hs
+            let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
+            let qd = nheads * hs
+            let kvd = (nheads / kv_mul) * hs
+            let kpos = w0 + rows
+            let kpad = kpos + FA_SHADOW_SLACK_ROWS
+            var qh : array<float>
+            var kh : array<float>
+            var vh : array<float>
+            qh |> resize(rows * qd)
+            kh |> resize(kpad * kvd)
+            vh |> resize(kpad * kvd)
+            for (i in range(rows * qd)) {
+                qh[i] = float((i * 41) % 73) * 0.05 - 1.8
+            }
+            for (i in range(kpos * kvd)) {   // the slack rows stay zero
+                kh[i] = float((i * 17) % 97) * 0.03 - 1.4
+                vh[i] = float((i * 53) % 89) * 0.04 - 1.7
+            }
+            let q_bytes = int64(rows * qd) * 4l
+            let m_bytes = int64(kpad * kvd) * 4l
+            let sh_bytes = int64(kpad * kvd) * 2l
+            let h16_bytes = int64(rows * qd) * 2l
+            let qdev = make_device_buf(q_bytes)
+            let kdev = make_device_buf(m_bytes)
+            let vdev = make_device_buf(m_bytes)
+            let khdev = make_device_buf(sh_bytes)
+            let vhdev = make_device_buf(sh_bytes)
+            let yd = make_device_buf(q_bytes)
+            let yh16_fused = make_device_buf(h16_bytes)   // the f16-out twin's plane
+            let yh16_split = make_device_buf(h16_bytes)   // the split pair's: f32 out -> f16cvt
+            var host = make_host_buf(q_bytes, true, [cached = true])
+            var host16 = make_host_buf(h16_bytes * 2l, true, [cached = true])
+            var y_cls : array<float>
+            var y16_fused : array<float16>
+            var y16_split : array<float16>
+            y_cls |> resize(rows * qd)
+            y16_fused |> resize(rows * qd)
+            y16_split |> resize(rows * qd)
+            // two DIFFERENT sentinels on the compared f16 planes: a dead leg on either side reads as a mismatch
+            for (i in range(rows * qd)) {
+                y16_fused[i] = float16(-777.5)
+                y16_split[i] = float16(-999.25)
+            }
+            unsafe {
+                upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
+                upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
+                upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+                upload_region_at(yh16_fused, 0l, addr<uint8 const?>(y16_fused[0]), h16_bytes)
+                upload_region_at(yh16_split, 0l, addr<uint8 const?>(y16_split[0]), h16_bytes)
+                var sck = set_f16cvt_cls(fixed_array(kdev, khdev),
+                    fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
+                var scv = set_f16cvt_cls(fixed_array(vdev, vhdev),
+                    fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
+                var sfa = set_fa_tile(khr, fixed_array(qdev, khdev, vhdev, yd),
+                    fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
+                    fixed_array(1u, 16u, 32u, 4u))
+                var sfa16 = set_fa_tile(khr, fixed_array(qdev, khdev, vhdev, yh16_fused),
+                    fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
+                    fixed_array(1u, 16u, 32u, 64u))
+                var scy = set_f16cvt_cls(fixed_array(yd, yh16_split),
+                    fixed_array(q_bytes, h16_bytes), fixed_array(4u, 128u))
+                var raw2 = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                var h2 : VkHaz
+                var pcv = ActArgs(nelem = uint(kpad * kvd), gelu = 0u, nblk = 0u)
+                let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
+                enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
+                enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
+                var pcf = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
+                    kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window))
+                enc_fa_tile(khr, hs, false, false, raw2, h2, sfa, pcf, nheads, rows)
+                enc_fa_tile(khr, hs, false, true, raw2, h2, sfa16, pcf, nheads, rows)
+                // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
+                var pcy = ActArgs(nelem = uint(rows * qd), gelu = 0u, nblk = 0u)
+                enc_f16cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
+                vhz_dep(raw2, h2, 4u | 64u | 128u, 0u, true)
+                cmd_copy_whole(raw2, yd, host.buf, q_bytes)
+                cmd_copy_range(raw2, yh16_fused, 0l, host16.buf, 0l, h16_bytes)
+                cmd_copy_range(raw2, yh16_split, 0l, host16.buf, h16_bytes, h16_bytes)
+                vk_check(vkEndCommandBuffer(raw2), null)
+                submit_wait(raw2)
+                memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+                memcpy(addr<void?>(y16_fused[0]), host16.mapped, h16_bytes)
+                memcpy(addr<void?>(y16_split[0]), reinterpret<void?>(intptr(host16.mapped) + uint64(h16_bytes)), h16_bytes)
+            }
+            // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
+            // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32. The cm2 kernel's
+            // O accumulates in f16 under the row-max bias (every P at an eighth or under, the normalized row a
+            // convex combination of V rows with |v| <= 1 on this fixture), so the f16 running sum's rounding
+            // stays under the 2e-3 relative bar mismatch_approx holds against the f32 oracle, and the f16 O
+            // twin against the f32 stamp pins the same bar - the bound is this fixture's magnitudes, not a proof.
+            // The KHR kernel rounds P to f16 and sums each 64-key step in f16 before its f32 o row: the same bar.
+            var qh2 : array<float>
+            var kh2 : array<float>
+            var vh2 : array<float>
+            qh2 |> resize(rows * qd)
+            kh2 |> resize(kpos * kvd)
+            vh2 |> resize(kpos * kvd)
+            for (i in range(rows * qd)) {
+                qh2[i] = float(float16(qh[i] * scale))
+            }
+            for (i in range(kpos * kvd)) {
+                kh2[i] = float(float16(kh[i]))
+                vh2[i] = float(float16(vh[i]))
+            }
+            var y_ref : array<float>
+            y_ref |> resize(rows * qd)
+            for (r in range(rows)) {
+                for (hh in range(nheads)) {
+                    let cnt = w0 + r + 1
+                    attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
+                        cnt, 1.0, y_ref, r * qd + hh * hs, window > 0 && cnt > window ? cnt - window : 0)
+                }
+            }
+            let bad = mismatch_approx(y_cls, y_ref)
+            t |> success(bad == 0, "{tag} hs {hs} window {window} matches the CPU oracle ({bad} of {rows * qd} off)")
+            y_ref[0] += 0.5
+            t |> success(mismatch_approx(y_cls, y_ref) > 0, "{tag} hs {hs} window {window}: the bar reds a poisoned oracle element")
+            var bad16 = 0
+            for (i in range(rows * qd)) {
+                if (float(y16_fused[i]) != float(y16_split[i])) {
+                    bad16++
+                }
+            }
+            t |> success(bad16 == 0, "{tag} hs {hs} f16-out twin == the f32 stamp's f16cvt ({bad16} of {rows * qd} off)")
+            delete qh
+            delete kh
+            delete vh
+            delete qh2
+            delete kh2
+            delete vh2
+            delete y_ref
+            delete y_cls
+            delete y16_fused
+            delete y16_split
+        }
+    }
+}
+
 [test]
 def test_vkd_fa_cm2(t0 : T?) {
     t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128 + h256, f16cvt-staged planes)") <| @(t : T?) {
@@ -5292,160 +5494,29 @@ def test_vkd_fa_cm2(t0 : T?) {
             }
             verify(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h128_cls() && ensure_fa_cm2_h256_cls() && ensure_fa_cm2_h512_cls(), "fa class rails must engage on an fa-capable device")
             verify(ensure_fa_cm2_h64_f16_cls() && ensure_fa_cm2_h128_f16_cls() && ensure_fa_cm2_h256_f16_cls() && ensure_fa_cm2_h512_f16_cls(), "fa f16-out twins must engage on an fa-capable device")
-            let nheads = 4
-            let kv_mul = 2
-            let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run
-            let w0 = 64      // nonzero window base: the causal bound crosses K tiles mid-window
-            let scale = 0.125
-            for (arm in fixed_array((hs = 64, window = 0), (hs = 128, window = 0), (hs = 256, window = 0), (hs = 512, window = 0), (hs = 128, window = 40))) {
-                let hs = arm.hs
-                let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
-                let qd = nheads * hs
-                let kvd = (nheads / kv_mul) * hs
-                let kpos = w0 + rows
-                var qh : array<float>
-                var kh : array<float>
-                var vh : array<float>
-                qh |> resize(rows * qd)
-                kh |> resize(kpos * kvd)
-                vh |> resize(kpos * kvd)
-                for (i in range(rows * qd)) {
-                    qh[i] = float((i * 41) % 73) * 0.05 - 1.8
-                }
-                for (i in range(kpos * kvd)) {
-                    kh[i] = float((i * 17) % 97) * 0.03 - 1.4
-                    vh[i] = float((i * 53) % 89) * 0.04 - 1.7
-                }
-                let q_bytes = int64(rows * qd) * 4l
-                let m_bytes = int64(kpos * kvd) * 4l
-                let sh_bytes = int64(kpos * kvd) * 2l
-                let h16_bytes = int64(rows * qd) * 2l
-                let qdev = make_device_buf(q_bytes)
-                let kdev = make_device_buf(m_bytes)
-                let vdev = make_device_buf(m_bytes)
-                let khdev = make_device_buf(sh_bytes)
-                let vhdev = make_device_buf(sh_bytes)
-                let yd = make_device_buf(q_bytes)
-                let yh16_fused = make_device_buf(h16_bytes)   // the f16-out twin's plane
-                let yh16_split = make_device_buf(h16_bytes)   // the split pair's: f32 out -> f16cvt
-                var host = make_host_buf(q_bytes, true, [cached = true])
-                var host16 = make_host_buf(h16_bytes * 2l, true, [cached = true])
-                var y_cls : array<float>
-                var y16_fused : array<float16>
-                var y16_split : array<float16>
-                y_cls |> resize(rows * qd)
-                y16_fused |> resize(rows * qd)
-                y16_split |> resize(rows * qd)
-                // two DIFFERENT sentinels on the compared f16 planes: a dead leg on either side reads as a mismatch
-                for (i in range(rows * qd)) {
-                    y16_fused[i] = float16(-777.5)
-                    y16_split[i] = float16(-999.25)
-                }
-                unsafe {
-                    upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                    upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
-                    upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
-                    upload_region_at(yh16_fused, 0l, addr<uint8 const?>(y16_fused[0]), h16_bytes)
-                    upload_region_at(yh16_split, 0l, addr<uint8 const?>(y16_split[0]), h16_bytes)
-                    var sck = set_f16cvt_cls(fixed_array(kdev, khdev),
-                        fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
-                    var scv = set_f16cvt_cls(fixed_array(vdev, vhdev),
-                        fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-                    var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
-                        fixed_array(1u, 16u, 32u, 4u))
-                    var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16_fused),
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
-                        fixed_array(1u, 16u, 32u, 64u))
-                    var scy = set_f16cvt_cls(fixed_array(yd, yh16_split),
-                        fixed_array(q_bytes, h16_bytes), fixed_array(4u, 128u))
-                    var raw2 = alloc_cmd()
-                    let begin = VkCommandBufferBeginInfo()
-                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
-                    var h2 : VkHaz
-                    var pcv = ActArgs(nelem = uint(kpos * kvd), gelu = 0u, nblk = 0u)
-                    let cvtwgs = int64((kpos * kvd / 4 + 255) / 256)
-                    enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
-                    enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
-                    var pcf = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
-                        kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window))
-                    let fawgs = int64(nheads * ((rows + 63) / 64))
-                    if (hs == 64) {
-                        enc_fa_cm2_h64_cls(raw2, h2, sfa, pcf, fawgs)
-                        enc_fa_cm2_h64_f16_cls(raw2, h2, sfa16, pcf, fawgs)
-                    } elif (hs == 128) {
-                        enc_fa_cm2_h128_cls(raw2, h2, sfa, pcf, fawgs)
-                        enc_fa_cm2_h128_f16_cls(raw2, h2, sfa16, pcf, fawgs)
-                    } elif (hs == 256) {
-                        enc_fa_cm2_h256_cls(raw2, h2, sfa, pcf, fawgs)
-                        enc_fa_cm2_h256_f16_cls(raw2, h2, sfa16, pcf, fawgs)
-                    } else {
-                        enc_fa_cm2_h512_cls(raw2, h2, sfa, pcf, fawgs)
-                        enc_fa_cm2_h512_f16_cls(raw2, h2, sfa16, pcf, fawgs)
-                    }
-                    // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
-                    var pcy = ActArgs(nelem = uint(rows * qd), gelu = 0u, nblk = 0u)
-                    enc_f16cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
-                    vhz_dep(raw2, h2, 4u | 64u | 128u, 0u, true)
-                    cmd_copy_whole(raw2, yd, host.buf, q_bytes)
-                    cmd_copy_range(raw2, yh16_fused, 0l, host16.buf, 0l, h16_bytes)
-                    cmd_copy_range(raw2, yh16_split, 0l, host16.buf, h16_bytes, h16_bytes)
-                    vk_check(vkEndCommandBuffer(raw2), null)
-                    submit_wait(raw2)
-                    memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
-                    memcpy(addr<void?>(y16_fused[0]), host16.mapped, h16_bytes)
-                    memcpy(addr<void?>(y16_split[0]), reinterpret<void?>(intptr(host16.mapped) + uint64(h16_bytes)), h16_bytes)
-                }
-                // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
-                // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32. The kernel's
-                // O accumulates in f16 under the row-max bias (every P at an eighth or under, the normalized row a
-                // convex combination of V rows with |v| <= 1 on this fixture), so the f16 running sum's rounding
-                // stays under the 2e-3 relative bar mismatch_approx holds against the f32 oracle, and the f16 O
-                // twin against the f32 stamp pins the same bar - the bound is this fixture's magnitudes, not a proof
-                var qh2 : array<float>
-                var kh2 : array<float>
-                var vh2 : array<float>
-                qh2 |> resize(rows * qd)
-                kh2 |> resize(kpos * kvd)
-                vh2 |> resize(kpos * kvd)
-                for (i in range(rows * qd)) {
-                    qh2[i] = float(float16(qh[i] * scale))
-                }
-                for (i in range(kpos * kvd)) {
-                    kh2[i] = float(float16(kh[i]))
-                    vh2[i] = float(float16(vh[i]))
-                }
-                var y_ref : array<float>
-                y_ref |> resize(rows * qd)
-                for (r in range(rows)) {
-                    for (hh in range(nheads)) {
-                        let cnt = w0 + r + 1
-                        attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
-                            cnt, 1.0, y_ref, r * qd + hh * hs, window > 0 && cnt > window ? cnt - window : 0)
-                    }
-                }
-                let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "fa_cm2 hs {hs} window {window} matches the CPU oracle ({bad} of {rows * qd} off)")
-                y_ref[0] += 0.5
-                t |> success(mismatch_approx(y_cls, y_ref) > 0, "fa_cm2 hs {hs} window {window}: the bar reds a poisoned oracle element")
-                var bad16 = 0
-                for (i in range(rows * qd)) {
-                    if (float(y16_fused[i]) != float(y16_split[i])) {
-                        bad16++
-                    }
-                }
-                t |> success(bad16 == 0, "fa_cm2 hs {hs} f16-out twin == the f32 stamp's f16cvt ({bad16} of {rows * qd} off)")
-                delete qh
-                delete kh
-                delete vh
-                delete qh2
-                delete kh2
-                delete vh2
-                delete y_ref
-                delete y_cls
-                delete y16_fused
-                delete y16_split
+            fa_tile_run(t, false)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+// the KHR flash tile (the coopmat2-less card's flash pass): the same oracle, arms and bars as the cm2 tile
+[test]
+def test_vkd_fa_khr(t0 : T?) {
+    t0 |> run("KHR flash-attention family == the CPU oracle (h64 + h128 + h256 + h512, the window arm, f16cvt-staged planes)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_f16cvt_cls()) {
+                t |> skip("no Vulkan device")
+                return
             }
+            if (!(g_gpu.has_coopmat && khr_kq_tile_on())) {
+                t |> skip("device lacks KHR cooperative matrices at subgroup 32")
+                return
+            }
+            verify(ensure_fa_khr_h64_cls() && ensure_fa_khr_h128_cls() && ensure_fa_khr_h256_cls() && ensure_fa_khr_h512_cls(), "KHR fa class rails must engage on a coopmat device")
+            verify(ensure_fa_khr_h64_f16_cls() && ensure_fa_khr_h128_f16_cls() && ensure_fa_khr_h256_f16_cls() && ensure_fa_khr_h512_f16_cls(), "KHR fa f16-out twins must engage on a coopmat device")
+            fa_tile_run(t, true)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -5599,19 +5670,20 @@ def test_vkd_fa_cm2_h256_gated(t0 : T?) {
 
 //! the softcap stamps at gemma-2's shape (256-wide heads, cap 50): the f32 and f16-out leaves against the oracle with the
 //! same cap on every scaled score. Returns (f32 mismatches, f16-vs-f32 mismatches, outputs compared).
-def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float) : tuple<bad : int; bad16 : int; n : int> {
+def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float; khr : bool) : tuple<bad : int; bad16 : int; n : int> {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let hs = 256
         let scale = 0.0625
         let qd = nheads * hs
         let kvd = (nheads / kv_mul) * hs
         let kpos = w0 + rows
+        let kpad = kpos + FA_SHADOW_SLACK_ROWS
         var qh : array<float>
         var kh : array<float>
         var vh : array<float>
         qh |> resize(rows * qd)
-        kh |> resize(kpos * kvd)
-        vh |> resize(kpos * kvd)
+        kh |> resize(kpad * kvd)
+        vh |> resize(kpad * kvd)
         for (i in range(rows * qd)) {   //! wide q and k values: the scaled scores run past the cap, so the cap is load-bearing
             qh[i] = float((i * 41) % 73) * 0.25 - 9.0
         }
@@ -5620,8 +5692,8 @@ def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float) : t
             vh[i] = float((i * 53) % 89) * 0.04 - 1.7
         }
         let q_bytes = int64(rows * qd) * 4l
-        let m_bytes = int64(kpos * kvd) * 4l
-        let sh_bytes = int64(kpos * kvd) * 2l
+        let m_bytes = int64(kpad * kvd) * 4l
+        let sh_bytes = int64(kpad * kvd) * 2l
         let o16_bytes = int64(rows * qd) * 2l
         let qdev = make_device_buf(q_bytes)
         let kdev = make_device_buf(m_bytes)
@@ -5643,23 +5715,22 @@ def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float) : t
             upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
             var sck = set_f16cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
             var scv = set_f16cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-            var sfa = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yd),
+            var sfa = set_fa_tile(khr, fixed_array(qdev, khdev, vhdev, yd),
                 fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes), fixed_array(1u, 16u, 32u, 4u))
-            var sfa16 = set_fa_cm2_cls(fixed_array(qdev, khdev, vhdev, yh16),
+            var sfa16 = set_fa_tile(khr, fixed_array(qdev, khdev, vhdev, yh16),
                 fixed_array(q_bytes, sh_bytes, sh_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u))
             var raw2 = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)
             var h2 : VkHaz
-            var pcv = ActArgs(nelem = uint(kpos * kvd), gelu = 0u, nblk = 0u)
-            let cvtwgs = int64((kpos * kvd / 4 + 255) / 256)
+            var pcv = ActArgs(nelem = uint(kpad * kvd), gelu = 0u, nblk = 0u)
+            let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
             enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
             enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
             var pcf = FaCm2Args(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd),
                 kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, cap = cap)
-            let fawgs = int64(nheads * ((rows + 63) / 64))
-            enc_fa_cm2_h256_cap_cls(raw2, h2, sfa, pcf, fawgs)
-            enc_fa_cm2_h256_cap_f16_cls(raw2, h2, sfa16, pcf, fawgs)
+            enc_fa_tile(khr, hs, true, false, raw2, h2, sfa, pcf, nheads, rows)
+            enc_fa_tile(khr, hs, true, true, raw2, h2, sfa16, pcf, nheads, rows)
             vhz_dep(raw2, h2, 4u | 64u, 0u, true)
             cmd_copy_whole(raw2, yd, host.buf, q_bytes)
             cmd_copy_range(raw2, yh16, 0l, host.buf, q_bytes, o16_bytes)
@@ -5731,10 +5802,33 @@ def test_vkd_fa_cm2_h256_softcap(t0 : T?) {
                 return
             }
             verify(ensure_fa_cm2_h256_cap_cls() && ensure_fa_cm2_h256_cap_f16_cls(), "the softcap h256 fa rails must engage on an fa-capable device")
-            let r = fa_h256_softcap_run(4, 2, 77, 64, 50.0)   // partial 64-tile, a nonzero window base
+            let r = fa_h256_softcap_run(4, 2, 77, 64, 50.0, false)   // partial 64-tile, a nonzero window base
             t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
             t |> success(r.bad == 0, "fa_cm2 h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
             t |> success(r.bad16 == 0, "fa_cm2 h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_fa_khr_h256_softcap(t0 : T?) {
+    t0 |> run("KHR flash-attention h256 softcap stamps == the CPU oracle under cap 50 (gemma-2's shape; the uncapped oracle as the control)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_f16cvt_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!(g_gpu.has_coopmat && khr_kq_tile_on())) {
+                t |> skip("device lacks KHR cooperative matrices at subgroup 32")
+                return
+            }
+            verify(ensure_fa_khr_h256_cap_cls() && ensure_fa_khr_h256_cap_f16_cls(), "the softcap h256 KHR fa rails must engage on a coopmat device")
+            let r = fa_h256_softcap_run(4, 2, 77, 64, 50.0, true)
+            t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
+            t |> success(r.bad == 0, "fa_khr h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
+            t |> success(r.bad16 == 0, "fa_khr h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
         } else {
             t |> skip("dasVulkan not present")
         }

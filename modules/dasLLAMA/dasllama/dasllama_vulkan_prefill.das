@@ -1152,18 +1152,29 @@ def private pf_setup {
     let kv16 = g_rd.kv16
     // the fa pick is per layer: a model's attention classes may differ in head size, and a class with no fa stamp takes the chunked pair
     let fa_dev = g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
+    //! the KHR flash tile serves where the cm2 one cannot: KHR cooperative matrices at subgroup 32, the f16 mirrors, no gated q plane
+    let fakhr_dev = !fa_dev && g_gpu.has_coopmat && khr_kq_tile_on() && vk_fa_on() && kv16 && !g_rd.q_gated
     var fa_hs : table<int64>   //! the head sizes the fa tiles serve on this model
+    var fakhr_hs : table<int64>   //! ... the KHR flash tile
     var chunked_hs : table<int64>   //! ... and the ones the chunked pair serves
     var any_cap = false   //! a flash layer under the attention softcap: the h256 cap stamps engage
+    var any_khr_cap = false
     g_rd.pf_facm2 = false
+    g_rd.pf_fakhr = false
     for (L in g_rd.layers) {
         continue if (L.recurrent)
-        L.pf_fa = (fa_dev && (L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l) && (!g_rd.q_gated || L.hs == 256l)
+        let fa_hs_ok = L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l
+        L.pf_fa = (fa_dev && fa_hs_ok && (!g_rd.q_gated || L.hs == 256l)
             && (L.attn_cap == 0.0 || (L.hs == 256l && !g_rd.q_gated)))
+        L.pf_fakhr = fakhr_dev && fa_hs_ok && (L.attn_cap == 0.0 || L.hs == 256l)
         any_cap = any_cap || (L.pf_fa && L.attn_cap != 0.0)
+        any_khr_cap = any_khr_cap || (L.pf_fakhr && L.attn_cap != 0.0)
         g_rd.pf_facm2 = g_rd.pf_facm2 || L.pf_fa
+        g_rd.pf_fakhr = g_rd.pf_fakhr || L.pf_fakhr
         if (L.pf_fa) {
             fa_hs |> insert(L.hs)
+        } elif (L.pf_fakhr) {
+            fakhr_hs |> insert(L.hs)
         } else {
             chunked_hs |> insert(L.hs)
         }
@@ -1190,6 +1201,11 @@ def private pf_setup {
             : (ensure_fa_cm2_h256_cls() && (!any_f16_feed || ensure_fa_cm2_h256_f16_cls()))))
         && (!any_cap || (ensure_fa_cm2_h256_cap_cls() && (!any_f16_feed || ensure_fa_cm2_h256_cap_f16_cls())))
         && (!key_exists(fa_hs, 512l) || (ensure_fa_cm2_h512_cls() && (!any_f16_feed || ensure_fa_cm2_h512_f16_cls())))
+        && (!key_exists(fakhr_hs, 64l) || (ensure_fa_khr_h64_cls() && (!any_f16_feed || ensure_fa_khr_h64_f16_cls())))
+        && (!key_exists(fakhr_hs, 128l) || (ensure_fa_khr_h128_cls() && (!any_f16_feed || ensure_fa_khr_h128_f16_cls())))
+        && (!key_exists(fakhr_hs, 256l) || (ensure_fa_khr_h256_cls() && (!any_f16_feed || ensure_fa_khr_h256_f16_cls())))
+        && (!any_khr_cap || (ensure_fa_khr_h256_cap_cls() && (!any_f16_feed || ensure_fa_khr_h256_cap_f16_cls())))
+        && (!key_exists(fakhr_hs, 512l) || (ensure_fa_khr_h512_cls() && (!any_f16_feed || ensure_fa_khr_h512_f16_cls())))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
@@ -1197,7 +1213,11 @@ def private pf_setup {
     if (g_rd.pf_facm2) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed ({long_length(fa_hs)} head size(s), native f16 mirrors; {long_length(chunked_hs)} on the chunked pair)\n")
     }
+    if (g_rd.pf_fakhr) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: KHR flash attention armed ({long_length(fakhr_hs)} head size(s), native f16 mirrors; {long_length(chunked_hs)} on the chunked pair)\n")
+    }
     delete fa_hs
+    delete fakhr_hs
     delete chunked_hs
     var nkvm = 0l
     for (l in range64(g_rd.n_layers)) {
@@ -1262,14 +1282,11 @@ def private pf_setup {
                 : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve this layer's head size
         let fa128l = fa128s && L.hs == 128l
-        if (L.pf_fa) {
-            g_rd.pf_sets[b + 5] = (wo6
-                ? set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_af),
-                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 2l),
-                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_AQ))
-                : set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn),
-                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l),
-                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)))
+        if (L.pf_fa || L.pf_fakhr) {
+            let fbufs = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, wo6 ? g_rd.pf_af : g_rd.pf_attn)
+            let fsizes = fixed_array(np * qrow * 4l, mirbytes, mirbytes, wo6 ? np * qd * 2l : np * qd * 4l)
+            let fgbits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, wo6 ? VHZ_AQ : VHZ_ATT)
+            g_rd.pf_sets[b + 5] = L.pf_fa ? set_fa_cm2_cls(fbufs, fsizes, fgbits) : set_fa_khr_cls(fbufs, fsizes, fgbits)
         } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l)
@@ -1736,6 +1753,43 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                             enc_fa_cm2_h256_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
                         }
                     }
+                } elif (g_rd.layers[l].pf_fakhr) {
+                    // the KHR flash tile reads the f16 mirrors directly too, sixteen query rows a workgroup
+                    var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
+                        kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
+                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap)
+                    let fawgs = g_rd.n_heads * ((wlen + 15l) / 16l)
+                    if (hs == 64l) {
+                        if (fo6) {
+                            enc_fa_khr_h64_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h64_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } elif (hs == 128l) {
+                        if (fo6) {
+                            enc_fa_khr_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h128_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } elif (hs == 512l) {
+                        if (fo6) {
+                            enc_fa_khr_h512_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h512_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } elif (pcf.cap != 0.0) {
+                        if (fo6) {
+                            enc_fa_khr_h256_cap_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h256_cap_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } else {
+                        if (fo6) {
+                            enc_fa_khr_h256_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h256_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    }
                 } else {
                     var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
                         hs = uint(hs), kv_mul = kv_mul, kbase = mirb, vbase = mirb,
@@ -1762,7 +1816,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let attn_landed_f16 = fo6 && g_rd.layers[l].pf_fa
+                let attn_landed_f16 = fo6 && (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr)
                 if (attn_landed_f16) {
                 } elif (fo6) {
                     var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)

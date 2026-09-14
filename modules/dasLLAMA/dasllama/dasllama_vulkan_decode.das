@@ -22,6 +22,7 @@ require daslib/strings_boost
 // mirror sync/read seams, the deltanet decode step, the FFN GEMV / qkv-group / classifier
 // decode arms, and the heat-pinned expert cache.
 
+let RDEC_MIR_SLACK = 16l * 8192l   //! elements past the last plane of each KV mirror: a flash fragment's last key step reads up to 15 rows past the window's end, and a row is at most 8192 wide
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
 
 //! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
@@ -73,14 +74,18 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     }
     // all-or-nothing: pre-flight the SAME prefill-attention pick pf_setup will make (fa tile,
     // h128 twin, or the chunked pair) so a declined kernel declines residency PRE-upload
-    let will_facm2 = (g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
-        && (head_size == 64l || head_size == 128l || head_size == 256l || head_size == 512l))
+    let fa_hs_ok = head_size == 64l || head_size == 128l || head_size == 256l || head_size == 512l
+    let will_facm2 = g_gpu.has_coopmat2_fa && vk_fa_on() && kv16 && fa_hs_ok
+    let will_fakhr = !will_facm2 && g_gpu.has_coopmat && khr_kq_tile_on() && vk_fa_on() && kv16 && fa_hs_ok && !q_gated
     if (!(will_facm2
             ? (head_size == 64l ? ensure_fa_cm2_h64_cls() : (head_size == 128l ? ensure_fa_cm2_h128_cls()
                 : (head_size == 512l ? ensure_fa_cm2_h512_cls() : (q_gated ? ensure_fa_cm2_h256_g_cls() : ensure_fa_cm2_h256_cls()))))
-            : (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
-                ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
-                : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls())))) {
+            : (will_fakhr
+                ? (head_size == 64l ? ensure_fa_khr_h64_cls() : (head_size == 128l ? ensure_fa_khr_h128_cls()
+                    : (head_size == 512l ? ensure_fa_khr_h512_cls() : ensure_fa_khr_h256_cls())))
+                : (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
+                    ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
+                    : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))))) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the prefill-attention class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
@@ -115,13 +120,22 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.ffnout_dev = make_device_buf(dim * 4l)
     r.xb2_dev = make_device_buf(dim * 4l)
     r.n_attn = n_attn
-    r.mir_elems = mir_elems
+    r.mir_elems = mir_elems + RDEC_MIR_SLACK
     // the two largest allocations of the load: a heap the last model fragmented can refuse them though the plan fit - decline, never die mid-upload
-    r.k_mirror = try_device_buf(mir_elems * esz)
-    r.v_mirror = try_device_buf(mir_elems * esz)
+    r.k_mirror = try_device_buf(r.mir_elems * esz)
+    r.v_mirror = try_device_buf(r.mir_elems * esz)
     if (r.k_mirror == 0ul || r.v_mirror == 0ul) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * mir_elems * esz) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * r.mir_elems * esz) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
         return false
+    }
+    {   //! the mirrors start at zero: a flash fragment's last key step reads up to 15 rows past the window's end, and zero times a masked probability stays zero where garbage would not
+        var rawz = alloc_cmd()
+        let beginz = VkCommandBufferBeginInfo()
+        vk_check(vkBeginCommandBuffer(rawz, beginz), null)
+        cmd_fill_zero(rawz, r.k_mirror, 0l, r.mir_elems * esz)
+        cmd_fill_zero(rawz, r.v_mirror, 0l, r.mir_elems * esz)
+        vk_check(vkEndCommandBuffer(rawz), null)
+        submit_wait(rawz)
     }
     r.hybrid = hybrid
     if (hybrid) {
