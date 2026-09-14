@@ -929,9 +929,9 @@ def public build_standalone_header(var exports : array<CExport>; names : CNames;
 
 
 struct public DasBindings {
-    linux_path : string
-    macos_path : string
-    windows_path : string
+    //! The library WITHOUT an extension: dasbind adds the running platform's, so one binding
+    //! file serves every platform.
+    library : string
 }
 
 
@@ -1074,10 +1074,7 @@ def private das_extern_signature(var e : CExport; names : CNames) : tuple<sig : 
 
 
 def private write_extern(var writer : StringBuilderWriter; b : DasBindings; sym, sig : string) {
-    write(writer, "[extern(cdecl, late, name=\"{sym}\",\n")
-    write(writer, "        linux_library=\"{b.linux_path}\",\n")
-    write(writer, "        macos_library=\"{b.macos_path}\",\n")
-    write(writer, "        windows_library=\"{b.windows_path}\")]\n")
+    write(writer, "[extern(cdecl, late, name=\"{sym}\", library=\"{b.library}\")]\n")
     write(writer, "def {sig} \{\}\n\n")
 }
 

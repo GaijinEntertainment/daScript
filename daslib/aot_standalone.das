@@ -655,7 +655,7 @@ def private writeDasBindings(var exports : array<CExport>; names : CNames;
         return true
     }
     let lib = cfg.das_bindings_library
-    let b = DasBindings(linux_path = "{lib}.so", macos_path = "{lib}.dylib", windows_path = "{lib}.dll")
+    let b = DasBindings(library = lib)
     let by = "daslang utils/aot/main.das -- -ctx {cur_mod}.das {cfg.cpp_output_dir}"
     return emit_das_bindings(exports, names, b, by, cfg.das_bindings_path)
 }

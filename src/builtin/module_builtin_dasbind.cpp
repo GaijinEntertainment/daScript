@@ -277,6 +277,14 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     das_hash_map<string,void *>    g_dasBindLib;
     mutex                          g_dasBindLibMutex;
 
+#if defined(_WIN32)
+    #define DAS_SHARED_LIBRARY_EXTENSION ".dll"
+#elif defined(__APPLE__)
+    #define DAS_SHARED_LIBRARY_EXTENSION ".dylib"
+#else
+    #define DAS_SHARED_LIBRARY_EXTENSION ".so"
+#endif
+
     enum class ApiType {
         api_unknown,
         api_cdecl,
@@ -316,37 +324,50 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return paths;
     }
 
+    static void * searchDynamicLibrary ( const string & library ) {
+        void * libhandle = getLibraryHandle(library.c_str());
+        if ( !libhandle ) {
+            libhandle = loadDynamicLibrary(library.c_str());
+            if (!libhandle) {
+                if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
+                    for ( auto & root : (*daScriptEnvironment::bound)->g_Program->policies.dll_search_paths ) {
+                        libhandle = loadDynamicLibrary((root + "/" + library).c_str());
+                        if ( libhandle ) break;
+                    }
+                    /* // we figure this out later
+                    if ( !libhandle ) {
+                        libhandle = loadDynamicLibrary(((*daScriptEnvironment::bound)->g_Program->policies.jit_path_to_shared_lib + "/" + library).c_str());
+                    }
+                    */
+                }
+                if ( !libhandle ) {
+                    for ( auto & root : dasDllSearchPathsFromEnv() ) {
+                        libhandle = loadDynamicLibrary((root + "/" + library).c_str());
+                        if ( libhandle ) break;
+                    }
+                }
+                if ( !libhandle ) {
+                    libhandle = loadDynamicLibrary((getDasRoot() + "/lib/" + library).c_str());
+                }
+            }
+        }
+        return libhandle;
+    }
+
     static void * bindDynamicLibrary ( const string & library ) {
         lock_guard<mutex> guard(g_dasBindLibMutex);
         auto it = g_dasBindLib.find(library);
         if ( it!=g_dasBindLib.end() ) {
             return it->second;
         } else {
-            void * libhandle = nullptr;
-            libhandle = getLibraryHandle(library.c_str());
+            void * libhandle = searchDynamicLibrary(library);
             if ( !libhandle ) {
-                libhandle = loadDynamicLibrary(library.c_str());
-                if (!libhandle) {
-                    if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
-                        for ( auto & root : (*daScriptEnvironment::bound)->g_Program->policies.dll_search_paths ) {
-                            libhandle = loadDynamicLibrary((root + "/" + library).c_str());
-                            if ( libhandle ) break;
-                        }
-                        /* // we figure this out later
-                        if ( !libhandle ) {
-                            libhandle = loadDynamicLibrary(((*daScriptEnvironment::bound)->g_Program->policies.jit_path_to_shared_lib + "/" + library).c_str());
-                        }
-                        */
-                    }
-                    if ( !libhandle ) {
-                        for ( auto & root : dasDllSearchPathsFromEnv() ) {
-                            libhandle = loadDynamicLibrary((root + "/" + library).c_str());
-                            if ( libhandle ) break;
-                        }
-                    }
-                    if ( !libhandle ) {
-                        libhandle = loadDynamicLibrary((getDasRoot() + "/lib/" + library).c_str());
-                    }
+                // an [extern] may name its library without one, so every platform can spell the
+                // same binding: add this one's extension and walk the same search again
+                string ext = DAS_SHARED_LIBRARY_EXTENSION;
+                if ( library.length()<ext.length() ||
+                     library.compare(library.length()-ext.length(), ext.length(), ext)!=0 ) {
+                    libhandle = searchDynamicLibrary(library + ext);
                 }
             }
             g_dasBindLib[library] = libhandle;
