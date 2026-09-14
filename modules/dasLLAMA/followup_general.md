@@ -1731,12 +1731,14 @@
     order can flip.
 
 151. **The q40 and iq4nl native dots read the per-256 Q8_K activation image.** `kq_sb` puts the
-    two per-32 weight formats on the Q8_K activation form `mm_kq` quantizes, while the sibling
-    per-32 format q51 reads the per-32 Q8_0 image and llama.cpp dots Q4_0 against Q8_0. On the
-    gemma-4-26B activations (absmax over rms 18.5) the per-256 form carries twice the
-    activation-quantization error of the per-32 one, and the Google QAT file's counting fixture
-    flips a top-8 router pick at layer 29 on an 8e-5 margin under the native rails where the q8
-    requant of the same planes holds (the ggml-org file of the same checkpoint holds on both).
-    Unquirked: a Q8_0-form activation path for q40 and iq4nl through every kq core - rows, gemv,
-    the batch tile, groupn - on each backend, the q51 pairing as the template. The bar is the QAT
-    file's fixture under the native rails on the box's default backend.
+    two per-32 weight formats on the Q8_K activation form `mm_kq` quantizes, and the Vulkan decode
+    GEMV reads the same form (one activation scale per superblock); the sibling per-32 format q51
+    reads the per-32 Q8_0 image and llama.cpp dots Q4_0 against Q8_0; the Vulkan cm2 prefill takes
+    f16 activations and Metal f32 (decode) and f16 (prefill), never 8-bit. On the gemma-4-26B
+    activations (absmax over rms 18.5) the per-256 form carries twice the activation-quantization
+    error of the per-32 one, and the Google QAT file's counting fixture flips a top-8 router pick
+    at layer 29 on an 8e-5 margin under the native CPU rails where the q8 requant of the same
+    planes holds (the ggml-org file of the same checkpoint holds on both). Ruled left as is: the
+    model is coherent, tracking llama.cpp's exact tokens is not the bar. The option, if a carrier
+    ever needs it: a Q8_0-form activation path for q40 and iq4nl through the CPU kq cores and the
+    Vulkan decode GEMV, the q51 pairing as the template.
