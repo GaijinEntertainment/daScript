@@ -3038,6 +3038,17 @@ def public spv_const_uint(words : array<uint>; id : uint) : uint {
     return v
 }
 
+//! the memory scope of every OpMemoryBarrier in a module, in order, resolved through its OpConstant (SpvScope values); empty when none is emitted
+def public spv_memory_barrier_scopes(words : array<uint>) : array<uint> {
+    var scopes : array<uint>
+    foreach_inst(words) $(opcode : uint; w : array<uint>; opStart : int; opCount : int) {
+        if (opcode == uint(SpvOp.MemoryBarrier) && opCount >= 2) {
+            scopes |> push(spv_const_uint(words, w[opStart]))
+        }
+    }
+    return <- scopes
+}
+
 //! every OpTypeCooperativeMatrixKHR of a module as "rows x cols", sorted - the shape set a fixture declares, whatever the declaration order
 def public spv_coopmat_shapes(words : array<uint>) : array<string> {
     var shapes : array<string>

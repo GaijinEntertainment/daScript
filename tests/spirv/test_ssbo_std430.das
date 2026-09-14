@@ -112,7 +112,14 @@ def test_ssbo_coherent(t : T?) {
             "cossbo: exactly one Coherent OpDecorate (the @coherent hand-off buffer), got {count_op_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.Coherent))}")
         t |> success(count_op_operand_at(words, SpvOp.MemberDecorate, 2, uint(SpvDecoration.Coherent)) == 0,
             "cossbo: no member-level Coherent, got {count_op_operand_at(words, SpvOp.MemberDecorate, 2, uint(SpvDecoration.Coherent))}")
-        t |> success(has_op(words, SpvOp.AtomicIAdd) && has_op(words, SpvOp.MemoryBarrier), "cossbo: the counter's atomic and the device-scope barrier are emitted")
+        t |> success(has_op(words, SpvOp.AtomicIAdd), "cossbo: the counter's atomic is emitted")
+        var scopes <- spv_memory_barrier_scopes(words)
+        var all_device = !empty(scopes)
+        for (s in scopes) {
+            all_device = all_device && s == uint(SpvScope.Device)
+        }
+        t |> success(all_device, "cossbo: every OpMemoryBarrier (the two hand-off barriers) at Device scope, got {scopes}")
+        delete scopes
         t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_3, "cossbo: SPIR-V header version 1.3 (the default vulkan1.1 target admits it)")
         validate(t, words, "cossbo")
         delete words
