@@ -1489,7 +1489,7 @@ module) is independent and can land any time - it is pure structure.
     compute equal and the reduce the whole difference). A KHR unit set measured on the `khrsk`
     probe rows (`harness/vk_gemm_probe.das`) is the lever, item 58's per-GEMM pick beside it.
 61. **The KHR tiles' lane maps rest on the device's advertised subgroup size, not a per-pipeline
-    one.** `khr_kq_tile_on` reads `subgroupSize` from the physical device; `FaKhrT` labels its four
+    one.** `khr_kq_tile_on` reads `subgroupSize` from the physical device; `FaT`'s KHR arm labels its four
     16-key bands `tid / 32` and reduces each softmax row over eight lanes with `subgroupShuffleXor`,
     and the KHR kq tile stages by the same rule, while no `fa_khr_*` or `*_khr_cls` pipeline pins
     `requiredSubgroupSize` and `REQUIRE_FULL_SUBGROUPS` is off by default. A driver that picks a

@@ -115,13 +115,13 @@ residual row and b+0 converts or requantizes it. The fused twins never write the
 the last layer always takes the split arm - the final requant reads `xb`. The addr_ffn site
 fuses the same way for the gate/up feed. Bit-identity with the split pair is a suite gate.
 
-**The cm2 flash-attention tile (`FaCm2T`) accumulates O in f16 under a biased row max, masks only its edge steps, and lands its
+**The flash-attention tile (`FaT`, one template with a `KHR` axis, its cm2 arm here) accumulates O in f16 under a biased row max, masks only its edge steps, and lands its
 output f16 when the `wo` feed is f16.** The running row max carries 3 ln 2, so every P = e^(S - M) sits at an eighth or under and
 the f16 O accumulator cannot overflow; L carries the same bias, the final divide cancels it, and S, L and M stay f32. The mask pass
 runs only on the steps that cross the causal diagonal or the tile's last window start; the KV loop carries `[dont_unroll]` (RTX PRO
 4500, a 512-row window: E4B's attention 6868 -> 4014 us, gemma-3-1b's 2671 -> 1844). The `OUT16` instance writes the `wo` feed
 plane directly, so no attn-to-f16 convert encodes; the f32 instance serves the quant route. **Without cm2 - a KHR-only card, or a
-mode forced off cm2 - the KHR flash tile (`FaKhrT`) serves the same head sizes, window and softcap from the same push constants on
+mode forced off cm2 - the tile's KHR arm (`FaT` at `KHR = true`, its ten `fa_khr_*` stamps) serves the same head sizes, window and softcap from the same push constants on
 subgroup-scope 16x16x16 fragments:** sixteen query rows a workgroup, 64 keys a step, each subgroup owning one 16-key column of
 S = Q K^T (K^T a column-major load straight from the f16 shadow) and, after the softmax runs per element through shared memory, a
 quarter of the head's output columns of P V (f16 fragments a step, summed into each thread's f32 o row). A key chunk that starts past
