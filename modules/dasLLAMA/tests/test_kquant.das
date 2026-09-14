@@ -2368,6 +2368,147 @@ def test_kq_load_layout(t : T?) {
     }
 }
 
+// An activation whose Q8_K image is EXACT: integers in [-127, 127] with a +-127 peak in every
+// 256-block, so the per-256 scale is 1 and the quants are the values. A GEMV over it therefore
+// carries no activation-quantization error, and any deviation from the double dot of the file's
+// own dequant is a plane-placement or kernel defect, never rounding.
+def private exact_q8k_row(var x : array<float>; n, seed : int64) {
+    for (i in range64(n)) {
+        x[i] = float(((i * 37l + 11l + seed * 13l) % 255l) - 127l)
+    }
+}
+
+// Largest |y[r] - double-dot(w row r, x)| over `rows`, relative to the dot's own magnitude.
+def private rows_dot_dev(w, x, y : array<float>; n, rows : int64) : float {
+    var worst = 0.0
+    for (r in range64(rows)) {
+        var acc = 0.0lf
+        for (i in range64(n)) {
+            acc += double(w[r * n + i]) * double(x[i])
+        }
+        worst = max(worst, float(abs(double(y[r]) - acc) / (abs(acc) + 1.0lf)))
+    }
+    return worst
+}
+
+[test]
+def test_kq_q40_repacked_planes(t : T?) {
+    // The REPACKED twin of test_kq_load_layout's q40 arm: that arm pins the portable backend, so
+    // it proves cursor placement over disk-order planes only. This one runs the box's own backend,
+    // so the grp<mr> repack, the per-expert offsets of the fused ffn_gate_up_exps split, the
+    // tied-k6 classifier plane and the region-list expert dispatch are all held to the file's own
+    // dequant at the 26B's production widths (dim 2816, n_ff_exp 704, 128 experts).
+    t |> run("repacked q40 expert planes and the tied k6 classifier serve exactly (gemma-4-26B QAT q4_0)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "gemma-4-26B_q4_0-it.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        let prev_kq = get_kquant_native()
+        let prev_q40 = get_kq_q40_native()
+        set_kquant_native(true)
+        set_kq_q40_native(true)
+        var tr <- load_gguf(path, QuantMode.q8)
+        set_kquant_native(prev_kq)
+        set_kq_q40_native(prev_q40)
+        let c = tr.config
+        let dim = c.dim
+        let nfe = c.n_ff_exp
+        let ege = dim * nfe
+        t |> success(tr.kquant_native, "load detected native Q4_0 tensors")
+        t |> success(tr.emb_fmt == KqFmt.k6 && cls_kq(tr), "the Q6_K token_embd serves as the tied kq classifier")
+        t |> success(fmt_at(tr.we1_fmt, 0l) == KqFmt.q40 && fmt_at(tr.we3_fmt, 0l) == KqFmt.q40,
+            "the fused ffn_gate_up_exps split keeps both halves on the q40 plane")
+        t |> success(fmt_at(tr.we2_fmt, 0l) == KqFmt.q8, "the 704-wide down stacks demote to the q8 rail")
+        if (!tr.kq_repacked) {
+            t |> skip("this box's backend carries no kq slots - the planes stay disk-order (test_kq_load_layout covers that)")
+            delete tr
+            return
+        }
+        var gt = 0
+        let rows = 64l
+        // the tied classifier's rows read through the grp<mr> gather: bit-exact vs the file dequant
+        var femb <- read_prefix(path, "token_embd.weight", rows * dim, gt)
+        var row : array<float>
+        row |> resize(dim)
+        var embbad = 0l
+        for (r in range64(rows)) {
+            embed_row(tr, r, unsafe(addr(row[0])))
+            for (i in range64(dim)) {
+                if (row[i] != femb[r * dim + i]) {
+                    embbad++
+                }
+            }
+        }
+        t |> success(embbad == 0, "embedding rows off the repacked k6 plane bit-match the file dequant")
+        delete row
+        delete femb
+        var x : array<float>
+        x |> resize(dim)
+        exact_q8k_row(x, dim, 0l)
+        var xq : array<int8>
+        xq |> resize(dim)
+        var xs : array<float>
+        xs |> resize(dim / 32l + 8l)
+        var xbs : array<int>
+        xbs |> resize(dim / 16l + 8l)
+        var y : array<float>
+        y |> resize(nfe)
+        // expert e of the fused stack sits at file rows e*2*nfe (gate) and e*2*nfe + nfe (up);
+        // the plane splits them into two regions at we1_offs/we3_offs + e*ege
+        var gatebad = 0.0
+        var upbad = 0.0
+        var mustred = 0.0
+        for (e in range64(4l)) {
+            var wg <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, e * 2l * nfe * dim)
+            var wu <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, (e * 2l * nfe + nfe) * dim)
+            mm_f(y, tr, fmt_at(tr.we1_fmt, 0l), tr.we1_offs[0] + e * ege, x, xq, xs, xbs, dim, nfe)
+            gatebad = max(gatebad, rows_dot_dev(wg, x, y, dim, rows))
+            mustred = max(mustred, rows_dot_dev(wu, x, y, dim, rows))   // the up half must NOT match the gate region
+            mm_f(y, tr, fmt_at(tr.we3_fmt, 0l), tr.we3_offs[0] + e * ege, x, xq, xs, xbs, dim, nfe)
+            upbad = max(upbad, rows_dot_dev(wu, x, y, dim, rows))
+            delete wu
+            delete wg
+        }
+        t |> success(gatebad == 0.0, "every expert's gate region dots the fused tensor's gate rows exactly")
+        t |> success(upbad == 0.0, "every expert's up region dots the fused tensor's up rows exactly")
+        t |> success(mustred > 0.1, "the control: the gate region must NOT read the up half's rows")
+        // the routed dispatch reads the same planes through a region list - scattered experts, one call
+        let k = 4l
+        var offs : array<int64>
+        offs |> resize(k * 2l)
+        for (j in range64(k)) {
+            offs[j * 2l] = tr.we1_offs[0] + (j * 7l + 3l) * ege
+            offs[j * 2l + 1l] = 0l
+        }
+        var gu : array<float>
+        gu |> resize(k * nfe)
+        quantize_q8_k_into(x, dim, xq, xs, xbs, 0l, 0l, 0l)
+        mm_at_kq_groupn(gu, tr, fmt_at(tr.we1_fmt, 0l), offs, k, xq, xs, xbs, dim, nfe)
+        var grpbad = 0l
+        for (j in range64(k)) {
+            mm_f(y, tr, fmt_at(tr.we1_fmt, 0l), offs[j * 2l], x, xq, xs, xbs, dim, nfe)
+            for (r in range64(nfe)) {
+                if (y[r] != gu[j * nfe + r]) {
+                    grpbad++
+                }
+            }
+        }
+        t |> success(grpbad == 0, "the region-list expert dispatch bit-matches the per-region GEMV")
+        delete gu
+        delete offs
+        delete y
+        delete xbs
+        delete xs
+        delete xq
+        delete x
+        delete tr
+    }
+}
+
 [test]
 def test_kq_fused_qkv_slices(t : T?) {
     // Fused-projection (Phi3) gate-lift oracle: attn_qkv / ffn_up split at load with dim-multiple
@@ -2459,9 +2600,10 @@ def test_kq_ple_table(t : T?) {
     }
 }
 
-// Dequant the first `n` elements of `name` into fp32; reports the on-disk type via `gt`.
-def private read_prefix(path, name : string; n : int64; var gt : int&) : array<float> {
+// Dequant `n` elements of `name` from element `first` into fp32; reports the on-disk type via `gt`.
+def private read_prefix(path, name : string; n : int64; var gt : int&; first : int64 = 0l) : array<float> {
     var dst : array<float>
+    dst |> reserve(n)
     dst |> resize(n)
     let f = fopen(path, "rb")
     if (f == null) {
@@ -2470,7 +2612,7 @@ def private read_prefix(path, name : string; n : int64; var gt : int&) : array<f
     fmap(f) $(var bytes : array<uint8>#) {
         var m <- parse_gguf_meta(bytes)
         gt = gguf_tensor_type(m, name)
-        gguf_read_tensor_f32(m, bytes, name, dst, 0l, n)
+        gguf_read_tensor_f32(m, bytes, name, dst, 0l, n, first)
         delete m
     }
     fclose(f)
