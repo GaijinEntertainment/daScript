@@ -370,7 +370,6 @@ def test_vkd_f16_gemm(t0 : T?) {
     }
 }
 
-// the KHR twin (the per-layer-embedding projection on a card without cm2): whole K, d and n 16-multiples, rows off the fragment
 [test]
 def test_vkd_f16_gemm_khr(t0 : T?) {
     t0 |> run("the small f16 GEMM on KHR fragments == the f32 dot, direct (the E-series projection's shapes)") <| @(t : T?) {
@@ -2359,8 +2358,6 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
     }
 }
 
-// the q8 KHR arm: the per-32 Q8_0 plane through the hand-staged KHR tile (a KHR-mode card's dense q8 GEMMs), two
-// regions over the fmt-0 planes, against the f16-fed q8 oracle
 [test]
 def test_vkd_q8_khr_batch(t0 : T?) {
     t0 |> run("the KHR kq tile over Q8_0 blocks (q8_batch_khr) == the CPU oracle") <| @(t : T?) {
@@ -5426,7 +5423,6 @@ let FA_SHADOW_SLACK_ROWS = 16
 def private set_fa_tile(khr : bool; bufs : uint64[4]; sizes : int64[4]; gbits : uint[4]) : VkDescriptorSet
     => khr ? set_fa_khr_cls(bufs, sizes, gbits) : set_fa_cm2_cls(bufs, sizes, gbits)
 
-//! one flash family's dispatch by head size, cap and output width: the cm2 tile's 64-row workgroups or the KHR tile's 16-row ones
 def private enc_fa_tile(khr : bool; hs : int; cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaCm2Args; nheads, rows : int) {
     let rpw = khr ? 16 : 64
     let wgs = int64(nheads * ((rows + rpw - 1) / rpw))
@@ -5469,8 +5465,7 @@ def private enc_fa_cm2_stamp(hs : int; cap, f16 : bool; raw : VkCommandBuffer; v
     }
 }
 
-// one flash family over its head sizes and the window arm against the CPU oracle, the f16-out twin against
-// the f32 stamp's f16cvt: `khr` picks the KHR tile, else the cm2 one
+//! one flash family's head sizes and window arm against the CPU oracle, its f16-out twin against the f32 stamp's f16cvt: `khr` picks the KHR tile, else the cm2 one
 def private fa_tile_run(t : T?; khr : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
@@ -5642,7 +5637,6 @@ def test_vkd_fa_cm2(t0 : T?) {
     }
 }
 
-// the KHR flash tile (the coopmat2-less card's flash pass): the same oracle, arms and bars as the cm2 tile
 [test]
 def test_vkd_fa_khr(t0 : T?) {
     t0 |> run("KHR flash-attention family == the CPU oracle (h64 + h128 + h256 + h512, the window arm, f16cvt-staged planes)") <| @(t : T?) {

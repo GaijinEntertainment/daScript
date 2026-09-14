@@ -1073,7 +1073,7 @@ def private pf_setup {
         g_rd.pf_ple = make_device_buf(np * all * 4l)
         if (g_rd.ple_gpu) {
             // the pre-step on device: f16 embedding rows -> the projected plane -> the side rows finished in place
-            let ple_cm2 = g_gpu.coopmat_mode == COOPMAT_CM2   //! the projection's tile: cm2 where the mode has it, the KHR fragments tile otherwise
+            let ple_cm2 = g_gpu.coopmat_mode == COOPMAT_CM2
             verify(ensure_f16cvt_cls() && (ple_cm2 ? ensure_f16_gemm_cm2_cls() : ensure_f16_gemm_khr_cls()) && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
             g_rd.pf_plexf = make_device_buf(np * dim * 2l)
             g_rd.pf_plep = make_device_buf(np * all * 4l)
@@ -1134,7 +1134,6 @@ def private pf_setup {
         g_rd.pf_af = make_device_buf(np * qd * 2l)
         g_rd.pf_hf = make_device_buf(np * hid * 2l)
     }
-    // the coopmat tiles' split-k scratch (one SSBO range): cap at the device range HERE where the size is negotiated
     if (any_f16_feed && g_gpu.coopmat_mode >= COOPMAT_MM) {
         var skb = 262_144l * int64(g_gpu.sm_count)
         let fsk = cm2_splitk_env()
@@ -1159,7 +1158,6 @@ def private pf_setup {
     let kv16 = g_rd.kv16
     // the fa pick is per layer: a model's attention classes may differ in head size, and a class with no fa stamp takes the chunked pair
     let fa_dev = g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
-    //! the KHR flash tile serves where the cm2 one cannot: KHR cooperative matrices at subgroup 32, the f16 mirrors, no gated q plane
     let fakhr_dev = !fa_dev && g_gpu.has_coopmat && khr_kq_tile_on() && vk_fa_on() && kv16 && !g_rd.q_gated
     var fa_hs : table<int64>   //! the head sizes the fa tiles serve on this model
     var fakhr_hs : table<int64>   //! ... the KHR flash tile
@@ -1395,9 +1393,8 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows :
     pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, logits)
 }
 
-//! The pre-step's projection on device (the cm2 route): the per-layer model projection as an f16 mirror and its norm row; the
+//! The pre-step's projection on device: the per-layer model projection as an f16 mirror and its norm row; the
 //! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before layer 0
-//! the per-layer-embedding projection's GEMM route: the cm2 f16 tile where the mode has it, else the KHR fragments tile (whole K, `dim` and the projected width 16-multiples)
 def ple_proj_shape_ok(dim, all : int64) : bool
     => f16g_shape_ok(dim) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on() && dim % 16l == 0l && all % 16l == 0l)
 
@@ -1407,7 +1404,7 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
     }
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_proj before set_ple")
     if (!ple_proj_shape_ok(g_rd.dim, all) || long_length(w) != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready) {
-        return false   //! the f16 GEMM wants a coopmat tile and a width its tile divides; the sets build with the prefill buffers
+        return false   //! refused past `pf_ready` too: these sets build with the prefill buffers
     }
     var half : array<uint16>
     half |> reserve(long_length(w))   // E4B: 27.5M halves - the guard wants the final size reserved first
@@ -1769,7 +1766,6 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                         }
                     }
                 } elif (g_rd.layers[l].pf_fakhr) {
-                    // the KHR flash tile reads the f16 mirrors directly too, sixteen query rows a workgroup
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
                         scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap)

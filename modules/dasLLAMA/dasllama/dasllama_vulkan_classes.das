@@ -3424,12 +3424,6 @@ class DaAttnBH128F16 : DaAttnBH128T {
     typedef KT = float16
 }
 
-// The KHR flash pass over the f16 K/V shadows: FaCm2T's algorithm on subgroup-scope 16x16x16 fragments
-// for a card (or a mode) without coopmat2. A workgroup takes 16 query rows and steps 64 keys; each of
-// its four subgroups owns one 16-key column of the score tile and, after the softmax, one quarter of
-// the head's output columns. The softmax runs per element through shared memory (eight lanes a row),
-// K^T and V fragments load straight from the shadows (no staging, so the 512 head fits), P x V
-// accumulates in f16 fragments per step and lands in each thread's f32 o row. FaCm2Args ride as is.
 [ |> template_struct_instance]
 class template FaKhrT {
     @ssbo @binding = 0 qpanel : array<float>     // the prepped/roped window q rows (window-local)
@@ -3458,7 +3452,7 @@ class template FaKhrT {
         let qhs = pa.qhs == 0u ? HS : pa.qhs
         let hw = HS / 2u
         var i = tid
-        while (i < 16u * hw) {   // the q tile once, scaled, as f16 pairs; padding rows zero
+        while (i < 16u * hw) {
             let qr = q0 + i / hw
             let jp = (i % hw) * 2u
             if (qr < pa.rows) {
@@ -3472,7 +3466,7 @@ class template FaKhrT {
         let srow = tid / 8u           // the softmax lanes: eight a row, eight keys each
         let cb = (tid % 8u) * 8u
         let gq = pa.w0 + q0 + srow
-        let oe = (tid % 8u) * (HS / 8u)   // this thread's dims of its o row
+        let o_dim0 = (tid % 8u) * (HS / 8u)
         var m = -3.0e38
         var l = 0.0
         var o : float[64]
@@ -3485,7 +3479,7 @@ class template FaKhrT {
         barrier()
         while [dont_unroll] (j < kmax) {
             let krow = j + sg * 16u
-            if (krow < kvlen) {   // S[:, sg] = Q x K^T over the subgroup's 16 keys (a column past the shadow's end is never read)
+            if (krow < kvlen) {
                 var s : coopmatAcc_f32_16x16
                 var d = 0u
                 while (d < HS) {
@@ -3501,7 +3495,7 @@ class template FaKhrT {
             barrier()
             let m_old = m
             var mloc = -3.0e38
-            for [unroll] (c in range(8)) {   // the cap, then the causal and window mask on the scaled scores
+            for [unroll] (c in range(8)) {
                 let idx = srow * 64u + cb + uint(c)
                 let gk = j + cb + uint(c)
                 let v = CAP ? softcap_exp(fs[idx], pa.cap) : fs[idx]
@@ -3514,7 +3508,7 @@ class template FaKhrT {
             mloc = max(mloc, subgroupShuffleXor(mloc, 4u))
             let mt = max(m_old, mloc)
             var lloc = 0.0
-            for [unroll] (c2 in range(4)) {   // P = e^(S - M) as f16 pairs
+            for [unroll] (c2 in range(4)) {
                 let idx = srow * 64u + cb + uint(c2) * 2u
                 let e0 = exp(fs[idx] - mt)
                 let e1 = exp(fs[idx + 1u] - mt)
@@ -3528,7 +3522,7 @@ class template FaKhrT {
             l = l * alpha + lloc
             m = mt
             barrier()
-            let c0 = sg * (HS / 4u)   // this subgroup's output columns
+            let sg_col0 = sg * (HS / 4u)
             var acc : coopmatAcc_f16_16x16[8]
             var kc = 0u
             while (kc < 64u) {
@@ -3537,18 +3531,18 @@ class template FaKhrT {
                     coopmatLoad(pf, fp, int(kc / 2u), 32, 0)
                     for (f in range(int(HS / 64u))) {
                         var vb : coopmatB_f16_16x16
-                        coopmatLoad(vb, vh, pa.kvbase + (j + kc) * pa.kvd + kvh * HS + c0 + uint(f) * 16u, int(pa.kvd), 0)
+                        coopmatLoad(vb, vh, pa.kvbase + (j + kc) * pa.kvd + kvh * HS + sg_col0 + uint(f) * 16u, int(pa.kvd), 0)
                         acc[f] = coopmatMulAdd(pf, vb, acc[f])
                     }
                 }
                 kc += 16u
             }
             for (f2 in range(int(HS / 64u))) {
-                coopmatStore(acc[f2], fpv, int((c0 + uint(f2) * 16u) / 2u), int(hw), 0)
+                coopmatStore(acc[f2], fpv, int((sg_col0 + uint(f2) * 16u) / 2u), int(hw), 0)
             }
             barrier()
-            for (z2 in range(int(HS / 16u))) {   // o = alpha * o + P x V, this thread's dims in pairs
-                let pair = unpackHalf2x16(fpv[srow * hw + (oe + uint(z2) * 2u) / 2u])
+            for (z2 in range(int(HS / 16u))) {
+                let pair = unpackHalf2x16(fpv[srow * hw + (o_dim0 + uint(z2) * 2u) / 2u])
                 o[z2 * 2] = o[z2 * 2] * alpha + pair.x
                 o[z2 * 2 + 1] = o[z2 * 2 + 1] * alpha + pair.y
             }
@@ -3557,7 +3551,7 @@ class template FaKhrT {
         }
         if (q0 + srow < pa.rows) {
             let inv = 1.0 / l
-            let ob = (q0 + srow) * pa.qd + h * HS + oe
+            let ob = (q0 + srow) * pa.qd + h * HS + o_dim0
             for (z3 in range(int(HS / 8u))) {
                 static_if (OUT16) {
                     outp[ob + uint(z3)] = float16(o[z3] * inv)
@@ -3617,7 +3611,6 @@ class FaKhrH256F16 : FaKhrH256T {
     override OUT16 = true
 }
 
-// gemma-2's capped 256 heads
 [vk_dispatch(name = "fa_khr_h256_cap_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH256Cap : FaKhrH256T {
     typedef OT = float
@@ -8338,7 +8331,6 @@ class K4KhrBatch : K4Cm2T {
     typedef ACCW = coopmatWgAcc_f32_128x128
 }
 
-// the per-32 Q8_0 plane on the KHR tile: the dense q8 GEMMs of a KHR-mode card take the f16 feed here instead of the mul_mm family's requant feed
 [vk_dispatch(name = "q8_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8KhrBatch : Q8Cm2T {
     override KHR = true
@@ -8600,7 +8592,6 @@ class F16GemmCm2 {
     }
 }
 
-//! the same small f16 x f16 GEMM on KHR fragments for a card without cm2: whole K only, a 64 x 64 output tile a workgroup, each of the four subgroups a 32 x 32 quarter as four fragments, the x and w^T fragments loaded straight from the planes (n and d 16-multiples; rows past `rows` land in the plane's spare rows)
 [vk_dispatch(name = "f16_gemm_khr_cls", grid = "wgs", params = "wgs : int64")]
 class F16GemmKhr {
     @ssbo @binding = 0 @role = "weight" w : array<float16>

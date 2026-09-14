@@ -39,8 +39,9 @@ except where a probe arm is named.
   (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ad) and the E-series' per-layer-embedding projection, which
   off cm2 takes `F16GemmKhr` instead - the whole-K twin on subgroup-scope 16x16x16 fragments, a
   64 x 64 output tile a workgroup with the x and w^T fragments loaded straight from the planes
-  (`ple_proj_shape_ok`: a KHR device at subgroup 32, `dim` and the projected width 16-multiples).
-  Off that route `RouterGemm` serves, the span's router
+  (`ple_proj_shape_ok`: a KHR device at subgroup 32, `dim` and the projected width 16-multiples); its
+  store writes whole 16-row fragments under a start-row guard, so the projection's output plane
+  carries the fragment's spare rows past `rows`. Off that route `RouterGemm` serves, the span's router
   GEMV batched: a 64 x 32 tile of positions by router rows per workgroup, each invocation a 4 x 2
   block whose two rows sit 16 apart, K in 64-wide steps through a float4 stage in shared memory
   at a row stride of 17 float4, the next step's rows fetched into registers while the current

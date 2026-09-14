@@ -838,8 +838,7 @@ def private check_ar_max_dim_triple {
     }
 }
 
-// q51 is a routed-expert plane alone, and the resident MoE block is cm2-gated: the one template the KHR
-// set does not reach (q8, the other per-32 format, rides `Q8KhrBatch` on a KHR-mode card).
+//! q51 is a routed-expert plane alone and the resident MoE block is cm2-gated, so the f16 feed never admits it on a KHR-mode card
 var private CM2_KHR_EXEMPT <- {"Q51Cm2T"}
 var private CM2_NO_EXEMPT : table<string>
 

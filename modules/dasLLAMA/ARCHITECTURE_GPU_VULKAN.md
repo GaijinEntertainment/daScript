@@ -126,7 +126,7 @@ subgroup-scope 16x16x16 fragments:** sixteen query rows a workgroup, 64 keys a s
 S = Q K^T (K^T a column-major load straight from the f16 shadow) and, after the softmax runs per element through shared memory, a
 quarter of the head's output columns of P V (f16 fragments a step, summed into each thread's f32 o row). A key chunk that starts past
 the window's end is skipped; the last one may load up to fifteen rows past it, so every KV mirror carries `RDEC_MIR_SLACK` zeroed
-elements past its planes.
+elements past its planes. The tile stages nothing from the shadows: at the 512-wide head its q tile and the step's P V plane already hold 32 KB of the 49152 B of workgroup memory the tier requires of a device, so K^T and V fragments load straight from the f16 mirrors. The tile carries no gated axis, so a model whose q plane is `[q | gate]` keeps the chunked attention pair whatever its head size.
 
 **A hybrid's gated attention rides the batch kernels through a per-head q stride** (`qhs = 2 x hs`):
 the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror

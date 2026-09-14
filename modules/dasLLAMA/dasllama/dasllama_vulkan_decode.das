@@ -22,7 +22,7 @@ require daslib/strings_boost
 // mirror sync/read seams, the deltanet decode step, the FFN GEMV / qkv-group / classifier
 // decode arms, and the heat-pinned expert cache.
 
-let RDEC_MIR_SLACK = 16l * 8192l   //! elements past the last plane of each KV mirror: a flash fragment's last key step reads up to 15 rows past the window's end, and a row is at most 8192 wide
+let RDEC_MIR_SLACK = 16l * 8192l   //! slack elements past each KV mirror's last plane: a flash fragment's 16 rows at the widest KV row this tier binds
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
 
 //! the token command's key splits a head: enough (head, split) workgroups to cover the card twice over, at most
@@ -128,7 +128,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * r.mir_elems * esz) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
         return false
     }
-    {   //! the mirrors start at zero: a flash fragment's last key step reads up to 15 rows past the window's end, and zero times a masked probability stays zero where garbage would not
+    {   //! the mirrors start at zero, never at garbage: zero times a masked probability stays zero in the slack rows a flash fragment reads
         var rawz = alloc_cmd()
         let beginz = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(rawz, beginz), null)

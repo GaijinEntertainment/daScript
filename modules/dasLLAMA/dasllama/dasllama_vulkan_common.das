@@ -196,7 +196,7 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
     if (cores == 0l) {
         return (tc = tc0, nsplit = 1l, ksplit = 0l)
     }
-    let khr = g_gpu.coopmat_mode == COOPMAT_MM   //! the KHR arm has the one 128-column geometry, so the pick weighs its k chunks alone
+    let khr = g_gpu.coopmat_mode == COOPMAT_MM
     let forced = cm2_splitk_env()
     if (forced > 0l) {
         var sk = min(forced, 8l)
@@ -1292,7 +1292,7 @@ def vk_moe_init : bool {
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
     g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
-    //! the cm2 flash tiles ride a device created in cm2 mode: a mode forced off it (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, so the flag reads false there whatever the card supports
+    //! a device created off cm2 mode (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, so this flag reads false whatever the card supports
     g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && cooperative_matrix2_fa_supported(g_gpu.phys)
     g_gpu.decvec_on = g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
     g_gpu.sm_count = query_sm_count(g_gpu.phys)

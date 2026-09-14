@@ -370,7 +370,7 @@ struct coopmatAcc_f32_16x16 {}
 // global + the element index), so the param type is irrelevant to lowering and this one signature accepts
 // both a dynamic @ssbo array<T> and a fixed @workgroup T[N] (shared-memory staging). dst (the coopmat
 // tile) and a/b/c stay strongly typed — that is what selects the tile shape.
-// idx also takes uint: an f16 K/V shadow past 2 GB indexes its elements past int32 while still fitting uint.
+//! idx takes uint because an f16 K/V shadow past 2 GB indexes its elements past int32.
 [unused_argument(dst, src, idx, stride, layout), sideeffects]
 def public coopmatLoad(var dst : coopmatA_f16_16x16; src; idx : int | uint; stride, layout : int) : void {}
 [unused_argument(dst, src, idx, stride, layout), sideeffects]
