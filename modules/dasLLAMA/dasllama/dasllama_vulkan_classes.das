@@ -3245,6 +3245,74 @@ class FaKhrH512F16 : FaH512T {
     override OUT16 = true
 }
 
+//! the flash tile's stamp pick, one ladder a stage: the arm (`khr`), the head size, the h256 gated stamp (the cm2 arm alone) or softcap stamp, the f16-out twin
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def fa_stamp_wgs(khr : bool; nheads, rows : int64) : int64 {
+    let rpw = khr ? 16l : 64l   //! query rows a workgroup: the KHR arm's sixteen, the cm2 arm's sixty-four
+    return nheads * ((rows + rpw - 1l) / rpw)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, f16 : bool) : bool {   // nolint:STYLE037 — one pick over the twenty stamps; a split per arm is the twin ladder this replaces
+    verify(!(khr && gated), "vk flash: the KHR flash tile has no gated stamp")
+    if (hs == 64l) return khr ? (f16 ? ensure_fa_khr_h64_f16_cls() : ensure_fa_khr_h64_cls()) : (f16 ? ensure_fa_cm2_h64_f16_cls() : ensure_fa_cm2_h64_cls())
+    if (hs == 128l) return khr ? (f16 ? ensure_fa_khr_h128_f16_cls() : ensure_fa_khr_h128_cls()) : (f16 ? ensure_fa_cm2_h128_f16_cls() : ensure_fa_cm2_h128_cls())
+    if (hs == 512l) return khr ? (f16 ? ensure_fa_khr_h512_f16_cls() : ensure_fa_khr_h512_cls()) : (f16 ? ensure_fa_cm2_h512_f16_cls() : ensure_fa_cm2_h512_cls())
+    verify(hs == 256l, "vk flash: a stamp for a head size the tile never serves")
+    if (gated) return f16 ? ensure_fa_cm2_h256_g_f16_cls() : ensure_fa_cm2_h256_g_cls()
+    if (cap) return khr ? (f16 ? ensure_fa_khr_h256_cap_f16_cls() : ensure_fa_khr_h256_cap_cls()) : (f16 ? ensure_fa_cm2_h256_cap_f16_cls() : ensure_fa_cm2_h256_cap_cls())
+    return khr ? (f16 ? ensure_fa_khr_h256_f16_cls() : ensure_fa_khr_h256_cls()) : (f16 ? ensure_fa_cm2_h256_f16_cls() : ensure_fa_cm2_h256_cls())
+}
+
+//! the f32 stamp, and its f16-out twin where a window lands attention in f16
+def fa_stamps_ensure(khr : bool; hs : int64; gated, cap, with_f16 : bool) : bool
+    => fa_stamp_ensure(khr, hs, gated, cap, false) && (!with_f16 || fa_stamp_ensure(khr, hs, gated, cap, true))
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def fa_stamp_set(khr : bool; bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet
+    => khr ? set_fa_khr_cls(bufs, sizes, gbits) : set_fa_cm2_cls(bufs, sizes, gbits)
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def fa_stamp_enc(khr : bool; hs : int64; gated, cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaCm2Args; wgs : int64) {   // nolint:STYLE037 — one pick over the twenty stamps; a split per arm is the twin ladder this replaces
+    verify(!(khr && gated), "vk flash: the KHR flash tile has no gated stamp")
+    if (hs == 64l) {
+        if (f16) {
+            if (khr) { enc_fa_khr_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_f16_cls(raw, h, s, pc, wgs) }
+        } else {
+            if (khr) { enc_fa_khr_h64_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_cls(raw, h, s, pc, wgs) }
+        }
+    } elif (hs == 128l) {
+        if (f16) {
+            if (khr) { enc_fa_khr_h128_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_f16_cls(raw, h, s, pc, wgs) }
+        } else {
+            if (khr) { enc_fa_khr_h128_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_cls(raw, h, s, pc, wgs) }
+        }
+    } elif (hs == 512l) {
+        if (f16) {
+            if (khr) { enc_fa_khr_h512_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h512_f16_cls(raw, h, s, pc, wgs) }
+        } else {
+            if (khr) { enc_fa_khr_h512_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h512_cls(raw, h, s, pc, wgs) }
+        }
+    } elif (gated) {
+        verify(hs == 256l, "vk flash: a stamp for a head size the tile never serves")
+        if (f16) { enc_fa_cm2_h256_g_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_g_cls(raw, h, s, pc, wgs) }
+    } elif (cap) {
+        verify(hs == 256l, "vk flash: a stamp for a head size the tile never serves")
+        if (f16) {
+            if (khr) { enc_fa_khr_h256_cap_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cap_f16_cls(raw, h, s, pc, wgs) }
+        } else {
+            if (khr) { enc_fa_khr_h256_cap_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cap_cls(raw, h, s, pc, wgs) }
+        }
+    } else {
+        verify(hs == 256l, "vk flash: a stamp for a head size the tile never serves")
+        if (f16) {
+            if (khr) { enc_fa_khr_h256_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_f16_cls(raw, h, s, pc, wgs) }
+        } else {
+            if (khr) { enc_fa_khr_h256_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cls(raw, h, s, pc, wgs) }
+        }
+    }
+}
+
 //! gemma-2's attention logit softcap on a scaled score; 0 = none
 def private attn_softcap(s, cap : float) : float => cap != 0.0 ? softcap_exp(s, cap) : s
 
@@ -8624,6 +8692,27 @@ class F16GemmKhr {
                 coopmatStore(acc[f], y, int(pa.ybase + r * pa.ystride + c), int(pa.ystride), 0)
             }
         }
+    }
+}
+
+//! the small f16 GEMM's arm pick: the cm2 128 x 128 workgroup tile in mode 4, the KHR 64 x 64 fragment tile off it; the KHR stamp reads no k split, so the split-k callers stay on the cm2 arm
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+def f16_gemm_wgs(khr : bool; rows, d : int64) : int64 {
+    let tile = khr ? 64l : 128l
+    return ((rows + tile - 1l) / tile) * ((d + tile - 1l) / tile)
+}
+
+def f16_gemm_ensure(khr : bool) : bool => khr ? ensure_f16_gemm_khr_cls() : ensure_f16_gemm_cm2_cls()
+
+def f16_gemm_set(khr : bool; bufs : uint64 const[3]; sizes : int64 const[3]; gbits : uint const[3]) : VkDescriptorSet
+    => khr ? set_f16_gemm_khr_cls(bufs, sizes, gbits) : set_f16_gemm_cm2_cls(bufs, sizes, gbits)
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+def f16_gemm_enc(khr : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : F16GemmArgs; rows, d : int64) {
+    if (khr) {
+        enc_f16_gemm_khr_cls(raw, h, s, pc, f16_gemm_wgs(true, rows, d))
+    } else {
+        enc_f16_gemm_cm2_cls(raw, h, s, pc, f16_gemm_wgs(false, rows, d))
     }
 }
 

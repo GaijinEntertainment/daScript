@@ -302,9 +302,12 @@ arms: the cm2 l/m/s tiles and the
 expert schedule's e column (the format's own 128-row e stamp, whose k step is the stamp's - 32 on
 iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
-32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; the
-k4 cell dispatches two workgroups past its schedule over sentinel map words (`SCHED_NONE`), the
-device-written schedules' upper-bound shape, and every arm's rows still match;
+32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; every
+arm runs through the prefill's own ladders (`cell_arm_set` / `cell_arm_enc` over `cm2_cls_*` and
+`khr_cls_*`) in one shared loop (`tile_cell_arms`, the format's oracle passed in), which dispatches
+two workgroups past its schedule over sentinel map words (`SCHED_NONE`), the device-written
+schedules' upper-bound shape, and every arm's rows still match; the q8 fmt-0 cells share one
+fixture the same way (`q8_fmt0_fixture` / `q8_fmt0_dispatch` / `q8_fmt0_check`);
 `test_vkd_ext_roster` asserts, for every entry of the device-init roster (`vk_ext_roster`: every
 Vulkan capability the tier keys a route on, what rides on it), that the entry's presence reads the
 same as the arming field it decides, so the roster's log line and the tier's route cannot

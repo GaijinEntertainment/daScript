@@ -611,7 +611,7 @@ def private pf_f16g_on() : bool => (g_rd.pf_splitk != 0ul && f16g_shape_ok(g_rd.
 def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : VkDescriptorSet; n, d, rows, woff, ybase : int64) {
     verify(F16G_SPLIT * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the f16 GEMM's partial planes exceed the split-k scratch")
     var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = uint(woff), ybase = 0u, ystride = uint(d), ksplit = uint(n / F16G_SPLIT))
-    enc_f16_gemm_cm2_cls(raw, h, gset, pc, ((rows + 127l) / 128l) * ((d + 127l) / 128l) * F16G_SPLIT)
+    enc_f16_gemm_cm2_cls(raw, h, gset, pc, f16_gemm_wgs(false, rows, d) * F16G_SPLIT)
     var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(F16G_SPLIT), ybase = uint(ybase))
     enc_splitk_reduce_cls(raw, h, rset, pcr, (rows * d + 1_023l) / 1_024l)
 }
@@ -1076,8 +1076,8 @@ def private pf_setup {
         g_rd.pf_ple = make_device_buf(np * all * 4l)
         if (g_rd.ple_gpu) {
             // the pre-step on device: f16 embedding rows -> the projected plane -> the side rows finished in place
-            let ple_cm2 = g_gpu.coopmat_mode == COOPMAT_CM2
-            verify(ensure_f16cvt_cls() && (ple_cm2 ? ensure_f16_gemm_cm2_cls() : ensure_f16_gemm_khr_cls()) && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
+            let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
+            verify(ensure_f16cvt_cls() && f16_gemm_ensure(ple_khr) && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
             g_rd.pf_plexf = make_device_buf(np * dim * 2l)
             g_rd.pf_plep = make_device_buf(np * all * 4l)
             g_rd.pf_ple_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_plexf),
@@ -1085,7 +1085,7 @@ def private pf_setup {
             let gbufs = fixed_array(g_rd.ple_w16_dev, g_rd.pf_plexf, g_rd.pf_plep)
             let gsizes = fixed_array(g_rd.ple_w16_bytes, np * dim * 2l, np * all * 4l)
             let ggbits = fixed_array(0u, VHZ_SK, VHZ_MRT)
-            g_rd.pf_ple_gemm_set = ple_cm2 ? set_f16_gemm_cm2_cls(gbufs, gsizes, ggbits) : set_f16_gemm_khr_cls(gbufs, gsizes, ggbits)
+            g_rd.pf_ple_gemm_set = f16_gemm_set(ple_khr, gbufs, gsizes, ggbits)
             //! the residual step's kernel over [np x layers] rows of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2); its normed output lands in the projected plane, unread
             g_rd.pf_ple_ar_set = set_cls_ar(fixed_array(g_rd.pf_ple, g_rd.pf_plep, g_rd.ple_pnorm_dev, g_rd.pf_plep),
                 fixed_array(np * all * 4l, np * all * 4l, g_rd.ple * 4l, np * all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
@@ -1203,18 +1203,16 @@ def private pf_setup {
         && (!fa128s || (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()))
         && (!narrow_hs || (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
         && (!wide_hs || (kv16 ? ensure_da_attn_bw_f16_cls() : ensure_da_attn_bw_cls()))
-        && (!key_exists(fa_hs, 64l) || (ensure_fa_cm2_h64_cls() && (!any_f16_feed || ensure_fa_cm2_h64_f16_cls())))
-        && (!key_exists(fa_hs, 128l) || (ensure_fa_cm2_h128_cls() && (!any_f16_feed || ensure_fa_cm2_h128_f16_cls())))
-        && (!key_exists(fa_hs, 256l) || (g_rd.q_gated
-            ? (ensure_fa_cm2_h256_g_cls() && (!any_f16_feed || ensure_fa_cm2_h256_g_f16_cls()))
-            : (ensure_fa_cm2_h256_cls() && (!any_f16_feed || ensure_fa_cm2_h256_f16_cls()))))
-        && (!any_cap || (ensure_fa_cm2_h256_cap_cls() && (!any_f16_feed || ensure_fa_cm2_h256_cap_f16_cls())))
-        && (!key_exists(fa_hs, 512l) || (ensure_fa_cm2_h512_cls() && (!any_f16_feed || ensure_fa_cm2_h512_f16_cls())))
-        && (!key_exists(fakhr_hs, 64l) || (ensure_fa_khr_h64_cls() && (!any_f16_feed || ensure_fa_khr_h64_f16_cls())))
-        && (!key_exists(fakhr_hs, 128l) || (ensure_fa_khr_h128_cls() && (!any_f16_feed || ensure_fa_khr_h128_f16_cls())))
-        && (!key_exists(fakhr_hs, 256l) || (ensure_fa_khr_h256_cls() && (!any_f16_feed || ensure_fa_khr_h256_f16_cls())))
-        && (!any_khr_cap || (ensure_fa_khr_h256_cap_cls() && (!any_f16_feed || ensure_fa_khr_h256_cap_f16_cls())))
-        && (!key_exists(fakhr_hs, 512l) || (ensure_fa_khr_h512_cls() && (!any_f16_feed || ensure_fa_khr_h512_f16_cls())))
+        && (!key_exists(fa_hs, 64l) || fa_stamps_ensure(false, 64l, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 128l) || fa_stamps_ensure(false, 128l, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 256l) || fa_stamps_ensure(false, 256l, g_rd.q_gated, false, any_f16_feed))
+        && (!any_cap || fa_stamps_ensure(false, 256l, false, true, any_f16_feed))
+        && (!key_exists(fa_hs, 512l) || fa_stamps_ensure(false, 512l, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 64l) || fa_stamps_ensure(true, 64l, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 128l) || fa_stamps_ensure(true, 128l, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 256l) || fa_stamps_ensure(true, 256l, false, false, any_f16_feed))
+        && (!any_khr_cap || fa_stamps_ensure(true, 256l, false, true, any_f16_feed))
+        && (!key_exists(fakhr_hs, 512l) || fa_stamps_ensure(true, 512l, false, false, any_f16_feed))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
@@ -1295,7 +1293,7 @@ def private pf_setup {
             let fbufs = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, wo6 ? g_rd.pf_af : g_rd.pf_attn)
             let fsizes = fixed_array(np * qrow * 4l, mirbytes, mirbytes, wo6 ? np * qd * 2l : np * qd * 4l)
             let fgbits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, wo6 ? VHZ_AQ : VHZ_ATT)
-            g_rd.pf_sets[b + 5] = L.pf_fa ? set_fa_cm2_cls(fbufs, fsizes, fgbits) : set_fa_khr_cls(fbufs, fsizes, fgbits)
+            g_rd.pf_sets[b + 5] = fa_stamp_set(!L.pf_fa, fbufs, fsizes, fgbits)
         } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l)
@@ -1595,11 +1593,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                 enc_f16cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
                 var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
-                if (g_gpu.coopmat_mode == COOPMAT_CM2) {
-                    enc_f16_gemm_cm2_cls(raw, h, g_rd.pf_ple_gemm_set, pcg, ((wlen + 127l) / 128l) * ((all + 127l) / 128l))
-                } else {
-                    enc_f16_gemm_khr_cls(raw, h, g_rd.pf_ple_gemm_set, pcg, ((wlen + 63l) / 64l) * ((all + 63l) / 64l))
-                }
+                f16_gemm_enc(g_gpu.coopmat_mode != COOPMAT_CM2, raw, h, g_rd.pf_ple_gemm_set, pcg, wlen, all)
                 var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
                 enc_cls_ar(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
             }
@@ -1727,85 +1721,14 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
                 }
                 pfq_ts(raw)
-                if (g_rd.layers[l].pf_fa) {
-                    // the cm2 fa tile reads the f16 mirrors directly
+                if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
+                    // the flash tile reads the f16 mirrors directly
+                    let khr = !g_rd.layers[l].pf_fa
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
                         scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap)
-                    let fawgs = g_rd.n_heads * ((wlen + 63l) / 64l)
-                    if (hs == 64l) {
-                        if (fo6) {
-                            enc_fa_cm2_h64_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_cm2_h64_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } elif (hs == 128l) {
-                        if (fo6) {
-                            enc_fa_cm2_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_cm2_h128_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } elif (hs == 512l) {
-                        if (fo6) {
-                            enc_fa_cm2_h512_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_cm2_h512_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } elif (g_rd.q_gated) {
-                        if (fo6) {
-                            enc_fa_cm2_h256_g_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_cm2_h256_g_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } elif (pcf.cap != 0.0) {
-                        if (fo6) {
-                            enc_fa_cm2_h256_cap_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_cm2_h256_cap_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } else {
-                        if (fo6) {
-                            enc_fa_cm2_h256_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_cm2_h256_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    }
-                } elif (g_rd.layers[l].pf_fakhr) {
-                    var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
-                        kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
-                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap)
-                    let fawgs = g_rd.n_heads * ((wlen + 15l) / 16l)
-                    if (hs == 64l) {
-                        if (fo6) {
-                            enc_fa_khr_h64_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_khr_h64_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } elif (hs == 128l) {
-                        if (fo6) {
-                            enc_fa_khr_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_khr_h128_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } elif (hs == 512l) {
-                        if (fo6) {
-                            enc_fa_khr_h512_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_khr_h512_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } elif (pcf.cap != 0.0) {
-                        if (fo6) {
-                            enc_fa_khr_h256_cap_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_khr_h256_cap_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    } else {
-                        if (fo6) {
-                            enc_fa_khr_h256_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        } else {
-                            enc_fa_khr_h256_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
-                        }
-                    }
+                    fa_stamp_enc(khr, hs, hs == 256l && g_rd.q_gated, pcf.cap != 0.0, fo6, raw, h, g_rd.pf_sets[b + 5], pcf,
+                        fa_stamp_wgs(khr, g_rd.n_heads, wlen))
                 } else {
                     var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
                         hs = uint(hs), kv_mul = kv_mul, kbase = mirb, vbase = mirb,
