@@ -407,6 +407,68 @@ class MetalPleGatherQ8 {
     }
 }
 
+//! The K-quant twin of MetalPleGatherQ8 - same grid, same output layout, decoding the table off
+//! its format's native planes, which bind at the TABLE's own base, so `el` is the element index
+//! inside the table and `el / 256` its plane superblock (the gate's two %256 clauses make it so).
+[ |> template_struct_instance]
+class template MetalPleGatherKqT {
+    @template_constant BLK : uint = 32u     //!< quant-plane uints per superblock (k5's qh strip adds 8)
+    @template_constant QH : bool = false    //!< k5: the 5th bit off the qh strip
+    @template_constant Q40 : bool = false   //!< q40: one f16 d per 32-block, the linear map (q - 8)
+    @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16> //!< scale plane, half view (k4/k5: d, dmin at 8*blk; q40: the eight per-32-block d)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" @template_gate = "!Q40" ks4 : array<uint4> //!< the SAME 16B block, uint4 view (the packed 6-bit sc/min)
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    //!< quant plane, uint view
+    @ssbo @binding = 3 @role = "read" tok : array<uint>    //!< [npos] token ids
+    @ssbo @binding = 4 @role = "write" y : array<float>    //!< [n_layers x npos x ple] layer-major side input
+    @uniform @binding = 5 ka : PleArgs
+
+    [metal_kernel]
+    def metal_ple_gather_kq {
+        let l = gl_WorkGroupID.x
+        let p = gl_WorkGroupID.y
+        let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
+        let el = tok[p] * (ka.nlayers * ka.ple) + l * ka.ple + i
+        let blk = el / 256u
+        let js = (el % 256u) / 32u
+        let e = el % 32u
+        var v : float
+        static_if (Q40) {
+            let u = kqu[blk * BLK + js * 4u + (e % 16u) / 4u]
+            v = float(ksh[blk * 8u + js]) * (float((u >> (8u * (e % 4u) + (e / 16u) * 4u)) & 15u) - 8.0)
+        } else {
+            let sv = ks4[blk]
+            var sc = 0u
+            var mn = 0u
+            kmask_scmn(sv, js, sc, mn)
+            let dsc = float(ksh[blk * 8u]) * float(sc)
+            let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
+            let u = kqu[blk * BLK + (js / 2u) * 8u + e / 4u]
+            static_if (QH) {
+                let hu = kqu[blk * BLK + 32u + e / 4u]
+                let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
+                v = dsc * float(q) - dmn
+            } else {
+                v = dsc * float((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) - dmn
+            }
+        }
+        y[(l * ka.npos + p) * ka.ple + i] = v * ka.sc0
+    }
+}
+
+[metal_dispatch(name = "pf_enc_ple_gather_k4", pso = "g_pf_pso_ple_gather_k4", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
+class MetalPleGatherK4 : MetalPleGatherKqT {}
+
+[metal_dispatch(name = "pf_enc_ple_gather_k5", pso = "g_pf_pso_ple_gather_k5", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
+class MetalPleGatherK5 : MetalPleGatherKqT {
+    override BLK = 40u
+    override QH = true
+}
+
+[metal_dispatch(name = "pf_enc_ple_gather_q40", pso = "g_pf_pso_ple_gather_q40", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
+class MetalPleGatherQ40 : MetalPleGatherKqT {
+    override Q40 = true
+}
+
 [metal_dispatch(name = "pf_enc_ple_finish", pso = "g_pf_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
 class MetalPleFinish {
     @ssbo @binding = 0 @role = "read" proj : array<float>  //!< [mp x n_layers*ple] position-major model_proj·embd
@@ -4283,6 +4345,9 @@ var private g_pf_pso_avmm_t : MetalComputePipeline?
 var private g_pf_pso_avmm_tp : MetalComputePipeline?
 var private g_pf_pso_avmm_p : MetalComputePipeline?
 var private g_pf_pso_ple_gather : MetalComputePipeline?   //!< PLE pre-step: q8 token-row gather
+var private g_pf_pso_ple_gather_k4 : MetalComputePipeline?   //!< PLE pre-step: k4 token-row gather
+var private g_pf_pso_ple_gather_k5 : MetalComputePipeline?   //!< PLE pre-step: k5 token-row gather
+var private g_pf_pso_ple_gather_q40 : MetalComputePipeline?  //!< PLE pre-step: q40 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   //!< PLE pre-step: rms + combine, in place
 var private g_pf_pso_qkmm : MetalComputePipeline?
 var private g_pf_pso_avmm : MetalComputePipeline?
@@ -4606,6 +4671,9 @@ def public metal_prefill_shutdown {   // nolint:STYLE038 — flat one-release-pe
     release_handle(g_pf_pso_bf16_mm_t128)
     release_handle(g_pf_pso_bf16_mm_th128)
     release_handle(g_pf_pso_ple_gather)
+    release_handle(g_pf_pso_ple_gather_k4)
+    release_handle(g_pf_pso_ple_gather_k5)
+    release_handle(g_pf_pso_ple_gather_q40)
     release_handle(g_pf_pso_ple_finish)
     for (pso in [g_pf_pso_moe_count,
                  g_pf_pso_moe_bucket, g_pf_pso_moe_reduce, g_pf_pso_moe_mm_q8, g_pf_pso_moe_mm_k4,
@@ -4755,6 +4823,9 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_pso_bf16_mm_th128 = compile_pso(MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl_fastmath, ok)
     }
     g_pf_pso_ple_gather = compile_pso(metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, ok)
+    g_pf_pso_ple_gather_k4 = compile_pso(MetalPleGatherK4_metal_ple_gather_kq_msl, MetalPleGatherK4_metal_ple_gather_kq_msl_entry, MetalPleGatherK4_metal_ple_gather_kq_msl_fastmath, ok)
+    g_pf_pso_ple_gather_k5 = compile_pso(MetalPleGatherK5_metal_ple_gather_kq_msl, MetalPleGatherK5_metal_ple_gather_kq_msl_entry, MetalPleGatherK5_metal_ple_gather_kq_msl_fastmath, ok)
+    g_pf_pso_ple_gather_q40 = compile_pso(MetalPleGatherQ40_metal_ple_gather_kq_msl, MetalPleGatherQ40_metal_ple_gather_kq_msl_entry, MetalPleGatherQ40_metal_ple_gather_kq_msl_fastmath, ok)
     g_pf_pso_ple_finish = compile_pso(metal_ple_finish_msl, metal_ple_finish_msl_entry, metal_ple_finish_msl_fastmath, ok)
     var perr : string
     var probe = pipeline_from_source(g_dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, perr)
@@ -6232,19 +6303,54 @@ def private pf_enc_slab_gemv_b(enc : MetalComputeEncoder?; bw, bx, by, bn, bd, b
 }
 
 
+//! The PLE token table's gather stamp, or null where the table's format has none. The gate admits
+//! a model only where this is live, and `pf_enc_ple_gather_fmt`'s ladder closes over the SAME four
+//! formats - every other one keeps the CPU pre-step.
+def private ple_gather_pso_of(fmt : KqFmt) : MetalComputePipeline? {
+    if (fmt == KqFmt.q8) return g_pf_pso_ple_gather
+    if (fmt == KqFmt.k4) return g_pf_pso_ple_gather_k4
+    if (fmt == KqFmt.k5) return g_pf_pso_ple_gather_k5
+    if (fmt == KqFmt.q40) return g_pf_pso_ple_gather_q40
+    return null
+}
+
+//! The device PLE gather: q8 off the 34B blob, a K-quant or Q4_0 table off its native planes,
+//! both bound at the TABLE's own base so the kernel's `el / 256` IS the plane superblock.
+def private pf_enc_ple_gather_fmt(enc : MetalComputeEncoder?; t : Model; btok, by : MetalBuffer?;
+                                  var ka : PleArgs; nlayers, npos, ple : int64) {
+    let fmt = t.ple_emb_fmt
+    if (fmt == KqFmt.q8) {
+        let bemb = blob_of(g_dev, t, t.ple_emb_off)
+        pf_enc_ple_gather(enc, bemb.buf, bemb.boff, bemb.buf, btok, by, ka, nlayers, npos, ple)
+        return
+    }
+    let bq = kq_quants_of(g_dev, t, fmt, t.ple_emb_off)
+    let bs = kq_scales_of(g_dev, t, fmt, t.ple_emb_off)
+    if (fmt == KqFmt.k4) {
+        pf_enc_ple_gather_k4(enc, bs.buf, bs.soff, bs.buf, bq.buf, bq.qoff, btok, by, ka, nlayers, npos, ple)
+    } elif (fmt == KqFmt.k5) {
+        pf_enc_ple_gather_k5(enc, bs.buf, bs.soff, bs.buf, bq.buf, bq.qoff, btok, by, ka, nlayers, npos, ple)
+    } elif (fmt == KqFmt.q40) {
+        pf_enc_ple_gather_q40(enc, bs.buf, bs.soff, bq.buf, bq.qoff, btok, by, ka, nlayers, npos, ple)
+    }
+}
+
 //! true iff THIS window's metal prefill will engage AND the pre-step kernels cover the model
 [unused_argument(s, start_pos)]
 def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
-    if (active_prefill_override() != "metal" ||
-            !t.metal_blob || t.ple_emb_fmt != KqFmt.q8 || !t.ple_model_bf16) {
+    if (active_prefill_override() != "metal" || !t.metal_blob || !t.ple_model_bf16) {
         return false
     }
     let ple = t.config.n_embd_per_layer
-    if (ple % 32l != 0l || ple > 1024l || (t.config.n_layers * ple) % 64l != 0l ||
+    let all = t.config.n_layers * ple
+    //! a kq table is gathered off planes bound at its base, so that base and the per-token row
+    //! stride both land on a superblock boundary - that is what makes the kernel's el/256 the one
+    let kq_aligned = t.ple_emb_fmt == KqFmt.q8 || (all % 256l == 0l && t.ple_emb_off % 256l == 0l)
+    if (ple % 32l != 0l || ple > 1024l || all % 64l != 0l || !kq_aligned ||
             prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {
         return false
     }
-    return metal_prefill_init()
+    return metal_prefill_init() && ple_gather_pso_of(t.ple_emb_fmt) != null
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-pad-rows-and-coop"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-chunked-submit"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
@@ -6671,8 +6777,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 //! the serial encoder orders the three PLE stages: gather -> model_proj GEMM -> rms+combine
                 unsafe {
                     var pka = ple_ka(npos, ple_n, c.n_layers, dim, c.norm_eps)
-                    let bemb = blob_of(g_dev, t, t.ple_emb_off)
-                    pf_enc_ple_gather(enc, bemb.buf, bemb.boff, bemb.buf, bple_tok, bple, pka, c.n_layers, npos, ple_n)
+                    pf_enc_ple_gather_fmt(enc, t, bple_tok, bple, pka, c.n_layers, npos, ple_n)
                     let bwp = bf16_of(g_dev, t, t.ple_model_off)
                     pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
                     var bw_pn = upload_region(addr < void? >(t.fblob[t.ple_pnorm_off]), uint64(ple_n * 4l))

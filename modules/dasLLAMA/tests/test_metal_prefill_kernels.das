@@ -8,6 +8,7 @@ require dastest/testing_boost public
 require daslib/math_bits           // float<->uint bits — the moe_wscale sel-buffer pun
 require dasllama/dasllama_math
 require dasllama/dasllama_convert  // used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
+require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
 require ?das_metal dasllama/dasllama_metal_prefill  // the Phase-6 prefill kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_kernels  // the Wave C MoE routing kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
@@ -1487,6 +1488,11 @@ def test_metal_prefill_kernels(t : T?) {
 
                 // ===== prefill misc (PLE pre-step, bias epilogue, MTP cat, deltanet ba) =====
                 ple_gather_q8_gate(t, dev, queue, 11, 3, 32, 5)
+                // the kq table twins: 300 superblocks of table past a non-zero base, one row per
+                // token = 3 superblocks, so every arm walks the row-stride and sub-block math
+                ple_gather_kq_gate(t, dev, queue, 4, 100, 3, 256, 5, 7)
+                ple_gather_kq_gate(t, dev, queue, 5, 100, 3, 256, 5, 7)
+                ple_gather_kq_gate(t, dev, queue, 40, 100, 3, 256, 5, 7)
                 ple_finish_gate(t, dev, queue, 3, 64, 5)
                 add_bias_rows_gate(t, dev, queue, 7, 96)
                 pf_cat2_gate(t, dev, queue, 5, 48)
@@ -2147,6 +2153,88 @@ def private ple_gather_q8_gate(t : T?; dev, queue; vocab, nlayers, ple, npos : i
     delete blob
     delete wdeq
     delete tok
+    delete want
+}
+
+// PLE stage 1, the kq twins (MetalPleGatherK4/K5/Q40): the same token-row gather and the same
+// layer-major output, decoding the table off its format's native planes bound at the table's
+// own superblock base (sb0) — the production shape, where kq_quants_of/kq_scales_of offset the
+// binds by the table's element offset. Truth is kq_row_ref, the same per-superblock dequant
+// ple_gather_row runs, scaled by sqrt(ple). The fixture's scales are pow2/quarter and its
+// quants are 4-/5-bit ints, so every product and difference is exact in fp32 on both sides.
+def private ple_gather_kq_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, sb0 : int) {
+    let tag = "ple_gather_kq f={fmt} v={vocab} nl={nlayers} ple={ple} np={npos} sb0={sb0}"
+    var err : string
+    var pso = (fmt == 4
+        ? pipeline_from_source(dev, MetalPleGatherK4_metal_ple_gather_kq_msl, MetalPleGatherK4_metal_ple_gather_kq_msl_entry, MetalPleGatherK4_metal_ple_gather_kq_msl_fastmath, err)
+        : (fmt == 5
+            ? pipeline_from_source(dev, MetalPleGatherK5_metal_ple_gather_kq_msl, MetalPleGatherK5_metal_ple_gather_kq_msl_entry, MetalPleGatherK5_metal_ple_gather_kq_msl_fastmath, err)
+            : pipeline_from_source(dev, MetalPleGatherQ40_metal_ple_gather_kq_msl, MetalPleGatherQ40_metal_ple_gather_kq_msl_entry, MetalPleGatherQ40_metal_ple_gather_kq_msl_fastmath, err)))
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let rowlen = nlayers * ple        // elements per token row
+    let rowsb = rowlen / 256          // ... and its superblocks (the gate's all % 256 clause)
+    let nsb = sb0 + vocab * rowsb
+    var kq : array<uint8>
+    var ks : array<uint8>
+    kq_fill_planes(fmt, nsb, kq, ks)
+    var tok : array<uint>
+    tok |> resize(npos)
+    for (p in range(npos)) {
+        tok[p] = uint((p * 23 + 5) % vocab)
+    }
+    let sc0 = sqrt(float(ple))
+    var wrow : array<float>
+    var want : array<float>
+    wrow |> resize(rowlen)
+    want |> resize(nlayers * npos * ple)
+    for (p in range(npos)) {
+        kq_row_ref(fmt, sb0 + int(tok[p]) * rowsb, rowsb, nsb, kq, ks, wrow)
+        for (l in range(nlayers)) {
+            for (i in range(ple)) {
+                want[(l * npos + p) * ple + i] = wrow[l * ple + i] * sc0
+            }
+        }
+    }
+    var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sc0,
+        inv_sd = 1.0, eps = 1.0e-6, inv_s2 = 1.0)
+    var bkq = buf_upload(dev, kq)
+    var bks = buf_upload(dev, ks)
+    var btok = buf_upload(dev, tok)
+    var by = buf_fill(dev, nlayers * npos * ple, -1000.0)
+    let soff = uint64(sb0 * 16)
+    let qoff = uint64(int64(sb0) * kq_qsb(fmt))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_buffer(enc, bks, soff, 0)   // scale plane, half view
+        if (fmt != 40) {
+            metal_set_buffer(enc, bks, soff, 1)   // the same 16B block, uint4 view (q40 gates it off)
+        }
+        metal_set_buffer(enc, bkq, qoff, 2)
+        metal_set_buffer(enc, btok, 0ul, 3)
+        metal_set_buffer(enc, by, 0ul, 4)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        metal_dispatch_threadgroups(enc, uint3(uint(nlayers), uint(npos), 1u), uint3(uint(ple), 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want), 0, "{tag}: gather vs kq_row_ref")
+        // the control: the same compare must RED on a poisoned expectation - an added
+        // abs(want[0])*0.1 + 1.0, past buf_mismatch_approx's 1e-4*max(1, |v|) band at any magnitude
+        var wantp := want
+        wantp[0] += abs(want[0]) * 0.1 + 1.0
+        t |> success(buf_mismatch_approx(by, wantp) != 0, "{tag}: poison control reds")
+        delete wantp
+    }
+    metal_release(bkq)
+    metal_release(bks)
+    metal_release(btok)
+    metal_release(by)
+    metal_release(pso)
+    delete kq
+    delete ks
+    delete tok
+    delete wrow
     delete want
 }
 

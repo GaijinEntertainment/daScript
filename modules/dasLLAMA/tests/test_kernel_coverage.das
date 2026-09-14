@@ -135,6 +135,11 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
     // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
     "MetalMoeSelect512",
+    // the PLE token-table gather twins: the census's only E-series carrier is the E4B Q8_0, whose
+    // table sits on the q8 plane and takes the q8 stamp. A k4/k5/q40 table needs an E-series file
+    // whose per_layer_token_embd is K-quant or Q4_0, and the zoo stocks none. Their coverage is
+    // ple_gather_kq_gate in test_metal_prefill_kernels.das
+    "MetalPleGatherK4", "MetalPleGatherK5", "MetalPleGatherQ40",
     // the geglu arm of the bound-total MoE activation: the prefill picks it on moe_dense_shexp (the
     // gemma-4 MoE shape) and the zoo's gemma-4 rows are the dense 12B and the E4B PLE model, so the
     // swiglu twin runs on every MoE row here. Their coverage is ew2_totb_gate(geglu = true) in
