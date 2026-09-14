@@ -14,8 +14,9 @@ def main() : int {
     let first = standalone_init_fixture_get_first(ctx)
     let stamp = standalone_init_fixture_get_init_fn_stamp(ctx)
     let shared_total = standalone_init_fixture_get_shared_total(ctx)
-    if (first != 31 || stamp != 3 || shared_total != 6) {
-        print("globals answered first={first} stamp={stamp} shared={shared_total}\n")
+    let dep_stamp = standalone_init_fixture_get_dep_init_stamp(ctx)
+    if (first != 31 || stamp != 3 || shared_total != 6 || dep_stamp != 11) {
+        print("globals answered first={first} stamp={stamp} shared={shared_total} dep={dep_stamp}\n")
         bad++
     }
     var p = standalone_init_fixture_Pair(a = 40, b = 2)

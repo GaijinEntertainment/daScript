@@ -128,9 +128,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   global's initializer temporaries collect under the collector's null key, the one
   `__init_script` declares. `UseTypeMarker` walks the foreign functions too, so an extern
   or handled type reached only from one still links its module.
-- **Cross-module `[init]` is refused at emit time**: only entry-module, AOT-emitted `[init]`
-  functions are called from the ctor; a required module's and `[no_aot]` ones are collected
-  emit errors with the reason.
+- **Every used `[init]` is called from the ctor, whatever module declares it.** The TU holds
+  every used function of every module (below), so a required module's `[init]` has an AOT body
+  like any other and needs no special case; the call order is the simulated context's own, read
+  back through rtti. A `[no_aot]` one stays a collected emit error, because there is no body to
+  call. An engine that registers itself from its modules - dasLLAMA's architecture registry is
+  sixty `[init]` functions spread over its arch files - has no standalone form under any
+  narrower rule.
 - **Every used function must have an AOT body** - a standalone context has no
   interpreter, so a used `noAot` function (the `[no_aot]` annotation, or `NoAotMarker`
   finding a type AOT cannot express) is a collected emit error, never a

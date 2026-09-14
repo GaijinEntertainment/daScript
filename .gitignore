@@ -206,3 +206,7 @@ site/files/profile_results_*.json
 # examples/c_api_library builds its three libraries here, and CMake generates their bindings
 examples/c_api_library/_out/
 examples/c_api_library/*_c.das
+
+# examples/dasLLAMA/library builds its JIT library here, and CMake generates its daslang bindings
+examples/dasLLAMA/library/_out/
+examples/dasLLAMA/library/*_c.das

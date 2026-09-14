@@ -53,6 +53,12 @@ bin/daslang -jit examples/dasLLAMA/transcribe.das -- <ggml-model.bin | decoder.g
 bin/daslang -jit examples/dasLLAMA/dictate.das -- <asr-model.bin>
 ```
 
+**Embed it in a C, C++ or daslang host** — `examples/dasLLAMA/library/` builds the engine as a
+library with a C ABI, through both standalone backends (`daslang -lib` jits it into a shared
+library; `-ctx` emits C++ the host compiles). Neither artifact carries a compiler, and the `-ctx`
+one carries no JIT or interpreter either. Read
+[examples/dasLLAMA/library/README.md](../../examples/dasLLAMA/library/README.md).
+
 ## Supported model families
 
 - **Text LLMs** (GGUF, arch auto-detected): Llama-2 / Llama-3 (incl. TinyLlama, SmolLM2,

@@ -22,6 +22,7 @@ int main ( void ) {
     expect("get_first()", standalone_init_fixture_get_first(ctx), 31);
     expect("get_second()", standalone_init_fixture_get_second(ctx), 2);
     expect("get_init_fn_stamp()", standalone_init_fixture_get_init_fn_stamp(ctx), 3);
+    expect("get_dep_init_stamp()", standalone_init_fixture_get_dep_init_stamp(ctx), 11);
     expect("get_reads_forward()", standalone_init_fixture_get_reads_forward(ctx), 100);
     expect("get_later()", standalone_init_fixture_get_later(ctx), 7);
     expect("get_shared_total()", standalone_init_fixture_get_shared_total(ctx), 6);

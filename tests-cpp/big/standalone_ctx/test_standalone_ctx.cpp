@@ -16,6 +16,7 @@ int main( int, char * [] ) {
     expect("get_first()", ctx.get_first(), 31);
     expect("get_second()", ctx.get_second(), 2);
     expect("get_init_fn_stamp()", ctx.get_init_fn_stamp(), 3);
+    expect("get_dep_init_stamp() - a REQUIRED module's [init] ran too", ctx.get_dep_init_stamp(), 11);
     expect("get_reads_forward()", ctx.get_reads_forward(), 100);
     expect("get_later()", ctx.get_later(), 7);
     ctx_standalone_init_fixture::Pair madePair = ctx.make_pair(3, 4);

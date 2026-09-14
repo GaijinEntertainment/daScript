@@ -43,6 +43,11 @@ def get_init_fn_stamp : int {
 }
 
 [export]
+def get_dep_init_stamp : int {
+    return g_dep_init_stamp
+}
+
+[export]
 def get_reads_forward : int {
     return g_reads_forward
 }

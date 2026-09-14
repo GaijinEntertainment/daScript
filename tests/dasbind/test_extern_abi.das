@@ -14,36 +14,36 @@ require daslib/rtti
 //! declares this file's probe_stack14 again, so compiling it re-applies the extern in the process
 let REAPPLY_FIXTURE = "{get_das_root()}/tests/dasbind/_reapply_fixture.das"
 
-[extern(cdecl, name="dasbind_probe_dbl_at45", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_dbl_at45", library="dasbind_probe")]
 def probe_dbl_at45(a0, a1, a2, a3 : int64; a4, a5 : double) : double { return 0.0lf; }
 
-[extern(cdecl, name="dasbind_probe_dbl_at6", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_dbl_at6", library="dasbind_probe")]
 def probe_dbl_at6(a0, a1, a2, a3, a4, a5 : int64; a6 : double; a7 : int64) : double { return 0.0lf; }
 
-[extern(cdecl, name="dasbind_probe_dbl_at67", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_dbl_at67", library="dasbind_probe")]
 def probe_dbl_at67(a0, a1, a2, a3, a4, a5 : int64; a6, a7 : double) : double { return 0.0lf; }
 
-[extern(cdecl, name="dasbind_probe_regs7", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_regs7", library="dasbind_probe")]
 def probe_regs7(a0 : int8; a1 : int16; a2 : int; a3 : int64; a4 : float; a5 : double; a6 : int) : int64 { return 0l; }
 
-[extern(cdecl, name="dasbind_probe_stack14", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_stack14", library="dasbind_probe")]
 def probe_stack14(a0 : int8; a1 : int16; a2 : int; a3 : int64; a4 : float; a5 : double; a6 : int;
                   a7 : int8; a8 : int8; a9 : int16; a10 : int; a11 : int64; a12 : bool; a13 : int) : int64 { return 0l; }
 
-[extern(cdecl, name="dasbind_probe_stack_narrow", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_stack_narrow", library="dasbind_probe")]
 def probe_stack_narrow(a0, a1, a2, a3, a4, a5, a6, a7 : float; a8, a9, a10, a11, a12, a13, a14, a15 : int64;
                        a16 : int8; a17 : int16; a18 : float; a19 : int) : float { return 0.0; }
 
-[extern(cdecl, name="dasbind_probe_ref_short", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_ref_short", library="dasbind_probe")]
 def probe_ref_short(r0 : float const&; a1 : int64; r2 : int const&) : int64 { return 0l; }
 
-[extern(cdecl, name="dasbind_probe_ref_args", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_ref_args", library="dasbind_probe")]
 def probe_ref_args(r0 : float const&; a1, a2, a3, a4, a5, a6, a7 : int64; r8 : int const&) : int64 { return 0l; }
 
-[extern(cdecl, name="dasbind_probe_ref_result", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_ref_result", library="dasbind_probe")]
 def probe_ref_result(a0, a1, a2, a3, a4, a5, a6 : int64; src : float const&) : float const& { return src; }
 
-[extern(cdecl, name="dasbind_probe_stack_dbl_result", windows_library="dasbind_probe", linux_library="dasbind_probe.so", macos_library="dasbind_probe.dylib")]
+[extern(cdecl, name="dasbind_probe_stack_dbl_result", library="dasbind_probe")]
 def probe_stack_dbl_result(a0 : double; a1, a2, a3, a4, a5, a6, a7, a8 : int64; a9 : int) : double { return 0.0lf; }
 
 [test]

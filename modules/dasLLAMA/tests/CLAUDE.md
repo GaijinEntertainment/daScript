@@ -594,7 +594,9 @@ own entry with a stale mark installed and checks the MoE layer request survives 
 installed tier).
 `test_program_roots.das` - model-free: every dasllama program root (tutorials, examples,
 server tools) declares `options stack = 524288`, and every model-loading root declares its
-prefill intent.
+prefill intent. A root is a file requiring `dasllama/` that exports `main`, or - a library root,
+built by `daslang -lib` / `-ctx` - carries `[export_c]` entry points instead; both owe the same
+two declarations.
 `test_jobque_tripwire.das` - model-free: the engine's first dispatch on a job queue nobody
 configured panics naming `setup_dasllama_jobque()` (a bare queue decodes ~200x slower - the
 fork-context clone per job, a wake per job, workers parking at once), `DASLLAMA_ALLOW_BARE_JOBQUE=1`

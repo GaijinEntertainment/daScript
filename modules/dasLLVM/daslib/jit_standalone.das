@@ -42,8 +42,7 @@ def public write_das_bindings(var exports : array<CExport>; names : CNames;
     if (static_lib) {
         to_log(LOG_WARNING, "LLVM LIB: --jit-lib-bindings names a shared library - a static archive has nothing for dasbind to load\n")
     }
-    let b = DasBindings(linux_path = "{output_path}.so", macos_path = "{output_path}.dylib",
-                        windows_path = "{output_path}.dll")
+    let b = DasBindings(library = output_path)
     let cmd = "daslang -lib {input_path} -output {output_path}"
     if (!emit_das_bindings(exports, names, b, cmd, bindings_path)) {
         to_log(LOG_ERROR, "LLVM LIB: the library is written but its daslang bindings are not - {bindings_path}\n")

@@ -1,5 +1,4 @@
 options gen2
-options no_aot = true  // macro module — compile-time only, never AOT-compiled (like jobque_boost)
 options _comment_hygiene = true
 options _dasllama_internal = true
 

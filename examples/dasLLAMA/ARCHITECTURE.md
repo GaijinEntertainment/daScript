@@ -26,6 +26,10 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
 - `wasm/dlim_config/` - a wasm-only program: prints the running build's DlimConfiguration JSON.
   `wasm/mint_models.py` - the deploy's staging step for a browser example's model set.
   `wasm/run_node.js` - runs the wasm64 engine host under node.
+- `library/` - the engine behind a C ABI, for a host that is not daslang: `dasllama_lib.das` is
+  the library (flat `[export_c]` entry points over the facade, three surfaces - text completion,
+  speech to text and speech synthesis), and `main.c`, `main.cpp` and `main.das` are the three hosts that drive it. Its
+  `README.md` is the page a reader starts from.
 - `chat.das`, `run.das`, `speak.das`, `speak_server.das`, `transcribe.das`, `dictate.das`,
   `audio_chat.das` - desktop-only programs over the facade; nothing here ships them to a page.
 
@@ -171,6 +175,27 @@ times real time - seconds of audio per second of generation, the inverse of the 
 real-time factor - the same figure on any box. The output waveform keeps a fixed time scale
 (thirty seconds at least) so the playhead moves at one speed while chunks land. The chords are Ctrl (or Command) with Enter to say and with R
 to record and stop.
+
+### 3.8 The library's two backends
+
+`library/dasllama_lib.das` is built by both standalone backends from the one source, and the
+difference decides what a host can do with it. `daslang -lib` jits it into a native shared
+library with a C ABI; `-ctx` emits a C++ header plus one translation unit the host compiles. The
+C surface is identical - one describer writes both headers - while the C++ surface exists only on
+the `-ctx` side, because a jitted library has no C++ source to put a real class on top of.
+
+Both emissions leave dasVulkan out, and the `-ctx` one leaves dasLLVM out as well. The GPU tier
+would pull tens of megabytes of kernel C++ into a translation unit that is already about 33 MB,
+and the tune framework is a macro module with no AOT form: a standalone context links no
+interpreter, so every function it reaches must have a C++ body, and a module marked no-AOT as a
+whole has none.
+
+A library is entered and left once per call, which is what separates this program from the
+scripts beside it. `with_job_que()` is a scope no C caller can hold open, so the library opens
+the queue persistently (`create_job_que`) and destroys only a queue it made itself, and only once
+none of its three surfaces holds a model; and the engine's `stats(session)` counters are filled
+by the one-call `generate`, which a caller pulling token by token never runs, so the library times
+its own calls instead.
 
 ## 4. Exception ledger
 
