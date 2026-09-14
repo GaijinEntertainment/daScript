@@ -67,6 +67,14 @@ enum class JitMode {
     Executable,
     Library,
 };
+
+static bool gc_thread_root_is_settled ( TextWriter & tout, const char * what, const char * when ) {
+    auto & root = gc_root::gc_get_thread_root();
+    if ( root.gc_count == 0 ) return true;
+    tout << what << ": " << uint64_t(root.gc_count) << " gc_node(s) " << when << "\n";
+    root.gc_report();
+    return false;
+}
 static JitMode jitEnabled = JitMode::None; // Disabled by default.
 static bool jitNoCache = false; // -jit-no-cache: bypass DLL-cache path, run in-memory.
 static bool jitStack = false; // -jit-stack: retain every generated call in the logical das stack.
@@ -610,12 +618,8 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
             startupSimulateUsec += get_time_usec(simulate0);
             finishModuleCache();
             // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
-            {
-                auto & root = gc_root::gc_get_thread_root();
-                if (root.gc_count != 0) {
-                    tout << "GC COMPILE LEAK: " << uint64_t(root.gc_count) << " gc_node(s) after compile\n";
-                    root.gc_report();
-                }
+            if ( !gc_thread_root_is_settled(tout, "GC COMPILE LEAK", "after compile") ) {
+                exitCode = 1;
             }
             if ( !pctx ) {
                 exitCode = 1;
@@ -672,12 +676,8 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                         }
                     }
                     // Check for app leaks (TypeDecl nodes created during execution)
-                    {
-                        auto & root = gc_root::gc_get_thread_root();
-                        if (root.gc_count != 0) {
-                            tout << "GC APP LEAK: " << uint64_t(root.gc_count) << " gc_node(s) after execution\n";
-                            root.gc_report();
-                        }
+                    if ( !gc_thread_root_is_settled(tout, "GC APP LEAK", "after execution") ) {
+                        exitCode = 1;
                     }
                 }
             }

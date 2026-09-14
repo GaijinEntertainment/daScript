@@ -1277,6 +1277,11 @@ DAS_API void jit_initialize_modules_done ( int32_t guard ) {
         if ( !das::Module::InitializeDependencies(notInitialized) ) {
             das::LOG(das::LogLevel::error) << "LLVM LIB: unable to initialize modules:" << notInitialized << "\n";
         }
+        auto & threadRoot = das::gc_root::gc_get_thread_root();
+        das::Module::foreach([&](das::Module * m) {
+            m->gc_collect(&threadRoot);
+            return true;
+        });
         return;
     }
     das::Module::Initialize();
