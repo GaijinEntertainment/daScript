@@ -282,3 +282,8 @@ twins' rounding legitimately flips tokens.
 
 **An ASR transcript cell that cannot assert the equality its comparison calls for converts to
 a forced-feed logits compare within a tolerance bar - never to a looser text compare.**
+
+**A test helper that passes buffers, hazards, descriptor sets or push constants to a Vulkan
+class builder leaves those parameters untyped - a generic body a build without the dasVulkan
+module never infers.** Naming the Vulkan type instead makes the file fail to compile wherever
+that module is absent.

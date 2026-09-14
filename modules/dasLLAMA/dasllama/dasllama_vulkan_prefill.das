@@ -1203,16 +1203,16 @@ def private pf_setup {
         && (!fa128s || (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()))
         && (!narrow_hs || (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
         && (!wide_hs || (kv16 ? ensure_da_attn_bw_f16_cls() : ensure_da_attn_bw_cls()))
-        && (!key_exists(fa_hs, 64l) || fa_stamps_ensure(false, 64l, false, false, any_f16_feed))
-        && (!key_exists(fa_hs, 128l) || fa_stamps_ensure(false, 128l, false, false, any_f16_feed))
-        && (!key_exists(fa_hs, 256l) || fa_stamps_ensure(false, 256l, g_rd.q_gated, false, any_f16_feed))
-        && (!any_cap || fa_stamps_ensure(false, 256l, false, true, any_f16_feed))
-        && (!key_exists(fa_hs, 512l) || fa_stamps_ensure(false, 512l, false, false, any_f16_feed))
-        && (!key_exists(fakhr_hs, 64l) || fa_stamps_ensure(true, 64l, false, false, any_f16_feed))
-        && (!key_exists(fakhr_hs, 128l) || fa_stamps_ensure(true, 128l, false, false, any_f16_feed))
-        && (!key_exists(fakhr_hs, 256l) || fa_stamps_ensure(true, 256l, false, false, any_f16_feed))
-        && (!any_khr_cap || fa_stamps_ensure(true, 256l, false, true, any_f16_feed))
-        && (!key_exists(fakhr_hs, 512l) || fa_stamps_ensure(true, 512l, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 64l) || fa_stamp_pair_ensure(false, 64l, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 128l) || fa_stamp_pair_ensure(false, 128l, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 256l) || fa_stamp_pair_ensure(false, 256l, g_rd.q_gated, false, any_f16_feed))
+        && (!any_cap || fa_stamp_pair_ensure(false, 256l, false, true, any_f16_feed))
+        && (!key_exists(fa_hs, 512l) || fa_stamp_pair_ensure(false, 512l, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 64l) || fa_stamp_pair_ensure(true, 64l, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 128l) || fa_stamp_pair_ensure(true, 128l, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 256l) || fa_stamp_pair_ensure(true, 256l, false, false, any_f16_feed))
+        && (!any_khr_cap || fa_stamp_pair_ensure(true, 256l, false, true, any_f16_feed))
+        && (!key_exists(fakhr_hs, 512l) || fa_stamp_pair_ensure(true, 512l, false, false, any_f16_feed))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
@@ -1722,7 +1722,6 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
                 if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
-                    // the flash tile reads the f16 mirrors directly
                     let khr = !g_rd.layers[l].pf_fa
                     var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,

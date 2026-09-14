@@ -2825,7 +2825,7 @@ class template FaT {
 
     [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {   // nolint:STYLE037,STYLE038 — the two arms of one flash pass, each the verbatim shipped kernel; a method call would emit a SPIR-V function the emitter never inlines
-        static_if (KHR) {   // the KHR arm: the gated shared-memory tiles exist on these instantiations alone
+        static_if (KHR) {
             let qtiles = (pa.rows + 15u) / 16u
             let h = gl_WorkGroupID.x / qtiles
             let q0 = (gl_WorkGroupID.x % qtiles) * 16u
@@ -2945,7 +2945,7 @@ class template FaT {
                     }
                 }
             }
-        } else {   // the cm2 arm
+        } else {
             let qtiles = (pa.rows + 63u) / 64u
             let h = gl_WorkGroupID.x / qtiles
             let qt = gl_WorkGroupID.x % qtiles
@@ -3177,7 +3177,6 @@ class FaCm2H512F16 : FaH512T {
     override OUT16 = true
 }
 
-// the KHR arm's leaves: the same head-size templates at KHR = true, the ten fa_khr_* stamps
 [vk_dispatch(name = "fa_khr_h64_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH64 : FaH64T {
     override KHR = true
@@ -3245,11 +3244,10 @@ class FaKhrH512F16 : FaH512T {
     override OUT16 = true
 }
 
-//! the flash tile's stamp pick, one ladder a stage: the arm (`khr`), the head size, the h256 gated stamp (the cm2 arm alone) or softcap stamp, the f16-out twin
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def fa_stamp_wgs(khr : bool; nheads, rows : int64) : int64 {
-    let rpw = khr ? 16l : 64l   //! query rows a workgroup: the KHR arm's sixteen, the cm2 arm's sixty-four
-    return nheads * ((rows + rpw - 1l) / rpw)
+    let qrows_per_wg = khr ? 16l : 64l
+    return nheads * ((rows + qrows_per_wg - 1l) / qrows_per_wg)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
@@ -3264,8 +3262,7 @@ def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, f16 : bool) : bool {   /
     return khr ? (f16 ? ensure_fa_khr_h256_f16_cls() : ensure_fa_khr_h256_cls()) : (f16 ? ensure_fa_cm2_h256_f16_cls() : ensure_fa_cm2_h256_cls())
 }
 
-//! the f32 stamp, and its f16-out twin where a window lands attention in f16
-def fa_stamps_ensure(khr : bool; hs : int64; gated, cap, with_f16 : bool) : bool
+def fa_stamp_pair_ensure(khr : bool; hs : int64; gated, cap, with_f16 : bool) : bool
     => fa_stamp_ensure(khr, hs, gated, cap, false) && (!with_f16 || fa_stamp_ensure(khr, hs, gated, cap, true))
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
@@ -8695,7 +8692,6 @@ class F16GemmKhr {
     }
 }
 
-//! the small f16 GEMM's arm pick: the cm2 128 x 128 workgroup tile in mode 4, the KHR 64 x 64 fragment tile off it; the KHR stamp reads no k split, so the split-k callers stay on the cm2 arm
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def f16_gemm_wgs(khr : bool; rows, d : int64) : int64 {
     let tile = khr ? 64l : 128l

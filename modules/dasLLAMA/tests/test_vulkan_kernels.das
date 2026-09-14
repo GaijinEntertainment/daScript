@@ -30,7 +30,6 @@ let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows 
 let private TILE_CELL_K = 768   //! every per-format tile cell's K: three unrolled superblock passes on both depths (a K-quant width is a multiple of 256, so no K-quant stamp ever takes the k loop's tail; the q8 cm2 cells' Q8_CELL_K takes the edge path)
 let private Q8_CELL_K = 544     //! the q8 cm2 cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path
 
-//! a format cell's arms: the cm2 l, m and s tiles, the KHR tile and the expert schedule's e column, each through the prefill's ladders (the ensure that admits it, then set and enc)
 let private ARM_CM2_L = 0
 let private ARM_CM2_M = 1
 let private ARM_CM2_S = 2
@@ -42,11 +41,9 @@ def private cell_arm_name(arm : int) : string {
     return arm == ARM_CM2_L ? "l" : (arm == ARM_CM2_M ? "m" : (arm == ARM_CM2_S ? "s" : (arm == ARM_KHR ? "khr" : "e")))
 }
 
-//! the rows a workgroup of the arm's tile: the l tile's 256, the s tile's 32, 128 for the m tile, the e column and the KHR tile
-def private cell_arm_rows(arm : int) : int => arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
+def private cell_arm_rows_per_wg(arm : int) : int => arm == ARM_CM2_L ? 256 : (arm == ARM_CM2_S ? 32 : 128)
 
-//! the ladder arms; generic on purpose - a build without the vulkan module must never infer these bodies
-def private cell_arm_tc(arm) => arm == ARM_CM2_E ? CM2_TC_E : int64(cell_arm_rows(arm))
+def private cell_arm_tc(arm) => arm == ARM_CM2_E ? CM2_TC_E : int64(cell_arm_rows_per_wg(arm))
 
 def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
     if (arm == ARM_KHR) {
@@ -65,8 +62,7 @@ def private cell_arm_enc(arm, fmt : int; raw; var h; var s; var pc; groups : int
     }
 }
 
-//! the q8 fmt-0 fixture the five q8 tile cells share: two regions of 300 and 260 rows over two weight planes of 160 rows (one full 128-tile
-//! and a 32 edge), K = n, the arm's rows a workgroup setting the schedule, two sentinel map words past it, the planes uploaded
+//! the five q8 tile cells' shared fixture: two regions over weight planes of one full 128-tile and a 32 edge, two sentinel map words past the live schedule
 struct Q8Fmt0Fixture {
     n, d, cnt0, cnt1, rows, nbb, wtiles, wgs0, wgs, tail : int
     wqh, wsh, xfh, sched : array<uint>
@@ -87,13 +83,13 @@ def private q8_fmt0_fixture(n, tile_rows : int; wq_seed, ws_seed, xf_mul, xf_add
     f.wsh |> resize((totblk + 1) / 2)
     f.xfh |> resize((f.rows + TILE_SLACK_ROWS) * n / 2)
     for (i in range(totblk * 8)) {
-        f.wqh[i] = hash_word(uint(i) + wq_seed)     // arbitrary bytes - s8 quants
+        f.wqh[i] = hash_word(uint(i) + wq_seed)
     }
     for (i in range((totblk + 1) / 2)) {
-        f.wsh[i] = ws_word(uint(i) + ws_seed)       // f16 scale pairs, finite halves
+        f.wsh[i] = ws_word(uint(i) + ws_seed)
     }
     for (i in range((f.rows + TILE_SLACK_ROWS) * n / 2)) {
-        f.xfh[i] = ws_word(uint(i) * xf_mul + xf_add)   // f16 activation pairs
+        f.xfh[i] = ws_word(uint(i) * xf_mul + xf_add)
     }
     f.sched |> resize(2 * 4 + f.wgs + f.tail)
     f.sched[2] = uint(f.cnt0)
@@ -128,7 +124,6 @@ def private q8_fmt0_fixture(n, tile_rows : int; wq_seed, ws_seed, xf_mul, xf_add
     return <- f
 }
 
-//! one q8 arm over the fixture: the y plane under the NaN sentinel, the tile over every map word including the sentinel tail, the plane read back
 def private q8_fmt0_dispatch(f : Q8Fmt0Fixture; arm : int) : array<float> {
     var y_cls : array<float>
     y_cls |> resize(f.rows * f.d)
@@ -154,7 +149,6 @@ def private q8_fmt0_dispatch(f : Q8Fmt0Fixture; arm : int) : array<float> {
     return <- y_cls
 }
 
-//! the oracle compare (a relative bar and a peak-scaled floor) and its control: one element pushed past both bars must red; the oracle comes back for a cell's further arms
 def private q8_fmt0_check(t : T?; tag : string; f : Q8Fmt0Fixture; y_cls : array<float>) : array<float> {
     var y_ref : array<float>
     y_ref |> resize(f.rows * f.d)
@@ -171,9 +165,7 @@ def private q8_fmt0_check(t : T?; tag : string; f : Q8Fmt0Fixture; y_cls : array
     return <- y_ref
 }
 
-//! a per-format tile cell's arms over one fixture: every arm the device serves - the schedule at the arm's rows a workgroup with two sentinel
-//! map words past it (the dispatch runs over them as the device-written schedules' upper bound does, and a tile that reads one returns
-//! before its first store), the y plane under the NaN sentinel, the format's oracle, the bars and their poison control
+//! every arm the device serves over one fixture, dispatched two sentinel map words past the live schedule - the device-written upper-bound shape, where a tile must return before its first store
 def private tile_cell_arms(t : T?; tag : string; fmt : int; n, d, cnt0, cnt1, wblk : int; wqh, wsuh, xfh : array<uint>; wq_bytes : int64;
         oracle : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) : void>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -203,7 +195,7 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; n, d, cnt0, cnt1, wb
                 continue
             }
             let tname = cell_arm_name(arm)
-            let ttile = cell_arm_rows(arm)
+            let ttile = cell_arm_rows_per_wg(arm)
             let wtiles = (d + 127) / 128
             let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
             let wgs = wgs0 + ((cnt1 + ttile - 1) / ttile) * wtiles
@@ -484,7 +476,7 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = f
                 var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
                 var sd = f16_gemm_set(khr, fixed_array(wd, xd, yd), fixed_array(w_bytes, x_bytes, y_bytes), fixed_array(1u, 2u, 4u))
                 f16_gemm_enc(khr, raw, h, sd, pc, int64(rows), int64(d))
-                if (!khr) {   //! the split arm - eight k chunks into the partial planes, then the reduce - is the cm2 stamp's alone: the KHR stamp reads no k split
+                if (!khr) {   //! the split arm is the cm2 stamp's alone: the KHR stamp reads no k split
                     var sp = set_f16_gemm_cm2_cls(fixed_array(wd, xd, pd), fixed_array(w_bytes, x_bytes, part_bytes), fixed_array(1u, 2u, 8u))
                     var sr = set_splitk_reduce_cls(fixed_array(pd, yd2), fixed_array(part_bytes, y_bytes), fixed_array(8u, 16u))
                     var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(n / nsplit))
@@ -4194,16 +4186,13 @@ def test_vkd_at_attn(t0 : T?) {
 //! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
 let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes
 
-//! one flash family's set: the cm2 tile's or the KHR tile's, the same four bindings (q, K shadow, V shadow, out)
-//! the cells' dispatch of one ungated flash stamp through the prefill's ladders, the grid from the arm's rows a workgroup
 def private enc_fa_tile(khr : bool; hs : int; cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaCm2Args; nheads, rows : int)
     => fa_stamp_enc(khr, int64(hs), false, cap, f16, raw, h, s, pc, fa_stamp_wgs(khr, int64(nheads), int64(rows)))
 
-//! every plain flash stamp of one arm: the four head sizes and their f16-out twins
 def private fa_arm_ensure(khr : bool) : bool {
     var ok = true
     for (hs in fixed_array(64l, 128l, 256l, 512l)) {
-        ok = ok && fa_stamps_ensure(khr, hs, false, false, true)
+        ok = ok && fa_stamp_pair_ensure(khr, hs, false, false, true)
     }
     return ok
 }
