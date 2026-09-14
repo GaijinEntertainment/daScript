@@ -243,6 +243,8 @@ same change.** Those predicates are what declines an unserved format, so an unli
 decodes under the layout of the ladder's last arm.
 
 **A diff that gives the Metal PLE token-table gather an arm for a weight format adds that
-format to both `ple_gather_pso_of` and `pf_enc_ple_gather_fmt` (`dasllama/dasllama_metal_prefill.das`),
-in the same change.** The first decides which models the pre-step gate admits; a format in it
-alone reaches the second's ladder, falls off every arm, and the device gather writes nothing.
+format to every per-format site of the pre-step - the gate's alignment arm
+(`metal_ple_pre_gpu_gate`), the PSO pick (`ple_gather_pso_of`) and the encode ladder
+(`pf_enc_ple_gather_fmt`), all in `dasllama/dasllama_metal_prefill.das` - in the same change.**
+A format one site admits and another lacks is dispatched under a layout or a kernel that is
+not its own.

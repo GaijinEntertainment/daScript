@@ -2210,10 +2210,10 @@ def private ple_gather_kq_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npo
         if (fmt != 40) {
             metal_set_buffer(enc, bks, soff, 1)   // the uint4 view of the same 16B block - `@template_gate = "!Q40"` drops it on q40
         }
-        metal_set_buffer(enc, bkq, qoff, 2)
-        metal_set_buffer(enc, btok, 0ul, 3)
-        metal_set_buffer(enc, by, 0ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        metal_set_buffer(enc, btok, 0ul, 2)
+        metal_set_buffer(enc, by, 0ul, 3)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+        metal_set_buffer(enc, bkq, qoff, 6)
         metal_dispatch_threadgroups(enc, uint3(uint(nlayers), uint(npos), 1u), uint3(uint(ple), 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")

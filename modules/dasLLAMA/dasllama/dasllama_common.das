@@ -925,6 +925,10 @@ struct Model {
     // scale strips, k6s the GPU split form. CPU inference on a blob-only model PANICS.
     mblob : array<uint8>
     metal_blob : bool = false
+    //! the kq scale planes already put in their device form, one bit per BLOB_SCALE_PLANES entry:
+    //! those transforms rewrite a plane IN PLACE, so a second walk over the same carrier shreds it.
+    //! Build-time bookkeeping about this process's carrier, never about the image - so never serialized.
+    blob_scaled : uint = 0u
     //! Baked dev-W f16 panels (metal flavor): bound zero-copy by the prefill dev-W route; empty = runtime dequant
     devwf16 : array<float16>
     devwf16_fmt : array<int>

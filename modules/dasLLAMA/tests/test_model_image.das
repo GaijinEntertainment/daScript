@@ -2603,6 +2603,53 @@ def test_k6_scale_split_sizing(t : T?) {
     }
 }
 
+// Model-free: the streamed save transforms each kq scale plane in place as its turn comes, and a
+// writer that dies mid-walk hands the carrier - planes already converted - to the in-memory
+// streamer, which walks it again. The per-carrier memo is what makes that second walk correct.
+[test]
+def test_blob_stream_scale_plane_once(t : T?) {
+    t |> run("the streamed blob build converts a named scale plane at most once per carrier") @(tt : T?) {
+        if (!arm_on(tt, "mechanics")) {
+            return
+        }
+        let nsb = 3l
+        var src <- split_scale_src(K6_SSB, nsb)
+        var once : array<uint8>
+        unsafe {
+            kq_split_scale_plane(KqFmt.k6, addr<uint8 const?>(src[0]), nsb, once)
+        }
+        var m = Model()
+        m.k6s <- split_scale_src(K6_SSB, nsb)
+        tt |> success(blob_stream_scale_plane(m, "k6s"), "the first walk converts the plane")
+        tt |> success(blob_stream_scale_plane(m, "k6s"), "the second walk answers for a plane already converted")
+        tt |> equal(long_length(m.k6s), long_length(once), "the plane keeps its device-form size")
+        var moved = 0l
+        for (i in range64(min(long_length(m.k6s), long_length(once)))) {
+            if (m.k6s[i] != once[i]) {
+                moved++
+            }
+        }
+        tt |> equal(moved, 0l, "and every byte is the once-transformed form")
+        // the must-red control: the split is NOT a no-op on its own output, so the equality above
+        // is the memo's doing and not an accident of the transform
+        var twice : array<uint8>
+        unsafe {
+            kq_split_scale_plane(KqFmt.k6, addr<uint8 const?>(once[0]), long_length(once) / K6_SSB, twice)
+        }
+        var differs = 0l
+        for (i in range64(min(long_length(twice), long_length(once)))) {
+            if (twice[i] != once[i]) {
+                differs++
+            }
+        }
+        tt |> success(differs > 0l, "a hand-doubled transform shreds the plane - the memo is load-bearing")
+        delete src
+        delete once
+        delete twice
+        delete m
+    }
+}
+
 //! one scale plane's source superblocks, every byte naming its own (superblock, offset) pair
 def private split_scale_src(ssb, nsb : int64) : array<uint8> {
     var @exact_size s : array<uint8>
@@ -2687,12 +2734,20 @@ def test_devw_bake_tables(t : T?) {
         tt |> equal(long_length(m.devwf16_off), 2l, "nor the offset table")
         tt |> equal(long_length(m.devwf16_n), 2l, "nor the length table")
         // an expert stack's slice (the per-expert fused gate/up split, or a whole down stack) has no
-        // dev-W reader: the routed block reads the quantized planes, so the bake leaves it out
+        // dev-W reader: the routed block reads the quantized planes, so the bake leaves it out. The
+        // routed block's SHARED expert reaches dev-W through enc_gemm_mm like any dense site, and
+        // the exclusion's "_exps.weight" suffix is what keeps it in
         var routed <- [ FillJob(name = "blk.0.attn_q.weight", woff = 64l, n = 256l, src_off = 0l, fmt = KqFmt.q8),
+                        FillJob(name = "blk.0.ffn_gate_shexp.weight", woff = 512l, n = 128l, src_off = 0l, fmt = KqFmt.q8),
                         FillJob(name = "blk.0.ffn_gate_up_exps.weight", woff = 1024l, n = 256l, src_off = 0l, fmt = KqFmt.q8),
                         FillJob(name = "blk.0.ffn_down_exps.weight", woff = 2048l, n = 512l, src_off = 0l, fmt = KqFmt.k4) ]
-        tt |> equal(devw_bake_tables(m, routed), 256l * 2l, "the expert slices bake nothing - the dense site alone")
-        tt |> equal(long_length(m.devwf16_key), 1l, "one site in the key table")
+        tt |> equal(devw_bake_tables(m, routed), (256l + 128l) * 2l, "the expert slices bake nothing - the dense site and the shared expert do")
+        tt |> equal(long_length(m.devwf16_key), 2l, "two sites in the key table")
+        // and the control that the suffix is doing the work: mis-spell it and the same row bakes
+        var misspelt <- [ FillJob(name = "blk.0.ffn_gate_up_exps.weights", woff = 1024l, n = 256l, src_off = 0l, fmt = KqFmt.q8) ]
+        tt |> equal(devw_bake_tables(m, misspelt), 256l * 2l, "a mis-spelt suffix bakes - the refusal reads the suffix, not the word 'exps'")
+        tt |> equal(long_length(m.devwf16_key), 1l, "the mis-spelt row is the one site")
+        delete misspelt
         delete routed
         delete jobs
         delete m

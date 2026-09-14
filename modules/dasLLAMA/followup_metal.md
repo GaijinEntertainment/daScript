@@ -323,7 +323,7 @@ Before the mechanisms the same thirteen read pp 0.93-1.02 and tg 0.92-1.05 (IQ2_
 gate, every mechanism landed; two rows sit under the 0.98 bar and are ledgered (sec.10 and
 sec.8), the sweep continued past them:
 
-| file (M4 Pro) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
+| file (M4 Pro; board row = `performance/records/m4.json`) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
 |---|---|---|---|---|---|---|---|
 | Qwen2.5-0.5B-Instruct-Q8_0 | 7798 | 7923 | 1.02 | 296.6 | 301.0 | 1.02 | 40/40 |
 | Qwen3.5-0.8B-Q4_K_M | 4313 | 5066 | 1.17 | 201.9 | 270.5 | 1.34 | 40/40 |
@@ -422,14 +422,17 @@ mechanisms landed on the way:
   at load, every slice passed the bake's format-and-size predicate, and a 26B image carried 32 GB of
   panels the routed block never reads (47 GB, an eight-minute bake). The bake refuses expert
   slices (IMAGE_VERSION 38): the same image is 18 GB, its dev-W plane 3.1 GB over 205 dense sites,
-  baked in under a second.
+  baked in under a second. Both readings are the metal-flavor mint of
+  `gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf` as the rig's cell logs it (`performance/gen_bench_records.das
+  --legs metal --catalog all --jit`, the `dasLLAMA image:` lines): the 47 GB / 493 s mint on the
+  M5 Max before the change, the 18 GB / 0.8 s mint on the M4 Pro after it.
 - **The routed block serves q40 expert planes.** A Q4_0 26B declined `graph` on both boxes and ran
   the whole model on the CPU rails, though the dense q40 kernels had shipped: the routed ladders
   carried no q40 arm. q40 joins the split-format expert twins off the iq4xs template
   (`MetalMoeMulMmQ40T/TH/TH128/THR`) with its own expert GEMV (`MetalMoeGemvQ40`); the M5 row below
   reads 1.05 and 1.11.
 
-| file (M5 Max) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
+| file (M5 Max; a board row is a file `performance/records/m5.json` covers, its cell an older commit's) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
 |---|---|---|---|---|---|---|---|
 | gemma-3-1b-it-Q8_0 | 17866 | 24256 | 1.36 | 288.4 | 327.3 | 1.13 | 40/40 |
 | gemma-2-2b-it-Q4_K_M | 8578 | 11378 | 1.33 | 211.7 | 228.4 | 1.08 | 40/40 |
@@ -437,21 +440,21 @@ mechanisms landed on the way:
 | gemma-4-E2B-it-Q4_0 | 7629 | 8452 | 1.11 | 177.4 | 215.0 | 1.21 | 40/40 |
 | gemma-4-E2B-it-Q4_K_M | 7209 | 8516 | 1.18 | 175.7 | 219.1 | 1.25 | 40/40 |
 | gemma-3-4b-it-Q8_0 | 5923 | 7103 | 1.20 | 107.9 | 114.5 | 1.06 | 40/40 |
-| gemma-4-E2B-it-Q8_0 | 7545 | 9100 | 1.21 | 137.5 | 160.5 | 1.17 | 40/40 |
-| gemma-4-E4B-it-Q8_0 | 4411 | 5330 | 1.21 | 81.7 | 90.4 | 1.11 | 40/40 |
+| gemma-4-E2B-it-Q8_0 (board row) | 7545 | 9100 | 1.21 | 137.5 | 160.5 | 1.17 | 40/40 |
+| gemma-4-E4B-it-Q8_0 (board row) | 4411 | 5330 | 1.21 | 81.7 | 90.4 | 1.11 | 40/40 |
 | gemma-3-12b-it-Q4_K_M | 1762 | 2163 | 1.23 | 62.2 | 65.2 | 1.05 | 40/40 |
-| gemma-4-12B-it-Q4_K_M | 1664 | 2086 | 1.25 | 59.4 | 64.0 | 1.08 | 40/40 |
+| gemma-4-12B-it-Q4_K_M (board row) | 1664 | 2086 | 1.25 | 59.4 | 64.0 | 1.08 | 40/40 |
 | gemma-4-12b-it-Q5_K_M | 1635 | 2117 | 1.30 | 53.1 | 51.0 | 0.96 | 31/40 (a) |
 | gemma-4-12b-it-Q6_K | 1690 | 2072 | 1.23 | 48.2 | 50.3 | 1.04 | 40/40 |
 | gemma-4-12B-it-Q8_0 | 1763 | 2136 | 1.21 | 39.9 | 41.0 | 1.03 | 40/40 |
 | gemma-4-26B-A4B-it-UD-IQ3_XXS | 3461 | 4009 | 1.16 | 108.7 | 129.4 | 1.19 | 40/40 |
 | gemma-4-26B-A4B-it-UD-IQ4_XS | 3429 | 3856 | 1.12 | 99.4 | 110.8 | 1.12 | 40/40 |
-| gemma-4-26B-A4B-it-Q4_K_M | 3467 | 3943 | 1.14 | 99.5 | 118.8 | 1.19 | 40/40 |
+| gemma-4-26B-A4B-it-Q4_K_M (board row) | 3467 | 3943 | 1.14 | 99.5 | 118.8 | 1.19 | 40/40 |
 | gemma-4-26B-A4B-it-Q8_0 | 3344 | 3767 | 1.13 | 91.5 | 106.4 | 1.16 | 40/40 |
 | gemma-4-26B-A4B-it-Q4_0 | 3796 | 3979 | 1.05 | 120.1 | 132.7 | 1.11 | 40/40 (b) |
 | gemma-4-26B_q4_0-it (QAT) | - | - | - | - | - | - | CPU pregate red (c) |
 
-| file (M4 Pro) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
+| file (M4 Pro; board row = `performance/records/m4.json`) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
 |---|---|---|---|---|---|---|---|
 | gemma-3-1b-it-Q8_0 | 4248 | 4425 | 1.04 | 171.5 | 182.0 | 1.06 | 40/40 |
 | gemma-2-2b-it-Q4_K_M | 1521 | 1691 | 1.11 | 114.9 | 118.8 | 1.03 | 40/40 |
@@ -459,15 +462,15 @@ mechanisms landed on the way:
 | gemma-4-E2B-it-Q4_0 | 1572 | 1584 | 1.01 | 108.4 | 121.6 | 1.12 | 40/40 |
 | gemma-4-E2B-it-Q4_K_M | 1494 | 1593 | 1.07 | 106.5 | 129.6 | 1.22 | 40/40 |
 | gemma-3-4b-it-Q8_0 | 982 | 983 | 1.00 | 54.7 | 55.5 | 1.01 | 40/40 |
-| gemma-4-E2B-it-Q8_0 | 1558 | 1541 | 0.99 | 78.6 | 86.3 | 1.10 | 40/40 |
-| gemma-4-E4B-it-Q8_0 | 786 | 772 | 0.98 | 42.3 | 45.7 | 1.08 | 40/40 |
-| gemma-4-12B-it-Q4_K_M | 276 | 290 | 1.05 | 29.4 | 30.7 | 1.04 | 40/40 |
+| gemma-4-E2B-it-Q8_0 (board row) | 1558 | 1541 | 0.99 | 78.6 | 86.3 | 1.10 | 40/40 |
+| gemma-4-E4B-it-Q8_0 (board row) | 786 | 772 | 0.98 | 42.3 | 45.7 | 1.08 | 40/40 |
+| gemma-4-12B-it-Q4_K_M (board row) | 276 | 290 | 1.05 | 29.4 | 30.7 | 1.04 | 40/40 |
 | gemma-4-12b-it-Q5_K_M | 263 | 297 | 1.13 | 21.2 | 21.6 | 1.02 | 40/40 |
 | gemma-4-12b-it-Q6_K | 279 | 297 | 1.07 | 22.4 | 23.8 | 1.06 | 40/40 |
 | gemma-4-12B-it-Q8_0 | 298 | 297 | 1.00 | 18.8 | 19.2 | 1.02 | 40/40 |
 | gemma-4-26B-A4B-it-UD-IQ3_XXS | 729 | 797 | 1.09 | 59.5 | 66.8 | 1.12 | 40/40 |
 | gemma-4-26B-A4B-it-UD-IQ4_XS | 741 | 778 | 1.05 | 53.8 | 54.8 | 1.02 | 40/40 |
-| gemma-4-26B-A4B-it-Q4_K_M | 731 | 818 | 1.12 | 53.9 | 60.4 | 1.12 | 40/40 |
+| gemma-4-26B-A4B-it-Q4_K_M (board row) | 731 | 818 | 1.12 | 53.9 | 60.4 | 1.12 | 40/40 |
 | gemma-4-26B-A4B-it-Q4_0 | 758 | 790 | 1.04 | 68.9 | 70.3 | 1.02 | 40/40 (b) |
 | gemma-4-26B_q4_0-it (QAT) | - | - | - | - | - | - | CPU pregate red (c) |
 
@@ -546,4 +549,37 @@ gather plus the model_proj GEMV (E2B 1536x8960 bf16, E4B 27 MB) and its norm - b
 wait and the next commit, while the Vulkan token command gathers the row and projects on device
 (`register_ple_gpu_decode_gate`). Unquirked: a decode-side twin of the prefill's `MetalPleGatherQ8`
 + `pf_enc_bf16_mm` + `MetalPleFinish` chain at one position, registered as the Metal decode gate.
-The bar is the E-series tg128 on both boxes, the served-pipeline fixture green.
+The bar is our own E-series tg128 rows of sec.7.2 not regressing on either box (no reference-build
+run: the ratio to llama.cpp is sec.7.2's, re-taken through its rig), the served-pipeline fixture green.
+
+## 14. The MoE expert mul_mm f32-X (`t`) form has no model-less cell in any format
+
+`moe_split_twin` in `tests/test_metal_gemm_kernels.das` stamps `th`, `th128` and `thr` only, so
+`moe_mulmm_split_gate` never dispatches the `t` stamp of any split format. That stamp is the arm
+`pf_enc_moe_mm` takes when the prefill minted no half panel, which no stocked routed model on
+either box reaches - leaving `MetalMoeMulMm<Fmt>T` covered by nothing. Unquirked: a
+`MoeSplitForm.t` arm in `moe_split_twin` over every split format, dispatched by
+`moe_mulmm_split_gate` off the f32 X panel against the same per-expert oracle its half-X sibling
+uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
+`tests/test_kernel_coverage.das` naming that arm as their coverage, the no-coverage note gone.
+
+## 15. Two Metal review gates the M4 pass found the shape of
+
+(a) A `REVIEW.das` check that reads every per-format dispatch ladder in
+`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (eleven today -
+`enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`,
+`pf_moe_split_pso`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_moe_split_enc`, plus the PLE pre-step's
+pair `ple_gather_pso_of` and `pf_enc_ple_gather_fmt`, whose format sets must agree with each
+other and with the gate's alignment arm) against the served-format predicates
+(`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in
+`dasllama/dasllama_metal_shapes.das`; `pf_kq_split_fmt`, `pf_moe_split_fmt` in the prefill) and
+reports an arm whose format no predicate serves - today the ladders' `panic` default arms are the
+only catch, at serve time; the gate retires `REVIEW_GPU.md`'s two dispatch-ladder rules to
+"weakening it is a defect". (b) A `tests/REVIEW.das` check over the hand-bound kernel-cell sites
+(38 today) that pass a `*_tgmem` global to `metal_set_threadgroup_memory_length` with no
+non-zero test: a stamp that gates its `@workgroup` state off makes the global read 0 and the
+call throw, which the gate in `test_metal_gemv_kernels.das`'s `w13sw_gate` now guards by hand.
+(c) A `REVIEW.das` check that `BLOB_SCALE_PLANES` (`dasllama/dasllama_load.das`) and the
+`name == "..."` arms of `metal_blob_scale_plane` (`dasllama/dasllama_layout.das`) name one
+roster: a format added to the ladder and not the roster loses the split-transform memo and is
+never committed by `metal_blob_commit`.

@@ -88,6 +88,9 @@ that a question answered for one backend has an obvious address in the other. Th
   shared bind path may span the two layouts; the in-engine moe mul_mm A/B race harnesses
   (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail` rather than a per-class
   `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`)
+  and the mul_mm tensor template's compact-scale stamps off the same family (`MetalKqMulMmIq4xsTensorT`
+  at IQ4NL, the dense `MetalKqMulMmIq4nlT` / `TH` and `MetalKqMulMmQ40T` / `TH`, and the four
+  `MetalMoeMulMmQ40*` expert stamps)
   bind the strip plane unread, so both formats share one set layout and one host bind path; and the
   split-scale dev-W dequant stamps (`MetalKqDequant<Fmt>`) inherit the mul_mm scaffold's `xf` and `y`
   bindings unread - they write only the f16 panel at binding 7 - so a format's dequant pass and its

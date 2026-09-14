@@ -1693,29 +1693,15 @@
     lanes' own), the rule measured on the 3990X, and the first read is which threads the
     `affinity hard` mode leaves to the OS.
 
-149. **Two Metal gates the M4 pass found the shape of.** (a) A `REVIEW.das` check that reads
-    every per-format dispatch ladder in `dasllama/dasllama_metal_kernels.das` and
-    `dasllama/dasllama_metal_prefill.das` (eleven today - `enc_kq_gemv`, `enc_kq_mvb`,
-    `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`, `pf_moe_split_pso`, `pf_moe_th_pso`,
-    `pf_enc_kq_dq`, `pf_moe_split_enc`, plus the PLE pre-step's pair `ple_gather_pso_of` and
-    `pf_enc_ple_gather_fmt`, whose format sets must agree with each other) against the
-    served-format predicates
-    (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in
-    `dasllama/dasllama_metal_shapes.das`; `pf_kq_split_fmt`, `pf_moe_split_fmt` in the prefill)
-    and reports an arm whose format no predicate serves - today the ladders' `panic` default
-    arms are the only catch, at serve time; the gate retires `REVIEW_GPU.md`'s dispatch-ladder
-    rule to "weakening it is a defect". (b) A `tests/REVIEW.das` check over the hand-bound
-    kernel-cell sites (38 today) that pass a `*_tgmem` global to
-    `metal_set_threadgroup_memory_length` with no non-zero test: a stamp that gates its
-    `@workgroup` state off makes the global read 0 and the call throw, which the gate in
-    `test_metal_gemv_kernels.das`'s `w13sw_gate` now guards by hand.
+149. Moved: `followup_metal.md` sec.15 (the two Metal review gates).
 
 149. **The streamed image save walks the carrier twice on a declined write.** `load_model`'s
     streamed rail runs `save_model_image_streaming` over the streamed `Model`, and on a decline
     (the writer died mid-plane - a full volume past the preallocation) runs
     `image_from_model_streaming` over the same carrier: the whole plane set is transcoded and the
     dev-W panels dequantized a second time, minutes on a 26B. The in-place split-scale transform
-    is guarded off a dead writer today, so the second walk is correct, only doubled. Unquirked: one
+    is memoized per carrier (`Model.blob_scaled`), so the second walk is correct however far the
+    writer got before it died - only doubled. Unquirked: one
     walk into the in-memory chunk, then `write_chunk` to persist it (the shape `chunk_rail` already
     takes), with the memory-sink decline dropping to the eager rail. The bar is one transcode per
     load on either outcome.
@@ -1728,7 +1714,11 @@
     base). Unquirked: before a continuation joins `performance/model_specs.das`, run the CPU chain
     over it and refuse a fixture whose top-2 margin at any step sits under a floor (2 logits),
     a `test_model_specs` cell over the stocked fixtures. The bar is no parity row a rounding
-    order can flip.
+    order can flip. The margins: the CPU chain through `harness/parity.das` (kq-native, the M5
+    Max's default backend) and the Metal chain through the same harness under `--ngl 99` with
+    `DAS_TUNE_MANIFEST` naming the box sidecar minus one crown at a time, top-2 logits read at
+    position 117 of the counting fixture; the kernel error from
+    `tests/test_metal_gemm_kernels.das`'s production-width cells.
 
 151. **The q40 and iq4nl native dots read the per-256 Q8_K activation image.** `kq_sb` puts the
     two per-32 weight formats on the Q8_K activation form `mm_kq` quantizes, and the Vulkan decode
@@ -1738,7 +1728,10 @@
     activations (absmax over rms 18.5) the per-256 form carries twice the activation-quantization
     error of the per-32 one, and the Google QAT file's counting fixture flips a top-8 router pick
     at layer 29 on an 8e-5 margin under the native CPU rails where the q8 requant of the same
-    planes holds (the ggml-org file of the same checkpoint holds on both). Ruled left as is: the
+    planes holds (the ggml-org file of the same checkpoint holds on both). The reference dot read
+    for the per-32 pairing is `ggml_vec_dot_q4_0_q8_0`; the margins and the error ratio come from
+    a forced-feed probe over `harness/parity.das`'s chain on the M5 Max (arm64-gen backend,
+    `KQ_NATIVE=1` against `=0`), the router logits dumped at the flip position. Ruled left as is: the
     model is coherent, tracking llama.cpp's exact tokens is not the bar. The option, if a carrier
     ever needs it: a Q8_0-form activation path for q40 and iq4nl through the CPU kq cores and the
     Vulkan decode GEMV, the q51 pairing as the template.

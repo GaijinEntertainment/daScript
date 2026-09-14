@@ -760,9 +760,27 @@ def blob_stream_eligible(t : Model) : bool {
     return g_blob_hooks_set && invoke(g_blob_eligible, t)
 }
 
-//! Put one kq scale plane into its device form during a blob build (see metal_blob_scale_plane).
+//! Every Model plane field a blob build puts in its device form, in Model.blob_scaled bit order.
+let BLOB_SCALE_PLANES = fixed_array("k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss",
+                                    "k2s", "iq2ss", "iq2xss", "iq2xxss")
+
+//! Put one kq scale plane into its device form during a blob build (see metal_blob_scale_plane),
+//! at most once per carrier: the transform rewrites the plane IN PLACE, and a writer that dies
+//! mid-walk hands the planes it already converted to the in-memory streamer, which walks them again.
 def blob_stream_scale_plane(var t : Model; name : string) : bool {
-    return g_blob_hooks_set && invoke(g_blob_scale_plane, t, name)
+    let bit = BLOB_SCALE_PLANES |> find_index(name)
+    if (!g_blob_hooks_set || bit < 0) {
+        return false
+    }
+    let mask = 1u << uint(bit)
+    if ((t.blob_scaled & mask) != 0u) {
+        return true
+    }
+    if (!invoke(g_blob_scale_plane, t, name)) {
+        return false
+    }
+    t.blob_scaled |= mask
+    return true
 }
 
 var private g_fill_plan_mode = false

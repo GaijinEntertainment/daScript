@@ -417,10 +417,10 @@ class template MetalPleGatherKqT {
     @template_constant Q40 : bool = false   //!< q40: one f16 d per 32-block, the linear map (q - 8)
     @ssbo @binding = 0 @role = "weight" @off = "soff" ksh : array<float16> //!< scale plane, half view (k4/k5: d, dmin at 8*blk; q40: the eight per-32-block d)
     @ssbo @binding = 1 @role = "weight" @off = "soff" @template_gate = "!Q40" ks4 : array<uint4> //!< the SAME 16B block, uint4 view (the packed 6-bit sc/min)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    //!< quant plane, uint view
-    @ssbo @binding = 3 @role = "read" tok : array<uint>    //!< [npos] token ids
-    @ssbo @binding = 4 @role = "write" y : array<float>    //!< [n_layers x npos x ple] layer-major side input
-    @uniform @binding = 5 ka : PleArgs
+    @ssbo @binding = 2 @role = "read" tok : array<uint>    //!< [npos] token ids - binding 2/3/4 are MetalPleGatherQ8's, shared field for shared field
+    @ssbo @binding = 3 @role = "write" y : array<float>    //!< [n_layers x npos x ple] layer-major side input
+    @uniform @binding = 4 ka : PleArgs
+    @ssbo @binding = 6 @role = "weight" @off = "qoff" kqu : array<uint>    //!< quant plane, uint view - past the q8 twin's set, which has no separate quant plane
 
     [metal_kernel]
     def metal_ple_gather_kq {
@@ -6380,11 +6380,13 @@ def private pf_enc_ple_gather_fmt(enc : MetalComputeEncoder?; t : Model; btok, b
     let bq = kq_quants_of(g_dev, t, fmt, t.ple_emb_off)
     let bs = kq_scales_of(g_dev, t, fmt, t.ple_emb_off)
     if (fmt == KqFmt.k4) {
-        pf_enc_ple_gather_k4(enc, bs.buf, bs.soff, bs.buf, bq.buf, bq.qoff, btok, by, ka, nlayers, npos, ple)
+        pf_enc_ple_gather_k4(enc, bs.buf, bs.soff, bs.buf, btok, by, ka, bq.buf, bq.qoff, nlayers, npos, ple)
     } elif (fmt == KqFmt.k5) {
-        pf_enc_ple_gather_k5(enc, bs.buf, bs.soff, bs.buf, bq.buf, bq.qoff, btok, by, ka, nlayers, npos, ple)
+        pf_enc_ple_gather_k5(enc, bs.buf, bs.soff, bs.buf, btok, by, ka, bq.buf, bq.qoff, nlayers, npos, ple)
     } elif (fmt == KqFmt.q40) {
-        pf_enc_ple_gather_q40(enc, bs.buf, bs.soff, bq.buf, bq.qoff, btok, by, ka, nlayers, npos, ple)
+        pf_enc_ple_gather_q40(enc, bs.buf, bs.soff, btok, by, ka, bq.buf, bq.qoff, nlayers, npos, ple)
+    } else {
+        panic("metal ple prefill: per-layer embedding table format {fmt} has no gather twin - ple_gather_pso_of admitted it")
     }
 }
 

@@ -741,8 +741,8 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_headnorm_off)
 }
 
-// the 3 deliberate skips: blocks, image_map, image_bytes
-let IMAGE_META_FIELDS = 76 + 3
+// the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes
+let IMAGE_META_FIELDS = 76 + 4
 
 // the tokenizer's tripwires: the SentencePiece backend's five serialized meta fields + its three
 // derived tables (lookup, pair_merge, bkey_id); the BPE backend's seven (merge_rank rides as the

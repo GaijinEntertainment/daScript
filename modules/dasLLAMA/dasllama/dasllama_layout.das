@@ -283,7 +283,7 @@ def metal_blob_commit(var t : Model) : bool {
     if (!metal_blob_eligible(t)) {
         return false
     }
-    for (nm in ["k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss", "k2s", "iq2ss", "iq2xss", "iq2xxss"]) {
+    for (nm in BLOB_SCALE_PLANES) {
         metal_blob_scale_plane(t, nm)
     }
     t.metal_blob = true

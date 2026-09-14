@@ -72,9 +72,9 @@ mints that cell in the same change.** A route is the end-to-end code path such a
 including the path a run with no flags and no environment overrides takes.
 
 **A change that owes a board cell for a route `performance/gen_bench_records.das` cannot mint a
-row for - no rig leg of it drives that route, or the author's box refuses or skips the rig leg
-that would - names instead, in the same change, the record or gate output that proves the route ran
-end to end.**
+row for - no board row can carry the route: no rig leg drives it, the author's box refuses or
+skips the leg that would, or the model is a sweep row outside the board catalog - names instead,
+in the same change, the record or gate output that proves the route ran end to end.**
 
 **A diff that makes the fat exe - a shipped exe carrying its tune profile
 (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a) - run end to end names `tune_gate`'s fat-world report

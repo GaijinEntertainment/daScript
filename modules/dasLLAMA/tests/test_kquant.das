@@ -25,6 +25,8 @@ require math
 // so a layout misread fails loudly with no model files needed. The dequant arithmetic itself is
 // proven bit-exact against gguf-py's dequantize (harness/q4k_dequant_probe.das); the real-file
 // arm cross-checks against the Q8_0 twin of the same weights at known quantization-error levels.
+// The repacked-plane cell is JIT-only, needs the large-tier gemma-4-26B_q4_0-it.gguf
+// (DASLLAMA_PARITY_FULL=1) and a backend carrying kq slots - each absence is a loud skip.
 
 // synthetic quant patterns: every nibble/5-bit/6-bit value, position-dependent so swaps can't cancel
 def private q4_pat(k : int) : int => (k * 7 + 3) % 16
@@ -2418,6 +2420,9 @@ def test_kq_q40_repacked_planes(t : T?) {
         let dim = c.dim
         let nfe = c.n_ff_exp
         let ege = dim * nfe
+        t |> equal(dim, 2816l, "the 26B's dim")
+        t |> equal(nfe, 704l, "the 26B's n_ff_exp")
+        t |> equal(c.n_expert, 128l, "the 26B's expert count")
         t |> success(tr.kquant_native, "load detected native Q4_0 tensors")
         t |> success(tr.emb_fmt == KqFmt.k6 && cls_kq(tr), "the Q6_K token_embd serves as the tied kq classifier")
         t |> success(fmt_at(tr.we1_fmt, 0l) == KqFmt.q40 && fmt_at(tr.we3_fmt, 0l) == KqFmt.q40,

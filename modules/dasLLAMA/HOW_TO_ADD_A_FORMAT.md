@@ -377,7 +377,7 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    A format whose decode already rides another format's split class stamps the four expert leaves
    (`T`, `TH`, `TH128`, `THR`) off THAT class's MoE template with its own template constants
    instead of authoring a new one - q40 off iq4xs's is the worked case.
-   **Serving an expert plane is six ladders, not one** (`followup_general.md` row 148 names the
+   **Serving an expert plane is six ladders, not one** (`followup_metal.md` sec.15 names the
    dispatch-vs-predicate invariant): `pf_moe_split_fmt`, `pf_moe_split_pso`, `pf_moe_split_enc`,
    `pf_moe_th_pso` and `pf_moe_split_th_any` (prefill) plus the `enc_moe_gemv` arm (decode); and
    `moe_site_ok`'s alignment arm must answer for the format exactly where `moe_fmt_metal_served`

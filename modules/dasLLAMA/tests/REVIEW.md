@@ -255,9 +255,9 @@ not exact-value: it is not float-portable.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A diff that adds a tolerance bar, or loosens an existing one, ships in the same change a
-control that lands outside the bar.** A bar nothing has ever exceeded is not known to
-discriminate.
+**A diff that adds an assert carrying a tolerance bar - a new bar value or an existing one on a
+new carrier - or loosens one, ships in the same change a control that lands outside the bar.** A
+bar nothing has ever exceeded is not known to discriminate.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

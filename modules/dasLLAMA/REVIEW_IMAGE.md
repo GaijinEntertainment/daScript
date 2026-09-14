@@ -79,9 +79,9 @@ beside it - or the `REVIEW.das` check that requires one, is a defect.** Raising 
 without adding the field to the serializer leaves that field out of every image, and a
 serializer without the tripwire reads a forgotten field back as zero on every load.
 
-**A filesystem or chunk-allocation decline while saving an image
-(`dasllama/dasllama_image.das`) never fails the load - warn, and serve what is still whole:
-the image already built in memory, or the carrier as loaded.**
+**A decline on any sink an image save writes through - the direct writer's open, an append, a
+chunk allocation - wherever that code lives, never fails the load: warn, and serve what is
+still whole - the image already built in memory, or the carrier as loaded.**
 
 **A bounds check on an image section or the meta blob in `dasllama/dasllama_image.das` is
 written `bytes > msize || off > msize - bytes`, never `off + bytes > msize`, which wraps.**

@@ -1,7 +1,7 @@
 # dasLLAMA GPU Tower Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_MEDIA.md`.
+doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff touching the tower driver
 (`dasllama/dasllama_metal_tower.das`), a kernel class or builder the tower dispatches, the
