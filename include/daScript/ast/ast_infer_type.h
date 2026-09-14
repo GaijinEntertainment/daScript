@@ -115,6 +115,8 @@ namespace das {
         string describeType(const TypeDeclPtr &decl, AliasDefs * aliasDefs) const;
         string describeFunction(const FunctionPtr &fun) const;
         string describeFunction(const Function *fun) const;
+        string describeCandidate(const Function *fun) const;
+        string privateSetterInfo(ExprOp2 *expr) const;
 
     protected:
         void verifyType(const TypeDeclPtr &decl, bool allowExplicit = false, bool classMethod = false, bool allowTemplate = false) const;

@@ -378,6 +378,7 @@ SET(AOT_LANGUAGE_MODULE_FILES
     tests/language/_never_inline_module.das
     tests/language/_operators_derived.das
     tests/language/_operators_parent.das
+    tests/language/_private_property_helper.das
     tests/language/_string_clone_init_helper.das
 )
 

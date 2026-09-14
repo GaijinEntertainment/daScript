@@ -565,6 +565,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | _module_b.das | *(helper)* Module for module_vis_fail - requires _module_a | |
 | _operators_derived.das | *(helper)* Derived class BarOp | |
 | _operators_parent.das | *(helper)* Parent class FooOp with property operator | |
+| _private_property_helper.das | *(helper)* Class Gate with a private property setter and a private property getter, for private_property_setter / failed_private_property_setter | |
 | access_private_from_lambda.das | Class private field access from lambda + operator delete | |
 | add_property_ext_const.das | `isReadOnly` property on `TestObjectFoo` - const vs non-const dispatch | |
 | aka.das | `aka` variable aliasing in various contexts | |
@@ -734,6 +735,8 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | peek_and_modify_string.das | `peek_data` finds chars, `modify_data` replaces bytes | |
 | permissive_tuple_const.das | Tuple param with `const?` field accepts argument tuple with non-const `?` field (generic + exact overloads) | |
 | pointers.das | Pointer operations - new, deref, safe navigation, null checks | |
+| private_property_setter.das | Private property setter and getter of a class stay usable inside the declaring module | |
+| failed_private_property_setter.das | Private property setter, private getter, and an operator of a private class rejected from another module | **expect** `30915` `30928:2` |
 | ptr_arithmetic.das | Pointer arithmetic - signed/unsigned int/int64/uint/uint64 | |
 | ptr_index.das | Pointer deref and index, default null pointer argument | |
 | properties.das | Property operators (.res :=, getter/setter) | |
