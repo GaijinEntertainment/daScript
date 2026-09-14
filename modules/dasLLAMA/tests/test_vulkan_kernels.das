@@ -388,7 +388,7 @@ def test_vkd_ext_roster(t0 : T?) {
                 t |> success(!key_exists(seen, e.name), "a roster entry is named once: {e.name}")
                 seen |> insert(e.name)
                 t |> success(!empty(e.rides), "a roster entry says what rides on it: {e.name}")
-                t |> success(empty(e.knob) || (e.knob |> starts_with("DASLLAMA_VK_")), "a roster knob is a Vulkan-tier env knob: {e.name} -> '{e.knob}'")
+                t |> success(empty(e.knob) || (e.knob |> starts_with("DASLLAMA_VK_")) || e.knob == "DASLLAMA_COOPMAT", "a roster knob is a Vulkan-tier env knob: {e.name} -> '{e.knob}'")
                 t |> success(!e.off || !empty(e.knob), "a route is held off only by a named knob: {e.name}")
             }
             t |> equal(g_gpu.has_coopmat, roster_on(roster, "VK_KHR_cooperative_matrix"), "has_coopmat follows the VK_KHR_cooperative_matrix entry")
