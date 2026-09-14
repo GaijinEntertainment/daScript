@@ -242,7 +242,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q8) {
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
     }
-    if (fmt == KqFmt.k4 || fmt == KqFmt.k5) {
+    if (fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40) {   // compact 16B scale rows: sb0*16 is 16B-aligned on its own
         return off >= 0l && (off % 256l) == 0l && (ege % 256l) == 0l
     }
     if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
@@ -256,7 +256,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
 
 //! the expert plane formats the Metal routed block has kernels for (mx4 rides its own gpt-oss arm)
 def moe_fmt_metal_served(f : KqFmt) : bool {
-    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3
+    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
         || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
 }
 

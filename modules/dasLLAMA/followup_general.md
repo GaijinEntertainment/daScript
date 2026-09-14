@@ -1692,3 +1692,46 @@
     and the engine confine themselves on such a part (one CCD's worth of processors near the
     lanes' own), the rule measured on the 3990X, and the first read is which threads the
     `affinity hard` mode leaves to the OS.
+
+149. Moved: `followup_metal.md` sec.15 (the two Metal review gates).
+
+150. **The streamed image save walks the carrier twice on a declined write.** `load_model`'s
+    streamed rail runs `save_model_image_streaming` over the streamed `Model`, and on a decline
+    (the writer died mid-plane - a full volume past the preallocation) runs
+    `image_from_model_streaming` over the same carrier: the whole plane set is transcoded and the
+    dev-W panels dequantized a second time, minutes on a 26B. The in-place split-scale transform
+    is memoized per carrier (`Model.blob_scaled`), so the second walk is correct however far the
+    writer got before it died - only doubled. Unquirked: one
+    walk into the in-memory chunk, then `write_chunk` to persist it (the shape `chunk_rail` already
+    takes), with the memory-sink decline dropping to the eager rail. The bar is one transcode per
+    load on either outcome.
+
+151. **A parity fixture carries no margin floor.** The gemma-4-12b Q5_K_M counting continuation
+    flips at its 21st token on Metal - the CPU chain's top-2 margin there is 6 logits, the Metal
+    chain's 0.03 with no tensor crown armed, and the box's crowns move the position by 0.18 - so
+    the token gate reports the side of a razor the chain lands on, not a kernel (the k5 tensor
+    twin holds the double-precision oracle at the production widths, 0.3% past the simdgroup
+    base). Unquirked: before a continuation joins `performance/model_specs.das`, run the CPU chain
+    over it and refuse a fixture whose top-2 margin at any step sits under a floor (2 logits),
+    a `test_model_specs` cell over the stocked fixtures. The bar is no parity row a rounding
+    order can flip. The margins: the CPU chain through `harness/parity.das` (kq-native, the M5
+    Max's default backend) and the Metal chain through the same harness under `--ngl 99` with
+    `DAS_TUNE_MANIFEST` naming the box sidecar minus one crown at a time, top-2 logits read at
+    position 117 of the counting fixture; the kernel error from
+    `tests/test_metal_gemm_kernels.das`'s production-width cells.
+
+152. **The q40 and iq4nl native dots read the per-256 Q8_K activation image.** `kq_sb` puts the
+    two per-32 weight formats on the Q8_K activation form `mm_kq` quantizes, and the Vulkan decode
+    GEMV reads the same form (one activation scale per superblock); the sibling per-32 format q51
+    reads the per-32 Q8_0 image and llama.cpp dots Q4_0 against Q8_0; the Vulkan cm2 prefill takes
+    f16 activations and Metal f32 (decode) and f16 (prefill), never 8-bit. On the gemma-4-26B
+    activations (absmax over rms 18.5) the per-256 form carries twice the activation-quantization
+    error of the per-32 one, and the Google QAT file's counting fixture flips a top-8 router pick
+    at layer 29 on an 8e-5 margin under the native CPU rails where the q8 requant of the same
+    planes holds (the ggml-org file of the same checkpoint holds on both). The reference dot read
+    for the per-32 pairing is `ggml_vec_dot_q4_0_q8_0`; the margins and the error ratio come from
+    a forced-feed probe over `harness/parity.das`'s chain on the M5 Max (arm64-gen backend,
+    `KQ_NATIVE=1` against `=0`), the router logits dumped at the flip position. Ruled left as is: the
+    model is coherent, tracking llama.cpp's exact tokens is not the bar. The option, if a carrier
+    ever needs it: a Q8_0-form activation path for q40 and iq4nl through the CPU kq cores and the
+    Vulkan decode GEMV, the q51 pairing as the template.

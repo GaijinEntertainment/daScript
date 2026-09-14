@@ -2170,7 +2170,7 @@ Module strudel_mini
 
 ### Structures
 
-- `Token` - JSON input stream token.
+- `Token`
 
 ### Tokenizer and parser
 
@@ -2252,17 +2252,17 @@ Module strudel_synth
 
 ### Drum renderers
 
-- `render_bd` - Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
-- `render_cowbell` - Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
-- `render_cp` - Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
-- `render_crash` - Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
-- `render_hh` - Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
-- `render_oh` - Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
-- `render_ride` - Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
-- `render_rimshot` - Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
-- `render_sd` - Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
-- `render_tambourine` - Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
-- `render_tom` - Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
+- `render_bd`
+- `render_cowbell`
+- `render_cp`
+- `render_crash`
+- `render_hh`
+- `render_oh`
+- `render_ride`
+- `render_rimshot`
+- `render_sd`
+- `render_tambourine`
+- `render_tom`
 
 ### Oscillator type
 
@@ -2864,7 +2864,7 @@ The PEG module is a parser generator based on `Parsing Expression Grammars`_. De
 
 - `get_current_char`
 - `matches`
-- `move` - Moves the smart pointer `src` into the smart pointer `dest`, nullifying the previous contents of `dest` and transferring ownership from `src`.
+- `move`
 - `reached_EOF`
 - `reached_EOL`
 
@@ -3996,7 +3996,7 @@ The AST module provides access to the abstract syntax tree representation of das
 ### Textual descriptions of the objects
 
 - `das_to_string` - Returns the name of the corresponding daslang base type as a string.
-- `describe` - Returns textual description of the type.
+- `describe`
 - `describe_cpp`
 - `describe_expression` - Returns a string description of the Expression matching the corresponding daslang source code.
 - `describe_function` - Returns a human-readable string description of the specified function, including its name, arguments, and return type.
@@ -4841,7 +4841,7 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 
 ### Result inspection
 
-- `describe` - Returns textual description of the type.
+- `describe`
 
 ## ast_used
 
@@ -6273,7 +6273,7 @@ The LINQ_FOLD module provides the `_fold` and `_old_fold` call macros that rewri
 
 ### Call macros
 
-- `_fold` - implements _fold(expression) that folds LINQ expressions into optimized sequnences for example::
+- `_fold`
 
 ## lint
 
@@ -6576,7 +6576,7 @@ Monadic `Option<T>` — represents a value that may or may not be present. Funct
 ### Constructors
 
 - `move_some`
-- `none` - Returns true if the array has no elements
+- `none`
 - `some`
 
 ### Queries
@@ -6587,8 +6587,8 @@ Monadic `Option<T>` — represents a value that may or may not be present. Funct
 ### Transforming
 
 - `and_then`
-- `filter` - iterates over `src` and yields only those elements for which `blk` returns true
-- `map` - iterates over `src` and yields the result of `blk` for each element
+- `filter`
+- `map`
 - `or_else`
 - `or_value`
 
@@ -6608,7 +6608,7 @@ Monadic `Option<T>` — represents a value that may or may not be present. Funct
 
 ### Pairing
 
-- `zip` - Merges two arrays into an array of tuples
+- `zip`
 
 ### Operators
 
@@ -6876,7 +6876,7 @@ Monadic `Result<T, E>` — a value (`ok`) or an error (`err`). Functional API fo
 
 ### Structures
 
-- `Result` - Result of evaluating a debug expression.
+- `Result`
 
 ### Constructors
 
@@ -6893,7 +6893,7 @@ Monadic `Result<T, E>` — a value (`ok`) or an error (`err`). Functional API fo
 ### Transforming
 
 - `and_then`
-- `map` - iterates over `src` and yields the result of `blk` for each element
+- `map`
 - `map_err`
 - `or_else`
 
@@ -7264,16 +7264,16 @@ The STRINGS_CONVERT module provides soft-failing string-to-numeric conversions t
 
 ### Soft-failing conversions
 
-- `try_to_double` - Parse `str` as a 64-bit float.
-- `try_to_float` - Parse `str` as a 32-bit float.
-- `try_to_int` - Parse `str` as a signed 32-bit integer.
-- `try_to_int16` - Parse `str` as a signed 16-bit integer.
-- `try_to_int64` - Parse `str` as a signed 64-bit integer.
-- `try_to_int8` - Parse `str` as a signed 8-bit integer.
-- `try_to_uint` - Parse `str` as an unsigned 32-bit integer.
-- `try_to_uint16` - Parse `str` as an unsigned 16-bit integer.
-- `try_to_uint64` - Parse `str` as an unsigned 64-bit integer.
-- `try_to_uint8` - Parse `str` as an unsigned 8-bit integer.
+- `try_to_double`
+- `try_to_float`
+- `try_to_int`
+- `try_to_int16`
+- `try_to_int64`
+- `try_to_int8`
+- `try_to_uint`
+- `try_to_uint16`
+- `try_to_uint64`
+- `try_to_uint8`
 
 ## temp_strings
 

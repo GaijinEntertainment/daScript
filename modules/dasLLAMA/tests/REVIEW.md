@@ -4,9 +4,10 @@
 doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-**A kernel-unit cell - a model-less cell that dispatches one kernel class and asserts on its
-output - or a gate that hand-dispatches or hand-binds a kernel, wherever the diff puts it,
-applies `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
+**A kernel-unit cell - a model-less cell (a cell is a `t |> run` block, or a helper call that
+issues asserts on `t`) that dispatches one kernel class and asserts on its output - or a gate
+that hand-dispatches or hand-binds a kernel, wherever the diff puts it, applies
+`REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
 
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
@@ -24,7 +25,7 @@ joins the exempt list of `test_run_suites.das`'s suite-membership gate in the sa
 weakening that gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every
 suite.
 
-**Invoking dastest directly on a test file in a `run.das` suite other than `model-free` and
+**Invoking dastest directly on a test file that no `run.das` suite lists under `model-free` or
 `stocked` is a defect - run it through `run.das`.**
 
 **`run.das` declares no global whose initializer spawns, logs, writes the environment or
@@ -255,8 +256,9 @@ not exact-value: it is not float-portable.
 **An embedding-parity cell that does not name its fixture, or does not log the measured
 maxdiff on green as well as red, is a defect.**
 
-**A diff that adds a tolerance bar, or loosens an existing one, ships in the same change a
-control that lands outside the bar.** A bar nothing has ever exceeded is not known to
+**A diff that adds an assert carrying a tolerance bar - a bar value new to the file, or one already
+used there applied at an assert site that did not carry it - or loosens one, ships in the same
+change a control that lands outside the bar.** A bar nothing has ever exceeded is not known to
 discriminate.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same

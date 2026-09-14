@@ -13,8 +13,9 @@ twin ignores that field.** Kernel twins are kernel classes whose bodies differ o
 axis - one compile-time choice, such as single/batch, format, or single-pass/chunked.
 
 **A copy-pasted kernel twin, or a kernel split into hand instances where a `static_if` on a
-`@template_constant` serves, is a defect - kernel twins stamp one `class template`.** Body divergence is carried by a `@template_constant`, or by an overridden
-method spliced flat at emission.
+`@template_constant` serves, is a defect - kernel twins stamp one `class template`.** Body
+divergence is carried by a `@template_constant`, or by an overridden method spliced flat at
+emission.
 
 **A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
 base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a real buffer to a
@@ -26,9 +27,11 @@ body reads any field declared on it - fields in the stamp or in the shell may sh
 `@role = "alias"` marks such a view - including a field read only under a run-time flag.
 
 **A diff that forks a kernel class out of a shared template shows, in the forked class's
-generated source (its `*_msl` global, or the SPIR-V dump), that its body no longer differs
-from its former siblings' on the compile-time choice the template carried, and names that
-choice on the forked class's `[metal_dispatch]` / `[vk_dispatch]` declaration.**
+generated source (its `*_msl` global, or the SPIR-V dump), that its body differs from its
+former siblings' on more than the compile-time choice the template carried, and names that
+choice in a `//!` line above the forked class's `[metal_dispatch]` / `[vk_dispatch]`
+declaration.** A fork whose body still differs on that choice alone is a twin, and twins stamp
+the template.
 
 **A `[metal_dispatch]` / `[vk_dispatch]` binding whose memory is never written after arming at
 every site that binds it is a defect unless a field at that binding carries `@role = "weight"`.**
@@ -43,7 +46,9 @@ performs.** `weight` tells the generated builder the buffer needs no per-encode 
 census row in `tests/test_kernel_coverage.das` that dispatches it, adding the row or the census
 model when none does, or names it in that file's blind-spot list for its backend -
 `CENSUS_NEVER_DISPATCHED` for Metal, `VK_CENSUS_NEVER_DISPATCHED` for Vulkan - with the reason no
-stocked model reaches it and the model-less test cell that dispatches it.**
+stocked model reaches it and the model-less test cell that dispatches it.** Weakening the
+blind-entry asserts in `tests/test_kernel_coverage.das` - that an entry matches a compiled
+census key, and that it matches no dispatched one - is a defect.
 
 **Weakening a refusal the `[metal_dispatch]` / `[vk_dispatch]` lens makes at compile time - an
 `@ssbo` field with no `@binding`, an unaccessed `@ssbo` field declaring no `@role`, a
@@ -64,8 +69,8 @@ body that only picks, defaults or composes generated builders binds nothing.
 `performance/`, is a defect: dispatch through the kernel's `enc_*` builder instead.**
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
-and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the `grid=`/`tg=` spec consumes
-host-side never reaches the device, so it does not count.
+and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the
+`grid=`/`tg=` spec consumes host-side never reaches the device, so it does not count.
 
 **Never bind a scalar that the other bound scalars already determine - derive it in the
 builder instead.** Binding it separately adds a second place to get it wrong.

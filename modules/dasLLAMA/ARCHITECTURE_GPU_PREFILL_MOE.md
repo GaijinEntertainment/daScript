@@ -40,8 +40,8 @@ minted once per layer and shared by both sites. An X read through the bucket ind
 form a tensor view, which is why every tensor twin of the MoE family serves contiguous rows
 only.
 
-The split-format expert twins (k3 and the iquants) do not derive from that scaffold: they derive
-from the format's DENSE split class (sec.2.2aa) and run its `stage16` under the dense base's
+The split-format expert twins (k3, q40 and the iquants) do not derive from that scaffold: they
+derive from the format's DENSE split class (sec.2.2aa) and run its `stage16` under the dense base's
 `moe_shell`, whose expert plane rides `nBase` - `(e*ndim + n)*nsb + sb` is the plane's superblock,
 so the decode is one source for both the dense and the routed site. Their bindings are the dense
 layout's (`xf` 3, `y` 4, the kdim/ndim uniforms at 5 and 6) plus `cnt` at 7 and `basep` at 8;
@@ -52,7 +52,11 @@ but one. These formats have no gathered base kernel, so their twins compile behi
 probe alone (`g_pf_tensor_ok`), not behind the dense race's crown - on a GPU where the tensor
 stamp loses the dense race by a few percent (M4-class) the twin is still the only Metal path,
 and a few percent of a GEMM beats the CPU. Their model builds the gather panel at every prompt
-length and declines `moe_twin` only where the probe failed.
+length and declines `moe_twin` only where the probe failed. q40 owns no split class of its own:
+its four stamps derive from the iq4xs MoE template with `IQ4NL` and `Q40` set, the same pair the
+dense q40 twins carry, and because its scale plane is compact - the eight per-32-block f16 d
+verbatim, no strip tail - both of its scale bindings take `soff`, where every other split format
+binds the d plane at `doff`.
 
 The select kernel is one template at two per-lane depths: 8 logits per lane covers 256 experts,
 the 16-deep stamp 512 (Qwen3-Coder-Next), and the serve gate admits 512.

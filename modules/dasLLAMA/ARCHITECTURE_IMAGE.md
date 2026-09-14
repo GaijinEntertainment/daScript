@@ -123,7 +123,9 @@ lane and reap each other's image on every switch.
 
 A metal-flavor image carries `devwf16`: every dev-W-eligible q8, k4/k5/k6 and split-scale
 (iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs) weight - a plane job whose f16 panel
-fits `DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror - pre-dequantized at mint into one
+fits `DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror, and whose tensor is not an expert stack
+(`*_exps.weight`: gemma-4 splits its fused stacks per expert at load, and the routed block reads
+the quantized planes with no dev-W route, so a baked expert panel is never read) - pre-dequantized at mint into one
 concatenated f16 plane, with parallel site tables (`devwf16_fmt/key/off/n`) serialized as
 ordinary planes. The mint dequant is the format's CPU mirror of the runtime dev-W dequant
 kernel. The q8 and K-quant mirrors are hand-written and bit-exact by construction: each f32

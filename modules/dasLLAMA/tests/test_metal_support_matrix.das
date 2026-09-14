@@ -1809,6 +1809,13 @@ def test_metal_family_matrix(t : T?) {
             // Wider step bar: the k4/q51 f16-tile paths measure 13.8 under the same double-router
             // amplifier (post-prefill stays 2.5-class); 24 keeps the ~2x margin discipline
             gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf"), "gemma4moe-26b-k", 8.0, 24.0)
+            // ... and the ggml-org Q4_0 file: q40 gate_up expert stacks beside q8 down stacks
+            // (a 704-wide down row is no multiple of 256, so the loader demotes it) - the q40
+            // routed twins' model-level pin. Bars are the Q4_K_M row's, not tighter: the same
+            // mixed-quant expert feed rides the same double-router amplifier, whose step spread
+            // across summation orders reaches 13.8 there while one measurement here reads 5.6
+            // (post-prefill 2.4). 14GB, PARITY_FULL-gated
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe-26b-q40", 8.0, 24.0)
             // gemma-4 E-series (E4B): PLE (MetalNeed.ple) + cross-layer KV sharing — decode +
             // prefill serve, batch declines need_ple. 7.2GB — DASLLAMA_PARITY_FULL-gated.
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E4B-it-Q8_0.gguf"), "gemma4e-e4b")

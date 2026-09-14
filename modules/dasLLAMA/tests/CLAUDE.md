@@ -168,9 +168,10 @@ plane's two arms against hand-built superblocks - k6 and k3 strip-first at `stri
 iq4xs and k2 d-first at `strip_at` 4 / `tail_at` 0 with k2's four-byte tail, each carrying an
 added-value poison in one tail byte that must move that byte and nothing in the strip, plus the
 k6 sizing leg at 4,000,000 superblocks - and the dev-W bake tables, whose rebuild-not-append
-contract, per-format key arithmetic and split-scale cover predicate - a 256-wide 64-row panel
-bakes, a 384-wide one and a 32-row one do not - are pure taxonomy
-over a job list) `smol untied metal metal-untied gemma tower whisper voxtral
+contract, per-format key arithmetic, split-scale cover predicate - a 256-wide 64-row panel
+bakes, a 384-wide one and a 32-row one do not - and expert exclusion - an `*_exps.weight`
+slice bakes nothing, a shared-expert site and a mis-spelt suffix still bake - are pure taxonomy
+over a job list, plus the split-scale transform's idempotence over one carrier) `smol untied metal metal-untied gemma tower whisper voxtral
 parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
 mtower kitten`; `kitten` is the TTS area's arm - the StyleTTS2 carrier (kitten-nano) through
 `load_styletts2` on both lanes, and the image loaded by its own path with the family data
@@ -420,8 +421,8 @@ reach) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a laye
 past the dense lead with all three expert planes, and its dense width is the shared expert's);
 plus the KV mirror's binding cap (`resident_binding_ctx`) on a hybrid shell whose layer 0 is
 recurrent, its dense twin, and a shell with no attention layer. The Metal serving gates ride the
-same synthetic shells: `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the twelve
-expert plane formats the routed block serves and the three it declines (q40, iq4nl, k2), one
+same synthetic shells: `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the thirteen
+expert plane formats the routed block serves and the two it declines (iq4nl, k2), one
 mixed-format model, and the drift guard walking all fifteen `KqFmt` members - the kernel roster
 (`moe_fmt_metal_served`) and the site-alignment gate (`moe_site_ok`) name ONE set, which is the
 only case that isolates the roster, since no format one admits the other refuses;

@@ -1685,8 +1685,9 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
 
 var private @scratch g_rdec_ple_rows : array<float>   //! the gather half of the per-layer-embedding pre-step, position-major, when the driver finishes it on device
 
-//! forward_prefill's offer of the per-layer-embedding pre-step: taken when the armed driver holds the projection (the token ids
-//! land in the session's stash; the override gathers the table rows and the device does the rest)
+//! ONE gate for both PLE pre-step seats, taken when the armed driver holds the projection:
+//! forward_prefill's, where the token ids land in the session's stash and the prefill override gathers the table rows,
+//! and the decode seat's, where the token command gathers the step's own row on device.
 [unused_argument(s, npos, start_pos)]
 def private vulkan_ple_gate(t : Model; s : Session; npos, start_pos : int64) : bool
     => g_rdec_active && has_ple(t.config) && rdec_ple_proj_on()
@@ -1873,6 +1874,7 @@ def resident_driver_register() {
     register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
     register_ple_gpu_gate(@@vulkan_ple_gate)
+    register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the token command gathers the row on device too
     register_prefill_override_split_span("vulkan")
     register_gpu_upload_resident(@@moe_gpu_upload_resident)
     set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)

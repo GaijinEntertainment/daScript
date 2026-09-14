@@ -222,6 +222,7 @@ var g_pso_moe_kq_iq2s : MetalComputePipeline?
 var g_pso_moe_kq_iq2xs : MetalComputePipeline?
 var g_pso_moe_kq_iq2xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq4xs : MetalComputePipeline?
+var g_pso_moe_kq_q40 : MetalComputePipeline?
 var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
@@ -966,9 +967,9 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
     }
 }
 
-//! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob
-//! transform): k4/k5 = 16B compact blocks at soff; k6 = the split plane — sub-scale strips at
-//! soff, the packed f16 d plane at doff (the kernels bind the buffer twice, once per offset).
+//! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob transform):
+//! k4/k5/q40/iq4nl = 16B compact blocks at soff, doff 0; every other format is the split plane -
+//! sub-scale strips at soff, the packed f16 d plane at doff, the kernels binding the buffer twice.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)

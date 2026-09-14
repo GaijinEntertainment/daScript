@@ -374,6 +374,17 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    set in `pf_kq_split_fmt`), and its routed expert twins (`MetalMoeMulMm<Fmt>SplitT`,
    `ARCHITECTURE_GPU_PREFILL_MOE.md`); the decode GEMV derives from `MetalGemvSiteT` so the
    dense and the expert-indexed stamps share one body (`enc_moe_gemv`, `moe_fmt_metal_served`).
+   A format whose decode already rides another format's split class stamps the four expert leaves
+   (`T`, `TH`, `TH128`, `THR`) off THAT class's MoE template with its own template constants
+   instead of authoring a new one - q40 off iq4xs's is the worked case.
+   **Serving an expert plane is six ladders, not one** (`followup_metal.md` sec.15 names the
+   dispatch-vs-predicate invariant): `pf_moe_split_fmt`, `pf_moe_split_pso`, `pf_moe_split_enc`,
+   `pf_moe_th_pso` and `pf_moe_split_th_any` (prefill) plus the `enc_moe_gemv` arm (decode); and
+   `moe_site_ok`'s alignment arm must answer for the format exactly where `moe_fmt_metal_served`
+   does - `test_moe_metal_expert_formats` walks the whole enum and reds on any disagreement. A
+   compact-scale format (q40, iq4nl: `kq_scales_of` returns `doff` 0) binds its d plane at `soff`
+   in every one of those arms; the split formats bind it at `doff`, and copying their arm reads
+   the scale plane's tail as the d row.
 5. **Tests:** `dequant_iq4xs_plane_superblock_at` (`dasllama_convert.das`, the split-layout
    twin the CPU row now calls), fixtures at fmt 44 in `tests/_metal_kernel_common.das`, the
    ladders + calls in `test_metal_gemv_kernels.das` (GEMV, B2/B4/B8) and
