@@ -3671,7 +3671,14 @@ void * das_dwrite_open ( const char * path, uint64_t total_bytes, uint64_t band_
         fstore_t st = { F_ALLOCATECONTIG | F_ALLOCATEALL, F_PEOFPOSMODE, 0, (off_t) total_bytes, 0 };
         if ( fcntl(fd, F_PREALLOCATE, &st) < 0 ) {
             st.fst_flags = F_ALLOCATEALL;   // contiguous is a preference, not a requirement
-            fcntl(fd, F_PREALLOCATE, &st);
+            if ( fcntl(fd, F_PREALLOCATE, &st) < 0 ) {   // the volume cannot hold the file: decline before a byte is staged
+                close(fd);
+                unlink(path);
+                free(w->band);
+                free(w->band2);
+                delete w;
+                return nullptr;
+            }
         }
     }
 #else

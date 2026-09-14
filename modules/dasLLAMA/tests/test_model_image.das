@@ -2686,6 +2686,14 @@ def test_devw_bake_tables(t : T?) {
         tt |> equal(long_length(m.devwf16_fmt), 2l, "nor the fmt table")
         tt |> equal(long_length(m.devwf16_off), 2l, "nor the offset table")
         tt |> equal(long_length(m.devwf16_n), 2l, "nor the length table")
+        // an expert stack's slice (the per-expert fused gate/up split, or a whole down stack) has no
+        // dev-W reader: the routed block reads the quantized planes, so the bake leaves it out
+        var routed <- [ FillJob(name = "blk.0.attn_q.weight", woff = 64l, n = 256l, src_off = 0l, fmt = KqFmt.q8),
+                        FillJob(name = "blk.0.ffn_gate_up_exps.weight", woff = 1024l, n = 256l, src_off = 0l, fmt = KqFmt.q8),
+                        FillJob(name = "blk.0.ffn_down_exps.weight", woff = 2048l, n = 512l, src_off = 0l, fmt = KqFmt.k4) ]
+        tt |> equal(devw_bake_tables(m, routed), 256l * 2l, "the expert slices bake nothing - the dense site alone")
+        tt |> equal(long_length(m.devwf16_key), 1l, "one site in the key table")
+        delete routed
         delete jobs
         delete m
     }

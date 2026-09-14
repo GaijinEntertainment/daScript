@@ -1709,3 +1709,13 @@
     `metal_set_threadgroup_memory_length` with no non-zero test: a stamp that gates its
     `@workgroup` state off makes the global read 0 and the call throw, which the gate in
     `test_metal_gemv_kernels.das`'s `w13sw_gate` now guards by hand.
+
+149. **The streamed image save walks the carrier twice on a declined write.** `load_model`'s
+    streamed rail runs `save_model_image_streaming` over the streamed `Model`, and on a decline
+    (the writer died mid-plane - a full volume past the preallocation) runs
+    `image_from_model_streaming` over the same carrier: the whole plane set is transcoded and the
+    dev-W panels dequantized a second time, minutes on a 26B. The in-place split-scale transform
+    is guarded off a dead writer today, so the second walk is correct, only doubled. Unquirked: one
+    walk into the in-memory chunk, then `write_chunk` to persist it (the shape `chunk_rail` already
+    takes), with the memory-sink decline dropping to the eager rail. The bar is one transcode per
+    load on either outcome.

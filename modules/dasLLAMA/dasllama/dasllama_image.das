@@ -38,7 +38,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 37   // the dev-W plane bakes the split-scale formats' panels (iq4xs, iq4nl, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs)
+let IMAGE_VERSION = 38   // the dev-W plane leaves the expert stacks out: the routed block has no dev-W route
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -1078,8 +1078,9 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
         }
         let want = stream_plane_bytes(t, jobs, name)
         if (want <= 0l) {
-            // a blob build's kq scale strips take their device form as each one's turn comes, before its bytes are written
-            if (t.metal_blob) {
+            // a blob build's kq scale strips take their device form as each one's turn comes, before its bytes are written;
+            // a dead sink leaves the carrier untouched - the in-memory fallback re-fills it with the disk stride
+            if (w.ok && t.metal_blob) {
                 blob_stream_scale_plane(t, name)
             }
             return false   // not a streamed plane — the walk writes it from RAM
@@ -1369,7 +1370,7 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
         }
         let want = stream_plane_bytes(t, jobs, name)
         if (want <= 0l) {
-            if (t.metal_blob) {   // the kq scale strips take their device form — see the file saver
+            if (w.ok && t.metal_blob) {   // the kq scale strips take their device form — see the file saver
                 blob_stream_scale_plane(t, name)
             }
             return false   // not a streamed plane — the walk writes it from RAM

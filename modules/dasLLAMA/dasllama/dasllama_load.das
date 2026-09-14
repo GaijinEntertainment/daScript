@@ -1080,9 +1080,12 @@ def private devw_bake_jobs(t : Model; jobs : array<FillJob>) : array<FillJob> {
 }
 
 //! The split-scale mirror refuses a panel whose row width is not a whole superblock or whose row
-//! count is not a multiple of 64, and one refusal aborts the whole image save - so a site the
-//! mirror would refuse is never covered. The hand-written q8 and k4/k5/k6 mirrors take any shape.
+//! count is not a multiple of 64, and one refusal aborts the whole image save - so a site the mirror
+//! would refuse is never covered, and neither is an expert stack's slice: the routed block has no dev-W route
 def private devw_bake_covers(t : Model; j : FillJob) : bool {
+    if (j.name |> ends_with("_exps.weight")) {
+        return false
+    }
     let field = stream_field_of(t, j.fmt)
     if (field == "mblob" || field == "k4q" || field == "k5q" || field == "k6q") {
         return true
