@@ -605,6 +605,60 @@ def private cov_tower_gemma4uv(t : T?) {
     }
 }
 
+//! Blind entries whose stamp compiles only behind a box crown, and the crown that reaches them:
+//! where the crown IS pinned a stocked carrier dispatches the stamp, so the drain assert would red
+//! on a correct box. `CENSUS_NEVER_DISPATCHED` has no vocabulary for "blind only off this crown",
+//! so the pair is named here.
+let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {"MetalKqMvB2K4R2" => "kq_mvb2_k4_r2"}
+
+//! Did this run compile the GATED stamp families the blind list names? Two gates decide it, both
+//! read from the run itself rather than re-probed: the Metal-4 tensor toolchain - the prefill's PSO
+//! init puts every tensor stamp behind one probe, so the dense q8 tensor family's presence in the
+//! census answers for all of them - and the box's tensor crowns, since every crown-gated twin
+//! compiles only behind `metal_tensor_crowned` and an empty crown list means none of them exist.
+def private census_gated_stamps_compiled(cov : table<string; int64>) : bool {
+    if (empty(get_metal_tensor_crowns())) {
+        return false
+    }
+    for (k in keys(cov)) {
+        if (starts_with(k, "MetalQ8MulMmT")) {
+            return true
+        }
+    }
+    return false
+}
+
+//! The blind-spot list self-drains: census keys are the compiled kernels' MSL entry names, so a
+//! declared entry whose key counted dispatches is a STALE entry, and one matching no key at all
+//! names nothing and would sit green forever. A box that compiled none of the gated stamp families
+//! cannot tell that second case from a misspelt key, so it SKIPS the entry loudly, never passes it.
+def private metal_census_blind_drain(t : T?; cov : table<string; int64>) {
+    let judge_unmatched = census_gated_stamps_compiled(cov)
+    for (blind in CENSUS_NEVER_DISPATCHED) {
+        var hits = 0l
+        var named = false
+        for (k, n in keys(cov), values(cov)) {
+            if (starts_with(k, blind)) {
+                hits += n
+                named = true
+            }
+        }
+        if (!named && !judge_unmatched) {
+            t |> skip("{blind}: this box compiled no tensor or crowned stamp, so an entry matching no census key cannot be told from a misspelt one here")
+            continue
+        }
+        let crown = CENSUS_CROWN_CONDITIONAL?[blind] ?? ""
+        if (hits > 0l && !empty(crown) && metal_tensor_crowned(crown)) {
+            t |> skip("{blind}: the {crown} crown is pinned on this box, so a stocked carrier reaches it ({hits}) - the entry is blind only off that crown")
+            continue
+        }
+        t |> success(named,
+            "{blind} names no compiled kernel - spell the census key (the class's own shader entry name, or <Class>_<kernel method>)")
+        t |> success(hits == 0l,
+            "{blind} is a DECLARED blind spot - a stocked carrier now dispatches it ({hits}): drop the entry, add its census row")
+    }
+}
+
 [test]
 def test_metal_kernel_coverage(tst : T?) {
     tst |> run("Metal kernel coverage census: the small-model zoo across format/graph/batch/KV axes") <| @(t : T?) {
@@ -632,24 +686,7 @@ def test_metal_kernel_coverage(tst : T?) {
             // the assert pins only that the RAIL counts — coverage gaps are human calls
             metal_kernel_coverage_report()
             var cov <- metal_kernel_coverage()
-            // the blind-spot list self-drains: census keys are class-qualified MSL entry
-            // names, so a declared class whose entry counted dispatches is a STALE entry
-            for (blind in CENSUS_NEVER_DISPATCHED) {
-                var hits = 0l
-                var named = false
-                for (k, n in keys(cov), values(cov)) {
-                    if (starts_with(k, blind)) {
-                        hits += n
-                        named = true
-                    }
-                }
-                // the entry must reach a COMPILED key: cov carries every compiled kernel at zero,
-                // so an entry matching none names nothing and would sit green forever
-                t |> success(named,
-                    "{blind} names no compiled kernel - spell the census key (the class's own shader entry name, or <Class>_<kernel method>)")
-                t |> success(hits == 0l,
-                    "{blind} is a DECLARED blind spot - a stocked carrier now dispatches it ({hits}): drop the entry, add its census row")
-            }
+            metal_census_blind_drain(t, cov)
             var served = 0
             for (n in values(cov)) {
                 if (n > 0l) {
