@@ -232,8 +232,13 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         expect_emit_failure(t, "_standalone_no_aot_fixture", out_dir)
     }
 
-    t |> run("a required module's [init] is a collected error, not a crash") @(t : T?) {
-        expect_emit_failure(t, "_standalone_foreign_init_fixture", out_dir)
+    t |> run("a required module's [init] is called from the constructor too") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_foreign_init_fixture", out_dir)
+        let init_script_pos = find(source, "__init_script(&context, true);")
+        t |> success(init_script_pos >= 0, "the constructor calls __init_script")
+        let tail = slice(source, init_script_pos)
+        t |> success(find(tail, "dep_record_init") >= 0, "the required module's [init] is called after __init_script")
+        t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
     }
 
     t |> run("before_emit receives the compiled program") @(t : T?) {

@@ -69,15 +69,12 @@ def collectInitFunctionAotNames(program : ProgramPtr; var context : Context) : a
         initMnhSet |> insert(mnh)
     }
     var mnhToAotName : table<uint64; string>
-    let thisModule = program.getThisModule
     program.get_ptr() |> for_each_module_no_order($(pm) {
         pm |> for_each_module_function($(pfun) {
             if (function_index(program, pfun) < 0 || !is_used(program, pfun) || !(initMnhSet |> key_exists(pfun.getMangledNameHash))) {
                 return
             }
-            if (pm != thisModule) {
-                macro_error(program, pfun.at, "standalone AOT cannot run [init] function: {pm.name}::{pfun.name} lives outside the main module")
-            } elif (pfun.flags.noAot) {
+            if (pfun.flags.noAot) {
                 macro_error(program, pfun.at, "standalone AOT cannot run [init] function: {pfun.name} is [no_aot]")
             } else {
                 mnhToAotName[pfun.getMangledNameHash] = aotFuncName(pfun)
