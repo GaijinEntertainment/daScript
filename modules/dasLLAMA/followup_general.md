@@ -1679,3 +1679,16 @@
     turn", "A figure below a leg of a served turn" and "A figure whose value is the same on
     every box" - three rules over one provenance criterion that differ only in what the figure
     scales with.
+148. **A small model's GPU prefill is bimodal by the process on a many-CCD host.** On the
+    Threadripper 3990X (eight CCDs, 128 logical processors) with the RTX 5060 Ti, gemma-3-1b's
+    pp512 reads 19.3 to 19.7 thousand tok/s in half the runs and 22.7 to 23.3 in the rest - the
+    level fixed for a process, the rep spread inside it small, worker affinity hard or off alike,
+    the GPU clock pinned either way - while llama.cpp b10660 holds 21.2 thousand in every run. The
+    same process confined to sixteen logical processors (`cmd /c start /affinity FFFF`, either end
+    of the part) reads the high level six of six times, and gemma-2-2b 10.7 to 11.1 thousand
+    against its unconfined 10.3 +- 1.0. A 512-row window of a small model is 25 to 50 ms of host
+    pacing (command building, the per-window submits and waits), and where the OS lands the main
+    thread and the driver's threads against the sixteen lanes decides the level. Owed: the bench
+    and the engine confine themselves on such a part (one CCD's worth of processors near the
+    lanes' own), the rule measured on the 3990X, and the first read is which threads the
+    `affinity hard` mode leaves to the OS.

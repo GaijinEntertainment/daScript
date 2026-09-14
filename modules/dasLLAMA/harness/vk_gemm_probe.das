@@ -9,6 +9,7 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP moe:|moesk: - the expert schedule's s and e stamps by schedule form.
 // ATTRIBUTION SWEEP cm2g:<fmt> - a format's dense role shapes at 512 rows, overlapped and one dispatch at a time.
 // ATTRIBUTION SWEEP g3|gemma|splitk - the gemma role shapes and the down's split-k ladder, whole against split.
+// ATTRIBUTION SWEEP khrsk - the KHR arm's q8 race (DASLLAMA_COOPMAT=mm): the q8 mul_mm tile against the KHR kq tile whole and split, one process.
 // ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
 // RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
@@ -2857,8 +2858,8 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
         }
         vk_check(vkEndCommandBuffer(raw), null)
         per_us = usec_per_dispatch(raw)
-        if (g_gpu.has_coopmat2) {
-            // the cm2 tiles at the serving no-split config (f16-fed, decode-in-load)
+        if (g_gpu.coopmat_mode == COOPMAT_CM2) {
+            // the cm2 tiles at the serving no-split config (f16-fed, decode-in-load); off cm2 mode the device enabled no cm2 extension
             let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
             let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
             let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
@@ -2896,8 +2897,8 @@ def private run_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 —
     delete b
 }
 
-//! the cm2 l and m stamps under a split-k of `nsplit` (the GEMM alone: the partial planes land, the reduce is not timed)
-def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
+//! the cm2 l and m stamps - or, under `khr`, the KHR kq tile - under a split-k of `nsplit` (the GEMM alone: the partial planes land), then the reduce and the chained pair
+def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool = false) {   // nolint:STYLE038 — one linear measurement sweep, two arms
     let nbb = n / 32
     let rows = cnt
     let totblk = d * nbb
@@ -2911,8 +2912,8 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
     let wsd = make_device_buf(ws_bytes)
     let xfd = make_device_buf(xf_bytes)
     let yd = make_device_buf(y_bytes)
-    let lwgs = ((cnt + 255) / 256) * ((d + 127) / 128) * nsplit
     let mwgs = ((cnt + 127) / 128) * ((d + 127) / 128) * nsplit
+    let lwgs = khr ? mwgs : ((cnt + 255) / 256) * ((d + 127) / 128) * nsplit   //! the KHR tile has the m column's 128-token geometry
     let ck = ((n + nsplit - 1) / nsplit + 255) & ~255   // the 256-aligned chunk the serving pick takes
     if (ck * (nsplit - 1) >= n) {   //! a chunk that starts past K: the serving pick sheds the split, and a tile handed one never finishes
         print("{name} split{nsplit} (chunk {ck}): the last chunk starts past K {n} - the pick sheds this split, skipped\n")
@@ -2938,30 +2939,50 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int) {
         let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
         let begin = VkCommandBufferBeginInfo()
-        var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
-        var rawl = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(rawl, begin), null)
-        var hzl : VkHaz
-        for (_k in range(DISPATCHES)) {
-            enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
+        if (khr) {
+            verify(ensure_q8_batch_khr_cls(), "the q8 KHR kq tile's probe pipeline must engage")
+            var sck = set_q8_batch_khr_cls(cbufs, csizes, cgbits)
+            var rawk = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(rawk, begin), null)
+            var hzk : VkHaz
+            for (_k in range(DISPATCHES)) {
+                enc_q8_batch_khr_cls(rawk, hzk, sck, pc, int64(lwgs))
+            }
+            vk_check(vkEndCommandBuffer(rawk), null)
+            cm2l_us = usec_per_dispatch(rawk)
+            let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, sck, pc, lwgs)
+            red_us = tr.red
+            chain_us = tr.chain
+        } else {
+            var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
+            var rawl = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(rawl, begin), null)
+            var hzl : VkHaz
+            for (_k in range(DISPATCHES)) {
+                enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
+            }
+            vk_check(vkEndCommandBuffer(rawl), null)
+            cm2l_us = usec_per_dispatch(rawl)
+            var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
+            var rawm = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(rawm, begin), null)
+            var hzm : VkHaz
+            for (_k in range(DISPATCHES)) {
+                enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
+            }
+            vk_check(vkEndCommandBuffer(rawm), null)
+            cm2m_us = usec_per_dispatch(rawm)
+            let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, scl, pc, lwgs)
+            red_us = tr.red
+            chain_us = tr.chain
         }
-        vk_check(vkEndCommandBuffer(rawl), null)
-        cm2l_us = usec_per_dispatch(rawl)
-        var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
-        var rawm = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(rawm, begin), null)
-        var hzm : VkHaz
-        for (_k in range(DISPATCHES)) {
-            enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
-        }
-        vk_check(vkEndCommandBuffer(rawm), null)
-        cm2m_us = usec_per_dispatch(rawm)
-        let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, scl, pc, lwgs)
-        red_us = tr.red
-        chain_us = tr.chain
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
-    print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, l + reduce chained {chain_us} us | timing-only\n")
+    if (khr) {
+        print("{name} khr split{nsplit} (chunk {ck}): khr wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, tile + reduce chained {chain_us} us | timing-only\n")
+    } else {
+        print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, l + reduce chained {chain_us} us | timing-only\n")
+    }
     delete sched
     delete b
 }
@@ -3776,7 +3797,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "splitk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "splitk" || a == "khrsk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (a |> starts_with("cm2:")) {
             only = "cm2:"
@@ -4089,6 +4110,27 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             run_shape_split("e2b wo     ", 1536, 2048, 512, sk)
             run_shape_split("g2 down    ", 2304, 9216, 512, sk)
             run_shape_split("e4b down8k ", 2560, 8192, 512, sk)
+        }
+        return
+    }
+    if (only == "khrsk") {
+        // the q8 dense GEMM race on the KHR arm, both forms in ONE process, two rounds so drift shows: the q8-fed mul_mm
+        // L-tile (run_shape's whole arm) against the KHR kq tile whole (split1) and under 2, 3 and 4 k chunks with the
+        // reduce, at the shapes the wave model decides - gemma-3-1b's down, E2B's gate/up (wide, shallow), its downs and
+        // wo (the shortest K the path takes), E4B's downs (the deepest)
+        if (g_gpu.coopmat_mode != COOPMAT_MM) {
+            print("khrsk reads the KHR arm - run with DASLLAMA_COOPMAT=mm\n")
+            g_probe_exit = 1
+            return
+        }
+        for (round in range(2)) {
+            for (shape in fixed_array((name = "g3 down    ", d = 1152, n = 6912), (name = "e2b gate/up", d = 6144, n = 1536), (name = "e2b down6k ", d = 1536, n = 6144),
+                    (name = "e2b down12k", d = 1536, n = 12288), (name = "e2b wo     ", d = 1536, n = 2048), (name = "e4b down8k ", d = 2560, n = 8192), (name = "e4b down16k", d = 2560, n = 16384))) {
+                run_shape("r{round} {shape.name}", shape.d, shape.n, 512)
+                for (sk in [1, 2, 3, 4]) {
+                    run_shape_split("r{round} {shape.name}", shape.d, shape.n, 512, sk, true)
+                }
+            }
         }
         return
     }

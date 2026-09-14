@@ -389,7 +389,7 @@ struct public VulkanEnv {
     @clarg_doc = "cm2 prefill tile pick: 0 = the wave model's pick (`cm2_gemm_pick`), 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry."
     cm2_tile : int64 = 0l
 
-    @clarg_doc = "cm2 split-k: 0 = the wave model's pick (`cm2_gemm_pick`), 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). Inert on the KHR arm, whose kq tile carries no split-k scratch."
+    @clarg_doc = "cm2 split-k: 0 = the wave model's pick (`cm2_gemm_pick`), 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). On the KHR arm the chunks ride its one 128-column geometry."
     cm2_splitk : int64 = 0l
 
     @clarg_path

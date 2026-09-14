@@ -292,7 +292,9 @@ per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs 
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
-which carry no KHR arm; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
+and its KHR arm is `test_vkd_q8_khr_batch`, the per-32 plane through the hand-staged KHR tile over the
+same two regions, whole and under a k split with the reduce, wherever the device has KHR cooperative
+matrices at subgroup 32; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
 only, on a cm2 device, over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
 its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408) run five
 arms: the cm2 l/m/s tiles and the
@@ -331,7 +333,9 @@ router logits, the deltanet beta/alpha rows) to the f32 dot of the same f16 valu
 shapes and one off every 4-multiple (the reduce's element-guarded tail), the direct store at a
 base and the eight-chunk split with the reduce at the same base, the header under the base kept
 as the sentinel and every bar with its added-value poison; it skips on a device without the cm2
-tile family, the only tile the class rides. `test_vkd_dn_family` holds the deltanet conv, the
+tile family, the only tile the class rides. `test_vkd_f16_gemm_khr` runs the same fixture's direct
+arm through the KHR twin (the E-series projection off cm2) at three shapes, one with rows off the
+16-row fragment, wherever the device has KHR cooperative matrices at subgroup 32. `test_vkd_dn_family` holds the deltanet conv, the
 fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the step's one-part
 and two-part state columns, the scan's four- and eight-lane clusters); `test_vkd_dn_scan_narrow`
 runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometry - 512 rows,
@@ -345,7 +349,9 @@ its Q8_0 requant in one dispatch, against the three-kernel path byte for byte an
 the pass and the combine), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
 restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
 the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
-f32 stamp).
+f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
+(`fa_tile_run`, `fa_h256_softcap_run`) through the KHR flash tile wherever the device has KHR
+cooperative matrices at subgroup 32, so a coopmat2 card covers both families.
 `test_bench_records_schema.das` - model-free: the record store's schema (round-trip, upsert
 identity with `workload` in the key, annotations landing only on the rows they select, the
 store lister admitting `records/{box}.json` alone) and the record rig's shared seams (the

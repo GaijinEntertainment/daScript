@@ -545,7 +545,7 @@ let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
 // in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 37
-let private IMAGE_LAYOUT_STAMP_HASH = 0x3e3af75be08fdc56ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0xb8b1e09e980b1e2ful
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
@@ -838,9 +838,8 @@ def private check_ar_max_dim_triple {
     }
 }
 
-// q8 and q51 are no superblock formats: their cm2 tiles are the fmt-0 cells with no KHR arm, and
-// the f16 feed admits neither on a KHR-mode card - the two templates the KHR set does not reach.
-var private CM2_KHR_EXEMPT <- {"Q8Cm2T", "Q51Cm2T"}
+//! q51 is a routed-expert plane alone and the resident MoE block is cm2-gated, so the f16 feed never admits it on a KHR-mode card
+var private CM2_KHR_EXEMPT <- {"Q51Cm2T"}
 var private CM2_NO_EXEMPT : table<string>
 
 def private cm2_format_templates(exempt : table<string>) : array<string> {

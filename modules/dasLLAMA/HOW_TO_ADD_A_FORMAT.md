@@ -267,8 +267,9 @@ own classes beside q8's rather than a `KqGemvBase` child - a `KqCm2BatchT` forma
 `cm2_cls_ensure` refuses it a dense column, the plan declines a dense plane of it) and a decode
 GEMV in `Q8Gemv`'s shape (`Q51Gemv`: one lane a block, `gemv_lanes_per_row` 0). Its census rows
 land in `VK_CENSUS_NEVER_DISPATCHED` while no stocked small carrier holds such a plane. The module
-gate (`REVIEW.das`) reads it twice: the template joins `CM2_KHR_EXEMPT` (a per-32 format has no KHR
-arm, and the f16 feed admits none on a KHR-mode card) with the licensed set `ARCHITECTURE_GPU_VULKAN.md`
+gate (`REVIEW.das`) reads it twice: the template joins `CM2_KHR_EXEMPT` (a routed-expert plane never
+reaches the KHR arm, since the resident MoE block is cm2-only; a dense per-32 plane ships its
+`<Fmt>KhrBatch` stamp and `khr_stage16` like q8 instead) with the licensed set `ARCHITECTURE_GPU_VULKAN.md`
 names, and `cm2_dispatch_name` learns that the format spells its expert stamp `<fmt>_batch_cm2e_cls`
 the way q8 does.
 

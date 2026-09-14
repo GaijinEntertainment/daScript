@@ -143,7 +143,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_VK_REBAR` | flag | on | Use a ReBAR device-local host-visible heap when one larger than 1GB is present. |
 | `DASLLAMA_VK_KV32` | number | 0 | Arm the resident driver with f32 KV mirrors instead of the f16 default (A/B instrument; only sessions of the armed codec are served). |
 | `DASLLAMA_CM2_TILE` | number | 0 | cm2 prefill tile pick: 0 = the wave model's pick (`cm2_gemm_pick`), 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry. |
-| `DASLLAMA_CM2_SPLITK` | number | 0 | cm2 split-k: 0 = the wave model's pick (`cm2_gemm_pick`), 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). Inert on the KHR arm, whose kq tile carries no split-k scratch. |
+| `DASLLAMA_CM2_SPLITK` | number | 0 | cm2 split-k: 0 = the wave model's pick (`cm2_gemm_pick`), 1 = off, N = force N k-chunks (A/B instrument; shrinks if N strands an empty tail). On the KHR arm the chunks ride its one 128-column geometry. |
 | `DASLLAMA_VK_SPV_OVERRIDE` | path | unset | Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument). |
 | `DASLLAMA_VK_SPV_DUMP` | path | unset | Directory to write each kernel's emitted words as <kernel>.spv at pipeline creation (the override instrument's capture half). |
 | `DASLLAMA_VK_HAZARD_PARANOID` | flag | off | Barrier at every dispatch (correctness bisect). |

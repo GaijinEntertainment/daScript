@@ -46,18 +46,17 @@ a run of skips is not the coverage the suite owes.
 `run.das` suite listing is the only registration these files get.**
 
 **A diff that changes what a file covers - a cell added, removed or moved, its suite, an axis or
-bar a cell the census entry names asserts - corrects that file's `CLAUDE.md` census entry,
-numbers included, in the same change.** A `{a,b}` shorthand naming several files at once, or a
+bar a cell the census entry names asserts, a cell's skip condition added, changed or dropped -
+corrects that file's `CLAUDE.md` census entry, numbers and skip clauses included, in the same
+change.** A `{a,b}` shorthand naming several files at once, or a
 suite roster, carries nothing to correct; a file with no census entry owes none.
 
 **A diff that changes the contract a gate pins - what its asserts hold fixed, an axis gained or
 lost - updates that gate's entry in this checklist's pinned set in the same change.**
 
 **A diff that adds, changes, or drops a cell's skip condition - a `t |> skip` or an early
-return - updates the test file's own header - the top comment block carrying every fact a skip
-condition in the file keys on (model, tier, fixture, device, arm, knob) - in the same change,
-and adds or corrects the skip clause in that file's `CLAUDE.md` entry where `CLAUDE.md` carries
-one.**
+return - updates the test file's header in the same change.** A header is the file's top comment
+block; it names every fact a skip condition in the file keys on.
 
 **A diff that adds, moves, or removes a `[test]` file outside this folder that carries a
 `require dasllama/...` line of its own adds, corrects, or drops its row, with the reason it
@@ -76,8 +75,9 @@ to a flag that no longer does what the text says.
 filter mechanics" section in the same change** - an arm the census does not name is
 unreachable to whoever is choosing what to run.
 
-**A pinned gate's coverage never shrinks - not its asserts, not its bounds, not the corpus or
-sweep it covers, and not the set of runs that reach it; a diff that shrinks one is a defect.**
+**A pinned gate's coverage never shrinks: a diff that removes one of its asserts, loosens one of
+its bounds, or drops an input or a run that reaches it is a defect.** Changing what a pinned
+predicate answers on an input the gate already asserts on is not a shrink; dropping the input is.
 A pinned file that reaches a fixture root sits in `stocked`, where the per-PR run reaches it;
 that is not a shrink. The pinned set, each with what it pins:
 `test_run_suites.das` (the per-PR split, the folder census, the area tables, the `--exclude`
@@ -90,7 +90,7 @@ run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and th
 wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
 `test_bench_records_schema.das` (the `write_bench_records` output, corpus sweeps included);
 `test_scheduler.das`'s media-stream bypass check (no cached hit at `prefix_attach`, no donated
-pages at `donate_stream`); `test_vulkan_kernels.das`'s tile-pick cell (which tile the Vulkan
+pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick` (which tile the Vulkan
 matmul picks and whether that dispatch splits its reduction across partial planes, on every input
 of the prefill's tile-and-split pick; added rows on those inputs are not an axis gained) and its `test_vkd_ext_roster` cell (the device-init roster's entries against the
 arming's fields); `utils/dasllama-server/test_worker_dispatch.das` (repo root) - worker-local

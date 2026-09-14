@@ -45,7 +45,7 @@ def public pf_f16_feed(f : int) : bool {
     if (g_gpu.coopmat_mode == COOPMAT_CM2) {
         return f == int(KqFmt.q8) || f == int(KqFmt.q51) || kq_sb(f)
     }
-    return g_gpu.coopmat_mode == COOPMAT_MM && kq_sb(f) && khr_kq_tile_on()
+    return g_gpu.coopmat_mode == COOPMAT_MM && (kq_sb(f) || f == int(KqFmt.q8)) && khr_kq_tile_on()
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
@@ -68,6 +68,7 @@ let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds her
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_ensure(fmt : int) : bool {
+    if (fmt == int(KqFmt.q8)) return ensure_q8_batch_khr_cls()
     if (fmt == int(KqFmt.k4)) return ensure_kq_batch_k4_khr_cls()
     if (fmt == int(KqFmt.k5)) return ensure_kq_batch_k5_khr_cls()
     if (fmt == int(KqFmt.k6)) return ensure_kq_batch_k6_khr_cls()
@@ -86,6 +87,7 @@ def khr_cls_ensure(fmt : int) : bool {
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.q8)) return set_q8_batch_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.k4)) return set_kq_batch_k4_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.k5)) return set_kq_batch_k5_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.k6)) return set_kq_batch_k6_khr_cls(bufs, sizes, gbits)
@@ -104,7 +106,9 @@ def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    if (fmt == int(KqFmt.k4)) {
+    if (fmt == int(KqFmt.q8)) {
+        enc_q8_batch_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.k4)) {
         enc_kq_batch_k4_khr_cls(raw, h, s, pc, groups)
     } elif (fmt == int(KqFmt.k5)) {
         enc_kq_batch_k5_khr_cls(raw, h, s, pc, groups)
@@ -215,6 +219,7 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
         return khr_cls_ensure(fmt)
     }
     if (tc == CM2_TC_E) {
@@ -271,6 +276,7 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
 def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
         return khr_cls_set(fmt, bufs, sizes, gbits)
     }
     if (tc == CM2_TC_E) {
@@ -369,6 +375,7 @@ def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 con
 def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
+        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
         khr_cls_enc(fmt, raw, h, s, pc, groups)
     } elif (tc == CM2_TC_E) {
         cm2e_cls_enc(fmt, raw, h, s, pc, groups)
@@ -1069,13 +1076,16 @@ def private pf_setup {
         g_rd.pf_ple = make_device_buf(np * all * 4l)
         if (g_rd.ple_gpu) {
             // the pre-step on device: f16 embedding rows -> the projected plane -> the side rows finished in place
-            verify(ensure_f16cvt_cls() && ensure_f16_gemm_cm2_cls() && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
+            let ple_cm2 = g_gpu.coopmat_mode == COOPMAT_CM2
+            verify(ensure_f16cvt_cls() && (ple_cm2 ? ensure_f16_gemm_cm2_cls() : ensure_f16_gemm_khr_cls()) && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
             g_rd.pf_plexf = make_device_buf(np * dim * 2l)
             g_rd.pf_plep = make_device_buf(np * all * 4l)
             g_rd.pf_ple_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_plexf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_X, VHZ_SK))
-            g_rd.pf_ple_gemm_set = set_f16_gemm_cm2_cls(fixed_array(g_rd.ple_w16_dev, g_rd.pf_plexf, g_rd.pf_plep),
-                fixed_array(g_rd.ple_w16_bytes, np * dim * 2l, np * all * 4l), fixed_array(0u, VHZ_SK, VHZ_MRT))
+            let gbufs = fixed_array(g_rd.ple_w16_dev, g_rd.pf_plexf, g_rd.pf_plep)
+            let gsizes = fixed_array(g_rd.ple_w16_bytes, np * dim * 2l, np * all * 4l)
+            let ggbits = fixed_array(0u, VHZ_SK, VHZ_MRT)
+            g_rd.pf_ple_gemm_set = ple_cm2 ? set_f16_gemm_cm2_cls(gbufs, gsizes, ggbits) : set_f16_gemm_khr_cls(gbufs, gsizes, ggbits)
             //! the residual step's kernel over [np x layers] rows of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2); its normed output lands in the projected plane, unread
             g_rd.pf_ple_ar_set = set_cls_ar(fixed_array(g_rd.pf_ple, g_rd.pf_plep, g_rd.ple_pnorm_dev, g_rd.pf_plep),
                 fixed_array(np * all * 4l, np * all * 4l, g_rd.ple * 4l, np * all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
@@ -1127,14 +1137,14 @@ def private pf_setup {
         g_rd.pf_af = make_device_buf(np * qd * 2l)
         g_rd.pf_hf = make_device_buf(np * hid * 2l)
     }
-    // cm2 split-k scratch (one SSBO range): cap at the device range HERE where the size is negotiated
-    if (any_f16_feed && g_gpu.coopmat_mode == COOPMAT_CM2) {
+    if (any_f16_feed) {
         var skb = 262_144l * int64(g_gpu.sm_count)
         let fsk = cm2_splitk_env()
         if (fsk > 1l) {
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_CM2_SPLITK={fsk} forces the k chunks of every coopmat GEMM the split admits (the cm2 tiles and the KHR arm alike)\n")
             skb = max(skb, np * wide * fsk * 4l)
         }
-        skb = min(skb, vk_max_storage_range())
+        skb = min(skb, vk_max_storage_range())   //! the split planes bind as one SSBO range: capped at the device range here, where the size is negotiated
         if (skb > 0l) {
             g_rd.pf_splitk = make_device_buf(skb)
             g_rd.pf_splitk_bytes = skb
@@ -1151,19 +1161,29 @@ def private pf_setup {
     let normbytes = g_rd.norms_bytes
     let kv16 = g_rd.kv16
     // the fa pick is per layer: a model's attention classes may differ in head size, and a class with no fa stamp takes the chunked pair
-    let fa_dev = g_gpu.has_coopmat2_fa && vk_fa_on() && kv16
+    let fa_dev = cm2_fa_on() && vk_fa_on() && kv16
+    let fakhr_dev = !fa_dev && khr_kq_tile_on() && vk_fa_on() && kv16
     var fa_hs : table<int64>   //! the head sizes the fa tiles serve on this model
+    var fakhr_hs : table<int64>   //! ... the KHR flash tile
     var chunked_hs : table<int64>   //! ... and the ones the chunked pair serves
     var any_cap = false   //! a flash layer under the attention softcap: the h256 cap stamps engage
+    var any_khr_cap = false
     g_rd.pf_facm2 = false
+    g_rd.pf_fakhr = false
     for (L in g_rd.layers) {
         continue if (L.recurrent)
-        L.pf_fa = (fa_dev && (L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l) && (!g_rd.q_gated || L.hs == 256l)
+        let fa_hs_ok = L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l
+        L.pf_fa = (fa_dev && fa_hs_ok && (!g_rd.q_gated || L.hs == 256l)
             && (L.attn_cap == 0.0 || (L.hs == 256l && !g_rd.q_gated)))
+        L.pf_fakhr = fakhr_dev && fa_khr_serves(L.hs, L.attn_cap, g_rd.q_gated)
         any_cap = any_cap || (L.pf_fa && L.attn_cap != 0.0)
+        any_khr_cap = any_khr_cap || (L.pf_fakhr && L.attn_cap != 0.0)
         g_rd.pf_facm2 = g_rd.pf_facm2 || L.pf_fa
+        g_rd.pf_fakhr = g_rd.pf_fakhr || L.pf_fakhr
         if (L.pf_fa) {
             fa_hs |> insert(L.hs)
+        } elif (L.pf_fakhr) {
+            fakhr_hs |> insert(L.hs)
         } else {
             chunked_hs |> insert(L.hs)
         }
@@ -1190,6 +1210,11 @@ def private pf_setup {
             : (ensure_fa_cm2_h256_cls() && (!any_f16_feed || ensure_fa_cm2_h256_f16_cls()))))
         && (!any_cap || (ensure_fa_cm2_h256_cap_cls() && (!any_f16_feed || ensure_fa_cm2_h256_cap_f16_cls())))
         && (!key_exists(fa_hs, 512l) || (ensure_fa_cm2_h512_cls() && (!any_f16_feed || ensure_fa_cm2_h512_f16_cls())))
+        && (!key_exists(fakhr_hs, 64l) || (ensure_fa_khr_h64_cls() && (!any_f16_feed || ensure_fa_khr_h64_f16_cls())))
+        && (!key_exists(fakhr_hs, 128l) || (ensure_fa_khr_h128_cls() && (!any_f16_feed || ensure_fa_khr_h128_f16_cls())))
+        && (!key_exists(fakhr_hs, 256l) || (ensure_fa_khr_h256_cls() && (!any_f16_feed || ensure_fa_khr_h256_f16_cls())))
+        && (!any_khr_cap || (ensure_fa_khr_h256_cap_cls() && (!any_f16_feed || ensure_fa_khr_h256_cap_f16_cls())))
+        && (!key_exists(fakhr_hs, 512l) || (ensure_fa_khr_h512_cls() && (!any_f16_feed || ensure_fa_khr_h512_f16_cls())))
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
@@ -1197,7 +1222,11 @@ def private pf_setup {
     if (g_rd.pf_facm2) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed ({long_length(fa_hs)} head size(s), native f16 mirrors; {long_length(chunked_hs)} on the chunked pair)\n")
     }
+    if (g_rd.pf_fakhr) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: KHR flash attention armed ({long_length(fakhr_hs)} head size(s), native f16 mirrors; {long_length(chunked_hs)} on the chunked pair)\n")
+    }
     delete fa_hs
+    delete fakhr_hs
     delete chunked_hs
     var nkvm = 0l
     for (l in range64(g_rd.n_layers)) {
@@ -1262,14 +1291,11 @@ def private pf_setup {
                 : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve this layer's head size
         let fa128l = fa128s && L.hs == 128l
-        if (L.pf_fa) {
-            g_rd.pf_sets[b + 5] = (wo6
-                ? set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_af),
-                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 2l),
-                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_AQ))
-                : set_fa_cm2_cls(fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn),
-                    fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l),
-                    fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)))
+        if (L.pf_fa || L.pf_fakhr) {
+            let fbufs = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, wo6 ? g_rd.pf_af : g_rd.pf_attn)
+            let fsizes = fixed_array(np * qrow * 4l, mirbytes, mirbytes, wo6 ? np * qd * 2l : np * qd * 4l)
+            let fgbits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, wo6 ? VHZ_AQ : VHZ_ATT)
+            g_rd.pf_sets[b + 5] = L.pf_fa ? set_fa_cm2_cls(fbufs, fsizes, fgbits) : set_fa_khr_cls(fbufs, fsizes, fgbits)
         } else {
             let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l)
@@ -1371,15 +1397,19 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows :
     pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, logits)
 }
 
-//! The pre-step's projection on device (the cm2 route): the per-layer model projection as an f16 mirror and its norm row; the
-//! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before layer 0
+def ple_proj_shape_ok(dim, all : int64) : bool
+    => f16g_shape_ok(dim) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on() && dim % 16l == 0l && all % 16l == 0l)
+
+//! The pre-step's projection on device: the per-layer model projection as an f16 mirror and its norm row; the
+//! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before
+//! layer 0. Refused past `pf_ready`: these sets build with the prefill buffers.
 def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return false
     }
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_proj before set_ple")
-    if (!f16g_shape_ok(g_rd.dim) || long_length(w) != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready) {
-        return false   //! the f16 GEMM wants the cm2 tile and a 512-multiple width; the sets build with the prefill buffers
+    if (!ple_proj_shape_ok(g_rd.dim, all) || long_length(w) != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready) {
+        return false
     }
     var half : array<uint16>
     half |> reserve(long_length(w))   // E4B: 27.5M halves - the guard wants the final size reserved first
@@ -1495,7 +1525,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let nlfin = rd_norm_final()
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let cos_elems = g_rd.cos_elems
-    let fa128s = !(g_gpu.has_coopmat2_fa && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
+    let fa128s = !(cm2_fa_on() && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
     unsafe {
         var w0 = 0l
         var last_wlen = 0l
@@ -1565,7 +1595,11 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
                 enc_f16cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
                 var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
-                enc_f16_gemm_cm2_cls(raw, h, g_rd.pf_ple_gemm_set, pcg, ((wlen + 127l) / 128l) * ((all + 127l) / 128l))
+                if (g_gpu.coopmat_mode == COOPMAT_CM2) {
+                    enc_f16_gemm_cm2_cls(raw, h, g_rd.pf_ple_gemm_set, pcg, ((wlen + 127l) / 128l) * ((all + 127l) / 128l))
+                } else {
+                    enc_f16_gemm_khr_cls(raw, h, g_rd.pf_ple_gemm_set, pcg, ((wlen + 63l) / 64l) * ((all + 63l) / 64l))
+                }
                 var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
                 enc_cls_ar(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
             }
@@ -1736,6 +1770,42 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                             enc_fa_cm2_h256_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
                         }
                     }
+                } elif (g_rd.layers[l].pf_fakhr) {
+                    var pcf = FaCm2Args(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
+                        kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
+                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap)
+                    let fawgs = g_rd.n_heads * ((wlen + 15l) / 16l)
+                    if (hs == 64l) {
+                        if (fo6) {
+                            enc_fa_khr_h64_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h64_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } elif (hs == 128l) {
+                        if (fo6) {
+                            enc_fa_khr_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h128_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } elif (hs == 512l) {
+                        if (fo6) {
+                            enc_fa_khr_h512_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h512_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } elif (pcf.cap != 0.0) {
+                        if (fo6) {
+                            enc_fa_khr_h256_cap_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h256_cap_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    } else {
+                        if (fo6) {
+                            enc_fa_khr_h256_f16_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        } else {
+                            enc_fa_khr_h256_cls(raw, h, g_rd.pf_sets[b + 5], pcf, fawgs)
+                        }
+                    }
                 } else {
                     var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
                         hs = uint(hs), kv_mul = kv_mul, kbase = mirb, vbase = mirb,
@@ -1762,11 +1832,12 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let attn_landed_f16 = fo6 && g_rd.layers[l].pf_fa
-                if (attn_landed_f16) {
-                } elif (fo6) {
-                    var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
-                    enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                let attn_landed_f16 = fo6 && (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr)
+                if (fo6) {
+                    if (!attn_landed_f16) {
+                        var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
+                        enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
+                    }
                 } elif (fok) {
                     var pc6 = RqArgs(inbase = 0u, nblk = uint(wlen * qd / 256l))
                     enc_cls_q8k_rq(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 8l + 255l) / 256l)
@@ -2886,7 +2957,7 @@ def private ensure_at_state {
 //! or 128, and no gate (this chain wires neither the h256 stamps nor their gated epilogue - gated models keep at_attn).
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def private at_fa_serves(hs : int64; gated : bool) : bool {
-    return !gated && g_gpu.has_coopmat2_fa && vk_fa_on() && (hs == 64l || hs == 128l)
+    return !gated && cm2_fa_on() && vk_fa_on() && (hs == 64l || hs == 128l)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]

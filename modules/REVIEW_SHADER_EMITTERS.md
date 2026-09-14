@@ -62,8 +62,15 @@ declaration by name.** A declaration in that module is available to both emitter
 
 **A skippable read of a global-rooted array - a module global, a `@workgroup` array, or a
 `self.<member>` resource - in a `[spirv_kernel]` or `[compute_shader]` body, or in any `def` that
-body calls, stays skippable: a diff that widens the set of dispatches the read happens on, or
-drops the condition that kept it from happening where its index is out of range, is a defect -
-both arms of an if reading it, a clamped index, and a bare read are the shapes that takes.** The emitter lowers a `?:`, `&&` or `||` operand as
-a branch (`dasSpirv/ARCHITECTURE.md` sec.3.4), so the
-short-circuit form needs no rewrite.
+body calls, stays skippable: a diff that widens the set of dispatches an existing read happens
+on, or drops the condition that kept it from happening where its index is out of range, is a
+defect - a read in both arms of an `if`, a clamped index, and a bare read are the shapes that
+drop takes.** The emitter lowers a `?:`, `&&` or `||` operand as a branch
+(`dasSpirv/ARCHITECTURE.md` sec.3.4), so the short-circuit form needs no rewrite.
+
+**A read of a global-rooted array that a diff adds to a `[spirv_kernel]` or `[compute_shader]`
+body, or to any `def` such a body calls, is in range on every dispatch it happens on, or the
+`ARCHITECTURE*.md` at the root of the module the kernel ships in names slack past that range and
+the read stays inside the slack.** A load that fetches a fixed-size block while only its store is
+guarded reads past the end of the region the store's bound defines; the device declares no robust
+buffer access, so an out-of-range read returns undefined data, not zero.
