@@ -1035,3 +1035,20 @@ jobs:
           -DDAS_LLVM_DISABLED=ON
         cmake --build ./build-gcc --parallel
 
+
+  nightly_issue:
+    needs: 
+      - pre_job
+      - build
+      - build_windows_relwithdebinfo_nightly
+      - build_windows_release_llvm_nightly
+      - bundle_smoke
+      - build_windows_mingw
+      - build_windows_clangcl
+      - build_linux_gcc
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: build.yml

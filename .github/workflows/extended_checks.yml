@@ -777,3 +777,12 @@ jobs:
       run: |
         $BIN/daslang dastest/dastest.das -- --cov-path coverage.lcov --color --test ./tests/language --timeout 1800
         $BIN/dascov.exe -- coverage.lcov --exclude tests/language
+
+  nightly_issue:
+    needs: [pre_job, extended_checks]
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: extended_checks.yml

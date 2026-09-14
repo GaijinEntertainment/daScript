@@ -188,3 +188,12 @@ jobs:
       run: |
         set -eux
         ./bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das --timeout 600
+
+  nightly_issue:
+    needs: [index_sweep, daspkg_unit_macos]
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: nightly_daspkg_index.yml

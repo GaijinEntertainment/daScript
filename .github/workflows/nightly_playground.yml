@@ -149,3 +149,12 @@ jobs:
         path: site/tests/playground/playwright-report/
         if-no-files-found: ignore
         retention-days: 14
+
+  nightly_issue:
+    needs: [verify_samples, wasm_specs]
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: nightly_playground.yml

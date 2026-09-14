@@ -137,3 +137,12 @@ jobs:
             --exclude key_hud \
             --exclude embedded_terminal \
             --headless
+
+  nightly_issue:
+    needs: [integration]
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    uses: ./.github/workflows/nightly_issue.yml
+    with:
+      lane: nightly_imgui.yml
