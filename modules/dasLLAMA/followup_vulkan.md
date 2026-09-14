@@ -1498,3 +1498,16 @@ module) is independent and can land any time - it is pure structure.
     answer, not a decline. Item 42's real-hardware pass on such a card is where it shows; the fix
     is the pipeline's `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` at 32 on every KHR
     stamp, or a decline where the device cannot pin it.
+62. **The per-op MoE attention decode fills a stack buffer the fitting plan forwent.** Under
+    `DASLLAMA_COOPMAT=mm` a large MoE declines the resident driver (item 57) and the per-op rails
+    serve it streamed; when the budget is tight the plan logs "the per-op rails serve this MoE
+    without the streamed slot or the decode mirrors the fitting plan forwent - layers the budget
+    stops keep the CPU", yet `vk_moe_attn_dec` still runs and `fill_stack_acts` memcpys the q
+    activation into a decode-attn stack whose host buffer was never allocated: a SIGSEGV at 0x20,
+    a null `HostBuf.mapped`. On the RunPod RTX PRO 4500 `test_parity`'s Qwen3-30B-A3B UD-IQ2_XXS
+    row crashes there under `mm` (its Q4_K_M twin passes; the file predates the KHR arc, master
+    crashes identically), while the default cm2 mode serves the model resident and passes. The
+    fix is at the plan: a layer whose decode GPU state the budget forwent keeps the CPU decode
+    path and never reaches `vk_moe_attn_dec`, or `fill_stack_acts` declines on a null buffer with
+    the reason in the log; either ships a large-tier cell that loads the IQ2_XXS 30B under `mm` and
+    decodes one token.
