@@ -420,8 +420,8 @@ reach) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a laye
 past the dense lead with all three expert planes, and its dense width is the shared expert's);
 plus the KV mirror's binding cap (`resident_binding_ctx`) on a hybrid shell whose layer 0 is
 recurrent, its dense twin, and a shell with no attention layer. The Metal serving gates ride the
-same synthetic shells: `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the twelve
-expert plane formats the routed block serves and the three it declines (q40, iq4nl, k2), one
+same synthetic shells: `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the thirteen
+expert plane formats the routed block serves and the two it declines (iq4nl, k2), one
 mixed-format model, and the drift guard walking all fifteen `KqFmt` members - the kernel roster
 (`moe_fmt_metal_served`) and the site-alignment gate (`moe_site_ok`) name ONE set, which is the
 only case that isolates the roster, since no format one admits the other refuses;

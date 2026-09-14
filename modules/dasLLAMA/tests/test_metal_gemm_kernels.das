@@ -1657,6 +1657,11 @@ def private moe_split_twin(fmt; form) : tuple<src : string; entry : string; fm :
         if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_tgmem)
         if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_tgmem)
     }
+    if (fmt == 40) {
+        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_tgmem)
+        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_tgmem)
+        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_tgmem)
+    }
     if (fmt == 33) {
         if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl, entry = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_entry, fm = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_fastmath, tgm = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_tgmem)
         if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl, entry = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_entry, fm = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_fastmath, tgm = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_tgmem)
@@ -2382,10 +2387,13 @@ def test_metal_gemm_kernels(t : T?) {
                 moe_mulmm_kq_gate(t, dev, queue, 5, 256, 128, [8, 33], false)   // twin legs per format
                 moe_mulmm_kq_gate(t, dev, queue, 6, 256, 128, [8, 33], false)
                 moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [130, 40, 200], false)   // tall pair: counts cross 128
-                for (fmt in [3, 44, 33, 34, 23, 24, 25]) {
+                for (fmt in [3, 44, 40, 33, 34, 23, 24, 25]) {
                     moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [8, 33])
                     moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [130, 40, 200])
                 }
+                // the q40 expert site at the gemma-4-26B-A4B geometry: kdim = dim 2816, ndim =
+                // n_ff_exp 704 (the widest superblock count a routed q40 stack walks)
+                moe_mulmm_split_gate(t, dev, queue, 40, 2816, 704, [8, 33])
                 moe_mulmm_q8_gate(t, dev, queue, false, 96, 64, [32, 40, 8], true)
                 moe_mulmm_q8_gate(t, dev, queue, false, 128, 64, [8, 33], false)
                 moe_mulmm_q8_gate(t, dev, queue, true, 128, 64, [8, 33], false)

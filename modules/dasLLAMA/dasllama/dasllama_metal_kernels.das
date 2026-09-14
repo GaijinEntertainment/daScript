@@ -3702,6 +3702,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_moe_kq_iq2xs = compile_pso(metal_moe_gemv_iq2xs_msl, metal_moe_gemv_iq2xs_msl_entry, metal_moe_gemv_iq2xs_msl_fastmath, ok)
     g_pso_moe_kq_iq2xxs = compile_pso(metal_moe_gemv_iq2xxs_msl, metal_moe_gemv_iq2xxs_msl_entry, metal_moe_gemv_iq2xxs_msl_fastmath, ok)
     g_pso_moe_kq_iq4xs = compile_pso(metal_moe_gemv_iq4xs_msl, metal_moe_gemv_iq4xs_msl_entry, metal_moe_gemv_iq4xs_msl_fastmath, ok)
+    g_pso_moe_kq_q40 = compile_pso(metal_moe_gemv_q40_msl, metal_moe_gemv_q40_msl_entry, metal_moe_gemv_q40_msl_fastmath, ok)
     g_pso_moe_kq_k5 = compile_pso(metal_moe_gemv_k5_msl, metal_moe_gemv_k5_msl_entry, metal_moe_gemv_k5_msl_fastmath, ok)
     g_pso_moe_kq_k6 = compile_pso(metal_moe_gemv_k6_msl, metal_moe_gemv_k6_msl_entry, metal_moe_gemv_k6_msl_fastmath, ok)
     g_pso_moe_combine = compile_pso(metal_moe_combine_msl, metal_moe_combine_msl_entry, metal_moe_combine_msl_fastmath, ok)
@@ -4280,6 +4281,9 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
             enc_moe_gemv_iq2xxs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } elif (fmt == KqFmt.iq4xs) {
             enc_moe_gemv_iq4xs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
+        } elif (fmt == KqFmt.q40) {
+            // the compact scale plane keeps the per-32-block f16 d AT soff, so the d bind is soff too (doff is 0)
+            enc_moe_gemv_q40_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } else {
             panic("metal moe decode: expert plane format {fmt} has no Metal expert kernel - moe_metal_ok admitted it (moe_fmt_metal_served)")
         }
@@ -4712,6 +4716,7 @@ def metal_kernels_release {   // nolint:STYLE038 — a flat release_handle per k
     release_handle(g_pso_moe_kq_iq2xs)
     release_handle(g_pso_moe_kq_iq2xxs)
     release_handle(g_pso_moe_kq_iq4xs)
+    release_handle(g_pso_moe_kq_q40)
     release_handle(g_pso_moe_kq_k5)
     release_handle(g_pso_moe_kq_k6)
     release_handle(g_pso_moe_combine)
@@ -8944,6 +8949,30 @@ class MetalMoeGemvIq4xs : MetalKqGemvIq4T {
 
     [metal_kernel(name="metal_moe_gemv_iq4xs_msl")]
     def metal_moe_gemv_iq4xs {
+        gemv_body()
+    }
+
+    def override site_setup(var g : uint[8]) {
+        moe_site_setup(ka.ndim, ka.ddim, ka.eplane, ka.xs, ka.ss, ka.bxs, ka.bys, sel, g)
+    }
+    def override y_rows : uint => ka.ddim
+    def override x4_at(i : uint) : float4 => x4[i]
+    def override y_put(i : uint; v : float) {
+        y[i] = v
+    }
+}
+
+[metal_dispatch(name = "enc_moe_gemv_q40_c", pso = "g_pso_moe_kq_q40", tgmem = "metal_moe_gemv_q40_msl_tgmem", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
+class MetalMoeGemvQ40 : MetalKqGemvIq4T {
+    @ssbo @binding = 3 @role = "read" x4 : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
+    @uniform @binding = 5 ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" sel : array<uint>
+    override IQ4NL = true
+    override Q40 = true
+
+    [metal_kernel(name="metal_moe_gemv_q40_msl")]
+    def metal_moe_gemv_q40 {
         gemv_body()
     }
 

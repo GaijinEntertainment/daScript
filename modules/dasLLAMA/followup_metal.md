@@ -405,7 +405,7 @@ Open on this box, to the 0.99 bar:
 
 The same driver over every gemma file the two boxes stock (gemma-2, gemma-3, the gemma-4 dense
 and E-series, the 26B-A4B MoE in five formats), sec.7's rig and bar (0.98 on both axes, the
-40-token instructed counting fixture token-for-token against llama.cpp's own greedy). Three
+40-token instructed counting fixture token-for-token against llama.cpp's own greedy). Four
 mechanisms landed on the way:
 
 - **The E-series decode built its PLE side input from nothing.** The hub's decode path consulted
@@ -423,6 +423,11 @@ mechanisms landed on the way:
   panels the routed block never reads (47 GB, an eight-minute bake). The bake refuses expert
   slices (IMAGE_VERSION 38): the same image is 18 GB, its dev-W plane 3.1 GB over 205 dense sites,
   baked in under a second.
+- **The routed block serves q40 expert planes.** A Q4_0 26B declined `graph` on both boxes and ran
+  the whole model on the CPU rails, though the dense q40 kernels had shipped: the routed ladders
+  carried no q40 arm. q40 joins the split-format expert twins off the iq4xs template
+  (`MetalMoeMulMmQ40T/TH/TH128/THR`) with its own expert GEMV (`MetalMoeGemvQ40`); the M5 row below
+  reads 1.05 and 1.11.
 
 | file (M5 Max) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
 |---|---|---|---|---|---|---|---|
@@ -443,7 +448,7 @@ mechanisms landed on the way:
 | gemma-4-26B-A4B-it-UD-IQ4_XS | 3429 | 3856 | 1.12 | 99.4 | 110.8 | 1.12 | 40/40 |
 | gemma-4-26B-A4B-it-Q4_K_M | 3467 | 3943 | 1.14 | 99.5 | 118.8 | 1.19 | 40/40 |
 | gemma-4-26B-A4B-it-Q8_0 | 3344 | 3767 | 1.13 | 91.5 | 106.4 | 1.16 | 40/40 |
-| gemma-4-26B-A4B-it-Q4_0 | - | - | - | - | - | - | declines `graph` (b) |
+| gemma-4-26B-A4B-it-Q4_0 | 3796 | 3979 | 1.05 | 120.1 | 132.7 | 1.11 | 40/40 (b) |
 | gemma-4-26B_q4_0-it (QAT) | - | - | - | - | - | - | CPU pregate red (c) |
 
 | file (M4 Pro) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
@@ -463,17 +468,22 @@ mechanisms landed on the way:
 | gemma-4-26B-A4B-it-UD-IQ3_XXS | 729 | 797 | 1.09 | 59.5 | 66.8 | 1.12 | 40/40 |
 | gemma-4-26B-A4B-it-UD-IQ4_XS | 741 | 778 | 1.05 | 53.8 | 54.8 | 1.02 | 40/40 |
 | gemma-4-26B-A4B-it-Q4_K_M | 731 | 818 | 1.12 | 53.9 | 60.4 | 1.12 | 40/40 |
-| gemma-4-26B-A4B-it-Q4_0 | - | - | - | - | - | - | declines `graph` (b) |
+| gemma-4-26B-A4B-it-Q4_0 | - | - | - | - | - | - | not re-measured (b) |
 | gemma-4-26B_q4_0-it (QAT) | - | - | - | - | - | - | CPU pregate red (c) |
 
 (a) The M5's decode sits at 0.96 on the k5 file - sec.10's gap at a third width (n=3840). Its
 fixture flips at token 21 on a 0.03-logit near-tie the Metal chain lands on with no crown armed
 (the k5 tensor twin holds the double-precision oracle at the production width - the kernel cells
 now run kdim 3840); the token gate is no instrument for that row (`followup_general.md` row 150,
-the fixture margin floor). (b) The routed block serves twelve expert-plane formats and declines
-q40: both Q4_0 26B files fall to the CPU rails on both boxes - the q40 expert twins (the s and e
-stamps, the routed GEMV) are the open item. (c) The Google QAT file diverges on the CPU
-kq-native rails, independent of Metal.
+the fixture margin floor). (b) The routed block serves thirteen expert-plane formats, q40 among
+them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside q8 down stacks (a 704-wide
+down row is no multiple of 256, so the loader demotes that plane) and runs the routed block on
+both boxes through the q40 split twins and the q40 expert GEMV. The M4 row is `-` until the sweep
+re-measures it. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
+byte-identical; only the token table's format and the Q4_0 rounding differ) and diverges on the
+CPU kq-native rails at one token: a top-8 router pick at layer 29 on an 8e-5 margin, which the
+arm64-sdot backend lands the other way - the CPU pregate refuses the file, so its rows stay
+unmeasured (`followup_general.md` row 151 has the activation form behind the margin).
 
 ## 8. The M4 Pro's routed iquant files prefill at 0.97 of llama.cpp
 

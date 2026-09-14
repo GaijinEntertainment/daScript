@@ -1066,6 +1066,36 @@ class MetalKqMulMmQ40TH : MetalKqMulMmIq4xsTensorT {
     override Q40 = true
 }
 
+[metal_dispatch(name = "pf_enc_moe_mm_q40_t_c", pso = "g_pf_pso_moe_mm_q40_t", kernel = "metal_moe_mulmm_iq4xs_t", tgmem = "MetalMoeMulMmQ40T_metal_moe_mulmm_iq4xs_t_msl_tgmem", tg = 128, grid = "tiles, rows/64, ne", params = "mp : int64, rows : int64, ne : int64, tiles : int64", requires = "rows % 64")]
+class MetalMoeMulMmQ40T : MetalMoeMulMmIq4xsSplitT {
+    typedef XT = float
+    override IQ4NL = true
+    override Q40 = true
+}
+
+[metal_dispatch(name = "pf_enc_moe_mm_q40_th_c", pso = "g_pf_pso_moe_mm_q40_th", kernel = "metal_moe_mulmm_iq4xs_t", tgmem = "MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_tgmem", tg = 128, grid = "tiles, rows/64, ne", params = "mp : int64, rows : int64, ne : int64, tiles : int64", requires = "rows % 64")]
+class MetalMoeMulMmQ40TH : MetalMoeMulMmIq4xsSplitT {
+    typedef XT = float16
+    override IQ4NL = true
+    override Q40 = true
+}
+
+[metal_dispatch(name = "pf_enc_moe_mm_q40_th128_c", pso = "g_pf_pso_moe_mm_q40_th128", kernel = "metal_moe_mulmm_iq4xs_t", tgmem = "MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_tgmem", tg = 128, grid = "tiles, rows/64, ne", params = "mp : int64, rows : int64, ne : int64, tiles : int64", requires = "rows % 64")]
+class MetalMoeMulMmQ40TH128 : MetalMoeMulMmIq4xsSplitT {
+    typedef XT = float16
+    override IQ4NL = true
+    override Q40 = true
+    override MT = 128u
+}
+
+[metal_dispatch(name = "pf_enc_moe_mm_q40_thr_c", pso = "g_pf_pso_moe_mm_q40_thr", kernel = "metal_moe_mulmm_iq4xs_t", tgmem = "MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_tgmem", tg = 128, grid = "4, rows/64, ne", params = "mp : int64, rows : int64, ne : int64, tiles : int64", requires = "rows % 64")]
+class MetalMoeMulMmQ40THR : MetalMoeMulMmIq4xsSplitT {
+    typedef XT = float16
+    override IQ4NL = true
+    override Q40 = true
+    override REM = true
+}
+
 [ |> template_struct_instance]
 class template MetalKqMulMmK3TensorT : MetalKqMulMmSplitTensorBase {
     [metal_kernel(float_a_ok=true)]
@@ -4267,6 +4297,10 @@ var private g_pf_pso_moe_mm_iq4xs_t : MetalComputePipeline?
 var private g_pf_pso_moe_mm_iq4xs_th : MetalComputePipeline?
 var private g_pf_pso_moe_mm_iq4xs_th128 : MetalComputePipeline?
 var private g_pf_pso_moe_mm_iq4xs_thr : MetalComputePipeline?
+var private g_pf_pso_moe_mm_q40_t : MetalComputePipeline?
+var private g_pf_pso_moe_mm_q40_th : MetalComputePipeline?
+var private g_pf_pso_moe_mm_q40_th128 : MetalComputePipeline?
+var private g_pf_pso_moe_mm_q40_thr : MetalComputePipeline?
 var private g_pf_pso_moe_mm_iq3s_t : MetalComputePipeline?
 var private g_pf_pso_moe_mm_iq3s_th : MetalComputePipeline?
 var private g_pf_pso_moe_mm_iq3s_th128 : MetalComputePipeline?
@@ -4547,6 +4581,10 @@ def public metal_prefill_shutdown {   // nolint:STYLE038 — flat one-release-pe
     release_handle(g_pf_pso_moe_mm_iq4xs_th)
     release_handle(g_pf_pso_moe_mm_iq4xs_th128)
     release_handle(g_pf_pso_moe_mm_iq4xs_thr)
+    release_handle(g_pf_pso_moe_mm_q40_t)
+    release_handle(g_pf_pso_moe_mm_q40_th)
+    release_handle(g_pf_pso_moe_mm_q40_th128)
+    release_handle(g_pf_pso_moe_mm_q40_thr)
     release_handle(g_pf_pso_moe_mm_iq3s_t)
     release_handle(g_pf_pso_moe_mm_iq3s_th)
     release_handle(g_pf_pso_moe_mm_iq3s_th128)
@@ -4739,6 +4777,12 @@ def private pf_compile_moe_kq_twins(var ok : bool&) {
         g_pf_pso_moe_mm_iq4xs_th = compile_pso(MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl, MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl_entry, MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl_fastmath, ok)
         g_pf_pso_moe_mm_iq4xs_th128 = compile_pso(MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl, MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_entry, MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_fastmath, ok)
         g_pf_pso_moe_mm_iq4xs_thr = compile_pso(MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl, MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_entry, MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_fastmath, ok)
+    }
+    if (g_pf_tensor_ok) {
+        g_pf_pso_moe_mm_q40_t = compile_pso(MetalMoeMulMmQ40T_metal_moe_mulmm_iq4xs_t_msl, MetalMoeMulMmQ40T_metal_moe_mulmm_iq4xs_t_msl_entry, MetalMoeMulMmQ40T_metal_moe_mulmm_iq4xs_t_msl_fastmath, ok)
+        g_pf_pso_moe_mm_q40_th = compile_pso(MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl, MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_entry, MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_fastmath, ok)
+        g_pf_pso_moe_mm_q40_th128 = compile_pso(MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl, MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_entry, MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_fastmath, ok)
+        g_pf_pso_moe_mm_q40_thr = compile_pso(MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl, MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_entry, MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_fastmath, ok)
     }
     if (g_pf_tensor_ok) {
         g_pf_pso_moe_mm_iq3s_t = compile_pso(MetalMoeMulMmIq3sT_metal_moe_mulmm_iq3s_t_msl, MetalMoeMulMmIq3sT_metal_moe_mulmm_iq3s_t_msl_entry, MetalMoeMulMmIq3sT_metal_moe_mulmm_iq3s_t_msl_fastmath, ok)
@@ -5963,6 +6007,7 @@ def private pf_moe_th_pso(fmt : KqFmt) : MetalComputePipeline? {
     if (fmt == KqFmt.q51) return g_pf_pso_moe_mm_q51_th
     if (fmt == KqFmt.k3) return g_pf_pso_moe_mm_k3_th
     if (fmt == KqFmt.iq4xs) return g_pf_pso_moe_mm_iq4xs_th
+    if (fmt == KqFmt.q40) return g_pf_pso_moe_mm_q40_th
     if (fmt == KqFmt.iq3s) return g_pf_pso_moe_mm_iq3s_th
     if (fmt == KqFmt.iq3xxs) return g_pf_pso_moe_mm_iq3xxs_th
     if (fmt == KqFmt.iq2s) return g_pf_pso_moe_mm_iq2s_th
@@ -5982,6 +6027,7 @@ enum MoeSplitForm {
 def private pf_moe_split_pso(fmt : KqFmt; form : MoeSplitForm) : MetalComputePipeline? {   // nolint:STYLE037 — flat per-format pick
     if (fmt == KqFmt.k3) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_k3_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_k3_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_k3_th128 : g_pf_pso_moe_mm_k3_thr))
     if (fmt == KqFmt.iq4xs) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq4xs_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq4xs_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq4xs_th128 : g_pf_pso_moe_mm_iq4xs_thr))
+    if (fmt == KqFmt.q40) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_q40_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_q40_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_q40_th128 : g_pf_pso_moe_mm_q40_thr))
     if (fmt == KqFmt.iq3s) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq3s_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq3s_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq3s_th128 : g_pf_pso_moe_mm_iq3s_thr))
     if (fmt == KqFmt.iq3xxs) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq3xxs_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq3xxs_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq3xxs_th128 : g_pf_pso_moe_mm_iq3xxs_thr))
     if (fmt == KqFmt.iq2s) return form == MoeSplitForm.t ? g_pf_pso_moe_mm_iq2s_t : (form == MoeSplitForm.th ? g_pf_pso_moe_mm_iq2s_th : (form == MoeSplitForm.th128 ? g_pf_pso_moe_mm_iq2s_th128 : g_pf_pso_moe_mm_iq2s_thr))
@@ -5990,7 +6036,7 @@ def private pf_moe_split_pso(fmt : KqFmt; form : MoeSplitForm) : MetalComputePip
     return null
 }
 
-def private pf_moe_split_th_any() : bool => g_pf_pso_moe_mm_k3_th != null || g_pf_pso_moe_mm_iq4xs_th != null || g_pf_pso_moe_mm_iq3s_th != null || g_pf_pso_moe_mm_iq3xxs_th != null || g_pf_pso_moe_mm_iq2s_th != null || g_pf_pso_moe_mm_iq2xs_th != null || g_pf_pso_moe_mm_iq2xxs_th != null
+def private pf_moe_split_th_any() : bool => g_pf_pso_moe_mm_k3_th != null || g_pf_pso_moe_mm_iq4xs_th != null || g_pf_pso_moe_mm_q40_th != null || g_pf_pso_moe_mm_iq3s_th != null || g_pf_pso_moe_mm_iq3xxs_th != null || g_pf_pso_moe_mm_iq2s_th != null || g_pf_pso_moe_mm_iq2xs_th != null || g_pf_pso_moe_mm_iq2xxs_th != null
 
 def private pf_moe_split_enc(enc : MetalComputeEncoder?; fmt : KqFmt; form : MoeSplitForm;   // nolint:STYLE037,STYLE038 — flat per-format, per-form dispatch ladder
                              bs : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64>; bq : tuple<buf : MetalBuffer?; qoff : uint64>;
@@ -6016,6 +6062,18 @@ def private pf_moe_split_enc(enc : MetalComputeEncoder?; fmt : KqFmt; form : Moe
             pf_enc_moe_mm_iq4xs_th128_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
         } else {
             pf_enc_moe_mm_iq4xs_thr_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
+        }
+        return
+    }
+    if (fmt == KqFmt.q40) {   //! compact scale plane: the f16 d row starts at soff, so both scale binds take soff (never doff, which is 0 here)
+        if (form == MoeSplitForm.t) {
+            pf_enc_moe_mm_q40_t_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
+        } elif (form == MoeSplitForm.th) {
+            pf_enc_moe_mm_q40_th_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
+        } elif (form == MoeSplitForm.th128) {
+            pf_enc_moe_mm_q40_th128_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
+        } else {
+            pf_enc_moe_mm_q40_thr_c(enc, bs.buf, bs.soff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, 0ul, by, 0ul, bkd, bnd, bcnt, bbase, mpad, rows, ne, tiles)
         }
         return
     }
@@ -6082,7 +6140,7 @@ def private pf_moe_split_enc(enc : MetalComputeEncoder?; fmt : KqFmt; form : Moe
     panic("metal moe prefill: expert plane format {fmt} has no split twin - pf_moe_split_fmt admitted it")
 }
 
-def private pf_moe_split_fmt(fmt : KqFmt) : bool => fmt == KqFmt.k3 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs
+def private pf_moe_split_fmt(fmt : KqFmt) : bool => fmt == KqFmt.k3 || fmt == KqFmt.iq4xs || fmt == KqFmt.q40 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs
 
 def private pf_moe_model_split(t : Model) : bool {
     for (l in range64(t.config.n_layers)) {

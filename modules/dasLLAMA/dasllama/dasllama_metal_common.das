@@ -222,6 +222,7 @@ var g_pso_moe_kq_iq2s : MetalComputePipeline?
 var g_pso_moe_kq_iq2xs : MetalComputePipeline?
 var g_pso_moe_kq_iq2xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq4xs : MetalComputePipeline?
+var g_pso_moe_kq_q40 : MetalComputePipeline?
 var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape

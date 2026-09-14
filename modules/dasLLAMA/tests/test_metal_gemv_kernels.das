@@ -313,6 +313,7 @@ def private moe_gemv_kernel(fmt) : tuple<src : string; entry : string; fm : bool
     if (fmt == 24) return (src = metal_moe_gemv_iq2xs_msl, entry = metal_moe_gemv_iq2xs_msl_entry, fm = metal_moe_gemv_iq2xs_msl_fastmath, tgm = 0ul)
     if (fmt == 25) return (src = metal_moe_gemv_iq2xxs_msl, entry = metal_moe_gemv_iq2xxs_msl_entry, fm = metal_moe_gemv_iq2xxs_msl_fastmath, tgm = 0ul)
     if (fmt == 44) return (src = metal_moe_gemv_iq4xs_msl, entry = metal_moe_gemv_iq4xs_msl_entry, fm = metal_moe_gemv_iq4xs_msl_fastmath, tgm = metal_moe_gemv_iq4xs_msl_tgmem)
+    if (fmt == 40) return (src = metal_moe_gemv_q40_msl, entry = metal_moe_gemv_q40_msl_entry, fm = metal_moe_gemv_q40_msl_fastmath, tgm = metal_moe_gemv_q40_msl_tgmem)
     panic("moe_gemv_kernel: no expert GEMV for format {fmt}")
     return (src = "", entry = "", fm = false, tgm = 0ul)
 }
@@ -922,10 +923,13 @@ def test_metal_kq_gemv_kernels(t : T?) {
                     kq_mvb_gate(t, dev, queue, fmt, 8, 768, 17, 6, 22)
                 }
                 // expert-indexed: shared-x (gate/up) and per-slot (down) forms
-                for (fmt in [4, 5, 6, 3, 33, 34, 23, 24, 25, 44]) {
+                for (fmt in [4, 5, 6, 3, 33, 34, 23, 24, 25, 44, 40]) {
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, false)
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, true)
                 }
+                // the q40 expert row at the gemma-4-26B-A4B decode geometry: n = dim 2816 (the
+                // gate/up site's reduction), d = 7 rows of the 704-wide stack
+                moe_kq_gemv_gate(t, dev, queue, 40, 2816, 7, 5, 3, 2, false)
                 // the fused QKV rope-store pair: norm/neox x bias x f16/f32 mirror
                 qkv_rs_gate(t, dev, queue, true, false, true, 64, 16, 8, 8)
                 qkv_rs_gate(t, dev, queue, true, true, false, 64, 16, 8, 8)

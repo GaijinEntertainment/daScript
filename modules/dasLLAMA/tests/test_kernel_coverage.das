@@ -103,17 +103,18 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the r2 arm of kq_mvb_gate plus the pair-walk gate in test_metal_gemv_kernels.das, and the
     // mtp suite's parity arms
     "MetalArgmaxRows", "MetalKqMvB2K4R2",
-    // the Q4_0 family: no stocked Metal census carrier holds a Q4_0 plane (the zoo quants are
-    // Q8_0 / Q5_K_M / Q4_K_M / mxfp4; the Q4_0 requant is a vulkan-census fixture). Their coverage
-    // is kq_gemv_gate("q40") and kq_mvb_gate(fmt 40) in test_metal_gemv_kernels.das plus
-    // kq_mulmm_gate(fmt 40) in test_metal_gemm_kernels.das
-    "MetalKqGemvQ40", "MetalKqMvB2Q40", "MetalKqMvB4Q40", "MetalKqMvB8Q40",
-    "MetalKqMulMmQ40", "MetalKqMulMmQ40T", "MetalKqMulMmQ40TH",
+    // the Q4_0 small-batch twins: the gemma4moe row reaches every other q40 dense stamp, but its
+    // decode steps are single rows, so the B2/B4/B8 tiles need a batched carrier no zoo row runs.
+    // The simdgroup dense mul_mm loses the box race to its own tensor stamp, so it never serves
+    // either - its entry carries the method suffix, since the bare class name prefix-matches the
+    // T/TH keys the row DOES dispatch. Their coverage is kq_mvb_gate(fmt 40) in
+    // test_metal_gemv_kernels.das and kq_mulmm_gate(fmt 40) in test_metal_gemm_kernels.das
+    "MetalKqMvB2Q40", "MetalKqMvB4Q40", "MetalKqMvB8Q40", "MetalKqMulMmQ40_metal_kq_mulmm",
     // the dev-W dequant kernels of the split-scale and iquant formats: the image mint's dev-W bake
     // runs one per format, and no stocked census carrier holds a plane in any of them (same zoo
     // quants as above). Their coverage is kq_devw_gate in test_metal_gemm_kernels.das, whose
     // kq_dq_kernel picks the stamp per format
-    "MetalKqDequantIq4xs", "MetalKqDequantIq4nl", "MetalKqDequantQ40", "MetalKqDequantK3",
+    "MetalKqDequantIq4xs", "MetalKqDequantIq4nl", "MetalKqDequantK3",
     "MetalKqDequantIq3s", "MetalKqDequantIq3xxs", "MetalKqDequantK2", "MetalKqDequantIq2s",
     "MetalKqDequantIq2xs", "MetalKqDequantIq2xxs",
     // the split-format MoE expert mul_mm stamps, all four forms (f32-X base, half-X twin, and the
@@ -127,10 +128,18 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalMoeMulMmIq2sT", "MetalMoeMulMmIq2sTH", "MetalMoeMulMmIq2sTH128", "MetalMoeMulMmIq2sTHR",
     "MetalMoeMulMmIq2xsT", "MetalMoeMulMmIq2xsTH", "MetalMoeMulMmIq2xsTH128", "MetalMoeMulMmIq2xsTHR",
     "MetalMoeMulMmIq2xxsT", "MetalMoeMulMmIq2xxsTH", "MetalMoeMulMmIq2xxsTH128", "MetalMoeMulMmIq2xxsTHR",
+    // the q40 expert twins the gemma4moe row cannot reach: the f32-X base only serves where no
+    // gather panel was minted (that row mints one, so it takes the TH stamp), and the tall pair
+    // engages at npos * n_expert_used >= 128 * n_expert = 16384 rows. The base's entry carries
+    // the method suffix - the bare class name prefix-matches the TH key the row dispatches.
+    // Their coverage is moe_mulmm_split_gate(fmt 40) in test_metal_gemm_kernels.das
+    "MetalMoeMulMmQ40T_metal_moe_mulmm_iq4xs_t", "MetalMoeMulMmQ40TH128", "MetalMoeMulMmQ40THR",
     // the expert-indexed GEMVs of the same formats, on the same expert planes nothing stocks.
+    // These classes name their MSL kernel outright, so the census key is that kernel name, not
+    // the class - a class-named entry here would match nothing and could never drain.
     // Their coverage is moe_kq_gemv_gate in test_metal_gemv_kernels.das
-    "MetalMoeGemvK3", "MetalMoeGemvIq4xs", "MetalMoeGemvIq3s", "MetalMoeGemvIq3xxs",
-    "MetalMoeGemvIq2s", "MetalMoeGemvIq2xs", "MetalMoeGemvIq2xxs",
+    "metal_moe_gemv_k3", "metal_moe_gemv_iq4xs", "metal_moe_gemv_iq3s", "metal_moe_gemv_iq3xxs",
+    "metal_moe_gemv_iq2s", "metal_moe_gemv_iq2xs", "metal_moe_gemv_iq2xxs",
     // the 16-deep router select stamp: it serves past 256 experts, and the stocked MoE carriers top
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
     // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
@@ -140,11 +149,11 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // whose per_layer_token_embd is K-quant or Q4_0, and the zoo stocks none. Their coverage is
     // ple_gather_kq_gate in test_metal_prefill_kernels.das
     "MetalPleGatherK4", "MetalPleGatherK5", "MetalPleGatherQ40",
-    // the geglu arm of the bound-total MoE activation: the prefill picks it on moe_dense_shexp (the
-    // gemma-4 MoE shape) and the zoo's gemma-4 rows are the dense 12B and the E4B PLE model, so the
-    // swiglu twin runs on every MoE row here. Their coverage is ew2_totb_gate(geglu = true) in
+    // the unconverted geglu arm of the bound-total MoE activation: the gemma4moe row picks the
+    // geglu family on moe_dense_shexp, and its panel always clears CVT_MIN_ROWS, so the HX twin
+    // serves and this one never does. Its coverage is ew2_totb_gate(geglu = true) in
     // test_metal_misc_kernels.das
-    "MetalGegluB", "MetalGegluHXB"
+    "MetalGegluB"
 ]
 
 def private counting_prompt(start, last : int) : string {
@@ -286,6 +295,11 @@ def private census_zoo(t : T?) {
         [KVDtype.f16], none)
     // qwen2moe: q8 expert stacks + the sigmoid-gated shared expert on std attention; large tier
     cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe",
+        [KVDtype.f16], none)
+    // gemma4moe: the only carrier of a Q4_0 routed expert plane - the gemma-4 dense-shared MoE
+    // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks demote to q8: no multiple of
+    // 256). No batch shapes, same reason as the other MoE rows; large tier
+    cov_model(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe",
         [KVDtype.f16], none)
     cov_tower(t)
 }

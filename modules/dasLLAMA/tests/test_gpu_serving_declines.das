@@ -234,12 +234,12 @@ def private moe_shell(fmt : KqFmt) : Model {
 [test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
-        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.iq4xs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
             var m <- moe_shell(f)
             t |> success(moe_metal_ok(m), "{f} expert planes are served")
             delete m
         }
-        for (f in [KqFmt.iq4nl, KqFmt.k2, KqFmt.q40]) {
+        for (f in [KqFmt.iq4nl, KqFmt.k2]) {
             var m <- moe_shell(f)
             t |> success(!moe_metal_ok(m), "{f} expert planes decline the routed block")
             delete m
@@ -252,7 +252,7 @@ def test_moe_metal_expert_formats(t : T?) {
     t |> run("the kernel roster and the site-alignment gate name ONE format set - every KqFmt reads the same on both") @(t : T?) {
         // No format the site gate admits is refused by the roster: the two lists are identical,
         // so a roster that answered true for everything is caught only by walking the WHOLE enum -
-        // q40, iq4nl and k2 are the members that must read false on both. A format added to one
+        // iq4nl and k2 are the members that must read false on both. A format added to one
         // list and not the other reds here.
         for (f in type<KqFmt>) {
             t |> equal(moe_fmt_metal_served(f), moe_site_ok(f, 0l, 512l), "{f}: the roster and the site gate agree")
