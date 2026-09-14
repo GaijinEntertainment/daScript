@@ -401,6 +401,80 @@ Open on this box, to the 0.99 bar:
 - Dense q8 prefill 0.95-0.98 below dim 1536 (the mulmm base at these widths), the MoE
   split twins' prefill 0.95, and the remaining 20 Qwen files never timed here.
 
+### 7.2 The gemma pass - both boxes
+
+The same driver over every gemma file the two boxes stock (gemma-2, gemma-3, the gemma-4 dense
+and E-series, the 26B-A4B MoE in five formats), sec.7's rig and bar (0.98 on both axes, the
+40-token instructed counting fixture token-for-token against llama.cpp's own greedy). Three
+mechanisms landed on the way:
+
+- **The E-series decode built its PLE side input from nothing.** The hub's decode path consulted
+  the prefill's device pre-step gate at one position; the Metal gate answered yes, the CPU pre-step
+  was skipped, and the Metal decode copied the unfilled host rows - every E-series q8 file served
+  garbage from the second token on both boxes. The gate is now two seats, one per direction
+  (`register_ple_gpu_decode_gate`), and Metal registers the prefill one alone (sec.13 is the
+  decode-side gather).
+- **The k4/k5/q40 PLE token tables gather on device.** The prefill's GPU pre-step took q8 tables
+  only; every other table fell to the serial CPU gather, and the E2B Q4_0 and Q4_K_M files
+  prefilled at 0.49 and 0.51 of llama.cpp on the M5. `MetalPleGatherKqT` stamps the three formats
+  off their native planes; the rows below read 1.11 and 1.18.
+- **The dev-W bake left the expert stacks in.** gemma-4 splits its fused expert stacks per expert
+  at load, every slice passed the bake's format-and-size predicate, and a 26B image carried 32 GB of
+  panels the routed block never reads (47 GB, an eight-minute bake). The bake refuses expert
+  slices (IMAGE_VERSION 38): the same image is 18 GB, its dev-W plane 3.1 GB over 205 dense sites,
+  baked in under a second.
+
+| file (M5 Max) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
+|---|---|---|---|---|---|---|---|
+| gemma-3-1b-it-Q8_0 | 17866 | 24256 | 1.36 | 288.4 | 327.3 | 1.13 | 40/40 |
+| gemma-2-2b-it-Q4_K_M | 8578 | 11378 | 1.33 | 211.7 | 228.4 | 1.08 | 40/40 |
+| gemma-2-2b-it-Q8_0 | 8757 | 11383 | 1.30 | 154.7 | 165.9 | 1.07 | 40/40 |
+| gemma-4-E2B-it-Q4_0 | 7629 | 8452 | 1.11 | 177.4 | 215.0 | 1.21 | 40/40 |
+| gemma-4-E2B-it-Q4_K_M | 7209 | 8516 | 1.18 | 175.7 | 219.1 | 1.25 | 40/40 |
+| gemma-3-4b-it-Q8_0 | 5923 | 7103 | 1.20 | 107.9 | 114.5 | 1.06 | 40/40 |
+| gemma-4-E2B-it-Q8_0 | 7545 | 9100 | 1.21 | 137.5 | 160.5 | 1.17 | 40/40 |
+| gemma-4-E4B-it-Q8_0 | 4411 | 5330 | 1.21 | 81.7 | 90.4 | 1.11 | 40/40 |
+| gemma-3-12b-it-Q4_K_M | 1762 | 2163 | 1.23 | 62.2 | 65.2 | 1.05 | 40/40 |
+| gemma-4-12B-it-Q4_K_M | 1664 | 2086 | 1.25 | 59.4 | 64.0 | 1.08 | 40/40 |
+| gemma-4-12b-it-Q5_K_M | 1635 | 2117 | 1.30 | 53.1 | 51.0 | 0.96 | 31/40 (a) |
+| gemma-4-12b-it-Q6_K | 1690 | 2072 | 1.23 | 48.2 | 50.3 | 1.04 | 40/40 |
+| gemma-4-12B-it-Q8_0 | 1763 | 2136 | 1.21 | 39.9 | 41.0 | 1.03 | 40/40 |
+| gemma-4-26B-A4B-it-UD-IQ3_XXS | 3461 | 4009 | 1.16 | 108.7 | 129.4 | 1.19 | 40/40 |
+| gemma-4-26B-A4B-it-UD-IQ4_XS | 3429 | 3856 | 1.12 | 99.4 | 110.8 | 1.12 | 40/40 |
+| gemma-4-26B-A4B-it-Q4_K_M | 3467 | 3943 | 1.14 | 99.5 | 118.8 | 1.19 | 40/40 |
+| gemma-4-26B-A4B-it-Q8_0 | 3344 | 3767 | 1.13 | 91.5 | 106.4 | 1.16 | 40/40 |
+| gemma-4-26B-A4B-it-Q4_0 | - | - | - | - | - | - | declines `graph` (b) |
+| gemma-4-26B_q4_0-it (QAT) | - | - | - | - | - | - | CPU pregate red (c) |
+
+| file (M4 Pro) | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
+|---|---|---|---|---|---|---|---|
+| gemma-3-1b-it-Q8_0 | 4248 | 4425 | 1.04 | 171.5 | 182.0 | 1.06 | 40/40 |
+| gemma-2-2b-it-Q4_K_M | 1521 | 1691 | 1.11 | 114.9 | 118.8 | 1.03 | 40/40 |
+| gemma-2-2b-it-Q8_0 | 1585 | 1688 | 1.06 | 80.4 | 81.6 | 1.01 | 40/40 |
+| gemma-4-E2B-it-Q4_0 | 1572 | 1584 | 1.01 | 108.4 | 121.6 | 1.12 | 40/40 |
+| gemma-4-E2B-it-Q4_K_M | 1494 | 1593 | 1.07 | 106.5 | 129.6 | 1.22 | 40/40 |
+| gemma-3-4b-it-Q8_0 | 982 | 983 | 1.00 | 54.7 | 55.5 | 1.01 | 40/40 |
+| gemma-4-E2B-it-Q8_0 | 1558 | 1541 | 0.99 | 78.6 | 86.3 | 1.10 | 40/40 |
+| gemma-4-E4B-it-Q8_0 | 786 | 772 | 0.98 | 42.3 | 45.7 | 1.08 | 40/40 |
+| gemma-4-12B-it-Q4_K_M | 276 | 290 | 1.05 | 29.4 | 30.7 | 1.04 | 40/40 |
+| gemma-4-12b-it-Q5_K_M | 263 | 297 | 1.13 | 21.2 | 21.6 | 1.02 | 40/40 |
+| gemma-4-12b-it-Q6_K | 279 | 297 | 1.07 | 22.4 | 23.8 | 1.06 | 40/40 |
+| gemma-4-12B-it-Q8_0 | 298 | 297 | 1.00 | 18.8 | 19.2 | 1.02 | 40/40 |
+| gemma-4-26B-A4B-it-UD-IQ3_XXS | 729 | 797 | 1.09 | 59.5 | 66.8 | 1.12 | 40/40 |
+| gemma-4-26B-A4B-it-UD-IQ4_XS | 741 | 778 | 1.05 | 53.8 | 54.8 | 1.02 | 40/40 |
+| gemma-4-26B-A4B-it-Q4_K_M | 731 | 818 | 1.12 | 53.9 | 60.4 | 1.12 | 40/40 |
+| gemma-4-26B-A4B-it-Q4_0 | - | - | - | - | - | - | declines `graph` (b) |
+| gemma-4-26B_q4_0-it (QAT) | - | - | - | - | - | - | CPU pregate red (c) |
+
+(a) The M5's decode sits at 0.96 on the k5 file - sec.10's gap at a third width (n=3840). Its
+fixture flips at token 21 on a 0.03-logit near-tie the Metal chain lands on with no crown armed
+(the k5 tensor twin holds the double-precision oracle at the production width - the kernel cells
+now run kdim 3840); the token gate is no instrument for that row (`followup_general.md` row 150,
+the fixture margin floor). (b) The routed block serves twelve expert-plane formats and declines
+q40: both Q4_0 26B files fall to the CPU rails on both boxes - the q40 expert twins (the s and e
+stamps, the routed GEMV) are the open item. (c) The Google QAT file diverges on the CPU
+kq-native rails, independent of Metal.
+
 ## 8. The M4 Pro's routed iquant files prefill at 0.97 of llama.cpp
 
 Qwen3-30B-A3B IQ2_XXS reads pp 0.97 (767 against 792 t/s) with decode 1.18, the M5 1.06 on the
@@ -432,7 +506,8 @@ every shape, so the k5 dot is at its ALU wall (`benchmarks/matmul/bench_metal_ge
 M4 Pro), and the kq_rows_k5 twin lost its race (0.86 against 0.99 ms). Unquirked: a new k5
 spelling in the lab against llama.cpp's `mul_mv_q5_K` at these shapes (the unpack: the low
 nibbles and the high-bit plane per 32-block), promoted through the kq_rows race; the sweep
-continues past the file under this row.
+continues past the file under this row. The gemma-4-12b Q5_K_M (dim 3840, hidden 15360) reads
+0.96 on the M5 Max and 1.02 on the M4 Pro (sec.7.2): at that width the gap is the M5's alone.
 
 ## 11. The k4 expert GEMV reads 0.97 of llama.cpp on the M4 Pro at Qwen1.5-MoE's expert width
 
