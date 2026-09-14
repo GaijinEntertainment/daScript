@@ -484,7 +484,9 @@ the final softcap and the suppressed ids - the bar's max logit skips the pinned 
 perplexity form (`ppl_compare`: `n` ids prefilled, `steps` teacher-forced, the resident's
 perplexity within 5% of the CPU chain's and its argmax hits within three, the one-position-off
 targets the control) at 150 + 150 and at 520 + 80 (two prefill windows, the second eight rows
-deep); the 12B Q4_K_M in the agreement form at eight and 300 tokens. The perplexity form exists
+deep; this cell's ratio is 1.3: over its 80 targets the CPU chain reads 1.97, the resident 2.37
+and llama.cpp b10660 2.51, hits 72, 72 and 71, so the resident sits between the two references);
+the 12B Q4_K_M in the agreement form at eight and 300 tokens. The perplexity form exists
 because the 12B's logits sit within a few points of each other at whole stretches of positions
 (llama.cpp's own margins on the same text read 0.6 to 16), so a maxdiff bar at one position
 measures the model's flatness, not the driver; the CPU chain's own two paths land 13% to 44% of
