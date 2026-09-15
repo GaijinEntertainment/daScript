@@ -347,6 +347,8 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
     var generic_call_char = -1
     var enum_line0 = -1
     var enum_char = -1
+    var paint_line0 = -1
+    var paint_char = -1
     var enum_use_line0 = -1
     var enum_use_char = -1
     var typedef_line0 = -1
@@ -408,6 +410,9 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
         } elif (clean_lines[i] |> starts_with("enum LspProbeColor")) {
             enum_line0 = i
             enum_char = find(clean_lines[i], "LspProbeColor")
+        } elif (clean_lines[i] |> starts_with("def lsp_probe_paint")) {
+            paint_line0 = i
+            paint_char = find(clean_lines[i], "LspProbeColor")
         } elif (clean_lines[i] |> starts_with("    pair.first = int(LspProbeColor")) {
             enum_use_line0 = i
             enum_use_char = find(clean_lines[i], "LspProbeColor")
@@ -445,9 +450,9 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
     t |> success(for_line0 >= 0 && for_use_line0 >= 0, "fixture contains the for loop and its body use")
     t |> success(self_line0 >= 0 && self_call_char > self_name_char, "fixture contains the one-line self-calling function")
     t |> success(generic_line0 >= 0 && generic_call_char > generic_name_char, "fixture contains the one-line self-calling generic")
-    t |> success(enum_line0 >= 0 && enum_use_line0 >= 0 && typedef_line0 >= 0 && pair_line0 >= 0 && global_line0 >= 0 && global_use_line0 >= 0 && yield_line0 >= 0 && let_base_line0 >= 0, "fixture contains the enum, typedef, global, generator and let probes")
+    t |> success(enum_line0 >= 0 && paint_line0 >= 0 && enum_use_line0 >= 0 && typedef_line0 >= 0 && pair_line0 >= 0 && global_line0 >= 0 && global_use_line0 >= 0 && yield_line0 >= 0 && let_base_line0 >= 0, "fixture contains the enum, typedef, global, generator and let probes")
     return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0 || for_line0 < 0 || for_use_line0 < 0 || self_line0 < 0 || generic_line0 < 0 ||
-        enum_line0 < 0 || enum_use_line0 < 0 || typedef_line0 < 0 || pair_line0 < 0 || global_line0 < 0 || global_use_line0 < 0 || yield_line0 < 0 || let_base_line0 < 0)
+        enum_line0 < 0 || paint_line0 < 0 || enum_use_line0 < 0 || typedef_line0 < 0 || pair_line0 < 0 || global_line0 < 0 || global_use_line0 < 0 || yield_line0 < 0 || let_base_line0 < 0)
     let uri = path_to_uri(fixture)
 
     for (host in front_hosts()) {
@@ -669,9 +674,10 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
                 t |> equal(hover_mid.character, let_base_char)
 
                 let enum_keys <- probe_references(t, w, r, 27, uri, enum_line0, enum_char + 2)
-                t |> equal(length(enum_keys), 2, "references to an enum: declaration + its use, got {enum_keys}")
+                t |> equal(length(enum_keys), 3, "references to an enum: declaration, the argument type and the constant's use, got {enum_keys}")
                 t |> success(enum_keys |> find_index("{enum_line0}:{enum_char}") >= 0, "enum references include the declaration")
                 t |> success(enum_keys |> find_index("{enum_use_line0}:{enum_use_char}") >= 0, "enum references include the use")
+                t |> success(enum_keys |> find_index("{paint_line0}:{paint_char}") >= 0, "enum references include the argument type")
                 let global_keys <- probe_references(t, w, r, 28, uri, global_line0, global_char + 2)
                 t |> equal(length(global_keys), 2, "references to a global: declaration + its use, got {global_keys}")
                 t |> success(global_keys |> find_index("{global_use_line0}:{global_use_char}") >= 0, "global references include the use inside the generator")
@@ -682,6 +688,14 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
                 t |> equal(hover_new.character, new_final_char)
                 t |> equal(probe_definition(t, w, r, 31, uri, new_final_line0, new_final_char + 2), int2(final_line0, final_name_char), "definition from the type name in new lands on the class")
                 t |> equal(probe_definition(t, w, r, 32, uri, pair_line0, pair_char + 2), int2(typedef_line0, typedef_char), "definition from a declared variable's type lands on the typedef")
+
+                t |> equal(probe_definition(t, w, r, 33, uri, paint_line0, paint_char + 2), int2(enum_line0, enum_char), "definition from an argument's enum type lands on the enum")
+                let paint_keys <- probe_references(t, w, r, 34, uri, paint_line0, paint_char + 2)
+                t |> success(paint_keys |> find_index("{enum_line0}:{enum_char}") >= 0 && paint_keys |> find_index("{paint_line0}:{paint_char}") >= 0 && paint_keys |> find_index("{enum_use_line0}:{enum_use_char}") >= 0, "references from an enum type name: the declaration, the argument type and the constant's use, got {paint_keys}")
+                write_frame(w, sprint_json(CursorRequestMsg(id = 35, method = "textDocument/prepareCallHierarchy",
+                    params = CursorParams(textDocument = DocId(uri = uri), position = Position0(line = def_line0, character = 6))), false))
+                let prep_def = read_until(t, r) $(js) => (js?["id"] ?? -1) == 35
+                t |> equal(prep_def?["result"]?[0]?["name"] ?? "", "lsp_probe_helper", "prepareCallHierarchy on the name in the def line")
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))

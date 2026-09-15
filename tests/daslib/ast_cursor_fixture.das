@@ -39,3 +39,24 @@ class Cat : Animal {
 def no_log() : file {
     return null
 }
+
+class Dog : Animal {
+    age : int = 3
+}
+
+def safe_x(p : Point?) : float {
+    return p?.x ?? 0.0
+}
+
+def twice(x) => x + x
+
+def use_twice() : int {
+    return twice(2)
+}
+
+def count_up() : iterator<int> {
+    return <- generator<int> {
+        yield 1
+        return false
+    }
+}

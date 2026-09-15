@@ -32,6 +32,8 @@ enum LspProbeColor {
     green
 }
 
+def lsp_probe_paint(c : LspProbeColor) : int => int(c)
+
 typedef LspProbePair = tuple<first : int; second : int>
 
 let LSP_PROBE_LIMIT = 3

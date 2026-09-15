@@ -1072,6 +1072,32 @@ def test_goto_definition_declarations(t : T?) {
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "Symbol: add_points") >= 0 && find(text, "Kind: function") >= 0 && find(text, "Line: 14") >= 0, "the definition: {text}")
     }
+    t |> run("a global's own name, a for variable's header and a class line report the cursor's column") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "36", "5"), text, is_error)
+        t |> success(find(text, "Symbol: GLOBAL_SCALE") >= 0 && find(text, "Kind: variable") >= 0 && find(text, "Line: 36") >= 0, "the global: {text}")
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "68", "10"), text, is_error)
+        t |> success(find(text, "Symbol: i") >= 0 && find(text, "Kind: variable") >= 0 && find(text, "Line: 68") >= 0, "the for variable on its header: {text}")
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "46", "8"), text, is_error)
+        t |> success(find(text, "Column: 6") >= 0, "the class name's column on its own line: {text}")
+        parse_result(do_type_of(fixture_path("_fixture_refs.das"), "68", "10"), text, is_error)
+        t |> success(find(text, "Variable(i) : int") >= 0, "type_of on a for variable's header: {text}")
+        t |> equal(source_line(fixture_path("_fixture_refs.das"), 68), "    for (i in range(2)) \{", "the subtools' line reader is 1-based")
+        t |> equal(source_line(fixture_path("_fixture_refs.das"), 100000), "", "past the end of the file the line is empty")
+    }
+    t |> run("an enum type name in a parameter is the enum") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "73", "15"), text, is_error)
+        t |> success(find(text, "Symbol: Color") >= 0 && find(text, "Kind: enum") >= 0 && find(text, "Line: 3") >= 0, "the enum: {text}")
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "73", "15", "file", "true"), text, is_error)
+        t |> success(find(text, "enumeration 'Color'") >= 0 && find(text, ":73:") >= 0 && find(text, ":60:") >= 0, "references from the parameter's type: the parameter and the constant's use (unoptimized, the folded let keeps its site): {text}")
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "3", "6", "file", "true"), text, is_error)
+        t |> success(find(text, "enumeration 'Color'") >= 0 && find(text, ":73:") >= 0 && find(text, ":60:") >= 0 && find(text, ":3:") < 0, "from the declaration's name: the same sites, never the declaration: {text}")
+        parse_result(do_type_of(fixture_path("_fixture_refs.das"), "73", "15"), text, is_error)
+        t |> success(find(text, "TypeDecl(Color) : Color") >= 0, "type_of on the enum type name: {text}")
+    }
 }
 
 [test]
@@ -1244,6 +1270,9 @@ def test_find_references_alias(t : T?) {
         t |> success(find(text, "alias") >= 0, "should identify as alias")
         t |> success(find(text, "Flags") >= 0, "should name Flags")
         t |> success(find(text, "[alias ref]") >= 0, "should find alias references")
+        t |> success(find(text, ":26:") < 0, "the declaration's own line is its binding, not a reference: {text}")
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "26", "10", "file", ""), text, is_error)
+        t |> success(find(text, ":38:") >= 0 && find(text, ":26:") < 0, "from the name on the declaration: the parameter's type, not the declaration: {text}")
     }
     t |> run("finds alias references from variant usage") <| @(t : T?) {
         var text : string

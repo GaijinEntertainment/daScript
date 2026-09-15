@@ -70,13 +70,7 @@ def private expression_name(expr : ExpressionPtr) : string {
 [arch(at="ARCHITECTURE_CURSOR.md#cursor-compiler-made-names")]
 def public is_synthesized(func : Function const?) : bool {
     //! True for a member the compiler made on the `class` line (`Foo'__finalize`), never for a lambda or generator body or a generic instance.
-    return false if (func == null)
-    return true if (func.flags.generated && !func.flags._lambda && !func.flags._generator && func.fromGeneric == null)
-    var has_tick = false
-    peek(func.name) $(n) {
-        has_tick = find(n, "'") >= 0
-    }
-    return has_tick
+    return func != null && func.flags.generated && !func.flags._lambda && !func.flags._generator && func.fromGeneric == null
 }
 
 [arch(at="ARCHITECTURE_CURSOR.md#cursor-compiler-made-names")]
@@ -376,10 +370,10 @@ class CursorVisitor : AstVisitor {
 
     // type names are TypeDecls, not expressions; a method's implicit self carries its class where the source spells no name, so spells_name gates the hit
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
-        return if (!withDeclarations || empty(targetLineText) || inSynthesized || typ == null || !in_target_file(typ.at))
+        return if (!withDeclarations || inSynthesized || typ == null || !in_target_file(typ.at))
         let td = typ
         let name = string(td.structType != null ? td.structType.name : td.enumType != null ? td.enumType.name : td.alias)
-        return if (empty(name) || !cursor_on_token(td.at, name) || !spells_name(targetLineText, int(td.at.column), name))
+        return if (!cursor_on_token(td.at, name) || !spells_name(targetLineText, int(td.at.column), name))
         let key = "{int(td.at.column)}:{name}"
         return if (key_exists(typeHits, key))
         typeHits |> insert(key)

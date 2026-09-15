@@ -223,7 +223,22 @@ def test_synthesized_members(t : T?) {
                 }
             }
             t2 |> success(synthesized > 0, "a class carries synthesized members: {synthesized}")
-            t2 |> equal(user, 6, "add, greet, main, Animal`speak, Cat`speak, no_log - got {user}")
+            t2 |> equal(user, 12, "add, greet, main, Animal`speak, Cat`speak, no_log, safe_x, use_twice, count_up, the twice and each instances, the generator body - got {user}")
+            var instances = 0
+            var generators = 0
+            ast::for_each_function(get_this_module(program), "") $(var func : FunctionPtr) {
+                let f = func
+                if (f.fromGeneric != null) {
+                    instances++
+                    t2 |> success(!is_synthesized(f), "a generic instance is the user's: {f.name}")
+                }
+                if (f.flags._generator) {
+                    generators++
+                    t2 |> success(!is_synthesized(f), "a generator body is the user's: {f.name}")
+                }
+            }
+            t2 |> success(instances > 0, "the fixture instantiates twice")
+            t2 |> success(generators > 0, "the fixture has a generator body")
         }
     }
 }
@@ -240,6 +255,10 @@ def test_find_declaration(t : T?) {
             t2 |> equal(int(parent.at.line), 31, "the parent's own position")
             let fn = find_declaration_at_cursor(program, "ast_cursor_fixture", 9, 6, "def add(a, b : int) : int \{")
             t2 |> success(fn.kind == DeclarationKind.func && fn.name == "add", "function name: {fn.name}")
+            let any_file = find_declaration_at_cursor(program, "", 9, 6, "def add(a, b : int) : int \{")
+            t2 |> success(any_file.kind == DeclarationKind.func && any_file.name == "add", "an empty file matches any file: {any_file.name}")
+            let other_file = find_declaration_at_cursor(program, "no_such_fixture", 9, 6, "def add(a, b : int) : int \{")
+            t2 |> equal(other_file.kind, DeclarationKind.none, "another file's line 9 is not this declaration")
             let method = find_declaration_at_cursor(program, "ast_cursor_fixture", 36, 20, "    def override speak() : string => \"meow\"")
             t2 |> success(method.kind == DeclarationKind.func && method.name == "speak", "method name is bare: {method.name}")
         }
@@ -274,6 +293,9 @@ def test_text_helpers(t : T?) {
         t2 |> success(!spells_name("class Cat : Animal \{", 13, "Animal"), "not starting at 13")
         t2 |> equal(source_name("__i_rename_at_6_13"), "i")
         t2 |> equal(source_name("plain"), "plain")
+        t2 |> equal(source_name("__this"), "__this", "a double underscore alone is not the rename wrap")
+        t2 |> equal(name_column("Cat is first", "Cat", -1), 0, "a name at the start of the line")
+        t2 |> equal(name_column("last is Cat", "Cat", -1), 8, "a name at the end of the line")
         t2 |> equal(bare_name("Animal`speak"), "speak")
         t2 |> equal(bare_name("speak"), "speak")
     }
@@ -309,16 +331,36 @@ def test_type_name_hit(t : T?) {
             let hits = find_at_cursor(program, "ast_cursor_fixture", 27, 19, true, "    var pet = new Cat()")
             t2 |> success(!empty(hits) && hits[0].type_decl != null && hits[0].name == "Cat", "type hit first: {[for (h in hits); describe(h)]}")
             t2 |> success(!empty(hits) && hits[0].type_decl != null && int(hits[0].type_decl.at.column) == 18, "at the name, not the new keyword: {[for (h in hits); describe(h)]}")
+            t2 |> equal(length([for (h in hits); h; where h.type_decl != null]), 1, "one type hit for the several nodes that carry T: {[for (h in hits); describe(h)]}")
+            t2 |> success(describe(hits[0]) |> starts_with("TypeDecl(Cat) : Cat at 27:18"), "describe names the type: {describe(hits[0])}")
+            let on_var = find_at_cursor(program, "ast_cursor_fixture", 27, 8, true, "    var pet = new Cat()")
+            t2 |> success(!has_type_hit(on_var), "the cursor on the variable, not the type name: {[for (h in on_var); describe(h)]}")
             let prim = find_at_cursor(program, "ast_cursor_fixture", 9, 16, true, "def add(a, b : int) : int \{")
             t2 |> success(!has_type_hit(prim), "no type hit on a builtin type: {[for (h in prim); describe(h)]}")
             let meth = find_at_cursor(program, "ast_cursor_fixture", 36, 20, true, "    def override speak() : string => \"meow\"")
             t2 |> success(!has_type_hit(meth, "Cat"), "the implicit self is not a type hit: {[for (h in meth); describe(h)]}")
+            let cls = find_at_cursor(program, "ast_cursor_fixture", 35, 7, true, "class Cat : Animal \{")
+            t2 |> success(!has_type_hit(cls, "Cat"), "the synthesized members' self on the class line is not a type hit: {[for (h in cls); describe(h)]}")
         }
     }
-    t |> run("without the line text there is no type hit") @(t2 : T?) {
+    t |> run("without the line text, without declarations or in another file there is no type hit") @(t2 : T?) {
         compile_fixture() $(program) {
             let hits = find_at_cursor(program, "ast_cursor_fixture", 27, 19, true)
             t2 |> success(!has_type_hit(hits), "no line text, no type hit")
+            let no_decl = find_at_cursor(program, "ast_cursor_fixture", 27, 19, false, "    var pet = new Cat()")
+            t2 |> success(!has_type_hit(no_decl), "declarations off, no type hit")
+            let other = find_at_cursor(program, "no_such_fixture", 27, 19, true, "    var pet = new Cat()")
+            t2 |> success(empty(other), "another file, no hit at all: {[for (h in other); describe(h)]}")
+        }
+    }
+    t |> run("a user field's initializer after the compiler's fields, and a safe field access from its name") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // class Dog : Animal { age : int = 3 } at lines 43-45; the 3 at 44:16
+            let init = find_at_cursor(program, "ast_cursor_fixture", 44, 16)
+            t2 |> success(!empty(init) && init[0].rtti == "ExprConstInt", "the initializer is a hit: {[for (h in init); describe(h)]}")
+            // return p?.x ?? 0.0 at line 48, x at column 14
+            let safe = find_at_cursor(program, "ast_cursor_fixture", 48, 14)
+            t2 |> success(!empty(safe) && safe[0].rtti == "ExprSafeField" && safe[0].name == "x", "the safe field access from its name: {[for (h in safe); describe(h)]}")
         }
     }
     t |> run("a type's declaration is its class, with the name column spelled on the class line") @(t2 : T?) {

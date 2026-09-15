@@ -69,3 +69,7 @@ def main() {
         print("{i}\n")
     }
 }
+
+def paint(c : Color) : int {
+    return int(c)
+}
