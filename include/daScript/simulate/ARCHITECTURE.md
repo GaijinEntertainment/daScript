@@ -109,6 +109,10 @@ correctness required it, and the alternative that was rejected.
   exact answer the JIT already computes, so interp, AOT and JIT agree. `log`, `sin`, `cos`
   and `tan` stay on the lane, which is cheaper for them.
 
+- **`v_pow_signed`** (`sim_policy.h`) - vector `Pow` xors back the sign `v_log2_est_p5` drops:
+  the odd bit of `trunc(y)` shifted to bit 31, anded with x. `pow_est` is the same without the
+  xor, which is `GLSLstd450.Pow` - undefined for a negative base, as GLSL leaves it.
+
 - **`das_ordered2`** (`aot.h`) - a two-member aggregate the AOT emitter wraps around any
   binary op whose operands are not both side-effect-free, because braced aggregate init is
   the C++ construct that guarantees left-to-right evaluation; a plain call argument list or

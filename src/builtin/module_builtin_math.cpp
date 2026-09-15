@@ -133,6 +133,11 @@ namespace das {
     IMPLEMENT_OP1_FUNCTION_POLICY_EX(Ceili,Int,int32_t,Double,double);
     IMPLEMENT_OP1_FUNCTION_POLICY_EX(Roundi,Int,int32_t,Double,double);
 
+    DEFINE_POLICY(PowEst);
+    IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(PowEst, float2);
+    IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(PowEst, float3);
+    IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(PowEst, float4);
+
     //exp
     MATH_FUN_OP1(Exp)
     MATH_FUN_OP1(Log)
@@ -634,6 +639,9 @@ namespace das {
             addFunctionOp3<float2>(*this,lib);
             addFunctionOp3<float3>(*this,lib);
             addFunctionOp3<float4>(*this,lib);
+            addFunction( (new BuiltInFn<Sim_PowEst<float2>, float2, float2, float2>("pow_est", lib, "PowEst"))->args({"x","y"}) );
+            addFunction( (new BuiltInFn<Sim_PowEst<float3>, float3, float3, float3>("pow_est", lib, "PowEst"))->args({"x","y"}) );
+            addFunction( (new BuiltInFn<Sim_PowEst<float4>, float4, float4, float4>("pow_est", lib, "PowEst"))->args({"x","y"}) );
             addFunction( (new BuiltInFn<Sim_MadS<float2>,   float2, float2,  float,  float2>("mad", lib, "MadS"))->args({"a","b","c"}) );
             addFunction( (new BuiltInFn<Sim_MadS<float3>,   float3, float3,  float,  float3>("mad", lib, "MadS"))->args({"a","b","c"}) );
             addFunction( (new BuiltInFn<Sim_MadS<float4>,   float4, float4,  float,  float4>("mad", lib, "MadS"))->args({"a","b","c"}) );

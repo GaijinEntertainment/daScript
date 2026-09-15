@@ -147,6 +147,7 @@ let g_intrin_lookup <- {
     "math::sin" => @@intrinsic_math_sincos,
     "math::cos" => @@intrinsic_math_sincos,
     "math::pow" => @@intrinsic_math_pow,
+    "math::pow_est" => @@intrinsic_math_pow_est,
     "math::min" => @@intrinsic_math_minmax,
     "math::max" => @@intrinsic_math_minmax,
     "math::hmin" => @@intrinsic_math_hminmax,
@@ -1207,7 +1208,11 @@ def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
 // ===== the inline-polynomial rail =====
 [arch(at = "../ARCHITECTURE.md#vector-poly-rail")]
 def private vmath_poly_gate(opType : TypeDeclPtr) : bool {
-    return g_target_is_aarch64 && opType.isVectorType && opType.vectorBaseType == Type.tFloat
+    return g_target_is_aarch64 && vmath_vector_float(opType)
+}
+
+def private vmath_vector_float(opType : TypeDeclPtr) : bool {
+    return opType.isVectorType && opType.vectorBaseType == Type.tFloat
 }
 
 def private vmath_fma_decl(opType : TypeDeclPtr; lt : LLVMOpaqueType?) : LLVMOpaqueValue? {
@@ -1479,15 +1484,30 @@ def intrinsic_math_log(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array
 
 // v_pow: exp2(log2_est_p5(x) * y), with vecmath's y == 0 guard on top (0^0 and inf^0 give 1).
 // Inherits the log2 estimate's error, amplified by |y|.
+def private build_vector_pow(ctx : JitCtx; opType : TypeDeclPtr; x, y : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let l2 = build_vector_log2(ctx, opType, x)
+    let r = build_vector_exp2(ctx, opType, LLVMBuildFMul(ctx.builder, l2, y, ""))
+    let y0 = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate.LLVMRealOEQ, y, vmath_fsplat(ctx, opType, 0.0lf), "")
+    return LLVMBuildSelect(ctx.builder, y0, vmath_fsplat(ctx, opType, 1.0lf), r, "")
+}
+
 def intrinsic_math_pow(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (!vmath_poly_gate(opType)) {
+    if (!vmath_vector_float(opType)) {
         return intrinsic_op2(ctx, expr, arguments)
     }
-    let l2 = build_vector_log2(ctx, opType, arguments[0])
-    let r = build_vector_exp2(ctx, opType, LLVMBuildFMul(ctx.builder, l2, arguments[1], ""))
-    let y0 = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate.LLVMRealOEQ, arguments[1], vmath_fsplat(ctx, opType, 0.0lf), "")
-    return LLVMBuildSelect(ctx.builder, y0, vmath_fsplat(ctx, opType, 1.0lf), r, "")
+    let bld = ctx.builder
+    let it = LLVMVectorType(ctx.types.t_int32, uint(opType.vectorDim))
+    let odd = LLVMBuildShl(bld, LLVMBuildAnd(bld, vmath_call1_2t(ctx, "llvm.fptosi.sat", it, type_to_llvm_type(opType), arguments[1]),
+        vmath_isplat(ctx, opType.vectorDim, 1ul), ""), vmath_isplat(ctx, opType.vectorDim, 31ul), "")
+    let sgn = LLVMBuildAnd(bld, odd, LLVMBuildBitCast(bld, arguments[0], it, ""), "")
+    let r = build_vector_pow(ctx, opType, arguments[0], arguments[1])
+    return LLVMBuildBitCast(bld, LLVMBuildXor(bld, LLVMBuildBitCast(bld, r, it, ""), sgn, ""), type_to_llvm_type(opType), "")
+}
+
+def intrinsic_math_pow_est(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    return build_vector_pow(ctx, opType, arguments[0], arguments[1])
 }
 
 // Near zero the exp forms of sinh and tanh cancel catastrophically, so |x| < 0.25 takes the odd

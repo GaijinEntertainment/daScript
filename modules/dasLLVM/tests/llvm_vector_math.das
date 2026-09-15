@@ -501,25 +501,22 @@ def test_vector_pow_zero_exponent(t : T?) {
     report_divergence(t, "pow(float4) zero exponent", xs, ys, OP_POW, 0.0)
 }
 
-// pow is exp2(log2_est(|x|) * y) and log2_est reads the exponent through a mask, so a negative base
-// loses its sign before the exponent is applied: pow(-2, 3) is +8, not libm's -8, and it is +8 on
-// every tier. The contract under test is the tiers agreeing, not the answer matching libm.
 [test]
 def test_vector_pow_negative_base(t : T?) {
     g_offset = 0.0
     var xs : array<float4>
     xs |> push(float4(-2.0, -8.0, -0.5, -3.0))
     var ys : array<float4>
-    ys |> push(float4(3.0, 1.0 / 3.0, 2.0, 2.0))
+    ys |> push(float4(3.0, 2.0, 2.0, -3.0))
     let got <- apply_op(xs, ys, OP_POW)
     let ref <- apply_op_interp(xs, ys, OP_POW)
-    let mirrors = !jit_enabled() || on_poly_rail()
     for (l in range(4)) {
-        t |> success(ref[0][l] > 0.0, "the interpreter drops the base sign, lane {l}: pow({xs[0][l]}, {ys[0][l]}) = {ref[0][l]}")
-        t |> success(!mirrors || got[0][l] == ref[0][l], "pow(negative base) agrees lane for lane, lane {l}: jit {got[0][l]}, interp {ref[0][l]}")
+        t |> equal(got[0][l], ref[0][l], "pow(negative base) agrees lane for lane, lane {l}")
     }
-    t |> equal(ref[0][0], 8.0, "pow(-2, 3) is +8 on the interpreter - log2's dropped sign")
-    t |> success(!mirrors || got[0][0] == 8.0, "pow(-2, 3) is +8 under the JIT too, got {got[0][0]}")
+    t |> equal(ref[0][0], -8.0, "pow(-2, 3) is -8 - the odd exponent flips the sign")
+    t |> equal(ref[0][1], 64.0, "an even exponent leaves the sign alone")
+    t |> equal(ref[0][2], 0.25, "pow(-0.5, 2) is 0.25")
+    t |> success(ref[0][3] < 0.0, "a negative odd exponent flips too, got {ref[0][3]}")
     report_divergence(t, "pow(float4) negative base", xs, ys, OP_POW, 0.0)
 }
 

@@ -204,7 +204,8 @@ to one NEON instruction apiece - so the three rails agree instead of merely bein
 one family that cannot mirror vecmath is sec.8.3. sin and cos mirror `v_sincos` (quadrant =
 round(x*2/pi), the two-constant Cody-Waite reduction, a degree-3-in-x^2 pair); tan mirrors
 `v_tan` (4/pi octants, three reduction constants, its own minimax - not sin over cos); exp2,
-log2, log and pow mirror `v_exp2`, `v_log2_est_p5`, `v_log` and `v_pow`. The gate is aarch64 by
+log2, log and pow mirror `v_exp2`, `v_log2_est_p5`, `v_log` and `v_pow`; pow takes the rail on
+every target, since `SimPolicy` runs the estimate for it. The gate is otherwise aarch64 by
 measurement, not by portability: on x64 the always-computed guard branches of these kernels
 cost more than they save. Scalar float and double keep the libm intrinsic on every target -
 libm is correctly rounded and one scalar call carries no scalarization penalty. exp keeps the

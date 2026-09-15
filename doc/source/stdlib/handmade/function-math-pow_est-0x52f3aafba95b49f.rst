@@ -1,0 +1,1 @@
+Returns a fast estimate of x raised to the power y for each component of a float2, float3, or float4 vector, trading precision for speed; unlike pow it drops the sign of a negative base, which makes it exactly the GLSL pow semantic.

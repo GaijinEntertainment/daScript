@@ -647,6 +647,7 @@ The MATH module contains floating point math functions and constants (trigonomet
 - `float4x4-` - Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
 - `floori` - Returns the largest integer not greater than x, converting the double argument to an int result.
 - `fract` - Returns the fractional part of x (equivalent to x - floor(x)), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
+- `pow_est` - Returns a fast estimate of x raised to the power y for each component of a float2, float3, or float4 vector, trading precision for speed; unlike pow it drops the sign of a negative base, which makes it exactly the GLSL pow semantic.
 - `rcp_est` - Returns a fast hardware estimate of the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 - `round` - Returns the rounded value of x to the nearest integer; works with float and double scalars.
 - `roundi` - Rounds the double x to the nearest integer value and returns the result as an int.
