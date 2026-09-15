@@ -84,7 +84,7 @@ class StdFolds : FoldRules {
             // idioms the built-in fold does not carry
             if (pow(_repeatable($e(x)), 2))         { return qmacro($e(x) * $e(x)) }
             if (pow($e(x), 1))                { return x }
-            if (pow(_repeatable($e(x)), 0.5))       { return qmacro(sqrt($e(x))) }
+            if (pow($e(x), 0.5))                    { return qmacro(sqrt($e(x))) }
             if (abs(abs($e(x))))                    { return qmacro(abs($e(x))) }
             if (abs(-$e(x)))                        { return qmacro(abs($e(x))) }
             if (min(_droppable($e(a)), _same(a)))        { return a }

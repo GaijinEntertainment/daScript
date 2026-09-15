@@ -87,6 +87,9 @@ The predicates the engine ships:
 ``_repeatable(P)``
     safe to evaluate MORE than once: droppable, and under a node budget, because duplicating a
     large pure expression is a pessimization. ``options _fold_repeat_budget = N`` sets the budget.
+    Only a rule that writes its capture twice needs this - a rule that merely *moves* an operand,
+    like ``pow(x, 0.5)`` into ``sqrt(x)``, evaluates it exactly once either way and needs no guard
+    at all.
 
 ``_const(P)``, ``_not_const(P)``
     is or is not a constant.

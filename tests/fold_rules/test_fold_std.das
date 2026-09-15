@@ -190,3 +190,15 @@ def test_repeatable_refuses_to_duplicate_a_large_operand(t : T?) {
             "a pure but large operand is not worth duplicating")
     }
 }
+
+[export, never_inline] def t_sqrt_of_effecting : float { return pow(float(side_effecting()), 0.5) }
+
+[test]
+def test_a_rule_that_moves_an_operand_needs_no_guard(t : T?) {
+    ast_gc_guard() {
+        // pow(x, 0.5) -> sqrt(x) evaluates x once before and once after, so purity is irrelevant
+        t |> success(has(body_of(t, "t_sqrt_of_effecting"), "sqrt"),
+            "the rewrite fires even on a side-effecting operand")
+        t |> success(!has(body_of(t, "t_sqrt_of_effecting"), "pow"), "no pow survives")
+    }
+}
