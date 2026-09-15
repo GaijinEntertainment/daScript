@@ -236,6 +236,11 @@ namespace  das {
         }
     };
 
+    __forceinline vec4f v_pow_signed ( vec4f x, vec4f y ) {
+        vec4i odd = v_slli(v_andi(v_cvt_vec4i(y), v_splatsi(1)), 31);
+        return v_xor(v_pow(x, y), v_and(v_cast_vec4f(odd), x));
+    }
+
     struct SimPolicy_MathFloat {
         static __forceinline float Sign     ( float a, Context &, LineInfo * )          { return a == 0.0f ? 0.0f : (a > 0.0f) ? 1.0f : -1.0f; }
         static __forceinline float Abs      ( float a, Context &, LineInfo * )          { return fabsf(a); }
@@ -310,7 +315,8 @@ namespace  das {
         static __forceinline vec4f Log   ( vec4f a, Context &, LineInfo * )          { return v_log(a); }
         static __forceinline vec4f Exp2  ( vec4f a, Context &, LineInfo * )          { return v_exp2(a); }
         static __forceinline vec4f Log2  ( vec4f a, Context &, LineInfo * )          { return v_log2_est_p5(a); }
-        static __forceinline vec4f Pow   ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_pow(a, b); }
+        static __forceinline vec4f Pow   ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_pow_signed(a, b); }
+        static __forceinline vec4f PowEst( vec4f a, vec4f b, Context &, LineInfo * ) { return v_pow(a, b); }
         static __forceinline vec4f Rcp   ( vec4f a, Context &, LineInfo * )          { return v_rcp(a); }
         static __forceinline vec4f RcpEst( vec4f a, Context &, LineInfo * )          { return v_rcp_est(a); }
 
