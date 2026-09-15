@@ -4856,7 +4856,6 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 - `CursorVisitor.generated_variable`
 - `CursorVisitor.on_field_name`
 - `CursorVisitor.cursor_on_token`
-- `CursorVisitor.unspelled`
 
 ### Cursor queries
 
@@ -4879,7 +4878,7 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 ### Class members
 
 - `field_at` - Where the field `name` of `st` is declared - the parent's line for an inherited field; a zero position when there is no such field.
-- `is_own_field` - True for a field the source declares in `st`'s own body: not one the compiler made (`__rtti`, `__finalize`) and not a parent's copy.
+- `is_own_field` - True for a field the source declares in its class's own body: not one the compiler made (`__rtti`, `__finalize`) and not a parent's copy.
 - `method_function` - The function a class method field `name` of `st` points at - the override `st` declares, else the inherited one; null for a data field or no such field.
 
 ### Result inspection

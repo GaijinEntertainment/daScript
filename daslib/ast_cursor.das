@@ -245,22 +245,10 @@ def private on_name(word : string; name : string; line_text : string; here : int
     return name == word && here == name_column(line_text, name, -1)
 }
 
-def private has_field(st : Structure const?; name : string) : bool {
-    for (fld in st.fields) {
-        return true if (fld.name == name)
-    }
-    return false
-}
-
 [arch(at="ARCHITECTURE_CURSOR.md#cursor-class-fields")]
-def public is_own_field(st : Structure const?; fld : FieldDeclaration) : bool {
-    //! True for a field the source declares in `st`'s own body: not one the compiler made (`__rtti`, `__finalize`) and not a parent's copy.
-    return false if (fld.flags.generated)
-    var own = true
-    peek(fld.name) $(n) {
-        own = !(n |> starts_with("__"))
-    }
-    return own && (st.parent == null || !has_field(st.parent, string(fld.name)))
+def public is_own_field(fld : FieldDeclaration) : bool {
+    //! True for a field the source declares in its class's own body: not one the compiler made (`__rtti`, `__finalize`) and not a parent's copy.
+    return !fld.flags.generated && !fld.flags.inherited && !(fld.name |> starts_with("__"))
 }
 
 [arch(at="ARCHITECTURE_CURSOR.md#cursor-class-fields")]
@@ -329,7 +317,7 @@ def public find_declaration_at_cursor(program : smart_ptr<Program>; file : strin
             return if (hit.kind != DeclarationKind.none)
             let s = st
             for (fld in s.fields) {
-                continue if (!is_own_field(s, fld) || fld.flags.classMethod || !on_line(fld.at, file, line) || !on_name(word, string(fld.name), line_text, here))
+                continue if (!is_own_field(fld) || fld.flags.classMethod || !on_line(fld.at, file, line) || !on_name(word, string(fld.name), line_text, here))
                 hit = DeclarationHit(kind = DeclarationKind.field, structure = s, field_type = fld._type, name = string(fld.name), at = fld.at, word_column = here)
                 break
             }
@@ -488,14 +476,10 @@ class CursorVisitor : AstVisitor {
         inSynthesized = false
     }
 
-    // the conversions a method call desugars to - `invoke(type<T>.m, cast<auto> deref(a), ...)` - carry the call's span and no token of their own
-    def unspelled(e : Expression const?) : bool {
-        return e is ExprTypeDecl || e is ExprRef2Value || e is ExprPtr2Ref
-    }
-
+    [arch(at="ARCHITECTURE_CURSOR.md#cursor-class-fields")]
     def override preVisitExpression(expr : ExpressionPtr) : void {
         let e = expr
-        return if (inSynthesized || !in_target_file(e.at) || generated_variable(e) || unspelled(e))
+        return if (inSynthesized || !in_target_file(e.at) || generated_variable(e) || e is ExprRef2Value)
         if (cursor_inside(targetLine, targetCol, e.at) || on_field_name(e)) {
             hits |> emplace(CursorHit(
                 expr = e,

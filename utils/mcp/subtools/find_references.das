@@ -34,13 +34,12 @@ struct RefTarget {
     kind : RefTargetKind
     // all pointers stored as void? for identity comparison (avoids const mismatch)
     target_ptr : void?
-    // for fields: the name; decl_at is the identity, shared by every class that inherits it
     field_name : string
     // for aliases: the alias name string
     alias_name : string
     // display name
     name : string
-    @safe_when_uninitialized decl_at : LineInfo   //! the declaration's own position when known: a site there is its binding, not a use
+    @safe_when_uninitialized decl_at : LineInfo   //! the declaration's own position when known: a site there is its binding, not a use; for a field it is the identity - the parent's line every class that inherits it shares
 }
 
 def position_key(at : LineInfo) : string {
@@ -56,7 +55,6 @@ def variable_target(variable : Variable const?) : RefTarget {
     return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
 }
 
-// the struct a field access reads (unwraps Foo? -> Foo); null when the value is not a struct
 def value_struct(value : Expression const?) : Structure const? {
     if (value == null || value._type == null) return null
     var vt = value._type
@@ -73,7 +71,6 @@ def field_target(st : Structure const?; fname : string) : RefTarget {
     return RefTarget(kind = RefTargetKind.field, field_name = fname, name = "{st.name}.{fname}", decl_at = field_at(st, fname))
 }
 
-// Field target from a field-access value expression; none-kind when not a struct field
 def field_target_of(value : Expression const?; fname : string) : RefTarget {
     let st = value_struct(value)
     return st != null ? field_target(st, fname) : RefTarget()

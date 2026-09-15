@@ -38,19 +38,23 @@ this file holds sec. 40.
 ### 40.3 Class members {#cursor-class-fields}
 
 - **A method call - `a->m(x)`, `a.m(x)`, or a bare `m(x)` inside the class - desugars to
-  `invoke(type<T>.m, cast<auto> deref(a), x)` (`makeInvokeMethod`, `src/ast/ast_generate.cpp`):
-  every node of it carries the call's span, the `->`/`.` forms the operator token's, and only the
-  `ExprField` for `m` keeps the name's own position in `atField`.** Nothing fails when one side
-  moves alone: the conversion nodes (`ExprTypeDecl`, `ExprCast`, `ExprPtr2Ref`, `ExprRef2Value`)
-  never spell a token, so a cursor visitor that admits them answers the class for a call on its
-  method; `tests/daslib/ast_cursor_test.das` pins the field-first order at one implicit and one
-  `->` site.
-- **A class method is a field of function type whose initializer is `@@Class`method`
-  (`ExprAddr`, its `func` the method) - an override's initializer wraps it in a cast - and a
-  derived class copies every parent field, position included, so a field has one declaration
-  across the hierarchy: the parent's line.** Nothing fails when one side moves alone: a
-  reference walk keyed on the struct pointer misses every access through a derived receiver,
-  and one that reads the initializer without unwrapping the cast lands overrides on the base.
-- **`__rtti` and `__finalize` are the compiler's fields on every class - `__finalize` is
-  `generated`, `__rtti` is not - and a method's field carries `classMethod`.** Nothing fails
-  when one side moves alone: an outline that filters on `generated` alone lists `__rtti`.
+  `invoke(type<T>.m, cast<auto> deref(a), x)` (`makeInvokeMethod`, `src/ast/ast_generate.cpp`,
+  repo root), every node on the call's span - the `->`/`.` forms on the operator token's, with
+  the method name's own position in the `ExprField`'s `atField` - and `CursorVisitor`
+  (`ast_cursor.das`) never hits the `ExprRef2Value` among them and ranks a named node before a
+  nameless one on the same span.** Nothing fails when one side moves alone: a new conversion
+  kind the C++ emits on that span is admitted with every test green, and only the named-first
+  rank keeps the field ahead of it; `tests/daslib/ast_cursor_test.das` pins the field-first
+  order at one implicit and one `->` site, not the set of nodes behind it.
+- **A class method is a field of function type whose initializer the parser builds as
+  `@@Class`method` (`src/parser/parser_impl.cpp`, repo root) - an override's wrapped in a cast -
+  and `method_function` (`ast_cursor.das`) unwraps that cast to reach the function.** Nothing
+  fails when one side moves alone: the override shape is pinned by no test on its own -
+  `method_function` reads both - so an initializer the parser builds a third way lands every
+  override on nothing.
+- **`__rtti` is `generated` on a derived class and not on a base class (`makeClassRtti`,
+  `src/ast/ast_generate.cpp`), so `is_own_field` (`ast_cursor.das`) drops the compiler's fields
+  by their `__` prefix and the parent's copies by `inherited`.** Nothing fails when one side
+  moves alone: `tests/lsp/test_lsp_protocol.das` lists a base class's children, where the
+  `generated` bit alone would already pass, so a filter that leans on it is green until a
+  derived class is listed.

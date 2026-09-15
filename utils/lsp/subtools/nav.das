@@ -629,7 +629,6 @@ def private structure_target(st : Structure const?; column : int) : RefTarget {
         signature = st.parent != null ? "{head} : {st.parent.name}" : head)
 }
 
-//! the field `name` of `st` - or of the parent that declares it - as a reference target, its declaration the field's own line
 def private field_target(st : Structure const?; name : string; field_type : TypeDecl const? = null) : RefTarget {
     let at = field_at(st, name)
     return RefTarget(kind = RefTargetKind.field, field_name = name, name = name,
@@ -906,7 +905,7 @@ def private run_document_symbol(file, project : string) : DocSymbolsResult {
             return if (to_generic_path(f) != target)
             var sym <- make_doc_symbol(f, s.at, string(s.name), "", s.flags.isClass ? SK_CLASS : SK_STRUCT)
             for (fld in s.fields) {
-                continue if (!is_own_field(s, fld) || fld.flags.classMethod)
+                continue if (!is_own_field(fld) || fld.flags.classMethod)
                 push_doc_child(sym, f, fld.at, string(fld.name), describe(fld._type), SK_FIELD)
             }
             if (s.flags.isClass) {

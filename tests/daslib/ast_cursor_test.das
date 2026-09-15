@@ -406,8 +406,9 @@ def test_class_members(t : T?) {
             let self_call = find_at_cursor(program, "ast_cursor_fixture", 71, 38)
             t2 |> success(!empty(self_call) && self_call[0].rtti == "ExprField" && self_call[0].name == "bark", "the implicit self call names its method: {[for (h in self_call); describe(h)]}")
             for (h in self_call) {
-                t2 |> success(h.rtti != "ExprTypeDecl" && h.rtti != "ExprRef2Value" && h.rtti != "ExprPtr2Ref", "no conversion node is a hit: {h.rtti}")
+                t2 |> success(h.rtti != "ExprRef2Value", "the compiler's ref-to-value conversion is never a hit")
             }
+            t2 |> success(length(self_call) > 1 && find(describe(self_call[1]), "Expr") >= 0, "the call's conversion nodes follow the named field on the same span: {[for (h in self_call); describe(h)]}")
             // return d.age + length(heard) at line 66, age at column 13
             let data = find_at_cursor(program, "ast_cursor_fixture", 66, 14)
             t2 |> success(!empty(data) && data[0].rtti == "ExprField" && data[0].name == "age", "a data field from its name: {[for (h in data); describe(h)]}")
@@ -437,8 +438,8 @@ def test_class_members(t : T?) {
             t2 |> success(decl.field_type != null && describe(unsafe(reinterpret<TypeDecl?>(decl.field_type))) == "int", "with its type")
             t2 |> equal(int(field_at(puppy, "age").line), 44, "the inherited copy keeps the parent's position")
             t2 |> equal(int(field_at(dog, "nope").line), 0, "no such field is a zero position")
-            let own <- [for (fld in puppy.fields); string(fld.name); where is_own_field(puppy, fld)]
-            t2 |> success(length(own) == 1 && own[0] == "bark", "Puppy's own field is its new method; age and the overridden speak are the parent's slots, __rtti and __finalize the compiler's: {own}")
+            let own <- [for (fld in puppy.fields); string(fld.name); where is_own_field(fld)]
+            t2 |> success(length(own) == 2 && own[0] == "speak" && own[1] == "bark", "Puppy's own fields are the override it declares and its new method; age is the parent's copy, __rtti and __finalize the compiler's: {own}")
             let method_line = find_declaration_at_cursor(program, "ast_cursor_fixture", 70, 9, "    def bark() : string => \"yip\"")
             t2 |> success(method_line.kind == DeclarationKind.func && method_line.name == "bark", "a method's def line is the function, not a field: {method_line.kind}")
         }

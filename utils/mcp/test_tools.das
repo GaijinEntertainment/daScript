@@ -1089,7 +1089,7 @@ def test_goto_definition_declarations(t : T?) {
 }
 
 [test]
-def test_goto_definition_members(t : T?) {
+def test_goto_definition_members_and_types(t : T?) {
     t |> run("a method call lands on the method the receiver's class runs, a field's own name is the field") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -1101,7 +1101,7 @@ def test_goto_definition_members(t : T?) {
         parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "10", "5"), text, is_error)
         t |> success(find(text, "Symbol: x") >= 0 && find(text, "Kind: field") >= 0 && find(text, "Line: 10") >= 0, "the field's declaration: {text}")
         parse_result(do_type_of(fixture_path("_fixture_refs.das"), "78", "15"), text, is_error)
-        t |> success(find(text, "ExprField(area)") >= 0 && find(text, "ExprTypeDecl") < 0 && find(text, "ExprPtr2Ref") < 0, "type_of on a method call: the method field first, no conversion nodes: {text}")
+        t |> success(text |> starts_with("ExprField(area)") && find(text, "ExprRef2Value") < 0, "type_of on a method call: the method field first, never the compiler's ref-to-value conversion: {text}")
     }
     t |> run("an enum type name in a parameter is the enum") <| @(t : T?) {
         var text : string
