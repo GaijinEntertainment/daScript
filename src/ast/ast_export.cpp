@@ -369,6 +369,41 @@ namespace das {
         }
     }
 
+    void Program::markFunctionDependencies(Function * fun) {
+        // refresh use-edges over the closure reachable from fun only: a macro asking for one
+        // function's dependencies must not pay for a walk of every module in the program
+        MarkSymbolUse vis(this, false);
+        Visitor & bvis = vis;
+        das_hash_set<Function *> seenFn;
+        das_hash_set<Variable *> seenVar;
+        vector<Function *> workFn;
+        vector<Variable *> workVar;
+        auto pushFn = [&](Function * f) {
+            if ( f->builtIn || !bvis.canVisitFunction(f) ) return;
+            if ( seenFn.insert(f).second ) workFn.push_back(f);
+        };
+        auto pushVar = [&](Variable * v) {
+            if ( seenVar.insert(v).second ) workVar.push_back(v);
+        };
+        pushFn(fun);
+        while ( !workFn.empty() || !workVar.empty() ) {
+            if ( !workFn.empty() ) {
+                auto f = workFn.back();
+                workFn.pop_back();
+                f->visit(vis);
+                for ( auto df : f->useFunctions ) pushFn(df);
+                for ( auto dv : f->useGlobalVariables ) pushVar(dv);
+            } else {
+                auto v = workVar.back();
+                workVar.pop_back();
+                visitGlobalVariable(bvis, v);
+                for ( auto df : v->useFunctions ) pushFn(df);
+                for ( auto dv : v->useGlobalVariables ) pushVar(dv);
+            }
+        }
+        vis.propagateFunctionUse(fun);
+    }
+
     void Program::markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs) {
         clearSymbolUse();
         MarkSymbolUse vis(this, builtInSym);
