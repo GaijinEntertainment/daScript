@@ -462,7 +462,7 @@ def test_vkd_fa_stamp_refusals(t0 : T?) {
             t |> success(fa_enc_panics(false, 128l, true, false), "no gated stamp off head size 256: the encode ladder refuses")
             t |> success(fa_enc_panics(false, 96l, false, false), "a head size no stamp serves: the encode ladder refuses")
             t |> success(fa_ensure_panics(false, 128l, false, false, true), "no sink stamp off head size 64: the ensure ladder refuses")
-            t |> success(fa_ensure_panics(false, 64l, false, true, true), "no capped sink stamp: the ensure ladder refuses")
+            t |> success(fa_ensure_panics(false, 256l, false, true, true), "no sink stamp at the softcap's head size: the ensure ladder refuses")
             t |> success(fa_enc_panics(true, 128l, false, false, true), "no sink stamp off head size 64: the encode ladder refuses")
         } else {
             t |> skip("dasVulkan not present")
@@ -951,6 +951,25 @@ def test_vkd_ar_class(t0 : T?) {
                 t |> success(bad_yb == 0, "biased partner: the normed output is bit-exact vs the seam fed the pre-added partner ({bad_yb} of {dim} diverge)")
                 t |> success(bad_xb == 0, "biased partner: the residual stream is bit-exact vs that seam ({bad_xb} of {dim} diverge)")
                 t |> success(moved > 0, "biased partner control: the bias moves the residual off the unbiased step ({moved} of {dim})")
+                //! the CPU oracle beside the seam: x' = (x + a + b) * ascale, y = w * x' * rsqrt(mean(x'^2) + eps)
+                var x_cpu : array<float>
+                var y_cpu : array<float>
+                x_cpu |> resize(dim)
+                y_cpu |> resize(dim)
+                var ssb = 0.0
+                for (i in range(dim)) {
+                    x_cpu[i] = (x[i] + ab[i]) * ascale
+                    ssb += x_cpu[i] * x_cpu[i]
+                }
+                let invb = 1.0 / sqrt(ssb / float(dim) + eps)
+                for (i in range(dim)) {
+                    y_cpu[i] = w[i] * (x_cpu[i] * invb)
+                }
+                t |> success(mismatch_approx(yc, y_cpu) == 0 && mismatch_approx(xc, x_cpu) == 0, "biased partner: the normed output and the residual match the CPU oracle ({mismatch_approx(yc, y_cpu)} / {mismatch_approx(xc, x_cpu)} of {dim} off)")
+                y_cpu[2] += 0.5
+                t |> success(mismatch_approx(yc, y_cpu) == 1, "biased partner control: the CPU bar reds one poisoned element")
+                delete x_cpu
+                delete y_cpu
                 delete b
                 delete ab
                 delete wb
@@ -1818,9 +1837,10 @@ def test_vkd_act_family(t0 : T?) {
                 upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), e_bytes)
                 upload_region_at(ud, 0l, addr<uint8 const?>(uh[0]), e_bytes)
             }
-            // arm 0 = q8 (32-blocks), arm 1 = q8k (256-superblocks)
-            for (arm in range(2)) {
-                let q8k = arm == 1
+            // arm 0 = q8 (32-blocks), arm 1 = q8k (256-superblocks); arms 2 and 3 the same under the clamped swiglu (gpt-oss's act code on the unbiased kernels)
+            for (arm in range(4)) {
+                let q8k = (arm & 1) == 1
+                let act = arm >= 2 ? ACT_OAI : ACT_SILU
                 let nblk = q8k ? nelem / 256 : nelem / 32
                 let q_bytes = int64(nelem)          // 1 byte per quant either way
                 let s_bytes = int64(nblk) * 4l
@@ -1842,7 +1862,7 @@ def test_vkd_act_family(t0 : T?) {
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
-                    var pc = ActArgs(nelem = uint(nelem), act = ACT_SILU, nblk = uint(nblk))
+                    var pc = ActArgs(nelem = uint(nelem), act = act, nblk = uint(nblk))
                     if (q8k) {
                         enc_q8k_actrq_cls(raw2, h2, sc, pc, wgs)
                     } else {
@@ -1858,11 +1878,11 @@ def test_vkd_act_family(t0 : T?) {
                 }
                 var q_ref : array<uint>
                 var s_ref : array<float>
-                actrq_oracle(gh, uh, nelem, q8k, false, q_ref, s_ref)
+                actrq_oracle(gh, uh, nelem, q8k, act, q_ref, s_ref)
                 // exp/tanh differ by ulps between backends: quants compare as bytes +-1, scales approx
                 let badq = mismatch_qbytes(q_cls, q_ref, 1)
                 let bads = mismatch_approx(s_cls, s_ref)
-                t |> success(badq == 0 && bads == 0, "{q8k ? "q8k" : "q8"} actrq matches the CPU oracle ({badq} bytes / {bads} scales off)")
+                t |> success(badq == 0 && bads == 0, "{q8k ? "q8k" : "q8"} actrq{act == ACT_OAI ? " under the clamped swiglu" : ""} matches the CPU oracle ({badq} bytes / {bads} scales off)")
                 delete q_ref
                 delete s_ref
                 delete q_cls
@@ -4043,6 +4063,71 @@ def test_vkd_da_attn(t0 : T?) {
                 t |> success(badk == 0, "da_attn sink twin split {split} ways matches the CPU oracle with the sink ({badk} of {nheads * hs} off)")
                 t |> success(mismatch_approx(y_cls, y_free) > 0, "da_attn sink twin split {split} ways: the sink-free oracle reds the compare")
             }
+            //! the f16-mirror sink twin (the resident driver's kv16 form): the same rows over f16 K/V, the oracle over the f16-rounded values
+            t |> success(ensure_da_attn_f16_sink_cls(), "the f16 sink twin compiles on this device")
+            {
+                var kh16 : array<float>
+                var vh16 : array<float>
+                kh16 |> resize(cnt * kvd)
+                vh16 |> resize(cnt * kvd)
+                for (i in range(cnt * kvd)) {
+                    kh16[i] = q16(kh[i])
+                    vh16[i] = q16(vh[i])
+                }
+                var k16 <- pack_f16(kh16)
+                var v16 <- pack_f16(vh16)
+                let m16_bytes = int64(cnt * kvd) * 2l
+                let kd16 = make_device_buf(m16_bytes)
+                let vd16 = make_device_buf(m16_bytes)
+                var y_sink16 : array<float>
+                var y_free16 : array<float>
+                y_sink16 |> resize(nheads * hs)
+                y_free16 |> resize(nheads * hs)
+                for (hh in range(nheads)) {
+                    attn_row_oracle(qh, hh * hs, kh16, 0, vh16, 0, kvd, hh, hs, kv_mul, cnt, scale, y_sink16, hh * hs, 0, 0.0, true, sinkh[hh])
+                    attn_row_oracle(qh, hh * hs, kh16, 0, vh16, 0, kvd, hh, hs, kv_mul, cnt, scale, y_free16, hh * hs)
+                }
+                for (split in fixed_array(1, nsplit)) {
+                    unsafe {
+                        upload_region_at(kd16, 0l, addr<uint8 const?>(k16[0]), m16_bytes)
+                        upload_region_at(vd16, 0l, addr<uint8 const?>(v16[0]), m16_bytes)
+                        nan_sentinel_upload(yd2, q_bytes)
+                        nan_sentinel_upload(partd, p_bytes)
+                        var tokb6 = make_host_buf(16l, true)
+                        var tmc6 = reinterpret<TokMeta?>(tokb6.mapped)
+                        tmc6.cnt = uint(cnt)
+                        var sc6 = set_da_attn_f16_sink_cls(fixed_array(qd, kd16, vd16, yd2, tokb6.buf, partd, yd2, yd2, sinkd),
+                            fixed_array(q_bytes, m16_bytes, m16_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes, sink_bytes),
+                            fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
+                        var sc6c = set_da_attn_comb_sink_cls(fixed_array(qd, partd, yd2, yd2, yd2, sinkd),
+                            fixed_array(q_bytes, p_bytes, q_bytes, q_bytes, q_bytes, sink_bytes), fixed_array(1u, 32u, 16u, 16u, 16u, 0u))
+                        var raw6 = alloc_cmd()
+                        let begin6 = VkCommandBufferBeginInfo()
+                        vk_check(vkBeginCommandBuffer(raw6, begin6), null)
+                        var h6 : VkHaz
+                        var pc6 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
+                            kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, nsplit = uint(split), rqk = DA_RQ_NONE, sinkoff = 0u)
+                        enc_da_attn_f16_sink_cls(raw6, h6, sc6, pc6, int64(nheads * split))
+                        if (split > 1) {
+                            enc_da_attn_comb_sink_cls(raw6, h6, sc6c, pc6, int64(nheads))
+                        }
+                        vhz_dep(raw6, h6, 16u, 0u, true)
+                        cmd_copy_whole(raw6, yd2, host.buf, q_bytes)
+                        vk_check(vkEndCommandBuffer(raw6), null)
+                        submit_wait(raw6)
+                        memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+                    }
+                    let badk16 = mismatch_approx(y_cls, y_sink16)
+                    t |> success(badk16 == 0, "da_attn f16 sink twin split {split} ways matches the CPU oracle with the sink ({badk16} of {nheads * hs} off)")
+                    t |> success(mismatch_approx(y_cls, y_free16) > 0, "da_attn f16 sink twin split {split} ways: the sink-free oracle reds the compare")
+                }
+                delete kh16
+                delete vh16
+                delete k16
+                delete v16
+                delete y_sink16
+                delete y_free16
+            }
             delete sinkh
             delete y_sink
             delete y_free
@@ -4277,7 +4362,7 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm l
                 let begin = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw2, begin), null)
                 var h2 : VkHaz
-                var pcv = ActArgs(nelem = uint(kpad * kvd), act = ACT_SILU, nblk = 0u)
+                var pcv = ActArgs(nelem = uint(kpad * kvd), nblk = 0u)
                 let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
                 enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
                 enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
@@ -4286,7 +4371,7 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm l
                 enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pcf, nheads, rows)
                 enc_fa_tile(khr, hs, false, false, sink, true, raw2, h2, sfa16, pcf, nheads, rows)
                 // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
-                var pcy = ActArgs(nelem = uint(rows * qd), act = ACT_SILU, nblk = 0u)
+                var pcy = ActArgs(nelem = uint(rows * qd), nblk = 0u)
                 enc_f16cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
                 vhz_dep(raw2, h2, 4u | 64u | 128u, 0u, true)
                 cmd_copy_whole(raw2, yd, host.buf, q_bytes)
@@ -4468,7 +4553,7 @@ def private fa_h256_gated_run(nheads, kv_mul, rows, w0 : int) : tuple<bad : int;
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)
             var h2 : VkHaz
-            var pcv = ActArgs(nelem = uint(kpos * kvd), act = ACT_SILU, nblk = 0u)
+            var pcv = ActArgs(nelem = uint(kpos * kvd), nblk = 0u)
             let cvtwgs = int64((kpos * kvd / 4 + 255) / 256)
             enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
             enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
@@ -4609,7 +4694,7 @@ def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float; khr
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)
             var h2 : VkHaz
-            var pcv = ActArgs(nelem = uint(kpad * kvd), act = ACT_SILU, nblk = 0u)
+            var pcv = ActArgs(nelem = uint(kpad * kvd), nblk = 0u)
             let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
             enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
             enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
@@ -5162,6 +5247,83 @@ def test_vkd_requant_family(t0 : T?) {
                 let bad = (mismatch_qbytes(q_cls, q_ref, 1) + mismatch_approx(s_cls, s_ref)
                     + mismatch_approx(x_cls, x_ref))
                 t |> success(bad == 0, "ar+requant fused matches the CPU oracle ({bad} elements off)")
+                //! the biased add partner (gpt-oss's output bias) on the fused stamp: the bias row rides the norms plane past the norm row
+                {
+                    var b : array<float>
+                    var wb : array<float>
+                    b |> resize(dim)
+                    wb |> resize(2 * dim)
+                    for (i in range(dim)) {
+                        b[i] = float((i * 23) % 71) * 0.09 - 3.1
+                        wb[i] = w[i]
+                        wb[dim + i] = b[i]
+                    }
+                    let wbd = make_device_buf(2l * e_bytes)
+                    var qb_cls : array<uint>
+                    var sb_cls : array<float>
+                    var xb_cls : array<float>
+                    qb_cls |> resize(dim / 4)
+                    sb_cls |> resize(nblk)
+                    xb_cls |> resize(dim)
+                    unsafe {
+                        upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
+                        upload_region_at(wbd, 0l, addr<uint8 const?>(wb[0]), 2l * e_bytes)
+                        var scb = set_cls_ar_rq(fixed_array(x2, ad, wbd, q2, s2),
+                            fixed_array(e_bytes, e_bytes, 2l * e_bytes, q_bytes, s_bytes),
+                            fixed_array(1u, 2u, 4u, 16u, 8u))
+                        var rawb = alloc_cmd()
+                        vk_check(vkBeginCommandBuffer(rawb, begin), null)
+                        var hb : VkHaz
+                        var pcb = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim))
+                        enc_cls_ar_rq(rawb, hb, scb, pcb, 1l)
+                        vhz_dep(rawb, hb, 1u | 8u | 16u, 0u, true)
+                        cmd_copy_whole(rawb, q2, host.buf, q_bytes)
+                        vk_check(vkEndCommandBuffer(rawb), null)
+                        submit_wait(rawb)
+                        memcpy(addr<void?>(qb_cls[0]), host.mapped, q_bytes)
+                        var rawb2 = alloc_cmd()
+                        vk_check(vkBeginCommandBuffer(rawb2, begin), null)
+                        cmd_copy_whole(rawb2, s2, host.buf, s_bytes)
+                        vk_check(vkEndCommandBuffer(rawb2), null)
+                        submit_wait(rawb2)
+                        memcpy(addr<void?>(sb_cls[0]), host.mapped, s_bytes)
+                        var rawb3 = alloc_cmd()
+                        vk_check(vkBeginCommandBuffer(rawb3, begin), null)
+                        cmd_copy_whole(rawb3, x2, host.buf, e_bytes)
+                        vk_check(vkEndCommandBuffer(rawb3), null)
+                        submit_wait(rawb3)
+                        memcpy(addr<void?>(xb_cls[0]), host.mapped, e_bytes)
+                    }
+                    var xb_ref : array<float>
+                    var yb_ref : array<float>
+                    xb_ref |> resize(dim)
+                    yb_ref |> resize(dim)
+                    var ssb = 0.0
+                    for (i in range(dim)) {
+                        xb_ref[i] = (x[i] + a[i] + b[i]) * ascale
+                        ssb += xb_ref[i] * xb_ref[i]
+                    }
+                    let invb = 1.0 / sqrt(ssb / float(dim) + eps)
+                    for (i in range(dim)) {
+                        yb_ref[i] = w[i] * (xb_ref[i] * invb)
+                    }
+                    var qb_ref : array<uint>
+                    var sb_ref : array<float>
+                    requant_oracle(yb_ref, 0, dim, false, qb_ref, sb_ref)
+                    let badb = (mismatch_qbytes(qb_cls, qb_ref, 1) + mismatch_approx(sb_cls, sb_ref)
+                        + mismatch_approx(xb_cls, xb_ref))
+                    t |> success(badb == 0, "ar+requant fused with the biased partner matches the CPU oracle ({badb} elements off)")
+                    t |> success(mismatch_approx(xb_cls, x_ref) > 0, "biased partner control: the bias moves the residual off the unbiased step ({mismatch_approx(xb_cls, x_ref)} of {dim})")
+                    delete b
+                    delete wb
+                    delete qb_cls
+                    delete sb_cls
+                    delete xb_cls
+                    delete xb_ref
+                    delete yb_ref
+                    delete qb_ref
+                    delete sb_ref
+                }
                 //! the three stamps beside it over the same x, a, w (x re-uploaded: the add writes it in place)
                 var q_ref_k : array<uint>
                 var s_ref_k : array<float>
@@ -5494,7 +5656,7 @@ def private mx4_gemv_row_oracle(wq, wsb, xq : array<uint>; xs : array<float>; wb
         var isum = 0
         for (j in range(16)) {
             let by = byte_u8(wq, wb * 16 + j)
-            isum += mx4_code(by & 15) * byte_s8(xq, b * 32 + j) + mx4_code(by >> 4) * byte_s8(xq, b * 32 + j + 16)
+            isum += mx4_mag2(by & 15) * byte_s8(xq, b * 32 + j) + mx4_mag2(by >> 4) * byte_s8(xq, b * 32 + j + 16)
         }
         f += float(isum) * mx4_dequant(1, byte_u8(wsb, wb)) * xs[b]
     }
@@ -5650,7 +5812,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {   // nolint:ST
             regs3[r * 2] = uint((nreg + r) * d * nb)
             regs3[r * 2 + 1] = 0u
         }
-        let act = bias ? ACT_OAI : 0u
+        let act = bias ? ACT_OAI : ACT_SILU
         let wq_bytes = int64(totblk) * 16l
         let ws_bytes = long_length(wsh) * 4l
         let xq_bytes = int64(nb) * 32l
@@ -5754,6 +5916,9 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {   // nolint:ST
             }
         }
         let badg = mismatch_approx(y_cls, y_g)
+        var y_gp := y_g   //! the gate rows' control: one element pushed past the bar must red
+        y_gp[0] += 1.0 + 2.0 * max_abs(y_g)
+        let badgp = mismatch_approx(y_cls, y_gp)
         var bads = 0
         var badq = 0
         var pbad = 0
@@ -5785,6 +5950,8 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {   // nolint:ST
         }
         let tag = "mx4 gu {nreg} x {d}{bias ? " biased" : ""}"
         t |> success(badg == 0, "{tag}: the gate rows match the scalar dot ({badg} of {rows} off)")
+        t |> success(badgp == 1, "{tag}: the gate rows' bar reds one poisoned element ({badgp})")
+        delete y_gp
         t |> success(bads == 0, "{tag}: the block scales match ({bads} of {nblk} off)")
         t |> success(badq == 0, "{tag}: the dequantized hidden rows sit within a quant step ({badq} of {rows} off)")
         t |> success(pbad == 0, "{tag}: the bar reds a poisoned oracle element in every block ({pbad} passed)")
@@ -6306,6 +6473,7 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
             q8_gemv_ar_run(t, 256, 1536, true, true, 1.0)     // an E-series down step: the row quantized as it is for the PLE gate
             q8_gemv_ar_run(t, 512, 1024, false, false, 0.5)   // a plain step under an output scale
             q8_gemv_ar_run(t, 512, 1024, false, false, 1.0, true)   // gpt-oss's wo step: the output bias row added before the residual
+            q8_gemv_ar_run(t, 512, 1152, true, false, 1.0, true)    // a sandwich-normed wo step with an output bias: the bias rides the partner before its norm
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -6521,7 +6689,7 @@ def test_vkd_cvt_family(t0 : T?) {
                 var host = make_host_buf(h_bytes, true, [cached = true])
                 var h_cls : array<uint>
                 h_cls |> resize(nelem / 2)
-                for (arm in range(1, 3)) {   // 1 = act-f16 (gelu), 2 = f16 convert
+                for (arm in range(1, 4)) {   // 1 = act-f16 (gelu), 2 = f16 convert, 3 = act-f16 under the clamped swiglu
                     unsafe {
                         upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
                         upload_region_at(ud, 0l, addr<uint8 const?>(uh[0]), g_bytes)
@@ -6531,15 +6699,15 @@ def test_vkd_cvt_family(t0 : T?) {
                         let begin = VkCommandBufferBeginInfo()
                         vk_check(vkBeginCommandBuffer(raw2, begin), null)
                         var h2 : VkHaz
-                        if (arm == 1) {
+                        if (arm != 2) {
                             sc = set_actf16_cls(fixed_array(gd, ud, hd2),
                                 fixed_array(g_bytes, g_bytes, h_bytes), fixed_array(1u, 2u, 4u))
-                            var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u)
+                            var pc = ActArgs(nelem = uint(nelem), act = arm == 3 ? ACT_OAI : ACT_GELU, nblk = 0u)
                             enc_actf16_cls(raw2, h2, sc, pc, int64(wgs))
                         } else {
                             sc = set_f16cvt_cls(fixed_array(ud, hd2),
                                 fixed_array(g_bytes, h_bytes), fixed_array(1u, 4u))
-                            var pc = ActArgs(nelem = uint(nelem), act = ACT_SILU, nblk = 0u)
+                            var pc = ActArgs(nelem = uint(nelem), nblk = 0u)
                             enc_f16cvt_cls(raw2, h2, sc, pc, int64(wgs))
                         }
                         vhz_dep(raw2, h2, 4u, 0u, true)
@@ -6556,7 +6724,7 @@ def test_vkd_cvt_family(t0 : T?) {
                     want |> resize(nelem)
                     for (i in range(nelem)) {
                         got[i] = half_at(h_cls, i)
-                        want[i] = arm == 1 ? act_mul_ref(gh[i], uh[i], true) : uh[i]
+                        want[i] = arm == 2 ? uh[i] : act_mul_ref(gh[i], uh[i], arm == 3 ? ACT_OAI : ACT_GELU)
                     }
                     let bad = mismatch_approx(got, want)
                     t |> success(bad == 0, "cvt arm {arm} matches the CPU oracle ({bad} of {nelem} off)")
@@ -9241,7 +9409,7 @@ def test_vkd_ar_f16_fused(t0 : T?) {
                 var h : VkHaz
                 var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
                 enc_cls_ar(raw, h, sca, pca, int64(nrows))
-                var pcc = ActArgs(nelem = uint(nrows * dim), act = ACT_SILU, nblk = 0u)
+                var pcc = ActArgs(nelem = uint(nrows * dim), nblk = 0u)
                 enc_f16cvt_cls(raw, h, scc, pcc, int64((nrows * dim / 4 + 255) / 256))
                 enc_cls_ar_f16_b(raw, h, scf, pca, int64(nrows))
                 vhz_dep(raw, h, 8u | 32u | 16u | 1u, 0u, true)
@@ -9522,16 +9690,17 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
         var lh : array<float>
         var rb : array<float>
         lh |> resize(MR_NPOS * MR_NER)
-        rb |> resize(MR_NE)
+        rb |> resize(2 * MR_NE)   //! two layers' bias rows: the dispatch reads the second (rboff = MR_NE), the first is a decoy
         for (i in range(MR_NPOS * MR_NER)) {
             lh[i] = hash_unit(uint(i) * 3u + 101u) * 2.0 + float(i % 7) * 0.0625   //! spread past any near-tie
         }
         for (e in range(MR_NE)) {
-            rb[e] = rbias ? hash_unit(uint(e) * 5u + 7u) * 3.0 - 1.5 : 0.0   //! a bias wide enough to move picks
+            rb[e] = 7.0
+            rb[MR_NE + e] = rbias ? hash_unit(uint(e) * 5u + 7u) * 3.0 - 1.5 : 0.0   //! a bias wide enough to move picks
         }
         let l_bytes = int64(MR_NPOS * MR_NER) * 4l
         let s_bytes = int64(MR_NPOS * MR_K) * 4l
-        let rb_bytes = int64(MR_NE) * 4l
+        let rb_bytes = int64(2 * MR_NE) * 4l
         let ld = make_device_buf(l_bytes)
         let idxd = make_device_buf(s_bytes)
         let wd = make_device_buf(s_bytes)
@@ -9553,7 +9722,7 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
             var pc = TopkRowsArgs(npos = uint(MR_NPOS), ne = uint(MR_NE), k = uint(MR_K), norm = norm || gate == MoeGate.softmax_weight ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = NO_DSCALE,
-                rbias_on = rbias ? 1u : 0u, rboff = 0u)
+                rbias_on = rbias ? 1u : 0u, rboff = uint(MR_NE))
             enc_topk_rows_cls(raw, h, sc, pc, int64(MR_NPOS))
             vhz_dep(raw, h, 2u | 4u, 0u, true)
             cmd_copy_whole(raw, idxd, hosti.buf, s_bytes)
@@ -9571,7 +9740,7 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
         row |> resize(MR_NE)
         for (p in range(MR_NPOS)) {
             for (e in range(MR_NE)) {
-                row[e] = lh[p * MR_NER + e] + rb[e]
+                row[e] = lh[p * MR_NER + e] + rb[MR_NE + e]
             }
             unsafe {
                 moe_select_core(gate, int64(MR_NE), int64(MR_K), norm, wscale, addr(row[0]), addr(widx[0]), addr(ww[0]), int64(p * MR_K))
@@ -9750,7 +9919,7 @@ def private moe_sched_arm(t : T?) {
 def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:STYLE037 — one arm: the fixture, both forms' dispatches, the oracle, the compares
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = 64
-        let k = 3
+        let k = dbias ? 12 : 3   //! twelve slots on the biased arm: the row pass's eight-slot register form and its tail past them
         let npos = 5
         let nrows = npos * k
         let ne = 6
@@ -9772,14 +9941,15 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         wn |> resize(n)
         lg |> resize(npos * MR_NER)
         sex |> resize(nrows)
-        db |> resize(ne * n)
+        let dbn = dbias ? 2 * ne * n : n   //! two layers' rows when biased (the dispatch reads the second), the biasless zero row of the model dim otherwise - the driver's own shapes
+        db |> resize(dbn)
         for (i in range(nrows)) {
             sidx[i] = uint((i * 7) % nrows)   //! a permutation of the bucket rows
             sw[i] = 0.125 + float(i % 5) * 0.25
             sex[i] = hash_word(uint(i) + 3u) % uint(ne)
         }
-        for (i in range(ne * n)) {
-            db[i] = dbias ? float((i * 19) % 23) * 0.25 - 2.75 : 0.0
+        for (i in range(dbn)) {
+            db[i] = dbias ? (i < ne * n ? 9.0 : float((i * 19) % 23) * 0.25 - 2.75) : 0.0   //! the first layer's rows are a decoy
         }
         for (i in range(nrows * n)) {
             rows[i] = float((i * 7) % 93) * 0.13 - 5.5
@@ -9799,7 +9969,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         let ro_bytes = int64(nrows * n) * 4l
         let wn_bytes = int64(n) * 4l
         let lg_bytes = int64(npos * MR_NER) * 4l
-        let db_bytes = int64(ne * n) * 4l
+        let db_bytes = int64(dbn) * 4l
         let sid = make_device_buf(si_bytes)
         let swd = make_device_buf(si_bytes)
         let rod = make_device_buf(ro_bytes)
@@ -9827,7 +9997,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         got_q |> resize(npos * n)
         got_s |> resize(npos * n / 32)
         var pc = ArArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
-            slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u, dbias_on = dbias ? 1u : 0u, dboff = 0u)
+            slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u, dbias_on = dbias ? 1u : 0u, dboff = dbias ? uint(ne * n) : 0u)
         unsafe {
             upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
             upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
@@ -9899,7 +10069,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
                     v += g * sh[p * n + i]
                 }
                 for (j in range(k)) {
-                    v += sw[p * k + j] * (rows[int(sidx[p * k + j]) * n + i] + db[int(sex[p * k + j]) * n + i])
+                    v += sw[p * k + j] * (rows[int(sidx[p * k + j]) * n + i] + (dbias ? db[ne * n + int(sex[p * k + j]) * n + i] : 0.0))
                 }
                 want_x[p * n + i] = v
                 ss += v * v

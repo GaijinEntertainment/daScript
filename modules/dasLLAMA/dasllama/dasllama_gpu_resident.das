@@ -828,6 +828,10 @@ def resident_unserved_features(c : Config) : string {
     name_list_add(names, c.attn_qkv_bias && !rdec_bias_installed(), "attention qkv bias")
     name_list_add(names, c.attn_sinks && !rdec_sinks_installed(), "attention sinks")
     name_list_add(names, c.attn_sinks && rdec_sinks_installed() && c.head_size != 64l, "attention sinks at head size {c.head_size} (the sink stamps serve 64)")
+    name_list_add(names, c.attn_sinks && rdec_sinks_installed() && c.head_size == 64l && c.head_size_swa != 0l && c.head_size_swa != 64l,
+        "attention sinks at head size {c.head_size_swa} on the sliding layers (the sink stamps serve 64)")
+    name_list_add(names, c.attn_sinks && rdec_sinks_installed() && (c.q_gated || c.attn_logit_softcap != 0.0),
+        "attention sinks under gated attention or a logit softcap (the sink stamps serve the plain flash tile)")
     name_list_add(names, c.moe_dense_shexp && !rdec_moe_installed(), "dense shared expert")
     name_list_add(names, has_ple(c) && !rdec_ple_installed(), "per-layer embeddings")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
@@ -883,8 +887,11 @@ def resident_layer_decline(t : Model; l : int64) : string {
         let fe1 = rdec_efmt(t, t.we1_fmt, l)
         let fe3 = rdec_efmt(t, t.we3_fmt, l)
         let fe2 = rdec_efmt(t, t.we2_fmt, l)
+        if (c.moe_exps_bias && kq_sb(fe2)) {
+            return "layer {l}'s biased expert stacks feed a K-quant down plane ({int(fe2)}) - the biased act has no Q8_K form"
+        }
         if (!rdec_moe_ok(int(fe1), int(fe3), int(fe2))) {
-            return "layer {l}'s expert formats {int(fe1)}/{int(fe3)}/{int(fe2)} are outside the resident MoE block's tile family (the f16-fed cm2 tiles)"
+            return "layer {l}'s expert formats {int(fe1)}/{int(fe3)}/{int(fe2)} are outside the resident MoE block's tile family (the f16-fed cm2 tiles, or the KHR tile in mm mode)"
         }
         if (kq_sb(fe1) != kq_sb(fe3)) {
             return "layer {l}'s expert gate and up stacks mix activation-quant forms ({int(fe1)}/{int(fe3)}) - one feed serves both"

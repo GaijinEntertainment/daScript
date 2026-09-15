@@ -27,11 +27,13 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
 }
 
-//! a fixture file, whether it carries a shared expert, and its logits bar as a fraction of the step's max |logit|
+//! a fixture file, whether it carries a shared expert, its logits bar as a fraction of the step's max |logit|, and the keys its
+//! sliding layers attend (0 = no sliding layers claimed)
 struct MoeFixture {
     file : string
     shexp : bool
     bar_rel : float
+    window : int64 = 0l
 }
 
 //! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's
@@ -81,7 +83,7 @@ def private census(kernel : string) : int64 {
     }
 }
 
-//! the token command's attention split count (0 without the module or the driver) and the tokens its unsplit twin served
+//! the token command's attention split count (0 without the module or the driver)
 def private attn_nsplit : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return vk_rdec_attn_nsplit()
@@ -90,6 +92,7 @@ def private attn_nsplit : int64 {
     }
 }
 
+//! the tokens the token command's unsplit twin served so far
 def private unsplit_tokens : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return vk_rdec_unsplit_tokens()
@@ -98,13 +101,14 @@ def private unsplit_tokens : int64 {
     }
 }
 
-//! the steps of a prompt of `n` rows the unsplit twin must serve: every one under RD_UNSPLIT_POS, none past it, -1 where the
-//! steps straddle it
-def private unsplit_want(n : int64) : int64 {
+let private UNSPLIT_UNDECIDED = -1l   //! the steps straddle the twin's threshold, or no vulkan module: the witness stands down
+
+//! the steps of a prompt of `nprompt` rows the unsplit twin must serve: every one under RD_UNSPLIT_POS, none past it
+def private unsplit_want(nprompt : int64) : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return n + FED_STEPS <= RD_UNSPLIT_POS ? FED_STEPS : (n >= RD_UNSPLIT_POS ? 0l : -1l)
+        return nprompt + FED_STEPS <= RD_UNSPLIT_POS ? FED_STEPS : (nprompt >= RD_UNSPLIT_POS ? 0l : UNSPLIT_UNDECIDED)
     } else {
-        return -1l
+        return UNSPLIT_UNDECIDED
     }
 }
 
@@ -170,6 +174,9 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â
     var tr <- load_model_(path, QuantMode.q8)
     set_gpu_resident_route(route0)
     t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp, "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
+    if (fx.window > 0l) {
+        t |> equal(tr.config.sliding_window, fx.window, "the fixture's sliding layers attend {fx.window} keys")
+    }
     if (!device_has_expert_tiles()) {
         t |> skip("the device has no tile family for the expert pieces (cm2, or KHR at subgroup 32) - the whole-model driver declines a MoE by design")
         delete tr
@@ -202,14 +209,14 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â
         let un0 = unsplit_tokens()
         var gpu <- feed_logits(tr, sg, prompt, toks)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
-        if (attn_nsplit() > 1l && unsplit_want(n) >= 0l) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
+        if (attn_nsplit() > 1l && unsplit_want(n) != UNSPLIT_UNDECIDED) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
             t |> equal(unsplit_tokens() - un0, unsplit_want(n), "the token command's unsplit twin served {unsplit_want(n)} of the {FED_STEPS} steps after {n} rows")
         }
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt ({nrec} recurrent layers of {layers})")
         if (sched0 != NO_CENSUS) {
             t |> equal(census("moe_sched_cls_spv") - sched0, layers * windows, "the device bucket schedule ran once per MoE layer per window ({windows} windows)")
             t |> equal(census("topk_rows_cls_spv") - rows0, layers * windows, "the window's per-row select ran once per MoE layer per window")
-            //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer
+            //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer per recorded form (a split device records the unsplit twin too)
             let topk = census("topk_cls_spv") - topk0
             t |> success(topk >= layers && topk % layers == 0l, "the token command recorded a top-k per MoE layer ({topk} over {layers} layers)")
             let edelta = column_census(ecol.col) - e0

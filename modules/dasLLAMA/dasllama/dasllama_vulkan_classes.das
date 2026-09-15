@@ -844,7 +844,7 @@ class Q8kRequant {
 
 struct ActArgs {
     nelem : uint   // element count (4-wide kernels; always a 32-multiple, the guard is exact)
-    act : uint    // activation select: 0 = silu, else tanh-gelu
+    act : uint    // the activation code: ACT_SILU / ACT_GELU / ACT_OAI
     nblk : uint    // 32-block / superblock count (the requant kernels' guard)
     elem0 : uint   // a 32-multiple; ActF16 only - the requant classes ignore it
     ubase : uint   //! the u side's element base; with `ustride` the rows of `ulen` elements sit `ustride` apart (a side input stored position-major); 0/0/0 = u is laid out like gate
@@ -857,9 +857,9 @@ struct ActArgs {
 }
 
 //! gpt-oss's clamped swiglu (`swiglu_oai`): the clamps and the +1 are the trained activation, not a guard
-let ACT_OAI = 2u
 let ACT_SILU = 0u
 let ACT_GELU = 1u   //! tanh-gelu
+let ACT_OAI = 2u    //! gpt-oss's clamped swiglu (`swiglu_oai`): the clamps and the +1 are the trained activation, not a guard
 
 //! the act kernels' `act` push word from a model's flags
 def act_code(oai, gelu : bool) : uint => oai ? ACT_OAI : (gelu ? ACT_GELU : ACT_SILU)
@@ -3110,7 +3110,7 @@ class template FaT {
     @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
     @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
-    @ssbo @binding = 4 @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
+    @ssbo @binding = 4 @role = "weight" @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
     @push_constant pa : FaArgs
     @template_constant HS : uint = 64u           // the head width
     @template_constant BC : uint = 64u           // the cm2 arm's K/V step: 64 at hs 64, 32 above (the head-size cut: K^T, V and the softmax state at 32 columns)
@@ -3606,8 +3606,8 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink : bool) {
     if (gated && hs != 256l) {
         panic("vk flash: the gated stamps serve head size 256 alone")
     }
-    if (sink && (hs != 64l || gated || cap)) {
-        panic("vk flash: the sink stamps serve head size 64 alone, ungated and uncapped")
+    if (sink && hs != 64l) {   //! the gated and capped stamps sit at 256 alone (above), so this one test also keeps the sinks off them
+        panic("vk flash: the sink stamps serve head size 64 alone")
     }
     if (hs != 64l && hs != 128l && hs != 256l && hs != 512l) {
         panic("vk flash: a stamp for a head size the tile never serves")
@@ -4105,7 +4105,7 @@ class template DaAttnT {
     @ssbo @binding = 5 part : array<float>   //! the split form's partials [head x split x (hs + 2)]; unsplit, any buffer (unread)
     @ssbo @binding = 6 aq : array<int8>      //! the row's quants when `rqk` folds the requant (the wo plane's feed); else any buffer (unwritten)
     @ssbo @binding = 7 aqs : array<float>    //! ... and its block scales
-    @ssbo @binding = 8 @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
+    @ssbo @binding = 8 @role = "weight" @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
     @push_constant pa : DaAttnArgs
     @workgroup qrow : float[512]   // this head's query row (hs <= 512)
     @workgroup sc : float[256]     // chunk scores, then the cross-group V partial reduce
@@ -4443,7 +4443,7 @@ class template DaAttnCombT {
     @ssbo @binding = 2 y : array<float>      //! attention out rows
     @ssbo @binding = 3 aq : array<int8>      //! the row's quants when `rqk` folds the requant; else any buffer (unwritten)
     @ssbo @binding = 4 aqs : array<float>    //! ... and its block scales
-    @ssbo @binding = 5 @template_gate = SINK sinks : array<float>   //! the SINK stamp: the per-head sink logits, `pa.sinkoff` the layer's row
+    @ssbo @binding = 5 @role = "weight" @template_gate = SINK sinks : array<float>   //! the SINK stamp: the per-head sink logits, `pa.sinkoff` the layer's row
     @push_constant pa : DaAttnArgs
     @workgroup wsum : float[2]   //! [0] = the aligned max, [1] = the aligned denom
     @workgroup sgp : float[64]   //! the Q8_K fold's per-subgroup maxes (two superblocks on a wide head)
@@ -7593,20 +7593,11 @@ class template Mx4Cm2T : KqCm2BatchT {
             let sh = (e0 >> 4u) * 4u
             let w4 = wq4[blk]
             let ex = (ws[blk >> 2u] >> ((blk & 3u) * 8u)) & 0xFFu
-            let sc = uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
+            let sc = mx4_e8m0_half(ex)
             for [unroll_full] (c in range(4)) {
-                let nw = (w4[c] >> sh) & 0x0F0F0F0Fu
-                let mag = nw & 0x07070707u
-                let lo2 = mag & 0x03030303u
-                let hi1 = (mag >> 2u) & 0x01010101u
-                let dm = lo2 + ((lo2 + 0x04040404u + (((lo2 & (lo2 >> 1u)) & 0x01010101u) << 1u)) & (hi1 * 0xFFu))
-                let sg = (nw >> 3u) & 0x01010101u
-                let v0 = float(dm & 0xFFu) * (1.0 - 2.0 * float(sg & 1u)) * sc
-                let v1 = float((dm >> 8u) & 0xFFu) * (1.0 - 2.0 * float((sg >> 8u) & 1u)) * sc
-                let v2 = float((dm >> 16u) & 0xFFu) * (1.0 - 2.0 * float((sg >> 16u) & 1u)) * sc
-                let v3 = float(dm >> 24u) * (1.0 - 2.0 * float(sg >> 24u)) * sc
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(v0, v1))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(v2, v3))
+                let v = mx4_dec4((w4[c] >> sh) & 0x0F0F0F0Fu, sc)
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(v.x, v.y))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(v.z, v.w))
             }
         }
     }
@@ -7618,10 +7609,10 @@ class template Mx4Cm2T : KqCm2BatchT {
         let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
         let nib = (by >> ((e >> 4u) * 4u)) & 0xFu
         let mag = nib & 7u
-        let dm = mag < 4u ? mag : ((4u + ((mag & 1u) << 1u)) << (((mag >> 1u) - 2u) & 1u))
+        let mag2 = mag < 4u ? mag : ((4u + ((mag & 1u) << 1u)) << (((mag >> 1u) - 2u) & 1u))
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
         let ex = (ws[idx >> 2u] >> ((idx & 3u) * 8u)) & 0xFFu
-        let v = float(dm) * uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
+        let v = float(mag2) * mx4_e8m0_half(ex)
         return float16((nib & 8u) != 0u ? -v : v)
     }
 
@@ -7633,19 +7624,31 @@ class template Mx4Cm2T : KqCm2BatchT {
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
         let nw = ((l0 >> sh) & 0xFu) | (((l0 >> (sh + 8u)) & 0xFu) << 8u) | (((l1 >> sh) & 0xFu) << 16u) | (((l1 >> (sh + 8u)) & 0xFu) << 24u)
-        let mag = nw & 0x07070707u
-        let lo2 = mag & 0x03030303u
-        let hi1 = (mag >> 2u) & 0x01010101u
-        let dm = lo2 + ((lo2 + 0x04040404u + (((lo2 & (lo2 >> 1u)) & 0x01010101u) << 1u)) & (hi1 * 0xFFu))
-        let sg = (nw >> 3u) & 0x01010101u
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
         let ex = (ws[idx >> 2u] >> ((idx & 3u) * 8u)) & 0xFFu
-        let sc = uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
-        return half4(float4(float(dm & 0xFFu) * (1.0 - 2.0 * float(sg & 1u)) * sc,
-            float((dm >> 8u) & 0xFFu) * (1.0 - 2.0 * float((sg >> 8u) & 1u)) * sc,
-            float((dm >> 16u) & 0xFFu) * (1.0 - 2.0 * float((sg >> 16u) & 1u)) * sc,
-            float(dm >> 24u) * (1.0 - 2.0 * float(sg >> 24u)) * sc))
+        return half4(mx4_dec4(nw, mx4_e8m0_half(ex)))
     }
+}
+
+//! the halved E8M0 scale of an MXFP4 block from its exponent byte: 2^(e - 128), the bit patterns below exponent 2 the denormals
+def mx4_e8m0_half(ex : uint) : float => uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
+
+//! the DOUBLED e2m1 magnitudes {0, 1, 2, 3, 4, 6, 8, 12} of four nibble codes, one per byte of `nib`, built without a table
+def mx4_mag2x4(nib : uint) : uint {
+    let mag = nib & 0x07070707u
+    let lo2 = mag & 0x03030303u
+    let hi1 = (mag >> 2u) & 0x01010101u
+    return lo2 + ((lo2 + 0x04040404u + (((lo2 & (lo2 >> 1u)) & 0x01010101u) << 1u)) & (hi1 * 0xFFu))
+}
+
+//! four MXFP4 values off four nibble codes (one per byte of `nib`) under the halved scale `sc`
+def mx4_dec4(nib : uint; sc : float) : float4 {
+    let mag2 = mx4_mag2x4(nib)
+    let sgn = (nib >> 3u) & 0x01010101u
+    return float4(float(mag2 & 0xFFu) * (1.0 - 2.0 * float(sgn & 1u)) * sc,
+        float((mag2 >> 8u) & 0xFFu) * (1.0 - 2.0 * float((sgn >> 8u) & 1u)) * sc,
+        float((mag2 >> 16u) & 0xFFu) * (1.0 - 2.0 * float((sgn >> 16u) & 1u)) * sc,
+        float(mag2 >> 24u) * (1.0 - 2.0 * float(sgn >> 24u)) * sc)
 }
 
 [ |> template_struct_instance]
@@ -9943,7 +9946,7 @@ struct GuArgs {
     d : uint      //! the output rows (the FFN width), a 32-multiple
     gblk : uint   //! the gate plane's block base in its slab
     ublk : uint   //! the up plane's block base in its slab
-    act : uint   //! activation select: 0 = silu, else tanh-gelu
+    act : uint   // the activation code: ACT_SILU / ACT_GELU / ACT_OAI
 }
 
 //! the dense FFN's gate and up GEMVs, the activation and its Q8_0 requant in one dispatch: a workgroup owns 32
@@ -10007,7 +10010,7 @@ class Q8GemvGu {
     def run {
         let row0 = gl_WorkGroupID.x * 32u
         let nsg = gl_NumSubgroups
-        let rows_per = 32u / nsg   // a row a subgroup at 32 lanes, 2 at 64: every row of the block in flight at once
+        let rows_per = 32u / nsg   // four rows a subgroup at 32 lanes (eight subgroups), eight at 64: every row of the block in flight at once
         var k = 0u
         while (k < rows_per) {
             let r = gl_SubgroupID + k * nsg
@@ -10040,7 +10043,7 @@ struct PleActArgs {
     d : uint      //! the output rows (the model dim)
     wblk : uint   //! the proj plane's block base in its slab
     ubase : uint  //! this layer's row base in the side plane
-    act : uint   //! activation select: 0 = silu, else tanh-gelu
+    act : uint   // the activation code: ACT_SILU / ACT_GELU / ACT_OAI
 }
 
 //! the per-layer-embedding branch's activation, its Q8_0 requant and the proj GEMV in one dispatch: every workgroup
@@ -10190,20 +10193,17 @@ class Q51GemvSum : Q51GemvBase {
     }
 }
 
-//! the sdot4 of four MXFP4 nibbles (one per byte of `n`) against four Q8_0 activation bytes: the doubled magnitudes built per byte without a table (`dm`), the sign applied by subtracting the negative bytes twice
-def mx4_sdot(n, x : uint) : int {
-    let mag = n & 0x07070707u
-    let lo2 = mag & 0x03030303u
-    let hi1 = (mag >> 2u) & 0x01010101u
-    let dm = lo2 + ((lo2 + 0x04040404u + (((lo2 & (lo2 >> 1u)) & 0x01010101u) << 1u)) & (hi1 * 0xFFu))
-    let neg = dm & (((n >> 3u) & 0x01010101u) * 0xFFu)
-    return sdot4(dm, x) - 2 * sdot4(neg, x)
+//! the sdot4 of four MXFP4 nibbles (one per byte of `nib`) against four Q8_0 activation bytes: the doubled magnitudes, the sign applied by subtracting the negative bytes twice
+def mx4_sdot(nib, x : uint) : int {
+    let mag2 = mx4_mag2x4(nib)
+    let neg = mag2 & (((nib >> 3u) & 0x01010101u) * 0xFFu)
+    return sdot4(mag2, x) - 2 * sdot4(neg, x)
 }
 
 //! MXFP4 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: `dot_mx4q8_scalar`'s float order, reassociated by lane
 class Mx4GemvBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words, four per block
-    @ssbo @binding = 1 wsb : array<uint>       // per-block E8M0 scale bytes, four blocks a word
+    @ssbo @binding = 1 wex : array<uint>       // per-block E8M0 exponent bytes, four blocks a word
     @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
     @ssbo @binding = 3 xqw : array<uint>       // activation quant words
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
@@ -10227,8 +10227,8 @@ class Mx4GemvBase {
                     idot += mx4_sdot((w >> 4u) & 0x0F0F0F0Fu, xqw[xbase + 4u + uint(c)])
                 }
                 let sb = wb0 + b
-                let ex = (wsb[sb >> 2u] >> ((sb & 3u) * 8u)) & 0xFFu
-                acc += float(idot) * uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u)) * axs[xb0 + b]
+                let ex = (wex[sb >> 2u] >> ((sb & 3u) * 8u)) & 0xFFu
+                acc += float(idot) * mx4_e8m0_half(ex) * axs[xb0 + b]
             }
             bi0 += gl_SubgroupSize
         }
@@ -10253,6 +10253,7 @@ class Mx4Gemv : Mx4GemvBase {
     }
 }
 
+//! bindings 10 and 11 sit at the hazard rail's cap (`SetBits` holds twelve): a thirteenth plane here is a rail change, not a line
 [vk_dispatch(name = "mx4_gemv_gu_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4GemvGu : Mx4GemvBase {
     @ssbo @binding = 6 regions3 : array<uint>   // the up stack's (rel_wblock, xblock) pairs per slot
@@ -10268,7 +10269,7 @@ class Mx4GemvGu : Mx4GemvBase {
     def run {
         let row0 = gl_WorkGroupID.x * 32u
         let nsg = gl_NumSubgroups
-        let rows_per = 32u / nsg   // a row a subgroup at 32 lanes, 2 at 64: every row of the block in flight at once
+        let rows_per = 32u / nsg   // four rows a subgroup at 32 lanes (eight subgroups), eight at 64: every row of the block in flight at once
         let nb = pa.n / 32u
         var t = 0u
         while (t < rows_per) {

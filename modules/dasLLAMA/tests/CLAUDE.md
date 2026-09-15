@@ -299,8 +299,13 @@ oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format 
 and its KHR arm is `test_vkd_q8_khr_batch`, the per-32 plane through the hand-staged KHR tile over the
 same two regions, whole and under a k split with the reduce, wherever the device has KHR cooperative
 matrices at subgroup 32; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
-only, on a cm2 device, over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
-its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408) run five
+on a cm2 device and its KHR tile wherever the device has KHR cooperative matrices at subgroup 32,
+over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
+its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408; mx4's rail
+rides `test_vkd_mx4_cm2_batch` (the same three arms over the doubled-magnitude plane, every nibble
+code reached), `test_vkd_mx4_gemv` (the Q8_0-fed decode GEMV at 704 and gpt-oss's 2880) and
+`test_vkd_mx4_gemv_gu` (the fused gate + up + act + requant twin byte for byte against the split
+path and the CPU chain, biased and unbiased, the gate rows' bar with its poison)) run five
 arms: the cm2 l/m/s tiles and the
 expert schedule's e column (the format's own 128-row e stamp, whose k step is the stamp's - 32 on
 iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
@@ -352,8 +357,17 @@ one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate a
 bound). The gemma arc's cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
 its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
 `test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
-`test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant) and
+`test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
+the biased add partner beside the plain step) and
 `test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths),
+the gpt-oss arc's arms - `test_vkd_ar_class` and `test_vkd_ar_rq_fused` add the biased add
+partner (the output bias row past the norm row) against the seam and the CPU oracle,
+`test_vkd_act_family` runs the unbiased act kernels under the clamped swiglu beside silu and adds
+the biased twins (`q8_actrq_b_cls`, `actf16_b_cls`) over a six-expert bias plane, `test_vkd_fa_cm2`
+/ `test_vkd_fa_khr` and `test_vkd_da_attn` add the sink arms (the h64 flash stamps whole and under
+a 40-key window; the token command's f32 and f16 sink twins unsplit and split with the sink
+combine), each with the sink-free oracle as the control, and `test_vkd_fa_stamp_refusals` covers
+the sink refusals -
 `test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
 the pass and the combine), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
 restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
@@ -425,7 +439,9 @@ from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
 shape is named in the text a user reads, a served one yields ""; the MoE names among them (the
 router shapes the routed block's kernels do not serve, the expert and slot counts past their
-reach) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a layer routes only
+reach; gpt-oss's router bias, biased stacks, clamped swiglu and softmax-weight gate are served,
+a biased stack feeding a K-quant down plane is named by layer, and the attention sinks are named
+only while no sink seat is installed or the head size is not 64) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a layer routes only
 past the dense lead with all three expert planes, and its dense width is the shared expert's);
 plus the KV mirror's binding cap (`resident_binding_ctx`) on a hybrid shell whose layer 0 is
 recurrent, its dense twin, and a shell with no attention layer. The Metal serving gates ride the
@@ -571,14 +587,18 @@ under either of two summation orders, the one-step-off controls 0.42 and above; 
 carries the reading) with the one-step-off control, at one window and
 two windows, plus the census witnesses: the device bucket schedule and the per-row select ran once
 per MoE layer per window, the expert schedule's m pieces dispatched the format's e column on the
-three expert planes once per MoE layer per window, the token command's top-k count a whole
-multiple of the MoE layer count (the command records once and resubmits); the second
+three expert planes once per MoE layer per window in cm2 mode (in mm mode the KHR tile also serves
+the window's dense GEMMs, so its count is a floor of two dispatches a plane per MoE layer per
+window), the token command's top-k count a whole multiple of the MoE layer count (the command
+records once and resubmits), and on a device whose SM count splits the attention keys the
+unsplit twin served every step of the one-window cell and none of the two-window one; the second
 fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
 after the deltanet head, at the same two lengths; the third is the Qwen3-30B-A3B UD-IQ2_XXS,
 the MoE with no shared expert (the residual step with its add partner off, the FFN-norm requant
 skipped), at the same two lengths; all three are large-tier (`DASLLAMA_PARITY_FULL=1`), and the
-cells skip without the file, the armed tier, or a device with no cm2 tile family (the driver
-declines a MoE there by design); on a cm2 device the driver's admission of the fixture is
+cells skip without the file, the armed tier, or a device with neither the cm2 tile family nor KHR
+cooperative matrices at subgroup 32 (the expert pieces' two tiles; the driver declines a MoE there
+by design); on a device with either the driver's admission of the fixture is
 asserted, a decline is a red that sends the reader to the load log. Every cell pins the resident
 route on for its load (`set_gpu_resident_route`) and restores the lever after.
 `test_gpu_resident_gptoss.das` - stocked suite, `-jit` only; the same rig on gpt-oss-20b (the pinned

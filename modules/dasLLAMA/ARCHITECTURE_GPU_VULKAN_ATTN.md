@@ -18,8 +18,10 @@ heads alone cover it), each running the online softmax over its piece into an un
 partials by their maxes, normalizes, gates and stores the row (unsplit, the pass stores it), and the
 store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax, Q8_K
 superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. A split
-device records the token command twice - the split chain and an unsplit twin over the same sets -
-and submits the twin while the position is under `RD_UNSPLIT_POS` (512): there a head's whole row
+device records the token command twice - the split chain and an unsplit twin over the same sets,
+so the once-per-epoch record costs double there and the profiler keeps each form's stamp names and
+restarts its averages when a run crosses between them - and submits the twin while the position is
+under `RD_UNSPLIT_POS` (512): there a head's whole row
 is at most two of the pass's 256-key chunks, less than the combine's own chain, so the split only
 adds a dispatch a layer (gpt-oss-20b on the RTX PRO 4500 at three splits, the `DASLLAMA_GPU_PROF=1`
 token profile of `benchmarks/lcpp_bench.das` under `-jit` in cm2 mode with `DASLLAMA_ALLOW_UNTUNED=1`:

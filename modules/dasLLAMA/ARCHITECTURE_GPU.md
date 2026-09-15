@@ -101,7 +101,8 @@ that a question answered for one backend has an obvious address in the other. Th
   `set_moe_gpu_attn_dec_hooks`, the decode FFN tail `set_moe_gpu_ffn_tail_hooks`, the deltanet decode step's state
   seams `set_moe_gpu_dn_state_hooks` (flush, invalidate, release), the whole-token span `set_moe_gpu_span_dec_hook` -
   the span rides common's decode override registry as `vulkan_moe_span`, selected by the MoE placement and declining
-  per token - the resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, its MoE seats
+  per token - the resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, its attention-sink seat
+  `install_moe_gpu_resident_sinks` (the per-head sink plane, `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2am), its MoE seats
   `install_moe_gpu_resident_moe` (the tile admission per expert triple, the routing geometry with the router plane, an
   MoE layer, and the routed block on a layer another seat built) behind the route lever `set_gpu_resident_route` /
   `gpu_want_resident`, the OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the

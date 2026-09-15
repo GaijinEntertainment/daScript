@@ -52,7 +52,7 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - sec.2.2g: the Metal prefill driver's routed block - the
   MoE bucket rail, its tensor-twin scaffold, and the split-format expert twins.
-- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai, 2.2aj, 2.2al: the Vulkan
+- `ARCHITECTURE_GPU_VULKAN.md` - sec.2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai, 2.2aj: the Vulkan
   resident driver's prefill chain and byte stores - the prefill window chain, the Q8 requant byte
   store, the decode GEMV family's grid codebook buffer, the tile probe's shared descriptor set
   layout, the recurrent block of the prefill window, the device-init roster of the Vulkan

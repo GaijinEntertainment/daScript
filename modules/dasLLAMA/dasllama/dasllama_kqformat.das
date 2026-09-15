@@ -855,7 +855,7 @@ def kq_elems(f : KqFmt) : int64 => kq_sb(f) ? 256l : 32l
 //! repack dispatchers translate it back to kernel id 2.
 let K2_STREAM_TAG = 20
 
-//! mx4's stream tag is the GGML type id: the loader never streams an mx4 plane, so the code names the format alone
+//! mx4's stream tag is the GGML type id (`GGML_TYPE_MXFP4`); no loader path streams an mx4 plane, so the row exists only to keep `kq_stream_code` total
 let MX4_STREAM_TAG = 39
 
 def kq_stream_code(f : KqFmt) : int {

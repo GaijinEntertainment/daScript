@@ -1191,7 +1191,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the KHR flash tile and the KHR f16 GEMM off cm2 (at subgroup 32), and the h128 attention twin; without it the sdot4 tiles and the chunked attention serve"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), and the h128 attention twin; without it the sdot4 tiles and the chunked attention serve, and a MoE stays per op in mm mode"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
@@ -1533,9 +1533,10 @@ def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64
 // pass slot capacities and a base of -1 (re-based per layer).
 def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
     // floor the ws buffer so a scale-less stack's descriptor slot stays valid
+    let wswords = (wscap + 3l) & ~3l   //! whole words: a byte-scale plane (mx4) is read four blocks a word
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
                      wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
-                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wscap, 64l), xfer_shared), wsbytes = wscap)
+                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wswords, 64l), xfer_shared), wsbytes = wswords)
     g_gpu.stacks |> push(st)
     return length(g_gpu.stacks) - 1
 }
@@ -2056,7 +2057,7 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
         return (wq = Q51_QPB, ws = Q51_SPB)   // 16 nibble bytes + 4 qh bytes, f16 d + f16 m: the CPU plane verbatim
     }
     if (fmt == int(KqFmt.mx4)) {
-        return (wq = MX4_QPB, ws = MX4_SPB)   // 16 nibble bytes, one E8M0 byte: the CPU's mxq / mxs planes verbatim
+        return (wq = MX4_QB, ws = MX4_SB)   // 16 nibble bytes, one E8M0 byte: the CPU's mxq / mxs planes verbatim
     }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
 }
@@ -2536,7 +2537,7 @@ struct RDec {
     moe_rb_bytes : int64
     exps_bias : bool              //! the expert stacks carry bias rows (gpt-oss): gate and up [n_moe x ne x nfe], down [n_moe x ne x dim]
     moe_gb_dev, moe_ub_dev, moe_db_dev : uint64
-    moe_gb_bytes, moe_db_bytes : int64
+    moe_gub_bytes, moe_db_bytes : int64
     moe_eidx_dev : uint64         //! the decode's k picks' experts (the biased act and combine's row map)
     moe_ident_dev : uint64        //! 0..MAX_ROUTED_SLOTS-1: the decode combine's identity slot map
     moe_dlog_dev : uint64         //! the decode's logits row (ner floats)
@@ -2564,7 +2565,7 @@ def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && di
 
 var g_rd : RDec?
 
-let RD_UNSPLIT_POS = 512l
+let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al)
 
 //! the token command's attention split count on this device (1 = the unsplit pass alone, no twin; 0 = no driver)
 def vk_rdec_attn_nsplit : int64 => g_rd != null ? g_rd.attn_nsplit : 0l
@@ -2663,29 +2664,45 @@ var g_rdq_n = 0u
 var g_rdq_count = 0l
 var g_rdq_total = 0.0lf
 var g_rdq_stamp_names : array<string>        //! the recorded token command's stamp names in stamp order, the recorder's own account of what each interval bills
-var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, and its stamp count
+var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, its stamp count and its overflow flag
 var g_rdq_n_unsplit = 0u
+var g_rdq_overflow_unsplit = false
+var g_rdq_form_unsplit = false   //! the form the last sampled token took: a switch restarts the averages
 var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
 var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
 var g_rdq_host_us : double[4]   //! ... split into its pieces: the memcpys and meta, the submit, the fence spin, the logits copy
 var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP): the recorded names and the pool saturate together, so the sampler reads this instead
 
-//! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
-def rdq_reset {
-    g_rdq_n = 0u
+//! the decode profiler's averages back to zero (the recorded stamp names stay): a switch between the token command's two forms
+//! the token command changed forms mid-run: say so and restart the ledger's averages, since the two forms' stamp roles differ
+[cold_path]
+def rdq_form_switch(unsplit : bool; pos : int64) {
+    to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {unsplit ? "unsplit" : "split"} form from position {pos} - the averages restart\n")
+    rdq_reset_averages()
+}
+
+def rdq_reset_averages {
     g_rdq_count = 0l
     g_rdq_total = 0.0lf
     g_rdq_wall_us = 0.0lf
     for (i in range(4)) {
         g_rdq_host_us[i] = 0.0lf
     }
-    g_rdq_overflow = false
     g_rdq_us_by_name |> clear()
     g_rdq_print_order |> clear()
+}
+
+//! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
+def rdq_reset {
+    rdq_reset_averages()
+    g_rdq_n = 0u
+    g_rdq_overflow = false
     g_rdq_stamp_names |> clear()
     g_rdq_names_unsplit |> clear()
     g_rdq_n_unsplit = 0u
+    g_rdq_overflow_unsplit = false
+    g_rdq_form_unsplit = false
 }
 
 let PFQ_CAP = 2048u

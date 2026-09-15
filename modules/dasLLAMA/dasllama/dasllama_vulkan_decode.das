@@ -173,7 +173,9 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
     r.cmd = alloc_cmd()
-    r.cmd_unsplit = alloc_cmd()
+    if (r.attn_nsplit > 1l) {   //! the unsplit twin exists only where the attention splits
+        r.cmd_unsplit = alloc_cmd()
+    }
     return true
 }
 
@@ -458,23 +460,29 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     }
     r.moe_gb_dev = r.dummy
     r.moe_ub_dev = r.dummy
-    r.moe_gb_bytes = 256l
-    r.moe_db_bytes = dim * 4l
-    r.moe_db_dev = make_device_buf(r.moe_db_bytes)
-    var zrow : array<float>
-    zrow |> resize(dim)
-    upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(zrow[0])), r.moe_db_bytes)
-    delete zrow
-    if (r.exps_bias) {
+    r.moe_gub_bytes = 256l
+    if (!r.exps_bias) {   //! the combine reads the down-bias row unconditionally at row base 0: a biasless model binds a ZERO ROW of the model dim, never the one-float dummy
+        r.moe_db_bytes = dim * 4l
+        r.moe_db_dev = make_device_buf(r.moe_db_bytes)
+        var zrow : array<float>
+        zrow |> reserve(dim)
+        zrow |> resize(dim)
+        upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(zrow[0])), r.moe_db_bytes)
+        delete zrow
+    } else {
         assert(long_length(gbias) == n_moe * ne * nfe && long_length(ubias) == n_moe * ne * nfe && long_length(dbias) == n_moe * ne * dim,
             "vk_rdec_prepare_moe: the expert-bias planes are not [n_moe x ne x nfe] / [n_moe x ne x dim]")
-        r.moe_gb_bytes = long_length(gbias) * 4l
+        if (max(long_length(gbias), long_length(dbias)) * 4l > vk_max_storage_range()) {   //! each bias plane binds as one range
+            to_log(LOG_WARNING, "dasLLAMA vulkan resident: an expert-bias plane ({n_moe} layers x {ne} experts x {max(nfe, dim)}) passes the device's storage range {vk_max_storage_range()}\n")
+            return false
+        }
+        r.moe_gub_bytes = long_length(gbias) * 4l
         r.moe_db_bytes = long_length(dbias) * 4l
-        r.moe_gb_dev = make_device_buf(r.moe_gb_bytes)
-        r.moe_ub_dev = make_device_buf(r.moe_gb_bytes)
+        r.moe_gb_dev = make_device_buf(r.moe_gub_bytes)
+        r.moe_ub_dev = make_device_buf(r.moe_gub_bytes)
         r.moe_db_dev = make_device_buf(r.moe_db_bytes)
-        upload_region_at(r.moe_gb_dev, 0l, unsafe(addr<uint8 const?>(gbias[0])), r.moe_gb_bytes)
-        upload_region_at(r.moe_ub_dev, 0l, unsafe(addr<uint8 const?>(ubias[0])), r.moe_gb_bytes)
+        upload_region_at(r.moe_gb_dev, 0l, unsafe(addr<uint8 const?>(gbias[0])), r.moe_gub_bytes)
+        upload_region_at(r.moe_ub_dev, 0l, unsafe(addr<uint8 const?>(ubias[0])), r.moe_gub_bytes)
         upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(dbias[0])), r.moe_db_bytes)
     }
     r.moe_eidx_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
@@ -563,7 +571,7 @@ def private rd_moe_sets(var L : RLayer) {
         fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_UP))
     if (g_rd.exps_bias) {   //! the biased act: the picks' gate and up bias rows join before the activation
         L.s_eact = set_q8_actrq_b_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev),
-            fixed_array(k * nfe * 4l, k * nfe * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES, g_rd.moe_gb_bytes, g_rd.moe_gb_bytes, MAX_ROUTED_SLOTS * 4l),
+            fixed_array(k * nfe * 4l, k * nfe * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l),
             fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ, 0u, 0u, VHZ_MRT))
     } else {
         L.s_eact = set_actrq_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
@@ -572,7 +580,7 @@ def private rd_moe_sets(var L : RLayer) {
     }
     //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once
     L.egu = (L.fe1 == int(KqFmt.k4) && L.fe3 == int(KqFmt.k4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
-        && vk_fuse_on() && ensure_kq_gemv_k4_gu_cls())
+        && !g_rd.exps_bias && !g_rd.act_oai && vk_fuse_on() && ensure_kq_gemv_k4_gu_cls())   //! the k4 twin carries no bias rows and no clamped act: a biased or gpt-oss-activated k4 stack takes the three dispatches
     if (L.egu) {
         L.s_egu = set_kq_gemv_k4_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, kq_grid_dev(), g_rd.moe_meta3_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
@@ -583,7 +591,7 @@ def private rd_moe_sets(var L : RLayer) {
         && vk_fuse_on() && ensure_mx4_gemv_gu_cls())
     if (L.egu_mx4) {
         L.s_egu = set_mx4_gemv_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, g_rd.moe_meta3_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gb_bytes, g_rd.moe_gb_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, VHZ_MRT, 0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
     }
     L.s_edown = gemv_cls_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev),
@@ -1048,18 +1056,20 @@ def private rd_record_token {
             fill_gemv_regions(L.m_pp, L.bpp)
         }
     }
-    g_rd.unsplit_on = false
-    if (g_rd.attn_nsplit > 1l) {
-        let ns = g_rd.attn_nsplit
-        g_rd.attn_nsplit = 1l
-        rd_encode_token(g_rd.cmd_unsplit)
-        g_rd.attn_nsplit = ns
-        delete g_rdq_names_unsplit
-        g_rdq_names_unsplit <- g_rdq_stamp_names
-        g_rdq_n_unsplit = g_rdq_n
-        g_rd.unsplit_on = true
-    }
-    rd_encode_token(g_rd.cmd)
+    rd_record_unsplit_twin()
+    rd_encode_token(g_rd.cmd, g_rd.attn_nsplit)
+}
+
+//! the unsplit twin on a split device: the same chain at one split into `cmd_unsplit`, its stamp names and overflow flag kept apart
+[cold_path]   // beside rd_record_token, and the rerecord probe's per-token leg
+def private rd_record_unsplit_twin {
+    g_rd.unsplit_on = g_rd.attn_nsplit > 1l
+    if (!g_rd.unsplit_on) return
+    rd_encode_token(g_rd.cmd_unsplit, 1l)
+    delete g_rdq_names_unsplit
+    g_rdq_names_unsplit <- g_rdq_stamp_names
+    g_rdq_n_unsplit = g_rdq_n
+    g_rdq_overflow_unsplit = g_rdq_overflow
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
@@ -1188,7 +1198,7 @@ def private rd_attn_rqk(L : RLayer) : uint {
     return L.hs % 256l == 0l ? DA_RQ_Q8K : DA_RQ_NONE
 }
 
-def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin : int64) {
+def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin, nsplit : int64) {
     let dim = g_rd.dim
     let qd = L.qd
     let kvd = L.kvd
@@ -1260,7 +1270,6 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
         rd_ts(raw, "a:rope")
     }
-    let nsplit = g_rd.attn_nsplit
     let rqk = rd_attn_rqk(L)
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
@@ -1387,11 +1396,11 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let dim = g_rd.dim
     let hid = L.hid
     let pfx = rd_ffn_pfx(L)
-    let gelu = L.gelu ? ACT_GELU : ACT_SILU
-    var pc_act = ActArgs(nelem = uint(hid), act = gelu, nblk = uint(hid / 32l))
-    var pc_act_k = ActArgs(nelem = uint(hid), act = gelu, nblk = uint(hid / 256l))
+    let act = L.gelu ? ACT_GELU : ACT_SILU
+    var pc_act = ActArgs(nelem = uint(hid), act = act, nblk = uint(hid / 32l))
+    var pc_act_k = ActArgs(nelem = uint(hid), act = act, nblk = uint(hid / 256l))
     if (L.gu_on) {
-        var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = gelu)
+        var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act)
         enc_q8_gemv_gu_cls(raw, h, L.s_gu, pcgu, hid / 32l)
         rd_ts(raw, L.moe ? "m:sh_gu" : "{pfx}gu")
     } else {
@@ -1546,7 +1555,7 @@ def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
 // The encode half alone: reset + re-encode the token cmd over the already-filled metas/sets.
 // The --rerecord-ab probe calls this per token to price the class twins' push-borne pos/cnt.
 [cold_path]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
-def private rd_encode_token(raw : VkCommandBuffer) {
+def private rd_encode_token(raw : VkCommandBuffer; nsplit : int64) {
     let dim = g_rd.dim
     let nlfin = rd_norm_final()   // rms_final offset in the norms buffer
     unsafe {
@@ -1606,7 +1615,7 @@ def private rd_encode_token(raw : VkCommandBuffer) {
             if (L.recurrent) {
                 rd_encode_dn_head(raw, h, L)
             } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin)
+                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, nsplit)
             }
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
@@ -1708,9 +1717,9 @@ def private rdq_group_line(pfx : string; n : double) : string {
 }
 
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
-def private rdq_sample(names : array<string>; n : uint) {
+def private rdq_sample(names : array<string>; n : uint; overflow : bool) {
     let want = length(names)
-    if (g_rdq_overflow || n != uint(want)) {
+    if (overflow || n != uint(want)) {
         // a bare stamp or a full query pool: the whole command's GPU span reads off the first and last stamps
         unsafe {
             var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
@@ -1729,7 +1738,7 @@ def private rdq_sample(names : array<string>; n : uint) {
         }
         g_rdq_count++
         if (g_rdq_count % 32l == 0l) {
-            let why = g_rdq_overflow ? "the query pool filled at PFQ_CAP" : "{n} stamps, the recorder named {want}"
+            let why = overflow ? "the query pool filled at PFQ_CAP" : "{n} stamps, the recorder named {want}"
             to_log(LOG_INFO, "vk_rdec gpu avg/token over {g_rdq_count}: total {int(g_rdq_total / double(g_rdq_count))} us (roles unaggregated: {why})\n")
         }
         return
@@ -1799,8 +1808,9 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
     if (!g_rd.tok_recorded) {
         rd_record_token()
-    } elif (vk_rdec_rerecord_on()) {
-        rd_encode_token(g_rd.cmd)   // probe arm: pay the full re-encode every token
+    } elif (vk_rdec_rerecord_on()) {   // probe arm: pay the full re-encode every token, both forms
+        rd_record_unsplit_twin()
+        rd_encode_token(g_rd.cmd, g_rd.attn_nsplit)
     }
     let ts0 = ref_time_ticks()
     let prof = vk_prof()
@@ -1861,11 +1871,15 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             }
         }
     }
-    if (prof) {
+    if (prof) {   //! the ledger reads the submitted form's stamps; a run crossing RD_UNSPLIT_POS restarts its averages, since the two forms' roles differ
+        if (g_rdq_count > 0l && unsplit != g_rdq_form_unsplit) {
+            rdq_form_switch(unsplit, pos)
+        }
+        g_rdq_form_unsplit = unsplit
         if (unsplit && g_rdq_n_unsplit > 2u) {
-            rdq_sample(g_rdq_names_unsplit, g_rdq_n_unsplit)
+            rdq_sample(g_rdq_names_unsplit, g_rdq_n_unsplit, g_rdq_overflow_unsplit)
         } elif (!unsplit && g_rdq_n > 2u) {
-            rdq_sample(g_rdq_stamp_names, g_rdq_n)
+            rdq_sample(g_rdq_stamp_names, g_rdq_n, g_rdq_overflow)
         }
     }
 }

@@ -15,9 +15,9 @@ require _moe_resident
 // Three fixtures: the twin, the Qwen3.6-35B UD-IQ2_XXS hybrid, whose recurrent layers take the routed
 // block after the deltanet head, and the Qwen3-30B UD-IQ2_XXS, the MoE with no shared expert (the
 // residual step's add partner off). All three fixtures are large-tier (DASLLAMA_PARITY_FULL=1); the
-// file is -jit only, and skips without the file, the armed tier, or a device with no cm2 tile family
-// (the routed block's only tile); on a cm2 device the driver's admission of every fixture is asserted,
-// never skipped.
+// file is -jit only, and skips without the file, the armed tier, or a device with neither the cm2 tile family
+// nor KHR cooperative matrices at subgroup 32 (the expert pieces' two tiles); on a device with either the
+// driver's admission of every fixture is asserted, never skipped.
 
 let private TWIN = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL)   //! the Q4_K_M mint of the Q8_0 carrier (its recipe row in ../performance/model_specs.das)
 let private HYBRID = MoeFixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL)   //! the deltanet hybrid MoE with a gated shared expert, the 16 GB card's whole-model fit

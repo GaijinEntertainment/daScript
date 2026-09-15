@@ -115,9 +115,9 @@ except where a probe arm is named.
   resident-vs-CPU bars of the MoE files keep their calibration: the fold's natural order - the
   residual first - moves the rounding enough to flip a router near-tie downstream, and one step
   of the 35B two-window cell reads 1.50 logits off the CPU chain against a 1.39 bar where the
-  chain's order reads 0.39. The row pass hoists the first eight slots' metas - row base, routing
-  weight, bias row - into registers once per thread, then walks FOUR columns a round with every
-  load issued before any add; slots past eight walk the memory form (a one-workgroup row kernel
+  chain's order reads 0.39. The row pass reads the first eight slots' metas - row base, routing
+  weight, bias row - once per thread into a per-thread array, then walks FOUR columns a round,
+  the four columns' loads written ahead of their adds; slots past eight walk the memory form (a one-workgroup row kernel
   is its dependent-load rounds, and a column a round over 2880 columns is twelve of them - the
   token command's one-row form, sec.2.2ag); a slot-major pass through the row stash instead read 2.4 ms more on the 30B window, the
   shared-memory read-modify-write per slot costing what the register sum does not. The token
@@ -155,7 +155,7 @@ sec.2.2af kernel at one row): the shared expert's row in `ffnout` at the sigmoid
 logit, the k weighted routed rows through the top-k's slot map, then the next layer's norm - a
 layer without a shared expert takes the same step with the add partner off. A one-row dispatch is
 latency, not bandwidth: the step's row pass is the sec.2.2af form - the first eight slots' metas
-in registers, four columns a round with every load issued before any add, the sums still in slot
+read once a thread, four columns a round with the loads written ahead of the adds, the sums still in slot
 order - so an element waits on one load round per four columns rather than one per column; on
 the `DASLLAMA_GPU_PROF=1` token profile (`vk_rdec moe avg/token`, `benchmarks/lcpp_bench.das`
 under `-jit` with `DASLLAMA_ALLOW_UNTUNED=1`, cm2 mode) gpt-oss-20b's 24 layers at four slots
@@ -231,7 +231,8 @@ model dim, the k regions' dots summed under the routing weights), so the combine
 (`ArArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
 the token command's combine quantizes it itself (`ClsArCombG4Rq`, `RLayer.comb_rq`), so the requant
 dispatch that opened the next layer (or the classifier) goes. The norms plane grows by the
-four rows (`RDEC_NORM_ROWS` 9; zero on every other model). The plan's unserved list names the
+four rows (`RDEC_NORM_ROWS` 10 with the output-bias row of `ARCHITECTURE_GPU_VULKAN_ATTN.md`
+sec.2.2am; zero on every other model). The plan's unserved list names the
 dense shared expert only where no backend installed the MoE seats; the plan sizes an MoE layer
 at its expert triple plus the FFN triple, and the layer decline reads the FFN triple's formats on
 the dense rail.

@@ -59,7 +59,9 @@ The taxonomy every other file keys off. One edit here, then the compiler finds t
   `kq_reads_packed_planes` - the one packed-versus-panel predicate the batch cell generator, the
   probe, the tests and the bench all read.
 - `tests/test_kqformat.das`: pin the enum value, the predicate, the strides, the id, the stream
-  code, and the codebook's edge values.
+  code, and the codebook's edge values; its radix guard holds every id under `DAT_KEY_FMTS`
+  (`dasllama_vulkan_common.das`, the Vulkan decode block's layer-key radix) - the 32nd member
+  grows the radix in the same change.
 
 ## 2. Codec - `dasllama/dasllama_convert.das`, `dasllama/dasllama_gguf.das`
 

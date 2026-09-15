@@ -27,10 +27,11 @@ what it costs today and what the fix would change.
   8637 and 145.3 / 140.8 (1.199 / 1.032), gemma-4-E2B Q8_0 13748 / 12586 and 190.8 / 180.5 (1.092 /
   1.057), gemma-4-E4B Q8_0 7556 / 6511 and 108.9 / 109.3 (1.160 / 0.996), gemma-4-12B Q4_K_M 3514 /
   3048 and 79.98 / 80.08 (1.153 / 0.999), gemma-4-12B Q8_0 3395 / 2907 and 54.88 / 53.16 (1.168 /
-  1.032), gemma-4-31B Q4_K_M 1253 / 1025 and 35.89 / 35.80 (1.222 / 1.003). The 26B-A4B is the gap:
-  its routed block is cm2-only, so under `mm` the resident driver declines and the UD-IQ3_XXS reads
-  328 / 39.1 against 4180 / 129.3 `external` (0.078 / 0.303) on the per-op rails (`followup_vulkan.md`
-  item 57; the UD-Q4_K_M file is not on the pod and takes the same decline).
+  1.032), gemma-4-31B Q4_K_M 1253 / 1025 and 35.89 / 35.80 (1.222 / 1.003). The 26B-A4B is the gap
+  as measured then: its routed block was cm2-only, so under `mm` the resident driver declined and
+  the UD-IQ3_XXS read 328 / 39.1 against 4180 / 129.3 `external` (0.078 / 0.303) on the per-op
+  rails; the resident block serves a KHR-mode card now, and the row's re-measurement is owed
+  (`followup_vulkan.md` item 66).
   Decode is mode-independent. Provenance, direction-grade: the RunPod RTX PRO 4500 Blackwell 32 GB
   (82 SMs) with the device created in KHR mode, `lcpp_bench --for-debug-purposes -r 5 -p 512 -n 128
   -t 16` under `DASLLAMA_COOPMAT=mm DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048

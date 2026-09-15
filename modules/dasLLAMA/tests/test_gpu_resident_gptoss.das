@@ -10,14 +10,15 @@ require _moe_resident
 // the gate / up / down bias rows at the act and the combine under the clamped swiglu, the per-head attention sinks in
 // the flash tiles and the token command's pass, the output bias on the residual step, sliding windows on the even
 // layers, YaRN folded at load) in _moe_resident's forced-feed form: one window, then two. Large-tier
-// (DASLLAMA_PARITY_FULL=1); -jit only; skips without the file, the armed tier, or a device with no cm2 tile family;
-// on a cm2 device the driver's admission is asserted - a decline (a seat, the sink arm, a plane's format) is a red
-// that sends the reader to the load log.
+// (DASLLAMA_PARITY_FULL=1); -jit only; skips without the file, the armed tier, or a device with neither the cm2 tile
+// family nor KHR cooperative matrices at subgroup 32 (the expert pieces' two tiles); on a device with either the
+// driver's admission is asserted - a decline (a seat, the sink arm, a plane's format) is a red that sends the reader
+// to the load log.
 //! gpt-oss's logits bar: the routed chain's noise reads 0.06-0.15 of a 7-15 max logit on the 5060 Ti (0.9-2.2%) at 40 and 600 tokens and
 //! every step, the argmax agreeing everywhere - the four picks over 32 experts on a biased softmax sit far from a near-tie on
 //! this fixture - while the one-step-off controls read 4.2-18.9, so a 5% bar keeps a 2x margin over the noise and 12x under the control
 let private GPTOSS_LOGIT_BAR_REL = 0.05
-let private GPTOSS = MoeFixture(file = "gpt-oss-20b-mxfp4.gguf", shexp = false, bar_rel = GPTOSS_LOGIT_BAR_REL)   //! the pinned upstream file (its row in ../performance/model_specs.das)
+let private GPTOSS = MoeFixture(file = "gpt-oss-20b-mxfp4.gguf", shexp = false, bar_rel = GPTOSS_LOGIT_BAR_REL, window = 128l)   //! the pinned upstream file (its row in ../performance/model_specs.das)
 
 [test]
 def test_gpu_resident_gptoss(t : T?) {

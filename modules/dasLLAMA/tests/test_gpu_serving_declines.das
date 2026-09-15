@@ -269,6 +269,16 @@ def test_moe_metal_expert_formats(t : T?) {
         t |> success(!moe_metal_ok(mixed), "one Q2_K down plane declines a q4_K model")
         delete mixed
     }
+    t |> run("the resident driver names a biased expert stack feeding a K-quant down plane by layer; a per-32 down plane draws no such decline") @(t : T?) {
+        var kb <- moe_shell(KqFmt.k6)
+        kb.config.moe_exps_bias = true
+        t |> success(says(resident_layer_decline(kb, 0l), "layer 0's biased expert stacks feed a K-quant down plane"), "the biased K-quant down is named")
+        delete kb
+        var qb <- moe_shell(KqFmt.q8)
+        qb.config.moe_exps_bias = true
+        t |> success(!says(resident_layer_decline(qb, 0l), "biased expert stacks"), "a biased stack over a Q8_0 down plane draws no bias decline")
+        delete qb
+    }
     t |> run("the kernel roster and the site-alignment gate name ONE format set - every KqFmt reads the same on both") @(t : T?) {
         // No format the site gate admits is refused by the roster: the two lists are identical,
         // so a roster that answered true for everything is caught only by walking the WHOLE enum -

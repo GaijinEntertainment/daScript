@@ -5,7 +5,8 @@ options _dasllama_internal = true
 // Pins the K-quant format taxonomy (dasllama_kqformat): enum int values, the stride truth
 // against LITERAL byte counts (not read back through the table), the predicates, and the
 // one enum<->kernel-id bridge — so the two-id-space footgun ("6 means Q6_K in the kernel-id
-// space and KqFmt value 6 in the enum") can never silently return.
+// space and KqFmt value 6 in the enum") can never silently return. The radix guard (every id
+// under the Vulkan decode block's layer-key radix) skips in a build without the vulkan module.
 
 require dastest/testing_boost public
 require dasllama/dasllama_kqformat
@@ -224,6 +225,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.iq2s), 23)
         t |> equal(kq_stream_code(KqFmt.iq2xs), 24)
         t |> equal(kq_stream_code(KqFmt.iq2xxs), 25)
+        t |> equal(kq_stream_code(KqFmt.mx4), 39)
     }
 }
 
