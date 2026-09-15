@@ -92,6 +92,7 @@ def public rewrite_children(var e : ExpressionPtr; fn : block<(var c : Expressio
         for (vi in range(length(o.values))) {
             o.values[vi] = invoke(fn, o.values[vi])
         }
+        o.constValues = false
     } else {
         guard_unhandled_node(e)
     }

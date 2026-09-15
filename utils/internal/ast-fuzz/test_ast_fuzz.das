@@ -57,6 +57,17 @@ def test_verifier_reports_an_aliased_type(t : T?) {
         "did not report the aliased type\n{out}")
 }
 
+// the flag a macro that rewrites a literal's values must clear; nothing but this verifier
+// notices one it did not
+[test]
+def test_verifier_reports_a_stale_const_values_flag(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/internal/ast-fuzz/selftest/const_values.das"], out, 60.0)
+    t |> success(!died(ec, out), "compile crashed (exit {ec})\n{out}")
+    t |> success(find(out, "ExprMakeArray.constValues is set over a value that is not a typed constant") >= 0,
+        "did not report the stale flag\n{out}")
+}
+
 // expr.type is not walked by the visitor, so this alias is only visible to the type
 // tree recorded from preVisitExpression
 [test]

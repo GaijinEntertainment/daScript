@@ -1308,6 +1308,15 @@ class private AstPostInferVerifyVisitor : AstVisitor {
 
     def override preVisitExprMakeArray(var expr : ExprMakeArray?) : void {
         need_elements(expr.values, "ExprMakeArray.values", expr.at)
+        if (expr.constValues) {
+            for (v in expr.values) {
+                if (v == null || !is_expr_const(v) || v._type == null) {
+                    report(expr.at, "ExprMakeArray.constValues is set over a value that is not a typed constant ({v == null ? "null" : v.__rtti})")
+                    expr.constValues = false
+                    break
+                }
+            }
+        }
     }
 
     def override preVisitExprMakeTuple(var expr : ExprMakeTuple?) : void {

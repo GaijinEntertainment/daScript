@@ -2129,7 +2129,7 @@ namespace das {
 
     void SerializeVisitor::serializeMakeArray ( ExprMakeArray * expr ) {
         serializeMakeLocal(expr);
-        ser << expr->recordType << expr->values << expr->gen2 << expr->makeArrayOnHeap;
+        ser << expr->recordType << expr->values << expr->gen2 << expr->makeArrayOnHeap << expr->constValues;
     }
 
     void SerializeVisitor::preVisitExpression ( Expression * expr ) {

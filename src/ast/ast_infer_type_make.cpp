@@ -1442,6 +1442,23 @@ namespace das {
             TypeDecl::clone(expr->recordType, mkBaseT);
         }
         expr->initAllFields = true;
+        if (!expr->constValues && expr->recordType && !expr->values.empty()) {
+            bool allConst = true;
+            for (auto & val : expr->values) {
+                if (!val->rtti_isConstant() || !val->type
+                    || !expr->recordType->isSameType(*val->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::no)) {
+                    allConst = false;
+                    break;
+                }
+            }
+            expr->constValues = allConst;
+        }
+    }
+    bool InferTypes::canVisitMakeArray(ExprMakeArray *expr) {
+        return !expr->constValues;
+    }
+    bool InferTypes::canVisitMakeArrayIndex(ExprMakeArray *, int, Expression *init, bool) {
+        return !(init->rtti_isConstant() && init->type);
     }
     ExpressionPtr InferTypes::visitMakeArrayIndex(ExprMakeArray *expr, int index, Expression *init, bool last) {
         if (expr->makeType && expr->makeType->isExprType()) {

@@ -174,6 +174,30 @@ namespace das {
         }
     }
 
+    bool VisitorAdapter::canVisitMakeArray(ExprMakeArray *expr) {
+        if ( auto fnCanVisit = get_canVisitMakeArray(classPtr) ) {
+            bool result = true;
+            runMacroFunction(context, "canVisitMakeArray", [&]() {
+                result = invoke_canVisitMakeArray(context,fnCanVisit,classPtr,expr);
+            });
+            return result;
+        } else {
+            return true;
+        }
+    }
+
+    bool VisitorAdapter::canVisitMakeArrayIndex(ExprMakeArray *expr, int index, Expression *init, bool lastIndex) {
+        if ( auto fnCanVisit = get_canVisitMakeArrayIndex(classPtr) ) {
+            bool result = true;
+            runMacroFunction(context, "canVisitMakeArrayIndex", [&]() {
+                result = invoke_canVisitMakeArrayIndex(context,fnCanVisit,classPtr,expr,index,init,lastIndex);
+            });
+            return result;
+        } else {
+            return true;
+        }
+    }
+
     bool VisitorAdapter::canVisitCall(ExprCall *expr) {
         if ( auto fnCanVisit = get_canVisitCall(classPtr) ) {
             bool result = true;

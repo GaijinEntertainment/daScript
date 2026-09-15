@@ -13,4 +13,5 @@ Type of the array elements
 Array of expressions for the elements
 If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
 Whether the array is built directly on the heap (set by the inferer for gen2 literals feeding to_array_move/to_table_move)
+Every element is a typed constant of the element type; inference skips the elements while it is set, and a macro that rewrites them clears it
 

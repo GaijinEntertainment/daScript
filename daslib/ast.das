@@ -553,6 +553,8 @@ class AstVisitor {
     def abstract visitExprUnsafe(expr : ExprUnsafe?) : ExpressionPtr
     def abstract preVisitExprCallMacro(expr : ExprCallMacro?) : void
     def abstract visitExprCallMacro(expr : ExprCallMacro?) : ExpressionPtr
+    def abstract canVisitMakeArray(expr : ExprMakeArray?) : bool
+    def abstract canVisitMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) : bool
 }
 
 var private gc_root_AstFunctionAnnotation : array<AstFunctionAnnotation?>
