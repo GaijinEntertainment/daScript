@@ -53,8 +53,8 @@ def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hid
     return true
 }
 
-[unused_argument(norms)]
-def private d_norms(norms : array<float>) {}
+[unused_argument(norms, obias)]
+def private d_norms(norms : array<float>; obias : bool) {}
 
 [unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private d_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) {}
