@@ -4828,13 +4828,20 @@ The AST_BOOST module provides high-level utilities for working with the AST. It 
 Position-based AST queries. Given a file, line, and column, finds all expression nodes at that cursor position with innermost-first ordering and enclosing function context. Used for implementing IDE features like goto-definition, type-of, and find-references.
 
 
+### Enumerations
+
+- `DeclarationKind`
+
 ### Structures
 
 - `CursorHit`
+- `DeclarationHit`
 
 ### Classes
 
 - `CursorVisitor`
+- `CursorVisitor.preVisitStructureField`
+- `CursorVisitor.visitStructureField`
 - `CursorVisitor.preVisitFunction`
 - `CursorVisitor.visitFunction`
 - `CursorVisitor.preVisitFunctionArgument`
@@ -4845,16 +4852,29 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 - `CursorVisitor.in_target_file`
 - `CursorVisitor.cursor_on_variable`
 - `CursorVisitor.add_variable_at_cursor`
+- `CursorVisitor.generated_variable`
+- `CursorVisitor.on_field_name`
+- `CursorVisitor.cursor_on_token`
 
 ### Cursor queries
 
 - `cursor_inside`
 - `find_at_cursor`
 - `find_at_cursor_in_function`
+- `find_declaration_at_cursor`
+
+### Source text
+
+- `bare_name`
+- `name_column`
+- `source_name`
+- `spells_name`
+- `word_at`
 
 ### Result inspection
 
 - `describe`
+- `is_synthesized`
 
 ## ast_used
 

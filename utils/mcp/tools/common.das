@@ -413,6 +413,21 @@ def get_daslang_exe() : string {
 // Returns the args after `--`. Falls back to args[2..] (skip exe + script
 // path) if no `--` is present, so subtools can also be invoked manually
 // for debugging without the separator.
+var private SOURCE_LINES : table<string; array<string>>
+
+//! the source line (1-based) of a file, "" past its end; a file is read once per process
+def public source_line(file : string; line : int) : string {
+    if (!key_exists(SOURCE_LINES, file)) {
+        SOURCE_LINES[file] <- split(fread(file), "\n")
+    }
+    var text = ""
+    let lines & = unsafe(SOURCE_LINES[file])
+    if (line >= 1 && line <= length(lines)) {
+        text = lines[line - 1]
+    }
+    return text
+}
+
 def subtool_user_args(args : array<string>) : array<string> {
     var out : array<string>
     var i = 0

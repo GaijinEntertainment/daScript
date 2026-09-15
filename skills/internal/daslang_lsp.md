@@ -36,19 +36,20 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   verbatim). Class-method Function names are class-prefixed
   (``Animal`speak``) - items display the bare name, `data.name` keeps the full
   one. Generated members (`Foo'__finalize`, apostrophe names) sit ON the
-  `class` source line, so every cursor op resolves a declaration first: the name token
-  under the cursor matched against the functions, structures (and the parent named on
-  a `class` line), enums, aliases and globals declared on that line, before any expression
-  hit; expression hits inside synthesized members are skipped. References to a type are
-  listed only where the source spells its name (the implicit `self` of a method is not a
-  site), and a derived class is a reference to its parent. A lambda or generator body is
-  a `generated` function of its own, visited before the function whose source holds it:
-  `daslib/ast_cursor` orders hits by span, not visit order, so the body's own expressions
-  win, and a capture read through the compiler's `__this` shows as the captured variable
-  (a `generated` variable is never the answer). A variable's declaration is not an
-  expression either: nav asks `find_at_cursor` for `declarations`, which adds a `variable`
-  hit (no `expr`) for the cursor on a `for`/`let` variable or a function, lambda or block
-  argument; the MCP cursor subtools do not ask, so they see expression hits only.
+  `class` source line, so every cursor op resolves a declaration first through
+  `daslib/ast_cursor`'s `find_declaration_at_cursor`: the name token under the cursor
+  matched against the functions, structures (and the parent named on a `class` line),
+  enums, aliases and globals declared on that line, before any expression hit;
+  `find_at_cursor` itself never yields a node inside a synthesized member, a generated
+  field initializer, or a compiler-made variable (the `__this` a capture reads through).
+  References to a type are listed only where the source spells its name (the implicit
+  `self` of a method is not a site), and a derived class is a reference to its parent. A
+  lambda or generator body is a `generated` function of its own, visited before the
+  function whose source holds it: hits order by span, not visit order, so the body's own
+  expressions win. A variable's declaration is not an expression either: nav asks
+  `find_at_cursor` for `declarations`, which adds a `variable` hit (no `expr`) for the
+  cursor on a `for`/`let` variable or a function, lambda or block argument. The MCP
+  cursor subtools (`utils/mcp/subtools/`) share all of this through the same module.
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
   crash isolation). Same rationale as the MCP subtool pattern.
 - **Every subtool compile sets `cop.module_cache = true`** - the default module cache

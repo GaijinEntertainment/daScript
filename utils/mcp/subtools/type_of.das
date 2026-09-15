@@ -19,8 +19,8 @@ def run_type_of(file : string; line_str, col_str, no_opt_str, project : string) 
     let proj_err = validate_project_arg(project)
     if (!empty(proj_err)) return make_tool_result(proj_err, true)
     let line = to_int(line_str)
-    let col = to_int(col_str)
-    if (line <= 0 || col <= 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
+    let col = to_int(col_str) - 1   //! the argument is 1-based, LineInfo columns are 0-based
+    if (line <= 0 || col < 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let no_opt = no_opt_str == "true"
     return compile_program(file, true, no_opt, project) $(program; _issues) {
         var hits <- find_at_cursor(program, file, line, col)

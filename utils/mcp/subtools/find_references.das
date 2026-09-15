@@ -41,6 +41,13 @@ struct RefTarget {
     alias_name : string
     // display name
     name : string
+    // the declaration's own position when known: a site there is the declaration's binding, not a use
+    @safe_when_uninitialized decl_at : LineInfo
+}
+
+def position_key(at : LineInfo) : string {
+    let file = at.fileInfo != null ? string(at.fileInfo.name) : ""
+    return "{file}:{int(at.line)}:{int(at.column)}"
 }
 
 def to_void(p) : void? {
@@ -67,11 +74,11 @@ def field_target_of(value : Expression const?; fname : string) : RefTarget {
 def identify_callable_target(expr : Expression const?) : RefTarget {
     if (expr is ExprCall) {
         let c = expr as ExprCall
-        if (c.func != null) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(c.func), name = string(c.func.name))
+        if (c.func != null) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(c.func), name = string(c.func.name), decl_at = c.func.at)
     }
     if (expr is ExprAddr) {
         let a = expr as ExprAddr
-        if (a.func != null) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(a.func), name = string(a.func.name))
+        if (a.func != null) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(a.func), name = string(a.func.name), decl_at = a.func.at)
     }
     // ExprInvoke → resolve the callable (first argument)
     if (expr is ExprInvoke) {
@@ -133,6 +140,10 @@ def identify_type_target(expr : Expression const?) : RefTarget {
 
 // Build a RefTarget from a cursor hit
 def identify_target(hit : CursorHit) : RefTarget {
+    if (hit.variable != null) {
+        let variable = hit.variable
+        return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
+    }
     let expr = hit.expr
     var t = identify_callable_target(expr)
     if (t.kind == RefTargetKind.none) {
@@ -146,26 +157,35 @@ def identify_target(hit : CursorHit) : RefTarget {
 
 // Visitor that collects all references to a given target
 class RefVisitor : AstVisitor {
-    target : RefTarget
+    target : RefTarget = RefTarget()
     refs : array<Reference>
     currentFunc : Function const?
+    in_synthesized_member : bool   // its sites borrow the class line's position and are not source
     file_filter : string   // if non-empty, only collect refs from this file
+    seen : table<string>   // one site per position: a `new T()` carries T's type on several nodes
 
     def RefVisitor(t : RefTarget; file_flt : string) {
         target = t
         currentFunc = null
         file_filter = file_flt
+        if (int(t.decl_at.line) > 0) {
+            seen |> insert(position_key(t.decl_at))
+        }
     }
 
     def add_ref(at : LineInfo; context : string) : void {
-        if (int(at.line) == 0) return
+        if (in_synthesized_member || int(at.line) == 0) return
         // file filter
         if (!empty(file_filter) && at.fileInfo != null) {
             let fname = string(at.fileInfo.name)
             if (find(fname, file_filter) < 0) return
         }
+        let file = at.fileInfo != null ? string(at.fileInfo.name) : ""
+        let key = position_key(at)
+        return if (key_exists(seen, key))
+        seen |> insert(key)
         refs |> emplace(Reference(
-            file = at.fileInfo != null ? string(at.fileInfo.name) : "",
+            file = file,
             line = int(at.line),
             column = int(at.column),
             in_function = currentFunc != null ? string(currentFunc.name) : "",
@@ -173,13 +193,31 @@ class RefVisitor : AstVisitor {
         ))
     }
 
+    //! a type reference the compiler placed where the source does not spell the type - the implicit
+    //! `self` of every method carries its class - is not a site to list
+    def add_type_ref(at : LineInfo; name : string; context : string) : void {
+        return if (at.fileInfo == null || !spells_name(source_line(string(at.fileInfo.name), int(at.line)), int(at.column), name))
+        add_ref(at, context)
+    }
+
     def override preVisitFunction(fun : FunctionPtr) : void {
         currentFunc = fun
+        in_synthesized_member = is_synthesized(fun)
     }
 
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         currentFunc = null
+        in_synthesized_member = false
         return <- fun
+    }
+
+    // a derived class names its parent on its own line - a parent link, not a TypeDecl
+    def override preVisitStructure(str : StructurePtr) : void {
+        return if (target.kind != RefTargetKind.structure || str.parent == null || to_void(str.parent) != target.target_ptr || int(str.at.line) == 0 || str.at.fileInfo == null)
+        let file = string(str.at.fileInfo.name)
+        var at = str.at
+        at.column = uint(name_column(source_line(file, int(at.line)), target.name, int(at.column)))
+        add_ref(at, "parent")
     }
 
     // ExprCall → function reference
@@ -265,17 +303,17 @@ class RefVisitor : AstVisitor {
         let td = typ
         if (target.kind == RefTargetKind.structure && td.structType != null) {
             if (to_void(td.structType) == target.target_ptr) {
-                add_ref(td.at, "type ref")
+                add_type_ref(td.at, target.name, "type ref")
             }
         }
         if (target.kind == RefTargetKind.enumeration && td.enumType != null) {
             if (to_void(td.enumType) == target.target_ptr) {
-                add_ref(td.at, "type ref")
+                add_type_ref(td.at, target.name, "type ref")
             }
         }
         if (target.kind == RefTargetKind.alias && !empty(td.alias)) {
             if (td.alias == target.alias_name) {
-                add_ref(td.at, "alias ref")
+                add_type_ref(td.at, target.alias_name, "alias ref")
             }
         }
     }
@@ -294,97 +332,39 @@ def format_references(refs : array<Reference>; target : RefTarget) : string {
     }
 }
 
-def private fileinfo_name_contains(name : das_string; needle : string) : bool {
-    var hit = false
-    peek(name) $(s) {
-        hit = find(s, needle) >= 0
-    }
-    return hit
-}
-
-// Try to identify a target from declarations at the cursor line
-// (function defs, struct defs, enum defs — not expressions)
-def identify_declaration_target(program : smart_ptr<Program>; file : string; line : int) : RefTarget {
-    let thisMod = get_this_module(program)
-    var result : RefTarget
-    // check function declarations
-    ast::for_each_function(thisMod, "") $(var func : FunctionPtr) {
-        if (result.kind != RefTargetKind.none) return
-        let f = func
-        if (int(f.at.line) == line && f.at.fileInfo != null) {
-            if (fileinfo_name_contains(f.at.fileInfo.name, file)) {
-                result = RefTarget(kind = RefTargetKind.func, target_ptr = to_void(f), name = string(f.name))
-            }
-        }
-    }
-    if (result.kind != RefTargetKind.none) return result
-    // check structure declarations
-    ast::for_each_structure(thisMod) $(var st : StructurePtr) {
-        if (result.kind != RefTargetKind.none) return
-        let s = st
-        if (int(s.at.line) == line && s.at.fileInfo != null) {
-            if (fileinfo_name_contains(s.at.fileInfo.name, file)) {
-                result = RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(s), name = string(s.name))
-            }
-        }
-    }
-    if (result.kind != RefTargetKind.none) return result
-    // check enumeration declarations
-    ast::for_each_enumeration(thisMod) $(var en : EnumerationPtr) {
-        if (result.kind != RefTargetKind.none) return
-        let e = en
-        if (int(e.at.line) == line && e.at.fileInfo != null) {
-            if (fileinfo_name_contains(e.at.fileInfo.name, file)) {
-                result = RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e), name = string(e.name))
-            }
-        }
-    }
-    if (result.kind != RefTargetKind.none) return result
-    // check typedef declarations (typedef, bitfield, variant, tuple)
-    ast::for_each_typedef(thisMod) $(name : string#; var value : TypeDeclPtr) {
-        if (result.kind != RefTargetKind.none) return
-        let td = value
-        if (int(td.at.line) == line && td.at.fileInfo != null) {
-            if (fileinfo_name_contains(td.at.fileInfo.name, file)) {
-                result = RefTarget(kind = RefTargetKind.alias, alias_name = string(name), name = string(name))
-            }
-        }
-    }
-    if (result.kind != RefTargetKind.none) return result
-    // check global variable declarations
-    ast::for_each_global(thisMod) $(var value : VariablePtr) {
-        if (result.kind != RefTargetKind.none) return
-        let v = value
-        if (int(v.at.line) == line && v.at.fileInfo != null) {
-            if (fileinfo_name_contains(v.at.fileInfo.name, file)) {
-                result = RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(v), name = string(v.name))
-            }
-        }
-    }
-    return result
+//! the declaration the cursor is on as a target; `line_text` "" matches any declaration on the line
+def declaration_target(program : smart_ptr<Program>; file : string; line, col : int; line_text : string) : RefTarget {
+    let d = find_declaration_at_cursor(program, file, line, col, line_text)
+    if (d.kind == DeclarationKind.func) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(d.func), name = string(d.func.name), decl_at = d.at)
+    if (d.kind == DeclarationKind.structure) return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(d.structure), name = d.name, decl_at = d.at)
+    if (d.kind == DeclarationKind.enumeration) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(d.enumeration), name = d.name, decl_at = d.at)
+    if (d.kind == DeclarationKind.alias) return RefTarget(kind = RefTargetKind.alias, alias_name = d.name, name = d.name, decl_at = d.at)
+    if (d.kind == DeclarationKind.variable) return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(d.variable), name = d.name, decl_at = d.at)
+    return RefTarget()
 }
 
 def run_find_references(file : string; line_str, col_str, scope_str, no_opt_str : string; project : string = "") : string {
     let proj_err = validate_project_arg(project)
     if (!empty(proj_err)) return make_tool_result(proj_err, true)
     let line = to_int(line_str)
-    let col = to_int(col_str)
-    if (line <= 0 || col <= 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
+    let col = to_int(col_str) - 1   //! the argument is 1-based, LineInfo columns are 0-based
+    if (line <= 0 || col < 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let all_modules = scope_str == "all"
     let no_opt = no_opt_str == "true"
     return compile_program(file, true, no_opt, project) $(program; _issues) {
-        // Step 1: identify the target from cursor (expression-based)
-        var target : RefTarget
-        var hits <- find_at_cursor(program, file, line, col)
-        if (!empty(hits)) {
+        // Step 1: the declaration whose name the cursor is on, before any expression - a class's
+        // synthesized members sit on its line and would answer for it
+        var target = declaration_target(program, file, line, col, source_line(file, line))
+        var hits <- find_at_cursor(program, file, line, col, true)
+        if (target.kind == RefTargetKind.none) {
             for (hit in hits) {
                 target = identify_target(hit)
                 if (target.kind != RefTargetKind.none) break
             }
         }
-        // Step 1b: if no expression found, try declaration-based lookup
+        // Step 1b: any declaration on the line
         if (target.kind == RefTargetKind.none) {
-            target = identify_declaration_target(program, file, line)
+            target = declaration_target(program, file, line, col, "")
         }
         if (target.kind == RefTargetKind.none) {
             if (empty(hits)) return "No expression or declaration found at {file}:{line}:{col}"

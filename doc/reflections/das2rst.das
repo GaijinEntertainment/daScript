@@ -967,8 +967,9 @@ def document_module_ast_block_to_loop(_root : string) {
 def document_module_ast_cursor(_root : string) {
     var mod = find_module("ast_cursor")
     var groups <- array<DocGroup>(
-        group_by_regex("Cursor queries", mod, %regex~.*(find_at_cursor|find_at_cursor_in_function|cursor_inside)$%%),
-        group_by_regex("Result inspection", mod, %regex~.*(describe)$%%)
+        group_by_regex("Cursor queries", mod, %regex~.*(find_at_cursor|find_at_cursor_in_function|cursor_inside|find_declaration_at_cursor)$%%),
+        group_by_regex("Source text", mod, %regex~.*(word_at|name_column|spells_name|source_name|bare_name)$%%),
+        group_by_regex("Result inspection", mod, %regex~.*(describe|is_synthesized)$%%)
     )
     document("Position-based AST queries", mod, "ast_cursor.rst", groups)
 }

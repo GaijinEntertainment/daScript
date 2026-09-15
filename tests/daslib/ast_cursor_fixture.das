@@ -24,4 +24,14 @@ def main() {
     for (i in range(2)) {
         to_log(LOG_INFO, "{i}\n")
     }
+    var pet = new Cat()
+    to_log(LOG_INFO, "{pet->speak()}\n")
+}
+
+class Animal {
+    def speak() : string => "..."
+}
+
+class Cat : Animal {
+    def override speak() : string => "meow"
 }
