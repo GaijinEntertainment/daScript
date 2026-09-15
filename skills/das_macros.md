@@ -86,6 +86,12 @@ only sometimes needed: a hit on a cache decides in the caller, and the emitter c
   **must** return true when it changes the tree, or the current errors become final.
 - StructureAnnotation `finish` / `patch` do NOT run for a struct whose inference failed; `apply` is
   the only guaranteed hook, so a deferred better-error cannot live in `finish`.
+- Every annotation hook's `args` is the instance's own argument list and is `var`: per-instance
+  state that outlives an inference restart (the `patched` marker a `patch` sets beside
+  `astChanged = true`, a phase counter) is read with `find_arg(args, ...)` and written with
+  `args |> add_annotation_argument(...)`. A by-name search over `func.annotations` cannot tell two
+  same-named instances apart and marks both on the first call, so the second never patches.
+  `progArgs` is the program's `options` and stays read-only.
 - **A `[simulate_macro]` in a shared macro module NEVER fires for the user's program** - it only
   sees the program its own module was compiled as. The hooks that do see the user program:
   `[infer_macro]`, `[dirty_infer_macro]`, `[optimization_macro]`, `[post_rewrite_macro]`,

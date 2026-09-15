@@ -144,7 +144,7 @@ with *"module Module_Name is required"*:
    class LogCallsMacro : AstFunctionAnnotation {
        def override apply(var func : FunctionPtr;
                           var group : ModuleGroup;
-                          args : AnnotationArgumentList;
+                          var args : AnnotationArgumentList;
                           var errors : das_string) : bool {
            // ... transform func ...
            return true
@@ -305,7 +305,7 @@ It receives the call expression and can accept or reject it.
    [function_macro(name="expect_range")]
    class ExpectRangeMacro : AstFunctionAnnotation {
        def override verifyCall(var call : ExprCallFunc?;
-                               args, progArgs : AnnotationArgumentList;
+                               var args : AnnotationArgumentList; progArgs : AnnotationArgumentList;
                                var errors : das_string) : bool {
            // ... validate call.arguments ...
            return true
@@ -317,8 +317,10 @@ The parameters:
 * **``call``** — the call expression at the call site.  ``call.func``
   is the function being called, ``call.arguments`` are the argument
   expressions.
-* **``args``** — the annotation’s argument list (e.g., for
+* **``args``** — this annotation instance’s own argument list (e.g., for
   ``[expect_range(value, min=0, max=255)]``, it contains three entries).
+  It is writable, so a hook can park state in it that a later pass reads
+  back; ``progArgs`` is the program’s ``options`` and is read-only.
 * **``errors``** — an output string for the error message.  Set it and
   return ``false`` to produce a compile error.
 
@@ -465,7 +467,7 @@ complete type information.
    class NoPrintMacro : AstFunctionAnnotation {
        def override lint(var func : FunctionPtr;
                          var group : ModuleGroup;
-                         args, progArgs : AnnotationArgumentList;
+                         var args : AnnotationArgumentList; progArgs : AnnotationArgumentList;
                          var errors : das_string) : bool {
            // ... walk func body ...
            return true

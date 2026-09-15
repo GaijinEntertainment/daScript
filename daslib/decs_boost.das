@@ -48,7 +48,7 @@ class DecsReqN : AstBlockAnnotation {
 [structure_macro(name="decs_template")]
 class DecsTemplate : AstStructureAnnotation {
     //! This macro creates a template for the given structure.
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (empty(st.fields)) {
             errors := "expecting at least one field in the desc_template {st.name}"
             return false
@@ -461,7 +461,7 @@ class DecsFindQueryMacro : DecsQueryMacro {
 [function_macro(name="decs")]
 class DecsEcsMacro : AstFunctionAnnotation {
     //! This macro converts a function into a DECS pass stage query. Possible arguments are `stage`, `REQUIRE`, and `REQUIRE_NOT`.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         let argPass = find_arg(args, "stage")
         if (!(argPass is tString)) {
             errors := "need to specify stage"

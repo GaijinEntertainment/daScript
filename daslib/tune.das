@@ -27,7 +27,7 @@ require [tune_framework] public
 [function_macro(name = "tune_perm")]
 class private TunePermShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         static_if (typeinfo module_exists(llvm_tune)) {
             return tune_perm_apply(func, group, args, errors)
         } else {
@@ -39,7 +39,7 @@ class private TunePermShell : AstFunctionAnnotation {
 [function_macro(name = "tune_companion")]
 class private TuneCompanionShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         static_if (typeinfo module_exists(llvm_tune)) {
             return tune_companion_apply(func, group, args, errors)
         } else {
@@ -51,7 +51,7 @@ class private TuneCompanionShell : AstFunctionAnnotation {
 [function_macro(name = "tune")]
 class private TuneShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         static_if (typeinfo module_exists(llvm_tune)) {
             return tune_apply(func, group, args, errors)
         } else {
@@ -63,7 +63,7 @@ class private TuneShell : AstFunctionAnnotation {
 [structure_macro(name = "tune_scope")]
 class private TuneScopeShell : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         static_if (typeinfo module_exists(llvm_tune)) {
             return tune_scope_apply(st, group, args, errors)
         } else {
@@ -75,7 +75,7 @@ class private TuneScopeShell : AstStructureAnnotation {
 [function_macro(name = "tune_policy")]
 class private TunePolicyShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         static_if (typeinfo module_exists(llvm_tune)) {
             return tune_policy_apply(func, group, args, errors)
         } else {
@@ -87,7 +87,7 @@ class private TunePolicyShell : AstFunctionAnnotation {
 [function_macro(name = "llvm_code")]
 class private LlvmCodeShell : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         static_if (typeinfo module_exists(llvm_code)) {
             return llvm_code_apply(func, group, args, errors)
         } else {

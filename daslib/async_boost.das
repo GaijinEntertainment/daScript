@@ -62,7 +62,7 @@ class AwaitCoroutineMacro : AstFunctionAnnotation {
 [function_macro(name="async")]
 class AsyncMacro : AstFunctionAnnotation {
     //! This macro converts function into generator.
-    [unused_argument(group, args)] def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    [unused_argument(group, args)] def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.result.baseType == Type.autoinfer) {
             macro_error(compiling_program(), func.at, "async function should have explicit return type")
             return true

@@ -22,7 +22,7 @@ require tutorial_c_12
 [function_macro(name="es")]
 class EsMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         // Find the user-defined struct in the compiling module.
         var st : Structure?
         for_each_structure(compiling_module()) $(s) {

@@ -153,12 +153,8 @@ class TypeMacroMacro : AstFunctionAnnotation {
         compiling_module() |> add_structure(cls)
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool { // nolint:STYLE037 — pre-existing typemacro patch pass; the if/elif AST routing is one order-coupled flow
-        for (ann in func.annotations) {
-            if (ann.annotation.name == "typemacro_function") {
-                if (!(find_arg(ann.arguments, "patched") is nothing)) return true
-            }
-        }
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+        if (find_arg(args, "patched") is tBool) return true
         if (length(func.arguments) < 2) {
             errors := "expecting at least 2 argumentst (macroArgument: TypeDeclPtr, passArgument: TypeDeclPtr)"
             return false
@@ -214,12 +210,8 @@ class TypeMacroMacro : AstFunctionAnnotation {
             return <- $e(retCall)
         }
         append_expressions(body, retExpr)
-        for (ann in func.annotations) {
-            if (ann.annotation.name == "typemacro_function") {
-                astChanged = true
-                ann.arguments |> add_annotation_argument("patched", true)
-            }
-        }
+        args |> add_annotation_argument("patched", true)
+        astChanged = true
         return true
     }
 }
@@ -360,12 +352,8 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
         }
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
-        for (ann in func.annotations) {
-            if (ann.annotation.name == "typemacro_template_function") {
-                if (!(find_arg(ann.arguments, "patched") is nothing)) return true
-            }
-        }
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+        if (find_arg(args, "patched") is tBool) return true
         let template_type_name = string(args[0].name)
         var body = func.body as ExprBlock
         body.list.clear()
@@ -425,13 +413,8 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
                 return resType
             }
         }
+        args |> add_annotation_argument("patched", true)
         astChanged = true
-        for (ann in func.annotations) {
-            if (ann.annotation.name == "typemacro_template_function") {
-                astChanged = true
-                ann.arguments |> add_annotation_argument("patched", true)
-            }
-        }
         return true
     }
 }
@@ -846,7 +829,7 @@ def public is_custom_work_done(structType : Structure?) : bool {
     //! Returns true if custom work has already been performed on the template structure.
     for (ann in structType.annotations) {
         if (ann.annotation.name == "template_structure") {
-            if (!(find_arg(ann.arguments, "custom_work_done") is nothing)) return true
+            if (find_arg(ann.arguments, "custom_work_done") is tBool) return true
         }
     }
     return false

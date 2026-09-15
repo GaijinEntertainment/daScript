@@ -15,7 +15,7 @@ require llvm/daslib/llvm_code
 [function_macro(name = "llvm_code")]
 class private LlvmCodeShellLocal : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         return llvm_code_apply(func, group, args, errors)
     }
 }

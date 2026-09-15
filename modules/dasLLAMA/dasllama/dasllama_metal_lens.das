@@ -269,7 +269,7 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
 
 [structure_macro(name = metal_dispatch)]
 class MetalDispatch : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 — flat per-argument validation + emit table
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 — flat per-argument validation + emit table
         let at = st.at
         let fn_name = find_arg(args, "name") ?as tString ?? ""
         let pso = find_arg(args, "pso") ?as tString ?? ""

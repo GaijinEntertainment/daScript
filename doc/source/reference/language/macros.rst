@@ -119,19 +119,25 @@ There is additionally the ``[function_macro]`` annotation which accomplishes the
 
     class AstFunctionAnnotation {
         def abstract transform ( var call : ExprCallFunc?; var errors : das_string ) : ExpressionPtr
-        def abstract verifyCall ( var call : ExprCallFunc?; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract generic_apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract finish ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
-        def abstract fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract lint ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract verifyCall ( var call : ExprCallFunc?; var args:AnnotationArgumentList; progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; var args:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract generic_apply ( var func:FunctionPtr; var group:ModuleGroup; var args:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract finish ( var func:FunctionPtr; var group:ModuleGroup; var args:AnnotationArgumentList; progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract patch ( var func:FunctionPtr; var group:ModuleGroup; var args:AnnotationArgumentList; progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
+        def abstract fixup ( var func:FunctionPtr; var group:ModuleGroup; var args:AnnotationArgumentList; progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract lint ( var func:FunctionPtr; var group:ModuleGroup; var args:AnnotationArgumentList; progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract complete ( var func:FunctionPtr; var ctx:smart_ptr<Context> ) : void
         def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         def abstract isSpecialized : bool
         def abstract appendToMangledName ( func:FunctionPtr; decl:AnnotationDeclaration; var mangledName:das_string ) : void
         def abstract isAppliedToGeneric : bool
     }
+
+``args`` is the argument list of the annotation instance the hook is running for, and it is
+writable: a hook that needs state across passes - a ``patched`` marker so a ``patch`` that
+restarts inference runs once, a phase counter - reads and writes it there, never by searching
+the function's annotations by name (two same-named annotations on one function are told apart
+only this way). ``progArgs`` is the program's ``options`` and is read-only.
 
 ``transform`` lets you change calls to the function and is applied at the infer pass.
 Transform is the best way to replace or modify function calls with other semantics.
@@ -184,7 +190,7 @@ it in one program):
 .. code-block:: das
 
     class MacroMacro : AstFunctionAnnotation {
-        def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool {
+        def override apply ( var func:FunctionPtr; var group:ModuleGroup; var args:AnnotationArgumentList; var errors : das_string ) : bool {
             compiling_program().flags.needMacroModule = true
             func.flags.macroInit = true
             var blk = new ExprBlock(at=func.at)
@@ -210,8 +216,8 @@ AstBlockAnnotation
 .. code-block:: das
 
     class AstBlockAnnotation {
-        def abstract apply ( var blk:ExprBlock?; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract finish ( var blk:ExprBlock?; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract apply ( var blk:ExprBlock?; var group:ModuleGroup; var args:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract finish ( var blk:ExprBlock?; var group:ModuleGroup; var args:AnnotationArgumentList; progArgs:AnnotationArgumentList; var errors : das_string ) : bool
     }
 
 ``add_new_block_annotation`` adds a block annotation to a module.
@@ -231,9 +237,9 @@ The ``AstStructureAnnotation`` macro lets you manipulate structure or class defi
 .. code-block:: das
 
     class AstStructureAnnotation {
-        def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract patch ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
+        def abstract apply ( var st:StructurePtr; var group:ModuleGroup; var args:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract finish ( var st:StructurePtr; var group:ModuleGroup; var args:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract patch ( var st:StructurePtr; var group:ModuleGroup; var args:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
         def abstract complete ( var st:StructurePtr; var ctx:smart_ptr<Context> ) : void
         def abstract aotPrefix ( var st:StructurePtr; args:AnnotationArgumentList; var writer:StringBuilderWriter ) : void
         def abstract aotBody ( var st:StructurePtr; args:AnnotationArgumentList; var writer:StringBuilderWriter ) : void
@@ -267,7 +273,7 @@ The ``AstEnumerationAnnotation`` macro lets you manipulate enumerations via anno
 .. code-block:: das
 
     class AstEnumerationAnnotation {
-        def abstract apply ( var st:EnumerationPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract apply ( var st:EnumerationPtr; var group:ModuleGroup; var args:AnnotationArgumentList; var errors : das_string ) : bool
     }
 
 ``add_new_enumeration_annotation`` adds an enumeration annotation to a module.
@@ -289,7 +295,7 @@ module, because the annotation it registers has to exist before the file that us
     [enumeration_macro(name="enum_total")]
     class EnumTotalAnnotation : AstEnumerationAnnotation {
         def override apply(var enu : EnumerationPtr; var group : ModuleGroup;
-                           args : AnnotationArgumentList;
+                           var args : AnnotationArgumentList;
                            var errors : das_string) : bool {
             // modify enu.list or generate code
             return true

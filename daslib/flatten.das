@@ -59,44 +59,20 @@ def private twin_name(func : FunctionPtr) : string {
     return "{func.name}_flat"
 }
 
-def private get_flatten_phase(func : FunctionPtr) : int {
-    for (ann in func.annotations) {
-        if (ann.annotation.name == "flatten") {
-            let pv = find_arg(ann.arguments, "phase")
-            if (pv is tInt) return pv as tInt
+def private set_flatten_phase(var args : AnnotationArgumentList; ph : int) {
+    for (a in args) {
+        if (a.name == "phase") {
+            a.iValue = ph
+            return
         }
     }
-    return -1
-}
-
-def private set_flatten_phase(var func : FunctionPtr; ph : int) {
-    for (ann in func.annotations) {
-        if (ann.annotation.name != "flatten") continue
-        var found = false
-        for (a in ann.arguments) {
-            if ("{a.name}" == "phase") {
-                a.iValue = ph
-                found = true
-            }
-        }
-        if (!found) ann.arguments |> add_annotation_argument("phase", ph)
-    }
+    args |> add_annotation_argument("phase", ph)
 }
 
 //! Default cap on the product of nested constant-loop iteration counts a twin may unroll
 //! to — unrolling multiplies across nesting, so an unbounded deep nest blows the heap.
 //! `[flatten(max_unroll=N)]` overrides per-function.
 let public FLATTEN_MAX_UNROLL = 4096
-
-def private get_flatten_max_unroll(func : FunctionPtr) : int {
-    for (ann in func.annotations) {
-        if (ann.annotation.name == "flatten") {
-            let mv = find_arg(ann.arguments, "max_unroll")
-            if (mv is tInt) return mv as tInt
-        }
-    }
-    return FLATTEN_MAX_UNROLL
-}
 
 struct private LoopMask {
     breakMaskName : string
@@ -869,10 +845,10 @@ class FlattenAnnotation : AstFunctionAnnotation {
         return true
     }
     def override patch(var func : FunctionPtr; var group : ModuleGroup;
-                       args, progArgs : AnnotationArgumentList; var errors : das_string;
+                       var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
         if (is_in_lint_check()) return true
-        let ph = get_flatten_phase(func)
+        let ph = args |> find_arg("phase") ?as tInt ?? -1
         if (ph == PHASE_DONE) return true
         var twin = find_unique_function(compiling_module(), twin_name(func), true)
         if (twin == null) {
@@ -880,30 +856,31 @@ class FlattenAnnotation : AstFunctionAnnotation {
             return false
         }
         if (ph != PHASE_LOWERED && ph != PHASE_FOLDED && ph != PHASE_OPTIMIZED && ph != PHASE_FUSED) {
-            var ctx = flatten_function(twin, STD_WHITELIST, get_flatten_max_unroll(func))
+            var ctx = flatten_function(twin, STD_WHITELIST, args |> find_arg("max_unroll") ?as tInt ?? FLATTEN_MAX_UNROLL)
             if (!ctx.ok) {
                 errors := ctx.err
                 return false
             }
-            set_flatten_phase(func, PHASE_LOWERED)
+            set_flatten_phase(args, PHASE_LOWERED)
             astChanged = true
             return true
         }
         if (ph == PHASE_LOWERED || ph == PHASE_FOLDED) {
             let folded = flatten_fold(twin, flatten_no_fast_math(), flatten_expand_lerp())
-            set_flatten_phase(func, PHASE_FOLDED)
+            set_flatten_phase(args, PHASE_FOLDED)
             if (folded) {
                 astChanged = true
                 return true
             }
-            set_flatten_phase(func, PHASE_OPTIMIZED)
+            set_flatten_phase(args, PHASE_OPTIMIZED)
             if (flatten_optimize(twin, FLATTEN_BARRIERS, flatten_no_fast_math(), flatten_log_cse())) {
                 astChanged = true
                 return true
             }
         }
-        if (get_flatten_phase(func) == PHASE_OPTIMIZED || get_flatten_phase(func) == PHASE_FUSED) {
-            set_flatten_phase(func, PHASE_FUSED)
+        let phNow = args |> find_arg("phase") ?as tInt ?? -1
+        if (phNow == PHASE_OPTIMIZED || phNow == PHASE_FUSED) {
+            set_flatten_phase(args, PHASE_FUSED)
             if (flatten_fuse(twin, flatten_no_fast_math(), flatten_hadd_pack_pairs() ? 2 : 3)) {
                 astChanged = true
                 return true
@@ -914,7 +891,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             errors := problem
             return false
         }
-        set_flatten_phase(func, PHASE_DONE)
+        set_flatten_phase(args, PHASE_DONE)
         return true
     }
 }

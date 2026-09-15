@@ -51,7 +51,7 @@ def JV(li : LineInfo) {
 class ExtractMethodMacro : AstFunctionAnnotation {
     //! Function annotation implementing extract-method refactoring.
     method_tag = "!!!extract_method"
-    def override verifyCall(var call : ExprCallFunc?; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override verifyCall(var call : ExprCallFunc?; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         if (!(call.arguments[0] is ExprConstString)) {
             print("extract_method: first argument must be a string literal")
             return false
@@ -180,7 +180,7 @@ class ExtractVariableFunction : AstFunctionAnnotation {
         }
         return null
     }
-    def override verifyCall(var call : ExprCallFunc?; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override verifyCall(var call : ExprCallFunc?; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         if (!(call.arguments[0] is ExprConstString)) {
             print("extract_variable: first argument must be a string literal")
             return false

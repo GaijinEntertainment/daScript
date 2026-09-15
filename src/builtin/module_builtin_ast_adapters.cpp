@@ -1212,18 +1212,18 @@ namespace das {
         : FunctionAnnotation(n), AstBlockAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool apply ( const FunctionPtr &, ModuleGroup &,
-                            const AnnotationArgumentList &, string & err ) override {
+                            AnnotationArgumentList &, string & err ) override {
             err = "not a function annotation";
             return false;
         }
         virtual bool finalize ( const FunctionPtr &, ModuleGroup &,
-                               const AnnotationArgumentList &,
+                               AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & err ) override {
             err = "not a function annotation";
             return false;
         }
         virtual bool apply ( ExprBlock * blk, ModuleGroup & group,
-                            const AnnotationArgumentList & args, string & errors ) override {
+                            AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "apply", [&]() {
@@ -1235,7 +1235,7 @@ namespace das {
             }
         }
         virtual bool finalize ( ExprBlock * blk, ModuleGroup & group,
-                               const AnnotationArgumentList & args,
+                               AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
                 bool result = true;
@@ -1258,7 +1258,7 @@ namespace das {
         : FunctionAnnotation(n), AstFunctionAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & group,
-                            const AnnotationArgumentList & args, string & errors ) override {
+                            AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "apply", [&]() {
@@ -1270,7 +1270,7 @@ namespace das {
             }
         }
         virtual bool generic_apply ( const FunctionPtr & func, ModuleGroup & group,
-                            const AnnotationArgumentList & args, string & errors ) override {
+                            AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_generic_apply(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "generic_apply", [&]() {
@@ -1282,7 +1282,7 @@ namespace das {
             }
         }
         virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group,
-                               const AnnotationArgumentList & args,
+                               AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
                 bool result = true;
@@ -1295,7 +1295,7 @@ namespace das {
             }
         }
         virtual bool lint ( const FunctionPtr & func, ModuleGroup & group,
-                               const AnnotationArgumentList & args,
+                               AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnLint = get_lint(classPtr) ) {
                 bool result = true;
@@ -1308,7 +1308,7 @@ namespace das {
             }
         }
         virtual bool patch ( const FunctionPtr & func, ModuleGroup & group,
-                               const AnnotationArgumentList & args,
+                               AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors, bool & astChanged ) override {
             if ( auto fnPatch = get_patch(classPtr) ) {
                 bool result = true;
@@ -1321,7 +1321,7 @@ namespace das {
             }
         }
         virtual bool fixup ( const FunctionPtr & func, ModuleGroup & group,
-                               const AnnotationArgumentList & args,
+                               AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnFixup = get_fixup(classPtr) ) {
                 bool result = true;
@@ -1334,12 +1334,12 @@ namespace das {
             }
         }
         virtual bool apply ( ExprBlock *, ModuleGroup &,
-                            const AnnotationArgumentList &, string & err ) override {
+                            AnnotationArgumentList &, string & err ) override {
             err = "not a block annotation";
             return false;
         }
         virtual bool finalize ( ExprBlock *, ModuleGroup &,
-                               const AnnotationArgumentList &,
+                               AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & err ) override {
             err = "not a block annotation";
             return false;
@@ -1355,7 +1355,7 @@ namespace das {
                 return nullptr;
             }
         }
-        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
+        virtual bool verifyCall ( ExprCallFunc * call, AnnotationArgumentList & args,
                 const AnnotationArgumentList & progArgs, string & err ) override {
             if ( auto fnTransform = get_verifyCall(classPtr) ) {
                 bool result = true;
@@ -1431,7 +1431,7 @@ namespace das {
             : StructureAnnotation(n), AstStructureAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool touch ( const StructurePtr & st, ModuleGroup & group,
-                            const AnnotationArgumentList & args, string & errors ) override {
+                            AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "apply", [&]() {
@@ -1443,7 +1443,7 @@ namespace das {
             }
         }
         virtual bool look (const StructurePtr & st, ModuleGroup & group,
-            const AnnotationArgumentList & args, string & errors ) override {
+            AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "finish", [&]() {
@@ -1455,7 +1455,7 @@ namespace das {
             }
         }
         virtual bool patch (const StructurePtr & st, ModuleGroup & group,
-            const AnnotationArgumentList & args, string & errors, bool & astChanged ) override {
+            AnnotationArgumentList & args, string & errors, bool & astChanged ) override {
             if ( auto fnPatch = get_patch(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "patch", [&]() {
@@ -1511,7 +1511,7 @@ namespace das {
             : EnumerationAnnotation(n), AstEnumerationAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool touch ( const EnumerationPtr & st, ModuleGroup & group,
-                            const AnnotationArgumentList & args, string & errors ) override {
+                            AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "apply", [&]() {
@@ -2434,7 +2434,8 @@ namespace das {
         StructureAnnotationPtr ann = das::move(_ann);
         string err;
         ModuleGroup dummy;
-        if ( !ann->touch(st, dummy, AnnotationArgumentList(), err) ) {
+        AnnotationArgumentList noArgs;
+        if ( !ann->touch(st, dummy, noArgs, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to structure %s",
                 ann->name.c_str(), st->name.c_str());
         }
@@ -2463,7 +2464,8 @@ namespace das {
         FunctionAnnotationPtr ann = das::move(_ann);
         string err;
         ModuleGroup dummy;
-        if ( !ann->apply(func, dummy, AnnotationArgumentList(), err) ) {
+        AnnotationArgumentList noArgs;
+        if ( !ann->apply(func, dummy, noArgs, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to function %s",
                 ann->name.c_str(), func->name.c_str());
         }
@@ -2476,7 +2478,8 @@ namespace das {
         FunctionAnnotationPtr ann = das::move(_ann);
         string err;
         ModuleGroup dummy;
-        if ( !ann->apply(blk, dummy, AnnotationArgumentList(), err) ) {
+        AnnotationArgumentList noArgs;
+        if ( !ann->apply(blk, dummy, noArgs, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to block %s",
                 ann->name.c_str(), blk->at.describe().c_str());
         }

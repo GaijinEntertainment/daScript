@@ -3,9 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 
-**This list is reached only through the checklists that route to it, never by the folder walk on
-its own.**
-
 A device-side value is one whose storage exists only on the device: a tile or tensor, a layout
 or view over one, a sampler, an image. A struct that stands for one on the CPU is a marker
 struct when it has no storage of its own and a resource struct when it carries a device handle.
@@ -44,16 +41,16 @@ specialization path - one compiled variant per constant shape - or records the k
 none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 
 **Never check a claim about emitted shape against the das source - check it in the emitted
-words or text, the SPIR-V words one emitter builds and the MSL text the other writes.** Emitted shape is the structure of the emitted kernel - its signature, its
-parameter attributes, its statement forms - and its stamped shape values (tile, grid,
-threadgroup sizes).
+words or text, the SPIR-V words one emitter builds and the MSL text the other writes.** Emitted
+shape is the structure of the emitted kernel - its signature, its parameter attributes, its
+statement forms - and its stamped shape values (tile, grid, threadgroup sizes).
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
-shared ledger (`dasMetal/ARCHITECTURE.md`) naming that capability - covered by the row that
-names its family, or by a row the diff adds.** A kernel-model capability is present on an
-emitter when the emitted text or words carry its effect - an emitter that accepts the construct
-and emits nothing for it does not have it - and a family is the set of constructs one ledger row
-(`dasMetal/ARCHITECTURE.md` sec.5) names.
+shared ledger (`dasMetal/ARCHITECTURE.md`, "Cross-backend parity - the kernel-model asymmetry
+ledger") naming that capability - covered by the row that names its family, or by a row the diff
+adds.** A kernel-model capability is present on an emitter when the emitted text or words carry
+its effect - an emitter that accepts the construct and emits nothing for it does not have it -
+and a family is the set of constructs one ledger row names.
 
 **A diff that puts a `daslib/shader_lingua_franca` declaration into a kernel body or fixture an
 emitter compiles, where that emitter does not handle it, ships, in the same change, either
@@ -61,19 +58,20 @@ that emitter's lowering of the declaration or a test showing the emitter rejects
 declaration by name.** A declaration in that module is available to both emitters.
 
 **A skippable read of a global-rooted array - a module global, a `@workgroup` array, or a
-`self.<member>` resource - in a `[spirv_kernel]` or `[compute_shader]` body, or in any `def` that
-body calls, stays skippable: a diff that widens the set of dispatches an existing read happens
-on, or drops the condition that kept it from happening where its index is out of range, is a
-defect - a read in both arms of an `if`, a clamped index, and a bare read are the shapes that
-drop takes.** The SPIR-V emitter lowers a `?:`, `&&` or `||` operand as a branch, so in a
-`[spirv_kernel]` the short-circuit form needs no rewrite.
+`self.<member>` resource - in a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` body, or
+in any `def` that body calls, stays skippable: a diff that widens the set of dispatches an
+existing read happens on, or drops the condition that kept it from happening where its index is
+out of range, is a defect - a read in both arms of an `if`, a clamped index, and a bare read are
+the shapes that drop takes.** Both emitters lower a `?:`, `&&` or `||` operand so only the taken
+side runs, so the short-circuit form needs no rewrite.
 
 **A compile-time gate (`static_if`, `@template_gate`) that keeps a global-rooted-array read out of
-a compiled kernel variant keeps it out: a diff that removes the gate, or widens the constant the
-gate switches on so the read reaches variants it did not reach, is a defect.**
+a compiled `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant keeps it out: a diff
+that removes the gate, or widens the constant the gate switches on so the read reaches variants
+it did not reach, is a defect.**
 
 **A read of a global-rooted array that a diff adds to the emitted words or text of a
-`[spirv_kernel]` or `[compute_shader]` kernel, or that a diff makes happen on a dispatch it did
+`[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` kernel, or that a diff makes happen on a dispatch it did
 not reach before, is in range on every dispatch it happens on, or the `ARCHITECTURE*.md` at the
 root of the module the kernel ships in names slack past that range and the read stays inside the
 slack.** A load that fetches a fixed-size block while only its store is

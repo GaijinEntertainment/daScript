@@ -58,7 +58,7 @@ class TracedBlockMacro : AstBlockAnnotation {
     //     the exit-message prints on block exit (like a finally block)
     // ------------------------------------------------------------------
     def override apply(var blk : ExprBlock?; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         // Validate: require a 'tag' string argument
         let labelArg = find_arg(args, "tag")
         if (!(labelArg is tString)) {
@@ -93,7 +93,7 @@ class TracedBlockMacro : AstBlockAnnotation {
     // finish() is read-only — use it for diagnostics and reporting.
     // ------------------------------------------------------------------
     def override finish(var blk : ExprBlock?; var group : ModuleGroup;
-                        args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+                        var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         // Recover the tag
         let labelArg = find_arg(args, "tag")
         var lbl = "?"

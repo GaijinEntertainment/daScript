@@ -108,13 +108,14 @@ def get_mangled_name(decl : ExprBlock?) {
 [macro_interface]
 class AstFunctionAnnotation {
     def abstract transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr
-    def abstract verifyCall(var call : ExprCallFunc?; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool
-    def abstract apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
-    def abstract generic_apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
-    def abstract finish(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool
-    def abstract patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool
-    def abstract fixup(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool
-    def abstract lint(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool
+    //! ``args`` is this annotation instance's own argument list - a hook that needs per-instance state (a ``patched`` marker, a phase counter) reads and writes it there, never by a by-name search over the owner's annotations. ``progArgs`` is the program's ``options`` and stays read-only.
+    def abstract verifyCall(var call : ExprCallFunc?; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract generic_apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract finish(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract patch(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool
+    def abstract fixup(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract lint(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool
     def abstract complete(var func : FunctionPtr; var ctx : smart_ptr<Context>) : void
     def abstract isCompatible(var func : FunctionPtr; var types : VectorTypeDeclPtr; decl : AnnotationDeclaration; var errors : das_string) : bool
     def abstract isSpecialized : bool
@@ -125,15 +126,15 @@ class AstFunctionAnnotation {
 
 [macro_interface]
 class AstBlockAnnotation {
-    def abstract apply(var blk : ExprBlock?; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
-    def abstract finish(var blk : ExprBlock?; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract apply(var blk : ExprBlock?; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract finish(var blk : ExprBlock?; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool
 }
 
 [macro_interface]
 class AstStructureAnnotation {
-    def abstract apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
-    def abstract finish(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
-    def abstract patch(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool
+    def abstract apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract finish(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract patch(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool
     def abstract complete(var st : StructurePtr; var ctx : smart_ptr<Context>) : void
     def abstract aotPrefix(var st : StructurePtr; args : AnnotationArgumentList; var writer : StringBuilderWriter) : void
     def abstract aotBody(var st : StructurePtr; args : AnnotationArgumentList; var writer : StringBuilderWriter) : void
@@ -237,7 +238,7 @@ class AstTypeInfoMacro {
 
 [macro_interface]
 class AstEnumerationAnnotation {
-    def abstract apply(var st : EnumerationPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
+    def abstract apply(var st : EnumerationPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool
 }
 
 [macro_interface]

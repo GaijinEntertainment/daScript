@@ -4,6 +4,9 @@
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`,
 `ARCHITECTURE_LINQ.md`.
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A
+diff that changes compile-time AST-building code - a class deriving an `Ast*Annotation`,
+`Ast*Macro`, or `AstVisitor`, a `[macro_function]`, or any function that calls `qmacro*`,
+`apply_template`, `macro_error`, or `macro_sticky_error` - applies `REVIEW_MACROS.md` too. A
 diff touching `daspkg.das` - the functions a `.das_package` manifest body calls - applies
 `utils/daspkg/REVIEW.md` (repo root) too; the folder walk never opens it for a `daslib/` diff.
 
@@ -64,9 +67,9 @@ the header window - keeps `tests/lint/test_nolint_suppression.das` and
 literal, a URL, and a mid-comment `nolint:` do not suppress while a first-token directive
 after `//` or `//!` does, and that a `lint-skip-file` past the header window is prose.
 
-**A diff that changes `build_lint_macro_disabled` keeps its four sources layered in this
-order: defaults, repo `off`, repo `on`, environment.** Env last lets a one-run
-`DAS_LINT_DISABLE` beat a `CODE = true`.
+**A diff that changes `build_lint_macro_disabled` keeps every layer beaten by the one after it,
+with the per-file `options _nolint`/`_lint` overrides last.** Env after the repo `on` erase lets
+a one-run `DAS_LINT_DISABLE` beat a `CODE = true`.
 
 **A diff that changes `options _enable_default_off_rules` keeps it skipping BOTH the default
 seeding and the repo `off` directives.** Repo policy must not silence the rule a fixture
@@ -155,14 +158,6 @@ keeps `buildStructEnumCollisions` running before it, directly or in a helper it 
 The table decides when a name gets its collision suffix, and a run that skips the seeding
 spells structs differently from the run that seeded it.
 
-**Never pass a synthesized access expression's location to `match_error` - pass a pattern
-node's location.** `match_error` stores the `LineInfo` pointer BORROWED, and access nodes
-are cloned per field inside a bare scope and die with it.
-
-**Never report an error with `macro_error` from a macro that lowers lambdas - report with
-`macro_sticky_error`.** A later pass lowers the lambda to a plain function and clears
-non-sticky errors.
-
 **Never index a UTF-8 byte-class table with a raw `ch` - index through `uint(uint8(ch))`.**
 `for (ch in string)` yields a SIGNED byte under JIT, so a raw index reads out of bounds for
 every byte >= 0x80.
@@ -218,18 +213,6 @@ out branchless and call-free.
 Inlining recurses back through the pipeline, and a nested visitor traversal corrupts the
 visitor machinery.
 
-**Never splice the same subexpression more than once in a macro - pre-bind it to a local ref
-and splice that.** Re-splicing re-evaluates a call once per splice, so a lock/unlock pair
-releases a different temporary than it took.
-
-**A diff that adds a `delete` for a `Template`'s substitution tables reads the declaration
-first.** An `inscope` local already finalizes, so the added delete is a silent
-double-finalize.
-
-**A call to `apply_template` assigns the result back into the expression it passed.** A
-root-node substitution is visible only through the return value, so a discarded result
-silently keeps the unsubstituted node.
-
 **A new daslib spelling that reads the environment joins the env_registry marker lists in
 the same change.** The scanners match daslang source text; a missing spelling makes every
 enforcement test pass vacuously.
@@ -244,10 +227,6 @@ reports it.** A broken slot left in place trips every later pass that walks the 
 
 **Never sum a range's start and count as `uint64` before proving both non-negative** - a
 signed sum wraps, the bounds test passes, and the walk leaves the array silently.
-
-**Never put a branch a macro-time value can decide into macro-built AST - branch in daslang
-and emit only the taken arm.** Nothing folds at macro-application time, so a generated
-`if ($v(flag))` keeps its dead arm and type-checks it.
 
 **A diff that adds a function to `cross_context.das` wrapping `invoke_in_context` - taking the
 `unsafe` and the `addr` off the caller - is a defect; the caller writes the call itself.** The
@@ -277,11 +256,6 @@ symbol re-stubs.
 **A diff that adds a numeric value form to the toml lexer routes it through `rewind_to_bare`
 on a bare-key character.** Without the rewind, a bare key that starts like a number lexes as
 a value.
-
-**A structure macro that instances inherit through `[|> name]` is idempotent: it appends a
-marker annotation to the instance it finishes, and returns unchanged when it sees that marker.**
-A chain of template ancestors delivers one copy of the annotation per level, so a macro without
-the marker runs a second time over a structure it already rewrote.
 
 **A diff that adds or renames a public intrinsic in `aarch64_neon.das`, `x64_avx.das` or
 `f16_cvt.das` changes its row in the lookup table of `modules/dasLLVM/daslib/llvm_jit_intrin.das`

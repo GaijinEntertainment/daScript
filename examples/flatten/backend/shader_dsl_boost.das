@@ -1636,12 +1636,12 @@ def private shader_stage_arg(args : AnnotationArgumentList) : string {
 [function_macro(name="pixel_shader")]
 class PixelShaderMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true
         return true
     }
     def override patch(var func : FunctionPtr; var group : ModuleGroup;
-                       args, progArgs : AnnotationArgumentList; var errors : das_string;
+                       var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
         // Skip during lint (the twin is irrelevant to linting source); flatten=off also skips ALL
         // passes — finish() then builds IR on the source verbatim (which must already be flat).
@@ -1711,7 +1711,7 @@ class PixelShaderMacro : AstFunctionAnnotation {
         return true
     }
     def override finish(var func : FunctionPtr; var group : ModuleGroup;
-                        args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+                        var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         return shader_build_ir(func, group, errors, "pixel")
     }
 }

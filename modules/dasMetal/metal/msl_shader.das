@@ -63,7 +63,7 @@ def private set_const_string_init(name : string; value : string; at : LineInfo) 
 
 [function_macro(name="metal_kernel")]
 class MetalKernel : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true   // keeps the (typically uncalled) method alive through dependency collection
         let argName = msl_global_name(func, args)
         return (add_typed_global(argName, Type.tString, func.at, errors) &&
@@ -72,7 +72,7 @@ class MetalKernel : AstFunctionAnnotation {
             add_typed_global("{argName}_census", Type.tString, func.at, errors) &&
             add_typed_global("{argName}_tgmem", Type.tUInt64, func.at, errors))
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         // Metal's runtime compiler does its own inlining — the CPU auto-inliner (patchInline,
         // which shares this patch slot and runs once annotation patches go quiet) must not
         // reshape the kernel tree the emitter reads at fixup (today that's helper-into-helper
@@ -90,7 +90,7 @@ class MetalKernel : AstFunctionAnnotation {
         }
         return true
     }
-    def override fixup(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override fixup(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         let argName = msl_global_name(func, args)
         let fastmath = args |> find_arg("fastmath") ?as tBool ?? true
         var glob = find_variable(compiling_module(), argName)

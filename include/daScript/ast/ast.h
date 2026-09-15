@@ -402,31 +402,31 @@ namespace das
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isFunctionAnnotation() const override { return true; }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & libGroup,
-                            const AnnotationArgumentList & args, string & err ) = 0;
+                            AnnotationArgumentList & args, string & err ) = 0;
         virtual bool generic_apply ( const FunctionPtr &, ModuleGroup &,
-                            const AnnotationArgumentList &, string & ) { return true; };
+                            AnnotationArgumentList &, string & ) { return true; };
         virtual bool finalize ( const FunctionPtr & func, ModuleGroup & libGroup,
-                               const AnnotationArgumentList & args,
+                               AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
         virtual bool apply ( ExprBlock * block, ModuleGroup & libGroup,
-                            const AnnotationArgumentList & args, string & err ) = 0;
+                            AnnotationArgumentList & args, string & err ) = 0;
         virtual bool finalize ( ExprBlock * block, ModuleGroup & libGroup,
-                               const AnnotationArgumentList & args,
+                               AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
         virtual bool patch ( const FunctionPtr &, ModuleGroup &,
-                               const AnnotationArgumentList &,
+                               AnnotationArgumentList &,
                                const AnnotationArgumentList &, string &, bool & ) { return true; }
         virtual bool fixup ( const FunctionPtr &, ModuleGroup &,
-                               const AnnotationArgumentList &,
+                               AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & ) { return true; }
         virtual bool lint ( const FunctionPtr &, ModuleGroup &,
-                               const AnnotationArgumentList &,
+                               AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & ) { return true; }
         virtual SimNode * simulate ( Context *, Function *,
                             const AnnotationArgumentList &, string & ) { return nullptr; }
         virtual void complete ( Context *, const FunctionPtr & ) { }
         virtual bool simulate ( Context *, SimFunction * ) { return true; }
-        virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/,
+        virtual bool verifyCall ( ExprCallFunc * /*call*/, AnnotationArgumentList & /*args*/,
             const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) { return true; }
         virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) { return nullptr; }
         virtual string aotName ( ExprCallFunc * call );
@@ -443,16 +443,16 @@ namespace das
     struct TransformFunctionAnnotation : FunctionAnnotation {
         TransformFunctionAnnotation ( const string & n ) : FunctionAnnotation(n) {}
         virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) override = 0;
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string & ) override {
             return false;
         }
-        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
             return false;
         }
-        virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        virtual bool apply ( ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string & ) override {
             return false;
         }
-        virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+        virtual bool finalize ( ExprBlock *, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
             return false;
         }
     };
@@ -557,11 +557,11 @@ namespace das
         StructureAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isStructureAnnotation() const override { return true; }
         virtual bool touch ( const StructurePtr & st, ModuleGroup & libGroup,
-                            const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change structure here
+                            AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change structure here
         virtual bool look (const StructurePtr & st, ModuleGroup & libGroup,
-            const AnnotationArgumentList & args, string & err ) = 0;                    // this one happens after infer. structure is read-only, or at-least infer-safe
+            AnnotationArgumentList & args, string & err ) = 0;                    // this one happens after infer. structure is read-only, or at-least infer-safe
         virtual bool patch (const StructurePtr &, ModuleGroup &,
-            const AnnotationArgumentList &, string &, bool & /*astChanged*/ ) { return true; } // this one happens after infer. this can restart infer by setting astChange
+            AnnotationArgumentList &, string &, bool & /*astChanged*/ ) { return true; } // this one happens after infer. this can restart infer by setting astChange
         virtual void complete ( Context *, const StructurePtr & ) { }
         virtual void aotPrefix ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
         virtual void aotBody   ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
@@ -573,7 +573,7 @@ namespace das
         EnumerationAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isEnumerationAnnotation() const override { return true; }
         virtual bool touch ( const EnumerationPtr & st, ModuleGroup & libGroup,
-                            const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change enum here
+                            AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change enum here
     };
     typedef EnumerationAnnotation * EnumerationAnnotationPtr;
 

@@ -29,7 +29,7 @@ struct LogCallsAnnotation : FunctionAnnotation {
 
     // Called during parsing — can modify function flags
     virtual bool apply(const FunctionPtr & func, ModuleGroup &,
-                       const AnnotationArgumentList &,
+                       AnnotationArgumentList &,
                        string &) override {
         printf("  [log_calls] apply:    %s\n", func->name.c_str());
         return true;
@@ -37,7 +37,7 @@ struct LogCallsAnnotation : FunctionAnnotation {
 
     // Not supported on blocks
     virtual bool apply(ExprBlock *, ModuleGroup &,
-                       const AnnotationArgumentList &,
+                       AnnotationArgumentList &,
                        string & err) override {
         err = "[log_calls] is not supported for blocks";
         return false;
@@ -45,7 +45,7 @@ struct LogCallsAnnotation : FunctionAnnotation {
 
     // Called after type inference — can validate the function
     virtual bool finalize(const FunctionPtr & func, ModuleGroup &,
-                          const AnnotationArgumentList &,
+                          AnnotationArgumentList &,
                           const AnnotationArgumentList &,
                           string &) override {
         printf("  [log_calls] finalize: %s (args: %d)\n",
@@ -55,7 +55,7 @@ struct LogCallsAnnotation : FunctionAnnotation {
 
     // Not supported on blocks
     virtual bool finalize(ExprBlock *, ModuleGroup &,
-                          const AnnotationArgumentList &,
+                          AnnotationArgumentList &,
                           const AnnotationArgumentList &,
                           string &) override {
         return true;
@@ -75,7 +75,7 @@ struct AddFieldAnnotation : StructureAnnotation {
 
     // Called BEFORE type inference — can modify the struct
     virtual bool touch(const StructurePtr & st, ModuleGroup &,
-                       const AnnotationArgumentList &,
+                       AnnotationArgumentList &,
                        string &) override {
         // Guard: don't add if already present (touch can be called
         // multiple times during compilation)
@@ -99,7 +99,7 @@ struct AddFieldAnnotation : StructureAnnotation {
 
     // Called AFTER type inference — read-only validation
     virtual bool look(const StructurePtr & st, ModuleGroup &,
-                      const AnnotationArgumentList &,
+                      AnnotationArgumentList &,
                       string &) override {
         printf("  [add_field] look: struct '%s' has %d fields\n",
                st->name.c_str(), (int)st->fields.size());

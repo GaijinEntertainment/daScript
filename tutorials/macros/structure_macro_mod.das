@@ -130,10 +130,11 @@ class SerializableMacro : AstStructureAnnotation {
     //
     // We mark the annotation with a "patched" argument to avoid
     // infinite loops — without it, astChanged would trigger patch()
-    // again endlessly.
+    // again endlessly.  `args` is this annotation instance's own
+    // argument list and is writable, so the mark goes straight into it.
     // ------------------------------------------------------------------
     def override patch(var st : StructurePtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string;
+                       var args : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
         // Guard: if we already patched, do nothing.
         // This prevents infinite re-inference loops.
@@ -164,11 +165,7 @@ class SerializableMacro : AstStructureAnnotation {
         }
 
         // Mark as patched and trigger re-inference
-        for (ann in st.annotations) {
-            if (ann.annotation.name == "serializable") {
-                ann.arguments |> add_annotation_argument("patched", true)
-            }
-        }
+        args |> add_annotation_argument("patched", true)
         astChanged = true
         return true
     }

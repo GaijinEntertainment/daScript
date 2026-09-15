@@ -15,11 +15,11 @@ require daslib/strings_boost
 [function_macro(name = "probe_deps")]
 class DepsProbe : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         return true
     }
     def override patch(var func : FunctionPtr; var group : ModuleGroup;
-                       args, progArgs : AnnotationArgumentList; var errors : das_string;
+                       var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string;
                        var astChanged : bool&) : bool {
         let want_fn = args |> find_arg("functions") ?as tString ?? ""
         let want_var = args |> find_arg("variables") ?as tString ?? ""

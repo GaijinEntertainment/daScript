@@ -99,9 +99,12 @@ class MemoizeMacro : AstFunctionAnnotation {
     //
     // The "already processed" guard prevents re-generation on the
     // second inference pass (after astChanged restarts inference).
+    // `args` is THIS annotation instance's own argument list, writable:
+    // the guard reads it and the mark writes it, so two [memoize]-style
+    // annotations on one function each patch exactly once.
     // ------------------------------------------------------------------
     def override patch(var fn : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - tutorial walkthrough, the numbered memoize steps ARE the lesson
-                       args, progArgs : AnnotationArgumentList;
+                       var args : AnnotationArgumentList; progArgs : AnnotationArgumentList;
                        var errors : das_string; var astChanged : bool&) : bool {
 
         // Guard: already processed?
@@ -114,12 +117,8 @@ class MemoizeMacro : AstFunctionAnnotation {
         }
 
         // Mark as processed and trigger inference restart
-        for (ann in fn.annotations) {
-            if (ann.annotation.name == "memoize") {
-                astChanged = true
-                ann.arguments |> add_annotation_argument("patched", true)
-            }
-        }
+        args |> add_annotation_argument("patched", true)
+        astChanged = true
 
         // Names for generated entities
         let cacheName = "`memoize`cache`{fn.name}"

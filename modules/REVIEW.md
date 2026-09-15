@@ -4,9 +4,10 @@
 
 **A diff to a function carrying `[metal_kernel]`, `[spirv_kernel]`, or an annotation whose name
 ends `_shader` and comes from `dasSpirv`, `dasVulkan` or `dasMetal`; to any `def` such a
-function reaches directly or through another; or to a class the `dasMetal` or `dasSpirv` emitter
-generates a kernel from, its member declarations included - applies `REVIEW_SHADER_EMITTERS.md`
-(beside this file) together with its own folder's checklist.**
+function reaches directly or through another; or to a class whose own or inherited method carries
+`[metal_kernel]` or `[spirv_kernel]`, or to a class such a class inherits from, member
+declarations included - applies `REVIEW_SHADER_EMITTERS.md` (beside this file) together with its
+own folder's checklist.**
 
 **A C++ module whose CMake target links another in-tree module's target calls
 `Module::require("<name>")` for it, and the returned module's `initDependencies()`, in its own

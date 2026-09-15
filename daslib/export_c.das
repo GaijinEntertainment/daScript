@@ -26,7 +26,7 @@ def private is_c_identifier(name : string) : bool {
 [function_macro(name = "export_c")]
 class private ExportCAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         for (arg in func.arguments) {
             if (arg._type.baseType == Type.autoinfer && arg.init == null) {
                 errors := "[export_c] can't export generic function `{func.name}`: it has auto or template arguments, and C needs one concrete signature"

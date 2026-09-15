@@ -93,7 +93,7 @@ class LiveCommandMacro : AstFunctionAnnotation {
     //! Registers a function as a live command. The function must have signature
     //! `def name(input : JsonValue?) : JsonValue?`. The command is registered
     //! in `live_command_registry` at context initialization.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         let commandName = "{func.name}"
         var description = ""
         let p = args |> find_arg("description")

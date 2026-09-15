@@ -3242,7 +3242,7 @@ def tune_policy_apply(var func : FunctionPtr; var _group : ModuleGroup;
 [function_macro(name = "tune_policy_default_applied")]
 class private TunePolicyDefaultMarker : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         return true
     }
 }

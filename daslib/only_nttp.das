@@ -23,7 +23,7 @@ class OnlyNttpVisitor : AstVisitor {
 [function_macro(name="only_nttp")]
 class public OnlyNttpAnnotation : AstFunctionAnnotation {
     //! Fails the compile when the annotated function calls an extern not bound with ``addExternInline``.
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         var scan = new OnlyNttpVisitor()
         make_visitor(*scan) $(adapter) {
             visit(func, adapter)

@@ -4,7 +4,8 @@ Read before touching `modules/dasLLVM/daslib/llvm_tune.das` or its tests. The fr
 itself - every annotation, the policy rail, the sidecar contract - is `skills/tune.md`; this
 file is only what maintaining the implementation needs on top of it.
 
-`llvm_tune.das` registers no annotation of its own. All six names plus the default-policy
+`llvm_tune.das` registers one annotation of its own, `[tune_policy_default_applied]`, the
+marker the default-policy pass stamps. The six user-facing names plus the default-policy
 infer pass are registered by `daslib/tune`, whose shells forward here - `tune_apply`,
 `tune_perm_apply`, `tune_companion_apply`, `tune_scope_apply`, `tune_policy_apply`,
 `tune_default_policy_apply`, and `llvm_code_apply` in `llvm_code.das` - under

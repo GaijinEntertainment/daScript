@@ -85,13 +85,8 @@ def private rewrite_to_pinvoke(var func : FunctionPtr; contextName, ctxCloneFnNa
 [function_macro(name="apply_in_context")]
 class AppendCondAnnotation : AstFunctionAnnotation {
   //! [apply_in_context] function annotation.
-  def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
-
-    for (ann in func.annotations) {
-      if (ann.annotation.name == "apply_in_context") {
-        if (!(find_arg(ann.arguments, "patched") is nothing)) return true
-      }
-    }
+  def override patch(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    if (find_arg(args, "patched") is tBool) return true
 
     if (args |> length != 1) {
       errors := "expecting one argument"
@@ -118,12 +113,8 @@ class AppendCondAnnotation : AstFunctionAnnotation {
       }
     }
 
-    for (ann in func.annotations) {
-      if (ann.annotation.name == "apply_in_context") {
-        astChanged = true
-        ann.arguments |> add_annotation_argument("patched", true)
-      }
-    }
+    args |> add_annotation_argument("patched", true)
+    astChanged = true
 
     let resName = "__res__"
     let ctxCloneFnName = "CONTEXT_CLONE`{func.name}"

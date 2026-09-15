@@ -38,7 +38,7 @@ def get_remove_indices(args : AnnotationArgumentList) {
 [function_macro(name="remove_call_args")]
 class RemoveCallArgsMacro : AstFunctionAnnotation {
     //! This macro removes all arguments by given indices [remove_call_args(arg=(1,2,3))]
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         var removeIndices <- get_remove_indices(args)
         if (empty(removeIndices)) return true
 

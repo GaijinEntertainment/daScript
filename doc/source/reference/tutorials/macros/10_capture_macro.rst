@@ -105,7 +105,7 @@ The tag annotation
    [structure_macro(name=audited)]
    class AuditedAnnotation : AstStructureAnnotation {
        def override apply(var st : StructurePtr; var group : ModuleGroup;
-               args : AnnotationArgumentList; var errors : das_string) : bool {
+               var args : AnnotationArgumentList; var errors : das_string) : bool {
            return true  // no-op tag
        }
    }

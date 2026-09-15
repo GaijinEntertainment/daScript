@@ -91,7 +91,7 @@ class SpirvShader : AstFunctionAnnotation {
     def generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr) {
         pass
     }
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true   // temporary: keeps the function alive through dependency collection
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`spirv"
         var atype = new TypeDecl(at = func.at, baseType = Type.tArray)
@@ -112,7 +112,7 @@ class SpirvShader : AstFunctionAnnotation {
         generate_push_constants_dummy(func)
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         // GPU compilers do their own inlining — the CPU auto-inliner (patchInline, which shares
         // this patch slot and runs once annotation patches go quiet) must not reshape the shader
         // tree the emitter reads at fixup. Callee-side neverInline pins every reachable function;
@@ -145,7 +145,7 @@ class SpirvShader : AstFunctionAnnotation {
         }
         return true
     }
-    def override fixup(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override fixup(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`spirv"
         var err : array<string>
         // local_size_{x,y,z} take an int literal OR the name of a module-scope int constant -- the same
@@ -229,7 +229,7 @@ class SpirvComputeShader : SpirvShader {
 // local_size_*, local_size_*_id).
 [function_macro(name="spirv_kernel")]
 class SpirvKernelShader : SpirvShader {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.classParent == null) {
             errors := "[spirv_kernel] must annotate a class method - resources are the class's annotated members"
             return false
@@ -294,7 +294,7 @@ class SpirvClosestHitShader : SpirvShader {
 // math can call the exact decode the GPU runs.
 [function_macro(name="spirv_decode")]
 class SpirvDecodeAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         // pin against the CPU auto-inliner: the emitter must see the body as authored
         func.moreFlags.neverInline = true
         return true
@@ -310,7 +310,7 @@ class SpirvDecodeAnnotation : AstFunctionAnnotation {
 // math can run the exact combine/per-element code the GPU runs.
 [function_macro(name="spirv_combine")]
 class SpirvCombineAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         func.moreFlags.neverInline = true
         return true
     }
@@ -318,7 +318,7 @@ class SpirvCombineAnnotation : AstFunctionAnnotation {
 
 [function_macro(name="spirv_per_element")]
 class SpirvPerElementAnnotation : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         func.moreFlags.neverInline = true
         return true
     }

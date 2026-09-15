@@ -89,7 +89,7 @@ class BgfxCompileComputeShaderFunctionAnnotation : AstFunctionAnnotation {
 
 [structure_macro(name="vertex_buffer")]
 class GlslVertexBuffer : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         // [template(self)] bind_vertex_buffer(vbo:uint; self:VertexType; vindex:uint=0u)
         var fn <- new Function(at = st.at, atDecl = st.at, name := "bind_vertex_buffer")
         fn.flags.generated = true

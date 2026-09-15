@@ -100,7 +100,7 @@ class GlslShader : AstFunctionAnnotation {
     def generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
         pass
     }
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true // note: this is temporary, until we are done with dependency collecting etc
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`shader_text"
         if (!add_global_var(compiling_module(), argName, new TypeDecl(at = func.at, baseType = Type.tString), func.at, false)) {
@@ -117,7 +117,7 @@ class GlslShader : AstFunctionAnnotation {
         generate_bind_uniform_dummy(func)
         return true
     }
-    def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
+    def override patch(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         // 16/8-bit lattice members in @uniform/@push_constant blocks fail closed HERE — before
         // the bind-uniform glue generates (an unpackable block would otherwise silently downgrade
         // to the loose per-field binder, and the diagnostic would be an incidental GL-bind error)
@@ -199,7 +199,7 @@ class GlslShader : AstFunctionAnnotation {
         }
         return caps
     }
-    def override fixup(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override fixup(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`shader_text"
         let version = args |> find_arg("version") ?as tInt ?? (shaderType == ShaderType.compute ? 430 : 330)
         var compute_local_size : int3

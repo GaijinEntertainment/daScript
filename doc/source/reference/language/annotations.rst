@@ -613,7 +613,7 @@ Example — macro registration runs during module compilation, so the file decla
     [function_macro(name="my_decorator")]
     class MyDecorator : AstFunctionAnnotation {
         def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                           args : AnnotationArgumentList; var errors : das_string) : bool {
+                           var args : AnnotationArgumentList; var errors : das_string) : bool {
             print("decorating {func.name}\n")
             return true
         }
