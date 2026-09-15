@@ -1086,6 +1086,23 @@ def test_goto_definition_declarations(t : T?) {
         t |> equal(source_line(fixture_path("_fixture_refs.das"), 68), "    for (i in range(2)) \{", "the subtools' line reader is 1-based")
         t |> equal(source_line(fixture_path("_fixture_refs.das"), 100000), "", "past the end of the file the line is empty")
     }
+}
+
+[test]
+def test_goto_definition_members(t : T?) {
+    t |> run("a method call lands on the method the receiver's class runs, a field's own name is the field") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "78", "15"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Symbol: Square`area") >= 0 && find(text, "Kind: function") >= 0 && find(text, "Line: 47") >= 0, "s->area() is the override, not the class: {text}")
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "67", "20"), text, is_error)
+        t |> success(find(text, "Symbol: Square`area") >= 0 && find(text, "Line: 47") >= 0, "shape->area() too: {text}")
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "10", "5"), text, is_error)
+        t |> success(find(text, "Symbol: x") >= 0 && find(text, "Kind: field") >= 0 && find(text, "Line: 10") >= 0, "the field's declaration: {text}")
+        parse_result(do_type_of(fixture_path("_fixture_refs.das"), "78", "15"), text, is_error)
+        t |> success(find(text, "ExprField(area)") >= 0 && find(text, "ExprTypeDecl") < 0 && find(text, "ExprPtr2Ref") < 0, "type_of on a method call: the method field first, no conversion nodes: {text}")
+    }
     t |> run("an enum type name in a parameter is the enum") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -1306,8 +1323,30 @@ def test_find_references_class(t : T?) {
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "structure 'Square'") >= 0, "should identify the class: {text}")
         t |> success(find(text, "__finalize") < 0, "never the synthesized finalizer: {text}")
-        t |> success(find(text, "Found 1 reference") >= 0, "the new site only, no implicit self: {text}")
-        t |> success(find(text, ":66:20 in main [type ref]") >= 0, "the new site: {text}")
+        t |> success(find(text, "Found 2 reference") >= 0, "the new site and the parameter type, no implicit self: {text}")
+        t |> success(find(text, ":66:20 in main [type ref]") >= 0 && find(text, ":77:") >= 0, "the new site and the parameter's type: {text}")
+    }
+    t |> run("a method's sites reference its function, through -> and the implicit self; an override is its own method") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "47", "18", "file", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "func 'Square`area'") >= 0, "the override's own function: {text}")
+        t |> success(find(text, ":67:") >= 0 && find(text, ":78:") >= 0 && find(text, "[method call]") >= 0, "shape->area() and s->area() call the override: {text}")
+        t |> success(find(text, ":47:") < 0, "never the declaration's own line: {text}")
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "43", "9", "file", ""), text, is_error)
+        t |> success(find(text, "func 'Shape`area'") >= 0 && find(text, "Found 0 reference") >= 0, "the base method has no site of its own - every receiver is a Square: {text}")
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "78", "15", "file", ""), text, is_error)
+        t |> success(find(text, "func 'Square`area'") >= 0 && find(text, ":67:") >= 0, "from a call site the same set: {text}")
+    }
+    t |> run("a field's declaration name references its accesses") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "10", "5", "file", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "field 'Point.x'") >= 0, "the field: {text}")
+        t |> success(find(text, ":15:") >= 0 && find(text, ":19:") >= 0 && find(text, ":64:") >= 0, "a.x, p?.x and p3.x: {text}")
+        t |> success(find(text, ":10:") < 0, "never the declaration's own line: {text}")
     }
     t |> run("a parent named on a derived class line references the parent") <| @(t : T?) {
         var text : string

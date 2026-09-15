@@ -149,6 +149,8 @@ enum public DeclarationKind {
     variable
     //! a C++-bound type: `annotation`
     handled
+    //! a struct or class field: `structure` owns it, `name` and `field_type` describe it
+    field
 }
 
 struct public DeclarationHit {
@@ -157,8 +159,10 @@ struct public DeclarationHit {
     kind : DeclarationKind
     //! the function or generic, for `func`
     func : Function const?
-    //! the structure or class, for `structure`
+    //! the structure or class, for `structure`; the owner, for `field`
     structure : Structure const?
+    //! the field's type, for `field`
+    field_type : TypeDecl const?
     //! the enumeration, for `enumeration`
     enumeration : Enumeration const?
     //! the global variable, for `variable`
@@ -241,6 +245,50 @@ def private on_name(word : string; name : string; line_text : string; here : int
     return name == word && here == name_column(line_text, name, -1)
 }
 
+def private has_field(st : Structure const?; name : string) : bool {
+    for (fld in st.fields) {
+        return true if (fld.name == name)
+    }
+    return false
+}
+
+[arch(at="ARCHITECTURE_CURSOR.md#cursor-class-fields")]
+def public is_own_field(st : Structure const?; fld : FieldDeclaration) : bool {
+    //! True for a field the source declares in `st`'s own body: not one the compiler made (`__rtti`, `__finalize`) and not a parent's copy.
+    return false if (fld.flags.generated)
+    var own = true
+    peek(fld.name) $(n) {
+        own = !(n |> starts_with("__"))
+    }
+    return own && (st.parent == null || !has_field(st.parent, string(fld.name)))
+}
+
+[arch(at="ARCHITECTURE_CURSOR.md#cursor-class-fields")]
+def public method_function(st : Structure const?; name : string) : Function const? {
+    //! The function a class method field `name` of `st` points at - the override `st` declares, else the inherited one; null for a data field or no such field.
+    return null if (st == null)
+    for (fld in st.fields) {
+        continue if (fld.name != name)
+        return null if (!fld.flags.classMethod || fld.init == null)
+        var init = fld.init
+        if (init is ExprCast) {
+            init = (init as ExprCast).subexpr
+        }
+        return init is ExprAddr ? (init as ExprAddr).func : null
+    }
+    return null
+}
+
+def public field_at(st : Structure const?; name : string) : LineInfo {
+    //! Where the field `name` of `st` is declared - the parent's line for an inherited field; a zero position when there is no such field.
+    if (st != null) {
+        for (fld in st.fields) {
+            return fld.at if (fld.name == name)
+        }
+    }
+    return LineInfo()
+}
+
 def private function_declaration(f : Function const?; word, file : string; line : int; line_text : string; here : int) : DeclarationHit {
     return DeclarationHit() if (is_synthesized(f) || !on_line(f.at, file, line) || !on_name(word, bare_name(string(f.name)), line_text, here))
     return DeclarationHit(kind = DeclarationKind.func, func = f, name = bare_name(string(f.name)), at = f.at, word_column = here)
@@ -273,6 +321,17 @@ def public find_declaration_at_cursor(program : smart_ptr<Program>; file : strin
             } elif (!empty(word) && s.parent != null && s.parent.name == word && here == name_column(line_text, word, -1)) {
                 let p = s.parent
                 hit = DeclarationHit(kind = DeclarationKind.structure, structure = p, name = word, at = p.at, word_column = here)
+            }
+        }
+    }
+    if (hit.kind == DeclarationKind.none) {
+        ast::for_each_structure(thisMod) $(var st : StructurePtr) {
+            return if (hit.kind != DeclarationKind.none)
+            let s = st
+            for (fld in s.fields) {
+                continue if (!is_own_field(s, fld) || fld.flags.classMethod || !on_line(fld.at, file, line) || !on_name(word, string(fld.name), line_text, here))
+                hit = DeclarationHit(kind = DeclarationKind.field, structure = s, field_type = fld._type, name = string(fld.name), at = fld.at, word_column = here)
+                break
             }
         }
     }
@@ -429,9 +488,14 @@ class CursorVisitor : AstVisitor {
         inSynthesized = false
     }
 
+    // the conversions a method call desugars to - `invoke(type<T>.m, cast<auto> deref(a), ...)` - carry the call's span and no token of their own
+    def unspelled(e : Expression const?) : bool {
+        return e is ExprTypeDecl || e is ExprRef2Value || e is ExprPtr2Ref
+    }
+
     def override preVisitExpression(expr : ExpressionPtr) : void {
         let e = expr
-        return if (inSynthesized || !in_target_file(e.at) || generated_variable(e))
+        return if (inSynthesized || !in_target_file(e.at) || generated_variable(e) || unspelled(e))
         if (cursor_inside(targetLine, targetCol, e.at) || on_field_name(e)) {
             hits |> emplace(CursorHit(
                 expr = e,
@@ -455,6 +519,7 @@ def private span_key(hit : CursorHit) : int3 {
 }
 
 //! sorted innermost first: fewer lines, then the later start, then the earlier end, then the
+//! named node (a call, a field, a variable) over a nameless one on the same span, then the
 //! later-visited (deeper) node
 def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
     var order : array<int>
@@ -468,6 +533,9 @@ def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
         if (sa.x != sb.x) return sa.x < sb.x
         if (sa.y != sb.y) return sa.y > sb.y
         if (sa.z != sb.z) return sa.z < sb.z
+        let na = !empty(src[a].name)
+        let nb = !empty(src[b].name)
+        if (na != nb) return na
         return a > b
     }
     var result : array<CursorHit>

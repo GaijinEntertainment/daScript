@@ -73,3 +73,7 @@ def main() {
 def paint(c : Color) : int {
     return int(c)
 }
+
+def area_of(var s : Square?) : float {
+    return s->area()
+}

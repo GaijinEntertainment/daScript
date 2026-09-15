@@ -2143,13 +2143,13 @@ expr_named_call
 /* a->b(args) is short for invoke(a.b, a, args)  */
 expr_method_call_no_bracket
     :   expr_no_bracket[left] RARROW[loc] NAME[method_name] '(' ')' {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), tokAt(scanner,@method_name), $left, *$method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         delete $method_name;
         $$ = pInvoke;
     }
     |   expr_no_bracket[left] RARROW[loc] NAME[method_name] '(' expr_list[arguments] ')' {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), tokAt(scanner,@method_name), $left, *$method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         auto callArgs = sequenceToList($arguments);
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
@@ -2232,13 +2232,13 @@ expr_field_no_bracket
         delete $name;
     }
     |   expr_no_bracket[left] '.'[loc] NAME[method_name] '(' ')' {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), tokAt(scanner,@method_name), $left, *$method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         delete $method_name;
         $$ = pInvoke;
     }
     |   expr_no_bracket[left] '.'[loc] NAME[method_name] '(' expr_list[arguments] ')' {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), tokAt(scanner,@method_name), $left, *$method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         auto callArgs = sequenceToList($arguments);
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
@@ -2246,13 +2246,13 @@ expr_field_no_bracket
         $$ = pInvoke;
     }
     |   expr_no_bracket[left] NOTDOT[loc] NAME[method_name] '(' ')' {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name, true);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), tokAt(scanner,@method_name), $left, *$method_name, true);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         delete $method_name;
         $$ = pInvoke;
     }
     |   expr_no_bracket[left] NOTDOT[loc] NAME[method_name] '(' expr_list[arguments] ')' {
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name, true);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), tokAt(scanner,@method_name), $left, *$method_name, true);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         auto callArgs = sequenceToList($arguments);
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
@@ -2289,13 +2289,13 @@ expr_field_no_bracket
     }
     |   expr_no_bracket[left] '.'[loc] basic_type_declaration[method_type] '(' ')' {
         auto method_name = das_to_string($method_type);
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, method_name);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), tokAt(scanner,@method_type), $left, method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         $$ = pInvoke;
     }
     |   expr_no_bracket[left] '.'[loc] basic_type_declaration[method_type] '(' expr_list[arguments] ')' {
         auto method_name = das_to_string($method_type);
-        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, method_name);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), tokAt(scanner,@method_type), $left, method_name);
         pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         auto callArgs = sequenceToList($arguments);
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );

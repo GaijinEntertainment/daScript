@@ -34,3 +34,23 @@ this file holds sec. 40.
   strips the wrap back to `<name>`.** Nothing fails when one side moves alone: the
   test pins only the daslib half, so a new spelling shows the mangled name in every hover and
   reference.
+
+### 40.3 Class members {#cursor-class-fields}
+
+- **A method call - `a->m(x)`, `a.m(x)`, or a bare `m(x)` inside the class - desugars to
+  `invoke(type<T>.m, cast<auto> deref(a), x)` (`makeInvokeMethod`, `src/ast/ast_generate.cpp`):
+  every node of it carries the call's span, the `->`/`.` forms the operator token's, and only the
+  `ExprField` for `m` keeps the name's own position in `atField`.** Nothing fails when one side
+  moves alone: the conversion nodes (`ExprTypeDecl`, `ExprCast`, `ExprPtr2Ref`, `ExprRef2Value`)
+  never spell a token, so a cursor visitor that admits them answers the class for a call on its
+  method; `tests/daslib/ast_cursor_test.das` pins the field-first order at one implicit and one
+  `->` site.
+- **A class method is a field of function type whose initializer is `@@Class`method`
+  (`ExprAddr`, its `func` the method) - an override's initializer wraps it in a cast - and a
+  derived class copies every parent field, position included, so a field has one declaration
+  across the hierarchy: the parent's line.** Nothing fails when one side moves alone: a
+  reference walk keyed on the struct pointer misses every access through a derived receiver,
+  and one that reads the initializer without unwrapping the cast lands overrides on the base.
+- **`__rtti` and `__finalize` are the compiler's fields on every class - `__finalize` is
+  `generated`, `__rtti` is not - and a method's field carries `classMethod`.** Nothing fails
+  when one side moves alone: an outline that filters on `generated` alone lists `__rtti`.

@@ -6,6 +6,7 @@
 options gen2
 
 class LspProbeBase {
+    probe_count : int = 0
     def probe_speak() : string => "base"
 }
 
@@ -54,6 +55,8 @@ def main() {
     print("{d->probe_speak()}\n")
     var f = new LspProbeFinalized()
     print("{f->probe_speak()}\n")
+    let spoken = d->probe_speak()
+    print("{spoken} {d.probe_count}\n")
     let base = 10
     let add = @(x : int) : int => x + base
     print("{add(1)}\n")

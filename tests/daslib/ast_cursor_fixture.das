@@ -60,3 +60,13 @@ def count_up() : iterator<int> {
         return false
     }
 }
+
+def kennel(var d : Dog?) : int {
+    let heard = d->speak()
+    return d.age + length(heard)
+}
+
+class Puppy : Dog {
+    def bark() : string => "yip"
+    def override speak() : string => bark()
+}

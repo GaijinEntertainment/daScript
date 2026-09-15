@@ -78,7 +78,7 @@ def definition_of(d : DeclarationHit; line : int) : DefinitionResult {
     return DefinitionResult() if (d.kind == DeclarationKind.none)
     if (d.kind == DeclarationKind.variable) return variable_definition(d.variable)
     if (d.kind == DeclarationKind.handled) return DefinitionResult(found = true, kind = "handled", name = d.name, cppName = string(d.annotation.cppName))
-    let kind = d.kind == DeclarationKind.func ? "function" : d.kind == DeclarationKind.structure ? "struct" : d.kind == DeclarationKind.enumeration ? "enum" : "typedef"
+    let kind = d.kind == DeclarationKind.func ? "function" : d.kind == DeclarationKind.structure ? "struct" : d.kind == DeclarationKind.enumeration ? "enum" : d.kind == DeclarationKind.field ? "field" : "typedef"
     let decl_file = lineinfo_file(d.at)
     let decl_line = int(d.at.line)
     return DefinitionResult(
@@ -164,6 +164,13 @@ def resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : Definiti
         }
         if (value_type != null && value_type.structType != null) {
             let st = value_type.structType
+            let method = method_function(st, field_name)
+            if (method != null) {
+                let file = lineinfo_file(method.at)
+                let line = int(method.at.line)
+                return DefinitionResult(found = true, kind = "function", name = string(method.name), file = file, line = line,
+                    column = int(method.at.column), snippet = read_source_snippet(file, line))
+            }
             for (fld in st.fields) {
                 if (fld.name == field_name) {
                     let file = lineinfo_file(fld.at)
