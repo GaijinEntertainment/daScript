@@ -288,6 +288,7 @@ namespace das {
     bool builtin_feof(const FILE*) GENERATE_IO_STUB_RET
     bool builtin_fpoll(const FILE*, int) GENERATE_IO_STUB_RET
     void builtin_funbuffered(const FILE*) GENERATE_IO_STUB
+    void builtin_fbinary(const FILE*) GENERATE_IO_STUB
     const FILE * builtin_fopen  ( const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     vec4f builtin_read ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
     vec4f builtin_write ( Context &, SimNode_CallBase *, vec4f * ) GENERATE_IO_STUB_VEC
@@ -539,6 +540,14 @@ namespace das {
     void builtin_funbuffered(const FILE* _f) {
         if ( !_f ) return;
         setvbuf((FILE*)_f, nullptr, _IONBF, 0);
+    }
+
+    void builtin_fbinary(const FILE* _f) {
+        if ( !_f ) return;
+#ifdef _WIN32
+        fflush((FILE*)_f);
+        _setmode(_fileno((FILE*)_f), _O_BINARY);
+#endif
     }
 
     // 64-bit-size stat/fstat (see das_filestat in aot_builtin_fio.h): on Windows the plain
@@ -3154,6 +3163,9 @@ namespace das {
                     ->args({"file","timeout_ms"});
             addExtern<DAS_BIND_FUN(builtin_funbuffered)>(*this, lib, "funbuffered",
                 SideEffects::modifyExternal, "builtin_funbuffered")
+                    ->arg("file");
+            addExtern<DAS_BIND_FUN(builtin_fbinary)>(*this, lib, "fbinary",
+                SideEffects::modifyExternal, "builtin_fbinary")
                     ->arg("file");
             addExtern<DAS_BIND_FUN(builtin_fseek)>(*this, lib, "fseek",
                 SideEffects::modifyExternal, "builtin_fseek")

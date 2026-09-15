@@ -145,14 +145,17 @@ def private write_frame(w : file; body : string) {
     fflush(w)
 }
 
-// one Content-Length frame -> parsed JSON; null on EOF / bad frame
-def private read_frame(r : file) : JsonValue? {
+//! one Content-Length frame -> parsed JSON; null on EOF / bad frame. Header lines are checked
+//! byte-exact: the pipe is binary on every platform, and a front writing through a text-mode
+//! stdout on Windows sends `\r\r\n`, which no client's reader ever matches as a terminator
+def private read_frame(t : T?; r : file) : JsonValue? {
     var content_length = 0
     while (true) {
         let raw = fgets(r)
         if (empty(raw)) {
             return null  // EOF — supervisor died or closed stdout
         }
+        t |> success(raw |> ends_with("\r\n") && !(rtrim(raw, "\n") |> ends_with("\r\r")), "header line ends in exactly CRLF: {replace(replace(raw, "\r", "\\r"), "\n", "\\n")}")
         let line = rtrim(raw, "\r\n")
         break if (empty(line))
         if (line |> starts_with("Content-Length:")) {
@@ -170,9 +173,9 @@ def private read_frame(r : file) : JsonValue? {
 }
 
 // frames until pred matches (skipping unrelated notifications); null on EOF
-def private read_until(r : file; pred : block<(js : JsonValue?) : bool>) : JsonValue? {
+def private read_until(t : T?; r : file; pred : block<(js : JsonValue?) : bool>) : JsonValue? {
     for (_attempt in range(50)) {
-        var js = read_frame(r)
+        var js = read_frame(t, r)
         return null if (js == null)
         return js if (invoke(pred, js))
     }
@@ -298,7 +301,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 write_frame(w, sprint_json(InitializeMsg(id = 1, params = InitializeParams(
                     initializationOptions = InitializeOptions(
                         compiler = get_full_file_name(get_das_exe())))), false))
-                let init_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 1
+                let init_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 1
                 t |> success(init_resp != null, "initialize response received")
                 return if (init_resp == null)
                 let server_name = init_resp?["result"]?["serverInfo"]?["name"] ?? ""
@@ -316,7 +319,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 write_frame(w, sprint_json(DidOpenMsg(params = DidOpenParams(
                     textDocument = TextDocumentItem(uri = uri, languageId = "daslang",
                         version = 1, text = broken))), false))
-                let pub1 = read_until(r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
+                let pub1 = read_until(t, r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
                 t |> success(pub1 != null, "publishDiagnostics after didOpen")
                 return if (pub1 == null)
                 t |> equal(pub1?["params"]?["uri"] ?? "", uri)
@@ -331,7 +334,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 write_frame(w, sprint_json(DidChangeMsg(params <- DidChangeParams(
                     textDocument = VersionedDoc(uri = uri, version = 2),
                     contentChanges <- [ContentChange(text = clean)])), false))
-                let pub2 = read_until(r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
+                let pub2 = read_until(t, r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
                 t |> success(pub2 != null, "publishDiagnostics after didChange")
                 t |> equal(diagnostics_of(pub2), 0)
 
@@ -347,7 +350,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     textDocument = VersionedDoc(uri = uri, version = 4),
                     contentChanges <- [ContentChange(text = clean)])), false))
                 var early = 0
-                let pub3 = read_until(r) $(js) {
+                let pub3 = read_until(t, r) $(js) {
                     return false if ((js?["method"] ?? "") != "textDocument/publishDiagnostics")
                     if (diagnostics_of(js) != 0) {
                         early++
@@ -364,7 +367,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     textDocument = DocId(uri = uri),
                     position = Position0(line = call_line0, character = 4))), false))
                 var stale = 0
-                let def_resp = read_until(r) $(js) {
+                let def_resp = read_until(t, r) $(js) {
                     if ((js?["method"] ?? "") == "textDocument/publishDiagnostics" && diagnostics_of(js) != 0) {
                         stale++
                     }
@@ -384,7 +387,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     params = CursorParams(
                         textDocument = DocId(uri = uri),
                         position = Position0(line = call_line0, character = 4))), false))
-                let prep_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 4
+                let prep_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 4
                 t |> success(prep_resp != null, "prepareCallHierarchy response received")
                 let item0 = prep_resp?["result"]?[0]
                 t |> equal(item0?["name"] ?? "", "lsp_probe_helper")
@@ -400,7 +403,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     method = "callHierarchy/incomingCalls",
                     params = HierCallsParams(item = HierItemMin(
                         data = echo_item_data(item0)))), false))
-                let inc_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 5
+                let inc_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 5
                 t |> success(inc_resp != null, "incomingCalls response received")
                 let inc_main = find_call_entry(inc_resp, "from", "main")
                 t |> success(inc_main != null, "incomingCalls lists main as a caller")
@@ -413,7 +416,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     method = "callHierarchy/outgoingCalls",
                     params = HierCallsParams(item = HierItemMin(
                         data = echo_item_data(inc_main?["from"])))), false))
-                let out_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 6
+                let out_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 6
                 t |> success(out_resp != null, "outgoingCalls response received")
                 let out_helper = find_call_entry(out_resp, "to", "lsp_probe_helper")
                 t |> success(out_helper != null, "outgoingCalls lists the helper as a callee")
@@ -426,7 +429,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     params = CursorParams(
                         textDocument = DocId(uri = uri),
                         position = Position0(line = base_speak_line0, character = base_speak_char))), false))
-                let impl_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 7
+                let impl_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 7
                 t |> success(impl_resp != null, "implementation response received")
                 let impl0 = impl_resp?["result"]?[0]
                 t |> equal(uri_for_compare(impl0?["uri"] ?? ""), uri_for_compare(uri))
@@ -435,7 +438,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))
-                let shutdown_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 3
+                let shutdown_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 3
                 t |> success(shutdown_resp != null, "shutdown response received")
                 write_frame(w, sprint_json(PlainMsg(method = "exit"), false))
             }

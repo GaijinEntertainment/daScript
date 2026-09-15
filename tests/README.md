@@ -860,7 +860,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 |---|---|---|
 | _fixture_clean.das | *(helper)* the clean disk file the protocol test opens with broken buffer text | |
 | test_lsp_project_root.das | the validate subtool under -project_root sees a project's own descriptors | |
-| test_lsp_protocol.das | the LSP front over a stdio pipe, through the interpreter host and the static exe - handshake, overlay diagnostics, navigation, shutdown | |
+| test_lsp_protocol.das | the LSP front over a stdio pipe, through the interpreter host and the static exe - handshake, overlay diagnostics, navigation, shutdown; every frame header byte-exact CRLF (a text-mode stdout on Windows writes `\r\r\n`) | |
 
 ## match/
 

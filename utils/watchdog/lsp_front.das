@@ -201,6 +201,8 @@ class public LspFront {
         sout = fstdout()
         sin = fstdin()
         funbuffered(sin)
+        fbinary(sin)
+        fbinary(sout)
         log->emit("watchdog_started", JV({"cwd" => JV(getcwd()), "compiler" => JV(compiler), "subtools" => JV(subtools)}))
     }
 

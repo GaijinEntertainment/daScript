@@ -197,8 +197,10 @@ loop polls between frames, and an edit of the file kills the one in flight, so a
 diagnostics never publish and an edit never waits on a compile. `--compiler <path>`,
 `--cwd <dir>` and `--log <file>` before the `--` override the discovered daslang, the
 workspace and the log (default: `$DASLANG_LSP_LOG`, else `daslang_lsp.log` in the temp
-directory). Stdout is the protocol;
-no pid file, no health poll, no tray. Configuration and the navigation notes: `utils/lsp/README.md`;
+directory). Stdout is the protocol, and both stdio streams are switched to binary mode
+(`fbinary`): a Windows text-mode stdout writes the `\r\n` of a frame header as `\r\r\n`, no
+client reader matches that as the terminator, and the `initialize` reply it never accepts leaves
+every later request waiting forever. No pid file, no health poll, no tray. Configuration and the navigation notes: `utils/lsp/README.md`;
 `tests/lsp/test_lsp_protocol.das` drives it through both hosts.
 
 ## Layout

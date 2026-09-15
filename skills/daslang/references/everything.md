@@ -796,6 +796,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `copy_file_result` - Copies a file from src to dst.
 - `equivalent` - Returns true if two paths refer to the same file or directory.
 - `equivalent_result` - Returns true if two paths refer to the same file or directory.
+- `fbinary` - Switches the stream to binary mode, so the bytes written are the bytes sent and the bytes read are the bytes received: no newline translation, no end-of-file character.
 - `fclose` - Closes the given FILE pointer and releases its associated resources, equivalent to C fclose.
 - `feof` - Returns true if the end-of-file indicator has been set on the given FILE pointer, equivalent to C feof.
 - `fexist` - Returns true if a file or directory exists at the given path.

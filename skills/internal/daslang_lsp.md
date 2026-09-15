@@ -96,6 +96,11 @@ tests and their module gate).
 
 ## Gotchas
 
+- The front puts stdin and stdout in **binary mode** (`fbinary`, a no-op off Windows). A
+  Windows text-mode stdout writes `\r\r\n` for `\r\n`, the client never finds the header
+  terminator, and the unaccepted `initialize` reply leaves every request hanging - the LSP
+  tool "never answers" while the log shows `initialize` received and nothing after.
+  `tests/lsp/test_lsp_protocol.das` checks the header bytes exactly, on every platform.
 - Compiler paths must be **absolute** - subtools spawn with per-request cwd
   (`find_compiler` absolutizes; keep it that way).
 - The lint-profile compile (`lint_check`, `export_all`, `no_optimizations`,
