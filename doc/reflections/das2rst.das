@@ -1893,6 +1893,7 @@ def document_module_spirv(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Reflection types", mod, %regex~(SpirvReflection|SpirvDescriptorBinding|SpirvPushConstantRange|SpirvDescriptorKind|SpirvStageFlags)$%%),
         group_by_regex("Serialization", mod, %regex~(encode_reflection|decode_reflection)$%%),
+        group_by_regex("Shader blob literals", mod, %regex~unpack_spirv_words$%%),
         hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize%%))
     )
     document("SPIR-V shader reflection (dasSpirv): API-neutral descriptor + push-constant layout, host-consumed", mod, "spirv_reflect.rst", groups)

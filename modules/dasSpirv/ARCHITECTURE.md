@@ -62,7 +62,7 @@ consumes it via `require spirv/...` and feeds the emitted `array<uint>` (SPIR-V 
 | `spirv/spirv_types.das` | hand | daslang `TypeDecl` -> SPIR-V type-id (scalars, vec/mat, fixed + runtime arrays, structs, pointers) with layout decorations. Highest-detail correctness file. |
 | `spirv/spirv_builtins.das` | hand | The builtin surface the emitter recognizes by name: builtin globals (`gl_*`), the opaque resource marker structs (`sampler2D`/`image2D`/`sampler2DShadow`/...), and the intrinsic stubs (`texture`, `imageLoad`, `barrier`, the atomics, the derivatives, ...). Every stub is `[sideeffects]` so no const-fold or DCE pass can reach it before the annotation runs. |
 | `spirv/spirv_emit.das` | hand | `SpirvEmit : AstVisitor` codegen visitor + the `[macro_function] generate_spirv(...)` entry point. Every construct the emitter cannot lower has a rejection override or hits the `value_of`/`ptr_of` backstop, so it becomes a clean compile error rather than a bad blob. |
-| `spirv/spirv_reflect.das` | hand | `shared public` reflection vocabulary - `SpirvReflection`, `DescriptorBinding`, `PushConstantRange`, `SpirvDescriptorKind`, `SpirvStageFlags` - plus the versioned `array<uint>` encode/decode the host reads. Names no graphics API, so dasSpirv never depends on dasVulkan. |
+| `spirv/spirv_reflect.das` | hand | `shared public` reflection vocabulary - `SpirvReflection`, `DescriptorBinding`, `PushConstantRange`, `SpirvDescriptorKind`, `SpirvStageFlags` - plus the versioned `array<uint>` encode/decode the host reads and `unpack_spirv_words`, the expander every captured shader global calls at init (a runtime function, so it lives here and not in the macro-only `spirv_shader`). Names no graphics API, so dasSpirv never depends on dasVulkan. |
 | `spirv/spirv_shader.das` | hand | The shader annotations, each a `SpirvShader : AstFunctionAnnotation` subclass carrying its stage: `[compute_shader]`, `[spirv_kernel]` (class-method authoring), `[vertex_shader]`, `[fragment_shader]`, `[mesh_shader]`, `[task_shader]`, `[raygen_shader]`, `[miss_shader]`, `[closest_hit_shader]`; plus the `[spirv_decode]` / `[spirv_combine]` / `[spirv_per_element]` callback annotations. `apply` reserves the blob global and its `_reflect` companion; `fixup` runs dependency collection, calls `generate_spirv`, and sets both inits. |
 | `spirv/spirv_dis.das` | hand | Minimal disassembler + opcode-census helper (self-delimiting walk: word0 = `(wordCount<<16)\|opcode`). Symbolic via `spirv_grammar`'s opcode->name table. |
 | `generator/gen_spirv_grammar.das` | hand | The mini-generator: reads vendored grammar JSON -> emits `spirv/spirv_grammar.das`. |
@@ -82,7 +82,9 @@ deduplicated) -> functions.
 
 **Capture mechanism (dasGlsl analog).** dasGlsl's `fixup` sets
 `glob.init = new ExprConstString(value := text)`; ours builds an `ExprMakeArray` of
-`ExprConstUInt` (one per SPIR-V word) for an `array<uint>` global named by the annotation's
+`ExprConstUInt4` (one per four SPIR-V words - a quarter of the nodes every compiler pass walks)
+that `unpack_spirv_words` expands to the exact word count at global init, for an `array<uint>`
+global named by the annotation's
 `name=` argument, or `` "{func.name}`spirv" `` when it has none, beside a `{name}_reflect`
 companion holding the encoded reflection. `generate_spirv` is a standalone `[macro_function]`
 called by **both** `fixup` and the unit tests - so opcode assertions hit the real codegen path

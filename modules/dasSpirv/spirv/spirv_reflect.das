@@ -165,3 +165,20 @@ def decode_reflection(words : array<uint>) : SpirvReflection {
     }
     return <- r
 }
+
+//! the words a packed shader literal carries, at their exact count; the packed array is
+//! consumed. Every `[spirv_kernel]` / `[compute_shader]` global's initializer calls this
+def public unpack_spirv_words(var packed : array<uint4>; count : int) : array<uint> {
+    if (count < 0 || count > length(packed) * 4) {
+        panic("unpack_spirv_words: {count} words asked of {length(packed)} packed uint4")
+    }
+    var words : array<uint>
+    words |> resize(count)
+    if (count > 0) {
+        unsafe {
+            memcpy(addr(words[0]), addr(packed[0]), count * 4)
+        }
+    }
+    delete packed
+    return <- words
+}
