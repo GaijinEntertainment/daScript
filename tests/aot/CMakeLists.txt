@@ -49,6 +49,11 @@ FILE(GLOB AOT_CLASS_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
 # Exclude expect-error tests (they intentionally fail to compile)
 list(FILTER AOT_CLASS_BOOST_FILES EXCLUDE REGEX "failed_")
 
+FILE(GLOB AOT_FOLD_RULES_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fold_rules/*.das")
+# Exclude _-prefixed rule modules and fixtures: the rule modules are required transitively, and two
+# fixtures fail to compile on purpose (that failure is what the error tests assert)
+list(FILTER AOT_FOLD_RULES_FILES EXCLUDE REGEX "/_")
+
 FILE(GLOB AOT_DASPEG_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasPEG/*.das")
 
 FILE(GLOB AOT_DASGLTF_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasGLTF/*.das")
@@ -393,7 +398,7 @@ set(TEST_AOT_ALL_DAS "")   # test-body .das (not module libs); LLVM-AOT corpus e
 set(DAS_AOT_SUITES
     algorithm apply archive assert_once ast_match async bare_block base64 bitfields bool_array
     class_boost dasbind daslib dasgltf daspeg data_walker debug debug_agent decs dynamic_cast_rtti fio
-    fixed_array flatten fs functional gc glsl handle_types hash_map interfaces jit
+    fixed_array flatten fold_rules fs functional gc glsl handle_types hash_map interfaces jit
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests network option promote quote
     reader_macro regex rtti safe_addr soa spoof strings stbimage table_packed template

@@ -121,6 +121,7 @@ namespace das {
         /*option*/ bool disable_run = false;                       // disable compile-time function evaluation (RunFolding of pure calls over constants)
         /*option*/ bool disable_temp_string_reclaim = false;       // disable the temp-string reclaim pass (fresh-string call results riding the 1-slot dispose queue)
         /*option*/ bool no_infer_time_folding = false;             // disable infer-time constant folding
+        /*option*/ bool disable_algebraic_folding = false;         // disable the built-in algebraic identity rewrites (x*1, x+0, !!x, c?a:a, same-type cast); constant EVALUATION is unaffected. for handing those rewrites to daslib/fold_rules
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
         /*option*/ bool log_compile_time = false;                  // if true, then compile time will be printed at the end of the compilation

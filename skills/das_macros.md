@@ -179,6 +179,9 @@ hand-rolled and got subtly wrong.
 | `qm_peel_ref2value(var e)` | the single home of `ExprRef2Value` peeling - never hand-roll `while (... is ExprRef2Value)` |
 | `push_block_list(var stmts, var blk)` (`daslib/templates_boost`) | splice a `qmacro_block` result into an `array<ExpressionPtr>`, cloning each statement |
 
+The **ladder form** - `qmatch(expr) { if (PATTERN) { ... } ... }`, arms tried in order and falling
+through - is what a rule table is written in; `doc/source/reference/fold_rules.rst` covers the optimizer built on it.
+
 They earn their keep in files that **probe** AST shape to route emission - `linq_fold`, `sql_linq`,
 `ast_match` itself; files that only **emit** (`decs_boost`, the emitter half of `templates_boost`)
 have no adoption sites. `qmatch` limits: shapes with cross-statement constraints ("three statements

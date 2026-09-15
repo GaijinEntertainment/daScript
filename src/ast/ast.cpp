@@ -1694,6 +1694,9 @@ namespace das {
         cexpr->index = index->clone();
         cexpr->no_promotion = no_promotion;
         cexpr->noBoundCheck = noBoundCheck;
+        cexpr->r2v = r2v;
+        cexpr->r2cr = r2cr;
+        cexpr->write = write;
         return cexpr;
     }
 
@@ -1717,6 +1720,9 @@ namespace das {
         cexpr->subexpr = subexpr->clone();
         cexpr->index = index->clone();
         cexpr->no_promotion = no_promotion;
+        cexpr->r2v = r2v;
+        cexpr->r2cr = r2cr;
+        cexpr->write = write;
         return cexpr;
     }
 
@@ -1912,6 +1918,9 @@ namespace das {
         cexpr->mask = mask;
         cexpr->value = value->clone();
         cexpr->no_promotion = no_promotion;
+        cexpr->r2v = r2v;
+        cexpr->r2cr = r2cr;
+        cexpr->write = write;
         return cexpr;
     }
 
@@ -1940,6 +1949,9 @@ namespace das {
         cexpr->ignoreCaptureConst = ignoreCaptureConst;
         cexpr->no_promotion = no_promotion;
         cexpr->atField = atField;
+        cexpr->r2v = r2v;
+        cexpr->r2cr = r2cr;
+        cexpr->write = write;
         return cexpr;
     }
 
@@ -2044,6 +2056,9 @@ namespace das {
         cexpr->pBlock = pBlock;
         cexpr->argument = argument;
         cexpr->argumentIndex = argumentIndex;
+        cexpr->r2v = r2v;
+        cexpr->r2cr = r2cr;
+        cexpr->write = write;
         return cexpr;
     }
 

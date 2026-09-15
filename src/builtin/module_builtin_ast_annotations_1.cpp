@@ -207,6 +207,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(result)>("result");
             this->template addField<DAS_BIND_MANAGED_FIELD(body)>("body");
             this->template addField<DAS_BIND_MANAGED_FIELD(totalStackSize)>("totalStackSize");
+            this->template addField<DAS_BIND_MANAGED_FIELD(optimizationRound)>("optimizationRound");
             this->template addField<DAS_BIND_MANAGED_FIELD(totalGenLabel)>("totalGenLabel");
             this->template addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             this->template addField<DAS_BIND_MANAGED_FIELD(atDecl)>("atDecl");

@@ -209,6 +209,43 @@ if (r.matched) {
 statements, optionally its arguments and return type (`$(x : int) : int { ... }`, matched strictly);
 `qmatch_function(func) $(args) : Ret { stmts }` a compiled function.
 
+**The ladder form** takes a trailing block of `if (pattern) { ... }` arms instead of one pattern:
+
+```das
+qmatch(expr) {
+    if (pow($e(x), 2.0)) { return qmacro($e(x) * $e(x)) }
+    if ($e(a) + $e(b))   { if (is_pure(b)) return a }
+}
+```
+
+Arms are tried in order and **fall through**: a body that does not leave the enclosing function lets
+the next arm try.
+
+**Predicate patterns** put the guard in the pattern. A call whose name starts with `_` - other than
+the statement wildcards - names a boolean function the matched node must satisfy; fail it and the
+pattern does not match, so the next arm is tried. The first argument is a nested pattern when it is
+a tag or a shape, and every other argument is passed to the function as written, with references to
+captures reading the value bound by this match:
+
+```das
+def _droppable(e : ExpressionPtr) : bool { return !has_sideeffects(e) }
+def _same(e, other : ExpressionPtr) : bool { return describe(e) == describe(other) }
+
+qmatch(expr) {
+    if (_droppable($e(x)) - _same(x)) { return zero_like(expr) }
+}
+```
+
+`_` in operand position matches anything and captures nothing.
+
+**A bare numeric literal matches that value in any numeric type** - `1` matches an `int`, a `float`,
+a `double` and a splat whose every lane is one, and `-1` matches a folded negative constant. `$v(v)`
+is the exact form: the capture variable's type picks the constant class. Bool and string literals
+stay exact. Each arm declares its own captures -
+`$e` `$i` `$c` `$f` `$t` `$a` `$b`; `$v` still needs a variable declared before the ladder, since its
+type picks the expected `ExprConst*` class. A trailing block of nothing but `if` arms is always the
+ladder; a block *pattern* of that shape is matched with the two-argument form, `qmatch(e, $ { ... })`.
+
 Tags: `$e(v)` captures a cloned sub-expression, `$i(v)` an identifier name, `$f(v)` a field name,
 `$c(v)` a call name, `$v(v)` a constant (the variable's type selects the expected `ExprConst*`),
 `$t(v)` a `TypeDecl?`, `$a(v)` the remaining arguments, `$b(v)` the statements a wildcard matched;

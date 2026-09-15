@@ -126,6 +126,17 @@ A public site and service for the `[tune]` ecosystem: upload a tuned box's sidec
 - **Dead-store elimination** (#3386) with `Expression::sameAs` same-shape folds; **CSE value reuse over the statement-level CFG** + AOT fast-math pragmas (#3387)
 - **Bound-check elision** in the interpreter for provably in-range array/vector access (#3327); **escape analysis 2** (#3213)
 
+#### Declarative Fold Rules: the Optimizer as Source Patterns
+
+`daslib/fold_rules` is a peephole optimizer whose rules are written as daslang source patterns instead of compiler code. A rule module subclasses `FoldRules`, annotates the class `[fold_rules]`, and writes one `qmatch` ladder arm per rewrite - `if (pow($e(x), 2.0)) { return qmacro($e(x) * $e(x)) }`; requiring that module arms the rules for a program.
+
+- **The `qmatch` ladder** - `qmatch(expr) { if (PATTERN) { ... } ... }` takes a trailing block of arms instead of one pattern. Arms are tried in order and fall through, and each arm declares its own captures
+- **Predicate patterns** - a call whose name starts with `_` inside a pattern is a guard on the matched node, so a rule whose condition does not hold simply does not match: `if (_pure(_not_float($e(x))) == _same(x))`. Any das function whose name starts with `_` can be one, with no registration. Purity splits into `_droppable` (safe to evaluate zero times) and `_repeatable` (safe to evaluate twice, under a node budget), so a rule that duplicates an operand no longer does it to an arbitrarily large one. `_` in operand position now matches any operand, and a bare numeric literal in a pattern matches that value in any numeric type
+- **The engine runs as an `[optimization_macro]`**, after the built-in passes of each round, so it matches the tree those passes produced. There is no re-inference at that phase, so it types every replacement itself and refuses - with a diagnostic naming the rule's input and output - anything outside constants, operators and pure-builtin calls. Rewrites retry until they settle, with a cap that reports a non-monotonic rule instead of looping
+- **`daslib/fold_rules_std`** carries the identities the constant folder knows (`x * 1`, `x - x`, `!!x`, `c ? a : a`, ...) plus idioms it does not (`pow(x, 2)`, `abs(abs(x))`, `min(a, a)`, integer self-comparisons), with the float laxity gates the compiler uses
+- **`options disable_algebraic_folding`** stands the built-in identity arms down (constant evaluation is unaffected) and hands the identities to the rules - the switch the parity test rides to hold the catalog equal to the compiler
+- **`clone` now carries the read flags** (`r2v`, `r2cr`, `write`), so a clone taken after the optimizer reads a value where the original did
+
 #### 16/8-bit Type Lattice (#3430, #3433, #3437, #3455)
 
 `float16`/`half` scalars plus the packed `half/short/ushort/byte/ubyte` vector families (closed fp16 arithmetic, storage+convert int families, `.s`-hex swizzles, `.lo`/`.hi`) - across interpreter, AOT, JIT (native lowering with arm64 fullfp16, #3433), the shader backends (dasSpirv + dasGlsl with real-GPU parity gates, #3437), and the debugger's `DapiDataWalker` (#3455).

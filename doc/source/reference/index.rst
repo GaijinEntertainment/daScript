@@ -33,6 +33,7 @@ THE SOFTWARE.
    dasllama_env.rst
    dasllama_methodology.rst
    flatten.rst
+   fold_rules.rst
    linq_fold_patterns.rst
    linq_das.rst
    strudel_vs_strudel_cc.rst
