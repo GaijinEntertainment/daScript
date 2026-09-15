@@ -4024,7 +4024,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `find_module_function_via_rtti` - Finds a function by name in the specified module using RTTI.
 - `find_module_via_rtti` - Finds a module by name in the specified program using RTTI.
 - `find_struct_field_parent` - Finds and returns the parent structure in the inheritance chain that originally declares the field with the given name.
-- `find_structure_field` - Returns the FieldDeclaration for a specific field of a structure type, or null if not found.
+- `find_structure_field` - Returns the FieldDeclaration for a specific field of a structure type, or null if not found or the structure is null.
 - `find_unique_structure` - Finds a uniquely named structure in the program, returning it if unique or null if ambiguous.
 - `find_variable` - Finds a variable by name in the specified module.
 

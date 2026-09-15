@@ -269,12 +269,8 @@ def public field_name_at(expr : Expression const?) : LineInfo {
 
 def public field_at(st : Structure const?; name : string) : LineInfo {
     //! Where the field `name` of `st` is declared - the parent's line for an inherited field; a zero position when there is no such field.
-    if (st != null) {
-        for (fld in st.fields) {
-            return fld.at if (fld.name == name)
-        }
-    }
-    return LineInfo()
+    let fld = find_structure_field(st, name)
+    return fld != null ? fld.at : LineInfo()
 }
 
 def private function_declaration(f : Function const?; word, file : string; line : int; line_text : string; here : int) : DeclarationHit {

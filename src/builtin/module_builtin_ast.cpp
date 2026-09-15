@@ -857,9 +857,8 @@ namespace das {
         return nullptr;
     }
 
-    Structure::FieldDeclaration * ast_findStructureField ( Structure * structType, const char * field, Context * context, LineInfoArg * at ) {
-        if ( !structType ) context->throw_error_at(at,"expecting structure");
-        if ( !field ) return nullptr;
+    Structure::FieldDeclaration * ast_findStructureField ( const Structure * structType, const char * field ) {
+        if ( !structType || !field ) return nullptr;
         return (Structure::FieldDeclaration *) structType->findField(field);
     }
 
@@ -1686,7 +1685,7 @@ namespace das {
                 ->args({"enum","value"});
         addExtern<DAS_BIND_FUN(ast_findStructureField)>(*this, lib,  "find_structure_field",
             SideEffects::none, "ast_findStructureField")
-                ->args({"structPtr","field","context","lineinfo"});
+                ->args({"structPtr","field"});
         addExtern<DAS_BIND_FUN(ast_findMethodFunction)>(*this, lib,  "find_method_function",
             SideEffects::none, "ast_findMethodFunction")
                 ->args({"structPtr","name"});
