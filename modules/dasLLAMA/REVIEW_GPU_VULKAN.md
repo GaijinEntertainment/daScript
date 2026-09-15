@@ -8,9 +8,6 @@ docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**A check added to the Vulkan section of the `REVIEW.das` beside this file names in its finding
-text the rule it enforces.**
-
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - adds every piece of state the family keeps per model to
 `vk_drop_model_state`'s sweep, in the same change.** A `make_device_buf` result and any field of
@@ -52,12 +49,11 @@ is a fallback a user finds only by profiling.
 `continue` routes work to the CPU path - that does not log the concrete reason it declined,
 once per reason per armed model, is a defect.**
 
-**A diff that keys a route of the tier on a Vulkan capability - a device or instance extension
-by name, a feature bit a `*_supported` probe of `modules/dasVulkan/daslib/vulkan_boost.das`
-reads, or a device limit - adds that capability to `vk_ext_roster`
+**A diff that keys a route of the tier on a device limit adds that limit to `vk_ext_roster`
 (`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without
-it, or adds the new route to the entry it already has, in the same change.** The device-init log prints the roster, so a box's log
-says which route each capability decided.
+it, or adds the new route to the entry it already has, in the same change.** An extension or a
+`*_supported` probe the roster omits is `check_vk_extension_roster`'s finding (`REVIEW.das`); the
+device-init log prints the roster, so a box's log says which route each capability decided.
 
 **The coordinate a k loop's counter feeds to `coopmatLoadTensor` / `coopmatLoadTensorDecode`
 starts at a literal or at a value rounded down to the loop's step - never at a bare runtime
@@ -110,7 +106,9 @@ rows.**
 **A diff that owes a cm2 stamp's probe rows takes them from that stamp's `harness/vk_gemm_probe.das`
 arm - `cm2:<fmt>` or `cm2g:<fmt>` for the l and m stamps (`<Fmt>Cm2LBatch`, `<Fmt>Cm2MBatch`),
 `moe:<fmt>` or `moesk:<fmt>` for the s and e stamps (`<Fmt>Cm2SBatch`, `<Fmt>Cm2EBatch`) - never
-from another arm and never from a whole-model sweep.**
+from another arm and never from a whole-model sweep; a per-32 format's s and e stamps, which the
+probe admits no arm for (`followup_vulkan.md` item 67), answer with their tile cell's run in
+`tests/test_vulkan_kernels.das` instead.**
 
 **A diff that answers a probe-row or kernel-cell duty with a claim that a stamp's emitted words
 did not move carries that stamp's `DASLLAMA_VK_SPV_DUMP` words diffed against master's.**

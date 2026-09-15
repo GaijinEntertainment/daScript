@@ -236,7 +236,7 @@ re-buying a measured loss.
 The probe also RETAINS the decided-and-shipped arms (the half-A stream, the dev-W all-device
 form, the tall M-tile twin, the bk staging depths, the no-zero-init form) as hand-written MSL
 reference implementations beside the refuted ones - they are the arc's bisect ledger, and the
-sync duty is `REVIEW_GPU.md`'s. The attention lab keeps the same class of retained references:
+sync duty is `REVIEW_GPU_RACE.md`'s. The attention lab keeps the same class of retained references:
 its PORT/PORTH/PORTC arms and `benchmarks/attn/lcpp_flash_dk72.metal` are the oracle-exact
 external reference the shipped `MetalTowerFlash` was decided against, and the DIAL arm races
 the production dialect against them - the bisect seat when the flash regresses.

@@ -53,21 +53,15 @@ line it ran under.**
 
 **A `-jit` ratio written into `PERF_LEDGER.md` names the arm it is measured against.**
 
-**A diff that adds a `PERF_LEDGER.md` entry whose reading no board cell produced names the
-instrument that produced it - the script or exe whose output is that wall or rate.**
-
-**A ruler record's third-party row is written by the same `harness/mtp_ruler.das` run that
-wrote the das row it pairs with.** A wall pasted in from another run measures a different
-prompt, drafter and settle state, and the acceptance rate it implies is not the pair's.
-
 **A `PERF_LEDGER.md` entry tags its reading `direction-grade` when the reading compares across
 two processes or two commits, and `out-of-process` when the wall was measured from outside the
 benchmark process.**
 
-**A checked-in document that states a `--for-debug-purposes` reading covered by a committed board
-row - one matching on all three of model, served-turn leg (prefill, decode, or the turn end to
-end) and backend - cites that row and marks the reading `debug-jit`.** A `--for-debug-purposes`
-reading is the `-jit` script's own output.
+**A checked-in document other than `PERF_LEDGER.md` that states a `--for-debug-purposes` reading
+covered by a committed board row - one matching on all three of model, served-turn leg (prefill,
+decode, or the turn end to end) and backend - cites that row and marks the reading `debug-jit`.**
+A `--for-debug-purposes` reading is the `-jit` script's own output; the ledger's own gate above
+admits no such reading.
 
 **A figure tagged `external` in `PERF_LEDGER.md` names the source and the report it came from.**
 

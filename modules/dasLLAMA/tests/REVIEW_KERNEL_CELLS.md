@@ -28,8 +28,9 @@ updates every hand-bind of that kernel the change made stale, in the same change
 bind reads the wrong buffer and passes on garbage that happens to compare.
 
 **A kernel-unit cell - a model-less cell that dispatches one or more kernel classes and asserts on
-their output - missing a compare against a CPU oracle is a defect.** A cell is a `t |> run` block, or a
-helper that asserts on `t`.
+their output - missing a compare against a CPU oracle is a defect; where the cell compares two
+kernel forms against each other, the oracle compare targets one of those two forms.** A cell is a
+`t |> run` block, or a helper that asserts on `t`. Two forms can be bit-equal and both wrong.
 
 **A kernel whose branch selection changes - a branch added, or an existing branch's predicate
 widened or narrowed, so that a different set of kargs values, or of sentinel values in a bound
@@ -44,9 +45,10 @@ buffers that the dispatch does not also read as input.** An unprefilled output c
 staying stale - the previous dispatch's values, or garbage that happens to sit inside the
 tolerance bar.
 
-**A bit-identity assert on a floating-point result compares two GPU dispatches, never a dispatch
-against a CPU oracle.** No CPU oracle can witness that property; an exact compare of indices,
-schedule words or quantized bytes against a CPU twin is not that assert.
+**A bit-identity assert on a result either side computes with floating-point arithmetic compares
+two GPU dispatches, never a dispatch against a CPU oracle - unless the cell fixes the operation
+order on both sides, so the oracle's result is the kernel's by construction.** An exact compare
+of indices or schedule words against a CPU twin is not that assert.
 
 **A kernel-unit cell whose output buffer is its input buffer, and whose CPU oracle does not
 differ from that input by construction, pairs its compare with an assert that the output
@@ -72,6 +74,3 @@ step's error, or how its bar follows from that error, whether or not the bar mov
 **A kernel-unit cell for a kernel that attends inside a restricted horizon - a window, a
 sliding span, a block-diagonal range - writes its CPU oracle to attend strictly inside that
 horizon.** A leak then fails the ordinary compare, so the cell needs no separate leak control.
-
-**A cell whose only compare is bit-identity between two kernel forms also compares one of the
-two against a CPU oracle, in the same cell.** Two forms can be bit-equal and both wrong.

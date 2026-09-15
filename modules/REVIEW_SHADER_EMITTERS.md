@@ -57,23 +57,20 @@ emitter compiles, where that emitter does not handle it, ships, in the same chan
 that emitter's lowering of the declaration or a test showing the emitter rejects the
 declaration by name.** A declaration in that module is available to both emitters.
 
-**A skippable read of a global-rooted array - a module global, a `@workgroup` array, or a
-`self.<member>` resource - in a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` body, or
-in any `def` that body calls, stays skippable: a diff that widens the set of dispatches an
-existing read happens on, or drops the condition that kept it from happening where its index lies
-outside the region this dispatch's own bound defines, is a defect - a read in both arms of an
-`if`, a clamp, and a bare read are the shapes that drop takes.** Both emitters lower a `?:`, `&&`
-or `||` operand so only the taken side runs, so the short-circuit form needs no rewrite.
+**A read of a global-rooted array - a module global, a `@workgroup` array, or a `self.<member>`
+resource - in a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` body, or in any `def`
+that body calls, that a diff adds to the emitted words or text, or makes happen on a dispatch or
+at an index it did not reach before - by widening the set of dispatches it happens on, by
+dropping the condition that kept it inside the region this dispatch's own bound defines (a read
+in both arms of an `if`, a clamp landing outside that region, and a bare read are the shapes that
+drop takes), or by loading a fixed-size block whose only guard is on its store - is in range on
+every dispatch it happens on, or the `ARCHITECTURE*.md` at the root of the module the kernel
+ships in names slack past that range and the read stays inside the slack.** Both emitters lower
+a `?:`, `&&` or `||` operand so only the taken side runs, so the short-circuit form needs no
+rewrite; the device declares no robust buffer access, so an out-of-range read returns undefined
+data, not zero.
 
 **A compile-time gate (`static_if`, `@template_gate`) that keeps a global-rooted-array read out of
 a compiled `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant keeps it out: a diff
 that removes the gate, or widens the constant the gate switches on so the read reaches variants
 it did not reach, is a defect.**
-
-**A read of a global-rooted array that a diff adds to the emitted words or text of a
-`[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` kernel, or that a diff makes happen on a dispatch it did
-not reach before, is in range on every dispatch it happens on, or the `ARCHITECTURE*.md` at the
-root of the module the kernel ships in names slack past that range and the read stays inside the
-slack.** A load that fetches a fixed-size block while only its store is
-guarded reads past the end of the region the store's bound defines; the device declares no robust
-buffer access, so an out-of-range read returns undefined data, not zero.

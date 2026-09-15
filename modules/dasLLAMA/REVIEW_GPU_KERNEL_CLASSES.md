@@ -75,12 +75,11 @@ compiled census key, and that it matches no dispatched one - is a defect.**
 binding a column tile of a wider row would leave the rest of each row outside the tracked
 hazard range.
 
-**A NEW hand-written encode or descriptor-set helper that binds a buffer or a kargs field itself
-is a defect - declare the class so the `[metal_dispatch]` / `[vk_dispatch]` lens generates the
-builder.** A body that only picks, defaults or composes generated builders binds nothing.
-
-**A hand-rolled bind list on a dispatch that serves a user call, in `dasllama/` or
-`performance/`, is a defect: dispatch through the kernel's `enc_*` builder instead.**
+**A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
+diff adds anywhere - a buffer or kargs field bound by literal number instead of through the
+`enc_*` builder the `[metal_dispatch]` / `[vk_dispatch]` lens generates - is a defect, unless the
+PR body states why the builder cannot serve that site.** A body that only picks, defaults or
+composes generated builders binds nothing.
 
 **A value that reaches the kernel twice device-side - a scalar bound both as a uniform buffer
 and as a kargs field - is a defect: bind it once, as a kargs field.** A `params=` value that the

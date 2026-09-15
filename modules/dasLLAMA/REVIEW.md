@@ -143,8 +143,9 @@ apart from the ad-hoc profiling an engine file may not carry.
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
 quantum - one batch of prompt tokens the prefill path processes in a single pass - is reached
 by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]`
-contracts, or `[cold_path]` on its only reaching entry.** An annotation binds every function the
-entry calls; an unreached loop has no contract (`ARCHITECTURE_RUNTIME.md` sec.2.11).
+contracts, or `[cold_path]` on its only reaching entry.** An annotation binds every function
+below the entry that carries no annotation of its own; an unreached loop has no contract
+(`ARCHITECTURE_RUNTIME.md` sec.2.11).
 
 **A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` / `[no_env]` /
 `[no_io]` contract moves that annotation to the new name in the same change** - it is no new entry.
@@ -224,11 +225,10 @@ failed, adding a name to a check's licensed set - the names that check does not 
 check's own finding text does not name the set as its extension point, or re-stamping a pinned
 hash, count or list where that check's own finding text does not sanction the re-stamp; the gate itself says what it enforces.
 
-**A new `REVIEW.das` check, or a check whose licensed set gains a name, ships its line in the
-companion section that owns the mechanism the check guards - an `ARCHITECTURE_*.md` companion,
-never `ARCHITECTURE.md` - in the same change.**
-The line names the check and the names it licenses; when the check licenses no names, the line
-says so.
+**A new `REVIEW.das` check, or a check whose licensed set gains a name, names in its finding text
+the rule it enforces and ships its line in the companion section that owns the mechanism the check
+guards - an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The
+line names the check and the names it licenses; when the check licenses no names, the line says so.
 
 **Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language -
 that describes a mechanism of the reference build, or names that build, its binaries or its
@@ -291,10 +291,10 @@ profile re-runs the tuning the profile was meant to save.
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
 or `var`).** A team lane never runs global initializers, so the global reads zero there.
 
-**A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension (a
-count the model file sets: layers, dim, experts, vocab, positions) is preceded by a `reserve` of
-the same count - a `dasllama/dasllama_common.das` sizing helper that reserves before it grows
+**A buffer in `dasllama/` whose element count scales with a model dimension (a count the model
+file sets: layers, dim, experts, vocab, positions) is declared `@exact_size`, and every `resize`
+of it follows a `reserve` of the same count - a `dasllama/dasllama_common.das` sizing helper
 (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`, `zeroed_resize`), the
 builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled out - whatever the size
-looks like at today's shapes.** Such a count is unbounded, and a bare grow past the heap's
-unreserved-size cap (64 MB) panics the load on the first big model rather than at the call site.
+looks like at today's shapes.** PERF032 holds the pair on an annotated buffer; a bare grow past
+the heap's unreserved-size cap (64 MB) panics the load on the first big model, not at the call site.
