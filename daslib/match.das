@@ -414,10 +414,8 @@ def match_expr(what : TypeDeclPtr; wthmt : ExprCall?; access : Expression?; var 
         return false
     }
     var expr = clone_expression(value)
-    unsafe {
-        expr = apply_template(expr) $(rules) {
-            bind_match_rules(rules, to, access)
-        }
+    expr = apply_template(expr) $(rules) {
+        bind_match_rules(rules, to, access)
     }
     var cond = qmacro($e(access) == $e(expr))
     cond |> force_at(value.at)
@@ -437,10 +435,8 @@ def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var t
     if (match_any(what, wth.left, access, to)) {
         log_m("\tguards {describe(wth.right)} at {wth.right.at}\n")
         var guards = clone_expression(wth.right)
-        unsafe {
-            guards = apply_template(guards) $(rules) {
-                bind_match_rules(rules, to, access)
-            }
+        guards = apply_template(guards) $(rules) {
+            bind_match_rules(rules, to, access)
         }
         to.conditions |> emplace(guards)
         return true
@@ -509,9 +505,7 @@ def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
             cap = qmacro(match_peel_r2v($e(cap)))
             cap |> force_at(tag.at)
         }
-        unsafe {
-            to.declarations[tname] = cap
-        }
+        unsafe(to.declarations[tname]) = cap
         log_m("\tadd variable {tname} as {describe(access)}\n")
         return true
     } else {

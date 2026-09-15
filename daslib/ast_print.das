@@ -1088,10 +1088,8 @@ def allExpr(arg : int) { // nolint:STYLE038 — coverage fixture: one of every e
     goto label 1;
     print("nop");
     label 1:;
-    unsafe {
-        let aacomp = addr(acomp);
-        print("{aacomp}");
-    }
+    let aacomp = unsafe(addr(acomp));
+    print("{aacomp}");
     let eaddr = @@add;
     print("{eaddr}");
     assert(aa == 4, "assert here");
@@ -1109,10 +1107,8 @@ def allExpr(arg : int) { // nolint:STYLE038 — coverage fixture: one of every e
     assert(key_exists(tab, 2));
     let easc = new fixed_array(1, 2, 3, 4);
     print("{easc}");
-    unsafe {
-        let aaf = reinterpret<float>(aa);
-        print("{aaf}");
-    }
+    let aaf = unsafe(reinterpret<float>(aa));
+    print("{aaf}");
     unsafe {
         delete pFoo1;
     }

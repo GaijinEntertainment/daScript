@@ -705,31 +705,25 @@ def private walk_and_convert_dim(data : uint8 const?; info : TypeDeclPtr; at : L
     }
     var mkArr = new ExprMakeArray(at = at, makeType = clone_type(info))
     for (x in range(total)) {
-        unsafe {
-            var elem = walk_and_convert(data + stride * x, einfo, at)
-            emplace(mkArr.values, elem)
-        }
+        var elem = walk_and_convert(unsafe(data + stride * x), einfo, at)
+        emplace(mkArr.values, elem)
     }
     return mkArr
 }
 
 def private walk_and_convert_pointer(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {
-    unsafe {
-        let pdata = *(reinterpret<uint8 const ??>(data))
-        var elem = walk_and_convert(pdata, info.firstType, at)
-        var mkAsc = new ExprAscend(at = at, subexpr = elem)
-        return mkAsc
-    }
+    let pdata = *(unsafe(reinterpret<uint8 const ??>(data)))
+    var elem = walk_and_convert(pdata, info.firstType, at)
+    var mkAsc = new ExprAscend(at = at, subexpr = elem)
+    return mkAsc
 }
 
 def private walk_and_convert_tuple(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {
     var mkArr = new ExprMakeTuple(at = at, recordType = clone_type(info))
     for (idx in range(info.argTypes |> length)) {
         let offset = get_tuple_field_offset(info, idx)
-        unsafe {
-            var elem = walk_and_convert(data + offset, info.argTypes[idx], at)
-            emplace(mkArr.values, elem)
-        }
+        var elem = walk_and_convert(unsafe(data + offset), info.argTypes[idx], at)
+        emplace(mkArr.values, elem)
     }
     return mkArr
 }
@@ -740,15 +734,13 @@ def private walk_and_convert_structure(data : uint8 const?; info : TypeDeclPtr; 
     var mkS = new MakeStruct(uninitialized)
     for (x in stype.fields) {
         if (x.annotation |> find_arg("do_not_convert") is nothing) {
-            unsafe {
-                let fdata = data + x.offset
-                var elem = walk_and_convert(fdata, x._type, at)
-                var mkF = new MakeFieldDecl(at = at, name := x.name, value = elem)
-                if (!x._type.canCopy) {
-                    mkF.flags = MakeFieldDeclFlags.moveSemantics
-                }
-                emplace_new(*mkS, mkF)
+            let fdata = unsafe(data + x.offset)
+            var elem = walk_and_convert(fdata, x._type, at)
+            var mkF = new MakeFieldDecl(at = at, name := x.name, value = elem)
+            if (!x._type.canCopy) {
+                mkF.flags = MakeFieldDeclFlags.moveSemantics
             }
+            emplace_new(*mkS, mkF)
         }
     }
     emplace(mkStruct.structs, mkS)
@@ -873,14 +865,12 @@ def walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : E
     } elif (info.baseType == Type.tArray) {
         return walk_and_convert_array(data, info, at)
     } elif (info.baseType == Type.tPointer) {
-        unsafe {
-            if (*reinterpret<uint8 const ??>(data) == null) {
-                return new ExprConstPtr(at = at)
-            } elif (info.firstType == null || info.firstType.isVoid) {
-                return new ExprConstPtr(at = at)
-            } else {
-                return walk_and_convert_pointer(data, info, at)
-            }
+        if (*(unsafe(reinterpret<uint8 const ??>(data))) == null) {
+            return new ExprConstPtr(at = at)
+        } elif (info.firstType == null || info.firstType.isVoid) {
+            return new ExprConstPtr(at = at)
+        } else {
+            return walk_and_convert_pointer(data, info, at)
         }
     } elif (info.baseType == Type.tStructure) {
         return walk_and_convert_structure(data, info, at)
@@ -944,9 +934,7 @@ def find_annotation(mod_name, ann_name : string) : Annotation const? {
     var ann : Annotation const?
     module_for_each_annotation(mod) $(value) {
         if (value.name == ann_name) {
-            unsafe {
-                ann = addr(value)
-            }
+            ann = unsafe(addr(value))
         }
     }
     return ann
@@ -957,7 +945,7 @@ def append_annotation(mod_name, ann_name : string; args : array< tuple<argname :
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
     var decl = new AnnotationDeclaration(uninitialized)
-    unsafe { decl.annotation = reinterpret<Annotation?>(ann); }
+    decl.annotation = unsafe(reinterpret<Annotation?>(ann))
     for (argP in args) {
         let argName & = argP.argname
         let arg & = argP.argvalue
@@ -981,7 +969,7 @@ def append_annotation(mod_name, ann_name : string) {
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
     var decl = new AnnotationDeclaration(uninitialized)
-    unsafe { decl.annotation = reinterpret<Annotation?>(ann); }
+    decl.annotation = unsafe(reinterpret<Annotation?>(ann))
     return decl
 }
 

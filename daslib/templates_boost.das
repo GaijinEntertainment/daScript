@@ -84,12 +84,7 @@ def replaceVariableWithList(var self : Template; name : string; expr : array<Exp
 
 def replaceVariableWithList(var self : Template; name : string; expr : dasvector`ptr`Expression) {
     //! Adds a rule to the template to replace a variable with an expression list.
-    var vec : array<Expression?>
-    unsafe {
-        for (e in expr) {
-            vec |> push(reinterpret<Expression?>(e))
-        }
-    }
+    var vec <- [for (e in expr); unsafe(reinterpret<Expression?>(e))]
     swap(self.var2exprList[name], vec)
 }
 
@@ -423,10 +418,8 @@ class private TemplateVisitor : AstVisitor {
 
 def visit_expression(var expr : Expression?&; var adapter : VisitorAdapter?) {
     //! Visits the expression with the given visitor adapter.
-    unsafe {
-        var newExpr = expr |> visit(adapter)
-        expr = newExpr
-    }
+    var newExpr = expr |> visit(adapter)
+    expr = newExpr
 }
 
 def apply_template(var rules : Template; at : LineInfo; var expr : Expression?; forceAt : bool = true) : Expression? {
@@ -446,13 +439,11 @@ def apply_template(var rules : Template; at : LineInfo; var expr : Expression?; 
 
 def private visit_type(var typ : TypeDeclPtr&; var adapter : VisitorAdapter?) {
     //! Visits the type declaration with the given visitor adapter.
-    unsafe {
-        var newType <- typ |> visit(adapter)
-        if (typ != newType) {
-            typ := null
-        }
-        typ <- newType
+    var newType <- typ |> visit(adapter)
+    if (typ != newType) {
+        typ := null
     }
+    typ <- newType
 }
 
 [unused_argument(at)]
@@ -734,13 +725,11 @@ class private QRulesVisitor : AstVisitor {
     }
     def visitTD(var typ : TypeDeclPtr&) : void {
         //! Visits type declaration and processes type tags.
-        unsafe {
-            var newTyp <- visitTypeDecl(typ)
-            if (newTyp != typ) {
-                typ := null
-            }
-            typ <- newTyp
+        var newTyp <- visitTypeDecl(typ)
+        if (newTyp != typ) {
+            typ := null
         }
+        typ <- newTyp
     }
     def override visitTypeDecl(var typ : TypeDeclPtr) : TypeDeclPtr {
         //! Visits type declaration and processes type tags.

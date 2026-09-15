@@ -172,9 +172,7 @@ def private writeFunctionLookup(var tw : StringBuilderWriter; usedFunctions : ar
     }
     name_lookup_seal(lookup)
     writeLookupTables(tw, "fn_lookup", lookup)
-    unsafe {
-        name_lookup_destroy(lookup)
-    }
+    unsafe(name_lookup_destroy(lookup))
 }
 
 //! the standalone context's global lookup: the value is the offset InitGlobalVariable assigns at construction -
@@ -196,9 +194,7 @@ def private writeVariableLookup(program : ProgramPtr; var tw : StringBuilderWrit
     }
     name_lookup_seal(lookup)
     writeLookupTables(tw, "var_lookup", lookup)
-    unsafe {
-        name_lookup_destroy(lookup)
-    }
+    unsafe(name_lookup_destroy(lookup))
 }
 
 def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr; lookupVariableTable : array<Variable?>; var context : Context) {   // nolint:STYLE038 - flat emitter - one write per ctor section

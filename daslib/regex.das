@@ -996,15 +996,13 @@ def private re_match2_set(var regex : Regex; var node : ReNode?; str : uint8 con
         print("match2 set {str}\n")
     }
     if (*str == 0u8 || !is_char_in_set(int(*str), node.cset)) return null
-    unsafe {
-        var tail = str + 1
-        node.tail = tail
-        var node2 = node.next
-        if (node2 != null) {
-            return invoke(node2.fun2, regex, node2, tail)
-        } else {
-            return tail
-        }
+    var tail = unsafe(str + 1)
+    node.tail = tail
+    var node2 = node.next
+    if (node2 != null) {
+        return invoke(node2.fun2, regex, node2, tail)
+    } else {
+        return tail
     }
 }
 
@@ -1014,15 +1012,13 @@ def private re_match2_any(var regex : Regex; var node : ReNode?; str : uint8 con
         print("match2 any {str}\n")
     }
     if (*str == 0u8 || (!regex.dotAll && int(*str) == '\n')) return null
-    unsafe {
-        var tail = str + 1
-        node.tail = tail
-        var node2 = node.next
-        if (node2 != null) {
-            return invoke(node2.fun2, regex, node2, tail)
-        } else {
-            return tail
-        }
+    var tail = unsafe(str + 1)
+    node.tail = tail
+    var node2 = node.next
+    if (node2 != null) {
+        return invoke(node2.fun2, regex, node2, tail)
+    } else {
+        return tail
     }
 }
 
@@ -1193,20 +1189,18 @@ def private re_match2_word_boundary(var regex : Regex; var node : ReNode?; str :
     if (log_match_enabled) {
         print("match word_boundary {str}\n")
     }
-    unsafe {
-        var prev_is_word = false
-        if (str != regex.match) {
-            prev_is_word = is_word_character(int(*(str + (-1))))
-        }
-        let curr_is_word = (*str != 0u8) && is_word_character(int(*str))
-        if (prev_is_word == curr_is_word) return null
-        node.tail = str
-        var node2 = node.next
-        if (node2 != null) {
-            return invoke(node2.fun2, regex, node2, str)
-        } else {
-            return str
-        }
+    var prev_is_word = false
+    if (str != regex.match) {
+        prev_is_word = is_word_character(int(*(unsafe(str + (-1)))))
+    }
+    let curr_is_word = (*str != 0u8) && is_word_character(int(*str))
+    if (prev_is_word == curr_is_word) return null
+    node.tail = str
+    var node2 = node.next
+    if (node2 != null) {
+        return invoke(node2.fun2, regex, node2, str)
+    } else {
+        return str
     }
 }
 
@@ -1215,20 +1209,18 @@ def private re_match2_non_word_boundary(var regex : Regex; var node : ReNode?; s
     if (log_match_enabled) {
         print("match non_word_boundary {str}\n")
     }
-    unsafe {
-        var prev_is_word = false
-        if (str != regex.match) {
-            prev_is_word = is_word_character(int(*(str + (-1))))
-        }
-        let curr_is_word = (*str != 0u8) && is_word_character(int(*str))
-        if (prev_is_word != curr_is_word) return null
-        node.tail = str
-        var node2 = node.next
-        if (node2 != null) {
-            return invoke(node2.fun2, regex, node2, str)
-        } else {
-            return str
-        }
+    var prev_is_word = false
+    if (str != regex.match) {
+        prev_is_word = is_word_character(int(*(unsafe(str + (-1)))))
+    }
+    let curr_is_word = (*str != 0u8) && is_word_character(int(*str))
+    if (prev_is_word != curr_is_word) return null
+    node.tail = str
+    var node2 = node.next
+    if (node2 != null) {
+        return invoke(node2.fun2, regex, node2, str)
+    } else {
+        return str
     }
 }
 

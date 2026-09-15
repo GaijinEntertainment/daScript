@@ -89,10 +89,8 @@ class ConstantExpressionMacro : AstFunctionAnnotation {
         if (expr.func.fromGeneric != null) {
             func_copy.body := null
             func_copy.result := null
-            unsafe {
-                func_copy.body = clone_expression(expr.func.fromGeneric.body)
-                func_copy.result = clone_type(expr.func.fromGeneric.result)
-            }
+            func_copy.body = clone_expression(expr.func.fromGeneric.body)
+            func_copy.result = clone_type(expr.func.fromGeneric.result)
         }
 
         apply_template(func_copy.body) $(rules) {
