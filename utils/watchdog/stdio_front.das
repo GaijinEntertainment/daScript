@@ -127,6 +127,8 @@ class public StdioFront {
         command <- child_command(cfg)
         sin = fstdin()
         sout = fstdout()
+        fbinary(sin)
+        fbinary(sout)
     }
 
     def finalize() {

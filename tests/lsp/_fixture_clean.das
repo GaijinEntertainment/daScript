@@ -13,6 +13,12 @@ class LspProbeDerived : LspProbeBase {
     def override probe_speak() : string => "derived"
 }
 
+class LspProbeFinal : LspProbeBase {
+    def finalize() {
+        print("final\n")
+    }
+}
+
 def lsp_probe_helper() {
     print("probe\n")
 }
@@ -22,4 +28,6 @@ def main() {
     lsp_probe_helper()
     var d = new LspProbeDerived()
     print("{d->probe_speak()}\n")
+    var f = new LspProbeFinal()
+    print("{f->probe_speak()}\n")
 }

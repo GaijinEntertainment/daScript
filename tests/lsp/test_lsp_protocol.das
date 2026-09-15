@@ -103,6 +103,23 @@ struct CursorRequestMsg {
     params : CursorParams
 }
 
+struct ReferenceContext {
+    includeDeclaration : bool
+}
+
+struct ReferencesParams {
+    textDocument : DocId
+    position : Position0
+    context : ReferenceContext
+}
+
+struct ReferencesMsg {
+    jsonrpc : string = "2.0"
+    id : int
+    method : string = "textDocument/references"
+    params : ReferencesParams
+}
+
 // call-hierarchy item as the client echoes it back: the server only reads
 // `data`, so the round-trip envelope carries just that
 struct HierItemData {
@@ -265,6 +282,14 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     var base_speak_char = -1
     var derived_speak_line0 = -1
     var derived_speak_char = -1
+    var base_line0 = -1
+    var derived_line0 = -1
+    var derived_parent_char = -1
+    var final_line0 = -1
+    var final_parent_char = -1
+    var finalize_line0 = -1
+    var new_final_line0 = -1
+    var new_final_char = -1
     var clean_lines <- split(clean, "\n")
     for (i in range(length(clean_lines))) {
         if (clean_lines[i] |> starts_with("def lsp_probe_helper")) {
@@ -277,12 +302,26 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
         } elif (clean_lines[i] |> starts_with("    def override probe_speak")) {
             derived_speak_line0 = i
             derived_speak_char = find(clean_lines[i], "probe_speak")
+        } elif (clean_lines[i] |> starts_with("class LspProbeBase")) {
+            base_line0 = i
+        } elif (clean_lines[i] |> starts_with("class LspProbeDerived")) {
+            derived_line0 = i
+            derived_parent_char = find(clean_lines[i], "LspProbeBase")
+        } elif (clean_lines[i] |> starts_with("class LspProbeFinal")) {
+            final_line0 = i
+            final_parent_char = find(clean_lines[i], "LspProbeBase")
+        } elif (clean_lines[i] |> starts_with("    def finalize")) {
+            finalize_line0 = i
+        } elif (clean_lines[i] |> starts_with("    var f = new LspProbeFinal")) {
+            new_final_line0 = i
+            new_final_char = find(clean_lines[i], "LspProbeFinal")
         }
     }
     delete clean_lines
     t |> success(def_line0 >= 0 && call_line0 >= 0, "fixture contains helper def and call")
     t |> success(base_speak_line0 >= 0 && derived_speak_line0 >= 0, "fixture contains probe_speak base and override")
-    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0)
+    t |> success(base_line0 >= 0 && derived_line0 >= 0 && final_line0 >= 0 && finalize_line0 >= 0 && new_final_line0 >= 0, "fixture contains the class with a user finalizer and its new site")
+    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0)
     let uri = path_to_uri(fixture)
 
     for (host in front_hosts()) {
@@ -435,6 +474,81 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 t |> equal(uri_for_compare(impl0?["uri"] ?? ""), uri_for_compare(uri))
                 t |> equal(impl0?["range"]?["start"]?["line"] ?? -1, derived_speak_line0)
                 t |> equal(impl0?["range"]?["start"]?["character"] ?? -1, derived_speak_char)
+
+                // a class name is a declaration, not an expression: hover names the class, never
+                // the synthesized finalizer that shares its line; the parent's name on that line
+                // hovers and navigates as the parent; a user-written finalizer hovers as itself
+                write_frame(w, sprint_json(CursorRequestMsg(id = 8, method = "textDocument/hover",
+                    params = CursorParams(textDocument = DocId(uri = uri),
+                        position = Position0(line = final_line0, character = 8))), false))
+                let hover_class = read_until(t, r) $(js) => (js?["id"] ?? -1) == 8
+                let class_text = hover_class?["result"]?["contents"]?["value"] ?? ""
+                t |> success(class_text |> find("class LspProbeFinal : LspProbeBase") >= 0, "hover on a class name shows the class: {class_text}")
+                t |> success(class_text |> find("__finalize") < 0, "hover on a class name is not the synthesized finalizer: {class_text}")
+                t |> equal(hover_class?["result"]?["range"]?["start"]?["line"] ?? -1, final_line0)
+                t |> equal(hover_class?["result"]?["range"]?["start"]?["character"] ?? -1, 6)
+
+                write_frame(w, sprint_json(CursorRequestMsg(id = 9, method = "textDocument/hover",
+                    params = CursorParams(textDocument = DocId(uri = uri),
+                        position = Position0(line = final_line0, character = final_parent_char + 2))), false))
+                let hover_parent = read_until(t, r) $(js) => (js?["id"] ?? -1) == 9
+                let parent_text = hover_parent?["result"]?["contents"]?["value"] ?? ""
+                t |> success(parent_text |> find("class LspProbeBase") >= 0, "hover on the parent name shows the parent: {parent_text}")
+                t |> equal(hover_parent?["result"]?["range"]?["start"]?["character"] ?? -1, final_parent_char)
+
+                write_frame(w, sprint_json(DefinitionMsg(id = 10, params = CursorParams(
+                    textDocument = DocId(uri = uri),
+                    position = Position0(line = final_line0, character = final_parent_char + 2))), false))
+                let parent_def = read_until(t, r) $(js) => (js?["id"] ?? -1) == 10
+                let parent_loc = parent_def?["result"]?[0]
+                t |> equal(parent_loc?["range"]?["start"]?["line"] ?? -1, base_line0)
+                t |> equal(parent_loc?["range"]?["start"]?["character"] ?? -1, 6)
+
+                write_frame(w, sprint_json(CursorRequestMsg(id = 11, method = "textDocument/hover",
+                    params = CursorParams(textDocument = DocId(uri = uri),
+                        position = Position0(line = finalize_line0, character = 10))), false))
+                let hover_final = read_until(t, r) $(js) => (js?["id"] ?? -1) == 11
+                let final_text = hover_final?["result"]?["contents"]?["value"] ?? ""
+                t |> success(final_text |> find("def finalize(self : LspProbeFinal") >= 0, "hover on a user finalizer shows it: {final_text}")
+                t |> success(final_text |> find("__finalize") < 0, "hover on a user finalizer is not the synthesized one: {final_text}")
+                t |> equal(hover_final?["result"]?["range"]?["start"]?["character"] ?? -1, 8)
+
+                // references to the class: its declaration once and its `new` site, nothing
+                // from the members the compiler generated on the class line
+                write_frame(w, sprint_json(ReferencesMsg(id = 12, params = ReferencesParams(
+                    textDocument = DocId(uri = uri),
+                    position = Position0(line = final_line0, character = 8),
+                    context = ReferenceContext(includeDeclaration = true))), false))
+                let refs_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 12
+                var ref_keys : array<string>
+                let refs_arr = refs_resp?["result"]
+                if (refs_arr != null && refs_arr.value is _array) {
+                    for (loc in refs_arr.value as _array) {
+                        ref_keys |> push("{loc?["range"]?["start"]?["line"] ?? -1}:{loc?["range"]?["start"]?["character"] ?? -1}")
+                    }
+                }
+                t |> equal(length(ref_keys), 2, "references to a class: declaration + new site, got {ref_keys}")
+                t |> success(ref_keys |> find_index("{final_line0}:6") >= 0, "references include the declaration once")
+                t |> success(ref_keys |> find_index("{new_final_line0}:{new_final_char}") >= 0, "references include the new site")
+
+                // references to the base class: its declaration and the parent mention on each
+                // derived class line; the implicit `self` of its method is not a site
+                write_frame(w, sprint_json(ReferencesMsg(id = 13, params = ReferencesParams(
+                    textDocument = DocId(uri = uri),
+                    position = Position0(line = base_line0, character = 8),
+                    context = ReferenceContext(includeDeclaration = true))), false))
+                let base_refs = read_until(t, r) $(js) => (js?["id"] ?? -1) == 13
+                var base_keys : array<string>
+                let base_arr = base_refs?["result"]
+                if (base_arr != null && base_arr.value is _array) {
+                    for (loc in base_arr.value as _array) {
+                        base_keys |> push("{loc?["range"]?["start"]?["line"] ?? -1}:{loc?["range"]?["start"]?["character"] ?? -1}")
+                    }
+                }
+                t |> equal(length(base_keys), 3, "references to a base class: declaration + two derived-class lines, got {base_keys}")
+                t |> success(base_keys |> find_index("{base_line0}:6") >= 0, "base references include the declaration")
+                t |> success(base_keys |> find_index("{derived_line0}:{derived_parent_char}") >= 0, "base references include the first derived class line")
+                t |> success(base_keys |> find_index("{final_line0}:{final_parent_char}") >= 0, "base references include the second derived class line")
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))

@@ -36,7 +36,12 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   verbatim). Class-method Function names are class-prefixed
   (``Animal`speak``) - items display the bare name, `data.name` keeps the full
   one. Generated members (`Foo'__finalize`, apostrophe names) sit ON the
-  `class` source line - both cursor paths skip synthesized functions.
+  `class` source line, so every cursor op resolves a declaration first: the name token
+  under the cursor matched against the functions, structures (and the parent named on
+  a `class` line), enums, aliases and globals declared on that line, before any expression
+  hit; expression hits inside synthesized members are skipped. References to a type are
+  listed only where the source spells its name (the implicit `self` of a method is not a
+  site), and a derived class is a reference to its parent.
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
   crash isolation). Same rationale as the MCP subtool pattern.
 - **Every subtool compile sets `cop.module_cache = true`** - the default module cache

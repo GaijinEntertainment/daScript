@@ -860,7 +860,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 |---|---|---|
 | _fixture_clean.das | *(helper)* the clean disk file the protocol test opens with broken buffer text | |
 | test_lsp_project_root.das | the validate subtool under -project_root sees a project's own descriptors | |
-| test_lsp_protocol.das | the LSP front over a stdio pipe, through the interpreter host and the static exe - handshake, overlay diagnostics, navigation, shutdown; every frame header byte-exact CRLF (a text-mode stdout on Windows writes `\r\r\n`) | |
+| test_lsp_protocol.das | the LSP front over a stdio pipe, through the interpreter host and the static exe - handshake, overlay diagnostics, navigation, shutdown; every frame header byte-exact CRLF (a text-mode stdout on Windows writes `\r\r\n`); a cursor on a class name, on the parent named on its line, and on a user-written `finalize` resolves the declaration, never the synthesized finalizer sharing the class line; references to a class are its declaration, its `new` sites and its derived classes, without the implicit `self` of its methods | |
 
 ## match/
 
