@@ -173,7 +173,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
     r.cmd = alloc_cmd()
-    r.cmd_short = alloc_cmd()
+    r.cmd_unsplit = alloc_cmd()
     return true
 }
 
@@ -448,7 +448,6 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the routing class rails declined on this device\n")
         return false
     }
-    //! the routing planes gpt-oss adds: the router bias [n_moe x ne], the gate and up biases [n_moe x ne x nfe], the down biases [n_moe x ne x dim]; the filler where a model has none
     r.moe_rb_dev = r.dummy
     r.moe_rb_bytes = 256l
     if (r.router_bias) {
@@ -460,8 +459,6 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     r.moe_gb_dev = r.dummy
     r.moe_ub_dev = r.dummy
     r.moe_gb_bytes = 256l
-    //! the down-bias plane a biasless model binds is a ZERO ROW of the model dim: the combine reads it flat at row base 0
-    //! (d + 0), so its column loop carries no branch a load has to wait behind
     r.moe_db_bytes = dim * 4l
     r.moe_db_dev = make_device_buf(r.moe_db_bytes)
     var zrow : array<float>
@@ -817,8 +814,6 @@ def vk_rdec_upload_bias(rows : array<float>) {
     g_rd.has_bias = true
 }
 
-//! The per-head attention sink logits, every layer's [n_heads] row in layer order; false = no flash arm serves the
-//! window chain on this device (the sink rides the flash tiles and the token command's pass alone, never the chunked pair)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes")]
 def vk_rdec_upload_sinks(rows : array<float>) : bool {
     if (g_gpu != null && g_gpu.dry) {
@@ -829,7 +824,6 @@ def vk_rdec_upload_sinks(rows : array<float>) : bool {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: attention sinks ride the flash tiles at head size 64 - no cm2 or KHR flash arm on the f16 mirrors here, the resident driver declines\n")
         return false
     }
-    //! the sink stamps pre-flight here, the way the prepare pre-flights the plain ones: a declined kernel declines residency before the upload
     let khr = !cm2_fa_on()
     let stamps_ok = (fa_stamp_pair_ensure(khr, 64l, false, false, true, true)
         && (g_rd.kv16 ? ensure_da_attn_f16_sink_cls() : ensure_da_attn_sink_cls())
@@ -1054,16 +1048,16 @@ def private rd_record_token {
             fill_gemv_regions(L.m_pp, L.bpp)
         }
     }
-    g_rd.short_on = false
-    if (g_rd.attn_nsplit > 1l) {   //! the unsplit twin for the positions under RD_UNSPLIT_POS: the same sets, the pass storing the row itself, no combine
+    g_rd.unsplit_on = false
+    if (g_rd.attn_nsplit > 1l) {
         let ns = g_rd.attn_nsplit
         g_rd.attn_nsplit = 1l
-        rd_encode_token(g_rd.cmd_short)
+        rd_encode_token(g_rd.cmd_unsplit)
         g_rd.attn_nsplit = ns
-        delete g_rdq_names_short
-        g_rdq_names_short <- g_rdq_stamp_names
-        g_rdq_n_short = g_rdq_n
-        g_rd.short_on = true
+        delete g_rdq_names_unsplit
+        g_rdq_names_unsplit <- g_rdq_stamp_names
+        g_rdq_n_unsplit = g_rdq_n
+        g_rd.unsplit_on = true
     }
     rd_encode_token(g_rd.cmd)
 }
@@ -1393,11 +1387,11 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let dim = g_rd.dim
     let hid = L.hid
     let pfx = rd_ffn_pfx(L)
-    let gelu = L.gelu ? 1u : 0u
-    var pc_act = ActArgs(nelem = uint(hid), gelu = gelu, nblk = uint(hid / 32l))
-    var pc_act_k = ActArgs(nelem = uint(hid), gelu = gelu, nblk = uint(hid / 256l))
+    let gelu = L.gelu ? ACT_GELU : ACT_SILU
+    var pc_act = ActArgs(nelem = uint(hid), act = gelu, nblk = uint(hid / 32l))
+    var pc_act_k = ActArgs(nelem = uint(hid), act = gelu, nblk = uint(hid / 256l))
     if (L.gu_on) {
-        var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), gelu = gelu)
+        var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = gelu)
         enc_q8_gemv_gu_cls(raw, h, L.s_gu, pcgu, hid / 32l)
         rd_ts(raw, L.moe ? "m:sh_gu" : "{pfx}gu")
     } else {
@@ -1439,12 +1433,12 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     gemv_enc(L.fpg, raw, h, L.s_ple_gate, pcg, ple)
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
-        var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), gelu = 1u)
+        var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), act = ACT_GELU)
         enc_q8_gemv_pleact_cls(raw, h, L.s_ple_pa, pcf, rd_ar_wgs(dim))
         rd_ts(raw, "p:actproj")
         return
     }
-    var pca = ActArgs(nelem = uint(ple), gelu = 1u, nblk = uint(ple / 32l), ubase = uint(l * ple))
+    var pca = ActArgs(nelem = uint(ple), act = ACT_GELU, nblk = uint(ple / 32l), ubase = uint(l * ple))
     enc_q8_actrq_cls(raw, h, L.s_ple_act, pca, (ple / 4l + 255l) / 256l)
     rd_ts(raw, "p:act")
     var pcp = GemvArgs(n = uint(ple), d = uint(dim), nreg = 1u, ybase = 0u)
@@ -1497,11 +1491,11 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(k), ybase = 0u)
     if (L.egu) {
         pcg.lanes_per_row = gemv_lanes_per_row(L.fe1, dim)
-        pcg.gelu = g_rd.is_gelu ? 1u : 0u
+        pcg.act = g_rd.is_gelu ? ACT_GELU : ACT_SILU
         enc_kq_gemv_k4_gu_cls(raw, h, L.s_egu, pcg, k * nfe / 32l)
         rd_ts(raw, "m:e_gu")
     } elif (L.egu_mx4) {
-        pcg.gelu = act_code(g_rd.act_oai, g_rd.is_gelu)
+        pcg.act = act_code(g_rd.act_oai, g_rd.is_gelu)
         pcg.bias_on = g_rd.exps_bias ? 1u : 0u
         pcg.gboff = uint(L.router_slot * g_rd.ne * nfe)
         pcg.uboff = uint(L.router_slot * g_rd.ne * nfe)
@@ -1513,10 +1507,10 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         gemv_enc(L.fe3, raw, h, L.s_eup, pcg, k * nfe)
         rd_ts(raw, "m:e_up")
         let dkq = kq_sb(L.fe2)
-        var pca = ActArgs(nelem = uint(k * nfe), gelu = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(k * nfe / (dkq ? 256l : 32l)),
+        var pca = ActArgs(nelem = uint(k * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(k * nfe / (dkq ? 256l : 32l)),
             bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * g_rd.ne * nfe), uboff = uint(L.router_slot * g_rd.ne * nfe), brow = uint(nfe))
         let awgs = (k * nfe / (dkq ? 8l : 4l) + 255l) / 256l
-        if (g_rd.exps_bias) {   //! the biased twin rides the Q8_0 form: an mx4 (gpt-oss) down plane takes Q8_0 activations
+        if (g_rd.exps_bias) {
             verify(!dkq, "vk decode: biased expert stacks feed a Q8_K down plane - the biased act has no Q8_K twin")
             enc_q8_actrq_b_cls(raw, h, L.s_eact, pca, awgs)
         } elif (dkq) {
@@ -1810,9 +1804,9 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     }
     let ts0 = ref_time_ticks()
     let prof = vk_prof()
-    let short = g_rd.short_on && pos < RD_UNSPLIT_POS
-    var cmd = short ? g_rd.cmd_short : g_rd.cmd
-    if (short) {
+    let unsplit = g_rd.unsplit_on && pos < RD_UNSPLIT_POS
+    var cmd = unsplit ? g_rd.cmd_unsplit : g_rd.cmd
+    if (unsplit) {
         g_rd.unsplit_served++
     }
     unsafe {
@@ -1867,10 +1861,10 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             }
         }
     }
-    if (prof) {   //! the ledger reads the submitted command's stamps
-        if (short && g_rdq_n_short > 2u) {
-            rdq_sample(g_rdq_names_short, g_rdq_n_short)
-        } elif (!short && g_rdq_n > 2u) {
+    if (prof) {
+        if (unsplit && g_rdq_n_unsplit > 2u) {
+            rdq_sample(g_rdq_names_unsplit, g_rdq_n_unsplit)
+        } elif (!unsplit && g_rdq_n > 2u) {
             rdq_sample(g_rdq_stamp_names, g_rdq_n)
         }
     }
@@ -2276,7 +2270,7 @@ def private ffn_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var fc : FfnCmd;
     gemv_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, nrows * nfe)
     gemv_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, nrows * nfe)
     let down_is_kq = !kq_block32(g_gpu.stacks[s2].fmt)
-    var pca = ActArgs(nelem = uint(nrows * nfe), gelu = is_gelu ? 1u : 0u,
+    var pca = ActArgs(nelem = uint(nrows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU,
         nblk = uint(nrows * nfe / (down_is_kq ? 256l : 32l)))
     let awgs = (nrows * nfe / (down_is_kq ? 8l : 4l) + 255l) / 256l
     if (down_is_kq) {

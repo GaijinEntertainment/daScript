@@ -1134,7 +1134,7 @@ def test_vkd_actf16_base(t0 : T?) {
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw, begin), null)
                     var h : VkHaz
-                    var pc = ActArgs(nelem = uint(nelem), gelu = 1u, nblk = 0u, elem0 = arm == 0 ? 0u : uint(nelem))
+                    var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u, elem0 = arm == 0 ? 0u : uint(nelem))
                     enc_actf16_cls(raw, h, sc, pc, int64((nelem / 4 + 255) / 256))
                     vhz_dep(raw, h, 4u, 0u, true)
                     cmd_copy_whole(raw, hd, host.buf, h_bytes)
@@ -1310,7 +1310,7 @@ def private act_mul_ref(v, u : float; gelu : bool) : float {
         : (v / (1.0 + exp(-v))) * u)
 }
 
-//! the same over the kernels' act code: ACT_OAI is gpt-oss's clamped swiglu, x = min(v, 7), y = clamp(u, -7, 7), (x sigmoid(1.702 x)) (y + 1)
+//! the same over the kernels' act code (ACT_OAI = gpt-oss's clamped swiglu)
 def private act_mul_ref(v, u : float; act : uint) : float {
     if (act == ACT_OAI) {
         let x = min(v, 7.0)
@@ -1332,7 +1332,7 @@ def private pack4_ref(v0, v1, v2, v3, id : float) : uint {
 // Q8_0 / Q8_K quantize of act(gate)*up rows: sequential amax (max is order-free), linear pack
 def private actrq_oracle(gh, uh : array<float>; nelem : int; q8k, gelu : bool;
                          var outq : array<uint>; var outs : array<float>) {
-    actrq_oracle(gh, uh, nelem, q8k, gelu ? 1u : 0u, outq, outs)
+    actrq_oracle(gh, uh, nelem, q8k, gelu ? ACT_GELU : ACT_SILU, outq, outs)
 }
 
 //! the same over the kernels' act code
@@ -1689,7 +1689,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
-                    var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row, gelu = 1u)
+                    var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row, act = ACT_GELU)
                     enc_kq_gemv_k4_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
                     vhz_dep(raw2, h2, 32u | 128u, 0u, true)
                     cmd_copy_whole(raw2, oqd, host.buf, oq_bytes)
@@ -1746,7 +1746,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                         var pc2 = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = 16u)
                         enc_kq_gemv_k4_cls(raw3, h3, s_g, pc2, gemv_wgs(int64(rows), 16u))
                         enc_kq_gemv_k4_cls(raw3, h3, s_u, pc2, gemv_wgs(int64(rows), 16u))
-                        var pca = ActArgs(nelem = uint(rows), gelu = 1u, nblk = uint(nblk))
+                        var pca = ActArgs(nelem = uint(rows), act = ACT_GELU, nblk = uint(nblk))
                         enc_q8_actrq_cls(raw3, h3, s_a, pca, (int64(rows) / 4l + 255l) / 256l)
                         vhz_dep(raw3, h3, 512u, 0u, true)
                         cmd_copy_whole(raw3, oq2d, host.buf, oq_bytes)
@@ -1842,7 +1842,7 @@ def test_vkd_act_family(t0 : T?) {
                     let begin = VkCommandBufferBeginInfo()
                     vk_check(vkBeginCommandBuffer(raw2, begin), null)
                     var h2 : VkHaz
-                    var pc = ActArgs(nelem = uint(nelem), gelu = 0u, nblk = uint(nblk))
+                    var pc = ActArgs(nelem = uint(nelem), act = ACT_SILU, nblk = uint(nblk))
                     if (q8k) {
                         enc_q8k_actrq_cls(raw2, h2, sc, pc, wgs)
                     } else {
@@ -1910,7 +1910,7 @@ def test_vkd_act_family(t0 : T?) {
                 q_cls |> resize(nb / 4)
                 s_cls |> resize(nb / 32)
                 h_cls |> resize(nb / 2)
-                var pc = ActArgs(nelem = uint(nb), gelu = ACT_OAI, nblk = uint(nb / 32), bias_on = 1u, gboff = 0u, uboff = 0u, brow = uint(brow))
+                var pc = ActArgs(nelem = uint(nb), act = ACT_OAI, nblk = uint(nb / 32), bias_on = 1u, gboff = 0u, uboff = 0u, brow = uint(brow))
                 unsafe {
                     upload_region_at(gbd, 0l, addr<uint8 const?>(gb[0]), b_bytes)
                     upload_region_at(ubd, 0l, addr<uint8 const?>(ub[0]), b_bytes)
@@ -4277,7 +4277,7 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm l
                 let begin = VkCommandBufferBeginInfo()
                 vk_check(vkBeginCommandBuffer(raw2, begin), null)
                 var h2 : VkHaz
-                var pcv = ActArgs(nelem = uint(kpad * kvd), gelu = 0u, nblk = 0u)
+                var pcv = ActArgs(nelem = uint(kpad * kvd), act = ACT_SILU, nblk = 0u)
                 let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
                 enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
                 enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
@@ -4286,7 +4286,7 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm l
                 enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pcf, nheads, rows)
                 enc_fa_tile(khr, hs, false, false, sink, true, raw2, h2, sfa16, pcf, nheads, rows)
                 // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
-                var pcy = ActArgs(nelem = uint(rows * qd), gelu = 0u, nblk = 0u)
+                var pcy = ActArgs(nelem = uint(rows * qd), act = ACT_SILU, nblk = 0u)
                 enc_f16cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
                 vhz_dep(raw2, h2, 4u | 64u | 128u, 0u, true)
                 cmd_copy_whole(raw2, yd, host.buf, q_bytes)
@@ -4468,7 +4468,7 @@ def private fa_h256_gated_run(nheads, kv_mul, rows, w0 : int) : tuple<bad : int;
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)
             var h2 : VkHaz
-            var pcv = ActArgs(nelem = uint(kpos * kvd), gelu = 0u, nblk = 0u)
+            var pcv = ActArgs(nelem = uint(kpos * kvd), act = ACT_SILU, nblk = 0u)
             let cvtwgs = int64((kpos * kvd / 4 + 255) / 256)
             enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
             enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
@@ -4609,7 +4609,7 @@ def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float; khr
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)
             var h2 : VkHaz
-            var pcv = ActArgs(nelem = uint(kpad * kvd), gelu = 0u, nblk = 0u)
+            var pcv = ActArgs(nelem = uint(kpad * kvd), act = ACT_SILU, nblk = 0u)
             let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
             enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
             enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
@@ -5486,8 +5486,7 @@ def test_vkd_q51_gemv(t0 : T?) {
     }
 }
 
-//! the mx4 GEMV cell's oracle: `dot_mx4q8_scalar`'s float order over the plane words - per block isum = sum w * a with
-//! w the doubled e2m1 magnitude (byte j: element j low, j + 16 high), f += isum * e8m0_half(scale byte) * xs
+//! the mx4 GEMV cell's oracle: `dot_mx4q8_scalar`'s float order over the plane words (byte j: element j low, j + 16 high)
 def private mx4_gemv_row_oracle(wq, wsb, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
     var f = 0.0
     for (b in range(nb)) {
@@ -5710,7 +5709,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {   // nolint:ST
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)
             var h2 : VkHaz
-            var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u, gelu = act, bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u)
+            var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u, act = act, bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u)
             enc_mx4_gemv_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
             //! the split path on the same planes: the two GEMVs, then the (biased) act + requant
             var s_g = gemv_cls_set(int(KqFmt.mx4), fixed_array(wqd, wsd, rgd, xqd, xsd, yud), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 4u, 8u, 16u, 256u))
@@ -5720,7 +5719,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {   // nolint:ST
             var pc2 = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u)
             gemv_enc(int(KqFmt.mx4), raw2, h2, s_g, pc2, int64(rows))
             gemv_enc(int(KqFmt.mx4), raw2, h2, s_u, pc2, int64(rows))
-            var pca = ActArgs(nelem = uint(rows), gelu = act, nblk = uint(nblk), bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u, brow = uint(d))
+            var pca = ActArgs(nelem = uint(rows), act = act, nblk = uint(nblk), bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u, brow = uint(d))
             if (bias) {
                 var s_a = set_q8_actrq_b_cls(fixed_array(yud, yu2d, oq2d, os2d, gbd, ubd, rexd),
                     fixed_array(y_bytes, y_bytes, oq_bytes, os_bytes, b_bytes, b_bytes, rg_bytes), fixed_array(256u, 1024u, 512u, 512u, 0u, 0u, 64u))
@@ -5905,7 +5904,7 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
         var h2 : VkHaz
-        var pc = GuArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, gelu = gelu ? 1u : 0u)
+        var pc = GuArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = gelu ? ACT_GELU : ACT_SILU)
         enc_q8_gemv_gu_cls(raw2, h2, s_cls, pc, int64(nblk_out))
         vhz_dep(raw2, h2, 64u, 0u, true)
         cmd_copy_whole(raw2, oqd, host.buf, oq_bytes)
@@ -6039,7 +6038,7 @@ def private q8_gemv_pleact_run(t; n, d : int) {
         let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
         var h2 : VkHaz
-        var pc = PleActArgs(n = uint(n), d = uint(d), wblk = 0u, ubase = uint(n), gelu = 1u)
+        var pc = PleActArgs(n = uint(n), d = uint(d), wblk = 0u, ubase = uint(n), act = ACT_GELU)
         let rpw = 4l * g_gpu.rows_per_wg
         enc_q8_gemv_pleact_cls(raw2, h2, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
         vhz_dep(raw2, h2, 16u, 0u, true)
@@ -6535,12 +6534,12 @@ def test_vkd_cvt_family(t0 : T?) {
                         if (arm == 1) {
                             sc = set_actf16_cls(fixed_array(gd, ud, hd2),
                                 fixed_array(g_bytes, g_bytes, h_bytes), fixed_array(1u, 2u, 4u))
-                            var pc = ActArgs(nelem = uint(nelem), gelu = 1u, nblk = 0u)
+                            var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u)
                             enc_actf16_cls(raw2, h2, sc, pc, int64(wgs))
                         } else {
                             sc = set_f16cvt_cls(fixed_array(ud, hd2),
                                 fixed_array(g_bytes, h_bytes), fixed_array(1u, 4u))
-                            var pc = ActArgs(nelem = uint(nelem), gelu = 0u, nblk = 0u)
+                            var pc = ActArgs(nelem = uint(nelem), act = ACT_SILU, nblk = 0u)
                             enc_f16cvt_cls(raw2, h2, sc, pc, int64(wgs))
                         }
                         vhz_dep(raw2, h2, 4u, 0u, true)
@@ -9242,7 +9241,7 @@ def test_vkd_ar_f16_fused(t0 : T?) {
                 var h : VkHaz
                 var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
                 enc_cls_ar(raw, h, sca, pca, int64(nrows))
-                var pcc = ActArgs(nelem = uint(nrows * dim), gelu = 0u, nblk = 0u)
+                var pcc = ActArgs(nelem = uint(nrows * dim), act = ACT_SILU, nblk = 0u)
                 enc_f16cvt_cls(raw, h, scc, pcc, int64((nrows * dim / 4 + 255) / 256))
                 enc_cls_ar_f16_b(raw, h, scf, pca, int64(nrows))
                 vhz_dep(raw, h, 8u | 32u | 16u | 1u, 0u, true)
@@ -9517,8 +9516,7 @@ def private moe_router_arm(t : T?; ner : int) {
 }
 
 //! the per-row select against moe_select_core over the same rows: norm on with no scale, norm off with a scale
-//! `gate` and `rbias` are the CPU select's own form (gpt-oss: softmax_weight, a router bias before the pick); the kernel emulates the
-//! softmax-weight gate with its renormalized softmax, since softmax over the picks equals the softmax over all experts renormalized over them
+//! `gate` and `rbias` are the CPU select's own form (gpt-oss: softmax_weight, a router bias before the pick), which the kernel serves on its renormalized-softmax arm
 def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGate; rbias : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var lh : array<float>

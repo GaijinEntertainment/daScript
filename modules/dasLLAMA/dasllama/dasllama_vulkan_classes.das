@@ -183,7 +183,6 @@ class ArBase : RmsWgBase {
         return ss
     }
 
-    //! the normed row's column `k` off the stash; the leaves store four a round, every norm weight loaded before the first store
     def normed(k : uint; inv : float) : float => wn[pa.woff + k] * (row[k] * inv)
 
     // workgroup-wide rms inverse from per-thread sum-of-squares partials (slot 1: the add partner's norm took slot 0)
@@ -373,12 +372,9 @@ class ArCombBase : ArBase {
         return pa.dbias_on != 0u ? d + dbias[pa.dboff + slot_ex[s] * pa.dim + k] : d
     }
 
-    //! the same row off registers: `rb` the slot's row base, `bb` its bias row base - a biasless model binds a zero row at base 0, so the add is unconditional
+    //! the same row off registers: `rb` the slot's row base, `bb` its bias row base
     def drow_at(rb, bb, k : uint) : float => down_rows[rb + k] + dbias[bb + k]
 
-    //! the slots' metas - row base, weight, bias row - read ONCE a thread for the first eight slots, then FOUR columns a round with
-    //! every load issued before any add: a one-workgroup row kernel is its dependent-load rounds, and a column a round over 2880
-    //! columns is twelve of them; slots past eight walk the memory form
     def override accum_row(base : uint) : float {   // nolint:STYLE038 — one row pass: the hoisted metas, the four-column round, the memory tail
         let p = base / pa.dim
         var g = 1.0
@@ -497,8 +493,7 @@ class ClsArComb : ArCombBase {
     }
 }
 
-//! the combine that quantizes the next head's feed itself (`ClsArCombG4Rq`'s form on the plain combine): the normed row into Q8_0
-//! blocks at the combine's free bindings instead of a float row a requant dispatch would read
+//! the plain combine's quantizing twin (`ClsArCombG4Rq`'s form): the normed row into Q8_0 blocks at the combine's free bindings, so no requant dispatch follows
 [vk_dispatch(name = "cls_ar_comb_rq", grid = "nrows", params = "nrows : int64")]
 class ClsArCombRq : ArCombBase {
     @ssbo @binding = 3 outq : array<int8>     //! the normed row's Q8_0 quants (the next layer's q feed)
@@ -849,7 +844,7 @@ class Q8kRequant {
 
 struct ActArgs {
     nelem : uint   // element count (4-wide kernels; always a 32-multiple, the guard is exact)
-    gelu : uint    // activation select: 0 = silu, else tanh-gelu
+    act : uint    // activation select: 0 = silu, else tanh-gelu
     nblk : uint    // 32-block / superblock count (the requant kernels' guard)
     elem0 : uint   // a 32-multiple; ActF16 only - the requant classes ignore it
     ubase : uint   //! the u side's element base; with `ustride` the rows of `ulen` elements sit `ustride` apart (a side input stored position-major); 0/0/0 = u is laid out like gate
@@ -861,21 +856,23 @@ struct ActArgs {
     brow : uint      //! ... the row width: element e sits in row e / brow, whose expert `rex` names
 }
 
-//! gpt-oss's clamped swiglu (`swiglu_oai`): x = min(v, 7), y = clamp(u, -7, 7), (x * sigmoid(1.702 x)) * (y + 1) - the clamps and the +1 are the trained activation
+//! gpt-oss's clamped swiglu (`swiglu_oai`): the clamps and the +1 are the trained activation, not a guard
 let ACT_OAI = 2u
+let ACT_SILU = 0u
+let ACT_GELU = 1u   //! tanh-gelu
 
-//! the act kernels' `gelu` push word: silu 0, tanh-gelu 1, the clamped swiglu ACT_OAI
-def act_code(oai, gelu : bool) : uint => oai ? ACT_OAI : (gelu ? 1u : 0u)
+//! the act kernels' `act` push word from a model's flags
+def act_code(oai, gelu : bool) : uint => oai ? ACT_OAI : (gelu ? ACT_GELU : ACT_SILU)
 
 // the one activation formula (silu, tanh-gelu or the clamped swiglu on v, times u) — the classes' act_mul
-// delegates pass their own pa.gelu
-def private act_mul_sel(v, u : float; gelu : uint) : float {
-    if (gelu == ACT_OAI) {
+// delegates pass their own pa.act
+def private act_mul_sel(v, u : float; act : uint) : float {
+    if (act == ACT_OAI) {
         let x = min(v, 7.0)
         let y = clamp(u, -7.0, 7.0)
         return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
     }
-    return (gelu != 0u ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
+    return (act == ACT_GELU ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
         : (v / (1.0 + exp(-v))) * u)
 }
 
@@ -887,7 +884,7 @@ class ActRqMembers {
     @ssbo @binding = 3 outs : array<float>     // per-block scales out
     @push_constant pa : ActArgs
 
-    def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.gelu)
+    def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.act)
 }
 
 // fused act + Q8_0 requant: subgroup per 4 blocks, 4 quants per lane, 8-lane shuffle amax (xor 1/2/4)
@@ -928,8 +925,7 @@ class Q8ActRq : ActRqMembers {
     }
 }
 
-//! the biased twin of the fused act + Q8_0 requant: element e's row e / brow names the expert whose gate and up bias rows
-//! join before the activation - gpt-oss's routed experts (a slot's k rows are its picks in order)
+//! the biased twin of the fused act + Q8_0 requant: element e's row (e / brow) names the expert whose gate and up bias rows join before the activation
 [vk_dispatch(name = "q8_actrq_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8ActRqB : Q8ActRq {
     @ssbo @binding = 4 @role = "weight" gb : array<float>   //! the gate-bias plane
@@ -1004,7 +1000,7 @@ class ActF16 {
     @ssbo @binding = 2 outh : array<float16>
     @push_constant pa : ActArgs
 
-    def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.gelu)
+    def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.act)
 
     [spirv_kernel(local_size_x = 256, name = "actf16_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
@@ -3292,7 +3288,7 @@ class template FaT {
             coopmatConvert(qf, q)
             var mrow : SACC
             var lrow : SACC
-            static_if (SINK) {   //! the phantom key: the head's sink logit as every row's running max, one as its running sum
+            static_if (SINK) {
                 coopmatFill(mrow, sinks[pa.sinkoff + h])
                 coopmatFill(lrow, 1.0)
             } else {
@@ -3391,7 +3387,6 @@ class FaCm2H64F16 : FaH64T {
     override OUT16 = true
 }
 
-//! the sink leaves (gpt-oss's 64-wide heads): the h64 pass seeded with the head's sink logit, in their own family for the fifth binding
 [vk_dispatch(name = "fa_cm2_h64_sink_cls", kernel = "run", family = "fa_cm2_sink_cls", grid = "wgs", params = "wgs : int64")]
 class FaCm2H64Sink : FaH64T {
     typedef OT = float
@@ -3619,7 +3614,6 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink : bool) {
     }
 }
 
-//! the sink stamps' ensure: the h64 pass seeded with the head's sink logit, on either arm
 def private fa_sink_ensure(khr, f16 : bool) : bool
     => khr ? (f16 ? ensure_fa_khr_h64_sink_f16_cls() : ensure_fa_khr_h64_sink_cls()) : (f16 ? ensure_fa_cm2_h64_sink_f16_cls() : ensure_fa_cm2_h64_sink_cls())
 
@@ -4427,7 +4421,6 @@ class DaAttnF16 : DaAttnT {
     override KV16 = true
 }
 
-//! the sink twins (gpt-oss): the pass with the head's sink logit in its unsplit store
 [vk_dispatch(name = "da_attn_sink_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttnSink : DaAttnT {
     typedef KT = float
@@ -4577,7 +4570,6 @@ class template DaAttnCombT {
 [vk_dispatch(name = "da_attn_comb_cls", grid = "nheads", params = "nheads : int64")]
 class DaAttnComb : DaAttnCombT {}
 
-//! the sink twin (gpt-oss): the combine folding the head's sink logit into the aligned max and denominator
 [vk_dispatch(name = "da_attn_comb_sink_cls", grid = "nheads", params = "nheads : int64")]
 class DaAttnCombSink : DaAttnCombT {
     override SINK = true
@@ -7589,9 +7581,6 @@ class template Q51Cm2T : KqCm2BatchT {
     }
 }
 
-//! MXFP4 on the cm2 tile: the per-32 plane verbatim (the CPU's `dot_mx4q8_scalar` layout), w = e2m1[nibble] * 2^(e - 127) computed
-//! as the DOUBLED magnitude {0,1,2,3,4,6,8,12} times the halved E8M0 scale (the CPU's `e8m0_half`), no table; the scale plane is one
-//! byte a block, read four blocks a word
 [ |> template_struct_instance]
 class template Mx4Cm2T : KqCm2BatchT {
     typedef BLK = VkMx4Blk
@@ -7622,7 +7611,7 @@ class template Mx4Cm2T : KqCm2BatchT {
         }
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def decode(blk : VkMx4Blk; bc, cib : uint2) : float16 {
         let e = cib.y
         let j = e & 15u
@@ -7636,7 +7625,7 @@ class template Mx4Cm2T : KqCm2BatchT {
         return float16((nib & 8u) != 0u ? -v : v)
     }
 
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def decode_v4(blk : VkMx4Blk; bc, cib : uint2) : half4 {
         let e = cib.y
         let li = int((e & 15u) >> 1u)
@@ -8941,7 +8930,6 @@ class Q8KhrBatch : Q8Cm2T {
     typedef ACCW = coopmatWgAcc_f32_128x128
 }
 
-//! the per-32 expert rails' KHR arms: the expert schedule's s and m pieces ride this one tile in mm mode, a 32-row piece an edge tile
 [vk_dispatch(name = "q51_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q51KhrBatch : Q51Cm2T {
     override KHR = true
@@ -9720,7 +9708,7 @@ struct GemvArgs {
     nreg : uint    // region count
     ybase : uint   // output base row
     lanes_per_row : uint   //! 8, 16, or 0 = the whole subgroup (the q8 GEMV ignores it)
-    gelu : uint    //! the fused gate-up twins' activation code (`act_code`: silu, gelu, the clamped swiglu); the plain GEMVs ignore it
+    act : uint    //! the fused gate-up twins' activation code (`act_code`: silu, gelu, the clamped swiglu); the plain GEMVs ignore it
     bias_on : uint   //! the mx4 gate-up twin: each slot's expert (`rex`) names its gate and up bias rows, `gboff` / `uboff` this layer's base in the planes ([ne x d] rows a layer)
     gboff : uint
     uboff : uint
@@ -9955,7 +9943,7 @@ struct GuArgs {
     d : uint      //! the output rows (the FFN width), a 32-multiple
     gblk : uint   //! the gate plane's block base in its slab
     ublk : uint   //! the up plane's block base in its slab
-    gelu : uint   //! activation select: 0 = silu, else tanh-gelu
+    act : uint   //! activation select: 0 = silu, else tanh-gelu
 }
 
 //! the dense FFN's gate and up GEMVs, the activation and its Q8_0 requant in one dispatch: a workgroup owns 32
@@ -10034,7 +10022,7 @@ class Q8GemvGu {
         if (gl_SubgroupID == 0u) {   // the block's activation and Q8_0 quant: one lane an output row
             let lane = gl_SubgroupInvocationID
             let li = min(lane, 31u)
-            let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.gelu) : 0.0
+            let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.act) : 0.0
             let d = da_q8_blk_d(a)
             let id = d != 0.0 ? 1.0 / d : 0.0
             if (lane == 0u) {
@@ -10052,7 +10040,7 @@ struct PleActArgs {
     d : uint      //! the output rows (the model dim)
     wblk : uint   //! the proj plane's block base in its slab
     ubase : uint  //! this layer's row base in the side plane
-    gelu : uint   //! activation select: 0 = silu, else tanh-gelu
+    act : uint   //! activation select: 0 = silu, else tanh-gelu
 }
 
 //! the per-layer-embedding branch's activation, its Q8_0 requant and the proj GEMV in one dispatch: every workgroup
@@ -10076,7 +10064,7 @@ class Q8GemvPleAct {
         }
         barrier()
         let e = min(tid, pa.n - 1u)
-        let v = tid < pa.n ? act_mul_sel(gate[e], side[pa.ubase + e], pa.gelu) : 0.0
+        let v = tid < pa.n ? act_mul_sel(gate[e], side[pa.ubase + e], pa.act) : 0.0
         let d = da_q8_blk_d(v)
         let id = d != 0.0 ? 1.0 / d : 0.0
         let q = uint(int(round(v * id))) & 0xFFu
@@ -10202,8 +10190,7 @@ class Q51GemvSum : Q51GemvBase {
     }
 }
 
-//! the sdot4 of four MXFP4 nibbles (one per byte of `n`, the e2m1 code) against four Q8_0 activation bytes: the doubled
-//! magnitudes {0,1,2,3,4,6,8,12} built per byte without a table (`dm`), the sign applied by subtracting the negative bytes twice
+//! the sdot4 of four MXFP4 nibbles (one per byte of `n`) against four Q8_0 activation bytes: the doubled magnitudes built per byte without a table (`dm`), the sign applied by subtracting the negative bytes twice
 def mx4_sdot(n, x : uint) : int {
     let mag = n & 0x07070707u
     let lo2 = mag & 0x03030303u
@@ -10213,9 +10200,7 @@ def mx4_sdot(n, x : uint) : int {
     return sdot4(dm, x) - 2 * sdot4(neg, x)
 }
 
-//! MXFP4 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: the block's four nibble words, the low and
-//! high nibbles dotted against the activation words through `mx4_sdot`, isum * e8m0_half(scale byte) * xs per block -
-//! `dot_mx4q8_scalar`'s float order, reassociated by lane
+//! MXFP4 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: `dot_mx4q8_scalar`'s float order, reassociated by lane
 class Mx4GemvBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words, four per block
     @ssbo @binding = 1 wsb : array<uint>       // per-block E8M0 scale bytes, four blocks a word
@@ -10268,10 +10253,6 @@ class Mx4Gemv : Mx4GemvBase {
     }
 }
 
-//! the routed experts' MXFP4 gate and up GEMVs, the activation under the slots' expert bias rows and its Q8_0 requant in one
-//! dispatch (`KqGemvK4Gu`'s form on `Mx4Gemv`'s row dot): a workgroup owns 32 hidden rows of one slot, a subgroup a row over
-//! both stacks (the up stack's regions at binding 6, in the gate stack's slab), and its first subgroup activates and quantizes
-//! the block - the split path's bytes, since the block's amax and the quant are the requant kernel's own
 [vk_dispatch(name = "mx4_gemv_gu_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4GemvGu : Mx4GemvBase {
     @ssbo @binding = 6 regions3 : array<uint>   // the up stack's (rel_wblock, xblock) pairs per slot
@@ -10322,7 +10303,7 @@ class Mx4GemvGu : Mx4GemvBase {
                 gv += gb[pa.gboff + ex * pa.d + c]
                 uv += ub[pa.uboff + ex * pa.d + c]
             }
-            let a = lane < 32u ? act_mul_sel(gv, uv, pa.gelu) : 0.0
+            let a = lane < 32u ? act_mul_sel(gv, uv, pa.act) : 0.0
             let dq = da_q8_blk_d(a)
             let id = dq != 0.0 ? 1.0 / dq : 0.0
             if (lane == 0u) {
@@ -10836,7 +10817,7 @@ class KqGemvK4Gu : KqGemvK4Base {
         barrier()
         if (gl_SubgroupID == 0u) {   // the block's activation and Q8_0 quant: one lane an output row
             let li = min(lane, 31u)
-            let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.gelu) : 0.0
+            let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.act) : 0.0
             let dq = da_q8_blk_d(a)
             let id = dq != 0.0 ? 1.0 / dq : 0.0
             if (lane == 0u) {

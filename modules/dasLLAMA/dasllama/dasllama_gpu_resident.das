@@ -973,7 +973,6 @@ def private resident_upload_bias(t : Model) {
     delete rows
 }
 
-//! the per-head attention sink logits, every layer's [n_heads] row in layer order; false = the device has no arm for them
 def private resident_upload_sinks(t : Model) : bool {
     let c = t.config
     var rows : array<float>
@@ -1467,7 +1466,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     return true
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bool {
     let c = t.config
     let dim = c.dim
@@ -1497,7 +1496,6 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
             di++
         }
     }
-    //! gpt-oss's routing planes: the router bias a layer, the expert stacks' gate / up / down bias rows (every MoE layer, in layer order)
     var rbias : array<float>
     var gbias : array<float>
     var ubias : array<float>
@@ -1524,7 +1522,6 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
         }
         bi++
     }
-    //! the softmax-weight gate (gpt-oss) picks its k on the raw logits and softmaxes over the picks alone: the renormalized softmax's weights
     let ok = rdec_prepare_moe(ne, c.n_expert_used, nfe, c.n_ff_shexp, n_moe, sh_gated, c.norm_topk_prob || c.moe_gate == MoeGate.softmax_weight,
         c.ffn_act == FfnAct.gelu, c.ffn_act == FfnAct.swiglu_oai, c.expert_weights_scale, router, dscale, rbias, gbias, ubias, dbias)
     delete router

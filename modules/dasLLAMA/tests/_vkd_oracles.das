@@ -885,8 +885,7 @@ def q51f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
     }
 }
 
-//! one MXFP4 weight off its e2m1 code and E8M0 scale byte: the DOUBLED magnitude {0,1,2,3,4,6,8,12} times the halved
-//! scale 2^(e - 128), as the CPU dot and the cm2 decode compute it (denormal bit patterns below e = 2)
+//! one MXFP4 weight off its e2m1 code and E8M0 scale byte, as the CPU dot and the cm2 decode compute it (denormal bit patterns below e = 2)
 def mx4_dequant(nib, ex : int) : float {
     let e = uint(ex)
     return float(mx4_code(nib)) * uint_bits_to_float(e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u))

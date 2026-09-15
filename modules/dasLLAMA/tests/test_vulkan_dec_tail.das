@@ -414,8 +414,7 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
 }
 
 //! two layers whose q planes sit at ONE offset in two format planes (a mixed-format file's shape): the block keys a layer by
-//! its offset under its format, so each layer serves its own quad and mirror - keyed by the offset alone, the second layer
-//! took the first one's sets and mirror (followup_vulkan.md item 62's crash); false = no device
+//! its offset under its format, so each layer serves its own quad and mirror; false = no device
 def private collide_cell(t : T?; f : Ffn; base : int64; tag : string) : bool {
     var qa : Quad
     var qb : Quad

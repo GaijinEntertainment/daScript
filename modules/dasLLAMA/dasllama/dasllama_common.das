@@ -561,15 +561,15 @@ var private g_layout_repack_q8 : ModelRepackFn
 var private g_layout_repack_kq : ModelRepackFn
 var private g_layout_repack_mx4 : ModelRepackFn
 var private g_layout_repack_q51 : ModelRepackFn
-typedef GatherStackQ51Fn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
+typedef GatherStackB32Fn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
                                      repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) : void>
 var private g_layout_gather : GatherStackFn
 var private g_layout_gather_kq : GatherStackKqFn
-var private g_layout_gather_q51 : GatherStackQ51Fn
-var private g_layout_gather_mx4 : GatherStackQ51Fn   //! the mx4 gather takes the q51 gather's shape: the per-32 planes out of the repack's grp<mr> interleave
+var private g_layout_gather_q51 : GatherStackB32Fn
+var private g_layout_gather_mx4 : GatherStackB32Fn
 var private g_layout_hooks_set = false
 
-def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsmx4 : GatherStackQ51Fn) {
+def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsmx4 : GatherStackB32Fn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
     g_layout_repack_mx4 = rmx4

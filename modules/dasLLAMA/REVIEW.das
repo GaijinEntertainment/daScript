@@ -840,7 +840,6 @@ def private check_ar_max_dim_triple {
     }
 }
 
-//! q51 and mx4 are routed-expert planes alone and the resident MoE block is cm2-gated, so the f16 feed never admits them on a KHR-mode card
 var private CM2_KHR_EXEMPT : table<string>   //! every format on the cm2 template owns a KHR arm today; a per-32 format the feed never admits in mm mode would join here
 var private CM2_NO_EXEMPT : table<string>
 

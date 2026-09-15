@@ -11,6 +11,21 @@ require dastest/testing_boost public
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
+require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
+require daslib/enum_trait   // the radix guard walks the whole KqFmt enum
+
+[test]
+def test_kqfmt_under_dat_key_radix(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> run("every KqFmt id sits under the decode block's layer-key radix") @(t : T?) {
+            for (f in type<KqFmt>) {   //! a radix at or below a member's id hands one layer another layer's mirror and sets
+                t |> success(int64(int(f)) < DAT_KEY_FMTS, "KqFmt.{f} ({int(f)}) is under DAT_KEY_FMTS ({DAT_KEY_FMTS})")
+            }
+        }
+    } else {
+        t |> skip("no vulkan module")
+    }
+}
 
 [test]
 def test_kqfmt_enum_values(t : T?) {

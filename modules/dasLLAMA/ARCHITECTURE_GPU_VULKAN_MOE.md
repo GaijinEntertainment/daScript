@@ -71,7 +71,13 @@ except where a probe arm is named.
   column tile per 128-row weight tile of the plane. In mm mode both piece kinds run the KHR
   128 x 128 tile (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ae) over the same records and maps -
   a 32-row s piece is an edge tile there, and the workgroup counts agree because a column is one
-  tile either way - so a KHR-mode card serves the resident MoE block (`vk_rdec_moe_ok`). The s pieces' records sit at `[0, ne)`,
+  tile either way - so a KHR-mode card serves the resident MoE block (`vk_rdec_moe_ok`). The
+  per-32 expert rails ride the same pieces through their own `<Fmt>Cm2T` stamps; the mx4 one
+  needs no codebook - the e2m1 nibble decodes as the DOUBLED magnitude {0, 1, 2, 3, 4, 6, 8, 12},
+  built per byte by shift and mask, against the HALVED E8M0 scale (`e8m0_half`; the bit patterns
+  below exponent 2 are the denormals), the CPU `dot_mx4q8_scalar`'s own arithmetic, so the tile,
+  the decode GEMV and the CPU dot agree by construction, and its scale plane is one byte a block,
+  read four blocks a word. The s pieces' records sit at `[0, ne)`,
   the m pieces' at `[ne, 2 ne)`,
   and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 2048 words for up
   to 256 experts twice), the two tile counts scanned as one packed word (its halves stay under
@@ -109,9 +115,11 @@ except where a probe arm is named.
   resident-vs-CPU bars of the MoE files keep their calibration: the fold's natural order - the
   residual first - moves the rounding enough to flip a router near-tie downstream, and one step
   of the 35B two-window cell reads 1.50 logits off the CPU chain against a 1.39 bar where the
-  chain's order reads 0.39. The slot loop loads eight rows together, then four, then one at a
-  time - the token command's one-row form is latency, and the groups are its shape (sec.2.2ag);
-  a slot-major pass through the row stash instead read 2.4 ms more on the 30B window, the
+  chain's order reads 0.39. The row pass hoists the first eight slots' metas - row base, routing
+  weight, bias row - into registers once per thread, then walks FOUR columns a round with every
+  load issued before any add; slots past eight walk the memory form (a one-workgroup row kernel
+  is its dependent-load rounds, and a column a round over 2880 columns is twelve of them - the
+  token command's one-row form, sec.2.2ag); a slot-major pass through the row stash instead read 2.4 ms more on the 30B window, the
   shared-memory read-modify-write per slot costing what the register sum does not. The token
   command's tail folds the same way; the residual step read those rows anyway, and the fold took
   one dispatch per layer out of both chains. There is no Q8 requant leaf: a third form would
@@ -146,14 +154,26 @@ routed rows; and the residual step that follows folds the combine in (`ClsArComb
 sec.2.2af kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
 logit, the k weighted routed rows through the top-k's slot map, then the next layer's norm - a
 layer without a shared expert takes the same step with the add partner off. A one-row dispatch is
-latency: the step loads eight slots' rows together, then four, then one at a time (the sums
-still in slot order), so an element waits on one load round per group rather than per slot - on
-the `DASLLAMA_GPU_PROF=1` token profile (`vk_rdec moe avg/token`, RTX 5060 Ti) the Qwen1.5-MoE
-twin's 24 layers at four slots read about 290 us per token in the step where a
-plain slot loop read 360 and the add plus the separate combine 199 and 233; on the 30B's 48
-layers at eight slots 440 where a four-slot group alone read 490 (the compiler's own unroll of
-the plain loop served eight slots but left four to a scalar tail). The slot regions are device
-buffers the top-k fills each token; the dense triple's host-filled regions stay what they are.
+latency, not bandwidth: the step's row pass is the sec.2.2af form - the first eight slots' metas
+in registers, four columns a round with every load issued before any add, the sums still in slot
+order - so an element waits on one load round per four columns rather than one per column; on
+the `DASLLAMA_GPU_PROF=1` token profile (`vk_rdec moe avg/token`, `benchmarks/lcpp_bench.das`
+under `-jit` with `DASLLAMA_ALLOW_UNTUNED=1`, cm2 mode) gpt-oss-20b's 24 layers at four slots
+read 272 us a token in the step on the RTX PRO 4500 where the column-a-round form read 719, and
+the fused norm+requant before the routed block 247 where it read 344. **A model without expert
+biases still binds a down-bias plane: one ZERO ROW of the model dim.** The combine reads it at
+row base 0 for every slot, so its column loop adds the bias unconditionally and carries no
+branch a load waits behind; the prepare allocates and uploads that row whatever the model
+carries. **gpt-oss's softmax-weight gate rides the renormalized-softmax arm.** The gate picks its
+k on the raw logits (under the router bias) and softmaxes over the picks alone, which is the
+softmax over every expert renormalized over the picks - the weights the `norm_topk` arm already
+computes - so the host passes `norm_topk` for it and the top-k kernels carry no second gate.
+Native-MXFP4 routed stacks take `KqGemvK4Gu`'s fusion (`Mx4GemvGu` on `Mx4Gemv`'s row dot;
+`RLayer.egu_mx4`): a workgroup owns 32 hidden rows of one slot, a subgroup a row over both
+stacks - the up stack's regions at their own binding, inside the gate stack's slab - and the
+first subgroup adds the slot's expert bias rows, activates and quantizes the block with the
+requant kernel's own amax and quant, so the bytes are the split path's. The slot regions are
+device buffers the top-k fills each token; the dense triple's host-filled regions stay what they are.
 
 **A recurrent MoE layer takes the routed block after its deltanet head** (the hybrid MoE,
 `ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v's head with this section's tail): the deltanet

@@ -703,7 +703,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let x6 = pf_dnx6(l)
     let xq8k = !x6 && kq_sb(L.fqkv)
     if (x6) {
-        var pcc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+        var pcc0 = ActArgs(nelem = uint(wlen * dim), act = ACT_SILU, nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
     }
     if (xq8k) {
@@ -777,7 +777,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     pfq_ts(raw)
     let o6 = pf_dno6(l)
     if (o6) {
-        var pco = ActArgs(nelem = uint(wlen * di), gelu = 0u, nblk = 0u)
+        var pco = ActArgs(nelem = uint(wlen * di), act = ACT_SILU, nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_dnof_set, pco, (wlen * di / 4l + 255l) / 256l)
     } elif (kq_sb(L.fout)) {
         var pcr = RqArgs(inbase = uint(DN_O_OFF), nblk = uint(wlen * di / 256l))
@@ -823,7 +823,6 @@ def vk_rdec_moe_ok(f1, f3, f2 : int) : bool {
     if (!vk_moe_init()) {
         return false
     }
-    //! the expert tiles: the cm2 s and e stamps in cm2 mode, the KHR 128 x 128 tile in mm mode at subgroup 32
     let tiles = (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on())
     return tiles && pf_f16_feed(f1) && pf_f16_feed(f3) && pf_f16_feed(f2)
 }
@@ -957,7 +956,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
         pfq_ts(raw)
     }
     if (pf_f16g_on()) {
-        var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+        var pcc = ActArgs(nelem = uint(wlen * dim), act = ACT_SILU, nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
         pf_f16g_enc(raw, h, L.pf_f16g_router_set, L.pf_f16g_router_red_set, dim, ner, wlen, L.router_slot * ner * dim, 0l)
     } else {
@@ -998,7 +997,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     cm2_cls_enc(L.fe3, tce, raw, h, L.pf_e3m_set, pc1m, bounds.mgu)
     cm2_cls_enc(L.fe3, tcs, raw, h, L.pf_e3_set, pc1, bounds.gu)
     pfq_ts(raw)
-    var pca = ActArgs(nelem = uint(nk * nfe), gelu = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nk * nfe / 32l), elem0 = 0u,
+    var pca = ActArgs(nelem = uint(nk * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nk * nfe / 32l), elem0 = 0u,
         bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * ne * nfe), uboff = uint(L.router_slot * ne * nfe), brow = uint(nfe))
     if (g_rd.exps_bias) {
         enc_actf16_b_cls(raw, h, L.pf_eact_set, pca, (nk * nfe / 4l + 255l) / 256l)
@@ -1026,7 +1025,7 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
     //! every step runs the whole window, the FFN's last-layer row slice included: the branch is 256 wide, and the sliced rows' results go unread
     let x6 = pf_f16_feed(fmt)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their Q8_0 blocks
     if (x6) {
-        var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+        var pcc = ActArgs(nelem = uint(wlen * dim), act = ACT_SILU, nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 16], pcc, (wlen * dim / 4l + 255l) / 256l)
     } else {
         var pcx = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 32l))
@@ -1035,7 +1034,7 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
     pfq_ts(raw)
     pf_gemm_enc(raw, h, b + 17, fmt, pg.wq, pg.ws, x6 ? g_rd.pf_xf : g_rd.pf_xq, x6 ? g_rd.dummy : g_rd.pf_xs, g_rd.pf_gate,
         pg.wqb, pg.wsb, x6 ? np * dim * 2l : np * dim, x6 ? 256l : np * (dim / 32l) * 4l, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, g_rd.layers[l].bpg, wlen, x6)
-    var pca = ActArgs(nelem = uint(wlen * ple), gelu = 1u, nblk = uint(wlen * ple / 32l),
+    var pca = ActArgs(nelem = uint(wlen * ple), act = ACT_GELU, nblk = uint(wlen * ple / 32l),
         ubase = uint(l * ple), ustride = all, ulen = uint(ple))
     enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple / 4l + 255l) / 256l)
     pfq_ts(raw)
@@ -1630,7 +1629,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             if (ple_raw) {   //! the per-layer-embedding pre-step's finish: the projection of the scaled embedding rows, normed per slice and averaged into the gathered rows
                 let all = g_rd.n_layers * g_rd.ple
-                var pcc = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+                var pcc = ActArgs(nelem = uint(wlen * dim), act = ACT_SILU, nblk = 0u)
                 enc_f16cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
                 var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
                 let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
@@ -1694,7 +1693,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let feed_already_fused = l > 0l && pf_qkv_feed_fused(l)
                 if (!feed_already_fused) {
                     if (fq6) {
-                        var pc0 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+                        var pc0 = ActArgs(nelem = uint(wlen * dim), act = ACT_SILU, nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 0], pc0, (wlen * dim / 4l + 255l) / 256l)
                     } elif (fqk) {
                         var pc0 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
@@ -1799,7 +1798,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let attn_landed_f16 = fo6 && (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr)
                 if (fo6) {
                     if (!attn_landed_f16) {
-                        var pc6 = ActArgs(nelem = uint(wlen * qd), gelu = 0u, nblk = 0u)
+                        var pc6 = ActArgs(nelem = uint(wlen * qd), act = ACT_SILU, nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 6], pc6, (wlen * qd / 4l + 255l) / 256l)
                     }
                 } elif (fok) {
@@ -1835,7 +1834,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     pfq_ts(raw)
                     let feed_read = !moe || has_dense_triple(g_rd.layers[l])   //! the routed block takes the f32 rows; only a dense triple reads the feed
                     if (feed_read && gu6) {
-                        var pc9 = ActArgs(nelem = uint(wlen * dim), gelu = 0u, nblk = 0u)
+                        var pc9 = ActArgs(nelem = uint(wlen * dim), act = ACT_SILU, nblk = 0u)
                         enc_f16cvt_cls(raw, h, g_rd.pf_sets[b + 9], pc9, (wlen * dim / 4l + 255l) / 256l)
                     } elif (feed_read && guk) {
                         var pc9 = RqArgs(inbase = 0u, nblk = uint(wlen * dim / 256l))
@@ -1860,15 +1859,15 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                         p1.wqb, p1.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_GATE, dim, hid, g_rd.layers[l].b1, ffn_rows, gu6, tgu, ffn_row0)
                     pf_gemm_enc(raw, h, b + 11, g_rd.layers[l].f3, p3.wq, p3.ws, gqb, gsb, g_rd.pf_up,
                         p3.wqb, p3.wsb, gqn, gsn, np * hid * 4l, VHZ_XQ, VHZ_UP, dim, hid, g_rd.layers[l].b3, ffn_rows, gu6, tgu, ffn_row0)
-                    let gelu = g_rd.layers[l].gelu ? 1u : 0u
+                    let gelu = g_rd.layers[l].gelu ? ACT_GELU : ACT_SILU
                     if (dn6) {
-                        var pc12 = ActArgs(nelem = uint(ffn_rows * hid), gelu = gelu, nblk = uint(ffn_rows * hid / 32l), elem0 = uint(ffn_row0 * hid))
+                        var pc12 = ActArgs(nelem = uint(ffn_rows * hid), act = gelu, nblk = uint(ffn_rows * hid / 32l), elem0 = uint(ffn_row0 * hid))
                         enc_actf16_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (ffn_rows * hid / 4l + 255l) / 256l)
                     } elif (dnk) {
-                        var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = gelu, nblk = uint(wlen * hid / 256l))
+                        var pc12 = ActArgs(nelem = uint(wlen * hid), act = gelu, nblk = uint(wlen * hid / 256l))
                         enc_q8k_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 8l + 255l) / 256l)
                     } else {
-                        var pc12 = ActArgs(nelem = uint(wlen * hid), gelu = gelu, nblk = uint(wlen * hid / 32l))
+                        var pc12 = ActArgs(nelem = uint(wlen * hid), act = gelu, nblk = uint(wlen * hid / 32l))
                         enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 12], pc12, (wlen * hid / 4l + 255l) / 256l)
                     }
                     pfq_ts(raw)
@@ -2176,7 +2175,7 @@ def vk_arena_ffn(var y : array<float>; blk1, blk3, blk2 : int64; n, nfe : int64;
         gemv_enc(f1, raw, h, gate_set, pcg, nfe)
         gemv_enc(f3, raw, h, up_set, pcg, nfe)
         // the requant form follows the DOWN plane — its GEMV consumes hq/hs
-        var pca = ActArgs(nelem = uint(nfe), gelu = is_gelu ? 1u : 0u, nblk = uint(nfe / (dkq ? 256l : 32l)))
+        var pca = ActArgs(nelem = uint(nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(nfe / (dkq ? 256l : 32l)))
         let awgs = (nfe / (dkq ? 8l : 4l) + 255l) / 256l
         if (dkq) {
             enc_q8k_actrq_cls(raw, h, g_gpu.af_actrq_set, pca, awgs)
@@ -2541,7 +2540,7 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
     stack_batch_enc(raw, h, s1, nwg_gu, n, nfe)
     stack_batch_enc(raw, h, s3, nwg_gu, n, nfe)
     // the mid-step form follows the DOWN stack — its GEMM is the consumer of the hidden plane
-    var pca = ActArgs(nelem = uint(rows * nfe), gelu = is_gelu ? 1u : 0u, nblk = uint(mid_nblk))
+    var pca = ActArgs(nelem = uint(rows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(mid_nblk))
     let dkq = g_gpu.stacks[s2].fmt != 0
     let awgs = (rows * nfe / (dkq ? 8l : 4l) + 255l) / 256l
     if (dkq) {
@@ -2999,7 +2998,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     vhz_dep(raw, h, VHB_VRAW, VHB_ATV, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_v_dev, w0 * kv_dim * 4l, rows * kv_dim * 4l)
     if (fa) {
-        var pcv = ActArgs(nelem = uint((w0 + rows) * kv_dim), gelu = 0u, nblk = 0u)
+        var pcv = ActArgs(nelem = uint((w0 + rows) * kv_dim), act = ACT_SILU, nblk = 0u)
         let cvtwgs = ((w0 + rows) * kv_dim / 4l + 255l) / 256l
         enc_f16cvt_cls(raw, h, g_gpu.at_k16cvt_set, pcv, cvtwgs)
         enc_f16cvt_cls(raw, h, g_gpu.at_v16cvt_set, pcv, cvtwgs)
@@ -3432,7 +3431,7 @@ def private record_ffn_cm2_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n,
     enc_moe_gather_f16_cls(raw, h, g_gpu.batch_gather_set, pcg, nk)
     stack_batch_enc_cm2(raw, h, s1, nwg_gu, n, nfe)
     stack_batch_enc_cm2(raw, h, s3, nwg_gu, n, nfe)
-    var pca = ActArgs(nelem = uint(rows * nfe), gelu = is_gelu ? 1u : 0u, nblk = uint(rows * nfe / 32l))
+    var pca = ActArgs(nelem = uint(rows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(rows * nfe / 32l))
     enc_actf16_cls(raw, h, g_gpu.batch_actf16_set, pca, (rows * nfe / 4l + 255l) / 256l)
     stack_batch_enc_cm2(raw, h, s2, nwg_dn, nfe, n)
     var pcc = CombineArgs(n = uint(n), k = k, r0 = uint(r0), r1 = uint(r1))
