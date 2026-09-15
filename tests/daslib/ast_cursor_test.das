@@ -293,3 +293,39 @@ def test_field_name_hit(t : T?) {
         }
     }
 }
+
+[test]
+def test_type_name_hit(t : T?) {
+    t |> run("a cursor on a type name yields the type; on a forward-referenced class's new site too") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // var pet = new Cat() at line 27, Cat at column 18; class Cat is declared after main
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 27, 19, true, "    var pet = new Cat()")
+            t2 |> success(!empty(hits) && hits[0].type_decl != null && hits[0].name == "Cat", "type hit first: {[for (h in hits); describe(h)]}")
+            t2 |> success(!empty(hits) && hits[0].type_decl != null && int(hits[0].type_decl.at.column) == 18, "at the name, not the new keyword: {[for (h in hits); describe(h)]}")
+            // def add(a, b : int) : int - a builtin type name is not a struct, enum or alias
+            let prim = find_at_cursor(program, "ast_cursor_fixture", 9, 16, true, "def add(a, b : int) : int \{")
+            var typed = false
+            for (h in prim) {
+                typed = typed || h.type_decl != null
+            }
+            t2 |> success(!typed, "no type hit on a builtin type: {[for (h in prim); describe(h)]}")
+            // def area/speak: the implicit self's TypeDecl sits at the method's name and is never a hit
+            let meth = find_at_cursor(program, "ast_cursor_fixture", 36, 20, true, "    def override speak() : string => \"meow\"")
+            var self_hit = false
+            for (h in meth) {
+                self_hit = self_hit || (h.type_decl != null && h.name == "Cat")
+            }
+            t2 |> success(!self_hit, "the implicit self is not a type hit: {[for (h in meth); describe(h)]}")
+        }
+    }
+    t |> run("without the line text there is no type hit") @(t2 : T?) {
+        compile_fixture() $(program) {
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 27, 19, true)
+            var typed = false
+            for (h in hits) {
+                typed = typed || h.type_decl != null
+            }
+            t2 |> success(!typed, "no line text, no type hit")
+        }
+    }
+}

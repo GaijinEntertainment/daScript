@@ -289,9 +289,12 @@ def private function_signature(f : Function const?) : string {
     }
 }
 
-def private resolve_definition(hit : CursorHit) : Definition { // nolint:STYLE037,STYLE038 — exact-type `is` ladder, one arm per Expression class
+def private resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : Definition { // nolint:STYLE037 — exact-type `is` ladder, one arm per Expression class
     if (hit.variable != null) {
         return variable_definition(hit.variable)
+    }
+    if (hit.type_decl != null) {
+        return type_definition(program, hit.type_decl)
     }
     let expr = hit.expr
     if (expr is ExprVar) {
@@ -355,43 +358,65 @@ def private resolve_definition(hit : CursorHit) : Definition { // nolint:STYLE03
         }
     }
     if (expr._type != null) {
-        let td = expr._type
-        if (!empty(td.alias)) {
-            return Definition(
-                found = true,
-                kind = "typedef",
-                name = string(td.alias),
-                file = lineinfo_file(td.at),
-                line = int(td.at.line),
-                column = int(td.at.column))
+        return type_definition(program, expr._type)
+    }
+    return Definition()
+}
+
+//! where a typedef named `name` is declared in the program's own module; a zero position when it is not
+def private alias_declaration(program : smart_ptr<Program>; name : string) : LineInfo {
+    var at = LineInfo()
+    for_each_typedef(get_this_module(program)) $(alias_name : string#; var value : TypeDeclPtr) {
+        if (alias_name == name) {
+            at = value.at
         }
-        if (td.isHandle && td.annotation != null) {
-            return Definition(
-                found = true,
-                kind = "handled",
-                name = string(td.annotation.name),
-                cppName = string(td.annotation.cppName))
-        }
-        if (td.structType != null) {
-            let st = td.structType
-            return Definition(
-                found = true,
-                kind = st.flags.isClass ? "class" : "struct",
-                name = string(st.name),
-                file = lineinfo_file(st.at),
-                line = int(st.at.line),
-                column = int(st.at.column))
-        }
-        if (td.enumType != null) {
-            let en = td.enumType
-            return Definition(
-                found = true,
-                kind = "enum",
-                name = string(en.name),
-                file = lineinfo_file(en.at),
-                line = int(en.at.line),
-                column = int(en.at.column))
-        }
+    }
+    return at
+}
+
+//! where the declared name is spelled on its declaration's line: a Structure's own position is one
+//! column before its name, a typedef's is its right-hand type
+def private declared_name_column(at : LineInfo; name : string) : int {
+    return name_column(line_text(lineinfo_file(at), int(at.line)), name, int(at.column))
+}
+
+def private type_definition(program : smart_ptr<Program>; td : TypeDecl const?) : Definition {
+    if (!empty(td.alias)) {
+        let at = alias_declaration(program, string(td.alias))
+        return Definition(
+            found = true,
+            kind = "typedef",
+            name = string(td.alias),
+            file = lineinfo_file(at),
+            line = int(at.line),
+            column = declared_name_column(at, string(td.alias)))
+    }
+    if (td.isHandle && td.annotation != null) {
+        return Definition(
+            found = true,
+            kind = "handled",
+            name = string(td.annotation.name),
+            cppName = string(td.annotation.cppName))
+    }
+    if (td.structType != null) {
+        let st = td.structType
+        return Definition(
+            found = true,
+            kind = st.flags.isClass ? "class" : "struct",
+            name = string(st.name),
+            file = lineinfo_file(st.at),
+            line = int(st.at.line),
+            column = declared_name_column(st.at, string(st.name)))
+    }
+    if (td.enumType != null) {
+        let en = td.enumType
+        return Definition(
+            found = true,
+            kind = "enum",
+            name = string(en.name),
+            file = lineinfo_file(en.at),
+            line = int(en.at.line),
+            column = declared_name_column(en.at, string(en.name)))
     }
     return Definition()
 }
@@ -408,9 +433,9 @@ def private run_definition(file : string; line0, char16 : int; project : string)
                 _range = word_range(decl.target.decl_file, decl.target.decl_line, decl.target.decl_column, decl.target.name)))
             return
         }
-        var hits <- find_at_cursor(program, file, line, col, true)
+        var hits <- find_at_cursor(program, file, line, col, true, line_text(file, line))
         for (hit in hits) {
-            let defn = resolve_definition(hit)
+            let defn = resolve_definition(program, hit)
             if (defn.found && !empty(defn.file) && defn.line > 0) {
                 res.locations |> push(NavLocation(
                     path = to_generic_path(defn.file),
@@ -440,6 +465,8 @@ def private hover_contents(hit : CursorHit; defn : Definition) : string {
             write(w, "{defn.signature}\n")
         } elif (hit.variable != null && hit.variable._type != null) {
             write(w, "{source_name(hit.name)} : {describe(hit.variable._type)}\n")
+        } elif (hit.type_decl != null) {
+            write(w, "{defn.kind} {hit.name}\n")
         } elif (!empty(hit.name) && hit.expr != null && hit.expr._type != null) {
             write(w, "{source_name(hit.name)} : {describe(hit.expr._type)}\n")
         } elif (hit.expr != null && hit.expr._type != null) {
@@ -476,7 +503,7 @@ def private run_hover(file : string; line0, char16 : int; project : string) : Ho
             res._range = word_range(file, line, decl.word_column, decl.target.name)
             return
         }
-        let hits <- find_at_cursor(program, file, line, col, true)
+        let hits <- find_at_cursor(program, file, line, col, true, line_text(file, line))
         var pick = -1
         for (idx in range(length(hits))) {
             if (pick < 0) {
@@ -492,10 +519,10 @@ def private run_hover(file : string; line0, char16 : int; project : string) : Ho
             return
         }
         let hit = hits[pick]
-        res.contents = hover_contents(hit, resolve_definition(hit))
-        if (hit.variable != null) {
+        res.contents = hover_contents(hit, resolve_definition(program, hit))
+        if (hit.variable != null || hit.type_decl != null) {
             res.hasRange = true
-            res._range = word_range(file, int(hit.variable.at.line), int(hit.variable.at.column), source_name(hit.name))
+            res._range = word_range(file, int(hit_at(hit).line), int(hit_at(hit).column), source_name(hit.name))
         } elif (hit.expr != null && to_generic_path(lineinfo_file(hit.expr.at)) == target && int(hit.expr.at.line) > 0) {
             res.hasRange = true
             res._range = span_range(file, int(hit.expr.at.line), int(hit.expr.at.column),
@@ -542,9 +569,12 @@ def private to_void(p : auto(TT) const?) : void? {
     return unsafe(reinterpret<void?>(p))
 }
 
-def private identify_target(hit : CursorHit) : RefTarget { // nolint:STYLE037 — exact-type `is` ladder, one arm per Expression class
+def private identify_target(program : smart_ptr<Program>; hit : CursorHit) : RefTarget { // nolint:STYLE037 — exact-type `is` ladder, one arm per Expression class
     if (hit.variable != null) {
         return variable_target(hit.variable, int(hit.variable.at.column))
+    }
+    if (hit.type_decl != null) {
+        return type_target(program, hit.type_decl)
     }
     let expr = hit.expr
     if (expr is ExprCall) {
@@ -592,19 +622,24 @@ def private identify_target(hit : CursorHit) : RefTarget { // nolint:STYLE037 �
         }
     }
     if (expr._type != null) {
-        let td = expr._type
-        if (!empty(td.alias)) {
-            return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias),
-                decl_file = lineinfo_file(td.at), decl_line = int(td.at.line), decl_column = int(td.at.column))
-        }
-        if (td.structType != null) {
-            return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(td.structType), name = string(td.structType.name),
-                decl_file = lineinfo_file(td.structType.at), decl_line = int(td.structType.at.line), decl_column = int(td.structType.at.column))
-        }
-        if (td.enumType != null) {
-            return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(td.enumType), name = string(td.enumType.name),
-                decl_file = lineinfo_file(td.enumType.at), decl_line = int(td.enumType.at.line), decl_column = int(td.enumType.at.column))
-        }
+        return type_target(program, expr._type)
+    }
+    return RefTarget()
+}
+
+def private type_target(program : smart_ptr<Program>; td : TypeDecl const?) : RefTarget {
+    if (!empty(td.alias)) {
+        let at = alias_declaration(program, string(td.alias))
+        return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias),
+            decl_file = lineinfo_file(at), decl_line = int(at.line), decl_column = declared_name_column(at, string(td.alias)))
+    }
+    if (td.structType != null) {
+        return structure_target(td.structType, declared_name_column(td.structType.at, string(td.structType.name)))
+    }
+    if (td.enumType != null) {
+        let en = td.enumType
+        return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(en), name = string(en.name),
+            decl_file = lineinfo_file(en.at), decl_line = int(en.at.line), decl_column = declared_name_column(en.at, string(en.name)))
     }
     return RefTarget()
 }
@@ -796,9 +831,9 @@ def private run_references(file : string; line0, char16 : int; include_decl : bo
     let compiled = compile_nav(file, project) $(program) {
         var target = declaration_at_cursor(program, file, line, col).target
         if (target.kind == RefTargetKind.none) {
-            var hits <- find_at_cursor(program, file, line, col, true)
+            var hits <- find_at_cursor(program, file, line, col, true, line_text(file, line))
             for (hit in hits) {
-                target = identify_target(hit)
+                target = identify_target(program, hit)
                 break if (target.kind != RefTargetKind.none)
             }
         }
@@ -1106,7 +1141,7 @@ def private make_hier_item(func : Function const?) : HierItem {
 // (or class method) declared on the cursor line
 def private function_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : Function const? {
     var result : Function const?
-    var hits <- find_at_cursor(program, file, line, col, true)
+    var hits <- find_at_cursor(program, file, line, col, true, line_text(file, line))
     for (hit in hits) {
         let expr = hit.expr
         continue if (expr == null)
@@ -1358,9 +1393,9 @@ def private run_implementation(file : string; line0, char16 : int; project : str
         // no method at cursor — try a class/struct: implementations = derived types
         var st_ptr : void?
         var st_name = ""
-        var hits <- find_at_cursor(program, file, line, col, true)
+        var hits <- find_at_cursor(program, file, line, col, true, line_text(file, line))
         for (hit in hits) {
-            let t = identify_target(hit)
+            let t = identify_target(program, hit)
             if (t.kind == RefTargetKind.structure) {
                 st_ptr = t.target_ptr
                 st_name = t.name

@@ -129,21 +129,24 @@ def identify_type_target(expr : Expression const?) : RefTarget {
         let e = expr as ExprConstEnumeration
         if (e.enumType != null) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e.enumType), name = string(e.enumType.name))
     }
-    if (expr._type != null) {
-        let td = expr._type
-        if (!empty(td.alias)) return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
-        if (td.structType != null) return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(td.structType), name = string(td.structType.name))
-        if (td.enumType != null) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(td.enumType), name = string(td.enumType.name))
-    }
+    if (expr._type != null) return type_target(expr._type)
     return RefTarget()
 }
 
 // Build a RefTarget from a cursor hit
+def type_target(td : TypeDecl const?) : RefTarget {
+    if (!empty(td.alias)) return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
+    if (td.structType != null) return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(td.structType), name = string(td.structType.name))
+    if (td.enumType != null) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(td.enumType), name = string(td.enumType.name))
+    return RefTarget()
+}
+
 def identify_target(hit : CursorHit) : RefTarget {
     if (hit.variable != null) {
         let variable = hit.variable
         return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
     }
+    if (hit.type_decl != null) return type_target(hit.type_decl)
     let expr = hit.expr
     var t = identify_callable_target(expr)
     if (t.kind == RefTargetKind.none) {
@@ -355,7 +358,7 @@ def run_find_references(file : string; line_str, col_str, scope_str, no_opt_str 
         // Step 1: the declaration whose name the cursor is on, before any expression - a class's
         // synthesized members sit on its line and would answer for it
         var target = declaration_target(program, file, line, col, source_line(file, line))
-        var hits <- find_at_cursor(program, file, line, col, true)
+        var hits <- find_at_cursor(program, file, line, col, true, source_line(file, line))
         if (target.kind == RefTargetKind.none) {
             for (hit in hits) {
                 target = identify_target(hit)

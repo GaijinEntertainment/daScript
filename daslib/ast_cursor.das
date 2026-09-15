@@ -23,12 +23,21 @@ struct public CursorHit {
     expr : Expression const?
     //! The variable whose declaration the cursor is on (`for`/`let` variable, function, lambda or block argument) when declarations were asked for; else null.
     variable : Variable const?
+    //! The type the cursor's type name denotes (a struct, enum or alias spelled in the source) when declarations were asked for; else null.
+    type_decl : TypeDecl const?
     //! Enclosing function, or null for expressions in global scope.
     func : Function const?
-    //! Extracted name for named nodes (variable name, call name, field name, operator).
+    //! Extracted name for named nodes (variable name, call name, field name, operator); the type's name for a type hit.
     name : string
-    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.; "Variable" for a variable hit.
+    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.; "Variable" or "TypeDecl" for the other hits.
     rtti : string
+}
+
+//! the position a hit's node carries
+def public hit_at(hit : CursorHit) : LineInfo {
+    if (hit.expr != null) return hit.expr.at
+    if (hit.variable != null) return hit.variable.at
+    return hit.type_decl.at
 }
 
 //! Check whether a point (line, col) is inside the span described by `at`.
@@ -254,12 +263,15 @@ class CursorVisitor : AstVisitor {
     currentFunc : Function const?
     withDeclarations : bool
     inSynthesized : bool
+    lineText : string    // the cursor line's source; "" leaves type names unmatched
+    typeHits : table<string>    // one type hit per name and position: a `new T()` carries T on several nodes
 
-    def CursorVisitor(file : string; line, col : int; declarations : bool) {
+    def CursorVisitor(file : string; line, col : int; declarations : bool; line_text : string) {
         targetFile = file
         targetLine = line
         targetCol = col
         withDeclarations = declarations
+        lineText = line_text
     }
 
     def in_target_file(at : LineInfo) : bool {
@@ -301,6 +313,25 @@ class CursorVisitor : AstVisitor {
 
     def override preVisitExprForVariable(expr : ExprFor?; svar : VariablePtr; last : bool) : void {
         add_variable_at_cursor(svar)
+    }
+
+    // a type name the source spells - `p : Point`, `new Point()`, a return type - is a TypeDecl,
+    // never an expression; the implicit `self` of a method carries its class at a position the
+    // source does not spell, so it never hits
+    def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
+        return if (!withDeclarations || empty(lineText) || inSynthesized || typ == null || !in_target_file(typ.at))
+        let td = typ
+        let name = string(td.structType != null ? td.structType.name : td.enumType != null ? td.enumType.name : td.alias)
+        return if (empty(name) || !cursor_on_token(td.at, name) || !spells_name(lineText, int(td.at.column), name))
+        let key = "{int(td.at.column)}:{name}"
+        return if (key_exists(typeHits, key))
+        typeHits |> insert(key)
+        hits |> emplace(CursorHit(
+            type_decl = td,
+            func = currentFunc,
+            name = name,
+            rtti = "TypeDecl"
+        ))
     }
 
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
@@ -367,7 +398,7 @@ class CursorVisitor : AstVisitor {
 //! earlier and ends no later than the node holding it
 def private span_key(hit : CursorHit) : int3 {
     if (hit.expr == null) {
-        let c = int(hit.variable.at.column)
+        let c = int(hit_at(hit).column)
         return int3(0, c, c + length(hit.name))
     }
     let at = hit.expr.at
@@ -398,11 +429,11 @@ def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
     return <- result
 }
 
-//! Find all expression nodes at the given cursor position, innermost first; `file` is a substring of
-//! ``FileInfo.name`` ("" matches any); nodes inside a synthesized member and compiler-made variables are
-//! never hits. With `declarations`, a cursor on a `for`/`let` variable's or an argument's name yields a `variable` hit.
-def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
-    return <- cursor_hits(file, line, col, declarations) $(var visitor) {
+//! Find all expression nodes at the given cursor position, innermost first; `file` is a substring of ``FileInfo.name``
+//! ("" matches any); nodes inside a synthesized member and compiler-made variables are never hits. With `declarations`, a cursor
+//! on a `for`/`let` variable's or an argument's name is a `variable` hit and, given the line's source as `line_text`, on a type name a `type_decl` hit.
+def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; declarations : bool = false; line_text : string = "") : array<CursorHit> {
+    return <- cursor_hits(file, line, col, declarations, line_text) $(var visitor) {
         make_visitor(*visitor) $(adapter) {
             visit(program, adapter)
         }
@@ -410,9 +441,9 @@ def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col
 }
 
 //! Find all expression nodes at the given cursor position within a single function body.
-//! `file` and `declarations` mean what they mean for `find_at_cursor`.
-def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
-    return <- cursor_hits(file, line, col, declarations) $(var visitor) {
+//! `file`, `declarations` and `line_text` mean what they mean for `find_at_cursor`.
+def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int; declarations : bool = false; line_text : string = "") : array<CursorHit> {
+    return <- cursor_hits(file, line, col, declarations, line_text) $(var visitor) {
         visitor.currentFunc = func
         make_visitor(*visitor) $(adapter) {
             visit(func, adapter)
@@ -421,8 +452,8 @@ def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, c
 }
 
 //! one visitor's run: `walk` drives it, the hits come back innermost first
-def private cursor_hits(file : string; line, col : int; declarations : bool; walk : block<(var visitor : CursorVisitor?) : void>) : array<CursorHit> {
-    var visitor = new CursorVisitor(file, line, col, declarations)
+def private cursor_hits(file : string; line, col : int; declarations : bool; line_text : string; walk : block<(var visitor : CursorVisitor?) : void>) : array<CursorHit> {
+    var visitor = new CursorVisitor(file, line, col, declarations, line_text)
     invoke(walk, visitor)
     var result <- innermost_first(visitor.hits)
     unsafe {
@@ -440,10 +471,12 @@ def public describe(hit : CursorHit) : string {
         }
         if (hit.variable != null && hit.variable._type != null) {
             write(w, " : {describe(hit.variable._type)}")
+        } elif (hit.type_decl != null) {
+            write(w, " : {describe(unsafe(reinterpret<TypeDecl?>(hit.type_decl)))}")
         } elif (hit.expr != null && hit.expr._type != null) {
             write(w, " : {describe(hit.expr._type)}")
         }
-        let at = hit.expr != null ? hit.expr.at : hit.variable.at
+        let at = hit_at(hit)
         write(w, " at {int(at.line)}:{int(at.column)}-{int(at.last_line)}:{int(at.last_column)}")
         if (hit.func != null) {
             write(w, " in {hit.func.name}")

@@ -4840,6 +4840,7 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 ### Classes
 
 - `CursorVisitor`
+- `CursorVisitor.preVisitTypeDecl`
 - `CursorVisitor.preVisitStructureField`
 - `CursorVisitor.visitStructureField`
 - `CursorVisitor.preVisitFunction`
@@ -4874,6 +4875,7 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 ### Result inspection
 
 - `describe`
+- `hit_at`
 - `is_synthesized`
 
 ## ast_used

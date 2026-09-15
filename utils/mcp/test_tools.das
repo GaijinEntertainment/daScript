@@ -1050,6 +1050,21 @@ def test_goto_definition_declarations(t : T?) {
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "Symbol: i") >= 0 && find(text, "Line: 68") >= 0, "the header: {text}")
     }
+    t |> run("a type name in an expression, a parameter and a constructor is the type") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "66", "21"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Symbol: Square") >= 0 && find(text, "Line: 46") >= 0 && find(text, "Column: 6") >= 0, "new Square() names the class: {text}")
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "14", "24"), text, is_error)
+        t |> success(find(text, "Symbol: Point") >= 0 && find(text, "Line: 9") >= 0, "a parameter's type: {text}")
+        parse_result(do_goto_definition(fixture_path("_fixture_refs.das"), "62", "14"), text, is_error)
+        t |> success(find(text, "Symbol: Value") >= 0 && find(text, "Kind: typedef") >= 0 && find(text, "Line: 31") >= 0, "a variant constructor's type lands on the typedef: {text}")
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "66", "21", "file", ""), text, is_error)
+        t |> success(find(text, "structure 'Square'") >= 0 && find(text, ":66:20") >= 0, "references from the type name in new: {text}")
+        parse_result(do_type_of(fixture_path("_fixture_refs.das"), "66", "21"), text, is_error)
+        t |> success(find(text, "TypeDecl(Square) : Square") >= 0, "type_of on a type name: {text}")
+    }
     t |> run("a function's own name is its definition") <| @(t : T?) {
         var text : string
         var is_error = false

@@ -88,13 +88,14 @@ def declaration_definition(program : smart_ptr<Program>; file : string; line, co
         name = d.kind == DeclarationKind.func ? string(d.func.name) : d.name,
         file = decl_file,
         line = decl_line,
-        column = int(d.at.line) == line && d.column >= 0 ? d.column : int(d.at.column),
+        column = int(d.at.line) == line && d.column >= 0 ? d.column : declared_name_column(d.at, d.name),
         snippet = read_source_snippet(decl_file, decl_line)
     )
 }
 
-def resolve_definition(hit : CursorHit) : DefinitionResult { // nolint:STYLE037,STYLE038 — exact-type `is` ladder over the AST node classes; each arm builds one DefinitionResult
+def resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : DefinitionResult { // nolint:STYLE037,STYLE038 — exact-type `is` ladder over the AST node classes; each arm builds one DefinitionResult
     if (hit.variable != null) return variable_definition(hit.variable)
+    if (hit.type_decl != null) return type_definition(program, hit.type_decl)
     let expr = hit.expr
     // ExprVar → variable declaration
     if (expr is ExprVar) {
@@ -195,64 +196,55 @@ def resolve_definition(hit : CursorHit) : DefinitionResult { // nolint:STYLE037,
             )
         }
     }
-    // Type alias → resolve to typedef declaration
-    if (expr._type != null) {
-        let td = expr._type
-        if (!empty(td.alias)) {
-            let file = lineinfo_file(td.at)
-            let line = int(td.at.line)
-            return DefinitionResult(
-                found = true,
-                kind = "typedef",
-                name = string(td.alias),
-                file = file,
-                line = line,
-                column = int(td.at.column),
-                snippet = read_source_snippet(file, line)
-            )
-        }
-    }
     // Fallback: resolve type reference from _type
     if (expr._type != null) {
-        let td = expr._type
-        if (td.isHandle && td.annotation != null) {
-            let ann = td.annotation
-            return DefinitionResult(
-                found = true,
-                kind = "handled",
-                name = string(ann.name),
-                cppName = string(ann.cppName)
-            )
-        }
-        if (td.structType != null) {
-            let st = td.structType
-            let file = lineinfo_file(st.at)
-            let line = int(st.at.line)
-            return DefinitionResult(
-                found = true,
-                kind = "struct",
-                name = string(st.name),
-                file = file,
-                line = line,
-                column = int(st.at.column),
-                snippet = read_source_snippet(file, line)
-            )
-        }
-        if (td.enumType != null) {
-            let en = td.enumType
-            let file = lineinfo_file(en.at)
-            let line = int(en.at.line)
-            return DefinitionResult(
-                found = true,
-                kind = "enum",
-                name = string(en.name),
-                file = file,
-                line = line,
-                column = int(en.at.column),
-                snippet = read_source_snippet(file, line)
-            )
-        }
+        return type_definition(program, expr._type)
     }
+    return DefinitionResult()
+}
+
+//! a declared name's column on its line: a Structure's own position sits one column before its name,
+//! a typedef's is its right-hand type
+def declared_name_column(at : LineInfo; name : string) : int {
+    return name_column(source_line(lineinfo_file(at), int(at.line)), name, int(at.column))
+}
+
+def declared_definition(kind : string; name : string; at : LineInfo) : DefinitionResult {
+    let file = lineinfo_file(at)
+    let line = int(at.line)
+    return DefinitionResult(
+        found = true,
+        kind = kind,
+        name = name,
+        file = file,
+        line = line,
+        column = declared_name_column(at, name),
+        snippet = read_source_snippet(file, line)
+    )
+}
+
+//! the declaration a type names: the typedef, the struct, the enum, or the handled type's C++ side
+def type_definition(program : smart_ptr<Program>; td : TypeDecl const?) : DefinitionResult {
+    if (!empty(td.alias)) {
+        var at = td.at
+        for_each_typedef(get_this_module(program)) $(alias_name : string#; var value : TypeDeclPtr) {
+            if (alias_name == td.alias) {
+                at = value.at
+            }
+        }
+        return declared_definition("typedef", string(td.alias), at)
+    }
+    if (td.isHandle && td.annotation != null) {
+        let ann = td.annotation
+        return DefinitionResult(
+            found = true,
+            kind = "handled",
+            name = string(ann.name),
+            cppName = string(ann.cppName)
+        )
+    }
+    if (td.structType != null) return declared_definition("struct", string(td.structType.name), td.structType.at)
+    if (td.enumType != null) return declared_definition("enum", string(td.enumType.name), td.enumType.at)
     return DefinitionResult()
 }
 
@@ -315,10 +307,10 @@ def run_goto_definition(file : string; line_str, col_str, no_opt_str, with_cpp_s
     return compile_program(file, true, no_opt, project) $(program; _issues) {
         let decl = declaration_definition(program, file, line, col)
         if (decl.found) return format_result(decl, CursorHit(), with_cpp_source, cpp_dirs_arr)
-        var hits <- find_at_cursor(program, file, line, col, true)
+        var hits <- find_at_cursor(program, file, line, col, true, source_line(file, line))
         if (empty(hits)) return "No expression found at {file}:{line}:{col}"
         for (hit in hits) {
-            let defn = resolve_definition(hit)
+            let defn = resolve_definition(program, hit)
             if (defn.found) return format_result(defn, hit, with_cpp_source, cpp_dirs_arr)
         }
         return build_string() $(var w) {

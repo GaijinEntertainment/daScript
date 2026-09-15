@@ -48,8 +48,10 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   function whose source holds it: hits order by span, not visit order, so the body's own
   expressions win. A variable's declaration is not an expression either: nav asks
   `find_at_cursor` for `declarations`, which adds a `variable` hit (no `expr`) for the
-  cursor on a `for`/`let` variable or a function, lambda or block argument. The MCP
-  cursor subtools (`utils/mcp/subtools/`) share all of this through the same module.
+  cursor on a `for`/`let` variable or a function, lambda or block argument, and passes
+  the cursor line's text, which adds a `type_decl` hit for the cursor on a type name the
+  source spells (`new T()`, `x : T`). The MCP cursor subtools (`utils/mcp/subtools/`)
+  share all of this through the same module.
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
   crash isolation). Same rationale as the MCP subtool pattern.
 - **Every subtool compile sets `cop.module_cache = true`** - the default module cache
