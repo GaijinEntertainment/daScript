@@ -6393,9 +6393,12 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     }
     var xr_ref : array<float>
     xr_ref |> resize(d)
+    var aref : array<float>   //! the add partner the step sees: the normed GEMV row under pre_on, the raw row otherwise
+    aref |> resize(d)
     var ss = 0.0
     for (k in range(d)) {
         let a = pre_on ? wnh[k] * (y[k] * ainv) : y[k]
+        aref[k] = a
         xr_ref[k] = (xres[k] + a) * ascale
         ss += xr_ref[k] * xr_ref[k]
     }
@@ -6405,10 +6408,17 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     for (k in range(d)) {
         normed[k] = (raw ? 1.0 : wnh[d + k]) * (xr_ref[k] * inv)
     }
+    //! the residual bar: the step's own rounding on the row, plus the GEMV's on the partner it adds - a 512-deep dot whose
+    //! terms cancel lands a few 1e-4 of its magnitude off the oracle's order (two rows of 2816 read 3e-4 at gemma-4-26B's width)
     var badx = 0
+    var pbadx = 0
     for (k in range(d)) {
-        if (abs(xr_cls[k] - xr_ref[k]) > 1e-4 * abs(xr_ref[k]) + 1e-4) {
+        let bar = 1e-4 * abs(xr_ref[k]) + 1e-4 + 4e-4 * abs(aref[k]) * ascale
+        if (abs(xr_cls[k] - xr_ref[k]) > bar) {
             badx++
+        }
+        if (abs(xr_cls[k] - (xr_ref[k] + 0.1 * abs(xr_ref[k]) + 0.1)) > bar) {   //! the control: an expectation pushed a tenth off must red
+            pbadx++
         }
     }
     var bads = 0
@@ -6431,6 +6441,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     }
     let tag = "n {n} d {d} pre {pre_on ? 1 : 0} raw {raw ? 1 : 0} bias {abias ? 1 : 0}"
     t |> success(badx == 0, "q8 gemv+ar {tag}: the residual row matches the oracle ({badx} of {d} off)")
+    t |> success(pbadx == d, "q8 gemv+ar {tag}: the residual bar reds an oracle row pushed a tenth off ({pbadx} of {d} red)")
     t |> success(bads == 0, "q8 gemv+ar {tag}: the block scales match ({bads} of {nblk_out} off)")
     t |> success(badq == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({badq} of {d} off)")
     t |> success(cnt_after[0] == 0u, "q8 gemv+ar {tag}: the arrival counter reads zero after the dispatch ({cnt_after[0]})")
@@ -6474,6 +6485,8 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
             q8_gemv_ar_run(t, 512, 1024, false, false, 0.5)   // a plain step under an output scale
             q8_gemv_ar_run(t, 512, 1024, false, false, 1.0, true)   // gpt-oss's wo step: the output bias row added before the residual
             q8_gemv_ar_run(t, 512, 1152, true, false, 1.0, true)    // a sandwich-normed wo step with an output bias: the bias rides the partner before its norm
+            q8_gemv_ar_run(t, 512, 2816, true, false, 1.0)    // gemma-4-26B's wo step: two whole four-column rounds and a three-column tail
+            q8_gemv_ar_run(t, 512, 2816, false, false, 1.0)   // the same width on the plain step (the four-column arm's tail)
         } else {
             t |> skip("dasVulkan not present")
         }

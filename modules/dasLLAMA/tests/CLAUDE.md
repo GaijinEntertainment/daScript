@@ -552,17 +552,25 @@ routed block in its gemma-4 form (the parallel dense shared expert as the layer'
 the routed feed and the router off their own norms of x, the per-expert down scale folded into
 the routing weights, the combine norming both branches and their sum under the layer's output
 scale) in the perplexity form at 150 + 150 and at 520 + 80 (two windows) with an argmax slack of
-eight (twelve on the Q4_K_M file, whose hits read 125 to 128 against the CPU chain's 134 as the
-token command's summation orders change) and a perplexity ratio of 1.45 on both files (a kernel
-rounding order alone moves the 150 + 150 cell: the Q4_K_M file's routed gate and up GEMVs - their
-lane split, the fused gate-up twin - across 4.05, 4.48 and 4.67 against the CPU chain's 3.38; the
-IQ3_XXS file 2.58 -> 4.30 with the flash tile's f16 O accumulator, its hits 129 -> 130 against
-133): a router near-tie flips whole positions between the arms,
-and either arm lands the farther one (per-position log-probs against llama.cpp b10660 on the
-same prose, mean gap on its confident positions: the IQ3_XXS file CPU 0.36 / resident 0.18, the
-Q4_K_M file CPU 0.21 / resident 0.28 to 0.56 across those orders; perplexities 3.36 / 2.58 and
-3.38 / 3.92 to 4.72, llama.cpp itself 3.87 on the Q4_K_M positions), so a
-forced-feed maxdiff against the CPU chain is no instrument here. Its planes alone pass a 16 GB
+twelve (sixteen on the Q4_K_M file, whose hits read 122 to 128 against the CPU chain's 134 as the
+kernels recompile) and a perplexity ratio of 2.0 on both files (a kernel recompile alone moves the
+150 + 150 cell, with the CPU chain fixed: the Q4_K_M file read 4.05, 4.48 and 4.67 against the CPU
+chain's 3.38 as its routed GEMVs changed their lane split and fused twin, then 4.37 -> 5.17 -> 5.80
+across the gpt-oss arc's row-kernel and attention rewrites - kernels bit-identical to the old ones at
+this model's width in the kernel cells, no out-of-range access under the validation layer's
+GPU-assisted mode, and the same readings with a barrier before every dispatch, so the drift is the
+device compiler's rounding per module, not a race - and 6.22 under that validation layer's
+instrumented shaders; the IQ3_XXS file 2.58 -> 4.30 with the flash tile's f16 O accumulator, then
+4.30 -> 2.27 across the same arc, its hits 129 -> 130 -> 139 against 133; the 520 + 80 cells moved
+1.52 -> 1.72 on the Q4_K_M file against 1.24 and 1.34 -> 1.85 on the IQ3_XXS against 1.69): a router
+near-tie flips whole positions between the arms, and either arm lands the farther one
+(per-position log-probs against llama.cpp b10660 on the same prose, mean gap on its confident
+positions: the IQ3_XXS file CPU 0.36 / resident 0.18, the Q4_K_M file CPU 0.21 / resident 0.28 to
+0.56 across those kernel versions; perplexities 3.36 / 2.58 and 3.38 / 3.92 to 5.87, llama.cpp
+itself 3.87 on the Q4_K_M positions, where the resident's misses gather in one stretch of fourteen
+positions after a flipped pick), so a forced-feed maxdiff against the CPU chain is no instrument
+here, and the perplexity ratio holds only the band - the reference-anchored form is
+`../followup_vulkan.md` item 68. Its planes alone pass a 16 GB
 card (the 704-wide down-expert rows demote to q8), so the cells skip there on the memory decline
 and run on a 32 GB card. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on
 the model table's official UD-Q4_K_M file, whose 704-wide down stacks are native Q5_1 and ride

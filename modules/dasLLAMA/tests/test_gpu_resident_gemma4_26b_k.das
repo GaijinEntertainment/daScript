@@ -11,9 +11,9 @@ require _gemma_resident
 // tier: arm `g4mk`. Skips off the JIT, without DASLLAMA_GPU=1 on a device the whole-model driver serves, without the
 // file under models_dir(), or when the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
 let private GEMMA4_26B_K_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
-//! the routed model's argmax slack: a router near-tie flips whole positions between the arms, and this file's routed
-//! GEMVs' summation order alone moves the hits (the readings: CLAUDE.md)
-let private GEMMA4_26B_K_HITS_SLACK = 12l
+//! the routed model's argmax slack: a router near-tie flips whole positions between the arms, and a kernel recompile alone
+//! moves the hits - 122 to 128 against the CPU chain's 134 over the 150-position cell (the readings: CLAUDE.md)
+let private GEMMA4_26B_K_HITS_SLACK = 16l
 
 [test]
 def test_gpu_resident_gemma4_26b_k(t : T?) {

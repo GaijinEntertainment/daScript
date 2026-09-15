@@ -1522,3 +1522,17 @@ module) is independent and can land any time - it is pure structure.
     and the `DASLLAMA_VK_DECVEC` pair `REVIEW_GPU_VULKAN.md` asks of a changed cm2 tile cannot be
     taken for them; the kernel cells hold the stamps meanwhile. The arms need the per-32 plane
     builders (the block-32 quant and scale planes) beside their kq ones, then the rows.
+68. **The routed 26B's perplexity cells measure the device compiler's rounding, not the driver.**
+    `test_gpu_resident_gemma4_26b.das` and `test_gpu_resident_gemma4_26b_k.das` hold the resident
+    perplexity to a ratio of the CPU chain's, and a kernel recompile alone - kernels bit-identical
+    at the model's width in the kernel cells, no out-of-range access under the validation layer,
+    the same readings with a barrier before every dispatch - moves the Q4_K_M file's 150-position
+    cell 4.37 -> 5.17 -> 5.80 -> 6.22 against the CPU chain's 3.38 and the IQ3_XXS file's 4.30 -> 2.27
+    against 3.36 (`tests/CLAUDE.md` carries the readings): a router near-tie flips a pick and the
+    resident's misses gather in a stretch of positions after it. The ratio bar sits past the band
+    (2.0) and holds only that band. The instrument that would hold the driver is a per-position
+    compare against the reference exe's saved logits on the same prose (the arc's probe read a mean
+    gap of 0.56 for the resident and 0.21 for the CPU chain on the reference's confident positions,
+    both inside the band the gemma arc measured): a stocked fixture of the reference exe's
+    `--save-all-logits` output beside the model, the cell scoring both arms against it and holding
+    the resident's mean gap to a bar the CPU chain's gap sets.
