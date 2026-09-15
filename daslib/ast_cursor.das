@@ -3,8 +3,9 @@ options indenting = 4
 options strict_smart_pointers = true
 
 //! ast_cursor provides position-based AST queries — given a file, line, and column,
-//! it finds all expression nodes at that cursor position. Results are returned
-//! innermost-first, with enclosing function context and extracted names.
+//! it finds the expression nodes at that cursor position, and on request the variable
+//! declarations. Results are returned innermost-first, with enclosing function context
+//! and extracted names.
 //!
 //! Typical use is implementing IDE features like goto-definition, type-of, and
 //! find-references on top of the compiled AST.
@@ -19,14 +20,13 @@ require strings
 struct public CursorHit {
     //! Raw pointer to the expression node (valid while the program lives); null for a variable hit.
     expr : Expression const?
-    //! The variable whose declaration the cursor is on - a `for` loop variable, a `let` variable,
-    //! a function, lambda or block argument - when the search asked for declarations; else null.
+    //! The variable whose declaration the cursor is on (`for`/`let` variable, function, lambda or block argument) when declarations were asked for; else null.
     variable : Variable const?
     //! Enclosing function, or null for expressions in global scope.
     func : Function const?
     //! Extracted name for named nodes (variable name, call name, field name, operator).
     name : string
-    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.
+    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.; "Variable" for a variable hit.
     rtti : string
 }
 
@@ -64,13 +64,13 @@ class CursorVisitor : AstVisitor {
     targetFile : string
     hits : array<CursorHit>
     currentFunc : Function const?
-    withVariables : bool
+    withDeclarations : bool
 
-    def CursorVisitor(file : string; line, col : int) {
+    def CursorVisitor(file : string; line, col : int; declarations : bool) {
         targetFile = file
         targetLine = line
         targetCol = col
-        currentFunc = null
+        withDeclarations = declarations
     }
 
     def in_target_file(at : LineInfo) : bool {
@@ -89,8 +89,8 @@ class CursorVisitor : AstVisitor {
         return targetCol >= c && targetCol < c + length(string(v.name))
     }
 
-    def add_variable(v : Variable const?) : void {
-        return if (!withVariables || v == null || v.flags.generated || !in_target_file(v.at) || !cursor_on_variable(v))
+    def add_variable_at_cursor(v : Variable const?) : void {
+        return if (!withDeclarations || v == null || v.flags.generated || !in_target_file(v.at) || !cursor_on_variable(v))
         hits |> emplace(CursorHit(
             variable = v,
             func = currentFunc,
@@ -104,19 +104,19 @@ class CursorVisitor : AstVisitor {
     }
 
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; lastArg : bool) : void {
-        add_variable(arg)
+        add_variable_at_cursor(arg)
     }
 
     def override preVisitExprBlockArgument(blk : ExprBlock?; arg : VariablePtr; lastArg : bool) : void {
-        add_variable(arg)
+        add_variable_at_cursor(arg)
     }
 
     def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) : void {
-        add_variable(arg)
+        add_variable_at_cursor(arg)
     }
 
     def override preVisitExprForVariable(expr : ExprFor?; svar : VariablePtr; last : bool) : void {
-        add_variable(svar)
+        add_variable_at_cursor(svar)
     }
 
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
@@ -146,7 +146,7 @@ def private span_size(hit : CursorHit) : int2 {
     return int2(int(at.last_line) - int(at.line), int(at.last_column) - int(at.column))
 }
 
-//! by span; within one span the later-visited (deeper) node first
+//! sorted by span size; within one span the later-visited (deeper) node comes first
 def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
     var order : array<int>
     order |> reserve(length(src))
@@ -172,27 +172,28 @@ def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
 //! matched against ``FileInfo.name`` ("" matches any). With `declarations`, a cursor on the name of
 //! a `for`/`let` variable or a function, lambda or block argument yields a `variable` hit with no `expr`.
 def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
-    var visitor = new CursorVisitor(file, line, col)
-    visitor.withVariables = declarations
-    make_visitor(*visitor) $(adapter) {
-        visit(program, adapter)
+    return <- cursor_hits(file, line, col, declarations) $(var visitor) {
+        make_visitor(*visitor) $(adapter) {
+            visit(program, adapter)
+        }
     }
-    var result <- innermost_first(visitor.hits)
-    unsafe {
-        delete visitor
-    }
-    return <- result
 }
 
 //! Find all expression nodes at the given cursor position within a single function body.
-//! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
+//! `file` and `declarations` mean what they mean for `find_at_cursor`.
 def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
-    var visitor = new CursorVisitor(file, line, col)
-    visitor.currentFunc = func
-    visitor.withVariables = declarations
-    make_visitor(*visitor) $(adapter) {
-        visit(func, adapter)
+    return <- cursor_hits(file, line, col, declarations) $(var visitor) {
+        visitor.currentFunc = func
+        make_visitor(*visitor) $(adapter) {
+            visit(func, adapter)
+        }
     }
+}
+
+//! one visitor's run: `walk` drives it, the hits come back innermost first
+def private cursor_hits(file : string; line, col : int; declarations : bool; walk : block<(var visitor : CursorVisitor?) : void>) : array<CursorHit> {
+    var visitor = new CursorVisitor(file, line, col, declarations)
+    invoke(walk, visitor)
     var result <- innermost_first(visitor.hits)
     unsafe {
         delete visitor

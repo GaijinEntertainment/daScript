@@ -13,7 +13,7 @@ class LspProbeDerived : LspProbeBase {
     def override probe_speak() : string => "derived"
 }
 
-class LspProbeFinal : LspProbeBase {
+class LspProbeFinalized : LspProbeBase {
     def finalize() {
         print("final\n")
     }
@@ -28,7 +28,7 @@ def main() {
     lsp_probe_helper()
     var d = new LspProbeDerived()
     print("{d->probe_speak()}\n")
-    var f = new LspProbeFinal()
+    var f = new LspProbeFinalized()
     print("{f->probe_speak()}\n")
     let base = 10
     let add = @(x : int) : int => x + base

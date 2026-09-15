@@ -174,7 +174,8 @@ replayed; requests are forwarded one at a time; a child that died before a reque
 respawned and the request re-sent once, while one that dies while answering gets an error reply
 and no re-send, since a tool call could otherwise run twice. Anything on the child's stdout that
 is not a JSON line is logged as `child_noise` and carried in that error text. Stdout is the
-protocol, so the log goes to its file only; no pid file, no health poll, no tray.
+protocol, so the log goes to its file only, and both stdio streams are switched to binary mode
+(`fbinary`) like the LSP front's; no pid file, no health poll, no tray.
 
 ```
 bin/watchdog --stdio --name daslang-mcp --cwd <tree> --program <tree>/bin/daslang -- -ignore-manifest utils/mcp/main.das

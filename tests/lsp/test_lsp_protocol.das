@@ -326,11 +326,14 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     var derived_speak_line0 = -1
     var derived_speak_char = -1
     var base_line0 = -1
+    var base_name_char = -1
     var derived_line0 = -1
     var derived_parent_char = -1
     var final_line0 = -1
+    var final_name_char = -1
     var final_parent_char = -1
     var finalize_line0 = -1
+    var finalize_char = -1
     var new_final_line0 = -1
     var new_final_char = -1
     var lambda_line0 = -1
@@ -354,17 +357,20 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
             derived_speak_char = find(clean_lines[i], "probe_speak")
         } elif (clean_lines[i] |> starts_with("class LspProbeBase")) {
             base_line0 = i
+            base_name_char = find(clean_lines[i], "LspProbeBase")
         } elif (clean_lines[i] |> starts_with("class LspProbeDerived")) {
             derived_line0 = i
             derived_parent_char = find(clean_lines[i], "LspProbeBase")
-        } elif (clean_lines[i] |> starts_with("class LspProbeFinal")) {
+        } elif (clean_lines[i] |> starts_with("class LspProbeFinalized")) {
             final_line0 = i
+            final_name_char = find(clean_lines[i], "LspProbeFinalized")
             final_parent_char = find(clean_lines[i], "LspProbeBase")
         } elif (clean_lines[i] |> starts_with("    def finalize")) {
             finalize_line0 = i
-        } elif (clean_lines[i] |> starts_with("    var f = new LspProbeFinal")) {
+            finalize_char = find(clean_lines[i], "finalize")
+        } elif (clean_lines[i] |> starts_with("    var f = new LspProbeFinalized")) {
             new_final_line0 = i
-            new_final_char = find(clean_lines[i], "LspProbeFinal")
+            new_final_char = find(clean_lines[i], "LspProbeFinalized")
         } elif (clean_lines[i] |> starts_with("    let add = @")) {
             lambda_line0 = i
             lambda_body_char = find(clean_lines[i], "x + base")
@@ -374,7 +380,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
             for_char = find(clean_lines[i], "i in")
         } elif (clean_lines[i] |> starts_with("        print(\"\{i\}")) {
             for_use_line0 = i
-            for_use_char = find(clean_lines[i], "\{i\}") + 1
+            for_use_char = find(clean_lines[i], "i\}")
         }
     }
     delete clean_lines
@@ -537,30 +543,30 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 t |> equal(impl0?["range"]?["start"]?["line"] ?? -1, derived_speak_line0)
                 t |> equal(impl0?["range"]?["start"]?["character"] ?? -1, derived_speak_char)
 
-                let hover_class = probe_hover(t, w, r, 8, uri, final_line0, 8)
-                t |> success(hover_class.text |> find("class LspProbeFinal : LspProbeBase") >= 0, "hover on a class name shows the class: {hover_class.text}")
+                let hover_class = probe_hover(t, w, r, 8, uri, final_line0, final_name_char + 2)
+                t |> success(hover_class.text |> find("class LspProbeFinalized : LspProbeBase") >= 0, "hover on a class name shows the class: {hover_class.text}")
                 t |> success(hover_class.text |> find("__finalize") < 0, "hover on a class name is not the synthesized finalizer: {hover_class.text}")
                 t |> equal(hover_class.line, final_line0)
-                t |> equal(hover_class.character, 6)
+                t |> equal(hover_class.character, final_name_char)
 
                 let hover_parent = probe_hover(t, w, r, 9, uri, final_line0, final_parent_char + 2)
                 t |> success(hover_parent.text |> find("class LspProbeBase") >= 0, "hover on the parent name shows the parent: {hover_parent.text}")
                 t |> equal(hover_parent.character, final_parent_char)
-                t |> equal(probe_definition(t, w, r, 10, uri, final_line0, final_parent_char + 2), int2(base_line0, 6), "definition of the parent name lands on the parent class")
+                t |> equal(probe_definition(t, w, r, 10, uri, final_line0, final_parent_char + 2), int2(base_line0, base_name_char), "definition of the parent name lands on the parent class")
 
-                let hover_final = probe_hover(t, w, r, 11, uri, finalize_line0, 10)
-                t |> success(hover_final.text |> find("def finalize(self : LspProbeFinal") >= 0, "hover on a user finalizer shows it: {hover_final.text}")
+                let hover_final = probe_hover(t, w, r, 11, uri, finalize_line0, finalize_char + 2)
+                t |> success(hover_final.text |> find("def finalize(self : LspProbeFinalized") >= 0, "hover on a user finalizer shows it: {hover_final.text}")
                 t |> success(hover_final.text |> find("__finalize") < 0, "hover on a user finalizer is not the synthesized one: {hover_final.text}")
-                t |> equal(hover_final.character, 8)
+                t |> equal(hover_final.character, finalize_char)
 
-                let ref_keys <- probe_references(t, w, r, 12, uri, final_line0, 8)
+                let ref_keys <- probe_references(t, w, r, 12, uri, final_line0, final_name_char + 2)
                 t |> equal(length(ref_keys), 2, "references to a class: declaration + new site, got {ref_keys}")
-                t |> success(ref_keys |> find_index("{final_line0}:6") >= 0, "references include the declaration once")
+                t |> success(ref_keys |> find_index("{final_line0}:{final_name_char}") >= 0, "references include the declaration once")
                 t |> success(ref_keys |> find_index("{new_final_line0}:{new_final_char}") >= 0, "references include the new site")
 
-                let base_keys <- probe_references(t, w, r, 13, uri, base_line0, 8)
+                let base_keys <- probe_references(t, w, r, 13, uri, base_line0, base_name_char + 2)
                 t |> equal(length(base_keys), 3, "references to a base class: declaration + two derived-class lines, got {base_keys}")
-                t |> success(base_keys |> find_index("{base_line0}:6") >= 0, "base references include the declaration")
+                t |> success(base_keys |> find_index("{base_line0}:{base_name_char}") >= 0, "base references include the declaration")
                 t |> success(base_keys |> find_index("{derived_line0}:{derived_parent_char}") >= 0, "base references include the first derived class line")
                 t |> success(base_keys |> find_index("{final_line0}:{final_parent_char}") >= 0, "base references include the second derived class line")
 
