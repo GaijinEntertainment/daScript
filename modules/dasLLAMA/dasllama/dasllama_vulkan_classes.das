@@ -6341,6 +6341,10 @@ struct VkQ51Blk {
     qs : int16[10]   //! one Q5_1 32-block: 16 nibble bytes (element j low, j + 16 high) then the 4 qh bytes (bit e = element e's fifth bit); d | m live in ws as one word
 }
 
+struct VkMx4Blk {
+    qs : int16[8]   //! one MXFP4 32-block: 16 nibble bytes (element j low, j + 16 high, the e2m1 code); the E8M0 scale byte lives in ws, four blocks a word
+}
+
 struct VkK6Blk {
     ql : int16[64]   // one Q6_K superblock's 128 low-nibble bytes as 16-bit lanes
     qh : int16[32]   // ... and its 64 high-2-bit bytes; scales (16 int8 + f16 d) live in ws
@@ -7136,6 +7140,53 @@ class template Q51Cm2T : KqCm2BatchT {
     }
 }
 
+//! MXFP4 on the cm2 tile: the per-32 plane verbatim (the CPU's `dot_mx4q8_scalar` layout), w = e2m1[nibble] * 2^(e - 127) computed
+//! as the DOUBLED magnitude {0,1,2,3,4,6,8,12} times the halved E8M0 scale (the CPU's `e8m0_half`), no table; the scale plane is one
+//! byte a block, read four blocks a word
+[ |> template_struct_instance]
+class template Mx4Cm2T : KqCm2BatchT {
+    typedef BLK = VkMx4Blk
+    typedef ST = uint
+    override BLKW = 32u
+    override DECV4 = true
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkMx4Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let j = e & 15u
+        let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
+        let nib = (by >> ((e >> 4u) * 4u)) & 0xFu
+        let mag = nib & 7u
+        let dm = mag < 4u ? mag : ((4u + ((mag & 1u) << 1u)) << (((mag >> 1u) - 2u) & 1u))
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let ex = (ws[idx >> 2u] >> ((idx & 3u) * 8u)) & 0xFFu
+        let v = float(dm) * uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
+        return float16((nib & 8u) != 0u ? -v : v)
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode_v4(blk : VkMx4Blk; bc, cib : uint2) : half4 {
+        let e = cib.y
+        let li = int((e & 15u) >> 1u)
+        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
+        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
+        let sh = (e >> 4u) * 4u
+        let nw = ((l0 >> sh) & 0xFu) | (((l0 >> (sh + 8u)) & 0xFu) << 8u) | (((l1 >> sh) & 0xFu) << 16u) | (((l1 >> (sh + 8u)) & 0xFu) << 24u)
+        let mag = nw & 0x07070707u
+        let lo2 = mag & 0x03030303u
+        let hi1 = (mag >> 2u) & 0x01010101u
+        let dm = lo2 + ((lo2 + 0x04040404u + (((lo2 & (lo2 >> 1u)) & 0x01010101u) << 1u)) & (hi1 * 0xFFu))
+        let sg = (nw >> 3u) & 0x01010101u
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let ex = (ws[idx >> 2u] >> ((idx & 3u) * 8u)) & 0xFFu
+        let sc = uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
+        return half4(float4(float(dm & 0xFFu) * (1.0 - 2.0 * float(sg & 1u)) * sc,
+            float((dm >> 8u) & 0xFFu) * (1.0 - 2.0 * float((sg >> 8u) & 1u)) * sc,
+            float((dm >> 16u) & 0xFFu) * (1.0 - 2.0 * float((sg >> 16u) & 1u)) * sc,
+            float(dm >> 24u) * (1.0 - 2.0 * float(sg >> 24u)) * sc))
+    }
+}
+
 [ |> template_struct_instance]
 class template Iq4xsCm2T : KqCm2BatchT {
     typedef BLK = VkK4Blk   // the iq4xs plane is the k/k+16 pairing verbatim - the k4 lane view fits
@@ -7839,6 +7890,17 @@ class Q51Cm2SBatch : Q51Cm2T {
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
+//! the mx4 rail's s column: the expert schedule's 32-row pieces (gpt-oss's routed stacks; a dense mx4 plane never exists)
+[vk_dispatch(name = "mx4_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Mx4Cm2SBatch : Mx4Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
 [vk_dispatch(name = "kq_batch_k4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K4Cm2LBatch : K4Cm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -8225,6 +8287,16 @@ class Q8Cm2EBatch : Q8Cm2T {
 
 [vk_dispatch(name = "q51_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q51Cm2EBatch : Q51Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "mx4_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Mx4Cm2EBatch : Mx4Cm2T {
     override BN = 128u
     override STILE = true
     typedef AT = coopmatWgA_f16_128x64
@@ -9590,6 +9662,70 @@ class Q51GemvSum : Q51GemvBase {
     }
 }
 
+//! the sdot4 of four MXFP4 nibbles (one per byte of `n`, the e2m1 code) against four Q8_0 activation bytes: the doubled
+//! magnitudes {0,1,2,3,4,6,8,12} built per byte without a table (`dm`), the sign applied by subtracting the negative bytes twice
+def mx4_sdot(n, x : uint) : int {
+    let mag = n & 0x07070707u
+    let lo2 = mag & 0x03030303u
+    let hi1 = (mag >> 2u) & 0x01010101u
+    let dm = lo2 + ((lo2 + 0x04040404u + (((lo2 & (lo2 >> 1u)) & 0x01010101u) << 1u)) & (hi1 * 0xFFu))
+    let neg = dm & (((n >> 3u) & 0x01010101u) * 0xFFu)
+    return sdot4(dm, x) - 2 * sdot4(neg, x)
+}
+
+//! MXFP4 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: the block's four nibble words, the low and
+//! high nibbles dotted against the activation words through `mx4_sdot`, isum * e8m0_half(scale byte) * xs per block -
+//! `dot_mx4q8_scalar`'s float order, reassociated by lane
+[vk_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Mx4Gemv {
+    @ssbo @binding = 0 wq : array<uint>        // weight quant words, four per block
+    @ssbo @binding = 1 wsb : array<uint>       // per-block E8M0 scale bytes, four blocks a word
+    @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
+    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
+    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
+    @ssbo @binding = 5 y : array<float>
+    @push_constant pa : GemvArgs
+
+    //! one row's dot over `nb` blocks from weight block `wb0` and activation block `xb0`: a lane a block, the subgroup's sum
+    def row_dot(wb0, xb0, nb : uint) : float {
+        let lane = gl_SubgroupInvocationID
+        var acc = 0.0
+        var bi0 = 0u
+        while (bi0 < nb) {
+            let b = bi0 + lane
+            if (b < nb) {
+                let wbase = (wb0 + b) * 4u
+                let xbase = (xb0 + b) * 8u
+                var idot = 0
+                for [unroll_full] (c in range(4)) {
+                    let w = wq[wbase + uint(c)]
+                    idot += mx4_sdot(w & 0x0F0F0F0Fu, xqw[xbase + uint(c)])
+                    idot += mx4_sdot((w >> 4u) & 0x0F0F0F0Fu, xqw[xbase + 4u + uint(c)])
+                }
+                let sb = wb0 + b
+                let ex = (wsb[sb >> 2u] >> ((sb & 3u) * 8u)) & 0xFFu
+                acc += float(idot) * uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u)) * axs[xb0 + b]
+            }
+            bi0 += gl_SubgroupSize
+        }
+        return subgroupAdd(acc)
+    }
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "mx4_gemv_cls_spv")]
+    def run {
+        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (rg < pa.nreg * pa.d) {
+            let r = rg / pa.d
+            let row = rg % pa.d
+            let nb = pa.n / 32u
+            let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
+            if (subgroupElect()) {
+                y[pa.ybase + rg] = total
+            }
+        }
+    }
+}
+
 // ===== the K-quant decode GEMV family: one base shell, per-format block contributions =====
 // ONE LANE PER 32-BLOCK via uint4 loads (one scale decode per block).
 // The formats share the region walk, the lane->block map, and the subgroup fold — only the
@@ -9907,6 +10043,8 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_q8_gemv_cls()
     } elif (fmt == int(KqFmt.q51)) {
         return ensure_q51_gemv_cls()
+    } elif (fmt == int(KqFmt.mx4)) {
+        return ensure_mx4_gemv_cls()
     } elif (fmt == int(KqFmt.k4)) {
         return ensure_kq_gemv_k4_cls()
     } elif (fmt == int(KqFmt.k5)) {
@@ -9943,6 +10081,8 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
         return set_q8_gemv_cls(bufs, sizes, gbits)
     } elif (fmt == int(KqFmt.q51)) {
         return set_q51_gemv_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.mx4)) {
+        return set_mx4_gemv_cls(bufs, sizes, gbits)
     } elif (kq_sb(fmt)) {
         // the family shares one layout — one set serves every kq format
         return set_kq_gemv_cls(fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], kq_grid_dev()),
@@ -9958,6 +10098,8 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_q8_gemv_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.q51)) {
         enc_q51_gemv_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.mx4)) {
+        enc_mx4_gemv_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k4)) {
         enc_kq_gemv_k4_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k5)) {
@@ -10004,7 +10146,7 @@ def gemv_grid_fmt(fmt : int) : bool {
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
-    if (fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51)) return 0u   //! the per-32 formats: a whole subgroup a row, a lane a block
+    if (kq_block32(fmt)) return 0u   //! the per-32 formats (q8, q51, mx4): a whole subgroup a row, a lane a block
     let nb = n / 32l
     let grid = gemv_grid_fmt(fmt)
     if (nb <= 24l) return 8u

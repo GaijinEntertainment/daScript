@@ -30,6 +30,7 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.iq2s), 12)
         t |> equal(int(KqFmt.iq2xs), 13)
         t |> equal(int(KqFmt.iq2xxs), 14)
+        t |> equal(int(KqFmt.mx4), 15)
     }
 }
 
@@ -60,6 +61,11 @@ def test_kqfmt_predicates(t : T?) {
         t |> success(kq_sb(int(KqFmt.iq2xs)), "the int-id predicate agrees for iq2xs")
         t |> success(kq_sb(KqFmt.iq2xxs), "iq2xxs is superblock")
         t |> success(kq_sb(int(KqFmt.iq2xxs)), "the int-id predicate agrees for iq2xxs")
+        t |> success(!kq_sb(KqFmt.mx4), "mx4 rides per-32 planes")
+        t |> success(kq_block32(KqFmt.mx4) && kq_block32(int(KqFmt.mx4)), "mx4 is a per-32 format on both predicates")
+        t |> equal(kq_qsb(KqFmt.mx4), 16l)   // 16 nibble bytes a block
+        t |> equal(kq_ssb(KqFmt.mx4), 1l)    // one E8M0 byte a block
+        t |> equal(kq_elems(KqFmt.mx4), 32l)
     }
 }
 

@@ -103,6 +103,7 @@ def kq_ggml_type(f : KqFmt) : int {
     if (f == KqFmt.iq2s) return GGML_TYPE_IQ2_S
     if (f == KqFmt.iq2xs) return GGML_TYPE_IQ2_XS
     if (f == KqFmt.iq2xxs) return GGML_TYPE_IQ2_XXS
+    if (f == KqFmt.mx4) return GGML_TYPE_MXFP4
     return -1
 }
 

@@ -840,8 +840,8 @@ def private check_ar_max_dim_triple {
     }
 }
 
-//! q51 is a routed-expert plane alone and the resident MoE block is cm2-gated, so the f16 feed never admits it on a KHR-mode card
-var private CM2_KHR_EXEMPT <- {"Q51Cm2T"}
+//! q51 and mx4 are routed-expert planes alone and the resident MoE block is cm2-gated, so the f16 feed never admits them on a KHR-mode card
+var private CM2_KHR_EXEMPT <- {"Q51Cm2T", "Mx4Cm2T"}
 var private CM2_NO_EXEMPT : table<string>
 
 def private cm2_format_templates(exempt : table<string>) : array<string> {
@@ -865,7 +865,7 @@ struct private LadderTrio {
 }
 
 def private cm2_dispatch_name(fmt, tail : string) : string {
-    return fmt == "q8" || fmt == "q51" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
+    return fmt == "q8" || fmt == "q51" || fmt == "mx4" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 }
 
 def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {

@@ -73,6 +73,10 @@ def kq_dev_ssb_i(fmt : int) : int64 {
 let Q51_QPB = 20l
 let Q51_SPB = 4l
 
+//! MXFP4 per-32-block plane strides: 16B nibbles, one E8M0 scale byte - the CPU's mxq / mxs planes verbatim.
+let MX4_QPB = 16l
+let MX4_SPB = 1l
+
 //! Quant-plane bytes per 256-weight superblock per row for a kq format id (4/5/6 = Q4_K/Q5_K/
 //! Q6_K, 40 = Q4_0, 44 = IQ4_XS, 3 = Q3_K, 33 = IQ3_S, 34 = IQ3_XXS, 45 = IQ4_NL, 2 = Q2_K, 23 = IQ2_S, 24 = IQ2_XS, 25 = IQ2_XXS). The ONE stride source for every fmt-branched kq walker/
 //! kernel/repack — an unknown id panics instead of silently walking another format's stride.

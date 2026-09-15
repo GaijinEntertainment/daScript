@@ -566,9 +566,10 @@ typedef GatherStackQ51Fn = function<(t : Model; woff : int64; n, rows, slice_row
 var private g_layout_gather : GatherStackFn
 var private g_layout_gather_kq : GatherStackKqFn
 var private g_layout_gather_q51 : GatherStackQ51Fn
+var private g_layout_gather_mx4 : GatherStackQ51Fn   //! the mx4 gather takes the q51 gather's shape: the per-32 planes out of the repack's grp<mr> interleave
 var private g_layout_hooks_set = false
 
-def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51 : GatherStackQ51Fn) {
+def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsmx4 : GatherStackQ51Fn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
     g_layout_repack_mx4 = rmx4
@@ -576,6 +577,7 @@ def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStack
     g_layout_gather = gs
     g_layout_gather_kq = gskq
     g_layout_gather_q51 = gsq51
+    g_layout_gather_mx4 = gsmx4
     g_layout_hooks_set = true
 }
 
@@ -624,6 +626,12 @@ def layout_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     layout_hooks_check()
     invoke(g_layout_gather_q51, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+}
+
+def layout_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64;
+                            repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    layout_hooks_check()
+    invoke(g_layout_gather_mx4, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
 // ===== whole-model GPU residency hook (registered by dasllama_gpu_resident at [init]) =====
