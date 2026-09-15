@@ -1513,3 +1513,13 @@ module) is independent and can land any time - it is pure structure.
     `fa_stamp_refuse` keep such a stamp off the device. The arms share one `run` because the
     SPIR-V emitter emits a method call as an `OpFunction` it never inlines; once the emitter inlines
     device-side calls, each arm becomes a method on its own template and the constants move with it.
+65. **The per-op streamed prefill of a mixed-format MoE dies on a bounds check.** With the resident
+    route off and a 5000 MiB cap (`DASLLAMA_GPU_RESIDENT=0 DASLLAMA_GPU_VRAM_MB=5000`) the
+    Qwen3-30B-A3B UD-IQ2_XXS loads on the per-op rails with its expert stacks streamed for the
+    layers past the budget, the decode block serves the fixture gate's eight tokens (item 62's
+    fix), and the first prefill window dies with `array index out of range` right after "cm2
+    expert chain engaged" - in cm2 mode and under `DASLLAMA_COOPMAT=mm`, with the streamed split on
+    and with `DASLLAMA_GPU_MOE_SPLIT=0`. The plan serves the file resident wherever it fits, so the
+    streamed form is reached only past the budget; the fix starts from the das call stack (the
+    repro under the interpreter, or a stack-walking build), and item 62's key is the first suspect
+    to rule out in the streamed chain's own per-layer tables (`heat_pools`, `ffn_cmds`).
