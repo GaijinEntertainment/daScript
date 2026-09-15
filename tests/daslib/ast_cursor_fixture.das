@@ -70,3 +70,13 @@ class Puppy : Dog {
     def bark() : string => "yip"
     def override speak() : string => bark()
 }
+
+struct Greeter {
+    cb : function<(name : string) : string> = @@greet
+}
+
+def captured() : int {
+    let base = 10
+    let plus = @(x : int) : int => x + base
+    return plus(1)
+}

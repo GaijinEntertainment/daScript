@@ -4019,6 +4019,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `find_enum_name` - Finds the name corresponding to an enumeration value in the specified type.
 - `find_enum_value` - Finds the integer value corresponding to an enumeration name in the specified type.
 - `find_matching_variable` - Searches the program for global variables matching the given name that are visible from the specified function's scope.
+- `find_method_function` - Returns the function a class method field points at - the override the class declares, else the inherited one - or null for a data field, an unknown name, or a null structure.
 - `find_module` - Finds a module by name in the specified program.
 - `find_module_function_via_rtti` - Finds a function by name in the specified module using RTTI.
 - `find_module_via_rtti` - Finds a module by name in the specified program using RTTI.
@@ -4878,8 +4879,9 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 ### Class members
 
 - `field_at` - Where the field `name` of `st` is declared - the parent's line for an inherited field; a zero position when there is no such field.
-- `is_own_field` - True for a field the source declares in its class's own body: not one the compiler made (`__rtti`, `__finalize`) and not a parent's copy.
-- `method_function` - The function a class method field `name` of `st` points at - the override `st` declares, else the inherited one; null for a data field or no such field.
+- `field_name_at` - Where a field access spells its field name - a method call's name sits past the `->` its node spans; a zero position for any other node.
+- `is_own_field` - True for a field the source declares in its struct's or class's own body - an override included - not one the compiler made (`__rtti`, `__finalize`) or a parent's copy.
+- `value_struct` - The struct a field access reads its field from - through a pointer when `value` is one; null for any other value.
 
 ### Result inspection
 

@@ -870,25 +870,7 @@ namespace das {
         if (name.find("::") != string::npos) {
             return nullptr;
         }
-        auto field = st->findField(name);
-        if (!field) {
-            return nullptr;
-        }
-        if (!field->classMethod) {
-            return nullptr;
-        }
-        auto addr = field->init;
-        if (addr->rtti_isCast()) {
-            addr = static_cast<ExprCast*>(addr)->subexpr;
-        }
-        if (!addr->rtti_isAddr()) {
-            return nullptr;
-        }
-        auto pAddr = static_cast<ExprAddr*>(addr);
-        if (!pAddr->func) {
-            return nullptr;
-        }
-        return pAddr->func;
+        return st->findMethodFunction(name);
     }
     bool InferTypes::hasMatchingMemberCall(Structure *st, const string &name, const vector<MakeFieldDeclPtr> &arguments, const vector<TypeDeclPtr> &nonNamedArguments, bool methodCall) const {
         auto methodFunc = findMethodFunction(st, name);

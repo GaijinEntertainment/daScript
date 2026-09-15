@@ -55,18 +55,9 @@ def variable_target(variable : Variable const?) : RefTarget {
     return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
 }
 
-def value_struct(value : Expression const?) : Structure const? {
-    if (value == null || value._type == null) return null
-    var vt = value._type
-    if (vt.structType == null && vt.firstType != null) {
-        vt = vt.firstType
-    }
-    return vt.structType
-}
-
 //! the field `fname` of `st` as a target; a class method field is its function instead
 def field_target(st : Structure const?; fname : string) : RefTarget {
-    let method = method_function(st, fname)
+    let method = find_method_function(st, fname)
     if (method != null) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(method), name = string(method.name), decl_at = method.at)
     return RefTarget(kind = RefTargetKind.field, field_name = fname, name = "{st.name}.{fname}", decl_at = field_at(st, fname))
 }
@@ -252,7 +243,7 @@ class RefVisitor : AstVisitor {
     def on_target_field(value : Expression const?; name : string) : bool {
         let st = value_struct(value)
         return false if (st == null)
-        if (target.kind == RefTargetKind.func) return to_void(method_function(st, name)) == target.target_ptr
+        if (target.kind == RefTargetKind.func) return to_void(find_method_function(st, name)) == target.target_ptr
         return target.kind == RefTargetKind.field && name == target.field_name && position_key(field_at(st, name)) == position_key(target.decl_at)
     }
 

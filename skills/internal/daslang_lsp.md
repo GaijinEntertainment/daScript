@@ -52,7 +52,7 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   the cursor line's text, which adds a `type_decl` hit for the cursor on a type name the
   source spells (`new T()`, `x : T`). A method call (`a->m()`, `a.m()`, a bare `m()` in the
   class) is a hit on its `ExprField` - the conversions the call desugars to are never hits -
-  and resolves to the method the receiver's class runs (`method_function`); a field is one
+  and resolves to the method the receiver's class runs (`ast::find_method_function`); a field is one
   declaration across the class hierarchy (`field_at`), so its references include accesses
   through derived receivers, and a cursor on the field's own name is a `field` declaration.
   `documentSymbol` lists a class's own fields (`is_own_field`) and bare method names. The

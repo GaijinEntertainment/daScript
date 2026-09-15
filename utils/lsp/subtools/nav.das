@@ -253,23 +253,9 @@ struct Definition {
 }
 
 def private field_value_struct(expr : Expression const?) : Structure const? {
-    var value_type : TypeDecl const?
-    if (expr is ExprField) {
-        let f = expr as ExprField
-        if (f.value != null) {
-            value_type = f.value._type
-        }
-    } elif (expr is ExprSafeField) {
-        let f = expr as ExprSafeField
-        if (f.value != null) {
-            value_type = f.value._type
-        }
-    }
-    // unwrap pointer types (Foo? -> Foo)
-    if (value_type != null && value_type.structType == null && value_type.firstType != null) {
-        value_type = value_type.firstType
-    }
-    return value_type != null ? value_type.structType : null
+    if (expr is ExprField) return value_struct((expr as ExprField).value)
+    if (expr is ExprSafeField) return value_struct((expr as ExprSafeField).value)
+    return null
 }
 
 def private variable_definition(variable : Variable const?) : Definition {
@@ -331,21 +317,14 @@ def private resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : 
         let field_name = string(expr is ExprField ? (expr as ExprField).name : (expr as ExprSafeField).name)
         let st = field_value_struct(expr)
         if (st != null) {
-            let method = method_function(st, field_name)
+            let method = find_method_function(st, field_name)
             if (method != null) {
                 return Definition(found = true, kind = "function", name = bare_name(string(method.name)), file = lineinfo_file(method.at),
                     line = int(method.at.line), column = int(method.at.column), signature = function_signature(method))
             }
-            for (fld in st.fields) {
-                if (fld.name == field_name) {
-                    return Definition(
-                        found = true,
-                        kind = "field",
-                        name = field_name,
-                        file = lineinfo_file(fld.at),
-                        line = int(fld.at.line),
-                        column = int(fld.at.column))
-                }
+            let at = field_at(st, field_name)
+            if (int(at.line) > 0) {
+                return Definition(found = true, kind = "field", name = field_name, file = lineinfo_file(at), line = int(at.line), column = int(at.column))
             }
         }
     }
@@ -443,13 +422,6 @@ def private hover_contents(hit : CursorHit; defn : Definition) : string {
             write(w, "\nin `{hit.func.name}`")
         }
     }
-}
-
-//! where a field access spells its field name - a method call's name sits past the `->` its node spans; a zero position for any other node
-def private field_name_at(expr : Expression const?) : LineInfo {
-    if (expr is ExprField) return (expr as ExprField).atField
-    if (expr is ExprSafeField) return (expr as ExprSafeField).atField
-    return LineInfo()
 }
 
 def private run_hover(file : string; line0, char16 : int; project : string) : HoverResult {
@@ -566,7 +538,7 @@ def private identify_target(program : smart_ptr<Program>; hit : CursorHit) : Ref
         let fname = string(expr is ExprField ? (expr as ExprField).name : (expr as ExprSafeField).name)
         let st = field_value_struct(expr)
         if (st != null) {
-            let method = method_function(st, fname)
+            let method = find_method_function(st, fname)
             return function_target(method, int(method.at.column)) if (method != null)
             return field_target(st, fname)
         }
@@ -663,11 +635,7 @@ def private declaration_target(found : DeclarationHit; column : int) : RefTarget
         let v = found.variable
         return variable_target(v, column, "{v.name} : {describe(v._type)}")
     }
-    if (found.kind == DeclarationKind.field) {
-        var t = field_target(found.structure, found.name, found.field_type)
-        t.decl_column = column
-        return t
-    }
+    if (found.kind == DeclarationKind.field) return field_target(found.structure, found.name, found.field_type)
     return RefTarget()
 }
 
@@ -745,7 +713,7 @@ class RefVisitor : AstVisitor {
     def on_target_field(expr : Expression const?; name : string) : bool {
         let st = field_value_struct(expr)
         return false if (st == null)
-        if (target.kind == RefTargetKind.func) return to_void(method_function(st, name)) == target.target_ptr
+        if (target.kind == RefTargetKind.func) return to_void(find_method_function(st, name)) == target.target_ptr
         return target.kind == RefTargetKind.field && name == target.field_name && same_site(field_at(st, name), target)
     }
 

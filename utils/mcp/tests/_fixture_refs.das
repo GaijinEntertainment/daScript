@@ -77,3 +77,11 @@ def paint(c : Color) : int {
 def area_of(var s : Square?) : float {
     return s->area()
 }
+
+struct Other {
+    x : int
+}
+
+def other_x(o : Other) : int {
+    return o.x
+}

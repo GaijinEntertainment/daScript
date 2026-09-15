@@ -209,6 +209,7 @@ namespace das
         StructurePtr clone() const;
         bool isCompatibleCast ( const Structure & castS ) const;
         const FieldDeclaration * findField ( const string & name ) const;
+        Function * findMethodFunction ( const string & name ) const;
         const Structure * findFieldParent ( const string & name ) const;
         FieldDeclarationRef findFieldRef ( const string & name ) const;
         int getSizeOf() const;

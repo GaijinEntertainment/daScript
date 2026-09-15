@@ -1347,6 +1347,9 @@ def test_find_references_class(t : T?) {
         t |> success(find(text, "field 'Point.x'") >= 0, "the field: {text}")
         t |> success(find(text, ":15:") >= 0 && find(text, ":19:") >= 0 && find(text, ":64:") >= 0, "a.x, p?.x and p3.x: {text}")
         t |> success(find(text, ":10:") < 0, "never the declaration's own line: {text}")
+        t |> success(find(text, ":86:") < 0, "Other.x is a different field with the same name: {text}")
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "86", "14", "file", ""), text, is_error)
+        t |> success(find(text, "field 'Other.x'") >= 0 && find(text, ":86:") >= 0 && find(text, ":15:") < 0, "from an access, the other field's own sites: {text}")
     }
     t |> run("a parent named on a derived class line references the parent") <| @(t : T?) {
         var text : string

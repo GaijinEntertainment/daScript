@@ -223,7 +223,7 @@ def test_synthesized_members(t : T?) {
                 }
             }
             t2 |> success(synthesized > 0, "a class carries synthesized members: {synthesized}")
-            t2 |> equal(user, 15, "add, greet, main, Animal`speak, Cat`speak, no_log, safe_x, use_twice, count_up, kennel, Puppy`bark, Puppy`speak, the twice and each instances, the generator body - got {user}")
+            t2 |> equal(user, 17, "add, greet, main, Animal`speak, Cat`speak, no_log, safe_x, use_twice, count_up, kennel, Puppy`bark, Puppy`speak, captured, the twice and each instances, the generator and lambda bodies - got {user}")
             var instances = 0
             var generators = 0
             ast::for_each_function(get_this_module(program), "") $(var func : FunctionPtr) {
@@ -385,16 +385,6 @@ def test_type_name_hit(t : T?) {
     }
 }
 
-def structure_named(program : smart_ptr<Program>; name : string) : Structure const? {
-    var found : Structure const?
-    ast::for_each_structure(get_this_module(program)) $(var st : StructurePtr) {
-        if (st.name == name) {
-            found = st
-        }
-    }
-    return found
-}
-
 [test]
 def test_class_members(t : T?) {
     t |> run("a method call is a hit on the method's name, never on the conversions the call desugars to") @(t2 : T?) {
@@ -416,22 +406,22 @@ def test_class_members(t : T?) {
     }
     t |> run("method_function follows a method field to the override the receiver's class declares, else the inherited one") @(t2 : T?) {
         compile_fixture() $(program) {
-            let dog = structure_named(program, "Dog")
-            let puppy = structure_named(program, "Puppy")
-            let point = structure_named(program, "Point")
+            let dog = module_find_structure(get_this_module(program), "Dog")
+            let puppy = module_find_structure(get_this_module(program), "Puppy")
+            let point = module_find_structure(get_this_module(program), "Point")
             t2 |> success(dog != null && puppy != null && point != null, "the fixture declares Dog, Puppy and Point")
-            let inherited = method_function(dog, "speak")
+            let inherited = find_method_function(dog, "speak")
             t2 |> success(inherited != null && inherited.name == "Animal`speak", "Dog inherits speak: {inherited != null ? string(inherited.name) : "null"}")
-            let overridden = method_function(puppy, "speak")
+            let overridden = find_method_function(puppy, "speak")
             t2 |> success(overridden != null && overridden.name == "Puppy`speak", "Puppy overrides speak: {overridden != null ? string(overridden.name) : "null"}")
-            t2 |> success(method_function(puppy, "age") == null, "a data field is no method")
-            t2 |> success(method_function(point, "x") == null && method_function(point, "nope") == null && method_function(null, "x") == null, "a struct field, an unknown name and no struct are null")
+            t2 |> success(find_method_function(puppy, "age") == null, "a data field is no method")
+            t2 |> success(find_method_function(point, "x") == null && find_method_function(point, "nope") == null && find_method_function(null, "x") == null, "a struct field, an unknown name and no struct are null")
         }
     }
     t |> run("a field is declared once: the class body's own line, shared by every class that inherits it") @(t2 : T?) {
         compile_fixture() $(program) {
-            let dog = structure_named(program, "Dog")
-            let puppy = structure_named(program, "Puppy")
+            let dog = module_find_structure(get_this_module(program), "Dog")
+            let puppy = module_find_structure(get_this_module(program), "Puppy")
             // age : int = 3 at line 44, column 4
             let decl = find_declaration_at_cursor(program, "ast_cursor_fixture", 44, 5, "    age : int = 3")
             t2 |> success(decl.kind == DeclarationKind.field && decl.name == "age" && decl.structure != null && decl.structure.name == "Dog", "the field declaration: {decl.name} of {decl.structure != null ? string(decl.structure.name) : "-"}")
@@ -442,6 +432,20 @@ def test_class_members(t : T?) {
             t2 |> success(length(own) == 2 && own[0] == "speak" && own[1] == "bark", "Puppy's own fields are the override it declares and its new method; age is the parent's copy, __rtti and __finalize the compiler's: {own}")
             let method_line = find_declaration_at_cursor(program, "ast_cursor_fixture", 70, 9, "    def bark() : string => \"yip\"")
             t2 |> success(method_line.kind == DeclarationKind.func && method_line.name == "bark", "a method's def line is the function, not a field: {method_line.kind}")
+            let off_name = find_declaration_at_cursor(program, "ast_cursor_fixture", 44, 10, "    age : int = 3")
+            t2 |> equal(off_name.kind, DeclarationKind.none, "the cursor on the field's type is not its declaration")
+            t2 |> equal(int(field_at(null, "age").line), 0, "no struct is a zero position")
+        }
+    }
+    t |> run("a captured let is a variable, not a field of the lambda's capture struct; a function-pointer field is no method") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // let base = 10 at line 79, captured by the lambda on line 80
+            let decl = find_declaration_at_cursor(program, "ast_cursor_fixture", 79, 9, "    let base = 10")
+            t2 |> equal(decl.kind, DeclarationKind.none, "the capture struct's field is not a declaration the source spells")
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 79, 9, true, "    let base = 10")
+            t2 |> success(has_variable_hit(hits, "base"), "the let itself is the answer: {[for (h in hits); describe(h)]}")
+            let greeter = module_find_structure(get_this_module(program), "Greeter")
+            t2 |> success(greeter != null && find_method_function(greeter, "cb") == null, "a data field initialized with @@greet is not a method")
         }
     }
 }

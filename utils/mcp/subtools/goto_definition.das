@@ -143,48 +143,22 @@ def resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : Definiti
     }
     // ExprField / ExprSafeField → struct field declaration
     if (expr is ExprField || expr is ExprSafeField) {
-        var field_name : string
-        var value_type : TypeDecl const?
-        if (expr is ExprField) {
-            let f = expr as ExprField
-            field_name = string(f.name)
-            if (f.value != null && f.value._type != null) {
-                value_type = f.value._type
-            }
-        } else {
-            let f = expr as ExprSafeField
-            field_name = string(f.name)
-            if (f.value != null && f.value._type != null) {
-                value_type = f.value._type
-            }
-        }
-        // unwrap pointer types (Foo? → Foo)
-        if (value_type != null && value_type.structType == null && value_type.firstType != null) {
-            value_type = value_type.firstType
-        }
-        if (value_type != null && value_type.structType != null) {
-            let st = value_type.structType
-            let method = method_function(st, field_name)
+        let field_name = string(expr is ExprField ? (expr as ExprField).name : (expr as ExprSafeField).name)
+        let st = value_struct(expr is ExprField ? (expr as ExprField).value : (expr as ExprSafeField).value)
+        if (st != null) {
+            let method = find_method_function(st, field_name)
             if (method != null) {
                 let file = lineinfo_file(method.at)
                 let line = int(method.at.line)
                 return DefinitionResult(found = true, kind = "function", name = string(method.name), file = file, line = line,
                     column = int(method.at.column), snippet = read_source_snippet(file, line))
             }
-            for (fld in st.fields) {
-                if (fld.name == field_name) {
-                    let file = lineinfo_file(fld.at)
-                    let line = int(fld.at.line)
-                    return DefinitionResult(
-                        found = true,
-                        kind = "field",
-                        name = "{st.name}.{field_name}",
-                        file = file,
-                        line = line,
-                        column = int(fld.at.column),
-                        snippet = read_source_snippet(file, line)
-                    )
-                }
+            let at = field_at(st, field_name)
+            if (int(at.line) > 0) {
+                let file = lineinfo_file(at)
+                let line = int(at.line)
+                return DefinitionResult(found = true, kind = "field", name = "{st.name}.{field_name}", file = file, line = line,
+                    column = int(at.column), snippet = read_source_snippet(file, line))
             }
         }
     }

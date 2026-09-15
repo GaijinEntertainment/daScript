@@ -863,6 +863,11 @@ namespace das {
         return (Structure::FieldDeclaration *) structType->findField(field);
     }
 
+    Function * ast_findMethodFunction ( const Structure * structType, const char * name ) {
+        if ( !structType || !name ) return nullptr;
+        return structType->findMethodFunction(name);
+    }
+
     Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) return nullptr;
         if ( !prog ) context->throw_error_at(at, "expecting program");
@@ -1682,6 +1687,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_findStructureField)>(*this, lib,  "find_structure_field",
             SideEffects::none, "ast_findStructureField")
                 ->args({"structPtr","field","context","lineinfo"});
+        addExtern<DAS_BIND_FUN(ast_findMethodFunction)>(*this, lib,  "find_method_function",
+            SideEffects::none, "ast_findMethodFunction")
+                ->args({"structPtr","name"});
         addExtern<DAS_BIND_FUN(get_mangled_name)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name")
                 ->args({"function","context","line"})->setTempStringResult();

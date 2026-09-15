@@ -54,7 +54,7 @@ def public cursor_inside(line, col : int; at : LineInfo) : bool {
     return true
 }
 
-def private expression_name(expr : ExpressionPtr) : string {
+def private expression_name(expr : Expression const?) : string {
     if (expr is ExprVar) return string((expr as ExprVar).name)
     if (expr is ExprCall) return string((expr as ExprCall).name)
     if (expr is ExprField) return string((expr as ExprField).name)
@@ -245,26 +245,26 @@ def private on_name(word : string; name : string; line_text : string; here : int
     return name == word && here == name_column(line_text, name, -1)
 }
 
-[arch(at="ARCHITECTURE_CURSOR.md#cursor-class-fields")]
 def public is_own_field(fld : FieldDeclaration) : bool {
-    //! True for a field the source declares in its class's own body: not one the compiler made (`__rtti`, `__finalize`) and not a parent's copy.
-    return !fld.flags.generated && !fld.flags.inherited && !(fld.name |> starts_with("__"))
+    //! True for a field the source declares in its struct's or class's own body - an override included - not one the compiler made (`__rtti`, `__finalize`) or a parent's copy.
+    return fld.flags.implemented
 }
 
-[arch(at="ARCHITECTURE_CURSOR.md#cursor-class-fields")]
-def public method_function(st : Structure const?; name : string) : Function const? {
-    //! The function a class method field `name` of `st` points at - the override `st` declares, else the inherited one; null for a data field or no such field.
-    return null if (st == null)
-    for (fld in st.fields) {
-        continue if (fld.name != name)
-        return null if (!fld.flags.classMethod || fld.init == null)
-        var init = fld.init
-        if (init is ExprCast) {
-            init = (init as ExprCast).subexpr
-        }
-        return init is ExprAddr ? (init as ExprAddr).func : null
+def public value_struct(value : Expression const?) : Structure const? {
+    //! The struct a field access reads its field from - through a pointer when `value` is one; null for any other value.
+    return null if (value == null || value._type == null)
+    var vt = value._type
+    if (vt.structType == null && vt.firstType != null) {
+        vt = vt.firstType
     }
-    return null
+    return vt.structType
+}
+
+def public field_name_at(expr : Expression const?) : LineInfo {
+    //! Where a field access spells its field name - a method call's name sits past the `->` its node spans; a zero position for any other node.
+    if (expr is ExprField) return (expr as ExprField).atField
+    if (expr is ExprSafeField) return (expr as ExprSafeField).atField
+    return LineInfo()
 }
 
 def public field_at(st : Structure const?; name : string) : LineInfo {
@@ -316,6 +316,7 @@ def public find_declaration_at_cursor(program : smart_ptr<Program>; file : strin
         ast::for_each_structure(thisMod) $(var st : StructurePtr) {
             return if (hit.kind != DeclarationKind.none)
             let s = st
+            return if (s.flags.generated)   // a lambda's capture struct holds each captured variable as a field at the variable's own position
             for (fld in s.fields) {
                 continue if (!is_own_field(fld) || fld.flags.classMethod || !on_line(fld.at, file, line) || !on_name(word, string(fld.name), line_text, here))
                 hit = DeclarationHit(kind = DeclarationKind.field, structure = s, field_type = fld._type, name = string(fld.name), at = fld.at, word_column = here)
@@ -447,15 +448,8 @@ class CursorVisitor : AstVisitor {
 
     // a field access spans its value and the dot; the field name has its own position
     def on_field_name(e : Expression const?) : bool {
-        if (e is ExprField) {
-            let f = e as ExprField
-            return cursor_on_token(f.atField, string(f.name))
-        }
-        if (e is ExprSafeField) {
-            let f = e as ExprSafeField
-            return cursor_on_token(f.atField, string(f.name))
-        }
-        return false
+        let at = field_name_at(e)
+        return int(at.line) > 0 && cursor_on_token(at, expression_name(e))
     }
 
     def cursor_on_token(at : LineInfo; name : string) : bool {

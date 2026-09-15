@@ -46,15 +46,3 @@ this file holds sec. 40.
   kind the C++ emits on that span is admitted with every test green, and only the named-first
   rank keeps the field ahead of it; `tests/daslib/ast_cursor_test.das` pins the field-first
   order at one implicit and one `->` site, not the set of nodes behind it.
-- **A class method is a field of function type whose initializer the parser builds as
-  `@@Class`method` (`src/parser/parser_impl.cpp`, repo root) - an override's wrapped in a cast -
-  and `method_function` (`ast_cursor.das`) unwraps that cast to reach the function.** Nothing
-  fails when one side moves alone: the override shape is pinned by no test on its own -
-  `method_function` reads both - so an initializer the parser builds a third way lands every
-  override on nothing.
-- **`__rtti` is `generated` on a derived class and not on a base class (`makeClassRtti`,
-  `src/ast/ast_generate.cpp`), so `is_own_field` (`ast_cursor.das`) drops the compiler's fields
-  by their `__` prefix and the parent's copies by `inherited`.** Nothing fails when one side
-  moves alone: `tests/lsp/test_lsp_protocol.das` lists a base class's children, where the
-  `generated` bit alone would already pass, so a filter that leans on it is green until a
-  derived class is listed.
