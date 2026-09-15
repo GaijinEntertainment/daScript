@@ -840,7 +840,7 @@ def private pf_moe_setup {
     let nk = np * g_rd.k
     g_rd.pf_nk = nk
     verify(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_gather_f16_cls()
-        && ensure_actf16_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b(),
+        && ensure_actf16_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b() && (!g_rd.exps_bias || ensure_actf16_b_cls()),
         "vk prefill: the MoE block's class rails must engage on a live device")
     let bounds = pf_moe_bounds(nk)
     assert((PF_MOE_MAP_OFF + max(bounds.gu + bounds.mgu, bounds.dn + bounds.mdn)) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: the MoE block's schedule exceeds its plane")
@@ -848,6 +848,7 @@ def private pf_moe_setup {
     g_rd.pf_midx = make_device_buf(nk * 4l)
     g_rd.pf_mw = make_device_buf(nk * 4l)
     g_rd.pf_minv = make_device_buf(nk * 4l)
+    g_rd.pf_bex = make_device_buf(nk * 4l)
     g_rd.pf_msch1 = make_device_buf(BATCH_META_BYTES)
     g_rd.pf_msch3 = make_device_buf(BATCH_META_BYTES)
     g_rd.pf_msch2 = make_device_buf(BATCH_META_BYTES)
@@ -889,11 +890,11 @@ def private pf_moe_layer_sets(l : int64) {
         L.pf_f16g_router_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, g_rd.pf_mlog),
             fixed_array(g_rd.pf_splitk_bytes, np * ner * 4l), fixed_array(VHZ_SK, VHZ_MRT))
     }
-    L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw, g_rd.moe_ds_dev),
-        fixed_array(np * ner * 4l, nk * 4l, nk * 4l, g_rd.moe_ds_bytes), fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u))
-    L.pf_sched_set = set_moe_sched_cls(fixed_array(g_rd.pf_midx, g_rd.pf_minv, g_rd.pf_msch1, g_rd.pf_msch3, g_rd.pf_msch2),
-        fixed_array(nk * 4l, nk * 4l, BATCH_META_BYTES, BATCH_META_BYTES, BATCH_META_BYTES),
-        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT))
+    L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw, g_rd.moe_ds_dev, g_rd.moe_rb_dev),
+        fixed_array(np * ner * 4l, nk * 4l, nk * 4l, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes), fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u))
+    L.pf_sched_set = set_moe_sched_cls(fixed_array(g_rd.pf_midx, g_rd.pf_minv, g_rd.pf_msch1, g_rd.pf_msch3, g_rd.pf_msch2, g_rd.pf_bex),
+        fixed_array(nk * 4l, nk * 4l, BATCH_META_BYTES, BATCH_META_BYTES, BATCH_META_BYTES, nk * 4l),
+        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT))
     L.pf_gather_set = set_moe_gather_f16_cls(fixed_array(g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mxg),
         fixed_array(np * dim * 4l, nk * 4l, xg_bytes), fixed_array(VHZ_XB, VHZ_MRT, VHZ_MXG))
     L.pf_e1_set = cm2_cls_set(L.fe1, tcs, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
@@ -904,8 +905,13 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP))
     L.pf_e3m_set = cm2_cls_set(L.fe3, tce, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
         fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP_M))
-    L.pf_eact_set = set_actf16_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf),
-        fixed_array(y_bytes, y_bytes, hf_bytes), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ))
+    if (g_rd.exps_bias) {   //! the biased act: each bucket row's expert (the schedule's map) names its gate and up bias rows
+        L.pf_eact_set = set_actf16_b_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.pf_bex),
+            fixed_array(y_bytes, y_bytes, hf_bytes, g_rd.moe_gb_bytes, g_rd.moe_gb_bytes, nk * 4l), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ, 0u, 0u, VHZ_MRT))
+    } else {
+        L.pf_eact_set = set_actf16_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf),
+            fixed_array(y_bytes, y_bytes, hf_bytes), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ))
+    }
     L.pf_e2_set = cm2_cls_set(L.fe2, tcs, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
         fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
     L.pf_e2m_set = cm2_cls_set(L.fe2, tce, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
@@ -920,12 +926,12 @@ def private pf_moe_layer_sets(l : int64) {
             fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M))
         return
     }
-    L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
-        fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
-        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
-    L.pf_arcomb_f16_set = set_cls_ar_comb_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog),
-        fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l),
-        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT))
+    L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_midx),
+        fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l, g_rd.moe_db_bytes, nk * 4l),
+        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT, 0u, VHZ_MRT))
+    L.pf_arcomb_f16_set = set_cls_ar_comb_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_midx),
+        fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l, g_rd.moe_db_bytes, nk * 4l),
+        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT, 0u, VHZ_MRT))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
@@ -953,7 +959,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     }
     pfq_ts(raw)
     var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale,
-        dsoff = L.moe_g4 ? uint(L.router_slot * ne) : NO_DSCALE)
+        dsoff = L.moe_g4 ? uint(L.router_slot * ne) : NO_DSCALE, rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * ne))
     enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)
     pfq_ts(raw)
     if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm, the rows the gather reads
@@ -985,8 +991,13 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     cm2_cls_enc(L.fe3, tce, raw, h, L.pf_e3m_set, pc1m, bounds.mgu)
     cm2_cls_enc(L.fe3, tcs, raw, h, L.pf_e3_set, pc1, bounds.gu)
     pfq_ts(raw)
-    var pca = ActArgs(nelem = uint(nk * nfe), gelu = g_rd.is_gelu ? 1u : 0u, nblk = uint(nk * nfe / 32l), elem0 = 0u)
-    enc_actf16_cls(raw, h, L.pf_eact_set, pca, (nk * nfe / 4l + 255l) / 256l)
+    var pca = ActArgs(nelem = uint(nk * nfe), gelu = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nk * nfe / 32l), elem0 = 0u,
+        bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * ne * nfe), uboff = uint(L.router_slot * ne * nfe), brow = uint(nfe))
+    if (g_rd.exps_bias) {
+        enc_actf16_b_cls(raw, h, L.pf_eact_set, pca, (nk * nfe / 4l + 255l) / 256l)
+    } else {
+        enc_actf16_cls(raw, h, L.pf_eact_set, pca, (nk * nfe / 4l + 255l) / 256l)
+    }
     pfq_ts(raw)
     var pc2 = BatchArgs(n = uint(nfe), d = uint(dim), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
     var pc2m = BatchArgs(n = uint(nfe), d = uint(dim), map_off = map_m_dn, ksplit = 0u)

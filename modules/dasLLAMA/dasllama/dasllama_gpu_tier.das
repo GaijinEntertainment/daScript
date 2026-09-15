@@ -249,8 +249,9 @@ def public rdec_upload_bias(rows : array<float>) { invoke(g_rdec_upload_bias, ro
 //! rides is the device's (the f16-fed cm2 tiles today).
 typedef RdecMoeOkFn = function<(f1 : int; f3 : int; f2 : int) : bool>
 //! The MoE geometry and the router plane (every MoE layer's [ne x dim] rows, then its gate row when the shared expert is gated) after the prepare; false = the class rails declined.
-//! `dscale`: every MoE layer's per-expert down scales [n_moe x ne] the top-k folds into its weights (gemma-4); empty on a model without them.
-typedef RdecPrepareMoeFn = function<(ne : int64; k : int64; nfe : int64; nsh : int64; n_moe : int64; sh_gated : bool; norm_topk : bool; is_gelu : bool; wscale : float; router : array<float>; dscale : array<float>) : bool>
+//! `dscale`: every MoE layer's per-expert down scales [n_moe x ne] the top-k folds into its weights (gemma-4); `act_oai`: the experts' activation is the clamped swiglu (gpt-oss).
+//! `rbias`: every MoE layer's router bias [n_moe x ne]; `gbias` / `ubias` / `dbias`: the expert stacks' bias rows ([n_moe x ne x nfe] twice, [n_moe x ne x dim]) - each plane empty on a model without it.
+typedef RdecPrepareMoeFn = function<(ne : int64; k : int64; nfe : int64; nsh : int64; n_moe : int64; sh_gated : bool; norm_topk : bool; is_gelu : bool; act_oai : bool; wscale : float; router : array<float>; dscale : array<float>; rbias : array<float>; gbias : array<float>; ubias : array<float>; dbias : array<float>) : bool>
 //! Register an MoE attention layer: the attention quad, the dense triple (the shared expert's, or -1 blocks for none) and the expert triple.
 typedef RdecSetMoeLayerFn = function<(l : int64; mir_idx : int64; router_slot : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; be1 : int64; be3 : int64; be2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; fe1 : int; fe3 : int; fe2 : int; g : RdecLayerGeom) : void>
 //! Register the routed block on a layer already registered by its own seat (a recurrent MoE layer after its deltanet registration): the expert triple and the layer's router-plane slot.
@@ -258,8 +259,9 @@ typedef RdecSetMoeExpertsFn = function<(l : int64; router_slot : int64; be1 : in
 
 [unused_argument(f1, f3, f2)]
 def private rdec_unset_moe_ok(f1, f3, f2 : int) : bool => false
-[unused_argument(ne, k, nfe, nsh, n_moe, sh_gated, norm_topk, is_gelu, wscale, router, dscale)]
-def private rdec_unset_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>; dscale : array<float>) : bool => false
+[unused_argument(ne, k, nfe, nsh, n_moe, sh_gated, norm_topk, is_gelu, act_oai, wscale, router, dscale, rbias, gbias, ubias, dbias)]
+def private rdec_unset_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu, act_oai : bool; wscale : float; router : array<float>; dscale : array<float>;
+                                   rbias : array<float>; gbias : array<float>; ubias : array<float>; dbias : array<float>) : bool => false
 [unused_argument(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2, g)]
 def private rdec_unset_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int; g : RdecLayerGeom) {}
 [unused_argument(l, router_slot, be1, be3, be2, fe1, fe3, fe2)]
@@ -282,7 +284,9 @@ def public install_moe_gpu_resident_moe(moe_ok : RdecMoeOkFn; prepare_moe : Rdec
 
 def public rdec_moe_installed() : bool => g_rdec_moe_installed
 def public rdec_moe_ok(f1, f3, f2 : int) : bool => invoke(g_rdec_moe_ok, f1, f3, f2)
-def public rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>; dscale : array<float>) : bool => invoke(g_rdec_prepare_moe, ne, k, nfe, nsh, n_moe, sh_gated, norm_topk, is_gelu, wscale, router, dscale)
+def public rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu, act_oai : bool; wscale : float; router : array<float>; dscale : array<float>;
+                            rbias : array<float>; gbias : array<float>; ubias : array<float>; dbias : array<float>) : bool
+    => invoke(g_rdec_prepare_moe, ne, k, nfe, nsh, n_moe, sh_gated, norm_topk, is_gelu, act_oai, wscale, router, dscale, rbias, gbias, ubias, dbias)
 def public rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_moe_layer, l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2, g) }
 def public rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2 : int) { invoke(g_rdec_set_moe_experts, l, router_slot, be1, be3, be2, fe1, fe3, fe2) }
 

@@ -48,6 +48,8 @@ struct ArArgs {
     sum_post_off : uint      //! ... and this the two branches' sum
     no_norm : uint           //! the requant twins quantize the updated row as it is - the E-series residual feeding its per-layer-embedding gate
     presummed : uint //! the gemma-4 combine: the routed rows arrive summed under their weights in row 0 (the down GEMV folded them)
+    dbias_on : uint  //! the combine twins: each routed row takes its expert's down bias (gpt-oss) before its routing weight scales it
+    dboff : uint     //! ... this layer's row base in the down-bias plane ([ne x dim] rows a layer)
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -295,6 +297,14 @@ class ArCombBase : ArBase {
     @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights
     @ssbo @binding = 6 down_rows : array<float>  //! the routed down-GEMM output rows
     @ssbo @binding = 7 logits : array<float>     //! [npos x lstride]; the gate logit is the row's last
+    @ssbo @binding = 8 @role = "weight" dbias : array<float>   //! the expert down biases, [ne x dim] a layer (gpt-oss), read under `dbias_on`
+    @ssbo @binding = 9 slot_ex : array<uint>     //! slot -> its expert, the down bias's row (the decode's top-k picks; the window's per-slot picks)
+
+    //! slot `s`'s down row at column k, its expert's bias added under `dbias_on`
+    def drow(s, k : uint) : float {
+        let d = down_rows[slot_idx[s] * pa.dim + k]
+        return pa.dbias_on != 0u ? d + dbias[pa.dboff + slot_ex[s] * pa.dim + k] : d
+    }
 
     def override accum_row(base : uint) : float {
         let p = base / pa.dim
@@ -312,14 +322,14 @@ class ArCombBase : ArBase {
             }
             var j = 0u
             while (j + 8u <= pa.slots) {
-                let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
-                let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
-                let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
-                let d3 = down_rows[slot_idx[pk + j + 3u] * pa.dim + k]
-                let d4 = down_rows[slot_idx[pk + j + 4u] * pa.dim + k]
-                let d5 = down_rows[slot_idx[pk + j + 5u] * pa.dim + k]
-                let d6 = down_rows[slot_idx[pk + j + 6u] * pa.dim + k]
-                let d7 = down_rows[slot_idx[pk + j + 7u] * pa.dim + k]
+                let d0 = drow(pk + j, k)
+                let d1 = drow(pk + j + 1u, k)
+                let d2 = drow(pk + j + 2u, k)
+                let d3 = drow(pk + j + 3u, k)
+                let d4 = drow(pk + j + 4u, k)
+                let d5 = drow(pk + j + 5u, k)
+                let d6 = drow(pk + j + 6u, k)
+                let d7 = drow(pk + j + 7u, k)
                 f += slot_w[pk + j] * d0
                 f += slot_w[pk + j + 1u] * d1
                 f += slot_w[pk + j + 2u] * d2
@@ -331,10 +341,10 @@ class ArCombBase : ArBase {
                 j += 8u
             }
             if (j + 4u <= pa.slots) {
-                let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
-                let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
-                let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
-                let d3 = down_rows[slot_idx[pk + j + 3u] * pa.dim + k]
+                let d0 = drow(pk + j, k)
+                let d1 = drow(pk + j + 1u, k)
+                let d2 = drow(pk + j + 2u, k)
+                let d3 = drow(pk + j + 3u, k)
                 f += slot_w[pk + j] * d0
                 f += slot_w[pk + j + 1u] * d1
                 f += slot_w[pk + j + 2u] * d2
@@ -342,7 +352,7 @@ class ArCombBase : ArBase {
                 j += 4u
             }
             while (j < pa.slots) {
-                f += slot_w[pk + j] * down_rows[slot_idx[pk + j] * pa.dim + k]
+                f += slot_w[pk + j] * drow(pk + j, k)
                 j++
             }
             let vv = (xs[base + k] + f) * pa.ascale
@@ -640,11 +650,26 @@ struct ActArgs {
     ubase : uint   //! the u side's element base; with `ustride` the rows of `ulen` elements sit `ustride` apart (a side input stored position-major); 0/0/0 = u is laid out like gate
     ustride : uint
     ulen : uint
+    bias_on : uint   //! the biased twins: gate and up take their expert's bias rows before the activation (gpt-oss)
+    gboff : uint     //! ... this layer's row base in the gate-bias plane ([ne x brow] rows a layer)
+    uboff : uint     //! ... and in the up-bias plane
+    brow : uint      //! ... the row width: element e sits in row e / brow, whose expert `rex` names
 }
 
-// the one activation formula (silu or tanh-gelu on v, times u) — the classes' act_mul
+//! gpt-oss's clamped swiglu (`swiglu_oai`): x = min(v, 7), y = clamp(u, -7, 7), (x * sigmoid(1.702 x)) * (y + 1) - the clamps and the +1 are the trained activation
+let ACT_OAI = 2u
+
+//! the act kernels' `gelu` push word: silu 0, tanh-gelu 1, the clamped swiglu ACT_OAI
+def act_code(oai, gelu : bool) : uint => oai ? ACT_OAI : (gelu ? 1u : 0u)
+
+// the one activation formula (silu, tanh-gelu or the clamped swiglu on v, times u) — the classes' act_mul
 // delegates pass their own pa.gelu
 def private act_mul_sel(v, u : float; gelu : uint) : float {
+    if (gelu == ACT_OAI) {
+        let x = min(v, 7.0)
+        let y = clamp(u, -7.0, 7.0)
+        return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
+    }
     return (gelu != 0u ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
         : (v / (1.0 + exp(-v))) * u)
 }
@@ -694,6 +719,40 @@ class Q8ActRq : ActRqMembers {
             let v2 = act_mul(gate[eb + 2u], up[ub + 2u])
             let v3 = act_mul(gate[eb + 3u], up[ub + 3u])
             blk_store(b, lane % 8u, v0, v1, v2, v3)
+        }
+    }
+}
+
+//! the biased twin of the fused act + Q8_0 requant: element e's row e / brow names the expert whose gate and up bias rows
+//! join before the activation - gpt-oss's routed experts (a slot's k rows are its picks in order)
+[vk_dispatch(name = "q8_actrq_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q8ActRqB : Q8ActRq {
+    @ssbo @binding = 4 @role = "weight" gb : array<float>   //! the gate-bias plane
+    @ssbo @binding = 5 @role = "weight" ub : array<float>   //! the up-bias plane
+    @ssbo @binding = 6 rex : array<uint>     //! row -> its expert
+
+    //! the biased v, u pair of element e (the gate row's element and the up element at ue)
+    def biased(e, ue : uint) : float2 {
+        let ex = rex[e / pa.brow]
+        let c = e % pa.brow
+        return float2(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[ue] + ub[pa.uboff + ex * pa.brow + c])
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "q8_actrq_b_cls_spv")]
+    def override run {
+        let gid = gl_GlobalInvocationID.x
+        let sg = gid / 32u
+        let lane = gid % 32u
+        let b = sg * 4u + lane / 8u
+        if (b < pa.nblk) {
+            let eb = sg * 128u + lane * 4u
+            let ul = max(pa.ulen, 1u)
+            let ub0 = pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb
+            let p0 = biased(eb, ub0)
+            let p1 = biased(eb + 1u, ub0 + 1u)
+            let p2 = biased(eb + 2u, ub0 + 2u)
+            let p3 = biased(eb + 3u, ub0 + 3u)
+            blk_store(b, lane % 8u, act_mul(p0.x, p0.y), act_mul(p1.x, p1.y), act_mul(p2.x, p2.y), act_mul(p3.x, p3.y))
         }
     }
 }
@@ -750,6 +809,31 @@ class ActF16 {
             outh[e + 1u] = float16(clamp(act_mul(gate[e + 1u], up[e + 1u]), -65504.0, 65504.0))
             outh[e + 2u] = float16(clamp(act_mul(gate[e + 2u], up[e + 2u]), -65504.0, 65504.0))
             outh[e + 3u] = float16(clamp(act_mul(gate[e + 3u], up[e + 3u]), -65504.0, 65504.0))
+        }
+    }
+}
+
+//! the biased twin of the f16 act: the window's bucket rows, row r's expert in `rex` (the schedule's bucket row -> expert map), its gate and up bias rows joining before the activation
+[vk_dispatch(name = "actf16_b_cls", grid = "wgs", params = "wgs : int64")]
+class ActF16B : ActF16 {
+    @ssbo @binding = 3 @role = "weight" gb : array<float>   //! the gate-bias plane
+    @ssbo @binding = 4 @role = "weight" ub : array<float>   //! the up-bias plane
+    @ssbo @binding = 5 rex : array<uint>     //! bucket row -> its expert
+
+    def bact(e : uint) : float16 {
+        let ex = rex[e / pa.brow]
+        let c = e % pa.brow
+        return float16(clamp(act_mul(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[e] + ub[pa.uboff + ex * pa.brow + c]), -65504.0, 65504.0))
+    }
+
+    [spirv_kernel(local_size_x = 256, name = "actf16_b_cls_spv")]
+    def override run {
+        let e = pa.elem0 + gl_GlobalInvocationID.x * 4u
+        if (e < pa.elem0 + pa.nelem) {
+            outh[e] = bact(e)
+            outh[e + 1u] = bact(e + 1u)
+            outh[e + 2u] = bact(e + 2u)
+            outh[e + 3u] = bact(e + 3u)
         }
     }
 }
@@ -1154,6 +1238,8 @@ struct TopkArgs {
     stride2 : uint
     xnb2 : uint      // the down feed's blocks per hidden row: slot j reads row j (gate/up read the one feed row)
     dsoff : uint     //! this layer's row base in the per-expert down-scale plane (gemma-4: ffn_down_exps.scale folds into the routing weight); NO_DSCALE = none
+    rbias_on : uint  //! the router bias (gpt-oss): logit e takes rb[rboff + e] before the pick
+    rboff : uint     //! ... this layer's row base in the router-bias plane ([ne] a layer)
 }
 
 let NO_DSCALE = 0xFFFFFFFFu   //! the top-k forms' "no per-expert down scale" sentinel
@@ -1266,13 +1352,16 @@ class TopK : TopKCore {
     @ssbo @binding = 3 meta2 : array<uint>
     @ssbo @binding = 4 w : array<float>      //! the k routing weights
     @ssbo @binding = 5 @role = "weight" ds : array<float>     //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
+    @ssbo @binding = 6 @role = "weight" rb : array<float>     //! the router biases ([ne] a layer, gpt-oss), read at rboff under `rbias_on`
+    @ssbo @binding = 7 eidx : array<uint>    //! the k picks' experts, the bias rows the act and the combine read
     @push_constant pa : TopkArgs
 
     [spirv_kernel(local_size_x = 256, name = "topk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
         let tid = gl_LocalInvocationID.x
         let live = tid < pa.ne
-        let lv = logits[min(tid, pa.ne - 1u)]
+        let e = min(tid, pa.ne - 1u)
+        let lv = logits[e] + (pa.rbias_on != 0u ? rb[pa.rboff + e] : 0.0)
         select_row(live ? lv : -3.0e38, live, pa.ne, pa.k)
         if (tid == 0u) {
             write_picks()
@@ -1288,6 +1377,7 @@ class TopK : TopKCore {
                 wj *= ds[pa.dsoff + ex]
             }
             w[jj] = wj
+            eidx[jj] = ex
             meta1[jj * 2u] = pa.base1 + ex * pa.stride1
             meta1[jj * 2u + 1u] = 0u
             meta3[jj * 2u] = pa.base3 + ex * pa.stride3
@@ -1307,6 +1397,8 @@ struct TopkRowsArgs {
     lstride : uint   //! the logits row stride (elements)
     wscale : float   //! 0 or 1 = none
     dsoff : uint     //! this layer's row base in the per-expert down-scale plane; NO_DSCALE = none
+    rbias_on : uint  //! the router bias (gpt-oss): logit e takes rb[rboff + e] before the pick
+    rboff : uint
 }
 
 [vk_dispatch(name = "topk_rows_cls", grid = "npos", params = "npos : int64")]
@@ -1315,6 +1407,7 @@ class TopKRows : TopKCore {
     @ssbo @binding = 1 idx : array<uint>       //! [npos x k] the picked expert per slot
     @ssbo @binding = 2 w : array<float>        //! ... and its routing weight
     @ssbo @binding = 3 @role = "weight" ds : array<float>       //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
+    @ssbo @binding = 4 @role = "weight" rb : array<float>       //! the router biases ([ne] a layer, gpt-oss), read at rboff under `rbias_on`
     @push_constant pa : TopkRowsArgs
 
     [spirv_kernel(local_size_x = 256, name = "topk_rows_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
@@ -1322,7 +1415,8 @@ class TopKRows : TopKCore {
         let tid = gl_LocalInvocationID.x
         let p = gl_WorkGroupID.x
         let live = tid < pa.ne
-        let lv = logits[p * pa.lstride + min(tid, pa.ne - 1u)]
+        let e = min(tid, pa.ne - 1u)
+        let lv = logits[p * pa.lstride + e] + (pa.rbias_on != 0u ? rb[pa.rboff + e] : 0.0)
         select_row(live ? lv : -3.0e38, live, pa.ne, pa.k)
         if (tid == 0u) {
             var jj = 0u
@@ -1519,6 +1613,7 @@ class MoeSched {
     @ssbo @binding = 2 sched1 : array<uint>    //! the gate plane's records + maps
     @ssbo @binding = 3 sched3 : array<uint>
     @ssbo @binding = 4 sched2 : array<uint>
+    @ssbo @binding = 5 bex : array<uint>       //! [nk] bucket row -> its expert (the biased act's row map)
     @push_constant pa : SchedArgs
     @workgroup scan : uint[256]
     @workgroup cnt : uint[256]    //! the experts' slot counts, then their bucket cursors
@@ -1639,7 +1734,9 @@ class MoeSched {
         barrier()
         i = tid
         while (i < pa.nk) {
-            inv[i] = atomicAdd(cnt[idx[i]], 1u)
+            let b = atomicAdd(cnt[idx[i]], 1u)
+            inv[i] = b
+            bex[b] = idx[i]
             i += 256u
         }
     }

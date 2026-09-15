@@ -833,11 +833,8 @@ def resident_unserved_features(c : Config) : string {
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
     name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
     if (c.n_expert > 0l) {
-        name_list_add(names, c.moe_gate != MoeGate.softmax, "a non-softmax router")
-        name_list_add(names, c.moe_router_bias, "a router bias")
+        name_list_add(names, c.moe_gate != MoeGate.softmax && c.moe_gate != MoeGate.softmax_weight, "a {c.moe_gate} router")
         name_list_add(names, c.moe_exp_probs, "an expert selection bias")
-        name_list_add(names, c.moe_exps_bias, "biased expert stacks")
-        name_list_add(names, c.ffn_act == FfnAct.swiglu_oai, "the clamped swiglu expert activation")
         name_list_add(names, c.n_expert > 256l, "{c.n_expert} experts (the select kernels reach 256)")
         name_list_add(names, c.n_expert_used > 64l, "{c.n_expert_used} routed experts (the slot metas hold 64)")
     }
@@ -1481,10 +1478,42 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
             di++
         }
     }
-    let ok = rdec_prepare_moe(ne, c.n_expert_used, c.n_ff_exp, c.n_ff_shexp, n_moe, sh_gated, c.norm_topk_prob,
-        c.ffn_act == FfnAct.gelu, c.expert_weights_scale, router, dscale)
+    //! gpt-oss's routing planes: the router bias a layer, the expert stacks' gate / up / down bias rows (every MoE layer, in layer order)
+    var rbias : array<float>
+    var gbias : array<float>
+    var ubias : array<float>
+    var dbias : array<float>
+    let nfe = c.n_ff_exp
+    if (c.moe_router_bias) {
+        rbias |> reserve_resize(n_moe * ne)
+    }
+    if (c.moe_exps_bias) {
+        gbias |> reserve_resize(n_moe * ne * nfe)
+        ubias |> reserve_resize(n_moe * ne * nfe)
+        dbias |> reserve_resize(n_moe * ne * dim)
+    }
+    var bi = 0l
+    for (l in range64(c.n_layers)) {
+        continue if (!layer_is_moe(t, l))
+        if (c.moe_router_bias) {
+            copy_floats(t.fblob, t.router_b_off + l * ne, rbias, bi * ne, ne)
+        }
+        if (c.moe_exps_bias) {
+            copy_floats(t.fblob, t.web1_off + l * ne * nfe, gbias, bi * ne * nfe, ne * nfe)
+            copy_floats(t.fblob, t.web3_off + l * ne * nfe, ubias, bi * ne * nfe, ne * nfe)
+            copy_floats(t.fblob, t.web2_off + l * ne * dim, dbias, bi * ne * dim, ne * dim)
+        }
+        bi++
+    }
+    //! the softmax-weight gate (gpt-oss) picks its k on the raw logits and softmaxes over the picks alone: the renormalized softmax's weights
+    let ok = rdec_prepare_moe(ne, c.n_expert_used, nfe, c.n_ff_shexp, n_moe, sh_gated, c.norm_topk_prob || c.moe_gate == MoeGate.softmax_weight,
+        c.ffn_act == FfnAct.gelu, c.ffn_act == FfnAct.swiglu_oai, c.expert_weights_scale, router, dscale, rbias, gbias, ubias, dbias)
     delete router
     delete dscale
+    delete rbias
+    delete gbias
+    delete ubias
+    delete dbias
     return ok
 }
 

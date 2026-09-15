@@ -631,6 +631,7 @@ struct GpuState {
     span_x_dev : uint64           // the residual row across the span
     span_xb_dev : uint64          // the normed row (scratch)
     span_w_dev : uint64           // the combine weights the top-k writes
+    span_eidx_dev : uint64        //! the top-k's picks (the span carries no bias, so nothing reads them)
     span_logits_dev : uint64      // the router logits
     span_router_dev : uint64      // the span's router planes, f32, layer-major
     span_shgate_dev : uint64      //! the shared expert's gate rows per span layer, f32 (gated models)
@@ -2514,6 +2515,7 @@ struct RDec {
     ne, k, nfe, nsh, ner : int64  //! experts, routed slots, the expert width, the shared expert's width (0 = none), the router rows per layer (ne, + the gate row)
     n_moe : int64                 //! MoE layers (the router plane's slots)
     sh_gated, norm_topk, is_gelu : bool
+    act_oai : bool                //! the experts' activation is gpt-oss's clamped swiglu (`ACT_OAI`), else silu or gelu by `is_gelu`
     wscale : float
     router_dev : uint64           //! [n_moe x ner x dim] f32 router rows, the gate row last
     router_bytes : int64
@@ -2521,6 +2523,13 @@ struct RDec {
     router16_bytes : int64
     moe_ds_dev : uint64           //! [n_moe x ne] the per-expert down scales the top-k folds into its weights (gemma-4); the filler when the model has none
     moe_ds_bytes : int64
+    router_bias : bool            //! the router logits take a per-expert bias before the pick (gpt-oss): `moe_rb_dev` holds [n_moe x ne]
+    moe_rb_dev : uint64
+    moe_rb_bytes : int64
+    exps_bias : bool              //! the expert stacks carry bias rows (gpt-oss): gate and up [n_moe x ne x nfe], down [n_moe x ne x dim]
+    moe_gb_dev, moe_ub_dev, moe_db_dev : uint64
+    moe_gb_bytes, moe_db_bytes : int64
+    moe_eidx_dev : uint64         //! the decode's k picks' experts (the biased act and combine's row map)
     moe_ident_dev : uint64        //! 0..MAX_ROUTED_SLOTS-1: the decode combine's identity slot map
     moe_dlog_dev : uint64         //! the decode's logits row (ner floats)
     moe_dw_dev : uint64           //! the decode's k routing weights
@@ -2530,6 +2539,7 @@ struct RDec {
     pf_nk : int64                 //! the window's slot rows (PF_WINDOW x k)
     pf_mlog : uint64              //! [np x ner] logits
     pf_midx, pf_mw, pf_minv : uint64   //! [nk] picks, weights, slot -> bucket row
+    pf_bex : uint64               //! [nk] bucket row -> its expert (the biased act's row map)
     pf_msch1, pf_msch3, pf_msch2 : uint64   //! the three expert planes' device-written schedules
     pf_mxg : uint64               //! [nk + slack x dim] the gathered f16 rows
     pf_my1, pf_my2 : uint64       //! [nk x nfe] the gate / up rows

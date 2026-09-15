@@ -1241,6 +1241,16 @@ def private act_mul_ref(v, u : float; gelu : bool) : float {
         : (v / (1.0 + exp(-v))) * u)
 }
 
+//! the same over the kernels' act code: ACT_OAI is gpt-oss's clamped swiglu, x = min(v, 7), y = clamp(u, -7, 7), (x sigmoid(1.702 x)) (y + 1)
+def private act_mul_ref(v, u : float; act : uint) : float {
+    if (act == ACT_OAI) {
+        let x = min(v, 7.0)
+        let y = clamp(u, -7.0, 7.0)
+        return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
+    }
+    return act_mul_ref(v, u, act != 0u)
+}
+
 def private pack4_ref(v0, v1, v2, v3, id : float) : uint {
     let q0 = int(round(v0 * id))
     let q1 = int(round(v1 * id))
@@ -1253,6 +1263,12 @@ def private pack4_ref(v0, v1, v2, v3, id : float) : uint {
 // Q8_0 / Q8_K quantize of act(gate)*up rows: sequential amax (max is order-free), linear pack
 def private actrq_oracle(gh, uh : array<float>; nelem : int; q8k, gelu : bool;
                          var outq : array<uint>; var outs : array<float>) {
+    actrq_oracle(gh, uh, nelem, q8k, gelu ? 1u : 0u, outq, outs)
+}
+
+//! the same over the kernels' act code
+def private actrq_oracle(gh, uh : array<float>; nelem : int; q8k : bool; act : uint;
+                         var outq : array<uint>; var outs : array<float>) {
     let bsz = q8k ? 256 : 32
     let nblk = nelem / bsz
     outq |> resize(nelem / 4)
@@ -1260,7 +1276,7 @@ def private actrq_oracle(gh, uh : array<float>; nelem : int; q8k, gelu : bool;
     for (b in range(nblk)) {
         var m = 0.0
         for (e in range(bsz)) {
-            m = max(m, abs(act_mul_ref(gh[b * bsz + e], uh[b * bsz + e], gelu)))
+            m = max(m, abs(act_mul_ref(gh[b * bsz + e], uh[b * bsz + e], act)))
         }
         let d = m / 127.0
         let id = d != 0.0 ? 1.0 / d : 0.0
@@ -1268,8 +1284,8 @@ def private actrq_oracle(gh, uh : array<float>; nelem : int; q8k, gelu : bool;
         for (wj in range(bsz / 4)) {
             let e0 = b * bsz + wj * 4
             outq[b * (bsz / 4) + wj] = pack4_ref(
-                act_mul_ref(gh[e0], uh[e0], gelu), act_mul_ref(gh[e0 + 1], uh[e0 + 1], gelu),
-                act_mul_ref(gh[e0 + 2], uh[e0 + 2], gelu), act_mul_ref(gh[e0 + 3], uh[e0 + 3], gelu), id)
+                act_mul_ref(gh[e0], uh[e0], act), act_mul_ref(gh[e0 + 1], uh[e0 + 1], act),
+                act_mul_ref(gh[e0 + 2], uh[e0 + 2], act), act_mul_ref(gh[e0 + 3], uh[e0 + 3], act), id)
         }
     }
 }
@@ -1780,6 +1796,120 @@ def test_vkd_act_family(t0 : T?) {
                 delete s_ref
                 delete q_cls
                 delete s_cls
+            }
+            //! the biased twins under the clamped swiglu (gpt-oss): three slot rows of 128, each row's expert naming its gate and up
+            //! bias rows out of a six-expert plane; the Q8_0 requant form and the f16 form against the oracle over the biased inputs
+            t |> success(ensure_q8_actrq_b_cls() && ensure_actf16_b_cls(), "the biased act twins compile on this device")
+            {
+                let brow = 128
+                let ne = 6
+                let nrow = 3
+                let nb = nrow * brow
+                var rex <- [uint(2), uint(0), uint(5)]
+                var gb : array<float>
+                var ub : array<float>
+                var gh2 : array<float>
+                var uh2 : array<float>
+                gb |> resize(ne * brow)
+                ub |> resize(ne * brow)
+                gh2 |> resize(nb)
+                uh2 |> resize(nb)
+                for (i in range(ne * brow)) {
+                    gb[i] = float((i * 13) % 31) * 0.3 - 4.5   //! biases past the 7 clamp on some elements: the clamps must engage
+                    ub[i] = float((i * 17) % 29) * 0.4 - 5.6
+                }
+                for (e in range(nb)) {
+                    let ex = int(rex[e / brow])
+                    gh2[e] = gh[e] + gb[ex * brow + e % brow]
+                    uh2[e] = uh[e] + ub[ex * brow + e % brow]
+                }
+                let b_bytes = int64(ne * brow) * 4l
+                let gbd = make_device_buf(b_bytes)
+                let ubd = make_device_buf(b_bytes)
+                let rexd = make_device_buf(int64(nrow) * 4l)
+                let hq2 = make_device_buf(int64(nb))
+                let hs2 = make_device_buf(int64(nb / 32) * 4l)
+                let hd2 = make_device_buf(int64(nb) * 2l)
+                var hostq = make_host_buf(int64(nb), true, [cached = true])
+                var hosts = make_host_buf(int64(nb / 32) * 4l, true, [cached = true])
+                var hosth = make_host_buf(int64(nb) * 2l, true, [cached = true])
+                var q_cls : array<uint>
+                var s_cls : array<float>
+                var h_cls : array<uint>
+                q_cls |> resize(nb / 4)
+                s_cls |> resize(nb / 32)
+                h_cls |> resize(nb / 2)
+                var pc = ActArgs(nelem = uint(nb), gelu = ACT_OAI, nblk = uint(nb / 32), bias_on = 1u, gboff = 0u, uboff = 0u, brow = uint(brow))
+                unsafe {
+                    upload_region_at(gbd, 0l, addr<uint8 const?>(gb[0]), b_bytes)
+                    upload_region_at(ubd, 0l, addr<uint8 const?>(ub[0]), b_bytes)
+                    upload_region_at(rexd, 0l, addr<uint8 const?>(rex[0]), int64(nrow) * 4l)
+                    nan_sentinel_upload(hq2, int64(nb))
+                    nan_sentinel_upload(hs2, int64(nb / 32) * 4l)
+                    nan_sentinel_upload(hd2, int64(nb) * 2l)
+                    var sc = set_q8_actrq_b_cls(fixed_array(gd, ud, hq2, hs2, gbd, ubd, rexd),
+                        fixed_array(e_bytes, e_bytes, int64(nb), int64(nb / 32) * 4l, b_bytes, b_bytes, int64(nrow) * 4l),
+                        fixed_array(16u, 1u, 4u, 8u, 0u, 0u, 0u))
+                    var raw2 = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    enc_q8_actrq_b_cls(raw2, h2, sc, pc, (int64(nb) / 4l + 255l) / 256l)
+                    var sc16 = set_actf16_b_cls(fixed_array(gd, ud, hd2, gbd, ubd, rexd),
+                        fixed_array(e_bytes, e_bytes, int64(nb) * 2l, b_bytes, b_bytes, int64(nrow) * 4l),
+                        fixed_array(16u, 1u, 32u, 0u, 0u, 0u))
+                    enc_actf16_b_cls(raw2, h2, sc16, pc, (int64(nb) / 4l + 255l) / 256l)
+                    vhz_dep(raw2, h2, 4u | 8u | 32u, 0u, true)
+                    cmd_copy_whole(raw2, hq2, hostq.buf, int64(nb))
+                    cmd_copy_whole(raw2, hs2, hosts.buf, int64(nb / 32) * 4l)
+                    cmd_copy_whole(raw2, hd2, hosth.buf, int64(nb) * 2l)
+                    vk_check(vkEndCommandBuffer(raw2), null)
+                    submit_wait(raw2)
+                    memcpy(addr<void?>(q_cls[0]), hostq.mapped, int64(nb))
+                    memcpy(addr<void?>(s_cls[0]), hosts.mapped, int64(nb / 32) * 4l)
+                    memcpy(addr<void?>(h_cls[0]), hosth.mapped, int64(nb) * 2l)
+                }
+                var q_ref : array<uint>
+                var s_ref : array<float>
+                actrq_oracle(gh2, uh2, nb, false, ACT_OAI, q_ref, s_ref)
+                let badq = mismatch_qbytes(q_cls, q_ref, 1)
+                let bads = mismatch_approx(s_cls, s_ref)
+                t |> success(badq == 0 && bads == 0, "the biased q8 actrq under the clamped swiglu matches the oracle over the biased rows ({badq} bytes / {bads} scales off)")
+                var h_ref : array<float>
+                var h_got : array<float>
+                h_ref |> resize(nb)
+                h_got |> resize(nb)
+                for (e in range(nb)) {
+                    h_ref[e] = float(float16(act_mul_ref(gh2[e], uh2[e], ACT_OAI)))
+                }
+                for (i in range(nb / 2)) {
+                    let pr = unpackHalf2x16(h_cls[i])
+                    h_got[2 * i] = pr.x
+                    h_got[2 * i + 1] = pr.y
+                }
+                let badh = mismatch_bars(h_got, h_ref, 2.0e-3, 2.0e-3 * max_abs(h_ref))
+                t |> success(badh == 0, "the biased f16 act under the clamped swiglu matches the oracle within the half's rounding ({badh} of {nb} off)")
+                //! the controls: an unbiased oracle must red both forms (the bias rows carry the signal)
+                var q_nb : array<uint>
+                var s_nb : array<float>
+                actrq_oracle(gh, uh, nb, false, ACT_OAI, q_nb, s_nb)
+                t |> success(mismatch_qbytes(q_cls, q_nb, 1) > 0, "biased actrq control: the unbiased oracle reds the compare")
+                h_ref[7] += 0.5
+                t |> success(mismatch_bars(h_got, h_ref, 2.0e-3, 2.0e-3 * max_abs(h_ref)) == 1, "biased f16 act control: the bar reds one poisoned element")
+                delete rex
+                delete gb
+                delete ub
+                delete gh2
+                delete uh2
+                delete q_cls
+                delete s_cls
+                delete h_cls
+                delete q_ref
+                delete s_ref
+                delete h_ref
+                delete h_got
+                delete q_nb
+                delete s_nb
             }
             // the combine
             {
@@ -8976,18 +9106,27 @@ def private moe_router_arm(t : T?; ner : int) {
 }
 
 //! the per-row select against moe_select_core over the same rows: norm on with no scale, norm off with a scale
-def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
+//! `gate` and `rbias` are the CPU select's own form (gpt-oss: softmax_weight, a router bias before the pick); the kernel emulates the
+//! softmax-weight gate with its renormalized softmax, since softmax over the picks equals the softmax over all experts renormalized over them
+def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGate; rbias : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var lh : array<float>
+        var rb : array<float>
         lh |> resize(MR_NPOS * MR_NER)
+        rb |> resize(MR_NE)
         for (i in range(MR_NPOS * MR_NER)) {
             lh[i] = hash_unit(uint(i) * 3u + 101u) * 2.0 + float(i % 7) * 0.0625   //! spread past any near-tie
         }
+        for (e in range(MR_NE)) {
+            rb[e] = rbias ? hash_unit(uint(e) * 5u + 7u) * 3.0 - 1.5 : 0.0   //! a bias wide enough to move picks
+        }
         let l_bytes = int64(MR_NPOS * MR_NER) * 4l
         let s_bytes = int64(MR_NPOS * MR_K) * 4l
+        let rb_bytes = int64(MR_NE) * 4l
         let ld = make_device_buf(l_bytes)
         let idxd = make_device_buf(s_bytes)
         let wd = make_device_buf(s_bytes)
+        let rbd = make_device_buf(rb_bytes)
         var hosti = make_host_buf(s_bytes, true, [cached = true])
         var hostw = make_host_buf(s_bytes, true, [cached = true])
         var gidx : array<uint>
@@ -8996,14 +9135,16 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
         gw |> resize(MR_NPOS * MR_K)
         unsafe {
             upload_region_at(ld, 0l, addr<uint8 const?>(lh[0]), l_bytes)
+            upload_region_at(rbd, 0l, addr<uint8 const?>(rb[0]), rb_bytes)
             nan_sentinel_upload(idxd, s_bytes)
             nan_sentinel_upload(wd, s_bytes)
-            var sc = set_topk_rows_cls(fixed_array(ld, idxd, wd, ld), fixed_array(l_bytes, s_bytes, s_bytes, l_bytes), fixed_array(1u, 2u, 4u, 1u))   //! no down scale: the logits fill the ds binding, never read at NO_DSCALE
+            var sc = set_topk_rows_cls(fixed_array(ld, idxd, wd, ld, rbd), fixed_array(l_bytes, s_bytes, s_bytes, l_bytes, rb_bytes), fixed_array(1u, 2u, 4u, 1u, 0u))   //! no down scale: the logits fill the ds binding, never read at NO_DSCALE
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var h : VkHaz
-            var pc = TopkRowsArgs(npos = uint(MR_NPOS), ne = uint(MR_NE), k = uint(MR_K), norm = norm ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = NO_DSCALE)
+            var pc = TopkRowsArgs(npos = uint(MR_NPOS), ne = uint(MR_NE), k = uint(MR_K), norm = norm || gate == MoeGate.softmax_weight ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = NO_DSCALE,
+                rbias_on = rbias ? 1u : 0u, rboff = 0u)
             enc_topk_rows_cls(raw, h, sc, pc, int64(MR_NPOS))
             vhz_dep(raw, h, 2u | 4u, 0u, true)
             cmd_copy_whole(raw, idxd, hosti.buf, s_bytes)
@@ -9021,10 +9162,10 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
         row |> resize(MR_NE)
         for (p in range(MR_NPOS)) {
             for (e in range(MR_NE)) {
-                row[e] = lh[p * MR_NER + e]
+                row[e] = lh[p * MR_NER + e] + rb[e]
             }
             unsafe {
-                moe_select_core(MoeGate.softmax, int64(MR_NE), int64(MR_K), norm, wscale, addr(row[0]), addr(widx[0]), addr(ww[0]), int64(p * MR_K))
+                moe_select_core(gate, int64(MR_NE), int64(MR_K), norm, wscale, addr(row[0]), addr(widx[0]), addr(ww[0]), int64(p * MR_K))
             }
         }
         var badi = 0
@@ -9034,11 +9175,35 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float) {
             }
         }
         let badw = mismatch_rel(gw, ww, 1e-4)
-        let arm = norm ? "renormalized" : "scaled by {wscale}"
+        let arm = (gate == MoeGate.softmax_weight ? "softmax over the picks" : (norm ? "renormalized" : "scaled by {wscale}")) + (rbias ? ", router bias" : "")
         t |> success(badi == 0, "per-row top-k picks the host select's experts ({arm}; {badi} of {MR_NPOS * MR_K} off)")
         t |> success(badw == 0, "per-row top-k weights match the host select ({arm}; {badw} of {MR_NPOS * MR_K} off)")
         ww[4] += 0.5
         t |> success(mismatch_rel(gw, ww, 1e-4) == 1, "per-row top-k control: the bar reds one poisoned weight")
+        if (rbias) {   //! the bias control: the select over the unbiased logits must pick differently somewhere
+            var wid0 : array<int64>
+            var ww0 : array<float>
+            wid0 |> resize(MR_NPOS * MR_K)
+            ww0 |> resize(MR_NPOS * MR_K)
+            for (p in range(MR_NPOS)) {
+                for (e in range(MR_NE)) {
+                    row[e] = lh[p * MR_NER + e]
+                }
+                unsafe {
+                    moe_select_core(gate, int64(MR_NE), int64(MR_K), norm, wscale, addr(row[0]), addr(wid0[0]), addr(ww0[0]), int64(p * MR_K))
+                }
+            }
+            var moved = 0
+            for (i in range(MR_NPOS * MR_K)) {
+                if (wid0[i] != widx[i]) {
+                    moved++
+                }
+            }
+            t |> success(moved > 0, "router bias control: the bias moves {moved} of {MR_NPOS * MR_K} picks off the unbiased select")
+            delete wid0
+            delete ww0
+        }
+        delete rb
         delete lh
         delete gidx
         delete gw
@@ -9076,6 +9241,7 @@ def private moe_sched_arm(t : T?) {
         let s_bytes = long_length(w1) * 4l
         let idxd = make_device_buf(i_bytes)
         let invd = make_device_buf(i_bytes)
+        let bexd = make_device_buf(i_bytes)
         let s1d = make_device_buf(s_bytes)
         let s3d = make_device_buf(s_bytes)
         let s2d = make_device_buf(s_bytes)
@@ -9084,22 +9250,25 @@ def private moe_sched_arm(t : T?) {
         for (f in fill) {
             f = MR_SENT
         }
-        var host = make_host_buf(i_bytes + 3l * s_bytes, true, [cached = true])
+        var host = make_host_buf(2l * i_bytes + 3l * s_bytes, true, [cached = true])
         var ginv : array<uint>
+        var gbex : array<uint>
         var g1 : array<uint>
         var g3 : array<uint>
         var g2 : array<uint>
         ginv |> resize(nk)
+        gbex |> resize(nk)
         g1 |> resize(length(w1))
         g3 |> resize(length(w1))
         g2 |> resize(length(w1))
         unsafe {
             upload_region_at(idxd, 0l, addr<uint8 const?>(idx[0]), i_bytes)
             nan_sentinel_upload(invd, i_bytes)
+            nan_sentinel_upload(bexd, i_bytes)
             upload_region_at(s1d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
             upload_region_at(s3d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
             upload_region_at(s2d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
-            var sc = set_moe_sched_cls(fixed_array(idxd, invd, s1d, s3d, s2d), fixed_array(i_bytes, i_bytes, s_bytes, s_bytes, s_bytes), fixed_array(1u, 2u, 2u, 2u, 2u))
+            var sc = set_moe_sched_cls(fixed_array(idxd, invd, s1d, s3d, s2d, bexd), fixed_array(i_bytes, i_bytes, s_bytes, s_bytes, s_bytes, i_bytes), fixed_array(1u, 2u, 2u, 2u, 2u, 2u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -9114,6 +9283,7 @@ def private moe_sched_arm(t : T?) {
             cmd_copy_range(raw, s1d, 0l, host.buf, i_bytes, s_bytes)
             cmd_copy_range(raw, s3d, 0l, host.buf, i_bytes + s_bytes, s_bytes)
             cmd_copy_range(raw, s2d, 0l, host.buf, i_bytes + 2l * s_bytes, s_bytes)
+            cmd_copy_range(raw, bexd, 0l, host.buf, i_bytes + 3l * s_bytes, i_bytes)
             vk_check(vkEndCommandBuffer(raw), null)
             submit_wait(raw)
             let hp = intptr(host.mapped)
@@ -9121,9 +9291,11 @@ def private moe_sched_arm(t : T?) {
             memcpy(addr<void?>(g1[0]), reinterpret<void?>(hp + uint64(i_bytes)), s_bytes)
             memcpy(addr<void?>(g3[0]), reinterpret<void?>(hp + uint64(i_bytes + s_bytes)), s_bytes)
             memcpy(addr<void?>(g2[0]), reinterpret<void?>(hp + uint64(i_bytes + 2l * s_bytes)), s_bytes)
+            memcpy(addr<void?>(gbex[0]), reinterpret<void?>(hp + uint64(i_bytes + 3l * s_bytes)), i_bytes)
         }
         //! the atomic cursor fixes no order within a bucket, so the check is per bucket: a permutation of its rows
         var inv_bad = 0
+        var bex_bad = 0
         var seen : array<bool>
         seen |> resize(nk)
         for (r in range(nk)) {
@@ -9135,10 +9307,15 @@ def private moe_sched_arm(t : T?) {
                 inv_bad++
             } else {
                 seen[int(row)] = true
+                if (gbex[int(row)] != idx[r]) {
+                    bex_bad++
+                }
             }
         }
         t |> success(inv_bad == 0, "the schedule's slot -> bucket row map is a permutation of each bucket's rows ({nk} slots, {inv_bad} off)")
+        t |> success(bex_bad == 0, "the schedule's bucket row -> expert map names each row's slot's expert ({bex_bad} of {nk} off)")
         delete seen
+        delete gbex
         t |> success(mismatch_qbytes(g1, w1, 0) == 0, "the gate plane's s and m records, maps and sentinel tails match the CPU twin word for word ({length(w1)} words)")
         t |> success(mismatch_qbytes(g3, w3, 0) == 0, "the up plane's schedule matches")
         t |> success(mismatch_qbytes(g2, w2, 0) == 0, "the down plane's schedule matches (its own tile counts and tails)")
@@ -9160,12 +9337,14 @@ def private moe_sched_arm(t : T?) {
 //! the residual step with the combine folded in: x += [g *] shared row + the k weighted expert rows
 //! through the slot map, then the next norm - the f32 and the f16 normed-row forms against one CPU
 //! oracle; `with_sh` = the layer has a shared expert (its rows ride the add partner)
-def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
+//! `dbias` = each slot's row takes its expert's down bias before its weight (gpt-oss), the slot -> expert map from a six-expert plane
+def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:STYLE037 — one arm: the fixture, both forms' dispatches, the oracle, the compares
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = 64
         let k = 3
         let npos = 5
         let nrows = npos * k
+        let ne = 6
         let eps = 1.0e-6
         var sidx : array<uint>
         var sw : array<float>
@@ -9174,6 +9353,8 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
         var sh : array<float>
         var wn : array<float>
         var lg : array<float>
+        var sex : array<uint>
+        var db : array<float>
         sidx |> resize(nrows)
         sw |> resize(nrows)
         rows |> resize(nrows * n)
@@ -9181,9 +9362,15 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
         sh |> resize(npos * n)
         wn |> resize(n)
         lg |> resize(npos * MR_NER)
+        sex |> resize(nrows)
+        db |> resize(ne * n)
         for (i in range(nrows)) {
             sidx[i] = uint((i * 7) % nrows)   //! a permutation of the bucket rows
             sw[i] = 0.125 + float(i % 5) * 0.25
+            sex[i] = hash_word(uint(i) + 3u) % uint(ne)
+        }
+        for (i in range(ne * n)) {
+            db[i] = dbias ? float((i * 19) % 23) * 0.25 - 2.75 : 0.0
         }
         for (i in range(nrows * n)) {
             rows[i] = float((i * 7) % 93) * 0.13 - 5.5
@@ -9203,6 +9390,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
         let ro_bytes = int64(nrows * n) * 4l
         let wn_bytes = int64(n) * 4l
         let lg_bytes = int64(npos * MR_NER) * 4l
+        let db_bytes = int64(ne * n) * 4l
         let sid = make_device_buf(si_bytes)
         let swd = make_device_buf(si_bytes)
         let rod = make_device_buf(ro_bytes)
@@ -9210,6 +9398,8 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
         let shd = make_device_buf(x_bytes)
         let wnd = make_device_buf(wn_bytes)
         let lgd = make_device_buf(lg_bytes)
+        let dbd = make_device_buf(db_bytes)
+        let sexd = make_device_buf(si_bytes)
         let yod = make_device_buf(x_bytes)
         let yhd = make_device_buf(x_bytes / 2l)
         var host = make_host_buf(3l * x_bytes, true, [cached = true])
@@ -9220,7 +9410,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
         got_y |> resize(npos * n)
         got_h |> resize(npos * n / 2)
         var pc = ArArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
-            slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u)
+            slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u, dbias_on = dbias ? 1u : 0u, dboff = 0u)
         unsafe {
             upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
             upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
@@ -9228,13 +9418,15 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
             upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
             upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), wn_bytes)
             upload_region_at(lgd, 0l, addr<uint8 const?>(lg[0]), lg_bytes)
+            upload_region_at(dbd, 0l, addr<uint8 const?>(db[0]), db_bytes)
+            upload_region_at(sexd, 0l, addr<uint8 const?>(sex[0]), si_bytes)
             nan_sentinel_upload(yod, x_bytes)
             nan_sentinel_upload(yhd, x_bytes / 2l)
             //! the f32 form: x updated in place, the normed row to yo
             upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
-            var sc = set_cls_ar_comb(fixed_array(xd, shd, wnd, yod, sid, swd, rod, lgd),
-                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes, si_bytes, si_bytes, ro_bytes, lg_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u))
+            var sc = set_cls_ar_comb(fixed_array(xd, shd, wnd, yod, sid, swd, rod, lgd, dbd, sexd),
+                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes, si_bytes, si_bytes, ro_bytes, lg_bytes, db_bytes, si_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u, 0u, 8u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -9249,9 +9441,9 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
             memcpy(addr<void?>(got_y[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
             //! the f16 form over a fresh x
             upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
-            var sc16 = set_cls_ar_comb_f16_b(fixed_array(xd, shd, wnd, yhd, sid, swd, rod, lgd),
-                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes / 2l, si_bytes, si_bytes, ro_bytes, lg_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u))
+            var sc16 = set_cls_ar_comb_f16_b(fixed_array(xd, shd, wnd, yhd, sid, swd, rod, lgd, dbd, sexd),
+                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes / 2l, si_bytes, si_bytes, ro_bytes, lg_bytes, db_bytes, si_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u, 0u, 8u))
             var raw2 = alloc_cmd()
             vk_check(vkBeginCommandBuffer(raw2, begin), null)
             var h2 : VkHaz
@@ -9272,7 +9464,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
                     v += g * sh[p * n + i]
                 }
                 for (j in range(k)) {
-                    v += sw[p * k + j] * rows[int(sidx[p * k + j]) * n + i]
+                    v += sw[p * k + j] * (rows[int(sidx[p * k + j]) * n + i] + db[int(sex[p * k + j]) * n + i])
                 }
                 want_x[p * n + i] = v
                 ss += v * v
@@ -9282,7 +9474,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
                 want_y[p * n + i] = wn[i] * (want_x[p * n + i] * inv)
             }
         }
-        let arm = (with_sh ? (gated ? "gated shared" : "ungated shared") : "no shared") + " expert"
+        let arm = (with_sh ? (gated ? "gated shared" : "ungated shared") : "no shared") + " expert" + (dbias ? ", down biases" : "")
         t |> success(mismatch_approx(got_x, xs) > 0, "the combine-folded residual step ({arm}): the in-place residual rows moved off their input")
         let bad_x = mismatch_approx(got_x, want_x)
         t |> success(bad_x == 0, "the combine-folded residual step ({arm}): the residual rows match the CPU oracle ({bad_x} of {npos * n} off)")
@@ -9318,6 +9510,8 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh : bool) {
         delete got_yf
         delete want_x
         delete want_y
+        delete sex
+        delete db
     }
 }
 
@@ -9566,12 +9760,14 @@ def test_vkd_moe_routing(t0 : T?) {
             }
             moe_router_arm(t, MR_NER)
             moe_router_arm(t, 9)   //! fewer rows than the tile's half: the second row of every invocation is guarded off
-            moe_topk_rows_arm(t, true, 0.0)
-            moe_topk_rows_arm(t, false, 2.5)
+            moe_topk_rows_arm(t, true, 0.0, MoeGate.softmax, false)
+            moe_topk_rows_arm(t, false, 2.5, MoeGate.softmax, false)
+            moe_topk_rows_arm(t, false, 0.0, MoeGate.softmax_weight, true)   //! gpt-oss: the biased pick, softmax over the picks
             moe_sched_arm(t)
-            moe_ar_comb_arm(t, true, true)
-            moe_ar_comb_arm(t, false, true)
-            moe_ar_comb_arm(t, false, false)
+            moe_ar_comb_arm(t, true, true, false)
+            moe_ar_comb_arm(t, false, true, false)
+            moe_ar_comb_arm(t, false, false, false)
+            moe_ar_comb_arm(t, false, false, true)   //! gpt-oss: the down biases under the routing weights
             moe_ar_comb_g4_arm(t)
         } else {
             t |> skip("dasVulkan not present")

@@ -728,6 +728,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the mx4 expert rail (gpt-oss's native-MXFP4 routed stacks: a carrier above the zoo's tier) - its s and e stamps and
     // its decode GEMV; their coverage is test_vkd_mx4_cm2_batch and test_vkd_mx4_gemv
     "mx4_batch_cm2s_cls_spv", "mx4_batch_cm2e_cls_spv", "mx4_gemv_cls_spv",
+    // the biased act twins (gpt-oss's expert stacks carry gate and up bias rows: a carrier above the zoo's tier) - the
+    // Q8_0 requant form the token command runs and the f16 form the window chain runs; their coverage is test_vkd_act_family
+    "q8_actrq_b_cls_spv", "actf16_b_cls_spv",
     // the Q4_K experts' gate+up+act twin (the 26B-A4B Q4_K_M's routed stacks feeding its Q5_1 down, above the zoo's
     // tier; the zoo's k4 MoE carrier feeds a k4 down): its coverage is test_vkd_kq_gemv_k4_gu in test_vulkan_kernels.das
     "kq_gemv_k4_gu_cls_spv",

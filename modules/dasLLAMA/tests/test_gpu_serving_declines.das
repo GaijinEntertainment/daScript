@@ -176,12 +176,14 @@ def test_resident_unserved_moe_features(t : T?) {
         c.n_expert_used = 4l
         t |> equal(resident_unserved_features(c), "", "a plain softmax MoE names nothing")
         c.moe_gate = MoeGate.sigmoid
-        t |> equal(resident_unserved_features(c), "a non-softmax router")
+        t |> equal(resident_unserved_features(c), "a sigmoid router", "the router shape the kernels do not serve is named by its form")
+        c.moe_gate = MoeGate.softmax_weight
+        t |> equal(resident_unserved_features(c), "", "gpt-oss's softmax over the picks is served (the renormalized select is the same weights)")
         c.moe_gate = MoeGate.softmax
         c.moe_router_bias = true
         c.moe_exp_probs = true
         let s = resident_unserved_features(c)
-        t |> success(says(s, "a router bias") && says(s, "an expert selection bias"), "the two biases named together: {s}")
+        t |> success(!says(s, "router bias") && says(s, "an expert selection bias"), "the router bias is served (the select adds it), the expert selection bias named: {s}")
         c.moe_router_bias = false
         c.moe_exp_probs = false
         c.n_expert = 300l
@@ -193,9 +195,7 @@ def test_resident_unserved_moe_features(t : T?) {
         c.moe_exps_bias = true
         c.ffn_act = FfnAct.swiglu_oai
         c.layer_out_scale = true
-        let e = resident_unserved_features(c)
-        t |> success(says(e, "biased expert stacks") && says(e, "the clamped swiglu expert activation") && !says(e, "output scale"),
-            "the expert stack's bias and the clamped activation named together, the layer output scale served: {e}")
+        t |> equal(resident_unserved_features(c), "", "gpt-oss's biased expert stacks, its clamped swiglu and the layer output scale are all served")
         c.moe_exps_bias = false
         c.ffn_act = FfnAct.gelu
         c.moe_dense_shexp = true

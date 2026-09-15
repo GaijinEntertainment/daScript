@@ -397,7 +397,8 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
 let private MOE_MAX_EXPERTS = 256l   //! the select kernels' one-workgroup reach: one thread per expert
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
-def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu : bool; wscale : float; router : array<float>; dscale : array<float>) : bool {
+def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu, act_oai : bool; wscale : float; router : array<float>; dscale : array<float>;
+                        rbias : array<float>; gbias : array<float>; ubias : array<float>; dbias : array<float>) : bool {
     let ner = ne + (nsh > 0l && sh_gated ? 1l : 0l)
     let reach = ne <= MOE_MAX_EXPERTS && k <= MAX_ROUTED_SLOTS && nfe % 32l == 0l
     if (g_gpu != null && g_gpu.dry) {
@@ -424,12 +425,42 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     r.sh_gated = sh_gated
     r.norm_topk = norm_topk
     r.is_gelu = is_gelu
+    r.act_oai = act_oai
     r.wscale = wscale
+    r.router_bias = !empty(rbias)
+    r.exps_bias = !empty(gbias)
     if (!(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_cls_ar_comb()
-            && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls())) {
+            && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && (!r.exps_bias || ensure_q8_actrq_b_cls()))) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the routing class rails declined on this device\n")
         return false
     }
+    //! the routing planes gpt-oss adds: the router bias [n_moe x ne], the gate and up biases [n_moe x ne x nfe], the down biases [n_moe x ne x dim]; the filler where a model has none
+    r.moe_rb_dev = r.dummy
+    r.moe_rb_bytes = 256l
+    if (r.router_bias) {
+        assert(long_length(rbias) == n_moe * ne, "vk_rdec_prepare_moe: the router-bias plane is not [n_moe x ne]")
+        r.moe_rb_bytes = long_length(rbias) * 4l
+        r.moe_rb_dev = make_device_buf(r.moe_rb_bytes)
+        upload_region_at(r.moe_rb_dev, 0l, unsafe(addr<uint8 const?>(rbias[0])), r.moe_rb_bytes)
+    }
+    r.moe_gb_dev = r.dummy
+    r.moe_ub_dev = r.dummy
+    r.moe_db_dev = r.dummy
+    r.moe_gb_bytes = 256l
+    r.moe_db_bytes = 256l
+    if (r.exps_bias) {
+        assert(long_length(gbias) == n_moe * ne * nfe && long_length(ubias) == n_moe * ne * nfe && long_length(dbias) == n_moe * ne * dim,
+            "vk_rdec_prepare_moe: the expert-bias planes are not [n_moe x ne x nfe] / [n_moe x ne x dim]")
+        r.moe_gb_bytes = long_length(gbias) * 4l
+        r.moe_db_bytes = long_length(dbias) * 4l
+        r.moe_gb_dev = make_device_buf(r.moe_gb_bytes)
+        r.moe_ub_dev = make_device_buf(r.moe_gb_bytes)
+        r.moe_db_dev = make_device_buf(r.moe_db_bytes)
+        upload_region_at(r.moe_gb_dev, 0l, unsafe(addr<uint8 const?>(gbias[0])), r.moe_gb_bytes)
+        upload_region_at(r.moe_ub_dev, 0l, unsafe(addr<uint8 const?>(ubias[0])), r.moe_gb_bytes)
+        upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(dbias[0])), r.moe_db_bytes)
+    }
+    r.moe_eidx_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     r.router_bytes = long_length(router) * 4l
     assert(r.router_bytes == n_moe * r.ner * dim * 4l, "vk_rdec_prepare_moe: the router plane is not [n_moe x ner x dim]")
     r.router_dev = make_device_buf(r.router_bytes)
@@ -504,18 +535,24 @@ def private rd_moe_sets(var L : RLayer) {
     L.rtn_fused = L.moe_g4 && vk_fuse_on()
     L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, L.rtn_fused ? g_rd.x_dev : g_rd.xb_dev, g_rd.moe_dlog_dev, g_rd.norms_dev),
         fixed_array(g_rd.router_bytes, dim * 4l, g_rd.ner * 4l, g_rd.norms_bytes), fixed_array(0u, L.rtn_fused ? VHZ_X : VHZ_XB, VHZ_MRT, 0u))
-    L.s_topk = set_topk_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev),
-        fixed_array(g_rd.ner * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l, g_rd.moe_ds_bytes),
-        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u))
+    L.s_topk = set_topk_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.moe_eidx_dev),
+        fixed_array(g_rd.ner * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, MAX_ROUTED_SLOTS * 4l),
+        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
     L.s_egate = gemv_cls_set(L.fe1, fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev),
         fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE))
     L.s_eup = gemv_cls_set(L.fe3, fixed_array(pe3.wq, pe3.ws, g_rd.moe_meta3_dev, xqb, xsb, g_rd.eup_dev),
         fixed_array(pe3.wqb, pe3.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_UP))
-    L.s_eact = set_actrq_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-        fixed_array(k * nfe * 4l, k * nfe * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-        fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
+    if (g_rd.exps_bias) {   //! the biased act: the picks' gate and up bias rows join before the activation
+        L.s_eact = set_q8_actrq_b_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev),
+            fixed_array(k * nfe * 4l, k * nfe * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES, g_rd.moe_gb_bytes, g_rd.moe_gb_bytes, MAX_ROUTED_SLOTS * 4l),
+            fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ, 0u, 0u, VHZ_MRT))
+    } else {
+        L.s_eact = set_actrq_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(k * nfe * 4l, k * nfe * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
+    }
     //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once
     L.egu = (L.fe1 == int(KqFmt.k4) && L.fe3 == int(KqFmt.k4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
         && vk_fuse_on() && ensure_kq_gemv_k4_gu_cls())
@@ -543,9 +580,9 @@ def private rd_moe_sets(var L : RLayer) {
     }
     verify(ensure_cls_ar_comb(), "vk decode: the combine-folded residual class rail must engage on a live device")
     L.s_addr_next = set_cls_ar_comb(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
-            g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev),
-        fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, k * dim * 4l, g_rd.ner * 4l),
-        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT))
+            g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev),
+        fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim * 4l, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, k * dim * 4l, g_rd.ner * 4l, g_rd.moe_db_bytes, MAX_ROUTED_SLOTS * 4l),
+        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT, 0u, VHZ_MRT))
 }
 
 //! a layer without a dense triple (an MoE layer with no shared expert): the tail sets the token
@@ -1368,6 +1405,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     rd_ts(raw, "m:router")
     var pct = TopkArgs(ne = uint(g_rd.ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, wscale = g_rd.wscale,
         dsoff = L.moe_g4 ? uint(L.router_slot * g_rd.ne) : NO_DSCALE,
+        rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * g_rd.ne),
         base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / fmt_unit(L.fe1)),
         base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / fmt_unit(L.fe3)),
         base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / fmt_unit(L.fe2)),
@@ -1386,9 +1424,13 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         gemv_enc(L.fe3, raw, h, L.s_eup, pcg, k * nfe)
         rd_ts(raw, "m:e_up")
         let dkq = kq_sb(L.fe2)
-        var pca = ActArgs(nelem = uint(k * nfe), gelu = g_rd.is_gelu ? 1u : 0u, nblk = uint(k * nfe / (dkq ? 256l : 32l)))
+        var pca = ActArgs(nelem = uint(k * nfe), gelu = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(k * nfe / (dkq ? 256l : 32l)),
+            bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * g_rd.ne * nfe), uboff = uint(L.router_slot * g_rd.ne * nfe), brow = uint(nfe))
         let awgs = (k * nfe / (dkq ? 8l : 4l) + 255l) / 256l
-        if (dkq) {
+        if (g_rd.exps_bias) {   //! the biased twin rides the Q8_0 form: an mx4 (gpt-oss) down plane takes Q8_0 activations
+            verify(!dkq, "vk decode: biased expert stacks feed a Q8_K down plane - the biased act has no Q8_K twin")
+            enc_q8_actrq_b_cls(raw, h, L.s_eact, pca, awgs)
+        } elif (dkq) {
             enc_q8k_actrq_cls(raw, h, L.s_eact, pca, awgs)
         } else {
             enc_q8_actrq_cls(raw, h, L.s_eact, pca, awgs)
@@ -1414,7 +1456,8 @@ def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
             routed_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), sum_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
     }
     return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
-        slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u)
+        slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u,
+        dbias_on = g_rd.exps_bias ? 1u : 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
 }
 
 // The encode half alone: reset + re-encode the token cmd over the already-filled metas/sets.
@@ -2354,9 +2397,9 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
     SL.s_router = set_router_gemv_cls(fixed_array(g_gpu.span_router_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev, g_gpu.span_xb_dev),
         fixed_array(nl * a.ne * nb, nb, MOE_MAX_EXPERTS * 4l, nb), fixed_array(0u, VHS_XB, VHS_LOG, 0u))   //! the norms slot: the span's router reads the normed row, never the norm
     SL.s_topk = set_topk_cls(   //! the span folds no down scale: the logits row fills the ds binding, never read at NO_DSCALE
-        fixed_array(g_gpu.span_logits_dev, g_gpu.stacks[SL.s1].meta.buf, g_gpu.stacks[SL.s3].meta.buf, g_gpu.stacks[SL.s2].meta.buf, g_gpu.span_w_dev, g_gpu.span_logits_dev),
-        fixed_array(MOE_MAX_EXPERTS * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l, MOE_MAX_EXPERTS * 4l),
-        fixed_array(VHS_LOG, VHS_META, VHS_META, VHS_META, VHS_META, VHS_LOG))
+        fixed_array(g_gpu.span_logits_dev, g_gpu.stacks[SL.s1].meta.buf, g_gpu.stacks[SL.s3].meta.buf, g_gpu.stacks[SL.s2].meta.buf, g_gpu.span_w_dev, g_gpu.span_logits_dev, g_gpu.span_logits_dev, g_gpu.span_eidx_dev),
+        fixed_array(MOE_MAX_EXPERTS * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l, MOE_MAX_EXPERTS * 4l, MOE_MAX_EXPERTS * 4l, MAX_ROUTED_SLOTS * 4l),
+        fixed_array(VHS_LOG, VHS_META, VHS_META, VHS_META, VHS_META, VHS_LOG, VHS_LOG, VHS_META))
     SL.s_comb = set_dec_combine_cls(fixed_array(g_gpu.span_x_dev, g_gpu.span_w_dev, g_gpu.stacks[SL.s2].y_dev, g_gpu.span_x_dev),
         fixed_array(nb, MAX_ROUTED_SLOTS * 4l, Y_BYTES, nb), fixed_array(VHS_X, VHS_META, VHG_YO, VHS_X))
     if (a.nsh > 0l) {
@@ -2514,6 +2557,7 @@ def private ensure_span_state(a : MoeSpanDec) {
     g_gpu.span_x_dev = make_device_buf(dim * 4l)
     g_gpu.span_xb_dev = make_device_buf(dim * 4l)
     g_gpu.span_w_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
+    g_gpu.span_eidx_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     g_gpu.span_logits_dev = make_device_buf(SPAN_LOGITS_BYTES)
     g_gpu.span_router_dev = make_device_buf(nl * a.ne * dim * 4l)
     g_gpu.span_norms_dev = make_device_buf(nl * 2l * dim * 4l)
