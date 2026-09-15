@@ -10,9 +10,6 @@
     ],
     "repeat": 3,
     "timeout_seconds": 900,
-    "regression_threshold": 0.1,
-    "noise_multiplier": 3.0,
-    "baseline_runs": 7,
     "files": {
         "core/array/test01.das": {
             "skip": "allocates ~19 GB under persistent_heap and gets OOM-killed; unskip once the benchmark is fixed"
