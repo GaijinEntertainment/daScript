@@ -1608,6 +1608,7 @@ namespace das
         void markMacroSymbolUse(TextWriter * logs = nullptr);
         void markExecutableSymbolUse(TextWriter * logs = nullptr);
         void markFoldingSymbolUse(const vector<Function *> & needRun, TextWriter * logs = nullptr);
+        void markFunctionDependencies(Function * fun);
         void removeUnusedSymbols();
         void clearSymbolUse();
         void dumpSymbolUse(TextWriter & logs);
@@ -1629,6 +1630,7 @@ namespace das
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name, Module * perspective = nullptr );    // perspective defaults to thisModule
         StructurePtr visitStructure(Visitor & vis, Structure *);
         EnumerationPtr visitEnumeration(Visitor & vis, Enumeration *);
+        VariablePtr visitGlobalVariable(Visitor & vis, const VariablePtr & var);
         void visitModule(Visitor & vis, Module * thatModule, bool visitGenerics = false, bool sortStructures = false);
         void visitModulesInOrder(Visitor & vis, bool visitGenerics = false);
         void visitModules(Visitor & vis, bool visitGenerics = false);

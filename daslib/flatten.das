@@ -333,6 +333,7 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
         for (vi in range(length(o.values))) {
             o.values[vi] = lift_expr(ctx, o.values[vi], structPred, out)
         }
+        o.constValues = false
         return n
     }
     if (e is ExprRef2Value) {

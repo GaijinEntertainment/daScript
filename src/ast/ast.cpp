@@ -2871,6 +2871,7 @@ namespace das {
         }
         cexpr->gen2 = gen2;
         cexpr->makeArrayOnHeap = makeArrayOnHeap;
+        cexpr->constValues = constValues;
         return cexpr;
     }
 
@@ -2881,16 +2882,21 @@ namespace das {
             makeType = makeType->visit(vis);
             makeType = vis.visit(makeType);
         }
-        int index = 0;
-        for ( auto it = values.begin(); it != values.end(); ) {
-            auto & value = *it;
-            vis.preVisitMakeArrayIndex(this, index, value, index==int(values.size()-1));
-            value = value->visit(vis);
-            if ( value ) {
-                value = vis.visitMakeArrayIndex(this, index, value, index==int(values.size()-1));
+        if ( vis.canVisitMakeArray(this) ) {
+            int index = 0;
+            for ( auto it = values.begin(); it != values.end(); ) {
+                auto & value = *it;
+                bool last = index==int(values.size()-1);
+                vis.preVisitMakeArrayIndex(this, index, value, last);
+                if ( vis.canVisitMakeArrayIndex(this, index, value, last) ) {
+                    value = value->visit(vis);
+                }
+                if ( value ) {
+                    value = vis.visitMakeArrayIndex(this, index, value, last);
+                }
+                if ( value ) ++it; else it = values.erase(it);
+                index ++;
             }
-            if ( value ) ++it; else it = values.erase(it);
-            index ++;
         }
         return vis.visit(this);
     }

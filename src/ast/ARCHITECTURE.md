@@ -239,7 +239,9 @@ record. A module whose parse failed pushes no record either, whatever the walk.
 Whether a program uses a function or a global, and the slot each holds in that program's
 context, are decided per program - the symbol-use pass (`markSymbolUse` and its variants,
 `ast_export.cpp`) walks the whole library from the program's roots, and `allocateStack` numbers
-what it marked - while the `Function` and `Variable` objects of a shared module are one instance
+what it marked; `markFunctionDependencies`, which `collect_dependencies` runs for a macro, walks
+one function's closure only, refreshing the use-edges it reaches and leaving the rest of the
+program's symbol state as it found it - while the `Function` and `Variable` objects of a shared module are one instance
 for every program in the process. The state therefore lives on `Program`: `usedFunctions` and
 `usedVariables` are sets, `functionIndices` and `variableIndices` maps, read through `isUsed`
 and `indexOf` and written through `setUsed` and `setIndex`; `clearSymbolUse` empties the sets.

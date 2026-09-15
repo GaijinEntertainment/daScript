@@ -2,8 +2,8 @@ options gen2
 options indenting = 4
 
 // Fixture for test_fixup_global_init.das: a function annotation whose fixup() installs a
-// CALL-SHAPED global init (the array<uint> literal's to_array_move lowering — the exact shape
-// dasSpirv's blob capture uses). Pins the pipeline contract that fixup-set global inits get a
+// CALL-SHAPED global init (the array<uint> literal's to_array_move lowering — the shape
+// dasSpirv's blob capture wraps in unpack_spirv_words). Pins the pipeline contract that fixup-set global inits get a
 // dirty re-infer (ast_parse.cpp) — without it this fails 50607 ('to_array_move' was not
 // resolved during type inference).
 

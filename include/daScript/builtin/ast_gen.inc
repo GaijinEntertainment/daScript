@@ -1324,9 +1324,11 @@ protected:
     __fn_visitExprUnsafe = 308,
     __fn_preVisitExprCallMacro = 309,
     __fn_visitExprCallMacro = 310,
+    __fn_canVisitMakeArray = 311,
+    __fn_canVisitMakeArrayIndex = 312,
   };
 protected:
-  int _das_class_method_offset[311];
+  int _das_class_method_offset[313];
 public:
   AstVisitor_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_preVisitProgram] = info->fields[2]->offset;
@@ -1640,6 +1642,8 @@ public:
       _das_class_method_offset[__fn_visitExprUnsafe] = info->fields[310]->offset;
       _das_class_method_offset[__fn_preVisitExprCallMacro] = info->fields[311]->offset;
       _das_class_method_offset[__fn_visitExprCallMacro] = info->fields[312]->offset;
+      _das_class_method_offset[__fn_canVisitMakeArray] = info->fields[313]->offset;
+      _das_class_method_offset[__fn_canVisitMakeArrayIndex] = info->fields[314]->offset;
   }
   __forceinline Func get_preVisitProgram ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitProgram]);
@@ -4439,6 +4443,24 @@ public:
       <void *,ExprCallMacro * const >
         (__context__,nullptr,__funcCall__,
           self,expr);
+  }
+  __forceinline Func get_canVisitMakeArray ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitMakeArray]);
+  }
+  __forceinline bool invoke_canVisitMakeArray ( Context * __context__, Func __funcCall__, void * self, ExprMakeArray * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprMakeArray * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_canVisitMakeArrayIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitMakeArrayIndex]);
+  }
+  __forceinline bool invoke_canVisitMakeArrayIndex ( Context * __context__, Func __funcCall__, void * self, ExprMakeArray * const  expr, int32_t index, Expression * const  init, bool last ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprMakeArray * const ,int32_t,Expression * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,init,last);
   }
 };
 

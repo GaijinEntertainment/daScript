@@ -1505,6 +1505,7 @@ namespace das
         vector<ExpressionPtr>       values;
         bool                        gen2 = false;
         bool                        makeArrayOnHeap = false; // set by inferer when this gen2 literal feeds to_array_move/to_table_move: build a heap array<T> directly (no stack T[N] + copy)
+        bool                        constValues = false;     // every value is a typed constant of recordType; infer skips them (canVisitMakeArray) - a macro that rewrites values clears it
     };
 
     struct DAS_API ExprMakeTuple : ExprMakeArray {

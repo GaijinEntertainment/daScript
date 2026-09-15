@@ -302,6 +302,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(values)>("values");
             this->template addField<DAS_BIND_MANAGED_FIELD(gen2)>("gen2");
             this->template addField<DAS_BIND_MANAGED_FIELD(makeArrayOnHeap)>("makeArrayOnHeap");
+            this->template addField<DAS_BIND_MANAGED_FIELD(constValues)>("constValues");
         }
     };
 

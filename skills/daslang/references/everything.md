@@ -2968,6 +2968,10 @@ Shader reflection for the dasSpirv SPIR-V backend: an API-neutral description of
 - `decode_reflection`
 - `encode_reflection`
 
+### Shader blob literals
+
+- `unpack_spirv_words`
+
 ## dasllama
 
 CPU large-language-model inference in pure daslang: load a GGUF model, tokenize, run the transformer, sample — or hold a full chat — validated token-for-token against llama.cpp on every supported family. Run with `-jit`; `examples/dasLLAMA/run.das` and `chat.das` show the canonical program shape.

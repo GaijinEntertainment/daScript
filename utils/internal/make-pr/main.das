@@ -231,7 +231,11 @@ def private gate_ast_verify(daslang : string) : bool {
         to_log(LOG_INFO, "ast-verify: diff touches no macro/AST surface - skipped\n")
         return true
     }
-    var das_files <- changed_files("*.das")
+    // the same set preflight's gate verifies: negative fixtures and the ast-fuzz self-test
+    // breakers report by design, and test_ast_fuzz.das owns those
+    var das_files <- [for (f in changed_files("*.das")); f;
+        where !(starts_with(base_name(f), "cant_") || starts_with(base_name(f), "failed_")
+            || starts_with(base_name(f), "invalid_") || find(f, "ast-fuzz/selftest/") >= 0)]
     var subject = "{length(das_files)} changed files"
     if (empty(das_files)) {
         das_files |> push("tests/jit_tests/array.das")

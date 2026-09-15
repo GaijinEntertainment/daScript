@@ -444,6 +444,21 @@ namespace das {
         }
     }
 
+    VariablePtr Program::visitGlobalVariable(Visitor & vis, const VariablePtr & var) {
+        vis.preVisitGlobalLet(var);
+        if ( var->type ) {
+            vis.preVisit(var->type);
+            var->type = var->type->visit(vis);
+            var->type = vis.visit(var->type);
+        }
+        if ( var->init ) {
+            vis.preVisitGlobalLetInit(var, var->init);
+            var->init = var->init->visit(vis);
+            var->init = vis.visitGlobalLetInit(var, var->init);
+        }
+        return vis.visitGlobalLet(var);
+    }
+
     StructurePtr Program::visitStructure(Visitor & vis, Structure * pst) {
         vis.preVisit(pst);
         pst->aliases.foreach([&](auto & alsv){
@@ -650,18 +665,7 @@ namespace das {
         vis.preVisitGlobalLetBody(this);
         thatModule->globals.foreach([&](auto & var){
             if ( vis.canVisitGlobalVariable(var) ) {
-                vis.preVisitGlobalLet(var);
-                if ( var->type ) {
-                    vis.preVisit(var->type);
-                    var->type = var->type->visit(vis);
-                    var->type = vis.visit(var->type);
-                }
-                if ( var->init ) {
-                    vis.preVisitGlobalLetInit(var, var->init);
-                    var->init = var->init->visit(vis);
-                    var->init = vis.visitGlobalLetInit(var, var->init);
-                }
-                auto varn = vis.visitGlobalLet(var);
+                auto varn = visitGlobalVariable(vis, var);
                 if ( varn!=var ) {
                     thatModule->globals.replace(var->name, varn);
                     var = varn;
