@@ -458,9 +458,15 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     }
     r.moe_gb_dev = r.dummy
     r.moe_ub_dev = r.dummy
-    r.moe_db_dev = r.dummy
     r.moe_gb_bytes = 256l
-    r.moe_db_bytes = 256l
+    //! the down-bias plane a biasless model binds is a ZERO ROW of the model dim: the combine reads it flat at row base 0
+    //! (d + 0), so its column loop carries no branch a load has to wait behind
+    r.moe_db_bytes = dim * 4l
+    r.moe_db_dev = make_device_buf(r.moe_db_bytes)
+    var zrow : array<float>
+    zrow |> resize(dim)
+    upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(zrow[0])), r.moe_db_bytes)
+    delete zrow
     if (r.exps_bias) {
         assert(long_length(gbias) == n_moe * ne * nfe && long_length(ubias) == n_moe * ne * nfe && long_length(dbias) == n_moe * ne * dim,
             "vk_rdec_prepare_moe: the expert-bias planes are not [n_moe x ne x nfe] / [n_moe x ne x dim]")

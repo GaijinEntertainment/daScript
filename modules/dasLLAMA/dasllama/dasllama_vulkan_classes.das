@@ -130,16 +130,61 @@ class ArBase : RmsWgBase {
         }
         var ss = 0.0
         var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let a = pa.pre_on != 0u ? wn[pa.pwoff + k] * (row[k] * ainv) : apart(base, k)
-            let vv = pa.add_on != 0u ? (xs[base + k] + a) * pa.ascale : xs[base + k]
-            xs[base + k] = vv
-            row[k] = vv
-            ss += vv * vv
-            k += 256u
+        if (pa.pre_on != 0u) {   //! the sandwich form: the partner off the row stash, a column a round
+            while (k < pa.dim) {
+                let a = wn[pa.pwoff + k] * (row[k] * ainv)
+                let vv = pa.add_on != 0u ? (xs[base + k] + a) * pa.ascale : xs[base + k]
+                xs[base + k] = vv
+                row[k] = vv
+                ss += vv * vv
+                k += 256u
+            }
+            return ss
+        }
+        let last = pa.dim - 1u
+        while (k < pa.dim) {   //! four columns a round, every load issued before the adds: a one-workgroup row kernel is its load rounds
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            var v0 = xs[base + k]
+            var v1 = xs[base + k1]
+            var v2 = xs[base + k2]
+            var v3 = xs[base + k3]
+            if (pa.add_on != 0u) {
+                let a0 = apart(base, k)
+                let a1 = apart(base, k1)
+                let a2 = apart(base, k2)
+                let a3 = apart(base, k3)
+                v0 = (v0 + a0) * pa.ascale
+                v1 = (v1 + a1) * pa.ascale
+                v2 = (v2 + a2) * pa.ascale
+                v3 = (v3 + a3) * pa.ascale
+            }
+            xs[base + k] = v0
+            row[k] = v0
+            ss += v0 * v0
+            if (k + 256u < pa.dim) {
+                xs[base + k1] = v1
+                row[k1] = v1
+                ss += v1 * v1
+            }
+            if (k + 512u < pa.dim) {
+                xs[base + k2] = v2
+                row[k2] = v2
+                ss += v2 * v2
+            }
+            if (k + 768u < pa.dim) {
+                xs[base + k3] = v3
+                row[k3] = v3
+                ss += v3 * v3
+            }
+            k += 1024u
         }
         return ss
     }
+
+    //! the normed row's column `k` off the stash; the leaves store four a round, every norm weight loaded before the first store
+    def normed(k : uint; inv : float) : float => wn[pa.woff + k] * (row[k] * inv)
 
     // workgroup-wide rms inverse from per-thread sum-of-squares partials (slot 1: the add partner's norm took slot 0)
     def rms_inv(ss0 : float) : float => wg_rms_inv(ss0, pa.dim, pa.eps, 1u)
@@ -155,10 +200,27 @@ class ClsArAddRms : ArBase {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
         let ss = accum_row(base)
         let inv = rms_inv(ss)
+        let last = pa.dim - 1u
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            yo[base + k] = wn[pa.woff + k] * (row[k] * inv)
-            k += 256u
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            let n0 = normed(k, inv)
+            let n1 = normed(k1, inv)
+            let n2 = normed(k2, inv)
+            let n3 = normed(k3, inv)
+            yo[base + k] = n0
+            if (k + 256u < pa.dim) {
+                yo[base + k1] = n1
+            }
+            if (k + 512u < pa.dim) {
+                yo[base + k2] = n2
+            }
+            if (k + 768u < pa.dim) {
+                yo[base + k3] = n3
+            }
+            k += 1024u
         }
     }
 }
@@ -311,60 +373,91 @@ class ArCombBase : ArBase {
         return pa.dbias_on != 0u ? d + dbias[pa.dboff + slot_ex[s] * pa.dim + k] : d
     }
 
-    def override accum_row(base : uint) : float {
+    //! the same row off registers: `rb` the slot's row base, `bb` its bias row base - a biasless model binds a zero row at base 0, so the add is unconditional
+    def drow_at(rb, bb, k : uint) : float => down_rows[rb + k] + dbias[bb + k]
+
+    //! the slots' metas - row base, weight, bias row - read ONCE a thread for the first eight slots, then FOUR columns a round with
+    //! every load issued before any add: a one-workgroup row kernel is its dependent-load rounds, and a column a round over 2880
+    //! columns is twelve of them; slots past eight walk the memory form
+    def override accum_row(base : uint) : float {   // nolint:STYLE038 — one row pass: the hoisted metas, the four-column round, the memory tail
         let p = base / pa.dim
         var g = 1.0
         if (pa.gated != 0u) {
             g = 1.0 / (1.0 + exp(-logits[p * pa.lstride + pa.lstride - 1u]))
         }
         let pk = p * pa.slots
+        let nreg = min(pa.slots, 8u)
+        var rb : uint[8]
+        var bb : uint[8]
+        var sw : float[8]
+        for (j in range(8)) {
+            if (uint(j) < nreg) {
+                rb[j] = slot_idx[pk + uint(j)] * pa.dim
+                sw[j] = slot_w[pk + uint(j)]
+                bb[j] = pa.dbias_on != 0u ? pa.dboff + slot_ex[pk + uint(j)] * pa.dim : 0u
+            } else {
+                rb[j] = 0u
+                sw[j] = 0.0
+                bb[j] = 0u
+            }
+        }
+        let last = pa.dim - 1u
         var ss = 0.0
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            var f = 0.0
+            let k1 = min(k + 256u, last)   //! the clamped columns past the row read a live column and store nothing
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            var f0 = 0.0
+            var f1 = 0.0
+            var f2 = 0.0
+            var f3 = 0.0
             if (pa.add_on != 0u) {
-                f = g * aa[base + k]
+                f0 = g * aa[base + k]
+                f1 = g * aa[base + k1]
+                f2 = g * aa[base + k2]
+                f3 = g * aa[base + k3]
             }
-            var j = 0u
-            while (j + 8u <= pa.slots) {
-                let d0 = drow(pk + j, k)
-                let d1 = drow(pk + j + 1u, k)
-                let d2 = drow(pk + j + 2u, k)
-                let d3 = drow(pk + j + 3u, k)
-                let d4 = drow(pk + j + 4u, k)
-                let d5 = drow(pk + j + 5u, k)
-                let d6 = drow(pk + j + 6u, k)
-                let d7 = drow(pk + j + 7u, k)
-                f += slot_w[pk + j] * d0
-                f += slot_w[pk + j + 1u] * d1
-                f += slot_w[pk + j + 2u] * d2
-                f += slot_w[pk + j + 3u] * d3
-                f += slot_w[pk + j + 4u] * d4
-                f += slot_w[pk + j + 5u] * d5
-                f += slot_w[pk + j + 6u] * d6
-                f += slot_w[pk + j + 7u] * d7
-                j += 8u
+            for (j in range(8)) {
+                if (uint(j) < nreg) {
+                    f0 += sw[j] * drow_at(rb[j], bb[j], k)
+                    f1 += sw[j] * drow_at(rb[j], bb[j], k1)
+                    f2 += sw[j] * drow_at(rb[j], bb[j], k2)
+                    f3 += sw[j] * drow_at(rb[j], bb[j], k3)
+                }
             }
-            if (j + 4u <= pa.slots) {
-                let d0 = drow(pk + j, k)
-                let d1 = drow(pk + j + 1u, k)
-                let d2 = drow(pk + j + 2u, k)
-                let d3 = drow(pk + j + 3u, k)
-                f += slot_w[pk + j] * d0
-                f += slot_w[pk + j + 1u] * d1
-                f += slot_w[pk + j + 2u] * d2
-                f += slot_w[pk + j + 3u] * d3
-                j += 4u
-            }
+            var j = 8u
             while (j < pa.slots) {
-                f += slot_w[pk + j] * drow(pk + j, k)
+                let w = slot_w[pk + j]
+                f0 += w * drow(pk + j, k)
+                f1 += w * drow(pk + j, k1)
+                f2 += w * drow(pk + j, k2)
+                f3 += w * drow(pk + j, k3)
                 j++
             }
-            let vv = (xs[base + k] + f) * pa.ascale
-            xs[base + k] = vv
-            row[k] = vv
-            ss += vv * vv
-            k += 256u
+            let v0 = (xs[base + k] + f0) * pa.ascale
+            let v1 = (xs[base + k1] + f1) * pa.ascale
+            let v2 = (xs[base + k2] + f2) * pa.ascale
+            let v3 = (xs[base + k3] + f3) * pa.ascale
+            xs[base + k] = v0
+            row[k] = v0
+            ss += v0 * v0
+            if (k + 256u < pa.dim) {
+                xs[base + k1] = v1
+                row[k1] = v1
+                ss += v1 * v1
+            }
+            if (k + 512u < pa.dim) {
+                xs[base + k2] = v2
+                row[k2] = v2
+                ss += v2 * v2
+            }
+            if (k + 768u < pa.dim) {
+                xs[base + k3] = v3
+                row[k3] = v3
+                ss += v3 * v3
+            }
+            k += 1024u
         }
         return ss
     }
@@ -379,10 +472,27 @@ class ClsArComb : ArCombBase {
         let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
         let ss = accum_row(base)
         let inv = rms_inv(ss)
+        let last = pa.dim - 1u
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            yo[base + k] = wn[pa.woff + k] * (row[k] * inv)
-            k += 256u
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            let n0 = normed(k, inv)
+            let n1 = normed(k1, inv)
+            let n2 = normed(k2, inv)
+            let n3 = normed(k3, inv)
+            yo[base + k] = n0
+            if (k + 256u < pa.dim) {
+                yo[base + k1] = n1
+            }
+            if (k + 512u < pa.dim) {
+                yo[base + k2] = n2
+            }
+            if (k + 768u < pa.dim) {
+                yo[base + k3] = n3
+            }
+            k += 1024u
         }
     }
 }
@@ -396,10 +506,27 @@ class ClsArCombF16B : ArCombBase {
         let rbase = gl_WorkGroupID.x * pa.dim
         let ss = accum_row(rbase)
         let inv = rms_inv(ss)
+        let last = pa.dim - 1u
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            outh[rbase + k] = float16(wn[pa.woff + k] * (row[k] * inv))
-            k += 256u
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            let n0 = normed(k, inv)
+            let n1 = normed(k1, inv)
+            let n2 = normed(k2, inv)
+            let n3 = normed(k3, inv)
+            outh[rbase + k] = float16(n0)
+            if (k + 256u < pa.dim) {
+                outh[rbase + k1] = float16(n1)
+            }
+            if (k + 512u < pa.dim) {
+                outh[rbase + k2] = float16(n2)
+            }
+            if (k + 768u < pa.dim) {
+                outh[rbase + k3] = float16(n3)
+            }
+            k += 1024u
         }
     }
 }
@@ -502,10 +629,27 @@ class ClsArCombG4F16B : ArCombG4Base {
         let rbase = gl_WorkGroupID.x * pa.dim
         let ss = accum_row(rbase)
         let inv = rms_inv(ss)
+        let last = pa.dim - 1u
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            outh[rbase + k] = float16(wn[pa.woff + k] * (row[k] * inv))
-            k += 256u
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            let n0 = normed(k, inv)
+            let n1 = normed(k1, inv)
+            let n2 = normed(k2, inv)
+            let n3 = normed(k3, inv)
+            outh[rbase + k] = float16(n0)
+            if (k + 256u < pa.dim) {
+                outh[rbase + k1] = float16(n1)
+            }
+            if (k + 512u < pa.dim) {
+                outh[rbase + k2] = float16(n2)
+            }
+            if (k + 768u < pa.dim) {
+                outh[rbase + k3] = float16(n3)
+            }
+            k += 1024u
         }
     }
 }
@@ -558,10 +702,27 @@ class ClsArAddRmsF16B : ArBase {
         let rbase = gl_WorkGroupID.x * pa.dim
         let ss = accum_row(rbase)
         let inv = rms_inv(ss)
+        let last = pa.dim - 1u
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            outh[rbase + k] = float16(wn[pa.woff + k] * (row[k] * inv))
-            k += 256u
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            let n0 = normed(k, inv)
+            let n1 = normed(k1, inv)
+            let n2 = normed(k2, inv)
+            let n3 = normed(k3, inv)
+            outh[rbase + k] = float16(n0)
+            if (k + 256u < pa.dim) {
+                outh[rbase + k1] = float16(n1)
+            }
+            if (k + 512u < pa.dim) {
+                outh[rbase + k2] = float16(n2)
+            }
+            if (k + 768u < pa.dim) {
+                outh[rbase + k3] = float16(n3)
+            }
+            k += 1024u
         }
     }
 }
@@ -9614,7 +9775,7 @@ class Q8GemvAr : RmsWgBase {
     def ya(j : uint) : float => y[j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
 
     //! the residual step over the finished rows, `ArRqBase.rq_row`'s math on the workgroup's 256 threads
-    def epilogue {
+    def epilogue {   // nolint:STYLE038 — one row pass: the sandwich column, the four-column round, the requant
         let tid = gl_LocalInvocationID.x
         var ainv = 0.0
         if (pa.pre_on != 0u && pa.add_on != 0u) {
@@ -9629,12 +9790,49 @@ class Q8GemvAr : RmsWgBase {
         }
         var ss = 0.0
         var k = tid
-        while (k < pa.d) {
-            let a = pa.pre_on != 0u ? wn[pa.pwoff + k] * (ya(k) * ainv) : ya(k)
-            let vv = pa.add_on != 0u ? (xres[k] + a) * pa.ascale : xres[k]
-            xres[k] = vv
-            ss += vv * vv
-            k += 256u
+        if (pa.pre_on != 0u) {   //! the sandwich form, a column a round
+            while (k < pa.d) {
+                let a = wn[pa.pwoff + k] * (ya(k) * ainv)
+                let vv = pa.add_on != 0u ? (xres[k] + a) * pa.ascale : xres[k]
+                xres[k] = vv
+                ss += vv * vv
+                k += 256u
+            }
+        }
+        let last = pa.d - 1u
+        while (pa.pre_on == 0u && k < pa.d) {   //! four columns a round, every load issued before the adds
+            let k1 = min(k + 256u, last)
+            let k2 = min(k + 512u, last)
+            let k3 = min(k + 768u, last)
+            var v0 = xres[k]
+            var v1 = xres[k1]
+            var v2 = xres[k2]
+            var v3 = xres[k3]
+            if (pa.add_on != 0u) {
+                let a0 = ya(k)
+                let a1 = ya(k1)
+                let a2 = ya(k2)
+                let a3 = ya(k3)
+                v0 = (v0 + a0) * pa.ascale
+                v1 = (v1 + a1) * pa.ascale
+                v2 = (v2 + a2) * pa.ascale
+                v3 = (v3 + a3) * pa.ascale
+            }
+            xres[k] = v0
+            ss += v0 * v0
+            if (k + 256u < pa.d) {
+                xres[k1] = v1
+                ss += v1 * v1
+            }
+            if (k + 512u < pa.d) {
+                xres[k2] = v2
+                ss += v2 * v2
+            }
+            if (k + 768u < pa.d) {
+                xres[k3] = v3
+                ss += v3 * v3
+            }
+            k += 1024u
         }
         let inv0 = wg_rms_inv(ss, pa.d, pa.eps, 1u)
         let inv = pa.no_norm != 0u ? 1.0 : inv0
