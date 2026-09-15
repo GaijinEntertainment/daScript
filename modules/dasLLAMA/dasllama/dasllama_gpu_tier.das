@@ -132,7 +132,7 @@ struct RdecDnGeom {
     cd, kd, di, nvh, nkh, ds, dconv : int64
     ba_f32 : bool
 }
-let public RDEC_NORM_ROWS = 9l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm, then the gemma-4 MoE layer's router scale, routed pre norm, dense post norm and routed post norm (zero rows where a model lacks them)
+let public RDEC_NORM_ROWS = 10l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm, then the gemma-4 MoE layer's router scale, routed pre norm, dense post norm and routed post norm, then the attention output bias row (gpt-oss) - zero rows where a model lacks them
 
 //! One attention layer's geometry for the resident driver - its attention class (gemma-4's sliding and
 //! global layers differ in head size, kv width and rope), its dense FFN width, and where its rows sit.
@@ -155,7 +155,8 @@ struct RdecLayerGeom {
 //! them); `mir_elems` is one mirror side's element count over every attention layer, `cos_elems`
 //! a position's cos/sin plane (the rope classes' rows end to end).
 typedef RdecPrepareFn = function<(n_layers : int64; n_attn : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems : int64; cos_elems : int64) : bool>
-typedef RdecNormsFn = function<(norms : array<float>) : void>
+//! `obias`: the plane's `RDEC_NORM_ROWS`-th row a layer is the attention output bias the residual step adds (gpt-oss); zero rows otherwise
+typedef RdecNormsFn = function<(norms : array<float>; obias : bool) : void>
 typedef RdecSetLayerFn = function<(l : int64; mir_idx : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; g : RdecLayerGeom) : void>
 typedef RdecSetDnLayerFn = function<(l : int64; bqkv : int64; bz : int64; bout : int64; bbeta : int64; balpha : int64; b1 : int64; b3 : int64; b2 : int64; ba_off : int64; fqkv : int; fz : int; fout : int; f1 : int; f3 : int; f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) : void>
 typedef RdecUploadDnBaFn = function<(rows : array<float>) : void>
@@ -178,8 +179,8 @@ def private rdec_unset_reserve(fmt : int; cap_blocks : int64) : bool => false
 def private rdec_unset_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => -1l
 [unused_argument(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn, mir_elems, cos_elems)]
 def private rdec_unset_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems : int64) : bool => false
-[unused_argument(norms)]
-def private rdec_unset_norms(norms : array<float>) {}
+[unused_argument(norms, obias)]
+def private rdec_unset_norms(norms : array<float>; obias : bool) {}
 [unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private rdec_unset_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) {}
 [unused_argument(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp)]
@@ -243,6 +244,23 @@ def public install_moe_gpu_resident_bias(upload_bias : RdecUploadBiasFn) {
 
 def public rdec_bias_installed() : bool => g_rdec_bias_installed
 def public rdec_upload_bias(rows : array<float>) { invoke(g_rdec_upload_bias, rows) }
+
+//! The per-head attention sink logits (gpt-oss), every layer's [n_heads] row in layer order; false = the device has no arm for them
+typedef RdecUploadSinksFn = function<(rows : array<float>) : bool>
+
+[unused_argument(rows)]
+def private rdec_unset_upload_sinks(rows : array<float>) : bool => false
+var g_rdec_upload_sinks = @@rdec_unset_upload_sinks
+var g_rdec_sinks_installed = false
+
+//! Install the resident driver's attention-sink seat (gpt-oss) - separately, so a tier without it declines a sink model by name.
+def public install_moe_gpu_resident_sinks(upload_sinks : RdecUploadSinksFn) {
+    g_rdec_upload_sinks = upload_sinks
+    g_rdec_sinks_installed = true
+}
+
+def public rdec_sinks_installed() : bool => g_rdec_sinks_installed
+def public rdec_upload_sinks(rows : array<float>) : bool => invoke(g_rdec_upload_sinks, rows)
 
 // ===== the resident driver's MoE seats =====
 //! Does the resident MoE block admit an expert triple of these formats - the tile family it
@@ -440,7 +458,7 @@ def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
 def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => invoke(g_rdec_place, wq, ws, n, rows, fmt)
 def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems : int64) : bool => invoke(g_rdec_prepare, n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn, mir_elems, cos_elems)
-def public rdec_upload_norms(norms : array<float>) { invoke(g_rdec_norms, norms) }
+def public rdec_upload_norms(norms : array<float>; obias : bool) { invoke(g_rdec_norms, norms, obias) }
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
 def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; var logits : array<float>) { invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, logits) }
@@ -1844,6 +1862,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_upload_bias == null) {
         g_rdec_upload_bias = @@rdec_unset_upload_bias
+    }
+    if (g_rdec_upload_sinks == null) {
+        g_rdec_upload_sinks = @@rdec_unset_upload_sinks
     }
     if (g_rdec_moe_ok == null) {
         g_rdec_moe_ok = @@rdec_unset_moe_ok

@@ -826,8 +826,8 @@ def private name_list_add(var names : string&; on : bool; name : string) {
 def resident_unserved_features(c : Config) : string {
     var names = ""
     name_list_add(names, c.attn_qkv_bias && !rdec_bias_installed(), "attention qkv bias")
-    name_list_add(names, c.attn_out_bias, "attention output bias")
-    name_list_add(names, c.attn_sinks, "attention sinks")
+    name_list_add(names, c.attn_sinks && !rdec_sinks_installed(), "attention sinks")
+    name_list_add(names, c.attn_sinks && rdec_sinks_installed() && c.head_size != 64l, "attention sinks at head size {c.head_size} (the sink stamps serve 64)")
     name_list_add(names, c.moe_dense_shexp && !rdec_moe_installed(), "dense shared expert")
     name_list_add(names, has_ple(c) && !rdec_ple_installed(), "per-layer embeddings")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
@@ -874,7 +874,7 @@ def private resident_shexp_decline(t : Model; l : int64) : string {
     return ""
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
 //! Why layer `l` keeps the whole-model driver off the model - "" when the driver serves the layer's
 //! shape (its planes placed, its own K/V, a head the attention kernels stage).
 def resident_layer_decline(t : Model; l : int64) : string {
@@ -955,7 +955,7 @@ def private resident_bias_off(c : Config; l : int64) : int64 {
     return off
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes")]
 def private resident_upload_bias(t : Model) {
     let c = t.config
     var rows : array<float>
@@ -971,6 +971,17 @@ def private resident_upload_bias(t : Model) {
     }
     rdec_upload_bias(rows)
     delete rows
+}
+
+//! the per-head attention sink logits, every layer's [n_heads] row in layer order; false = the device has no arm for them
+def private resident_upload_sinks(t : Model) : bool {
+    let c = t.config
+    var rows : array<float>
+    rows |> reserve_resize(c.n_layers * c.n_heads)
+    copy_floats(t.fblob, t.sinks_off, rows, 0l, c.n_layers * c.n_heads)
+    let ok = rdec_upload_sinks(rows)
+    delete rows
+    return ok
 }
 
 //! the global rope class's rotary width: the config's head size (the global class's), or rope_dim on a partial-rope model
@@ -1196,6 +1207,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     if (c.attn_qkv_bias) {
         resident_upload_bias(t)
     }
+    if (c.attn_sinks && !resident_upload_sinks(t)) {
+        return rdec_decline("the attention sinks found no flash arm on the device (the tier's line above)")
+    }
     // place + wire each layer. One quantized X image feeds each consumer group (qkv shares one,
     // gate/up another), so a group must agree on its quant form — mixed groups decline
     var mir_idx = 0l
@@ -1415,6 +1429,11 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 norms[lb + 8l * dim + i] = t.fblob[t.rms_post_ffn2_off + l * dim + i]
             }
         }
+        if (c.attn_out_bias) {   //! the attention output bias rides the norms plane as a row the residual step adds to the wo GEMV's row
+            for (i in range64(dim)) {
+                norms[lb + 9l * dim + i] = t.bo[l * dim + i]
+            }
+        }
     }
     for (i in range64(dim)) {
         norms[c.n_layers * RDEC_NORM_ROWS * dim + i] = t.fblob[t.rms_final_off + i]
@@ -1431,7 +1450,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             }
         }
     }
-    rdec_upload_norms(norms)
+    rdec_upload_norms(norms, c.attn_out_bias)
     delete norms
     g_rdec_active = true
     g_rdec_decline_reason = ""

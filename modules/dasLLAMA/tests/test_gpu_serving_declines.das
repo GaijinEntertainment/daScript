@@ -13,6 +13,9 @@ require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt 
 [unused_argument(rows)]
 def private test_upload_bias(rows : array<float>) {}
 
+[unused_argument(rows)]
+def private test_upload_sinks(rows : array<float>) : bool => true
+
 // The whole-model driver's decline reasons, decided from a Config or a synthetic Model shell
 // (no weights on disk): every feature and layer shape the driver has no arm for is named in
 // the text a user reads, and a shape it serves yields no text at all.
@@ -56,8 +59,25 @@ def test_resident_unserved_features(t : T?) {
     }
     t |> run("one feature alone is one name, no separator") @(t : T?) {
         var c = Config()
+        c.q_gated = true
+        t |> equal(resident_unserved_features(c), "gated attention without qk-norm")
+    }
+    t |> run("the attention sinks are named only while no sink seat is installed; a seat serves them at head size 64 alone, and the output bias is served") @(t : T?) {
+        var c = Config()
         c.attn_sinks = true
+        c.head_size = 64l
+        let saved_seat = g_rdec_upload_sinks
+        let saved_installed = g_rdec_sinks_installed
+        g_rdec_sinks_installed = false
         t |> equal(resident_unserved_features(c), "attention sinks")
+        install_moe_gpu_resident_sinks(@@test_upload_sinks)
+        t |> equal(resident_unserved_features(c), "", "gpt-oss's sinks are served with the seat installed")
+        c.attn_out_bias = true
+        t |> equal(resident_unserved_features(c), "", "the attention output bias rides the norms plane into the residual step")
+        c.head_size = 128l
+        t |> equal(resident_unserved_features(c), "attention sinks at head size 128 (the sink stamps serve 64)")
+        g_rdec_upload_sinks = saved_seat
+        g_rdec_sinks_installed = saved_installed
     }
     t |> run("the q/k/v projection bias is named only while no bias seat is installed; a seat serves the qwen2 shape") @(t : T?) {
         var c = Config()

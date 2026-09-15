@@ -56,8 +56,10 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   resident driver's prefill chain and byte stores - the prefill window chain, the Q8 requant byte
   store, the decode GEMV family's grid codebook buffer, the tile probe's shared descriptor set
   layout, the recurrent block of the prefill window, the device-init roster of the Vulkan
-  capabilities the tier keys its routes on, the `[vk_dispatch]` lens's readonly derivation, and
-  the token command's attention key split.
+  capabilities the tier keys its routes on, and the `[vk_dispatch]` lens's readonly derivation.
+- `ARCHITECTURE_GPU_VULKAN_ATTN.md` - sec.2.2al-2.2am: the token command's attention key split,
+  and the attention-side planes the resident driver uploads beside its norms - the q/k/v
+  projection bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias.
 - `ARCHITECTURE_GPU_VULKAN_GEMM.md` - sec.2.2k-2.2m, 2.2q, 2.2ae, 2.2ah: the cooperative-matrix
   tiles the Vulkan tier's GEMMs run on - the cm2 decode lanes, the tile pick and the coopmat mode
   ladder, the class-pipeline build seat, the MoE expert chain on those tiles, the KHR arm's

@@ -1194,6 +1194,7 @@ def private pf_setup {
     var chunked_hs : table<int64>   //! ... and the ones the chunked pair serves
     var any_cap = false   //! a flash layer under the attention softcap: the h256 cap stamps engage
     var any_khr_cap = false
+    let sinks = g_rd.has_sinks   //! the sink stamps take every flash layer of a sink model (its heads are 64 wide, the stamps' one size)
     g_rd.pf_facm2 = false
     g_rd.pf_fakhr = false
     for (L in g_rd.layers) {
@@ -1229,16 +1230,17 @@ def private pf_setup {
         && (!fa128s || (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()))
         && (!narrow_hs || (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
         && (!wide_hs || (kv16 ? ensure_da_attn_bw_f16_cls() : ensure_da_attn_bw_cls()))
-        && (!key_exists(fa_hs, 64l) || fa_stamp_pair_ensure(false, 64l, false, false, any_f16_feed))
-        && (!key_exists(fa_hs, 128l) || fa_stamp_pair_ensure(false, 128l, false, false, any_f16_feed))
-        && (!key_exists(fa_hs, 256l) || fa_stamp_pair_ensure(false, 256l, g_rd.q_gated, false, any_f16_feed))
-        && (!any_cap || fa_stamp_pair_ensure(false, 256l, false, true, any_f16_feed))
-        && (!key_exists(fa_hs, 512l) || fa_stamp_pair_ensure(false, 512l, false, false, any_f16_feed))
-        && (!key_exists(fakhr_hs, 64l) || fa_stamp_pair_ensure(true, 64l, false, false, any_f16_feed))
-        && (!key_exists(fakhr_hs, 128l) || fa_stamp_pair_ensure(true, 128l, false, false, any_f16_feed))
-        && (!key_exists(fakhr_hs, 256l) || fa_stamp_pair_ensure(true, 256l, false, false, any_f16_feed))
-        && (!any_khr_cap || fa_stamp_pair_ensure(true, 256l, false, true, any_f16_feed))
-        && (!key_exists(fakhr_hs, 512l) || fa_stamp_pair_ensure(true, 512l, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 64l) || fa_stamp_pair_ensure(false, 64l, false, false, sinks, any_f16_feed))
+        && (!key_exists(fa_hs, 128l) || fa_stamp_pair_ensure(false, 128l, false, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 256l) || fa_stamp_pair_ensure(false, 256l, g_rd.q_gated, false, false, any_f16_feed))
+        && (!any_cap || fa_stamp_pair_ensure(false, 256l, false, true, false, any_f16_feed))
+        && (!key_exists(fa_hs, 512l) || fa_stamp_pair_ensure(false, 512l, false, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 64l) || fa_stamp_pair_ensure(true, 64l, false, false, sinks, any_f16_feed))
+        && (!key_exists(fakhr_hs, 128l) || fa_stamp_pair_ensure(true, 128l, false, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 256l) || fa_stamp_pair_ensure(true, 256l, false, false, false, any_f16_feed))
+        && (!any_khr_cap || fa_stamp_pair_ensure(true, 256l, false, true, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 512l) || fa_stamp_pair_ensure(true, 512l, false, false, false, any_f16_feed))
+        && (!sinks || long_length(chunked_hs) == 0l)   //! the sink rides the flash tiles alone: a sink model whose layer fell to the chunked pair declined at the sink upload
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
@@ -1315,7 +1317,12 @@ def private pf_setup {
                 : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve this layer's head size
         let fa128l = fa128s && L.hs == 128l
-        if (L.pf_fa || L.pf_fakhr) {
+        if ((L.pf_fa || L.pf_fakhr) && g_rd.has_sinks) {
+            let fbufs = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, wo6 ? g_rd.pf_af : g_rd.pf_attn, g_rd.sinks_dev)
+            let fsizes = fixed_array(np * qrow * 4l, mirbytes, mirbytes, wo6 ? np * qd * 2l : np * qd * 4l, g_rd.sinks_bytes)
+            let fgbits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, wo6 ? VHZ_AQ : VHZ_ATT, 0u)
+            g_rd.pf_sets[b + 5] = fa_stamp_sink_set(L.pf_fakhr, fbufs, fsizes, fgbits)
+        } elif (L.pf_fa || L.pf_fakhr) {
             let fbufs = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, wo6 ? g_rd.pf_af : g_rd.pf_attn)
             let fsizes = fixed_array(np * qrow * 4l, mirbytes, mirbytes, wo6 ? np * qd * 2l : np * qd * 4l)
             let fgbits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, wo6 ? VHZ_AQ : VHZ_ATT)
@@ -1752,8 +1759,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     let khr = g_rd.layers[l].pf_fakhr
                     var pcf = FaArgs(rows = uint(wlen), w0 = uint(w0), qd = uint(qd),
                         kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
-                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap)
-                    fa_stamp_enc(khr, hs, hs == 256l && g_rd.q_gated, pcf.cap != 0.0, fo6, raw, h, g_rd.pf_sets[b + 5], pcf,
+                        scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
+                        sinkoff = uint(l * g_rd.n_heads))
+                    fa_stamp_enc(khr, hs, hs == 256l && g_rd.q_gated, pcf.cap != 0.0, g_rd.has_sinks, fo6, raw, h, g_rd.pf_sets[b + 5], pcf,
                         fa_stamp_wgs(khr, g_rd.n_heads, wlen))
                 } else {
                     var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
@@ -1805,7 +1813,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 let pre_on = g_rd.layers[l].pre_post ? 1u : 0u
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
-                    pre_on = pre_on, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)))
+                    pre_on = pre_on, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
+                    abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
                 let moe = g_rd.layers[l].moe   //! the routed block reads the normed rows the fused twin never stores
                 if (fuse_arq && !guk && !moe) {
                     if (gu6) {
@@ -2914,7 +2923,7 @@ def private ensure_at_fa_state(hs : int64) {
     if (g_gpu.at_fa_ready) {
         return
     }
-    verify(ensure_f16cvt_cls() && fa_stamp_ensure(false, hs, false, false, false),
+    verify(ensure_f16cvt_cls() && fa_stamp_ensure(false, hs, false, false, false, false),
         "vk attention chain: the fa class rails must engage on a live device")
     let kvbytes = AT_CTX * AT_MAX_KV * 4l
     let kv16bytes = AT_CTX * AT_MAX_KV * 2l
@@ -2999,7 +3008,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
         }
         var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kv_dim),
             kv_mul = uint(kv_mul), kvbase = 0u, scale = scale)
-        fa_stamp_enc(false, hs, false, false, false, raw, h, g_gpu.at_fa_set, pcf, fa_stamp_wgs(false, n_heads, rows))
+        fa_stamp_enc(false, hs, false, false, false, false, raw, h, g_gpu.at_fa_set, pcf, fa_stamp_wgs(false, n_heads, rows))
     } else {
         var pca = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kv_dim),
             hs = uint(hs), kv_mul = uint(kv_mul), flags = gated ? 1u : 0u, dpl = uint(hs / 32l), scale = scale)

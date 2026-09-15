@@ -84,8 +84,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     var fa_ok = true
     if (will_facm2 || will_fakhr) {
         let gated256 = q_gated && head_size == 256l   // the gated stamp exists at 256 on the cm2 arm alone
-        let stamp_ok = fa_stamp_ensure(will_fakhr, head_size, gated256, false, false)
-        fa_ok = stamp_ok && (head_size != 256l || gated256 || fa_stamp_ensure(will_fakhr, 256l, false, true, false))   // an ungated 256 pre-flights its softcap twin
+        let stamp_ok = fa_stamp_ensure(will_fakhr, head_size, gated256, false, false, false)
+        fa_ok = stamp_ok && (head_size != 256l || gated256 || fa_stamp_ensure(will_fakhr, 256l, false, true, false, false))   // an ungated 256 pre-flights its softcap twin
     }
     let chunked_ok = (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
         ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
@@ -179,11 +179,12 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
 //! Upload the norm-weight rows once: [rms_att[0], rms_ffn[0], ..., rms_att[L-1], rms_ffn[L-1],
 //! rms_final], dim floats each, exactly the layout the layer w_offs index. Under qk_norm the
 //! per-head [rms_q[l], rms_k[l]] x L rows (head_size floats each) follow.
-def vk_rdec_upload_norms(norms : array<float>) {
+def vk_rdec_upload_norms(norms : array<float>; obias : bool) {
     if (g_gpu != null && g_gpu.dry) {
         return
     }
     assert(g_rd != null, "vk_rdec_upload_norms before prepare")
+    g_rd.has_obias = obias
     upload_region_at(g_rd.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), long_length(norms) * 4l)
     // the fused-rail constants: eps/ascale past the norm rows (qk_norm rows serve in place — the
     // qkn class twin binds the norms buffer directly)
@@ -372,14 +373,26 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         // attn (class): per-token cnt rides TokMeta, the scale rides the push
         let partbytes = g_rd.n_heads * DA_NSPLIT_MAX * (g_rd.head_size + 2l) * 4l
         //! the partials ride the attention-out bit (written by the pass, read by the combine that writes the row); the folded requant lands in the wo feed's aq/as
-        let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev)
-        let asizes = fixed_array(qbytes, mirbytes, mirbytes, qd * 4l, 16l, partbytes, qd, (qd / 32l) * 4l)
-        let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ)
-        L.s_attn = kv16 ? set_da_attn_f16_cls(abufs, asizes, abits) : set_da_attn_cls(abufs, asizes, abits)
-        if (g_rd.attn_nsplit > 1l) {
-            verify(ensure_da_attn_comb_cls(), "vk decode: the split attention's combine class rail must engage on a live device")
-            L.s_attn_comb = set_da_attn_comb_cls(fixed_array(g_rd.q_dev, g_rd.attn_part_dev, g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
-                fixed_array(qbytes, partbytes, qd * 4l, qd, (qd / 32l) * 4l), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT, VHZ_AQ, VHZ_AQ))
+        if (g_rd.has_sinks) {   //! the sink twins bind the sink plane past the pass's eight
+            let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev)
+            let asizes = fixed_array(qbytes, mirbytes, mirbytes, qd * 4l, 16l, partbytes, qd, (qd / 32l) * 4l, g_rd.sinks_bytes)
+            let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u)
+            L.s_attn = kv16 ? set_da_attn_f16_sink_cls(abufs, asizes, abits) : set_da_attn_sink_cls(abufs, asizes, abits)
+            if (g_rd.attn_nsplit > 1l) {
+                verify(ensure_da_attn_comb_sink_cls(), "vk decode: the split attention's sink combine class rail must engage on a live device")
+                L.s_attn_comb = set_da_attn_comb_sink_cls(fixed_array(g_rd.q_dev, g_rd.attn_part_dev, g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev),
+                    fixed_array(qbytes, partbytes, qd * 4l, qd, (qd / 32l) * 4l, g_rd.sinks_bytes), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u))
+            }
+        } else {
+            let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, g_rd.tok_meta.buf, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev)
+            let asizes = fixed_array(qbytes, mirbytes, mirbytes, qd * 4l, 16l, partbytes, qd, (qd / 32l) * 4l)
+            let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ)
+            L.s_attn = kv16 ? set_da_attn_f16_cls(abufs, asizes, abits) : set_da_attn_cls(abufs, asizes, abits)
+            if (g_rd.attn_nsplit > 1l) {
+                verify(ensure_da_attn_comb_cls(), "vk decode: the split attention's combine class rail must engage on a live device")
+                L.s_attn_comb = set_da_attn_comb_cls(fixed_array(g_rd.q_dev, g_rd.attn_part_dev, g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
+                    fixed_array(qbytes, partbytes, qd * 4l, qd, (qd / 32l) * 4l), fixed_array(VHZ_Q, VHZ_ATT, VHZ_ATT, VHZ_AQ, VHZ_AQ))
+            }
         }
         // quantize attn -> aq/as
         L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
@@ -777,7 +790,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     g_rd.tok_recorded = false
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes")]
 def vk_rdec_upload_bias(rows : array<float>) {
     if (g_gpu != null && g_gpu.dry) {
         return
@@ -787,6 +800,34 @@ def vk_rdec_upload_bias(rows : array<float>) {
     g_rd.bias_dev = make_device_buf(g_rd.bias_bytes)
     upload_region_at(g_rd.bias_dev, 0l, unsafe(addr<uint8 const?>(rows[0])), g_rd.bias_bytes)
     g_rd.has_bias = true
+}
+
+//! The per-head attention sink logits, every layer's [n_heads] row in layer order; false = no flash arm serves the
+//! window chain on this device (the sink rides the flash tiles and the token command's pass alone, never the chunked pair)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes")]
+def vk_rdec_upload_sinks(rows : array<float>) : bool {
+    if (g_gpu != null && g_gpu.dry) {
+        return true
+    }
+    assert(g_rd != null, "vk_rdec_upload_sinks before prepare")
+    if (!(g_rd.kv16 && vk_fa_on() && (cm2_fa_on() || khr_kq_tile_on()) && g_rd.head_size == 64l)) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: attention sinks ride the flash tiles at head size 64 - no cm2 or KHR flash arm on the f16 mirrors here, the resident driver declines\n")
+        return false
+    }
+    //! the sink stamps pre-flight here, the way the prepare pre-flights the plain ones: a declined kernel declines residency before the upload
+    let khr = !cm2_fa_on()
+    let stamps_ok = (fa_stamp_pair_ensure(khr, 64l, false, false, true, true)
+        && (g_rd.kv16 ? ensure_da_attn_f16_sink_cls() : ensure_da_attn_sink_cls())
+        && (g_rd.attn_nsplit <= 1l || ensure_da_attn_comb_sink_cls()))
+    if (!stamps_ok) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: an attention-sink kernel class declined on this device, the resident driver declines\n")
+        return false
+    }
+    g_rd.sinks_bytes = long_length(rows) * 4l
+    g_rd.sinks_dev = make_device_buf(g_rd.sinks_bytes)
+    upload_region_at(g_rd.sinks_dev, 0l, unsafe(addr<uint8 const?>(rows[0])), g_rd.sinks_bytes)
+    g_rd.has_sinks = true
+    return true
 }
 
 //! hasb 0 leaves the binding unread - the norms buffer only fills the slot
@@ -1116,7 +1157,7 @@ def private rd_ensure_fused_sets {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: fused add+rms+requant on every decode site (DASLLAMA_VK_FUSE=0 pins the split dispatches)\n")
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
 def private rd_attn_rqk(L : RLayer) : uint {
     if (!kq_sb(L.fo)) return DA_RQ_Q8
     return L.hs % 256l == 0l ? DA_RQ_Q8K : DA_RQ_NONE
@@ -1198,15 +1239,25 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     let rqk = rd_attn_rqk(L)
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
-        window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk)
-    if (g_rd.kv16) {
+        window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads))
+    if (g_rd.has_sinks) {
+        if (g_rd.kv16) {
+            enc_da_attn_f16_sink_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
+        } else {
+            enc_da_attn_sink_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
+        }
+    } elif (g_rd.kv16) {
         enc_da_attn_f16_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
     } else {
         enc_da_attn_cls(raw, h, L.s_attn, pca, g_rd.n_heads * nsplit)
     }
     rd_ts(raw, "a:attn")
     if (nsplit > 1l) {
-        enc_da_attn_comb_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads)
+        if (g_rd.has_sinks) {
+            enc_da_attn_comb_sink_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads)
+        } else {
+            enc_da_attn_comb_cls(raw, h, L.s_attn_comb, pca, g_rd.n_heads)
+        }
         rd_ts(raw, "a:attc")
     }
     if (rqk == DA_RQ_NONE) {   //! a head the fold cannot block (a K-quant wo plane under a head off 256): the separate requant
@@ -1220,7 +1271,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     if (L.wo_ar) {
         var pcwa = GemvArArgs(n = uint(qd), d = uint(dim), wblk = uint(arena_local_blk(L.bo)), xblk = 0u, add_on = 1u,
             woff = uint(rd_norm_off(l, RD_NORM_FFN)), pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)), pre_on = L.pre_post ? 1u : 0u,
-            no_norm = 0u, eps = g_rd.eps, ascale = 1.0)
+            no_norm = 0u, eps = g_rd.eps, ascale = 1.0, abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
         enc_q8_gemv_ar_cls(raw, h, L.s_wo_ar, pcwa, rd_ar_wgs(dim))
         rd_ts(raw, "a:wo_ar")
         return
@@ -1527,7 +1578,8 @@ def private rd_encode_token {
                 rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin)
             }
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
-                pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)))
+                pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
+                abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
             if (fuse) {
                 if (!L.wo_ar) {   //! else the wo GEMV's epilogue took the step
                     enc_ar_rq_stamp(L.rq_ffn_stamp, raw, h, L.s_addr_ffn_rq, pc8)

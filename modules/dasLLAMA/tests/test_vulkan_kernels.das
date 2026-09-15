@@ -335,11 +335,11 @@ def private kept_stamp_shape(kernel : string) : tuple<wg_vars : int; caps : tabl
     return <- res
 }
 
-def private fa_ensure_panics(khr : bool; hs : int64; gated, cap : bool) : bool {
+def private fa_ensure_panics(khr : bool; hs : int64; gated, cap : bool; sink : bool = false) : bool {
     var tripped = false
     static_if (typeinfo builtin_module_exists(vulkan)) {
         try {
-            fa_stamp_ensure(khr, hs, gated, cap, false)
+            fa_stamp_ensure(khr, hs, gated, cap, sink, false)
         } recover {
             tripped = true
         }
@@ -347,7 +347,7 @@ def private fa_ensure_panics(khr : bool; hs : int64; gated, cap : bool) : bool {
     return tripped
 }
 
-def private fa_enc_panics(khr : bool; hs : int64; gated, cap : bool) : bool {
+def private fa_enc_panics(khr : bool; hs : int64; gated, cap : bool; sink : bool = false) : bool {
     var tripped = false
     static_if (typeinfo builtin_module_exists(vulkan)) {
         try {
@@ -355,7 +355,7 @@ def private fa_enc_panics(khr : bool; hs : int64; gated, cap : bool) : bool {
             var h : VkHaz
             var s : VkDescriptorSet
             var pc : FaArgs
-            fa_stamp_enc(khr, hs, gated, cap, false, raw, h, s, pc, 1l)
+            fa_stamp_enc(khr, hs, gated, cap, sink, false, raw, h, s, pc, 1l)
         } recover {
             tripped = true
         }
@@ -421,8 +421,8 @@ def test_vkd_fa_stamp_words(t0 : T?) {
             var cm2_ok = true
             var khr_ok = true
             for (hs in head_sizes) {
-                cm2_ok = cm2_ok && (!cm2_on || fa_stamp_ensure(false, hs, false, false, false))
-                khr_ok = khr_ok && (!khr_on || fa_stamp_ensure(true, hs, false, false, false))
+                cm2_ok = cm2_ok && (!cm2_on || fa_stamp_ensure(false, hs, false, false, false, false))
+                khr_ok = khr_ok && (!khr_on || fa_stamp_ensure(true, hs, false, false, false, false))
             }
             g_vkd_spv_keep = false   // off before any assert, so a red cell keeps nothing past this one
             t |> success(cm2_ok, "every cm2 flash stamp engages on an fa-capable device")
@@ -461,6 +461,9 @@ def test_vkd_fa_stamp_refusals(t0 : T?) {
             t |> success(fa_enc_panics(false, 128l, false, true), "no softcap stamp off head size 256: the encode ladder refuses")
             t |> success(fa_enc_panics(false, 128l, true, false), "no gated stamp off head size 256: the encode ladder refuses")
             t |> success(fa_enc_panics(false, 96l, false, false), "a head size no stamp serves: the encode ladder refuses")
+            t |> success(fa_ensure_panics(false, 128l, false, false, true), "no sink stamp off head size 64: the ensure ladder refuses")
+            t |> success(fa_ensure_panics(false, 64l, false, true, true), "no capped sink stamp: the ensure ladder refuses")
+            t |> success(fa_enc_panics(true, 128l, false, false, true), "no sink stamp off head size 64: the encode ladder refuses")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -888,6 +891,72 @@ def test_vkd_ar_class(t0 : T?) {
             }
             t |> success(bad_y == 0, "normed output bit-exact vs the seam ({bad_y} of {dim} diverge)")
             t |> success(bad_x == 0, "residual stream bit-exact vs the seam ({bad_x} of {dim} diverge)")
+            //! the biased add partner (gpt-oss's attention output bias): the bias row rides the norms plane past the norm row, the
+            //! kernel adds it to the partner before the add; the seam fed the pre-added partner is the bit-exact reference
+            {
+                var b : array<float>
+                var ab : array<float>
+                var wb : array<float>
+                b |> resize(dim)
+                ab |> resize(dim)
+                wb |> resize(2 * dim)
+                for (i in range(dim)) {
+                    b[i] = float((i * 23) % 71) * 0.09 - 3.1
+                    ab[i] = a[i] + b[i]
+                    wb[i] = w[i]
+                    wb[dim + i] = b[i]
+                }
+                var x3 := x
+                var y3 : array<float>
+                y3 |> resize(dim)
+                vk_add_rms(x3, ab, w, y3, int64(dim), eps, ascale, true)
+                let wbd = make_device_buf(2l * bytes)
+                unsafe {
+                    upload_region_at(yd, 0l, addr<uint8 const?>(ysent[0]), bytes)
+                    upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bytes)
+                    upload_region_at(wbd, 0l, addr<uint8 const?>(wb[0]), 2l * bytes)
+                    var s3 = set_cls_ar(fixed_array(xd, ad, wbd, yd), fixed_array(bytes, bytes, 2l * bytes, bytes), fixed_array(1u, 2u, 4u, 8u))
+                    var raw3 = alloc_cmd()
+                    let begin3 = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw3, begin3), null)
+                    var h3 : VkHaz
+                    var pc3 = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim))
+                    enc_cls_ar(raw3, h3, s3, pc3, 1l)
+                    vhz_dep(raw3, h3, 8u | 1u, 0u, true)
+                    cmd_copy_whole(raw3, yd, host.buf, bytes)
+                    vk_check(vkEndCommandBuffer(raw3), null)
+                    submit_wait(raw3)
+                    memcpy(addr<void?>(yc[0]), host.mapped, bytes)
+                    var raw4 = alloc_cmd()
+                    vk_check(vkBeginCommandBuffer(raw4, begin3), null)
+                    cmd_copy_whole(raw4, xd, host.buf, bytes)
+                    vk_check(vkEndCommandBuffer(raw4), null)
+                    submit_wait(raw4)
+                    memcpy(addr<void?>(xc[0]), host.mapped, bytes)
+                }
+                var bad_yb = 0
+                var bad_xb = 0
+                var moved = 0
+                for (i in range(dim)) {
+                    if (yc[i] != y3[i]) {
+                        bad_yb++
+                    }
+                    if (xc[i] != x3[i]) {
+                        bad_xb++
+                    }
+                    if (xc[i] != x2[i]) {
+                        moved++
+                    }
+                }
+                t |> success(bad_yb == 0, "biased partner: the normed output is bit-exact vs the seam fed the pre-added partner ({bad_yb} of {dim} diverge)")
+                t |> success(bad_xb == 0, "biased partner: the residual stream is bit-exact vs that seam ({bad_xb} of {dim} diverge)")
+                t |> success(moved > 0, "biased partner control: the bias moves the residual off the unbiased step ({moved} of {dim})")
+                delete b
+                delete ab
+                delete wb
+                delete x3
+                delete y3
+            }
             delete x
             delete a
             delete w
@@ -1315,13 +1384,15 @@ def private requant_oracle(src : array<float>; base, nelem : int; q8k : bool;
 // single-query causal attention oracle: one output row per (query row, head) — plain two-pass
 // softmax over [kstart, cnt) (a sliding layer's window starts past 0); the device's online form
 // reassociates, so approx bars
+//! `has_sink` / `sink`: the head's attention sink logit (gpt-oss) joins the softmax's max and denominator as a phantom key with no value row
 def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kbase0 : int;
                             vv : array<float>; vbase0 : int; kvd, hh, hs, kv_mul, cnt : int;
-                            scale : float; var out : array<float>; obase : int; kstart : int = 0; cap : float = 0.0) {
+                            scale : float; var out : array<float>; obase : int; kstart : int = 0; cap : float = 0.0;
+                            has_sink : bool = false; sink : float = 0.0) {
     let khoff = (hh / kv_mul) * hs
     var sc : array<float>
     sc |> resize(cnt)
-    var mm = -3.0e38
+    var mm = has_sink ? sink : -3.0e38
     for (j in range(kstart, cnt)) {
         var s = 0.0
         for (e in range(hs)) {
@@ -1333,7 +1404,7 @@ def private attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kb
         }
         mm = max(mm, sc[j])
     }
-    var tot = 0.0
+    var tot = has_sink ? exp(sink - mm) : 0.0
     for (j in range(kstart, cnt)) {
         sc[j] = exp(sc[j] - mm)
         tot += sc[j]
@@ -3917,6 +3988,72 @@ def test_vkd_da_attn(t0 : T?) {
             t |> success(bads == 0, "da_attn split {nsplit} ways + the combine matches the CPU oracle under the cap ({bads} of {nheads * hs} off)")
             y_ref[hs + 3] += 0.5
             t |> success(mismatch_approx(y_cls, y_ref) == 1, "split attention control: the bar reds one poisoned element")
+            //! the sink arms (gpt-oss): a per-head sink logit, the unsplit pass folding it at its store and the split pass leaving it
+            //! to the combine, both against the oracle with the sink; the sink-free oracle is the control
+            t |> success(ensure_da_attn_sink_cls() && ensure_da_attn_comb_sink_cls(), "the sink twins compile on this device")
+            var sinkh : array<float>
+            sinkh |> resize(nheads)
+            for (hh in range(nheads)) {   //! a sink past each head's top scaled score: the fixture's 300-key row is flat, so only a dominant phantom key carries measurable mass
+                let khoff = (hh / kv_mul) * hs
+                var smax = -3.0e38
+                for (j in range(cnt)) {
+                    var s = 0.0
+                    for (e in range(hs)) {
+                        s += qh[hh * hs + e] * kh[j * kvd + khoff + e]
+                    }
+                    smax = max(smax, s * scale)
+                }
+                sinkh[hh] = smax + 2.5 + 0.5 * float(hh)
+            }
+            let sink_bytes = int64(nheads) * 4l
+            let sinkd = make_device_buf(sink_bytes)
+            var y_sink : array<float>
+            y_sink |> resize(nheads * hs)
+            for (hh in range(nheads)) {
+                attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_sink, hh * hs, 0, 0.0, true, sinkh[hh])
+            }
+            var y_free : array<float>
+            y_free |> resize(nheads * hs)
+            for (hh in range(nheads)) {
+                attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_free, hh * hs)
+            }
+            t |> success(mismatch_approx(y_sink, y_free) > 0, "sink control: the sink moves the oracle's own output ({mismatch_approx(y_sink, y_free)} of {nheads * hs})")
+            for (split in fixed_array(1, nsplit)) {
+                unsafe {
+                    upload_region_at(sinkd, 0l, addr<uint8 const?>(sinkh[0]), sink_bytes)
+                    nan_sentinel_upload(yd2, q_bytes)
+                    nan_sentinel_upload(partd, p_bytes)
+                    var tokb5 = make_host_buf(16l, true)
+                    var tmc5 = reinterpret<TokMeta?>(tokb5.mapped)
+                    tmc5.cnt = uint(cnt)
+                    var sc5 = set_da_attn_sink_cls(fixed_array(qd, kd, vd, yd2, tokb5.buf, partd, yd2, yd2, sinkd),
+                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, 16l, p_bytes, q_bytes, q_bytes, sink_bytes),
+                        fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
+                    var sc5c = set_da_attn_comb_sink_cls(fixed_array(qd, partd, yd2, yd2, yd2, sinkd),
+                        fixed_array(q_bytes, p_bytes, q_bytes, q_bytes, q_bytes, sink_bytes), fixed_array(1u, 32u, 16u, 16u, 16u, 0u))
+                    var raw5 = alloc_cmd()
+                    let begin5 = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw5, begin5), null)
+                    var h5 : VkHaz
+                    var pc5 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
+                        kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, nsplit = uint(split), rqk = DA_RQ_NONE, sinkoff = 0u)
+                    enc_da_attn_sink_cls(raw5, h5, sc5, pc5, int64(nheads * split))
+                    if (split > 1) {
+                        enc_da_attn_comb_sink_cls(raw5, h5, sc5c, pc5, int64(nheads))
+                    }
+                    vhz_dep(raw5, h5, 16u, 0u, true)
+                    cmd_copy_whole(raw5, yd2, host.buf, q_bytes)
+                    vk_check(vkEndCommandBuffer(raw5), null)
+                    submit_wait(raw5)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
+                }
+                let badk = mismatch_approx(y_cls, y_sink)
+                t |> success(badk == 0, "da_attn sink twin split {split} ways matches the CPU oracle with the sink ({badk} of {nheads * hs} off)")
+                t |> success(mismatch_approx(y_cls, y_free) > 0, "da_attn sink twin split {split} ways: the sink-free oracle reds the compare")
+            }
+            delete sinkh
+            delete y_sink
+            delete y_free
             delete qh
             delete kh
             delete vh
@@ -4033,21 +4170,22 @@ def test_vkd_at_attn(t0 : T?) {
 let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes
 
 //! the cells' dispatch of one flash stamp through the prefill's ladders, the grid from the arm's rows a workgroup; generic so a build without the vulkan module never infers it
-def private enc_fa_tile(khr : bool; hs : int; gated, cap, f16 : bool; raw; var h; var s; var pc; nheads, rows : int) {
-    fa_stamp_enc(khr, int64(hs), gated, cap, f16, raw, h, s, pc, fa_stamp_wgs(khr, int64(nheads), int64(rows)))
+def private enc_fa_tile(khr : bool; hs : int; gated, cap, sink, f16 : bool; raw; var h; var s; var pc; nheads, rows : int) {
+    fa_stamp_enc(khr, int64(hs), gated, cap, sink, f16, raw, h, s, pc, fa_stamp_wgs(khr, int64(nheads), int64(rows)))
 }
 
 def private fa_arm_ensure(khr : bool) : bool {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         for (hs in fixed_array(64l, 128l, 256l, 512l)) {
-            if (!fa_stamp_pair_ensure(khr, hs, false, false, true)) return false
+            if (!fa_stamp_pair_ensure(khr, hs, false, false, false, true)) return false
         }
+        if (!fa_stamp_pair_ensure(khr, 64l, false, false, true, true)) return false   //! the sink stamps (gpt-oss)
     }
     return true
 }
 
 //! the f16-out twin is held to the f32 stamp's output through f16cvt, not to the oracle: the two stamps must agree bit for bit
-def private fa_tile_run(t : T?; khr : bool) {
+def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm loop: the fixture, both stamps, the oracle and its controls
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
         let nheads = 4
@@ -4055,9 +4193,20 @@ def private fa_tile_run(t : T?; khr : bool) {
         let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run (the KHR tile: five 16-row tiles, the last 13 deep)
         let w0 = 64      // nonzero window base: the causal bound crosses K tiles mid-window
         let scale = 0.125
-        for (arm in fixed_array((hs = 64, window = 0), (hs = 128, window = 0), (hs = 256, window = 0), (hs = 512, window = 0), (hs = 128, window = 40))) {
+        //! the sink arms (gpt-oss): the h64 stamps seeded with a per-head sink logit, whole and under a sliding window
+        for (arm in fixed_array((hs = 64, window = 0, sink = false), (hs = 128, window = 0, sink = false), (hs = 256, window = 0, sink = false),
+                (hs = 512, window = 0, sink = false), (hs = 128, window = 40, sink = false), (hs = 64, window = 0, sink = true), (hs = 64, window = 40, sink = true))) {
             let hs = arm.hs
             let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
+            let sink = arm.sink
+            let stag = sink ? " sink" : ""
+            var sinkh : array<float>
+            sinkh |> resize(nheads)
+            for (hh in range(nheads)) {
+                sinkh[hh] = 0.45 * float(hh) - 0.3   //! sink logits inside the scaled scores' range, one under and the rest over the row's typical max
+            }
+            let sink_bytes = int64(nheads) * 4l
+            let sinkd = make_device_buf(sink_bytes)
             let qd = nheads * hs
             let kvd = (nheads / kv_mul) * hs
             let kpos = w0 + rows
@@ -4110,17 +4259,26 @@ def private fa_tile_run(t : T?; khr : bool) {
                 upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
                 upload_region_at(yh16_fused, 0l, addr<uint8 const?>(y16_fused[0]), h16_bytes)
                 upload_region_at(yh16_split, 0l, addr<uint8 const?>(y16_split[0]), h16_bytes)
+                upload_region_at(sinkd, 0l, addr<uint8 const?>(sinkh[0]), sink_bytes)
                 nan_sentinel_upload(yd, q_bytes)
                 var sck = set_f16cvt_cls(fixed_array(kdev, khdev),
                     fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
                 var scv = set_f16cvt_cls(fixed_array(vdev, vhdev),
                     fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-                var sfa = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yd),
-                    fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
-                    fixed_array(1u, 16u, 32u, 4u))
-                var sfa16 = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yh16_fused),
-                    fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
-                    fixed_array(1u, 16u, 32u, 64u))
+                var sfa = (sink
+                    ? fa_stamp_sink_set(khr, fixed_array(qdev, khdev, vhdev, yd, sinkd),
+                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes, sink_bytes),
+                        fixed_array(1u, 16u, 32u, 4u, 0u))
+                    : fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yd),
+                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
+                        fixed_array(1u, 16u, 32u, 4u)))
+                var sfa16 = (sink
+                    ? fa_stamp_sink_set(khr, fixed_array(qdev, khdev, vhdev, yh16_fused, sinkd),
+                        fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes, sink_bytes),
+                        fixed_array(1u, 16u, 32u, 64u, 0u))
+                    : fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yh16_fused),
+                        fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
+                        fixed_array(1u, 16u, 32u, 64u)))
                 var scy = set_f16cvt_cls(fixed_array(yd, yh16_split),
                     fixed_array(q_bytes, h16_bytes), fixed_array(4u, 128u))
                 var raw2 = alloc_cmd()
@@ -4132,9 +4290,9 @@ def private fa_tile_run(t : T?; khr : bool) {
                 enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
                 enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
                 var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
-                    kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window))
-                enc_fa_tile(khr, hs, false, false, false, raw2, h2, sfa, pcf, nheads, rows)
-                enc_fa_tile(khr, hs, false, false, true, raw2, h2, sfa16, pcf, nheads, rows)
+                    kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u)
+                enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pcf, nheads, rows)
+                enc_fa_tile(khr, hs, false, false, sink, true, raw2, h2, sfa16, pcf, nheads, rows)
                 // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
                 var pcy = ActArgs(nelem = uint(rows * qd), gelu = 0u, nblk = 0u)
                 enc_f16cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
@@ -4174,20 +4332,35 @@ def private fa_tile_run(t : T?; khr : bool) {
                 for (hh in range(nheads)) {
                     let cnt = w0 + r + 1
                     attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
-                        cnt, 1.0, y_ref, r * qd + hh * hs, window > 0 && cnt > window ? cnt - window : 0)
+                        cnt, 1.0, y_ref, r * qd + hh * hs, window > 0 && cnt > window ? cnt - window : 0, 0.0, sink, sinkh[hh])
                 }
             }
             let bad = mismatch_approx(y_cls, y_ref)
-            t |> success(bad == 0, "{tag} hs {hs} window {window} matches the CPU oracle ({bad} of {rows * qd} off)")
+            t |> success(bad == 0, "{tag} hs {hs} window {window}{stag} matches the CPU oracle ({bad} of {rows * qd} off)")
             y_ref[0] += 0.5
-            t |> success(mismatch_approx(y_cls, y_ref) > 0, "{tag} hs {hs} window {window}: the bar reds a poisoned oracle element")
+            t |> success(mismatch_approx(y_cls, y_ref) > 0, "{tag} hs {hs} window {window}{stag}: the bar reds a poisoned oracle element")
+            if (sink) {   //! the sink control: the sink-free oracle over the same rows must miss - the phantom key carries mass
+                var y_nosink : array<float>
+                y_nosink |> resize(rows * qd)
+                for (r in range(rows)) {
+                    for (hh in range(nheads)) {
+                        let cnt = w0 + r + 1
+                        attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
+                            cnt, 1.0, y_nosink, r * qd + hh * hs, window > 0 && cnt > window ? cnt - window : 0)
+                    }
+                }
+                let moved = mismatch_approx(y_cls, y_nosink)
+                t |> success(moved > 0, "{tag} hs {hs} window {window} sink control: the sink moves the output off the sink-free oracle ({moved} of {rows * qd})")
+                delete y_nosink
+            }
             var bad16 = 0
             for (i in range(rows * qd)) {
                 if (float(y16_fused[i]) != float(y16_split[i])) {
                     bad16++
                 }
             }
-            t |> success(bad16 == 0, "{tag} hs {hs} f16-out twin == the f32 stamp's f16cvt ({bad16} of {rows * qd} off)")
+            t |> success(bad16 == 0, "{tag} hs {hs}{stag} f16-out twin == the f32 stamp's f16cvt ({bad16} of {rows * qd} off)")
+            delete sinkh
             delete qh
             delete kh
             delete vh
@@ -4309,8 +4482,8 @@ def private fa_h256_gated_run(nheads, kv_mul, rows, w0 : int) : tuple<bad : int;
             enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
             var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd),
                 kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, qstride = uint(qrow), qhs = uint(qhs))
-            enc_fa_tile(false, 256, true, false, false, raw2, h2, sfa, pcf, nheads, rows)
-            enc_fa_tile(false, 256, true, false, true, raw2, h2, sfa16, pcf, nheads, rows)
+            enc_fa_tile(false, 256, true, false, false, false, raw2, h2, sfa, pcf, nheads, rows)
+            enc_fa_tile(false, 256, true, false, false, true, raw2, h2, sfa16, pcf, nheads, rows)
             vhz_dep(raw2, h2, 4u | 64u, 0u, true)
             cmd_copy_whole(raw2, yd, host.buf, o_bytes)
             cmd_copy_range(raw2, yh16, 0l, host.buf, o_bytes, o16_bytes)
@@ -4379,7 +4552,7 @@ def test_vkd_fa_cm2_h256_gated(t0 : T?) {
                 t |> skip("device lacks the cm2 flash-attention trio")
                 return
             }
-            verify(fa_stamp_pair_ensure(false, 256l, true, false, true), "the gated h256 fa rails must engage on an fa-capable device")
+            verify(fa_stamp_pair_ensure(false, 256l, true, false, false, true), "the gated h256 fa rails must engage on an fa-capable device")
             let r = fa_h256_gated_run(4, 2, 77, 64)   // partial 64-tile, a nonzero window base
             t |> success(r.bad == 0, "fa_cm2 h256 gated matches the CPU oracle ({r.bad} of {r.n} off)")
             t |> success(r.bad16 == 0, "fa_cm2 h256 gated f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
@@ -4450,8 +4623,8 @@ def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float; khr
             enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
             var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd),
                 kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, cap = cap)
-            enc_fa_tile(khr, hs, false, true, false, raw2, h2, sfa, pcf, nheads, rows)
-            enc_fa_tile(khr, hs, false, true, true, raw2, h2, sfa16, pcf, nheads, rows)
+            enc_fa_tile(khr, hs, false, true, false, false, raw2, h2, sfa, pcf, nheads, rows)
+            enc_fa_tile(khr, hs, false, true, false, true, raw2, h2, sfa16, pcf, nheads, rows)
             vhz_dep(raw2, h2, 4u | 64u, 0u, true)
             cmd_copy_whole(raw2, yd, host.buf, q_bytes)
             cmd_copy_range(raw2, yh16, 0l, host.buf, q_bytes, o16_bytes)
@@ -4522,7 +4695,7 @@ def test_vkd_fa_cm2_h256_softcap(t0 : T?) {
                 t |> skip("device lacks the cm2 flash-attention trio")
                 return
             }
-            verify(fa_stamp_pair_ensure(false, 256l, false, true, true), "the softcap h256 fa rails must engage on an fa-capable device")
+            verify(fa_stamp_pair_ensure(false, 256l, false, true, false, true), "the softcap h256 fa rails must engage on an fa-capable device")
             let r = fa_h256_softcap_run(4, 2, 77, 64, 50.0, false)   // partial 64-tile, a nonzero window base
             t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
             t |> success(r.bad == 0, "fa_cm2 h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
@@ -4545,7 +4718,7 @@ def test_vkd_fa_khr_h256_softcap(t0 : T?) {
                 t |> skip("device lacks KHR cooperative matrices at subgroup 32")
                 return
             }
-            verify(fa_stamp_pair_ensure(true, 256l, false, true, true), "the softcap h256 KHR fa rails must engage on a coopmat device")
+            verify(fa_stamp_pair_ensure(true, 256l, false, true, false, true), "the softcap h256 KHR fa rails must engage on a coopmat device")
             let r = fa_h256_softcap_run(4, 2, 77, 64, 50.0, true)
             t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
             t |> success(r.bad == 0, "fa_khr h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
@@ -4569,7 +4742,7 @@ def test_vkd_fa_cm2_h256_9b(t0 : T?) {
                 t |> skip("device lacks the cm2 flash-attention trio")
                 return
             }
-            verify(fa_stamp_pair_ensure(false, 256l, true, false, true), "the gated h256 fa rails must engage on an fa-capable device")
+            verify(fa_stamp_pair_ensure(false, 256l, true, false, false, true), "the gated h256 fa rails must engage on an fa-capable device")
             let r = fa_h256_gated_run(16, 4, 512, 0)
             t |> success(r.bad == 0, "fa_cm2 h256 gated 9B: matches the CPU oracle ({r.bad} of {r.n} off)")
             t |> success(r.bad16 == 0, "fa_cm2 h256 gated 9B: f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
@@ -5704,7 +5877,8 @@ def private q8_gemv_pleact_run(t; n, d : int) {
 //! the q8 GEMV with the residual step as its last workgroup's epilogue, against the GEMV in the scalar block order and
 //! `ArRq`'s math on the CPU: the residual row updated in place, the normed (or raw) row's Q8_0 blocks; the counter
 //! reads zero after the dispatch; a poisoned expectation must red
-def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float) {   // nolint:STYLE037 — one linear fixture: the GEMV, the residual step and its quant, each with its bar
+//! `abias`: the GEMV's row takes a bias row out of the norms plane (its third row here) before the add - gpt-oss's attention output bias
+def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; abias : bool = false) {   // nolint:STYLE037 — one linear fixture: the GEMV, the residual step and its quant, each with its bar
     let nb = n / 32
     let totblk = d * nb
     let nblk_out = d / 32
@@ -5721,7 +5895,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float) { 
     xqh |> resize(nb * 8)
     xsh |> resize(nb)
     xres |> resize(d)
-    wnh |> resize(2 * d)   // two norm rows: the post norm at 0, the next norm at d
+    wnh |> resize(3 * d)   // two norm rows - the post norm at 0, the next norm at d - then the bias row at 2d
     for (i in range(totblk * 8)) {
         wqh[i] = hash_word(uint(i) * 3u + 29u)
     }
@@ -5740,10 +5914,13 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float) { 
     for (i in range(2 * d)) {
         wnh[i] = 0.8 + float(i % 9) * 0.05
     }
+    for (i in range(d)) {
+        wnh[2 * d + i] = float((i * 31) % 67) * 0.6 - 19.8   //! a bias of the residual row's own magnitude, so a dropped add is loud
+    }
     let xq_bytes = int64(nb) * 32l
     let xs_bytes = int64(nb) * 4l
     let r_bytes = int64(d) * 4l
-    let wn_bytes = int64(2 * d) * 4l
+    let wn_bytes = int64(3 * d) * 4l
     let oq_bytes = int64(d)
     let os_bytes = int64(nblk_out) * 4l
     let wqd = make_device_buf(wq_bytes)
@@ -5787,7 +5964,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float) { 
         vk_check(vkBeginCommandBuffer(raw2, begin), null)
         var h2 : VkHaz
         var pc = GemvArArgs(n = uint(n), d = uint(d), wblk = 0u, xblk = 0u, add_on = 1u, woff = uint(d), pwoff = 0u,
-            pre_on = pre_on ? 1u : 0u, no_norm = raw ? 1u : 0u, eps = eps, ascale = ascale)
+            pre_on = pre_on ? 1u : 0u, no_norm = raw ? 1u : 0u, eps = eps, ascale = ascale, abias_on = abias ? 1u : 0u, aboff = uint(2 * d))
         let rpw = 4l * g_gpu.rows_per_wg
         enc_q8_gemv_ar_cls(raw2, h2, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
         vhz_dep(raw2, h2, 16u | 32u | 64u, 0u, true)
@@ -5807,6 +5984,11 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float) { 
     var y : array<float>
     y |> resize(d)
     q8_gemm_oracle(wqh, wsh, xqh, xsh, one_row, 1, n, d, y)
+    if (abias) {
+        for (k in range(d)) {
+            y[k] += wnh[2 * d + k]
+        }
+    }
     var ainv = 0.0
     if (pre_on) {
         var sa = 0.0
@@ -5853,7 +6035,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float) { 
             }
         }
     }
-    let tag = "n {n} d {d} pre {pre_on ? 1 : 0} raw {raw ? 1 : 0}"
+    let tag = "n {n} d {d} pre {pre_on ? 1 : 0} raw {raw ? 1 : 0} bias {abias ? 1 : 0}"
     t |> success(badx == 0, "q8 gemv+ar {tag}: the residual row matches the oracle ({badx} of {d} off)")
     t |> success(bads == 0, "q8 gemv+ar {tag}: the block scales match ({bads} of {nblk_out} off)")
     t |> success(badq == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({badq} of {d} off)")
@@ -5896,6 +6078,7 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
             q8_gemv_ar_run(t, 512, 1152, true, false, 1.0)    // gemma-3-1b's wo step: the add partner normed first, then the FFN norm's quant
             q8_gemv_ar_run(t, 256, 1536, true, true, 1.0)     // an E-series down step: the row quantized as it is for the PLE gate
             q8_gemv_ar_run(t, 512, 1024, false, false, 0.5)   // a plain step under an output scale
+            q8_gemv_ar_run(t, 512, 1024, false, false, 1.0, true)   // gpt-oss's wo step: the output bias row added before the residual
         } else {
             t |> skip("dasVulkan not present")
         }

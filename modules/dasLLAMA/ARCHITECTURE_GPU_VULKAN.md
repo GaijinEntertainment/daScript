@@ -1,11 +1,13 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai, 2.2aj and 2.2al: the prefill window
+carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj: the prefill window
 chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer, the tile probe's
 shared descriptor set layout, the recurrent block of the prefill window, the roster of Vulkan
-capabilities the tier keys its routes on, how the `[vk_dispatch]` lens derives `readonly` from a
-class family's accesses, and the token command's attention key split. The MoE block of that
+capabilities the tier keys its routes on, and how the `[vk_dispatch]` lens derives `readonly` from a
+class family's accesses. The token command's attention key split and the attention-side planes
+(the q/k/v bias, the sink logits, the output bias) are `ARCHITECTURE_GPU_VULKAN_ATTN.md`'s
+sections 2.2al and 2.2am. The MoE block of that
 window, the token command's routed twin and their gemma-4 form are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s
 sections 2.2af, 2.2ag and 2.2ak. The cooperative-matrix tiles the chain's GEMMs run on - the cm2
 decode spelling, the tile pick and the coopmat mode ladder, the class-pipeline build seat, the MoE
@@ -284,17 +286,3 @@ view protects its same-binding aliases. A method body the access classifier refu
 writing every binding, so a body the classifier cannot read loses the decoration rather than
 carrying a false one. A declared `@readonly` on a binding a kernel writes is the one shape that
 yields a module the validator rejects, and the lens refuses it.
-
-### 2.2al The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
-
-**The decode attention dispatches a workgroup per (head, key split) and a combine per head.** One
-workgroup a head leaves a low-head model's attention on a few SMs (four heads of eighty-two), so the
-decode pass (`DaAttnT`) cuts the attended span into `nsplit` 32-aligned pieces (`da_nsplit`: enough
-workgroups to cover the SM count twice, at most `DA_NSPLIT_MAX`, one where the count is unknown or the
-heads alone cover it), each running the online softmax over its piece into an unnormalized partial
-(max, denominator, accumulators; an empty piece's weighs nothing); `DaAttnComb` aligns a head's
-partials by their maxes, normalizes, gates and stores the row (unsplit, the pass stores it), and the
-store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax, Q8_K
-superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. The scores
-go a subgroup two keys a step, lanes across the dims (one coalesced K row, the dot a subgroup add; on the f16 mirror a lane's eight halves are one 16-byte word, `KV16`, and both keys' words are in flight before either dot - a piece holds a few keys a subgroup, so the pass is the memory round trips it chains); the V pass
-keeps a thread a dim, eight keys' loads issued before their adds (four a key pair on a 512 head) for the same reason - on the RTX PRO 4500 the two together read gemma-3-1b's attention 384 -> 178 us a token at 128 tokens. The flash tile's cm2 arm (`FaT` at `KHR = false`) runs one workgroup a (head, 64-row q tile) unsplit, its KHR arm one a (head, 16-row q tile): a key split there costs more in partial stores and a combine than the shorter key loop returns on every gemma shape measured (`followup_vulkan.md` item 50). A model that softcaps its attention logits (gemma-2) takes the tile's `CAP` leaves at head size 256: every scaled score through `cap * tanh(s / cap)` before the mask, the 8-row tile serving any other capped shape. Every kernel that stages a head does it in a 256-thread workgroup, 32 dims to a lane and a second element a thread past 256, so the driver serves head sizes that are 32-multiples up to 512 and `resident_layer_decline` names any other by layer.

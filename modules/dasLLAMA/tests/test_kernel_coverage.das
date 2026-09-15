@@ -731,6 +731,11 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the biased act twins (gpt-oss's expert stacks carry gate and up bias rows: a carrier above the zoo's tier) - the
     // Q8_0 requant form the token command runs and the f16 form the window chain runs; their coverage is test_vkd_act_family
     "q8_actrq_b_cls_spv", "actf16_b_cls_spv",
+    // the attention-sink twins (gpt-oss's per-head sink logits, a carrier above the zoo's tier): the h64 flash tiles on both
+    // arms with their f16-out twins, the token command's pass and its split combine; their coverage is the sink arms of
+    // test_vkd_fa_cm2, test_vkd_fa_khr and test_vkd_da_attn in test_vulkan_kernels.das
+    "fa_cm2_h64_sink_cls_spv", "fa_cm2_h64_sink_f16_cls_spv", "fa_khr_h64_sink_cls_spv", "fa_khr_h64_sink_f16_cls_spv",
+    "da_attn_sink_cls_spv", "da_attn_f16_sink_cls_spv", "da_attn_comb_sink_cls_spv",
     // the Q4_K experts' gate+up+act twin (the 26B-A4B Q4_K_M's routed stacks feeding its Q5_1 down, above the zoo's
     // tier; the zoo's k4 MoE carrier feeds a k4 down): its coverage is test_vkd_kq_gemv_k4_gu in test_vulkan_kernels.das
     "kq_gemv_k4_gu_cls_spv",

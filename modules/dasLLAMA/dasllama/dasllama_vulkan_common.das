@@ -2435,6 +2435,10 @@ struct RDec {
     bias_dev : uint64             // the q/k/v projection biases, per layer [q | k | v] (qwen2; 0 = the model has none)
     bias_bytes : int64
     has_bias : bool
+    sinks_dev : uint64            //! the per-head attention sink logits, [n_heads] a layer (gpt-oss; 0 = the model has none)
+    sinks_bytes : int64
+    has_sinks : bool
+    has_obias : bool              //! the attention output bias rows ride the norms plane (`RD_NORM_OBIAS`) and the residual steps add them
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
     logits_dev : uint64
     x_host, logits_host : HostBuf
@@ -2568,6 +2572,7 @@ let RD_NORM_ROUTER = 5l
 let RD_NORM_PRE_FFN2 = 6l
 let RD_NORM_POST_FFN1 = 7l
 let RD_NORM_POST_FFN2 = 8l
+let RD_NORM_OBIAS = 9l   //! the attention output bias row (gpt-oss), added to the wo GEMV's row at the residual step; a zero row elsewhere
 
 //! layer `l`'s norm row of `kind` in the norms plane, in floats
 def rd_norm_off(l, kind : int64) : int64 => (l * RD_NORM_ROWS + kind) * g_rd.dim

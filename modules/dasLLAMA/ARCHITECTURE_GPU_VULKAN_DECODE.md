@@ -245,20 +245,8 @@ mirror is sized `n_attn x seq_cap x kv_dim` and each attention layer carries its
 once on a recurrent layer. The attention geometry (head size, q and kv widths) is the first
 attention layer's - on qwen35 layer 0 is recurrent.
 
-**A q/k/v projection bias (qwen2) folds into the rope stage.** The biased models' bias rows
-upload once as one row per layer in the projection buffer's own `[q | k | v]` layout
-(`vk_rdec_upload_bias`, a recurrent layer's row zero) - every layer's rows one after another, each at its own attention class's widths, so a layer's base is the sum of the widths below it (`resident_bias_off`) - bound at the last binding of the three
-rope kernels - the decode rope+store, the prefill's batched twin and the fused qk-norm+rope -
-which add the bias to each element as they read it, before the rotation (or the norm) and
-before the v copy, so no dispatch is added: the CPU chain adds the bias between the projection
-and the norm, and so does this. A model without a bias binds the norms buffer in that slot as
-a placeholder the kernel never reads (`hasb` 0). The seat installs separately
-(`install_moe_gpu_resident_bias`), so a tier without it names the bias in its decline instead
-of serving the model unbiased. The per-op tier carries the same rows through its hooks: the
-decode block binds the layer's row to the same rope kernels (sec.2.2r), and the prefill chain's
-`AtPrep` stage adds the q and k rows before its norm and rope and runs a third pass over the raw
-v window - `AtPrep` with no rope and no norm is a copy plus bias, in place - so the attention and
-the v rows that come home both carry it (`ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op chain).
+The attention-side planes the driver uploads beside its norms - the q/k/v projection bias, the
+sink logits and the output bias - are `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2am.
 
 **Gated attention and partial rotary ride the fused qk-norm+rope kernel and the decode attention
 kernel, not a detour.** On a gated model the q GEMV writes `2 x qd` rows in the loader's per-head

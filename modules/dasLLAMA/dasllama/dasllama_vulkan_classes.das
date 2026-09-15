@@ -50,6 +50,8 @@ struct ArArgs {
     presummed : uint //! the gemma-4 combine: the routed rows arrive summed under their weights in row 0 (the down GEMV folded them)
     dbias_on : uint  //! the combine twins: each routed row takes its expert's down bias (gpt-oss) before its routing weight scales it
     dboff : uint     //! ... this layer's row base in the down-bias plane ([ne x dim] rows a layer)
+    abias_on : uint  //! the add partner carries a bias row out of wn before the add (gpt-oss's attention output bias, `RD_NORM_OBIAS`)
+    aboff : uint     //! ... that row's base in wn
 }
 
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
@@ -108,6 +110,9 @@ class ArBase : RmsWgBase {
     @push_constant pa : ArArgs
     @workgroup row : float[8192]           // AR_MAX_DIM — staged so the post-reduce reread is local
 
+    //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
+    def apart(base, j : uint) : float => aa[base + j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
+
     // the residual add + row stash + sum-of-squares pass over one row at `base`; under pre_on the add
     // partner is normed first (its own reduce, the row stash holding it meanwhile)
     def accum_row(base : uint) : float {
@@ -116,7 +121,7 @@ class ArBase : RmsWgBase {
             var sa = 0.0
             var j = gl_LocalInvocationID.x
             while (j < pa.dim) {
-                let a = aa[base + j]
+                let a = apart(base, j)
                 row[j] = a
                 sa += a * a
                 j += 256u
@@ -126,7 +131,7 @@ class ArBase : RmsWgBase {
         var ss = 0.0
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            let a = pa.pre_on != 0u ? wn[pa.pwoff + k] * (row[k] * ainv) : aa[base + k]
+            let a = pa.pre_on != 0u ? wn[pa.pwoff + k] * (row[k] * ainv) : apart(base, k)
             let vv = pa.add_on != 0u ? (xs[base + k] + a) * pa.ascale : xs[base + k]
             xs[base + k] = vv
             row[k] = vv
@@ -2893,6 +2898,7 @@ struct FaArgs {
     qhs : uint      // the q panel's per-head stride (2 x hs on a gated plane); 0 = hs
     window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50), read by the CAP stamps; 0 = none
+    sinkoff : uint  //! the SINK stamps: this layer's row base in the sink plane ([n_heads] a layer)
 }
 
 //! gemma-2's attention logit softcap on a scaled score tile
@@ -2908,17 +2914,31 @@ class template FaT {
     @ssbo @binding = 1 kh : array<float16>       // f16 K shadow at absolute positions
     @ssbo @binding = 2 vh : array<float16>       // f16 V shadow at absolute positions
     @ssbo @binding = 3 outp : array<OT>          // attention out plane (rows x qd)
+    @ssbo @binding = 4 @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
     @push_constant pa : FaArgs
     @template_constant HS : uint = 64u           // the head width
     @template_constant BC : uint = 64u           // the cm2 arm's K/V step: 64 at hs 64, 32 above (the head-size cut: K^T, V and the softmax state at 32 columns)
     @template_constant OUT16 : bool = false      // the o store as f16
     @template_constant GATED : bool = false      // the cm2 arm: multiply the sigmoid of the gate half of a [q | gate] head into o; qstride/qhs describe that panel and read as qd/HS when unset
     @template_constant CAP : bool = false        //! the softcap stamps: every scaled score through cap * tanh(s / cap) before the mask (gemma-2)
+    @template_constant SINK : bool = false       //! the sink stamps (gpt-oss): the online softmax seeds its max with the head's sink logit and its sum with one - the phantom key with no value row
     @template_constant KHR : bool = false        //! the KHR cooperative-matrix arm; its lane map is the cited section's
     @workgroup @template_gate = KHR fq : uint[4096]     // the 16-row q tile, scaled, f16 pairs: HS / 2 words a row (sized for the 512 head on every stamp)
     @workgroup @template_gate = KHR fs : float[1024]    // the 16 x 64 score tile, row stride 64
     @workgroup @template_gate = KHR fp : uint[512]      // P as f16 pairs, 16 x 64: 32 words a row
     @workgroup @template_gate = KHR fpv : uint[4096]    // the step's P x V as f16 pairs, 16 x HS: HS / 2 words a row
+
+    //! the KHR arm's running max seed: the head's sink logit on the sink stamps (the phantom key), the floor elsewhere
+    def seed_m(h : uint) : float {
+        static_if (SINK) {
+            return sinks[pa.sinkoff + h]
+        } else {
+            return -3.0e38
+        }
+    }
+
+    //! ... and its running sum seed: the phantom key's own mass, one, on the sink stamps
+    def seed_l : float => SINK ? 1.0 : 0.0
 
     [spirv_kernel(local_size_x = 128), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {   // nolint:STYLE037,STYLE038 — the two arms of one flash pass, each the verbatim shipped kernel; a method call would emit a SPIR-V function the emitter never inlines
@@ -2949,8 +2969,8 @@ class template FaT {
             let key_col0 = (tid % 8u) * 8u
             let gq = pa.w0 + q0 + srow
             let o_dim0 = (tid % 8u) * (HS / 8u)
-            var m = -3.0e38
-            var l = 0.0
+            var m = seed_m(h)
+            var l = seed_l()
             var o : float[64]
             for [unroll] (z in range(int(HS / 8u))) {
                 o[z] = 0.0
@@ -3071,8 +3091,13 @@ class template FaT {
             var qf : QA
             coopmatConvert(qf, q)
             var mrow : SACC
-            coopmatFill(mrow, -1.7e38)
             var lrow : SACC
+            static_if (SINK) {   //! the phantom key: the head's sink logit as every row's running max, one as its running sum
+                coopmatFill(mrow, sinks[pa.sinkoff + h])
+                coopmatFill(lrow, 1.0)
+            } else {
+                coopmatFill(mrow, -1.7e38)
+            }
             var o : OF
             let qbase = pa.w0 + q0
             let kmax = pa.w0 + min(q0 + 64u, pa.rows)   // causal bound (exclusive) of the tile's last row
@@ -3164,6 +3189,20 @@ class FaCm2H64 : FaH64T {
 class FaCm2H64F16 : FaH64T {
     typedef OT = float16
     override OUT16 = true
+}
+
+//! the sink leaves (gpt-oss's 64-wide heads): the h64 pass seeded with the head's sink logit, in their own family for the fifth binding
+[vk_dispatch(name = "fa_cm2_h64_sink_cls", kernel = "run", family = "fa_cm2_sink_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64Sink : FaH64T {
+    typedef OT = float
+    override SINK = true
+}
+
+[vk_dispatch(name = "fa_cm2_h64_sink_f16_cls", kernel = "run", family = "fa_cm2_sink_cls", grid = "wgs", params = "wgs : int64")]
+class FaCm2H64SinkF16 : FaH64T {
+    typedef OT = float16
+    override OUT16 = true
+    override SINK = true
 }
 
 // hs=128 (llama-3.2-3B-class) at Bc=32. Fast standalone (24.7 TFLOP/s, right beside the h64) and
@@ -3286,6 +3325,21 @@ class FaKhrH64F16 : FaH64T {
     override OUT16 = true
 }
 
+[vk_dispatch(name = "fa_khr_h64_sink_cls", kernel = "run", family = "fa_khr_sink_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64Sink : FaH64T {
+    override KHR = true
+    typedef OT = float
+    override SINK = true
+}
+
+[vk_dispatch(name = "fa_khr_h64_sink_f16_cls", kernel = "run", family = "fa_khr_sink_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH64SinkF16 : FaH64T {
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+    override SINK = true
+}
+
 [vk_dispatch(name = "fa_khr_h128_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH128 : FaH128T {
     override KHR = true
@@ -3347,7 +3401,7 @@ def fa_stamp_wgs(khr : bool; nheads, rows : int64) : int64 {
 }
 
 //! the refusals are `panic`s, not `verify`s: a `verify` prints a stack walk before it throws, and the refusal cell probes them under `recover`
-def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap : bool) {
+def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink : bool) {
     if (khr && gated) {
         panic("vk flash: the KHR flash tile has no gated stamp")
     }
@@ -3357,13 +3411,21 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap : bool) {
     if (gated && hs != 256l) {
         panic("vk flash: the gated stamps serve head size 256 alone")
     }
+    if (sink && (hs != 64l || gated || cap)) {
+        panic("vk flash: the sink stamps serve head size 64 alone, ungated and uncapped")
+    }
     if (hs != 64l && hs != 128l && hs != 256l && hs != 512l) {
         panic("vk flash: a stamp for a head size the tile never serves")
     }
 }
 
-def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, f16 : bool) : bool {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
-    fa_stamp_refuse(khr, hs, gated, cap)
+//! the sink stamps' ensure: the h64 pass seeded with the head's sink logit, on either arm
+def private fa_sink_ensure(khr, f16 : bool) : bool
+    => khr ? (f16 ? ensure_fa_khr_h64_sink_f16_cls() : ensure_fa_khr_h64_sink_cls()) : (f16 ? ensure_fa_cm2_h64_sink_f16_cls() : ensure_fa_cm2_h64_sink_cls())
+
+def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool) : bool {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
+    fa_stamp_refuse(khr, hs, gated, cap, sink)
+    if (sink) return fa_sink_ensure(khr, f16)
     if (hs == 64l) return khr ? (f16 ? ensure_fa_khr_h64_f16_cls() : ensure_fa_khr_h64_cls()) : (f16 ? ensure_fa_cm2_h64_f16_cls() : ensure_fa_cm2_h64_cls())
     if (hs == 128l) return khr ? (f16 ? ensure_fa_khr_h128_f16_cls() : ensure_fa_khr_h128_cls()) : (f16 ? ensure_fa_cm2_h128_f16_cls() : ensure_fa_cm2_h128_cls())
     if (hs == 512l) return khr ? (f16 ? ensure_fa_khr_h512_f16_cls() : ensure_fa_khr_h512_cls()) : (f16 ? ensure_fa_cm2_h512_f16_cls() : ensure_fa_cm2_h512_cls())
@@ -3372,15 +3434,29 @@ def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, f16 : bool) : bool {   /
     return khr ? (f16 ? ensure_fa_khr_h256_f16_cls() : ensure_fa_khr_h256_cls()) : (f16 ? ensure_fa_cm2_h256_f16_cls() : ensure_fa_cm2_h256_cls())
 }
 
-def fa_stamp_pair_ensure(khr : bool; hs : int64; gated, cap, with_f16 : bool) : bool
-    => fa_stamp_ensure(khr, hs, gated, cap, false) && (!with_f16 || fa_stamp_ensure(khr, hs, gated, cap, true))
+def fa_stamp_pair_ensure(khr : bool; hs : int64; gated, cap, sink, with_f16 : bool) : bool
+    => fa_stamp_ensure(khr, hs, gated, cap, sink, false) && (!with_f16 || fa_stamp_ensure(khr, hs, gated, cap, sink, true))
 
 def fa_stamp_set(khr : bool; bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet
     => khr ? set_fa_khr_cls(bufs, sizes, gbits) : set_fa_cm2_cls(bufs, sizes, gbits)
 
-def fa_stamp_enc(khr : bool; hs : int64; gated, cap, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
-    fa_stamp_refuse(khr, hs, gated, cap)
-    if (hs == 64l) {
+//! the sink stamps' set: the four planes and the sink plane
+def fa_stamp_sink_set(khr : bool; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet
+    => khr ? set_fa_khr_sink_cls(bufs, sizes, gbits) : set_fa_cm2_sink_cls(bufs, sizes, gbits)
+
+def private fa_sink_enc(khr, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {
+    if (khr) {
+        if (f16) { enc_fa_khr_h64_sink_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h64_sink_cls(raw, h, s, pc, wgs) }
+    } else {
+        if (f16) { enc_fa_cm2_h64_sink_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_sink_cls(raw, h, s, pc, wgs) }
+    }
+}
+
+def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
+    fa_stamp_refuse(khr, hs, gated, cap, sink)
+    if (sink) {
+        fa_sink_enc(khr, f16, raw, h, s, pc, wgs)
+    } elif (hs == 64l) {
         if (khr) {
             if (f16) { enc_fa_khr_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h64_cls(raw, h, s, pc, wgs) }
         } else {
@@ -3807,6 +3883,7 @@ struct DaAttnArgs {
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
     nsplit : uint   //! the key range split across this many workgroups a head, each leaving a (max, denom, acc) partial for `DaAttnComb`; 0 or 1 = one workgroup a head stores y itself
     rqk : uint      //! the row's requant folded into the store: 0 = Q8_0 blocks of 32, 1 = Q8_K superblocks of 256 (a head a multiple of 256), 2 = none (the row alone)
+    sinkoff : uint  //! the SINK stamps: this layer's row base in the sink plane ([n_heads] a layer)
 }
 
 //! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
@@ -3824,6 +3901,7 @@ def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 [ |> template_struct_instance]
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
+    @template_constant SINK : bool = false   //! the sink stamps (gpt-oss): the head's sink logit joins the softmax's max and denominator at the unsplit store; a split piece leaves it to the combine
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
     @ssbo @binding = 1 kmir : array<KT>      // the K mirror plane
     @ssbo @binding = 1 @role = "alias" @template_gate = KV16 kw4 : array<uint4>   //! the K mirror as 16-byte words
@@ -3833,6 +3911,7 @@ class template DaAttnT {
     @ssbo @binding = 5 part : array<float>   //! the split form's partials [head x split x (hs + 2)]; unsplit, any buffer (unread)
     @ssbo @binding = 6 aq : array<int8>      //! the row's quants when `rqk` folds the requant (the wo plane's feed); else any buffer (unwritten)
     @ssbo @binding = 7 aqs : array<float>    //! ... and its block scales
+    @ssbo @binding = 8 @template_gate = SINK sinks : array<float>   //! the SINK stamps: the per-head sink logits, `pa.sinkoff` the layer's row
     @push_constant pa : DaAttnArgs
     @workgroup qrow : float[512]   // this head's query row (hs <= 512)
     @workgroup sc : float[256]     // chunk scores, then the cross-group V partial reduce
@@ -3841,6 +3920,18 @@ class template DaAttnT {
 
     //! one V mirror element as f32
     def vld(i : uint) : float => float(vmir[i])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+
+    //! the unsplit store's normalization: 1 / L, or on the sink stamps the phantom key folded into the max and the denominator once
+    def unsplit_linv(h : uint; mrun, l : float) : float {
+        static_if (SINK) {
+            let sk = sinks[pa.sinkoff + h]
+            let msk = max(mrun, sk)
+            let os = exp(mrun - msk)
+            return os / (l * os + exp(sk - msk))
+        } else {
+            return 1.0 / l
+        }
+    }
 
     //! eight halves of a K row word against the q row's slice at `qo`
     def kdot8(w : uint4; qo : uint) : float {
@@ -3909,7 +4000,7 @@ class template DaAttnT {
         }
     }
 
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim online-softmax pass, parity-locked to the shipped kernel
         let hs = pa.hs
         let cnt = tok[0u].cnt
@@ -4075,6 +4166,7 @@ class template DaAttnT {
             c0 += 256u
         }
         let pb = (h * nsplit + sp) * da_attn_part_stride(hs)   // this (head, split)'s partial
+        let linv = unsplit_linv(h, mrun, ml[1u])
         if (wide) {   // one group: every thread holds two finished dims
             if (nsplit > 1u) {
                 if (tid == 0u) {
@@ -4085,7 +4177,6 @@ class template DaAttnT {
                 part[pb + 2u + tid + 256u] = acc2
                 return
             }
-            let linv = 1.0 / ml[1u]
             var o = acc * linv
             var o2 = acc2 * linv
             if (pa.gated != 0u) {
@@ -4116,7 +4207,7 @@ class template DaAttnT {
             }
             return
         }
-        var o = tot / ml[1u]
+        var o = SINK ? tot * linv : tot / ml[1u]
         if (pa.gated != 0u && tid < hs) {
             o = o / (1.0 + exp(-q[h * qstride + hs + tid]))
         }
@@ -4136,17 +4227,51 @@ class DaAttnF16 : DaAttnT {
     override KV16 = true
 }
 
+//! the sink twins (gpt-oss): the pass with the head's sink logit in its unsplit store
+[vk_dispatch(name = "da_attn_sink_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnSink : DaAttnT {
+    typedef KT = float
+    override SINK = true
+}
+
+[vk_dispatch(name = "da_attn_f16_sink_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnF16Sink : DaAttnT {
+    typedef KT = float16
+    override KV16 = true
+    override SINK = true
+}
+
 //! the split decode attention's combine: one wg a head over its nsplit partials, each weighed e^(m_s - M) against the aligned max
-[vk_dispatch(name = "da_attn_comb_cls", grid = "nheads", params = "nheads : int64")]
-class DaAttnComb {
+[ |> template_struct_instance]
+class template DaAttnCombT {
+    @template_constant SINK : bool = false   //! the sink stamp (gpt-oss): the head's sink logit joins the aligned max and denominator, once, here - the pieces carry none
     @ssbo @binding = 0 q : array<float>      //! the query rows, for the gate half of a gated head
     @ssbo @binding = 1 part : array<float>   //! [head x split x (hs + 2)]
     @ssbo @binding = 2 y : array<float>      //! attention out rows
     @ssbo @binding = 3 aq : array<int8>      //! the row's quants when `rqk` folds the requant; else any buffer (unwritten)
     @ssbo @binding = 4 aqs : array<float>    //! ... and its block scales
+    @ssbo @binding = 5 @template_gate = SINK sinks : array<float>   //! the SINK stamp: the per-head sink logits, `pa.sinkoff` the layer's row
     @push_constant pa : DaAttnArgs
     @workgroup wsum : float[2]   //! [0] = the aligned max, [1] = the aligned denom
     @workgroup sgp : float[64]   //! the Q8_K fold's per-subgroup maxes (two superblocks on a wide head)
+
+    //! the aligned max's seed: the head's sink logit on the sink stamp (the phantom key), the floor elsewhere
+    def seed_m(h : uint) : float {
+        static_if (SINK) {
+            return sinks[pa.sinkoff + h]
+        } else {
+            return -3.0e38
+        }
+    }
+
+    //! ... and the aligned denominator's: the phantom key's mass against the aligned max, once for the head
+    def seed_l(h : uint; m : float) : float {
+        static_if (SINK) {
+            return exp(sinks[pa.sinkoff + h] - m)
+        } else {
+            return 0.0
+        }
+    }
 
     //! the head's finished value at dim `d`: the aligned partials summed and normalized, then the gate
     def dim_value(hb, stride, nsplit, h, hs, d : uint; m, linv : float) : float {
@@ -4164,7 +4289,7 @@ class DaAttnComb {
         return o
     }
 
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
     def run {   // nolint:STYLE037,STYLE038 — the combine and its folded requant, the two head widths in one pass
         let hs = pa.hs
         let nsplit = max(pa.nsplit, 1u)
@@ -4173,13 +4298,13 @@ class DaAttnComb {
         let stride = da_attn_part_stride(hs)
         let hb = h * nsplit * stride
         if (tid == 0u) {
-            var m = -3.0e38
+            var m = seed_m(h)
             var s = 0u
             while (s < nsplit) {
                 m = max(m, part[hb + s * stride])
                 s++
             }
-            var l = 0.0
+            var l = seed_l(h, m)
             s = 0u
             while (s < nsplit) {
                 l += part[hb + s * stride + 1u] * exp(part[hb + s * stride] - m)
@@ -4247,6 +4372,15 @@ class DaAttnComb {
             }
         }
     }
+}
+
+[vk_dispatch(name = "da_attn_comb_cls", grid = "nheads", params = "nheads : int64")]
+class DaAttnComb : DaAttnCombT {}
+
+//! the sink twin (gpt-oss): the combine folding the head's sink logit into the aligned max and denominator
+[vk_dispatch(name = "da_attn_comb_sink_cls", grid = "nheads", params = "nheads : int64")]
+class DaAttnCombSink : DaAttnCombT {
+    override SINK = true
 }
 
 // ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====
@@ -9388,6 +9522,8 @@ struct GemvArArgs {
     no_norm : uint
     eps : float
     ascale : float
+    abias_on : uint   //! the GEMV's row takes a bias row out of wn before the add (gpt-oss's attention output bias)
+    aboff : uint      //! ... that row's base in wn
 }
 
 //! the q8 decode GEMV carrying the residual step as its last workgroup's epilogue: a subgroup a row, eight rows a
@@ -9410,6 +9546,9 @@ class Q8GemvAr : RmsWgBase {
     //! the norm weight at `e`, one under `no_norm`
     def nw(e : uint) : float => pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
 
+    //! the finished row's element `j`, its bias row added under `abias_on`
+    def ya(j : uint) : float => y[j] + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
+
     //! the residual step over the finished rows, `ArRqBase.rq_row`'s math on the workgroup's 256 threads
     def epilogue {
         let tid = gl_LocalInvocationID.x
@@ -9418,7 +9557,7 @@ class Q8GemvAr : RmsWgBase {
             var sa = 0.0
             var j = tid
             while (j < pa.d) {
-                let a = y[j]
+                let a = ya(j)
                 sa += a * a
                 j += 256u
             }
@@ -9427,7 +9566,7 @@ class Q8GemvAr : RmsWgBase {
         var ss = 0.0
         var k = tid
         while (k < pa.d) {
-            let a = pa.pre_on != 0u ? wn[pa.pwoff + k] * (y[k] * ainv) : y[k]
+            let a = pa.pre_on != 0u ? wn[pa.pwoff + k] * (ya(k) * ainv) : ya(k)
             let vv = pa.add_on != 0u ? (xres[k] + a) * pa.ascale : xres[k]
             xres[k] = vv
             ss += vv * vv
