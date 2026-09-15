@@ -86,7 +86,7 @@ class private CoAwait : AstCallMacro {
 [function_macro(name="coroutine")]
 class private CoroutineMacro : AstFunctionAnnotation {
     //! This macro converts coroutine function into generator, adds return false.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Transforms the annotated function into a generator-based coroutine.
         var retT : TypeDeclPtr
         if (func.result.baseType == Type.tVoid || func.result.baseType == Type.autoinfer) {

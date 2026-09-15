@@ -13,7 +13,7 @@ require _stackwalk_common
 
 [structure_macro(name = "gen_forced_walker")]
 class GenForcedWalker : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         // the string is runtime-built so the let survives to the park (no const forwarding)
         var fn = qmacro_function("forced_walker") $(var w : CollectingWalker?) : int {
             let forced_precious = "FORCED_{length(w.frames)}"

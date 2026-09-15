@@ -308,17 +308,14 @@ the function where ``obj`` is a parameter.
 Step 5 — Mark as patched and trigger re-inference
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: member AstStructureAnnotation
+.. das-doc: fragment
 .. code-block:: das
 
-   for (ann in st.annotations) {
-       if (ann.annotation.name == "serializable") {
-           ann.arguments |> add_annotation_argument("patched", true)
-       }
-   }
+   args |> add_annotation_argument("patched", true)
    astChanged = true
 
 We add a ``"patched"`` boolean argument to our own annotation —
+``args`` is this instance's own argument list, and it is writable —
 this is the marker that Step 1 checks on the next pass.  Then
 ``astChanged = true`` tells the compiler to re-run inference on
 the modified function body.  On the next pass, ``find_arg(args,
@@ -332,7 +329,7 @@ Inside ``finish()``
 .. code-block:: das
 
    def override finish(var st : StructurePtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
        var serializable = 0
        var skipped = 0
        for (fld in st.fields) {

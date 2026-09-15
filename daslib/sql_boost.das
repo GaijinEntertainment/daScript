@@ -512,7 +512,7 @@ def private build_field_unique_indexes_sql(table_name : string; fields : array<F
 class SqlIndexMacro : AstStructureAnnotation {
     //! Stackable struct-level annotation: ``[sql_index(fields="A"|("A","B"), unique=?, name=?)]``.
     //! Must appear after ``[sql_table]`` in the annotation list (it rewrites that helper's body).
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (find_struct_helper_fn("_sql_legacy_table_marker", st) != null) {
             errors := "[sql_index] on '{st.name}': not supported on [sql_table(legacy=true)] structs (they don't define schema). Drop the [sql_index] annotation; the current (non-legacy) struct's indexes are reapplied automatically by ``convert_and_rename``."
             return false
@@ -610,7 +610,7 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
 
 [structure_macro(name=sql_table)]
 class SqlTableMacro : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 - flat registration table, one emit call per generated [sql_table] helper
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 - flat registration table, one emit call per generated [sql_table] helper
         let table_name = find_annotation(args, "name", string(st.name))
         let is_legacy = find_annotation(args, "legacy", false)
 
@@ -1579,7 +1579,7 @@ def private emit_json_blob_adapters_for_struct(var st : StructurePtr; fields : a
 
 [structure_macro(name=sql_view)]
 class private SqlViewMacro : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE038 - flat registration table, one emit call per generated [sql_view] helper
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE038 - flat registration table, one emit call per generated [sql_view] helper
         let view_name = find_annotation(args, "name", string(st.name))
         for (annDecl in st.annotations) {
             if (annDecl.annotation.name == "sql_index") {
@@ -2205,7 +2205,7 @@ class SqlFunctionMacro : AstFunctionAnnotation {
     //! of every UDF-capable provider, and emitted as ``<name>(args)`` inside ``_sql(...)``
     //! chains. Optional args: ``name``, ``deterministic``, ``directonly``.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - flat arity ladder, one binding form per UDF signature
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[sql_function] is not supported on generic functions; instantiate with concrete types and tag the concrete instance"
             return false

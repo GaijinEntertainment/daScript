@@ -33,7 +33,7 @@ def private init_arg_to_field(name : string) : string {
 class WidgetFunctionMacro : AstFunctionAnnotation {
     //! ``[widget]`` annotation — registers ``def fn(var state : ST, ...)`` as a stateful widget. Auto-emits the state global, injects ``widget_ident``, and installs a per-kind call_macro for dotted-flag parsing.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         let fwd = args |> find_arg("forward_argument") ?as tBool ?? false
         let verbatim = args |> find_arg("verbatim_path") ?as tBool ?? false
         return apply_widget_or_container(func, errors, false, fwd, verbatim)
@@ -44,7 +44,7 @@ class WidgetFunctionMacro : AstFunctionAnnotation {
 class ContainerFunctionMacro : AstFunctionAnnotation {
     //! ``[container]`` annotation — block-arg sibling of ``[widget]``; same identifier auto-emit, plus ``container_path_push``/``pop`` around ``invoke(blk)`` so leaf telemetry paths nest correctly.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (empty(func.arguments) || func.arguments[length(func.arguments) - 1]._type == null
             || func.arguments[length(func.arguments) - 1]._type.baseType != Type.tBlock) {
             errors := "[container] requires the last parameter to be `blk : block`"
@@ -84,7 +84,7 @@ class DrawlistPrimFunctionMacro : AstFunctionAnnotation {
     //! primitive. Injects ``widget_ident`` at position 0 and a per-kind
     //! call_macro that prepends a synthesized ``<mod>:<line>:<col>`` path key.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (empty(func.arguments)) {
             errors := "[drawlist_prim] requires at least one parameter (the drawlist pointer)"
             return false
@@ -842,7 +842,7 @@ class WidgetCallMacro : AstCallMacro {
 class EditWidgetFunctionMacro : AstFunctionAnnotation {
     //! ``[edit_widget]`` annotation — registers an external-pointer widget. First parameter is the user-owned pointer (``T?``); macro injects ``widget_ident : string`` at index 1 and installs a call_macro that requires an explicit ``id="..."`` literal at the call site.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         return apply_edit_widget_or_container(func, errors, false)
     }
 }
@@ -851,7 +851,7 @@ class EditWidgetFunctionMacro : AstFunctionAnnotation {
 class EditContainerFunctionMacro : AstFunctionAnnotation {
     //! ``[edit_container]`` annotation — block-arg sibling of ``[edit_widget]``. First parameter is the user-owned pointer (``T?``); last parameter must be ``blk : block``. Macro injects ``widget_ident : string`` at index 1 and wraps the body with ``container_path_push``/``pop`` so leaves rendered inside ``invoke(blk)`` nest under the container's path key. Same ``id="..."`` literal requirement as ``[edit_widget]``.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (empty(func.arguments) || func.arguments[length(func.arguments) - 1]._type == null
             || func.arguments[length(func.arguments) - 1]._type.baseType != Type.tBlock) {
             errors := "[edit_container] requires the last parameter to be `blk : block`"
@@ -987,7 +987,7 @@ class EditExternalCallMacro : AstCallMacro {
 class WidgetDispatchFunctionMacro : AstFunctionAnnotation {
     //! ``[widget_dispatch]`` annotation — registers a per-state-struct dispatcher for HTTP set/click/open/close actions. Required signature: ``def <name>(var state : T; action : string; payload : string)``. Keyed by ``T`` (first parameter's struct type); the function name is irrelevant. One body per state struct covers every kind whose state is ``T``. Renames the user function to private ``__dispatch_body_<T>`` (avoids collision with same-named ``[widget]`` defs), emits a type-erased wrapper ``__dispatch_wrap_<T>``, and pushes an init call to ``register_widget_dispatch_for_type`` so ``dispatch_or_err`` resolves via ``meta.ti.hash`` at runtime.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (length(func.arguments) != 3) {
             errors := "[widget_dispatch] requires exactly 3 parameters: (var state : T; action : string; payload : string)"
             return false

@@ -502,10 +502,10 @@ namespace das
     // this one replaces sort(array<>) via correct builtin
     struct BuiltinSortFunctionAnnotation : FunctionAnnotation {
         BuiltinSortFunctionAnnotation() : FunctionAnnotation("builtin_array_sort") { }
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override { return true; }
-        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override { return true; }
-        virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & ) override { return false; }
-        virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override { return false; }
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string & ) override { return true; }
+        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override { return true; }
+        virtual bool apply ( ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string & ) override { return false; }
+        virtual bool finalize ( ExprBlock *, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override { return false; }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
             for ( auto & arg : call->arguments ) {
                 if ( !arg->type || !arg->type->isFullySealed() ) {

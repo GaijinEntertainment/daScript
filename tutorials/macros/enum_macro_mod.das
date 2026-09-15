@@ -7,7 +7,7 @@ options no_aot
 // entry to any enum, set to the number of original values.
 //
 // AstEnumerationAnnotation has a single method:
-//   apply(var st, var group, args, var errors) : bool
+//   apply(var st, var group, var args, var errors) : bool
 //     Called BEFORE the infer pass — can modify the enum or generate code.
 //
 // This macro demonstrates modifying the enum itself by adding a new
@@ -20,7 +20,7 @@ require daslib/ast_boost
 
 [enumeration_macro(name="enum_total")]
 class EnumTotalAnnotation : AstEnumerationAnnotation {
-    def override apply(var enu : EnumerationPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var enu : EnumerationPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         // Check that the enum doesn't already have a "total" entry.
         for (ee in enu.list) {
             if (ee.name == "total") {

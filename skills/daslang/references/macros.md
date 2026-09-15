@@ -40,7 +40,7 @@ require daslib/templates_boost
 [function_macro(name="trace")]
 class TraceMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         func.body = qmacro_block() {
             print("{$v(string(func.name))} enter\n")
             $e(func.body)
@@ -49,6 +49,13 @@ class TraceMacro : AstFunctionAnnotation {
     }
 }
 ```
+
+`args` is the argument list of the annotation instance the hook runs for, and it is writable:
+per-instance state that must survive an inference restart (a `patched` marker, a phase counter)
+is read and written there - `find_arg(args, "patched") is tBool` to guard,
+`args |> add_annotation_argument("patched", true)` to mark - never found by searching
+`func.annotations` by name, which cannot tell two same-named instances apart. `progArgs` is the
+program's `options`, read-only.
 
 For what the annotations do not cover, register manually: a `[_macro] def private setup` function
 runs at the end of every module compile. Guard it with `is_compiling_macros_in_module("my_macros")`

@@ -29,9 +29,9 @@
 
 - **A diff that makes a record written before it wrong - the bytes still decode, but what they
   encode is no longer what this build would write - bumps the version `getVersion()` returns in
-  `include/daScript/ast/ast_serializer.h`, in the same change** - the version is the only thing
-  that discards a cache a user already holds, so without the bump every later launch is served
-  the stale record.
+  `include/daScript/ast/ast_serializer.h`, in the same change** - a record reached through an
+  explicit `-module-cache <path>` carries no binary stamp in its key, so the version is the only
+  thing that discards it.
 
 - **A diff that streams or compares a `CodeOfPolicies` field in `module_builtin_ast_serialize.cpp`
   outside `DAS_MODULE_CACHE_POLICY_FIELDS` is a defect - put the field on the list instead** - the
@@ -66,9 +66,9 @@
   `ARCHITECTURE.md` in the same change.** Comments in `module_builtin_dasbind.cpp` cite that
   section instead of restating it, so a stale section is what the next reader trusts.
 
-- **A diff that changes what `ModuleFileCache::defaultPath` folds into the module-cache key -
-  the binary, the command line, the environment names, or which script arguments count - updates
-  section 2 of `ARCHITECTURE.md` in the same change.** The key is what stops a native-compiled
+- **A diff that changes what `ModuleFileCache::defaultPath` or `ModuleFileCache::embeddedHostOptions`
+  folds into the module-cache key - the binary, the command line, the environment names, or
+  which script arguments count - updates section 2 of `ARCHITECTURE.md` in the same change.** The key is what stops a native-compiled
   module serving a cross compile, so a wrong description of it gets trusted.
 
 - **A diff that adds a `std::filesystem` call in `module_builtin_fio.cpp` passes every path into
@@ -111,12 +111,6 @@
   (`module_builtin_ast_serialize.cpp`) clears it in `AstSerializer::clearNodeIds`, in the same
   change.** A later compile reuses a freed address, so a table that outlives its record answers a
   new node with the old node's number or name.
-
-- **Weakening `tests-cpp/small/test_env_serializer.cpp`'s position census - the cold-to-warm
-  comparison of every `line`, `column` and `last_column` - is a defect.** The GC reads a local's
-  visibility range to decide the local is dead, and inlining can put two locals on one line
-  where they differ only in column, so a program restored with rounded columns has its GC free
-  a local still in use.
 
 - **A diff that reads a writing `SerializationStorageVector`'s `buffer` outside
   `AstSerializer::serializeProgram` (`module_builtin_ast_serialize.cpp`) - to hand the bytes out,

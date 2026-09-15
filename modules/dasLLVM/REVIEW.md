@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
 `ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`,
-`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_LIB.md`. Planned work: `LEDGER.md` takes a new row; `DEBUGGING.md` (sec. Roadmap) and `fat_mode_plan.md` carry older plans.
+`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_LIB.md`. Planned work: `LEDGER.md`.
 
 **A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
@@ -31,7 +31,7 @@ there.
   concurrent runs share.
 
 - **A diff that adds or changes a branch on the target triple records in its PR body the
-  cross-compile (`write_exe`) for that target that exercised the behavior.** The suite runs on
+  `-exe --jit-target=<triple>` build for that target that exercised the behavior.** The suite runs on
   the host, so a target-triple branch is checked only by the artifact built for that target.
 
 - **A diff that adds work to, or moves work within, what `run_jit`
@@ -60,7 +60,7 @@ there.
 - **A das function the jit finalizer reaches - `free_jit_context` (`daslib/llvm_jit_link.das`)
   and anything it calls - is `[no_jit]` and calls only externs or other `[no_jit]` das
   functions; a das helper on that path (`macro_context_of` and the rest of
-  `daslib/cross_context`) is a defect - call the externs directly.** The finalizer is program
+  `daslib/cross_context`, repo root) is a defect - call the externs directly.** The finalizer is program
   code, so a jittable function on its path joins every jitted program's DLL (the block-passing
   helpers cannot be lowered: `ARCHITECTURE_JIT_ENTRY.md` sec.4).
 
@@ -83,7 +83,9 @@ there.
 - **A `-lib` build that writes no artifact exits non-zero.** A build rule reads the exit code, and
   a silent success lets it link the previous run's library against this run's header.
 
-- **A change to a `[tune]`-family annotation is reviewed with `skills/tune.md`.**
+- **A diff that changes the implementation of `[tune]`, `[tune_perm]`, `[tune_companion]`,
+  `[tune_scope]`, `[tune_policy]` or `[llvm_code]` in this folder is reviewed with
+  `skills/tune.md`.**
 
 - **A change to the tune framework - `daslib/llvm_tune.das`, its tests, or the descriptor and
   C++ rows that join it to a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with

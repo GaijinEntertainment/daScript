@@ -24,7 +24,7 @@ require daslib/ast_boost
 
 [structure_macro(name=audited)]
 class AuditedAnnotation : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         return true  // no-op tag
     }
 }

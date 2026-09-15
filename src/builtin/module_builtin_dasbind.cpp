@@ -569,18 +569,18 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
     struct ExternFunctionAnnotation : FunctionAnnotation {
         ExternFunctionAnnotation() : FunctionAnnotation("extern") { }
-        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err) override {
+        virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string & err) override {
             err = "not supported for block";
             return false;
         }
-        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
             return true;
         }
-        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
 #if !DAS_BIND_EXTERNAL
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & err )  override {
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string & err )  override {
             err = "daslang is configured with extern functions disabled";
             return false;
         }
@@ -631,7 +631,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             return true;
         }
 
-        virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, const AnnotationArgumentList & args, string & err )  override {
+        virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, AnnotationArgumentList & args, string & err )  override {
             if (!verifyCallCorrect(fun, args, err)) {
                 return false;
             }

@@ -35,7 +35,7 @@ require daslib/ast
 class InterfaceMacro : AstStructureAnnotation {
     //! Verifies that the annotated class is a valid interface — it may only contain
     //! function-typed fields (no data members). Applied via ``[interface]`` annotation.
-    def override finish(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override finish(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         for (fld in st.fields) {
             if (fld.name == "__rtti") continue
             if (!fld._type.isFunction) {
@@ -168,7 +168,7 @@ def private emit_proxy_methods(var st : StructurePtr; var cls : StructurePtr; va
 [structure_macro(name="implements")]
 class ImplementsMacro : AstStructureAnnotation {
     //! Generates interface bindings for a struct. Creates a proxy class that delegates interface method calls to the struct's own methods, and adds a ``get`InterfaceName`` method that lazily constructs the proxy. Applied via ``[implements(InterfaceName)]``.
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (length(args) != 1) {
             errors := "implements macro takes exactly one argument"
             return false
@@ -234,7 +234,7 @@ class ImplementsMacro : AstStructureAnnotation {
         return true
     }
 
-    def override finish(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override finish(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         let iface_name = annotation_interface_name(args)
         if (empty(iface_name)) return true
         var iface <- compiling_program() |> find_unique_structure(iface_name)

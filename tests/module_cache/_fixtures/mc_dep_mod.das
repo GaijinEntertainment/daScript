@@ -11,7 +11,7 @@ require daslib/fio
 //! tune-sidecar read does (llvm_tune's read_manifest calls add_module_cache_dependency)
 [function_macro(name = "dep_probe")]
 class private DepProbe : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         add_module_cache_dependency(get_env_variable("MC_DEP_FILE"))
         return true
     }

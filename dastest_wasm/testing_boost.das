@@ -14,7 +14,6 @@ module testing_boost shared
 require daslib/ast_boost
 require daslib/templates_boost
 require ../dastest/testing.das public
-require strings
 
 // ---- compile-time accumulation of [test] functions ----
 struct private TestEntry {
@@ -38,7 +37,7 @@ def private validate_arguments(type_name : string, args) : bool {
 
 [function_macro(name="test")]
 class TestFunctionAnnotation : AstFunctionAnnotation {
-    [unused_argument(group, args, errors)] def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    [unused_argument(group, args, errors)] def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (!validate_arguments("T", func.arguments)) {
             errors := "Invalid arguments for test macro\nexpected function header: def {func.name}() or def {func.name}(t: testing::T?)"
             return false
@@ -58,7 +57,7 @@ class TestFunctionAnnotation : AstFunctionAnnotation {
 
 [function_macro(name="benchmark")]
 class BenchmarkFunctionAnnotation : AstFunctionAnnotation {
-    [unused_argument(group, args, errors)] def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    [unused_argument(group, args, errors)] def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (!validate_arguments("B", func.arguments)) {
             errors := "Invalid arguments for benchmark macro\nexpected function header: def {func.name}() or def {func.name}(b: testing::B?)"
             return false

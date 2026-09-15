@@ -153,7 +153,7 @@ def private emit_variant(var mod : Module?; tmpl : FunctionPtr; perm : TunePerm;
 [structure_macro(name="dasllama_tune")]
 class private TuneMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         var mod = compiling_module()
         var tunable : array<FunctionPtr>
         for_each_function(mod, "") $(func) {
@@ -237,7 +237,7 @@ def private emit_fallback_registry(var mod : Module?; var errors : das_string) :
 [structure_macro(name="dasllama_fallbacks")]
 class private FallbacksMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         return emit_fallback_registry(compiling_module(), errors)
     }
 }
@@ -248,7 +248,7 @@ class private FallbacksMacro : AstStructureAnnotation {
 [structure_macro(name="dasllama_grid")]
 class private GridMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         let src = find_arg(args, "src")
         if (!(src is tString)) {
             errors := "dasllama_grid: requires src=\"<template_name>\""
@@ -389,7 +389,7 @@ def private find_template_function(name : string) : FunctionPtr {
 [function_macro(name="tuned")]
 class private TunedMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         let tmpl_name = tuned_template_name(func, args)
         var tmpl = find_template_function(tmpl_name)
         if (tmpl == null) {

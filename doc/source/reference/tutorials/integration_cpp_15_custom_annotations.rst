@@ -67,14 +67,14 @@ annotated function is parsed and type-checked:
 
        // Called during parsing — can modify function flags
        bool apply(const FunctionPtr & func, ModuleGroup &,
-                  const AnnotationArgumentList &, string &) override {
+                  AnnotationArgumentList &, string &) override {
            printf("[log_calls] apply: %s\n", func->name.c_str());
            return true;  // true = success, false = error
        }
 
        // Not supported on blocks
        bool apply(ExprBlock *, ModuleGroup &,
-                  const AnnotationArgumentList &,
+                  AnnotationArgumentList &,
                   string & err) override {
            err = "not supported for blocks";
            return false;
@@ -82,7 +82,7 @@ annotated function is parsed and type-checked:
 
        // Called after type inference
        bool finalize(const FunctionPtr & func, ModuleGroup &,
-                     const AnnotationArgumentList &,
+                     AnnotationArgumentList &,
                      const AnnotationArgumentList &,
                      string &) override {
            printf("[log_calls] finalize: %s (args: %d)\n",
@@ -91,7 +91,7 @@ annotated function is parsed and type-checked:
        }
 
        bool finalize(ExprBlock *, ModuleGroup &,
-                     const AnnotationArgumentList &,
+                     AnnotationArgumentList &,
                      const AnnotationArgumentList &,
                      string &) override { return true; }
    };
@@ -125,7 +125,7 @@ inference and can modify the struct:
 
        // Called BEFORE type inference — can modify struct
        bool touch(const StructurePtr & st, ModuleGroup &,
-                  const AnnotationArgumentList &, string &) override {
+                  AnnotationArgumentList &, string &) override {
            if (!st->findField("id")) {
                st->fields.emplace_back(
                    "id",                             // name
@@ -143,7 +143,7 @@ inference and can modify the struct:
 
        // Called AFTER type inference — read-only validation
        bool look(const StructurePtr & st, ModuleGroup &,
-                 const AnnotationArgumentList &,
+                 AnnotationArgumentList &,
                  string &) override {
            printf("struct '%s' has %d fields\n",
                   st->name.c_str(), (int)st->fields.size());

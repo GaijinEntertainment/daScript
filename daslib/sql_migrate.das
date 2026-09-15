@@ -448,7 +448,7 @@ class SqlMigrationMacro : AstFunctionAnnotation {
     //! DB. The runner parameter's type selects the provider STREAM; versions are unique per
     //! stream. Args: ``version=<int>`` (required), optional ``description``/``vacuum``/``analyze``.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[sql_migration] is not supported on generic functions"
             return false
@@ -687,7 +687,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
     //! Same-name-same-type / ``T → Option<T>`` / ``INT↔STRING↔FLOAT`` cast / ``@sql_renamed_from`` are
     //! filled in; an explicit ``dst.X = …`` (or ``<-``/``:=``) on the LHS suppresses the auto-fill for X.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;   // nolint:STYLE038 - one arm per auto-fill field mapping rule
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {
             errors := "[struct_convert]: not supported on generic functions"
             return false

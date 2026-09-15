@@ -208,7 +208,7 @@ Inside ``finish()``
 .. code-block:: das
 
    def override finish(var blk : ExprBlock?; var group : ModuleGroup;
-                       args, progArgs : AnnotationArgumentList;
+                       var args : AnnotationArgumentList; progArgs : AnnotationArgumentList;
                        var errors : das_string) : bool {
        let labelArg = find_arg(args, "tag")
        var lbl = "?"

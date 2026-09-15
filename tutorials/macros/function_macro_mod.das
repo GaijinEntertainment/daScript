@@ -59,7 +59,7 @@ var public LOG_DEPTH = 0
 [function_macro(name="log_calls")]
 class LogCallsMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
 
         // Step 1: Build an ExprStringBuilder for "funcname(arg1, arg2, ...)\n"
         var call_sb = new ExprStringBuilder(at = func.at)
@@ -139,7 +139,7 @@ def public getConstantInt(expr : ExpressionPtr; var result : int&) : bool {
 [function_macro(name="expect_range")]
 class ExpectRangeMacro : AstFunctionAnnotation {
     def override verifyCall(var call : ExprCallFunc?;
-                            args, progArgs : AnnotationArgumentList;
+                            var args : AnnotationArgumentList; progArgs : AnnotationArgumentList;
                             var errors : das_string) : bool {
 
         // Step 1: Parse annotation arguments — find the argument name,
@@ -208,7 +208,7 @@ class NoPrintVisitor : AstVisitor {
 [function_macro(name="no_print")]
 class NoPrintMacro : AstFunctionAnnotation {
     def override lint(var func : FunctionPtr; var group : ModuleGroup;
-                      args, progArgs : AnnotationArgumentList;
+                      var args : AnnotationArgumentList; progArgs : AnnotationArgumentList;
                       var errors : das_string) : bool {
 
         // Step 1: Create a visitor and adapt it for the visit() call

@@ -6,10 +6,11 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_COOPMAT.md`. Shared emitter rules:
 that compiles a shader and asserts on its emitted words - answers to `tests/spirv/REVIEW.md`
 (repo root), wherever the diff puts it.
 
-**A diff under this folder that changes the set of das programs the emitter accepts, or the words
-it emits for one, adds a fixture under `tests/spirv/` (repo root) for each such difference, in
-the same change, that compiles a program showing it and asserts on the emitted words.** Emitted words no fixture asserts are produced by nothing the suite
-runs. The fixture forms are `ARCHITECTURE.md` section 4.
+**A diff under this folder that adds a das program the emitter accepts, or changes the words it
+emits for one, adds a fixture under `tests/spirv/` (repo root) for each such difference, in the
+same change, that compiles a program showing it and asserts on the emitted words.** Emitted
+words no fixture asserts are produced by nothing the suite runs. The fixture forms are
+`ARCHITECTURE.md` section 4.
 
 **A diff that declares a struct the emitter recognizes by name and lowers to a type whose storage
 exists only on the device - a tile, tensor, layout, sampler, or image - adds a fixture under
@@ -40,8 +41,10 @@ builtin's emitted form returns, or a plain CPU reference of the same arithmetic,
 expectation re-spelled inline in the test.** An inline expectation is read off the emitter's own
 output, so it passes whatever the emitter does.
 
-**A diff under `modules/dasSpirv` that edits a file under `modules/dasGlsl` or
-`modules/dasOpenGL` is a defect** - dasSpirv copies dasGlsl's design, not its code.
+**A diff under `modules/dasSpirv` that adds a `require` of a module under `modules/dasGlsl` or
+`modules/dasOpenGL`, or that adds code to a file under either module that a file under
+`modules/dasSpirv` names, is a defect - that code lands under `modules/dasSpirv` instead.**
+dasSpirv copies dasGlsl's design, not its code.
 
 **A diff that adds an `OpVariable` emit to an emitted function's entry block puts it ahead of
 every non-`OpVariable` instruction of that block, and an instruction it emits into that block

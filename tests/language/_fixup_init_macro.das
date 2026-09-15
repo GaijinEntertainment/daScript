@@ -28,7 +28,7 @@ def private build_uint_array_literal(words : array<uint>; at : LineInfo) : Expre
 
 [function_macro(name="fixup_init_capture")]
 class FixupInitCapture : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         func.flags.exports = true
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`captured"
         var atype = new TypeDecl(at = func.at, baseType = Type.tArray)
@@ -39,7 +39,7 @@ class FixupInitCapture : AstFunctionAnnotation {
         }
         return true
     }
-    def override fixup(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override fixup(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`captured"
         var glob = find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null && glob.name == argName) {

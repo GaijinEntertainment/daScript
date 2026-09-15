@@ -72,7 +72,7 @@ Full source: :download:`enum_macro_mod.das <../../../../../tutorials/macros/enum
     class EnumTotalAnnotation : AstEnumerationAnnotation {
         def override apply(var enu : EnumerationPtr;
                            var group : ModuleGroup;
-                           args : AnnotationArgumentList;
+                           var args : AnnotationArgumentList;
                            var errors : das_string) : bool {
             // Check that the enum doesn't already have a "total" entry.
             for (ee in enu.list) {
@@ -208,7 +208,7 @@ demonstrates the **code generation** pattern for enumeration macros:
     class EnumFromStringConstruction : AstEnumerationAnnotation {
         def override apply(var enu : EnumerationPtr;
                            var group : ModuleGroup;
-                           args : AnnotationArgumentList;
+                           var args : AnnotationArgumentList;
                            var errors : das_string) : bool {
             var enumT = new TypeDecl(
                 baseType = Type.tEnumeration,

@@ -377,7 +377,7 @@ class private SmtFnEmitter {
 [function_macro(name="smt_fn")]
 class private SmtFnMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       args : AnnotationArgumentList; var errors : das_string) : bool {
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
         let key = "{compiling_module().name}::{func.name}"
         if (key_exists(g_smtfn_done, key)) {
             return true

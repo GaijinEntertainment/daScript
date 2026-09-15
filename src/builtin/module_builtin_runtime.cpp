@@ -93,37 +93,37 @@ namespace das
 
     struct MarkFunctionAnnotation : FunctionAnnotation {
         MarkFunctionAnnotation(const string & na) : FunctionAnnotation(na) { }
-        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err) override {
+        virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string & err) override {
             err = "not supported for block";
             return false;
         }
-        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
     };
 
     struct MarkFunctionOrBlockAnnotation : FunctionAnnotation {
         MarkFunctionOrBlockAnnotation() : FunctionAnnotation("marker") { }
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string & ) override {
             return true;
         }
-        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string &) override {
             return true;
         }
-        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
     };
 
     struct MacroFunctionAnnotation : MarkFunctionAnnotation {
         MacroFunctionAnnotation() : MarkFunctionAnnotation("_macro") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->macroInit = true;
             auto program = daScriptEnvironment::getBound()->g_Program;
             program->needMacroModule = true;
@@ -133,7 +133,7 @@ namespace das
 
     struct MacroFnFunctionAnnotation : MarkFunctionAnnotation {
         MacroFnFunctionAnnotation() : MarkFunctionAnnotation("macro_function") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->macroFunction = true;
             return true;
         };
@@ -145,7 +145,7 @@ namespace das
     // Pure metadata; args stored in func->annotations for lint consumption.
     struct CloneFunctionAnnotation : MarkFunctionAnnotation {
         CloneFunctionAnnotation() : MarkFunctionAnnotation("clone") { }
-        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string &) override {
             return true;
         };
     };
@@ -156,7 +156,7 @@ namespace das
     // daslib/perf_lint reads the annotation NAMES off func->annotations wherever lint actually runs.
     struct HotPathFunctionAnnotation : MarkFunctionAnnotation {
         HotPathFunctionAnnotation(const string & na) : MarkFunctionAnnotation(na) { }
-        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string &) override {
             return true;
         };
     };
@@ -188,14 +188,14 @@ namespace das
 
     struct ArchFunctionAnnotation : MarkFunctionAnnotation {
         ArchFunctionAnnotation() : MarkFunctionAnnotation("arch") { }
-        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList & args, string & err) override {
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList & args, string & err) override {
             return verifyArchCitation(args, err);
         };
     };
 
     struct RequestJitFunctionAnnotation : MarkFunctionAnnotation {
         RequestJitFunctionAnnotation() : MarkFunctionAnnotation("jit") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->requestJit = true;
             return true;
         };
@@ -203,7 +203,7 @@ namespace das
 
     struct RequestNoJitFunctionAnnotation : MarkFunctionAnnotation {
         RequestNoJitFunctionAnnotation() : MarkFunctionAnnotation("no_jit") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->requestNoJit = true;
             return true;
         };
@@ -214,7 +214,7 @@ namespace das
     // compilation error reported here at lint (post-infer, so generics check per-instantiation)
     struct InlineFunctionAnnotation : MarkFunctionAnnotation {
         InlineFunctionAnnotation() : MarkFunctionAnnotation("inline") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & err) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string & err) override {
             if ( func->neverInline ) {
                 err = "[inline] conflicts with [never_inline]";
                 return false;
@@ -222,7 +222,7 @@ namespace das
             func->mustInline = true;
             return true;
         };
-        virtual bool lint(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &,
+        virtual bool lint(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &,
                 const AnnotationArgumentList &, string & err) override {
             return canFunctionInline(func, err) && isInlineRecursionFree(func, err);
         }
@@ -231,7 +231,7 @@ namespace das
     // [never_inline] - keep this function, or this block literal, out of best-effort (auto) inlining
     struct NeverInlineFunctionAnnotation : MarkFunctionAnnotation {
         NeverInlineFunctionAnnotation() : MarkFunctionAnnotation("never_inline") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & err) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string & err) override {
             if ( func->mustInline ) {
                 err = "[never_inline] conflicts with [inline]";
                 return false;
@@ -241,14 +241,14 @@ namespace das
         };
         // on a block literal the marker rides block->annotations; the inline pass
         // checks it at the invoke-block gate (canBlockInline, ast_inline.cpp)
-        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string &) override {
             return true;
         }
     };
 
     struct RequestNoDiscardFunctionAnnotation : MarkFunctionAnnotation {
         RequestNoDiscardFunctionAnnotation() : MarkFunctionAnnotation("nodiscard") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->nodiscard = true;
             return true;
         };
@@ -259,11 +259,11 @@ namespace das
     // pass queue the result on the 1-slot dispose queue when it dies in the consuming call.
     struct TempStringResultFunctionAnnotation : MarkFunctionAnnotation {
         TempStringResultFunctionAnnotation() : MarkFunctionAnnotation("temp_string_result") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->tempStringResult = true;
             return true;
         };
-        virtual bool lint(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &,
+        virtual bool lint(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &,
                 const AnnotationArgumentList &, string & err) override {
             // post-infer, so an inferred (auto) return type is concrete by now. The contract is
             // a BY-VALUE fresh allocation: a reference or temporary result points into storage
@@ -278,11 +278,11 @@ namespace das
 
     struct DeprecatedFunctionAnnotation : MarkFunctionAnnotation {
         DeprecatedFunctionAnnotation() : MarkFunctionAnnotation("deprecated") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->deprecated = true;
             return true;
         };
-        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
+        virtual bool verifyCall ( ExprCallFunc * call, AnnotationArgumentList & args,
             const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) override {
             DAS_ASSERT(daScriptEnvironment::getBound()->g_compilerLog);
             (*daScriptEnvironment::getBound()->g_compilerLog) << call->at.describe() << ": *warning* function " << call->func->name << " is deprecated\n";
@@ -295,7 +295,7 @@ namespace das
 
     struct TypeFunctionFunctionAnnotation : MarkFunctionAnnotation {
         TypeFunctionFunctionAnnotation() : MarkFunctionAnnotation("type_function") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & error) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string & error) override {
             if ( !daScriptEnvironment::getBound()->g_Program->thisModule->addTypeFunction(func->name, true) ) {
                 error = "can't add type function. type function " + func->name + " already exists?";
                 return false;
@@ -320,7 +320,7 @@ namespace das
 
     struct NeverAliasCMRESFunctionAnnotation : MarkFunctionAnnotation {
         NeverAliasCMRESFunctionAnnotation() : MarkFunctionAnnotation("never_alias_cmres") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->neverAliasCMRES = true;
             return true;
         };
@@ -328,7 +328,7 @@ namespace das
 
     struct AliasCMRESFunctionAnnotation : MarkFunctionAnnotation {
         AliasCMRESFunctionAnnotation() : MarkFunctionAnnotation("alias_cmres") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->aliasCMRES = true;
             return true;
         };
@@ -338,16 +338,16 @@ namespace das
     // dummy annotation for optimization hints on functions or blocks
     struct HintFunctionAnnotation : FunctionAnnotation {
         HintFunctionAnnotation() : FunctionAnnotation("hint") { }
-        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string &) override {
             return true;
         };
-        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string & ) override {
             return true;
         }
-        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+        virtual bool finalize(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
     };
@@ -366,7 +366,7 @@ namespace das
 
     struct UnsafeDerefFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeDerefFunctionAnnotation() : MarkFunctionAnnotation("unsafe_deref") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->unsafeDeref = true;
             return true;
         };
@@ -377,21 +377,21 @@ namespace das
         virtual bool isGeneric() const override {
             return true;
         }
-        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string &) override {
             return true;
         };
     };
 
     struct NoLintFunctionAnnotation : MarkFunctionAnnotation {
         NoLintFunctionAnnotation() : MarkFunctionAnnotation("no_lint") { }
-        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string &) override {
             return true;
         };
     };
 
     struct ExportFunctionAnnotation : MarkFunctionAnnotation {
         ExportFunctionAnnotation() : MarkFunctionAnnotation("export") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->exports = true;
             return true;
         };
@@ -399,7 +399,7 @@ namespace das
 
     struct PInvokeFunctionAnnotation : MarkFunctionAnnotation {
         PInvokeFunctionAnnotation() : MarkFunctionAnnotation("pinvoke") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->pinvoke = true;
             return true;
         };
@@ -407,7 +407,7 @@ namespace das
 
     struct SideEffectsFunctionAnnotation : MarkFunctionAnnotation {
         SideEffectsFunctionAnnotation() : MarkFunctionAnnotation("sideeffects") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->sideEffectFlags |= uint32_t(SideEffects::userScenario);
             return true;
         };
@@ -415,7 +415,7 @@ namespace das
 
     struct RunAtCompileTimeFunctionAnnotation : MarkFunctionAnnotation {
         RunAtCompileTimeFunctionAnnotation() : MarkFunctionAnnotation("run") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->hasToRunAtCompileTime = true;
             return true;
         };
@@ -423,7 +423,7 @@ namespace das
 
     struct UnsafeOpFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeOpFunctionAnnotation() : MarkFunctionAnnotation("unsafe_operation") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->unsafeOperation = true;
             return true;
         };
@@ -431,7 +431,7 @@ namespace das
 
     struct UnsafeOutsideOfForFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeOutsideOfForFunctionAnnotation() : MarkFunctionAnnotation("unsafe_outside_of_for") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->unsafeOutsideOfFor = true;
             return true;
         };
@@ -439,7 +439,7 @@ namespace das
 
     struct UnsafeWhenNotCloneArray : MarkFunctionAnnotation {
         UnsafeWhenNotCloneArray() : MarkFunctionAnnotation("unsafe_when_not_clone_array") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->unsafeWhenNotCloneArray = true;
             return true;
         };
@@ -447,7 +447,7 @@ namespace das
 
     struct NoAotFunctionAnnotation : MarkFunctionAnnotation {
         NoAotFunctionAnnotation() : MarkFunctionAnnotation("no_aot") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->noAot = true;
             return true;
         };
@@ -455,7 +455,7 @@ namespace das
 
     struct InitFunctionAnnotation : MarkFunctionAnnotation {
         InitFunctionAnnotation() : MarkFunctionAnnotation("init") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList & args, string &) override {
             func->init = true;
             for ( auto & arg : args ) {
                 if ( arg.name=="late" && arg.type == Type::tBool ) {
@@ -466,7 +466,7 @@ namespace das
             }
             return true;
         };
-        virtual bool finalize(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & errors) override {
+        virtual bool finalize(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & errors) override {
             if ( func->arguments.size() ) {
                 errors += "[init] function can't have any arguments";
                 return false;
@@ -481,7 +481,7 @@ namespace das
 
     struct FinalizeFunctionAnnotation : MarkFunctionAnnotation {
         FinalizeFunctionAnnotation() : MarkFunctionAnnotation("finalize") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList & args, string &) override {
             func->shutdown = true;
             for ( auto & arg : args ) {
                 if ( arg.name=="late" && arg.type == Type::tBool ) {
@@ -490,7 +490,7 @@ namespace das
             }
             return true;
         };
-        virtual bool finalize(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & errors) override {
+        virtual bool finalize(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & errors) override {
             if ( func->arguments.size() ) {
                 errors += "[finalize] function can't have any arguments";
                 return false;
@@ -505,7 +505,7 @@ namespace das
 
     struct MarkUsedFunctionAnnotation : MarkFunctionAnnotation {
         MarkUsedFunctionAnnotation() : MarkFunctionAnnotation("unused_argument") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList & args, string &) override {
             for ( auto & fnArg : func->arguments ) {
                 if ( auto optArg = args.find(fnArg->name, Type::tBool) ) {
                     fnArg->marked_used = optArg->bValue;
@@ -513,7 +513,7 @@ namespace das
             }
             return true;
         };
-        virtual bool apply(ExprBlock * block, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
+        virtual bool apply(ExprBlock * block, ModuleGroup &, AnnotationArgumentList & args, string &) override {
             for ( auto & bArg : block->arguments ) {
                 if ( auto optArg = args.find(bArg->name, Type::tBool) ) {
                     bArg->marked_used = optArg->bValue;
@@ -526,7 +526,7 @@ namespace das
     struct ArgumentTemplateAnnotation : MarkFunctionAnnotation {
         ArgumentTemplateAnnotation( const string & na ) : MarkFunctionAnnotation(na) {}
         virtual bool isSpecialized() const override { return true; }
-        virtual bool apply(const FunctionPtr & fn, ModuleGroup &, const AnnotationArgumentList & decl, string & err) override {
+        virtual bool apply(const FunctionPtr & fn, ModuleGroup &, AnnotationArgumentList & decl, string & err) override {
             for ( const auto & arg : decl ) {
                 if ( arg.type!=Type::tBool ) {
                     err = "expecting names only";
@@ -600,11 +600,11 @@ namespace das
     struct CommentAnnotation : StructureAnnotation {
         CommentAnnotation() : StructureAnnotation("comment") {}
         virtual bool touch(const StructurePtr &, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             return true;
         }
     };
@@ -612,13 +612,13 @@ namespace das
     struct NoDefaultCtorAnnotation : StructureAnnotation {
         NoDefaultCtorAnnotation() : StructureAnnotation("no_default_initializer") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             ps->genCtor = true;
             ps->noGenCtor = true;
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             return true;
         }
     };
@@ -626,12 +626,12 @@ namespace das
     struct MacroInterfaceAnnotation : StructureAnnotation {
         MacroInterfaceAnnotation() : StructureAnnotation("macro_interface") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             ps->macroInterface = true;
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             return true;
         }
     };
@@ -639,7 +639,7 @@ namespace das
 
     struct HybridFunctionAnnotation : MarkFunctionAnnotation {
         HybridFunctionAnnotation() : MarkFunctionAnnotation("hybrid") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string &) override {
             func->aotHybrid = true;
             return true;
         };
@@ -648,13 +648,13 @@ namespace das
     struct CppAlignmentAnnotation : StructureAnnotation {
         CppAlignmentAnnotation() : StructureAnnotation("cpp_layout") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList & args, string & ) override {
+                           AnnotationArgumentList & args, string & ) override {
             ps->cppLayout = true;
             ps->cppLayoutNotPod = !args.getBoolOption("pod", true);
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             return true;
         }
     };
@@ -662,36 +662,36 @@ namespace das
     struct SafeWhenUninitializedAnnotation : StructureAnnotation {
         SafeWhenUninitializedAnnotation() : StructureAnnotation("safe_when_uninitialized") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             ps->safeWhenUninitialized = true;
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             return true;
         }
     };
 
     struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         LocalOnlyFunctionAnnotation() : FunctionAnnotation("local_only") { }
-        virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
+        virtual bool apply ( ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string & err ) override {
             err = "not a block annotation";
             return false;
         }
-        virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &,
+        virtual bool finalize ( ExprBlock *, ModuleGroup &, AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & err ) override {
             err = "not a block annotation";
             return false;
         }
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string & ) override {
             return true;
         };
-        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &,
+        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & ) override {
             return true;
         }
         // [local_only ()]
-        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
+        virtual bool verifyCall ( ExprCallFunc * call, AnnotationArgumentList & args,
                 const AnnotationArgumentList &, string & err ) override {
             if ( !call->func ) {
                 err = "unknown function";
@@ -716,12 +716,12 @@ namespace das
     struct PersistentStructureAnnotation : StructureAnnotation {
         PersistentStructureAnnotation() : StructureAnnotation("persistent") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
+                           AnnotationArgumentList &, string & ) override {
             ps->persistent = true;
             return true;
         }
         virtual bool look ( const StructurePtr & st, ModuleGroup &,
-                           const AnnotationArgumentList & args, string & errors ) override {
+                           AnnotationArgumentList & args, string & errors ) override {
             bool allPod = true;
             if ( !args.getBoolOption("mixed_heap", false) ) {
                 for ( const auto & field : st->fields ) {
@@ -738,10 +738,10 @@ namespace das
 
     struct LogicOpAnnotation : FunctionAnnotation {
         LogicOpAnnotation(const string & name) : FunctionAnnotation(name) { }
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override { return true; }
-        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string &) override { return true; }
-        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override { return true; }
-        virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override { return true; }
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string & ) override { return true; }
+        virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string &) override { return true; }
+        virtual bool finalize(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override { return true; }
+        virtual bool finalize(const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string &) override { return true; }
         virtual bool isSpecialized() const override { return true; }
     };
 

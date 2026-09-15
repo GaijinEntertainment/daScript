@@ -73,7 +73,7 @@ class SoaCallMacro : AstFunctionAnnotation {
 [structure_macro(name=soa)]
 class SoaStructMacro : AstStructureAnnotation {
     //! Generates a Structure-of-Arrays layout from a regular struct.
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (is_in_completion()) {
             var tdef = new TypeDecl(at = st.at,
                 baseType = Type.tArray,

@@ -132,7 +132,7 @@ void testAdd ( int & a, int b ) {
 struct CheckRange : StructureAnnotation {
     CheckRange() : StructureAnnotation("checkRange") {}
     virtual bool touch(const StructurePtr & st, ModuleGroup &,
-        const AnnotationArgumentList & args, string & ) override {
+        AnnotationArgumentList & args, string & ) override {
         // this is here for the 'example' purposes
         // lets add a sample 'dummy' field
         if (args.getBoolOption("dummy",false) && !st->findField("dummy")) {
@@ -143,7 +143,7 @@ struct CheckRange : StructureAnnotation {
         return true;
     }
     virtual bool look ( const StructurePtr & st, ModuleGroup &,
-                        const AnnotationArgumentList & args, string & err ) override {
+                        AnnotationArgumentList & args, string & err ) override {
         bool ok = true;
         if (!args.getBoolOption("disable", false)) {
             for (auto & fd : st->fields) {
@@ -267,22 +267,22 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
 
 struct TestFunctionAnnotation : FunctionAnnotation {
     TestFunctionAnnotation() : FunctionAnnotation("test_function") { }
-    virtual bool apply ( const FunctionPtr & fn, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+    virtual bool apply ( const FunctionPtr & fn, ModuleGroup &, AnnotationArgumentList &, string & ) override {
         TextPrinter tp;
         tp << "test function: apply " << fn->describe() << "\n";
         return true;
     }
-    virtual bool finalize ( const FunctionPtr & fn, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+    virtual bool finalize ( const FunctionPtr & fn, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
         TextPrinter tp;
         tp << "test function: finalize " << fn->describe() << "\n";
         return true;
     }
-    virtual bool apply ( ExprBlock * blk, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+    virtual bool apply ( ExprBlock * blk, ModuleGroup &, AnnotationArgumentList &, string & ) override {
         TextPrinter tp;
         tp << "test function: apply to block at " << blk->at.describe() << "\n";
         return true;
     }
-    virtual bool finalize ( ExprBlock * blk, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+    virtual bool finalize ( ExprBlock * blk, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
         TextPrinter tp;
         tp << "test function: finalize block at " << blk->at.describe() << "\n";
         return true;
@@ -291,17 +291,17 @@ struct TestFunctionAnnotation : FunctionAnnotation {
 
 struct BlockAnnotationDataAnnotation : FunctionAnnotation {
     BlockAnnotationDataAnnotation() : FunctionAnnotation("block_ann_data") { }
-    virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
+    virtual bool apply ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, string & err ) override {
         err = "block_ann_data can only be applied to a block";
         return false;
     }
-    virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+    virtual bool finalize ( const FunctionPtr &, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
         return true;
     }
-    virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+    virtual bool apply ( ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string & ) override {
         return true;
     }
-    virtual bool finalize ( ExprBlock * blk, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+    virtual bool finalize ( ExprBlock * blk, ModuleGroup &, AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
         // ast_annotations.cpp requires the pair; setting only one is an internal error.
         blk->annotationData = g_blockAnnotationDataPayload;
         blk->annotationDataSid = g_blockAnnotationDataSid;
@@ -312,7 +312,7 @@ struct BlockAnnotationDataAnnotation : FunctionAnnotation {
 struct EventRegistrator : StructureAnnotation {
     EventRegistrator() : StructureAnnotation("event") {}
     bool touch ( const StructurePtr & st, ModuleGroup & /*libGroup*/,
-        const AnnotationArgumentList & /*args*/, string & /*err*/ ) override {
+        AnnotationArgumentList & /*args*/, string & /*err*/ ) override {
         st->fields.emplace(st->fields.begin(), "eventFlags", new TypeDecl(Type::tUInt16, cppBindingLineInfo()),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
         st->fields.emplace(st->fields.begin(), "eventSize", new TypeDecl(Type::tUInt16, cppBindingLineInfo()),
@@ -322,7 +322,7 @@ struct EventRegistrator : StructureAnnotation {
         return true;
     }
     bool look (const StructurePtr & /*st*/, ModuleGroup & /*libGroup*/,
-        const AnnotationArgumentList & /*args*/, string & /* err */ ) override {
+        AnnotationArgumentList & /*args*/, string & /* err */ ) override {
         return true;
     }
 };

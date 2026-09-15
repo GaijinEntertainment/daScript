@@ -152,7 +152,7 @@ def override_method(var str : StructurePtr; name, funcName : string) : bool {
 
 class MacroMacro : AstFunctionAnnotation {
     //! Function annotation that guards the function body with an is_compiling_macros check.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Wraps function body in an `is_compiling_macros` guard and marks program as needing macro module.
         compiling_program().flags.needMacroModule = true
         func.flags.macroInit = true
@@ -167,7 +167,7 @@ class MacroMacro : AstFunctionAnnotation {
 
 class TagFunctionAnnotation : AstFunctionAnnotation {
     //! Function annotation that validates tag_function arguments are boolean tag names.
-    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Validates that tag_function annotation arguments are boolean tag names.
         for (arg in args) {
             let val = get_annotation_argument_value(arg)
@@ -182,7 +182,7 @@ class TagFunctionAnnotation : AstFunctionAnnotation {
 
 class TagStructureAnnotation : AstStructureAnnotation {
     //! Structure annotation that validates tag_structure arguments are boolean tag names.
-    def override apply(var str : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var str : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Validates that tag_structure annotation arguments are boolean tag names.
         for (arg in args) {
             let val = get_annotation_argument_value(arg)
@@ -376,7 +376,7 @@ class SetupAnyAnnotation : AstStructureAnnotation {
         //! Populates the annotation setup call with the structure name argument.
         emplace_new(cll.arguments, new ExprConstString(at = st.at, value := name))
     }
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Registers the annotated structure as a macro by generating the setup call.
         let argName = args |> find_arg("name")
         if (argName is nothing) {
@@ -513,7 +513,7 @@ class TagFunctionMacro : SetupAnyAnnotation {
         emplace_new(cll.arguments, new ExprConstString(at = st.at, value := name))
         emplace_new(cll.arguments, new ExprConstString(at = st.at, value := tag))
     }
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Validates the tag argument and registers the structure as a tag function macro.
         let argTag = args |> find_arg("tag")
         if (argTag is nothing) {

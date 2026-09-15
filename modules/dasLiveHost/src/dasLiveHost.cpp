@@ -336,23 +336,23 @@ void live_collect_string_gc(Context * ctx, LineInfoArg * at) {
 struct BeforeReloadAnnotation : FunctionAnnotation {
     BeforeReloadAnnotation() : FunctionAnnotation("before_reload") {}
     virtual bool apply(const FunctionPtr & func, ModuleGroup &,
-                       const AnnotationArgumentList &, string &) override {
+                       AnnotationArgumentList &, string &) override {
         func->exports = true;
         func->name = "__before_reload_" + func->name;
         return true;
     }
     virtual bool apply(ExprBlock *, ModuleGroup &,
-                       const AnnotationArgumentList &, string & err) override {
+                       AnnotationArgumentList &, string & err) override {
         err = "not supported for blocks";
         return false;
     }
     virtual bool finalize(const FunctionPtr &, ModuleGroup &,
-                         const AnnotationArgumentList &,
+                         AnnotationArgumentList &,
                          const AnnotationArgumentList &, string &) override {
         return true;
     }
     virtual bool finalize(ExprBlock *, ModuleGroup &,
-                         const AnnotationArgumentList &,
+                         AnnotationArgumentList &,
                          const AnnotationArgumentList &, string &) override {
         return true;
     }
@@ -361,23 +361,23 @@ struct BeforeReloadAnnotation : FunctionAnnotation {
 struct AfterReloadAnnotation : FunctionAnnotation {
     AfterReloadAnnotation() : FunctionAnnotation("after_reload") {}
     virtual bool apply(const FunctionPtr & func, ModuleGroup &,
-                       const AnnotationArgumentList &, string &) override {
+                       AnnotationArgumentList &, string &) override {
         func->exports = true;
         func->name = "__after_reload_" + func->name;
         return true;
     }
     virtual bool apply(ExprBlock *, ModuleGroup &,
-                       const AnnotationArgumentList &, string & err) override {
+                       AnnotationArgumentList &, string & err) override {
         err = "not supported for blocks";
         return false;
     }
     virtual bool finalize(const FunctionPtr &, ModuleGroup &,
-                         const AnnotationArgumentList &,
+                         AnnotationArgumentList &,
                          const AnnotationArgumentList &, string &) override {
         return true;
     }
     virtual bool finalize(ExprBlock *, ModuleGroup &,
-                         const AnnotationArgumentList &,
+                         AnnotationArgumentList &,
                          const AnnotationArgumentList &, string &) override {
         return true;
     }
@@ -386,23 +386,23 @@ struct AfterReloadAnnotation : FunctionAnnotation {
 struct BeforeUpdateAnnotation : FunctionAnnotation {
     BeforeUpdateAnnotation() : FunctionAnnotation("before_update") {}
     virtual bool apply(const FunctionPtr & func, ModuleGroup &,
-                       const AnnotationArgumentList &, string &) override {
+                       AnnotationArgumentList &, string &) override {
         func->exports = true;
         func->name = "__before_update_" + func->name;
         return true;
     }
     virtual bool apply(ExprBlock *, ModuleGroup &,
-                       const AnnotationArgumentList &, string & err) override {
+                       AnnotationArgumentList &, string & err) override {
         err = "not supported for blocks";
         return false;
     }
     virtual bool finalize(const FunctionPtr &, ModuleGroup &,
-                         const AnnotationArgumentList &,
+                         AnnotationArgumentList &,
                          const AnnotationArgumentList &, string &) override {
         return true;
     }
     virtual bool finalize(ExprBlock *, ModuleGroup &,
-                         const AnnotationArgumentList &,
+                         AnnotationArgumentList &,
                          const AnnotationArgumentList &, string &) override {
         return true;
     }

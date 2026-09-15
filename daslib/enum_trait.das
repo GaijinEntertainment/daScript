@@ -92,7 +92,7 @@ def public enum_to_table(ent : auto(EnumT)) : table<string, EnumT -const -&> {
 [enumeration_macro(name="string_to_enum")]
 class EnumFromStringConstruction : AstEnumerationAnnotation {
     //! Enumeration annotation which implements string constructor for enumeration.
-    def override apply(var enu : EnumerationPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+    def override apply(var enu : EnumerationPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         //! implements enum string constructor
         var enumT = new TypeDecl(baseType = Type.tEnumeration, enumType = enu)
         let varName = "_`enum`table`{enu.name}"

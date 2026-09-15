@@ -141,7 +141,7 @@ class VkDispatch : AstStructureAnnotation {
     fam_count : table<string; int>   // "{module}`{family}" -> next ordinal
     seen_ord : table<string; int>    // "{module}`{name}" -> assigned ordinal
 
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 — flat per-argument validation + emit table
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {   // nolint:STYLE037,STYLE038 — flat per-argument validation + emit table
         let at = st.at
         let base = find_arg(args, "name") ?as tString ?? ""
         let grid = find_arg(args, "grid") ?as tString ?? ""

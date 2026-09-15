@@ -20,7 +20,7 @@ require daslib/algorithm
 [function_macro(name=constexpr)]
 class ConstExprAnnotation : AstFunctionAnnotation {
     //! Checks selected function arguments and fails when any receives a non-constant expression.
-    def override verifyCall(var call : ExprCallFunc?; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override verifyCall(var call : ExprCallFunc?; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         for (aa in args) {
             if (aa.basicType == Type.tBool) {
                 for (ca, ce in call.func.arguments, call.arguments) {

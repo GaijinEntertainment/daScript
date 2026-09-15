@@ -1684,7 +1684,7 @@ let private FTS5_REJECTED_ANNOTATIONS = fixed_array(
 
 [structure_macro(name=sql_fts5)]
 class private SqlFts5Macro : AstStructureAnnotation {
-    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {  // nolint:STYLE037,STYLE038 - one arm per rejected annotation shape, then a flat one-call-per-helper emission list
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {  // nolint:STYLE037,STYLE038 - one arm per rejected annotation shape, then a flat one-call-per-helper emission list
         let table_name = find_annotation(args, "name", string(st.name))
         // ---- per-field validation: FTS5 columns are simple text ----
         var fields : array<FieldInfo>

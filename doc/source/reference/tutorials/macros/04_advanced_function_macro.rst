@@ -134,7 +134,7 @@ apply() — pre-inference validation
    class MemoizeMacro : AstFunctionAnnotation {
 
        def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                          args : AnnotationArgumentList; var errors : das_string) : bool {
+                          var args : AnnotationArgumentList; var errors : das_string) : bool {
            if (func.isGeneric) {
                errors := "cannot memoize a generic function — all argument types must be specified"
                return false
@@ -168,7 +168,7 @@ The "already processed" guard
 .. code-block:: das
 
    def override patch(var fn : FunctionPtr; var group : ModuleGroup;
-                      args, progArgs : AnnotationArgumentList;
+                      var args : AnnotationArgumentList; progArgs : AnnotationArgumentList;
                       var errors : das_string; var astChanged : bool&) : bool {
 
        // Guard: already processed?
@@ -181,20 +181,19 @@ generate duplicate functions and hit an infinite loop.
 Mark as processed and trigger restart
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. das-doc: member AstFunctionAnnotation
+.. das-doc: fragment
 .. code-block:: das
 
        // Mark as processed and trigger inference restart
-       for (ann in fn.annotations) {
-           if (ann.annotation.name == "memoize") {
-               astChanged = true
-               ann.arguments |> add_annotation_argument("patched", true)
-           }
-       }
+       args |> add_annotation_argument("patched", true)
+       astChanged = true
 
-``add_annotation_argument`` stores data in the annotation that persists
-across inference passes.  We also store the wrapper function name later,
-so ``transform()`` can read it.
+``args`` is this annotation instance's own argument list and it is
+writable, so ``add_annotation_argument`` on it stores data that persists
+across inference passes - and stays private to this instance, which is
+what lets two same-named annotations on one function each patch once.
+We also store the wrapper function name later, so ``transform()`` can
+read it.
 
 Step 1 — clone the original function
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
