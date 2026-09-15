@@ -21,8 +21,9 @@ superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch 
 device records the token command twice - the split chain and an unsplit twin over the same sets -
 and submits the twin while the position is under `RD_UNSPLIT_POS` (512): there a head's whole row
 is at most two of the pass's 256-key chunks, less than the combine's own chain, so the split only
-adds a dispatch a layer (gpt-oss on the RTX PRO 4500 at three splits: the combine 147 us a token,
-the pass no shorter for the split). The scores
+adds a dispatch a layer (gpt-oss-20b on the RTX PRO 4500 at three splits, the `DASLLAMA_GPU_PROF=1`
+token profile of `benchmarks/lcpp_bench.das` under `-jit` in cm2 mode with `DASLLAMA_ALLOW_UNTUNED=1`:
+the combine 147 us a token, the pass no shorter for the split). The scores
 go a subgroup two keys a step, lanes across the dims (one coalesced K row, the dot a subgroup add; on
 the f16 mirror a lane's eight halves are one 16-byte word, `KV16`, and both keys' words are in flight
 before either dot - a piece holds a few keys a subgroup, so the pass is the memory round trips it
