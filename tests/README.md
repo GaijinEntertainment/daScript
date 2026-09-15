@@ -289,7 +289,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | File | Description | Expects errors |
 |---|---|---|
 | ast_cursor_fixture.das | *(helper)* Fixture file for ast_cursor tests | |
-| ast_cursor_test.das | `daslib/ast_cursor` - cursor-based AST navigation and query; with `declarations` a cursor on a `for`/`let` variable or a function argument is a variable hit, off by default | |
+| ast_cursor_test.das | `daslib/ast_cursor` - cursor-based AST navigation and query; with `declarations` a cursor on a `for`/`let` variable or a function argument is a variable hit, off by default; a class line yields no hit from its synthesized members; `find_declaration_at_cursor` on a class, its parent, a function and a method, the name-token rule and the line-only lookup; the text helpers; a cursor on a field name hits the access | |
 | clargs_test.das | `daslib/clargs` - string flags, `=`-style assignment, array flags, int/float flags, bool/help flags | |
 | keyword_test.das | `daslib/keyword` - `is_cpp_keyword`, `is_das_keyword`, `is_keyword` predicates | |
 
