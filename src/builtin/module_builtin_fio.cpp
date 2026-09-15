@@ -545,7 +545,7 @@ namespace das {
     void builtin_fbinary(const FILE* _f) {
         if ( !_f ) return;
 #ifdef _WIN32
-        fflush((FILE*)_f);
+        if ( _f != stdin ) fflush((FILE*)_f);
         _setmode(_fileno((FILE*)_f), _O_BINARY);
 #endif
     }

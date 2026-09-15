@@ -673,7 +673,6 @@ def private declared_here(at : LineInfo; target_file : string; line : int) : boo
     return int(at.line) == line && to_generic_path(lineinfo_file(at)) == target_file
 }
 
-//! an empty cursor word matches any declaration on the line - the line-only lookup
 //! an empty cursor word matches any declaration on the line - the line-only lookup; otherwise the
 //! cursor must sit on the declaration's own name token, not on another spelling of the name on that line
 def private on_name(word : string; name; file : string; line, here : int; at : LineInfo) : bool {
