@@ -37,7 +37,7 @@ typedef LspProbePair = tuple<first : int; second : int>
 let LSP_PROBE_LIMIT = 3
 
 def lsp_probe_gen() : iterator<int> {
-    return <- generator<int>() <| $() {   // nolint:STYLE002 a generator's block parses in the piped form only
+    return <- generator<int> {
         for (i in range(LSP_PROBE_LIMIT)) {
             yield i
         }
