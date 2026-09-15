@@ -742,9 +742,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // test_vkd_fa_cm2, test_vkd_fa_khr and test_vkd_da_attn in test_vulkan_kernels.das
     "fa_cm2_h64_sink_cls_spv", "fa_cm2_h64_sink_f16_cls_spv", "fa_khr_h64_sink_cls_spv", "fa_khr_h64_sink_f16_cls_spv",
     "da_attn_sink_cls_spv", "da_attn_f16_sink_cls_spv", "da_attn_comb_sink_cls_spv",
-    // the Q4_K experts' gate+up+act twin (the 26B-A4B Q4_K_M's routed stacks feeding its Q5_1 down, above the zoo's
-    // tier; the zoo's k4 MoE carrier feeds a k4 down): its coverage is test_vkd_kq_gemv_k4_gu in test_vulkan_kernels.das
-    "kq_gemv_k4_gu_cls_spv",
     // the E-series per-layer-embedding tail (the act, its requant and the proj GEMV in one): its carriers are the
     // gemma-4 E2B / E4B, no zoo row; its coverage is test_vkd_q8_gemv_pleact in test_vulkan_kernels.das
     "q8_gemv_pleact_cls_spv",
