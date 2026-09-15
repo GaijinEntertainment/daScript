@@ -1729,9 +1729,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     }
     let dim = c.dim
     g_rdec_x |> resize(dim)
-    unsafe {
-        embed_row(t, token, addr(g_rdec_x[0]))
-    }
+    embed_row(t, token, unsafe(addr(g_rdec_x[0])))
     if (c.embed_scale != 1.0) {
         scale_inplace(unsafe(addr(g_rdec_x[0])), c.embed_scale, dim)
     }

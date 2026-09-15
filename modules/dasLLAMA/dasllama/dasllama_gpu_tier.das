@@ -1005,9 +1005,7 @@ def public matmul_moe_gpu_heat_query(l : int64; idx : array<int64>; k : int64;
 //! bases + formats. The tier reconciles against its slots under its own upload budget.
 def public moe_gpu_heat_advise(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int;
                                n, nfe : int64; ids : array<int64>; nids : int64) {
-    unsafe {
-        invoke(g_moe_gpu_heat_advise, l, b1, b3, b2, f1, f3, f2, n, nfe, addr<int64 const?>(ids[0]), nids)
-    }
+    invoke(g_moe_gpu_heat_advise, l, b1, b3, b2, f1, f3, f2, n, nfe, unsafe(addr<int64 const?>(ids[0])), nids)
 }
 
 //! Async decode FFN: submit the hit chain, return before it completes (join collects gout).
@@ -1024,9 +1022,7 @@ def public matmul_moe_gpu_ffn_begin(offs1 : array<int64>; offs3 : array<int64>; 
 
 //! Collect the pending async FFN's output rows (spin the fence, copy back).
 def public matmul_moe_gpu_ffn_join(var gout : array<float>) {
-    unsafe {
-        invoke(g_moe_gpu_ffn_join, addr(gout[0]))
-    }
+    invoke(g_moe_gpu_ffn_join, unsafe(addr(gout[0])))
 }
 
 // ===== GPU tier programmatic config + status =====
@@ -1593,9 +1589,7 @@ def public matmul_moe_gpu_ffn_combined_xf_begin(offs1 : array<int64>; offs3 : ar
 }
 
 def public matmul_moe_gpu_ffn_combined_xf_join(var gout : array<float>) {
-    unsafe {
-        invoke(g_moe_gpu_ffn_xf_join, addr(gout[0]))
-    }
+    invoke(g_moe_gpu_ffn_xf_join, unsafe(addr(gout[0])))
 }
 
 // ===== the decode attention block: one submit per layer over the resident q/k/v/o quad =====

@@ -484,13 +484,11 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
 //! stdout of a git command, "" when git is absent or the command fails
 def private git_lines(args : string) : array<string> {
     var out = ""
-    unsafe {
-        popen("git {args}") $(f) {
-            if (f != null) {
-                out = fread(f)
-            }
+    unsafe(popen("git {args}") $(f) {
+        if (f != null) {
+            out = fread(f)
         }
-    }
+    })
     return <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
 }
 
@@ -650,12 +648,9 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
             to_log(LOG_INFO, "START {tag}{rep_tag}: {cmd}\n")
             let t0 = ref_time_ticks()
-            var rc = 0
-            unsafe {
-                rc = popen(cmd) $(f) {
-                    let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
-                }
-            }
+            let rc = unsafe(popen(cmd) $(f) {
+                let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
+            })
             let secs = double(get_time_usec(t0)) / 1000000.0lf
             let summary = log_summary(log_path)
             let verdict = !empty(summary) ? summary : "no dastest summary - the run died early (read the log)"

@@ -233,9 +233,7 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
                         ss |> emplace <| make_run_state(tr.config, kdt, kdt)
                         let pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
                         eval_(tr, ss[i], pb)
-                        unsafe {
-                            sess |> push(addr(ss[i]))
-                        }
+                        sess |> push(unsafe(addr(ss[i])))
                         curs |> push(greedy_top(ss[i].logits, vocab))
                     }
                     var ws <- create_batch_workspace_(tr)
@@ -815,9 +813,7 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
                     ss |> emplace <| make_run_state(tr.config, KVDtype.f32, KVDtype.f32)
                     let pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
                     eval_(tr, ss[i], pb)
-                    unsafe {
-                        sess |> push(addr(ss[i]))
-                    }
+                    sess |> push(unsafe(addr(ss[i])))
                     curs |> push(greedy_top(ss[i].logits, vocab))
                 }
                 var ws <- create_batch_workspace_(tr)

@@ -840,9 +840,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     var bda = VkMemoryAllocateFlagsInfo()
     bda.flags.device_address = true
     if (bda_on) {
-        unsafe {
-            mai.next = addr<void?>(bda)
-        }
+        mai.next = unsafe(addr<void?>(bda))
     }
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
@@ -852,9 +850,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
             panic("dasLLAMA vulkan tier: pinned host alloc failed ({ares}, {bytes} bytes, type {mai.memoryTypeIndex})")
         }
         to_log(LOG_INFO, "dasLLAMA vulkan tier: pinned mirror alloc declined ({ares}, {bytes} bytes, type {mai.memoryTypeIndex}) - streamed walk stops here\n")
-        unsafe {
-            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
-        }
+        vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), null)
         return HostBuf()
     }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
@@ -863,9 +859,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     }
     var mapped : void? = null
     let mf : VkMemoryMapFlags
-    unsafe {
-        vk_check(vkMapMemory(dev_raw(), boost_value_to_vk(m), 0ul, uint64(bytes), mf, addr(mapped)), null)
-    }
+    vk_check(vkMapMemory(dev_raw(), boost_value_to_vk(m), 0ul, uint64(bytes), mf, unsafe(addr(mapped))), null)
     g_gpu.host_mem |> insert(b._vk, m._vk)
     g_gpu.host_bytes += bytes
     return HostBuf(buf = b._vk, mem = m._vk, mapped = mapped, bytes = bytes)
@@ -881,9 +875,7 @@ def private fail_device_buf(buf : uint64; bytes : int64; ares : VkResult; soft :
     if (!soft) {
         panic("Vulkan call failed: {ares} (a {bytes >> 20l} MB device buffer)")
     }
-    unsafe {
-        vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(buf), null)
-    }
+    vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(buf)), null)
     to_log(LOG_WARNING, "dasLLAMA vulkan tier: a {bytes >> 20l} MB device buffer failed with {ares}\n")
     return 0ul
 }
@@ -909,18 +901,14 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     var bda = VkMemoryAllocateFlagsInfo()   // the usage bit above wants its allocation flagged too
     bda.flags.device_address = g_gpu.has_bda
     if (g_gpu.has_memprio) {
-        unsafe {
-            bda.pNext = addr<void?>(prio)
-        }
+        bda.pNext = unsafe(addr<void?>(prio))
     }
     if (g_gpu.rebar_type >= 0 && (req.memoryTypeBits & (1u << uint(g_gpu.rebar_type))) != 0u) {
         // ReBAR attempt — raw alloc so a decline falls back to plain device-local below
         var rmai = VkMemoryAllocateInfo()
         rmai.allocationSize = req.size
         rmai.memoryTypeIndex = uint(g_gpu.rebar_type)
-        unsafe {
-            rmai.pNext = addr<void?>(bda)
-        }
+        rmai.pNext = unsafe(addr<void?>(bda))
         var rmem : VkDeviceMemory
         if (vkAllocateMemory(dev_raw(), rmai, null, rmem) == VkResult.SUCCESS) {
             vk_check(vkBindBufferMemory(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), rmem, 0ul), null)
@@ -929,9 +917,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
             }
             var mapped : void? = null
             let mf : VkMemoryMapFlags
-            unsafe {
-                vk_check(vkMapMemory(dev_raw(), rmem, 0ul, req.size, mf, addr(mapped)), null)
-            }
+            vk_check(vkMapMemory(dev_raw(), rmem, 0ul, req.size, mf, unsafe(addr(mapped))), null)
             g_gpu.dev_mem |> insert(b._vk, unsafe(reinterpret<uint64>(rmem)))
             g_gpu.dev_mapped |> insert(b._vk, unsafe(reinterpret<uint64>(mapped)))
             return b._vk
@@ -941,9 +927,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     want.device_local = true
     var mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
-    unsafe {
-        mai.next = addr<void?>(bda)
-    }
+    mai.next = unsafe(addr<void?>(bda))
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
     if (ares != VkResult.SUCCESS) {
@@ -1026,9 +1010,7 @@ def query_heap_info(phys : VkPhysicalDevice) : VkHeapInfo {
     var mb = VkPhysicalDeviceMemoryBudgetPropertiesEXT()   // sType pre-filled by the ctor
     var mp2 = VkPhysicalDeviceMemoryProperties2()
     if (has_budget) {
-        unsafe {
-            mp2.pNext = addr<void?>(mb)
-        }
+        mp2.pNext = unsafe(addr<void?>(mb))
     }
     vkGetPhysicalDeviceMemoryProperties2(phys, mp2)
     var best = -1
@@ -1246,9 +1228,7 @@ def private query_sm_count(phys : VkPhysicalDevice) : int {
     }
     var sp = VkPhysicalDeviceShaderSMBuiltinsPropertiesNV()
     var p2 = VkPhysicalDeviceProperties2()
-    unsafe {
-        p2.pNext = addr<void?>(sp)
-    }
+    p2.pNext = unsafe(addr<void?>(sp))
     vkGetPhysicalDeviceProperties2(phys, p2)
     return int(sp.shaderSMCount)
 }
@@ -1599,9 +1579,7 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
         bci.sharingMode = VkSharingMode.CONCURRENT
         bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
     }
-    unsafe {
-        bci.next = addr<void?>(emb)
-    }
+    bci.next = unsafe(addr<void?>(emb))
     var cres = VkResult.SUCCESS
     var b <- create_buffer(g_gpu.device, bci, unsafe(addr(cres)))   // deliberately never finalized (make_host_buf's rule)
     if (cres != VkResult.SUCCESS) {
@@ -1611,9 +1589,7 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
     let req = get_buffer_memory_requirements(g_gpu.device, b)
     let usable = hpp.memoryTypeBits & req.memoryTypeBits
     if (usable == 0u || int64(req.size) > sz) {
-        unsafe {
-            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
-        }
+        vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), null)
         vk_import_declined(usable == 0u ? "no usable memory type" : "buffer wants {req.size} bytes over a {sz} byte window")
         return hb
     }
@@ -1642,15 +1618,11 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
     imp.handleType = ht
     imp.pHostPointer = ptr
     var mai = MemoryAllocateInfo(allocationSize = uint64(sz), memoryTypeIndex = ti)
-    unsafe {
-        mai.next = addr<void?>(imp)
-    }
+    mai.next = unsafe(addr<void?>(imp))
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
     if (ares != VkResult.SUCCESS) {
-        unsafe {
-            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
-        }
+        vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), null)
         vk_import_declined("vkAllocateMemory {ares}, type {ti} of usable {usable} ({mp.memoryTypes[int(ti)].propertyFlags}), {sz} bytes")
         return hb
     }
@@ -1860,9 +1832,7 @@ def vk_drop_model_state {
     }
     // every alloc_cmd result is model-owned — one bulk free
     if (!empty(g_gpu.model_cmds)) {
-        unsafe {
-            vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), uint(length(g_gpu.model_cmds)), addr(g_gpu.model_cmds[0]))
-        }
+        vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), uint(length(g_gpu.model_cmds)), unsafe(addr(g_gpu.model_cmds[0])))
         g_gpu.model_cmds |> clear()
     }
     // every descriptor set came from the chain and every one is model-owned — reset every chunk
@@ -2141,9 +2111,7 @@ def arena_reserve(fmt : int; cap_blocks : int64) : bool {
         }
         return true
     }
-    unsafe {
-        g_gpu.arenas[fmt] <- ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, slab_cap = arena_slab_blocks(fmt))
-    }
+    g_gpu.arenas[fmt] <- ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, slab_cap = arena_slab_blocks(fmt))
     return true
 }
 
@@ -3109,9 +3077,7 @@ def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : 
     g_vk_kcov[intptr(boost_value_to_vk(c.pipes[ord]))]++
     vhz_dep(raw, h, m.r, m.w)
     cmd_bind_pipeline(vk_value_to_boost(raw), c.pipes[ord], VkPipelineBindPoint.COMPUTE)
-    unsafe {
-        vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(c.pipe_layout), 0u, 1u, addr(set_), 0u, null)
-    }
+    vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(c.pipe_layout), 0u, 1u, unsafe(addr(set_)), 0u, null)
     vkCmdDispatch(raw, groups, 1u, 1u)
 }
 
@@ -3261,9 +3227,7 @@ def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer 
         dstage.compute_shader = true
         dstage.transfer = true
         let dflags : VkDependencyFlags
-        unsafe {
-            vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 1u, addr(mb), 0u, null, 0u, null)
-        }
+        vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 1u, unsafe(addr(mb)), 0u, null, 0u, null)
         h.w = 0u
         h.r = 0u
         h.pend_compute = false
@@ -3287,16 +3251,12 @@ def alloc_transient_cmd : VkCommandBuffer {
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw : VkCommandBuffer
-    unsafe {
-        vk_check(vkAllocateCommandBuffers(dev_raw(), ai, addr(raw)), null)
-    }
+    vk_check(vkAllocateCommandBuffers(dev_raw(), ai, unsafe(addr(raw))), null)
     return raw
 }
 
 def free_transient_cmd(var raw : VkCommandBuffer) {
-    unsafe {
-        vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), 1u, addr(raw))
-    }
+    vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), 1u, unsafe(addr(raw)))
 }
 
 def alloc_cmd : VkCommandBuffer {
@@ -3343,11 +3303,9 @@ def submit_nofence(var raw : VkCommandBuffer) {
 
 def wait_fence {
     var fence = g_gpu.fence
-    unsafe {
-        // spin, never block: vkWaitForFences pays 1-2ms OS wake-up latency per submit (measured)
-        while (vkGetFenceStatus(dev_raw(), fence) != VkResult.SUCCESS) {}
-        vk_check(vkResetFences(dev_raw(), 1u, addr(fence)), null)
-    }
+    // spin, never block: vkWaitForFences pays 1-2ms OS wake-up latency per submit (measured)
+    while (vkGetFenceStatus(dev_raw(), fence) != VkResult.SUCCESS) {}
+    vk_check(vkResetFences(dev_raw(), 1u, unsafe(addr(fence))), null)
 }
 
 def submit_wait(var raw : VkCommandBuffer) {
@@ -3489,9 +3447,7 @@ let PAR_COPY_CHUNK = 2_097_152l
 
 def par_memcpy(var dst : void?; src : void?; bytes : int64) {
     if (bytes < PAR_COPY_CHUNK * 2l || !is_job_que_available()) {
-        unsafe {
-            memcpy(dst, src, bytes)
-        }
+        unsafe(memcpy(dst, src, bytes))
         return
     }
     let nch = int((bytes + PAR_COPY_CHUNK - 1l) / PAR_COPY_CHUNK)
@@ -3523,9 +3479,7 @@ def cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : u
 
 // zero a device range inside a command (a transfer write; offset and size multiples of 4)
 def cmd_fill_zero(raw : VkCommandBuffer; dst : uint64; dst_off : int64; bytes : int64) {
-    unsafe {
-        vkCmdFillBuffer(raw, reinterpret<VkBuffer>(dst), uint64(dst_off), uint64(bytes), 0u)
-    }
+    vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(dst)), uint64(dst_off), uint64(bytes), 0u)
 }
 
 // host-wait the transfer timeline up to `v` — the backstop before re-recording the shared xfer

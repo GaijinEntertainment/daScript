@@ -186,9 +186,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq4xss") {
         if (!empty(t.iq4xss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq4xs, addr < uint8 const? >(t.iq4xss[0]), long_length(t.iq4xss) / kq_ssb(KqFmt.iq4xs), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq4xs, unsafe(addr < uint8 const? >(t.iq4xss[0])), long_length(t.iq4xss) / kq_ssb(KqFmt.iq4xs), xc)
             t.iq4xss <- xc
         }
         return true
@@ -196,9 +194,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq3ss") {
         if (!empty(t.iq3ss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq3s, addr < uint8 const? >(t.iq3ss[0]), long_length(t.iq3ss) / kq_ssb(KqFmt.iq3s), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq3s, unsafe(addr < uint8 const? >(t.iq3ss[0])), long_length(t.iq3ss) / kq_ssb(KqFmt.iq3s), xc)
             t.iq3ss <- xc
         }
         return true
@@ -206,9 +202,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq3xxss") {
         if (!empty(t.iq3xxss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq3xxs, addr < uint8 const? >(t.iq3xxss[0]), long_length(t.iq3xxss) / kq_ssb(KqFmt.iq3xxs), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq3xxs, unsafe(addr < uint8 const? >(t.iq3xxss[0])), long_length(t.iq3xxss) / kq_ssb(KqFmt.iq3xxs), xc)
             t.iq3xxss <- xc
         }
         return true
@@ -216,9 +210,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq2ss") {
         if (!empty(t.iq2ss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq2s, addr < uint8 const? >(t.iq2ss[0]), long_length(t.iq2ss) / kq_ssb(KqFmt.iq2s), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq2s, unsafe(addr < uint8 const? >(t.iq2ss[0])), long_length(t.iq2ss) / kq_ssb(KqFmt.iq2s), xc)
             t.iq2ss <- xc
         }
         return true
@@ -226,9 +218,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq2xss") {
         if (!empty(t.iq2xss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq2xs, addr < uint8 const? >(t.iq2xss[0]), long_length(t.iq2xss) / kq_ssb(KqFmt.iq2xs), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq2xs, unsafe(addr < uint8 const? >(t.iq2xss[0])), long_length(t.iq2xss) / kq_ssb(KqFmt.iq2xs), xc)
             t.iq2xss <- xc
         }
         return true
@@ -236,9 +226,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq2xxss") {
         if (!empty(t.iq2xxss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq2xxs, addr < uint8 const? >(t.iq2xxss[0]), long_length(t.iq2xxss) / kq_ssb(KqFmt.iq2xxs), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq2xxs, unsafe(addr < uint8 const? >(t.iq2xxss[0])), long_length(t.iq2xxss) / kq_ssb(KqFmt.iq2xxs), xc)
             t.iq2xxss <- xc
         }
         return true
@@ -246,9 +234,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "k2s") {
         if (!empty(t.k2s)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.k2, addr < uint8 const? >(t.k2s[0]), long_length(t.k2s) / kq_ssb(KqFmt.k2), xc)
-            }
+            kq_split_scale_plane(KqFmt.k2, unsafe(addr < uint8 const? >(t.k2s[0])), long_length(t.k2s) / kq_ssb(KqFmt.k2), xc)
             t.k2s <- xc
         }
         return true
@@ -256,9 +242,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "k3s") {
         if (!empty(t.k3s)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.k3, addr < uint8 const? >(t.k3s[0]), long_length(t.k3s) / kq_ssb(KqFmt.k3), xc)
-            }
+            kq_split_scale_plane(KqFmt.k3, unsafe(addr < uint8 const? >(t.k3s[0])), long_length(t.k3s) / kq_ssb(KqFmt.k3), xc)
             t.k3s <- xc
         }
         return true
@@ -268,9 +252,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     }
     if (!empty(t.k6s)) {
         var @exact_size k6c : array<uint8>
-        unsafe {
-            kq_split_scale_plane(KqFmt.k6, addr < uint8 const? >(t.k6s[0]), long_length(t.k6s) / K6_SSB, k6c)
-        }
+        kq_split_scale_plane(KqFmt.k6, unsafe(addr < uint8 const? >(t.k6s[0])), long_length(t.k6s) / K6_SSB, k6c)
         t.k6s <- k6c
     }
     return true

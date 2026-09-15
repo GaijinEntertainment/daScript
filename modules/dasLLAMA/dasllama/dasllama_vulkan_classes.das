@@ -10358,9 +10358,7 @@ def kq_grid_dev() : uint64 {
             words[int(KQ_GRID_IQ3XXS) + i] = iq3xxs_grid_word(i)
         }
         g_gpu.kq_grid_dev = make_device_buf(KQ_GRID_BYTES)
-        unsafe {
-            upload_region_at(g_gpu.kq_grid_dev, 0l, addr<uint8 const?>(words[0]), KQ_GRID_BYTES)
-        }
+        upload_region_at(g_gpu.kq_grid_dev, 0l, unsafe(addr<uint8 const?>(words[0])), KQ_GRID_BYTES)
     }
     return g_gpu.kq_grid_dev
 }

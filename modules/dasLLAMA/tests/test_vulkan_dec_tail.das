@@ -366,10 +366,8 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     var xq : array<int8>
     var xs : array<float>
     feed_ref(x, qa.norm, qa.fmt, xd, xq, xs)
-    unsafe {
-        matmul_moe_gpu_attn_dec(xb2, kout, vout, qa.woq, qa.wok, qa.wov, qa.woo, qa.fmt, qa.fmt, qa.fmt, qa.fmt, xq, xs, cossin, null, null,
-            bias_ptr(qa.bq), bias_ptr(qa.bk), bias_ptr(qa.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qa.neox, false)
-    }
+    matmul_moe_gpu_attn_dec(xb2, kout, vout, qa.woq, qa.wok, qa.wov, qa.woo, qa.fmt, qa.fmt, qa.fmt, qa.fmt, xq, xs, cossin, null, null,
+        bias_ptr(qa.bq), bias_ptr(qa.bk), bias_ptr(qa.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qa.neox, false)
     var xb2_ref : array<float>
     var kraw_ref : array<float>
     block_ref(qa, x, pos, cossin, xb2_ref, kraw_ref)
@@ -387,18 +385,14 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     var gxq : array<int8>
     var gxs : array<float>
     k_copies(gxq1, gxs1, gxq, gxs)
-    unsafe {
-        matmul_moe_gpu_ffn_tail(f.offs1, f.offs3, f.offs2, K, gxq, gxs, N, NFE, K, 1, 1, 3, false, f.rw, x, qb.woq, qb.fmt,
-            addr<float const?>(qb.norm[0]), EPS)
-    }
+    matmul_moe_gpu_ffn_tail(f.offs1, f.offs3, f.offs2, K, gxq, gxs, N, NFE, K, 1, 1, 3, false, f.rw, x, qb.woq, qb.fmt,
+        unsafe(addr<float const?>(qb.norm[0])), EPS)
     t |> success(moe_gpu_ffn_tail_pending(), "{tag} pos {pos}: the tail is pending until layer B's attention collects it")
     let pair <- [0l, 1l]   // the tail arm routes slot j to expert j
     ffn_ref_sel(f, fd, pair, f.rw, x1_ref)
     // layer B on the block: its feed came from the tail; the host acts are ignored
-    unsafe {
-        matmul_moe_gpu_attn_dec(xb2, kout, vout, qb.woq, qb.wok, qb.wov, qb.woo, qb.fmt, qb.fmt, qb.fmt, qb.fmt, xq, xs, cossin, null, null,
-            bias_ptr(qb.bq), bias_ptr(qb.bk), bias_ptr(qb.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qb.neox, false)
-    }
+    matmul_moe_gpu_attn_dec(xb2, kout, vout, qb.woq, qb.wok, qb.wov, qb.woo, qb.fmt, qb.fmt, qb.fmt, qb.fmt, xq, xs, cossin, null, null,
+        bias_ptr(qb.bq), bias_ptr(qb.bk), bias_ptr(qb.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qb.neox, false)
     t |> success(!moe_gpu_ffn_tail_pending(), "{tag} pos {pos}: layer B's attention collected the tail")
     check_row(t, "{tag} pos {pos} residual row after FFN A (the tail's combine)", x, x1_ref)
     var xb2b_ref : array<float>
@@ -685,9 +679,7 @@ def test_vulkan_dec_span_cache(t : T?) {
         ma.fblob |> resize(4)
         mb.fblob |> resize(4)
         var a <- MoeSpanDec(woq <- [7l, 8l])
-        unsafe {
-            a.blob = addr<float const?>(ma.fblob[0])
-        }
+        a.blob = unsafe(addr<float const?>(ma.fblob[0]))
         t |> success(span_args_current(a, ma, 0l, 2l), "the carrier that filled the cache is current")
         t |> success(!span_args_current(a, mb, 0l, 2l), "a same-layout carrier is NOT current - its rows live elsewhere")
         t |> success(!span_args_current(a, ma, 1l, 1l), "another suffix is not current")

@@ -199,9 +199,7 @@ def private vulkan_backend_available : bool {
         exts |> push("VK_KHR_portability_enumeration")
         ci.flags.enumerate_portability_khr = true
         ci.enabledExtensionCount = 1u
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var inst : VkInstance
     let cr = vkCreateInstance(ci, null, inst)

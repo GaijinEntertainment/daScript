@@ -448,9 +448,7 @@ def gguf_map_shards(paths : array<string>; idx : int; var bases : array<void?>; 
             panic("gguf: cannot open shard '{paths[idx]}'")
         }
         fmap(f) $(var bytes : array<uint8>#) {
-            unsafe {
-                bases |> push(addr<void?>(bytes[0]))
-            }
+            bases |> push(unsafe(addr<void?>(bytes[0])))
             sizes |> push(long_length(bytes))
             gguf_map_shards(paths, idx + 1, bases, sizes, blk)
         }

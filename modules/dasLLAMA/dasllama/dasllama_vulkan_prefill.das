@@ -1545,9 +1545,7 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
     g_rd.emb_f32 = make_device_buf(bytes)
     g_rd.emb_f32_bytes = bytes
     g_gpu.resident_bytes += bytes
-    unsafe {
-        upload_region_at(g_rd.emb_f32, 0l, addr<uint8 const?>(fblob[int(off)]), bytes)
-    }
+    upload_region_at(g_rd.emb_f32, 0l, unsafe(addr<uint8 const?>(fblob[int(off)])), bytes)
     return true
 }
 
@@ -2467,40 +2465,38 @@ def private stack_batch_enc_cm2(raw : VkCommandBuffer; var h : VkHaz; si : int; 
 // tile router; kq formats are fixed), a per-(stack, variant) cached set over the planes
 // ensure_batch_set recorded, BatchArgs push. n/d must MATCH the fill's values.
 def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg : uint; n, d : int64) {
-    unsafe {
-        var st & = g_gpu.stacks[si]
-        let fmt = st.fmt
-        // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
-        let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
-        var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin
+    var st & = unsafe(g_gpu.stacks[si])
+    let fmt = st.fmt
+    // Q4_0 rides the f16 coopmat arm too (no s8-native for nibbles — mode 2 falls back to sdot4)
+    let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
+    var v = 6   // the stack's fixed class (kq); 5 = the q40 f16 MMA twin
+    if (fmt == int(KqFmt.q8)) {
+        v = q8_batch_cls_variant(st.batch_tile, st.batch_aligned)
+    } elif (q40cm) {
+        v = 5
+    }
+    if ((st.batch_cls_ready & (1u << uint(v))) == 0u) {
+        let bufs = fixed_array(st.wqbuf, st.wsbuf, st.batch_meta_dev, st.batch_xq, st.batch_xs, st.batch_y)
+        let sizes = fixed_array(st.wqbytes, ws_range(si), BATCH_META_BYTES, st.batch_xq_bytes, st.batch_xs_bytes, st.batch_y_bytes)
+        let gbits = fixed_array(0u, 0u, VHB_META, st.batch_xbit, st.batch_xbit, st.batch_ybit)
         if (fmt == int(KqFmt.q8)) {
-            v = q8_batch_cls_variant(st.batch_tile, st.batch_aligned)
-        } elif (q40cm) {
-            v = 5
-        }
-        if ((st.batch_cls_ready & (1u << uint(v))) == 0u) {
-            let bufs = fixed_array(st.wqbuf, st.wsbuf, st.batch_meta_dev, st.batch_xq, st.batch_xs, st.batch_y)
-            let sizes = fixed_array(st.wqbytes, ws_range(si), BATCH_META_BYTES, st.batch_xq_bytes, st.batch_xs_bytes, st.batch_y_bytes)
-            let gbits = fixed_array(0u, 0u, VHB_META, st.batch_xbit, st.batch_xbit, st.batch_ybit)
-            if (fmt == int(KqFmt.q8)) {
-                verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
-                st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
-            } elif (q40cm || kq_sb(fmt)) {
-                verify(kq_batch_cls_ensure(fmt, q40cm), "vk batch: the kq batch class rail must engage")
-                st.batch_cls_sets[v] = kq_batch_cls_set_for(fmt, q40cm, bufs, sizes, gbits)
-            } else {
-                panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
-            }
-            st.batch_cls_ready |= 1u << uint(v)
-        }
-        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(st.batch_map_off))
-        if (fmt == int(KqFmt.q8)) {
-            q8_batch_cls_enc(v, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
+            verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
+            st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
         } elif (q40cm || kq_sb(fmt)) {
-            kq_batch_cls_enc_for(fmt, q40cm, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
+            verify(kq_batch_cls_ensure(fmt, q40cm), "vk batch: the kq batch class rail must engage")
+            st.batch_cls_sets[v] = kq_batch_cls_set_for(fmt, q40cm, bufs, sizes, gbits)
         } else {
             panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
         }
+        st.batch_cls_ready |= 1u << uint(v)
+    }
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(st.batch_map_off))
+    if (fmt == int(KqFmt.q8)) {
+        q8_batch_cls_enc(v, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
+    } elif (q40cm || kq_sb(fmt)) {
+        kq_batch_cls_enc_for(fmt, q40cm, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
+    } else {
+        panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
     }
 }
 
@@ -2629,9 +2625,7 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
         r0 = r1
     }
     if (comb) {
-        unsafe {
-            par_memcpy(reinterpret<void?>(goutp), g_gpu.comb_y.mapped, npos * n * 4l)
-        }
+        par_memcpy(unsafe(reinterpret<void?>(goutp)), g_gpu.comb_y.mapped, npos * n * 4l)
     }
 }
 
@@ -2671,10 +2665,7 @@ def vk_moe_dense(var yp : float?; woff : int64; xqp : int8 const?; xsp : float c
         let r1 = min(r0 + chunk, nrows)
         let rows = r1 - r0
         let ts0 = ref_time_ticks()
-        var nwg = 0u
-        unsafe {
-            nwg = fill_batch_meta(si, addr(region[0]), 1l, n, d, r0, r1)
-        }
+        let nwg = fill_batch_meta(si, unsafe(addr(region[0])), 1l, n, d, r0, r1)
         let ts1 = ref_time_ticks()
         upload_batch_acts(xqp, xsp, r0, rows, n, xunit)
         let ts2 = ref_time_ticks()
@@ -3496,9 +3487,7 @@ def vk_moe_ffn_batch_xf(var goutp : float?; offs1 : int64 const?; offs3 : int64 
         }
         r0 = r1
     }
-    unsafe {
-        par_memcpy(reinterpret<void?>(goutp), g_gpu.comb_y.mapped, npos * n * 4l)
-    }
+    par_memcpy(unsafe(reinterpret<void?>(goutp)), g_gpu.comb_y.mapped, npos * n * 4l)
 }
 
 var private g_xf_pending = false   // ONE async cm2 chain in flight (its combined rows wait in comb_y)
@@ -3531,8 +3520,6 @@ def vk_moe_ffn_batch_xf_begin(offs1 : int64 const?; offs3 : int64 const?; offs2 
 def vk_moe_ffn_batch_xf_join(var goutp : float?) {
     assert(g_xf_pending, "dasLLAMA vulkan tier: async cm2 chain join with nothing in flight")
     wait_fence()
-    unsafe {
-        par_memcpy(reinterpret<void?>(goutp), g_gpu.comb_y.mapped, g_xf_pend_bytes)
-    }
+    par_memcpy(unsafe(reinterpret<void?>(goutp)), g_gpu.comb_y.mapped, g_xf_pend_bytes)
     g_xf_pending = false
 }
