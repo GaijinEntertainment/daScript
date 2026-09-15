@@ -13,26 +13,35 @@ options strict_smart_pointers = true
 module ast_cursor shared public
 
 require daslib/ast_boost
+require daslib/utf8_utils
 require strings
 
-//! A single hit at the cursor position — one AST expression node, or a variable declaration when asked for.
-//! Innermost (most specific) hits come first in the result array.
 struct public CursorHit {
-    //! Raw pointer to the expression node (valid while the program lives); null for a variable hit.
+    //! A single hit at the cursor position: an expression node, or when asked for a variable declaration or a type name. Innermost hits come first.
+    //! Raw pointer to the expression node (valid while the program lives); null for a variable or type hit.
     expr : Expression const?
     //! The variable whose declaration the cursor is on (`for`/`let` variable, function, lambda or block argument) when declarations were asked for; else null.
     variable : Variable const?
+    //! The type the cursor's type name denotes (a struct, enum or alias spelled in the source) when declarations were asked for; else null.
+    type_decl : TypeDecl const?
     //! Enclosing function, or null for expressions in global scope.
     func : Function const?
-    //! Extracted name for named nodes (variable name, call name, field name, operator).
+    //! Extracted name for named nodes (variable name, call name, field name, operator); the type's name for a type hit.
     name : string
-    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.; "Variable" for a variable hit.
+    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.; "Variable" or "TypeDecl" for the other hits.
     rtti : string
 }
 
-//! Check whether a point (line, col) is inside the span described by `at`.
-//! Follows the same logic as C++ ``LineInfo::inside``.
+def public hit_at(hit : CursorHit) : LineInfo {
+    //! The position of the node the hit holds: its expression, variable or type.
+    if (hit.expr != null) return hit.expr.at
+    if (hit.variable != null) return hit.variable.at
+    return hit.type_decl.at
+}
+
 def public cursor_inside(line, col : int; at : LineInfo) : bool {
+    //! Check whether a point (line, col) is inside the span described by `at`.
+    //! Follows the same logic as C++ ``LineInfo::inside``.
     if (int(at.line) == 0 && int(at.last_line) == 0) return false
     let tl = int(at.line)
     let tc = int(at.column)
@@ -58,6 +67,248 @@ def private expression_name(expr : ExpressionPtr) : string {
     return ""
 }
 
+[arch(at="ARCHITECTURE_CURSOR.md#cursor-compiler-made-names")]
+def public is_synthesized(func : Function const?) : bool {
+    //! True for a member the compiler made on the `class` line (`Foo'__finalize`), never for a lambda or generator body or a generic instance.
+    return func != null && func.flags.generated && !func.flags._lambda && !func.flags._generator && func.fromGeneric == null
+}
+
+[arch(at="ARCHITECTURE_CURSOR.md#cursor-compiler-made-names")]
+def public source_name(name : string) : string {
+    //! The name the source spells for a compiler-renamed variable (a generator's loop variable); any other name unchanged.
+    return name if (!(name |> starts_with("__")))
+    let at = find(name, "_rename_at_")
+    return at > 2 ? slice(name, 2, at) : name
+}
+
+def private is_ident_byte(c : uint8) : bool {
+    return utf32_is_word_char(uint(c))
+}
+
+def public word_at(line_text : string; col : int) : tuple<word : string; start : int> {
+    //! The identifier the 0-based byte column `col` is on in `line_text`, with its start column; a caret right after a word is on it, as in an editor, and the word is empty when `col` is on none.
+    var word = ""
+    var start = -1
+    peek_data(line_text) $(d) {
+        let n = length(d)
+        return if (col < 0 || col > n)
+        var b = col
+        while (b > 0 && is_ident_byte(d[b - 1])) {
+            b--
+        }
+        var e = col
+        while (e < n && is_ident_byte(d[e])) {
+            e++
+        }
+        start = b
+        word = slice(d, b, e)
+    }
+    return (word = word, start = start)
+}
+
+[arch(at="ARCHITECTURE_CURSOR.md#cursor-variable-position")]
+def public name_column(line_text : string; name : string; hint : int) : int {
+    //! Where `line_text` spells `name` as a whole word (0-based byte column), else `hint`.
+    var column = hint
+    peek_data(line_text) $(d) {
+        let n = length(d)
+        let w = length(name)
+        var at = find(d, name)
+        while (at >= 0) {
+            let before = at == 0 || !is_ident_byte(d[at - 1])
+            let after = at + w >= n || !is_ident_byte(d[at + w])
+            if (before && after) {
+                column = at
+                return
+            }
+            at = find(d, name, at + 1)
+        }
+    }
+    return column
+}
+
+def public spells_name(line_text : string; col : int; name : string) : bool {
+    //! True when `line_text` spells `name` as a whole word starting exactly at `col`.
+    let w = word_at(line_text, col)
+    return w.word == name && w.start == col
+}
+
+enum public DeclarationKind {
+    //! What `find_declaration_at_cursor` or `declaration_of` found: which of `DeclarationHit`'s pointers is set.
+    //! no declaration
+    none
+    //! a function or generic: `func`
+    func
+    //! a struct or class: `structure`
+    structure
+    //! an enumeration: `enumeration`
+    enumeration
+    //! a typedef: `name` and `alias_type`
+    alias
+    //! a global variable: `variable`
+    variable
+    //! a C++-bound type: `annotation`
+    handled
+}
+
+struct public DeclarationHit {
+    //! A declaration - the one whose name the cursor is on, or the one a type denotes: at most one of the pointers is set, by `kind`.
+    //! which pointer below is set; `none` when there is no declaration
+    kind : DeclarationKind
+    //! the function or generic, for `func`
+    func : Function const?
+    //! the structure or class, for `structure`
+    structure : Structure const?
+    //! the enumeration, for `enumeration`
+    enumeration : Enumeration const?
+    //! the global variable, for `variable`
+    variable : Variable const?
+    //! the aliased type, for `alias`; null when no module of the program declares the typedef
+    alias_type : TypeDecl const?
+    //! the C++-bound type's annotation, for `handled`
+    annotation : TypeAnnotation const?
+    //! the declared name
+    name : string
+    //! the declaration's own position; zero for `handled` and for an alias no module declares
+    @safe_when_uninitialized at : LineInfo
+    //! 0-based byte column where the cursor's word starts on the cursor line; -1 when no cursor word named it
+    word_column : int = -1
+}
+
+def private in_file(at : LineInfo; file : string) : bool {
+    return true if (empty(file) || at.fileInfo == null)
+    return find(string(at.fileInfo.name), file) >= 0
+}
+
+def private on_line(at : LineInfo; file : string; line : int) : bool {
+    return int(at.line) == line && in_file(at, file)
+}
+
+def public declared_name_column(at : LineInfo; name : string) : int {
+    //! Where the line a declaration starts on spells its `name`; `at.column` when it does not.
+    var column = int(at.column)
+    return column if (at.fileInfo == null || int(at.line) == 0)
+    get_file_source_line(at.fileInfo, at.line) $(text) {
+        column = name_column(string(text), name, column)
+    }
+    return column
+}
+
+def private typedef_in(mod : Module?; name : string) : TypeDecl const? {
+    var found : TypeDecl const?
+    return found if (mod == null)
+    for_each_typedef(mod) $(alias_name : string#; var value : TypeDeclPtr) {
+        if (alias_name == name) {
+            found = value
+        }
+    }
+    return found
+}
+
+def public typedef_named(program : smart_ptr<Program>; name : string; mod : Module? = null) : TypeDecl const? {
+    //! The type declared under the typedef `name` - in `mod` when given, else in the program's own module, else in any module it requires; null when none declares it.
+    var found = typedef_in(mod != null ? mod : get_this_module(program), name)
+    if (found == null) {
+        program_for_each_module(program) $(m) {
+            if (found == null) {
+                found = typedef_in(m, name)
+            }
+        }
+    }
+    return found
+}
+
+def public declaration_of(program : smart_ptr<Program>; td : TypeDecl const?) : DeclarationHit {
+    //! The declaration a type denotes - its typedef, structure, enumeration or C++-bound annotation; `none` for a bare type.
+    return DeclarationHit() if (td == null)
+    if (!empty(td.alias)) {
+        let name = string(td.alias)
+        var hit = DeclarationHit(kind = DeclarationKind.alias, name = name, alias_type = typedef_named(program, name, td._module))
+        if (hit.alias_type != null) {
+            hit.at = hit.alias_type.at
+        }
+        return hit
+    }
+    if (td.isHandle && td.annotation != null) return DeclarationHit(kind = DeclarationKind.handled, annotation = td.annotation, name = string(td.annotation.name))
+    if (td.structType != null) return DeclarationHit(kind = DeclarationKind.structure, structure = td.structType, name = string(td.structType.name), at = td.structType.at)
+    if (td.enumType != null) return DeclarationHit(kind = DeclarationKind.enumeration, enumeration = td.enumType, name = string(td.enumType.name), at = td.enumType.at)
+    return DeclarationHit()
+}
+
+//! Only the line's first whole-word spelling of `name` is the declaration - a self-call or a parameter named after the function is not.
+def private on_name(word : string; name : string; line_text : string; here : int) : bool {
+    return true if (empty(word))
+    return name == word && here == name_column(line_text, name, -1)
+}
+
+def private function_declaration(f : Function const?; word, file : string; line : int; line_text : string; here : int) : DeclarationHit {
+    return DeclarationHit() if (is_synthesized(f) || !on_line(f.at, file, line) || !on_name(word, bare_name(string(f.name)), line_text, here))
+    return DeclarationHit(kind = DeclarationKind.func, func = f, name = bare_name(string(f.name)), at = f.at, word_column = here)
+}
+
+def public find_declaration_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; line_text : string) : DeclarationHit {
+    //! The declaration whose name is at the cursor, the parent a `class` line names included; `line_text` "" makes it a line-only lookup, `file` is a substring of ``FileInfo.name``.
+    var hit = DeclarationHit()
+    let w = word_at(line_text, col)
+    let word = w.word
+    let here = w.start
+    let thisMod = get_this_module(program)
+    ast::for_each_function(thisMod, "") $(var func : FunctionPtr) {
+        return if (hit.kind != DeclarationKind.none)
+        hit = function_declaration(func, word, file, line, line_text, here)
+    }
+    if (hit.kind == DeclarationKind.none) {
+        ast::for_each_generic(thisMod) $(var func : FunctionPtr) {
+            return if (hit.kind != DeclarationKind.none)
+            hit = function_declaration(func, word, file, line, line_text, here)
+        }
+    }
+    if (hit.kind == DeclarationKind.none) {
+        ast::for_each_structure(thisMod) $(var st : StructurePtr) {
+            return if (hit.kind != DeclarationKind.none)
+            let s = st
+            return if (!on_line(s.at, file, line))
+            if (on_name(word, string(s.name), line_text, here)) {
+                hit = DeclarationHit(kind = DeclarationKind.structure, structure = s, name = string(s.name), at = s.at, word_column = here)
+            } elif (!empty(word) && s.parent != null && s.parent.name == word && here == name_column(line_text, word, -1)) {
+                let p = s.parent
+                hit = DeclarationHit(kind = DeclarationKind.structure, structure = p, name = word, at = p.at, word_column = here)
+            }
+        }
+    }
+    if (hit.kind == DeclarationKind.none) {
+        ast::for_each_enumeration(thisMod) $(var en : EnumerationPtr) {
+            return if (hit.kind != DeclarationKind.none)
+            let e = en
+            return if (!on_line(e.at, file, line) || !on_name(word, string(e.name), line_text, here))
+            hit = DeclarationHit(kind = DeclarationKind.enumeration, enumeration = e, name = string(e.name), at = e.at, word_column = here)
+        }
+    }
+    if (hit.kind == DeclarationKind.none) {
+        ast::for_each_typedef(thisMod) $(name : string#; var value : TypeDeclPtr) {
+            return if (hit.kind != DeclarationKind.none)
+            let td = value
+            return if (!on_line(td.at, file, line) || !on_name(word, string(name), line_text, here))
+            hit = DeclarationHit(kind = DeclarationKind.alias, alias_type = td, name = string(name), at = td.at, word_column = here)
+        }
+    }
+    if (hit.kind == DeclarationKind.none) {
+        ast::for_each_global(thisMod) $(var value : VariablePtr) {
+            return if (hit.kind != DeclarationKind.none)
+            let v = value
+            return if (!on_line(v.at, file, line) || !on_name(word, string(v.name), line_text, here))
+            hit = DeclarationHit(kind = DeclarationKind.variable, variable = v, name = string(v.name), at = v.at, word_column = here)
+        }
+    }
+    return hit
+}
+
+def public bare_name(name : string) : string {
+    //! "Animal`speak" -> "speak": the token the source spells at a method's declaration and call sites.
+    let ix = rfind(name, "`")
+    return ix < 0 ? name : slice(name, ix + 1)
+}
+
 class CursorVisitor : AstVisitor {
     targetLine : int
     targetCol : int
@@ -65,32 +316,29 @@ class CursorVisitor : AstVisitor {
     hits : array<CursorHit>
     currentFunc : Function const?
     withDeclarations : bool
+    inSynthesized : bool
+    targetLineText : string
+    typeHits : table<string>    // one type hit per name and position: a `new T()` carries T on several nodes
 
-    def CursorVisitor(file : string; line, col : int; declarations : bool) {
+    def CursorVisitor(file : string; line, col : int; declarations : bool; line_text : string) {
         targetFile = file
         targetLine = line
         targetCol = col
         withDeclarations = declarations
+        targetLineText = line_text
     }
 
     def in_target_file(at : LineInfo) : bool {
-        return true if (empty(targetFile) || at.fileInfo == null)
-        return find(string(at.fileInfo.name), targetFile) >= 0
+        return in_file(at, targetFile)
     }
 
-    [arch(at="ARCHITECTURE.md#cursor-variable-position")]
+    [arch(at="ARCHITECTURE_CURSOR.md#cursor-variable-position")]
     def cursor_on_variable(v : Variable const?) : bool {
-        let at = v.at
-        return false if (int(at.line) != targetLine)
-        if (int(at.last_line) != int(at.line) || int(at.last_column) > int(at.column)) {
-            return cursor_inside(targetLine, targetCol, at)
-        }
-        let c = int(at.column)
-        return targetCol >= c && targetCol < c + length(string(v.name))
+        return cursor_on_token(v.at, string(v.name))
     }
 
     def add_variable_at_cursor(v : Variable const?) : void {
-        return if (!withDeclarations || v == null || v.flags.generated || !in_target_file(v.at) || !cursor_on_variable(v))
+        return if (!withDeclarations || inSynthesized || v == null || v.flags.generated || !in_target_file(v.at) || !cursor_on_variable(v))
         hits |> emplace(CursorHit(
             variable = v,
             func = currentFunc,
@@ -101,6 +349,7 @@ class CursorVisitor : AstVisitor {
 
     def override preVisitFunction(fun : FunctionPtr) : void {
         currentFunc = fun
+        inSynthesized = is_synthesized(fun)
     }
 
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; lastArg : bool) : void {
@@ -119,15 +368,71 @@ class CursorVisitor : AstVisitor {
         add_variable_at_cursor(svar)
     }
 
+    // type names are TypeDecls, not expressions; a method's implicit self carries its class where the source spells no name, so spells_name gates the hit
+    def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
+        return if (!withDeclarations || inSynthesized || typ == null || !in_target_file(typ.at))
+        let td = typ
+        let name = string(td.structType != null ? td.structType.name : td.enumType != null ? td.enumType.name : td.alias)
+        return if (!cursor_on_token(td.at, name) || !spells_name(targetLineText, int(td.at.column), name))
+        let key = "{int(td.at.column)}:{name}"
+        return if (key_exists(typeHits, key))
+        typeHits |> insert(key)
+        hits |> emplace(CursorHit(
+            type_decl = td,
+            func = currentFunc,
+            name = name,
+            rtti = "TypeDecl"
+        ))
+    }
+
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         currentFunc = null
+        inSynthesized = false
         return fun
+    }
+
+    // a compiler-made variable - the __this a lambda reads its captures through - is not source the cursor can be on
+    def generated_variable(e : Expression const?) : bool {
+        return false if (!(e is ExprVar))
+        let v = e as ExprVar
+        return v.variable != null && v.variable.flags.generated
+    }
+
+    // a field access spans its value and the dot; the field name has its own position
+    def on_field_name(e : Expression const?) : bool {
+        if (e is ExprField) {
+            let f = e as ExprField
+            return cursor_on_token(f.atField, string(f.name))
+        }
+        if (e is ExprSafeField) {
+            let f = e as ExprSafeField
+            return cursor_on_token(f.atField, string(f.name))
+        }
+        return false
+    }
+
+    def cursor_on_token(at : LineInfo; name : string) : bool {
+        return false if (int(at.line) != targetLine)
+        if (int(at.last_line) != int(at.line) || int(at.last_column) > int(at.column)) {
+            return cursor_inside(targetLine, targetCol, at)
+        }
+        let c = int(at.column)
+        return targetCol >= c && targetCol < c + length(name)
+    }
+
+    // a generated field's initializer - the finalizer and vtable entries - sits on the class line with no source of its own
+    def override preVisitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) : void {
+        inSynthesized = decl.flags.generated
+    }
+
+    def override visitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) : void {
+        inSynthesized = false
     }
 
     def override preVisitExpression(expr : ExpressionPtr) : void {
         let e = expr
-        return if (!in_target_file(e.at))
-        if (cursor_inside(targetLine, targetCol, e.at)) {
+        return if (inSynthesized || !in_target_file(e.at) || generated_variable(e))
+        if (cursor_inside(targetLine, targetCol, e.at) || on_field_name(e)) {
             hits |> emplace(CursorHit(
                 expr = e,
                 func = currentFunc,
@@ -142,7 +447,7 @@ class CursorVisitor : AstVisitor {
 //! earlier and ends no later than the node holding it
 def private span_key(hit : CursorHit) : int3 {
     if (hit.expr == null) {
-        let c = int(hit.variable.at.column)
+        let c = int(hit_at(hit).column)
         return int3(0, c, c + length(hit.name))
     }
     let at = hit.expr.at
@@ -173,21 +478,21 @@ def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
     return <- result
 }
 
-//! Find all expression nodes at the given cursor position, innermost first; `file` is a substring
-//! matched against ``FileInfo.name`` ("" matches any). With `declarations`, a cursor on the name of
-//! a `for`/`let` variable or a function, lambda or block argument yields a `variable` hit with no `expr`.
-def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
-    return <- cursor_hits(file, line, col, declarations) $(var visitor) {
+def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; declarations : bool = false; line_text : string = "") : array<CursorHit> {
+    //! Find all expression nodes at the given cursor position, innermost first; `file` is a substring of ``FileInfo.name``
+    //! ("" matches any); nodes inside a synthesized member and compiler-made variables are never hits. With `declarations`, a cursor
+    //! on a `for`/`let` variable's or an argument's name is a `variable` hit and, given the line's source as `line_text`, on a type name a `type_decl` hit.
+    return <- cursor_hits(file, line, col, declarations, line_text) $(var visitor) {
         make_visitor(*visitor) $(adapter) {
             visit(program, adapter)
         }
     }
 }
 
-//! Find all expression nodes at the given cursor position within a single function body.
-//! `file` and `declarations` mean what they mean for `find_at_cursor`.
-def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
-    return <- cursor_hits(file, line, col, declarations) $(var visitor) {
+def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int; declarations : bool = false; line_text : string = "") : array<CursorHit> {
+    //! Find all expression nodes at the given cursor position within a single function body.
+    //! `file`, `declarations` and `line_text` mean what they mean for `find_at_cursor`.
+    return <- cursor_hits(file, line, col, declarations, line_text) $(var visitor) {
         visitor.currentFunc = func
         make_visitor(*visitor) $(adapter) {
             visit(func, adapter)
@@ -196,8 +501,8 @@ def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, c
 }
 
 //! one visitor's run: `walk` drives it, the hits come back innermost first
-def private cursor_hits(file : string; line, col : int; declarations : bool; walk : block<(var visitor : CursorVisitor?) : void>) : array<CursorHit> {
-    var visitor = new CursorVisitor(file, line, col, declarations)
+def private cursor_hits(file : string; line, col : int; declarations : bool; line_text : string; walk : block<(var visitor : CursorVisitor?) : void>) : array<CursorHit> {
+    var visitor = new CursorVisitor(file, line, col, declarations, line_text)
     invoke(walk, visitor)
     var result <- innermost_first(visitor.hits)
     unsafe {
@@ -206,8 +511,8 @@ def private cursor_hits(file : string; line, col : int; declarations : bool; wal
     return <- result
 }
 
-//! Pretty-print a CursorHit for debugging. Includes RTTI type, name, resolved type, source location, and enclosing function.
 def public describe(hit : CursorHit) : string {
+    //! Pretty-print a CursorHit for debugging. Includes RTTI type, name, resolved type, source location, and enclosing function.
     return build_string() $(var w) {
         write(w, hit.rtti)
         if (!empty(hit.name)) {
@@ -215,10 +520,12 @@ def public describe(hit : CursorHit) : string {
         }
         if (hit.variable != null && hit.variable._type != null) {
             write(w, " : {describe(hit.variable._type)}")
+        } elif (hit.type_decl != null) {
+            write(w, " : {describe(unsafe(reinterpret<TypeDecl?>(hit.type_decl)))}")
         } elif (hit.expr != null && hit.expr._type != null) {
             write(w, " : {describe(hit.expr._type)}")
         }
-        let at = hit.expr != null ? hit.expr.at : hit.variable.at
+        let at = hit_at(hit)
         write(w, " at {int(at.line)}:{int(at.column)}-{int(at.last_line)}:{int(at.last_column)}")
         if (hit.func != null) {
             write(w, " in {hit.func.name}")

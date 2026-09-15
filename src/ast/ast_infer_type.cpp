@@ -3310,8 +3310,9 @@ namespace das {
         // infer
         if (expr->typeexpr->isAlias()) {
             if (auto aT = findAlias(expr->typeexpr->alias)) {
+                auto nameAt = expr->typeexpr->at;
                 TypeDecl::clone(expr->typeexpr, aT);
-                if ( !expr->typeexpr->at.fileInfo ) expr->typeexpr->at = expr->at;
+                expr->typeexpr->at = nameAt.fileInfo ? nameAt : expr->at;
                 expr->typeexpr->ref = false;      // drop a ref
                 expr->typeexpr->constant = false; // drop a const
                 expr->typeexpr->sanitize();

@@ -59,25 +59,52 @@ def lineinfo_file(at : LineInfo) : string {
     return ""
 }
 
-// Resolve definition from a CursorHit
-def resolve_definition(hit : CursorHit) : DefinitionResult { // nolint:STYLE037,STYLE038 — exact-type `is` ladder over the AST node classes; each arm builds one DefinitionResult
+def variable_definition(variable : Variable const?) : DefinitionResult {
+    let file = lineinfo_file(variable.at)
+    let line = int(variable.at.line)
+    return DefinitionResult(
+        found = true,
+        kind = "variable",
+        name = source_name(string(variable.name)),
+        file = file,
+        line = line,
+        column = int(variable.at.column),
+        snippet = read_source_snippet(file, line)
+    )
+}
+
+//! the definition a declaration is; the cursor's own word column when the declaration sits on the cursor `line`
+def definition_of(d : DeclarationHit; line : int) : DefinitionResult {
+    return DefinitionResult() if (d.kind == DeclarationKind.none)
+    if (d.kind == DeclarationKind.variable) return variable_definition(d.variable)
+    if (d.kind == DeclarationKind.handled) return DefinitionResult(found = true, kind = "handled", name = d.name, cppName = string(d.annotation.cppName))
+    let kind = d.kind == DeclarationKind.func ? "function" : d.kind == DeclarationKind.structure ? "struct" : d.kind == DeclarationKind.enumeration ? "enum" : "typedef"
+    let decl_file = lineinfo_file(d.at)
+    let decl_line = int(d.at.line)
+    return DefinitionResult(
+        found = true,
+        kind = kind,
+        name = d.kind == DeclarationKind.func ? string(d.func.name) : d.name,
+        file = decl_file,
+        line = decl_line,
+        column = decl_line == line && d.word_column >= 0 ? d.word_column : declared_name_column(d.at, d.name),
+        snippet = read_source_snippet(decl_file, decl_line)
+    )
+}
+
+def type_definition(program : smart_ptr<Program>; td : TypeDecl const?) : DefinitionResult {
+    return definition_of(declaration_of(program, td), 0)
+}
+
+def resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : DefinitionResult { // nolint:STYLE037,STYLE038 — exact-type `is` ladder over the AST node classes; each arm builds one DefinitionResult
+    if (hit.variable != null) return variable_definition(hit.variable)
+    if (hit.type_decl != null) return type_definition(program, hit.type_decl)
     let expr = hit.expr
     // ExprVar → variable declaration
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            let variable = v.variable
-            let file = lineinfo_file(variable.at)
-            let line = int(variable.at.line)
-            return DefinitionResult(
-                found = true,
-                kind = "variable",
-                name = string(variable.name),
-                file = file,
-                line = line,
-                column = int(variable.at.column),
-                snippet = read_source_snippet(file, line)
-            )
+            return variable_definition(v.variable)
         }
     }
     // ExprCall / ExprCallFunc → function declaration
@@ -172,63 +199,9 @@ def resolve_definition(hit : CursorHit) : DefinitionResult { // nolint:STYLE037,
             )
         }
     }
-    // Type alias → resolve to typedef declaration
-    if (expr._type != null) {
-        let td = expr._type
-        if (!empty(td.alias)) {
-            let file = lineinfo_file(td.at)
-            let line = int(td.at.line)
-            return DefinitionResult(
-                found = true,
-                kind = "typedef",
-                name = string(td.alias),
-                file = file,
-                line = line,
-                column = int(td.at.column),
-                snippet = read_source_snippet(file, line)
-            )
-        }
-    }
     // Fallback: resolve type reference from _type
     if (expr._type != null) {
-        let td = expr._type
-        if (td.isHandle && td.annotation != null) {
-            let ann = td.annotation
-            return DefinitionResult(
-                found = true,
-                kind = "handled",
-                name = string(ann.name),
-                cppName = string(ann.cppName)
-            )
-        }
-        if (td.structType != null) {
-            let st = td.structType
-            let file = lineinfo_file(st.at)
-            let line = int(st.at.line)
-            return DefinitionResult(
-                found = true,
-                kind = "struct",
-                name = string(st.name),
-                file = file,
-                line = line,
-                column = int(st.at.column),
-                snippet = read_source_snippet(file, line)
-            )
-        }
-        if (td.enumType != null) {
-            let en = td.enumType
-            let file = lineinfo_file(en.at)
-            let line = int(en.at.line)
-            return DefinitionResult(
-                found = true,
-                kind = "enum",
-                name = string(en.name),
-                file = file,
-                line = line,
-                column = int(en.at.column),
-                snippet = read_source_snippet(file, line)
-            )
-        }
+        return type_definition(program, expr._type)
     }
     return DefinitionResult()
 }
@@ -277,7 +250,8 @@ def run_goto_definition(file : string; line_str, col_str, no_opt_str, with_cpp_s
     if (!empty(proj_err)) return make_tool_result(proj_err, true)
     let line = to_int(line_str)
     let col = to_int(col_str)
-    if (line <= 0 || col <= 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
+    let col0 = col - 1
+    if (line <= 0 || col0 < 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let no_opt = no_opt_str == "true"
     let with_cpp_source = with_cpp_source_str == "true"
     var cpp_dirs_arr : array<string>
@@ -290,10 +264,12 @@ def run_goto_definition(file : string; line_str, col_str, no_opt_str, with_cpp_s
         }
     }
     return compile_program(file, true, no_opt, project) $(program; _issues) {
-        var hits <- find_at_cursor(program, file, line, col)
+        let decl = definition_of(find_declaration_at_cursor(program, file, line, col0, source_line(file, line)), line)
+        if (decl.found) return format_result(decl, CursorHit(), with_cpp_source, cpp_dirs_arr)
+        var hits <- find_at_cursor(program, file, line, col0, true, source_line(file, line))
         if (empty(hits)) return "No expression found at {file}:{line}:{col}"
         for (hit in hits) {
-            let defn = resolve_definition(hit)
+            let defn = resolve_definition(program, hit)
             if (defn.found) return format_result(defn, hit, with_cpp_source, cpp_dirs_arr)
         }
         return build_string() $(var w) {

@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_EMIT.md`,
-`ARCHITECTURE_LINQ.md`.
+`ARCHITECTURE_LINQ.md`, `ARCHITECTURE_CURSOR.md`.
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A
 diff that changes compile-time AST-building code - a class deriving an `Ast*Annotation`,
 `Ast*Macro`, or `AstVisitor`, a `[macro_function]`, or any function that calls `qmacro*`,

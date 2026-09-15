@@ -4828,13 +4828,21 @@ The AST_BOOST module provides high-level utilities for working with the AST. It 
 Position-based AST queries. Given a file, line, and column, finds all expression nodes at that cursor position with innermost-first ordering and enclosing function context. Used for implementing IDE features like goto-definition, type-of, and find-references.
 
 
+### Enumerations
+
+- `DeclarationKind` - What `find_declaration_at_cursor` or `declaration_of` found: which of `DeclarationHit`'s pointers is set.
+
 ### Structures
 
-- `CursorHit`
+- `CursorHit` - A single hit at the cursor position: an expression node, or when asked for a variable declaration or a type name.
+- `DeclarationHit` - A declaration - the one whose name the cursor is on, or the one a type denotes: at most one of the pointers is set, by `kind`.
 
 ### Classes
 
 - `CursorVisitor`
+- `CursorVisitor.preVisitTypeDecl`
+- `CursorVisitor.preVisitStructureField`
+- `CursorVisitor.visitStructureField`
 - `CursorVisitor.preVisitFunction`
 - `CursorVisitor.visitFunction`
 - `CursorVisitor.preVisitFunctionArgument`
@@ -4845,16 +4853,33 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 - `CursorVisitor.in_target_file`
 - `CursorVisitor.cursor_on_variable`
 - `CursorVisitor.add_variable_at_cursor`
+- `CursorVisitor.generated_variable`
+- `CursorVisitor.on_field_name`
+- `CursorVisitor.cursor_on_token`
 
 ### Cursor queries
 
-- `cursor_inside`
-- `find_at_cursor`
-- `find_at_cursor_in_function`
+- `cursor_inside` - Check whether a point (line, col) is inside the span described by `at`.
+- `declaration_of` - The declaration a type denotes - its typedef, structure, enumeration or C++-bound annotation; `none` for a bare type.
+- `find_at_cursor` - Find all expression nodes at the given cursor position, innermost first; `file` is a substring of `FileInfo.name` ("" matches any); nodes inside a synthesized member and compiler-made variables are never hits.
+- `find_at_cursor_in_function` - Find all expression nodes at the given cursor position within a single function body.
+- `find_declaration_at_cursor` - The declaration whose name is at the cursor, the parent a `class` line names included; `line_text` "" makes it a line-only lookup, `file` is a substring of `FileInfo.name`.
+- `typedef_named` - The type declared under the typedef `name` - in `mod` when given, else in the program's own module, else in any module it requires; null when none declares it.
+
+### Source text
+
+- `bare_name` - "Animal`speak" -> "speak": the token the source spells at a method's declaration and call sites.
+- `declared_name_column` - Where the line a declaration starts on spells its `name`; `at.column` when it does not.
+- `name_column` - Where `line_text` spells `name` as a whole word (0-based byte column), else `hint`.
+- `source_name` - The name the source spells for a compiler-renamed variable (a generator's loop variable); any other name unchanged.
+- `spells_name` - True when `line_text` spells `name` as a whole word starting exactly at `col`.
+- `word_at` - The identifier the 0-based byte column `col` is on in `line_text`, with its start column; a caret right after a word is on it, as in an editor, and the word is empty when `col` is on none.
 
 ### Result inspection
 
-- `describe`
+- `describe` - Pretty-print a CursorHit for debugging.
+- `hit_at` - The position of the node the hit holds: its expression, variable or type.
+- `is_synthesized` - True for a member the compiler made on the `class` line (`Foo'__finalize`), never for a lambda or generator body or a generic instance.
 
 ## ast_used
 

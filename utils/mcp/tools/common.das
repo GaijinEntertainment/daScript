@@ -392,6 +392,23 @@ def get_daslang_exe() : string {
     return get_das_exe()
 }
 
+// ── Source text ──────────────────────────────────────────────────────
+
+var private SOURCE_LINES : table<string; array<string>>
+
+//! the source line (1-based) of a file, "" past its end; a file is read once per process
+def public source_line(file : string; line : int) : string {
+    if (!key_exists(SOURCE_LINES, file)) {
+        SOURCE_LINES[file] <- split(fread(file), "\n")
+    }
+    var text = ""
+    let lines & = unsafe(SOURCE_LINES[file])
+    if (line >= 1 && line <= length(lines)) {
+        text = lines[line - 1]
+    }
+    return text
+}
+
 // ── MCP subtool runner ──────────────────────────────────────────────
 //
 // Why subprocess: in-process compile_file / RTTI walks leak C++-side
@@ -407,6 +424,7 @@ def get_daslang_exe() : string {
 //   - Exits 0 on success AND on tool-level failure (e.g. compile errors are a
 //     successful tool run that reports isError=true). Exit non-0 ONLY on
 //     catastrophic failure (cannot read args, internal panic).
+
 // Inside an MCP subtool's `[export] def main`, locate the caller-supplied
 // args inside daslang's full argv. Conventional invocation:
 //   daslang.exe utils/mcp/subtools/<name>.das -- <arg1> <arg2> ...
