@@ -95,13 +95,32 @@ class CursorVisitor : AstVisitor {
     }
 }
 
+//! the size of an expression's span, lines first: a nested expression always has the
+//! smaller one, whichever function the visitor met first - a lambda or generator body is a
+//! function of its own, visited before the function whose source it sits in
+def private span_size(hit : CursorHit) : int2 {
+    let at = hit.expr.at
+    return int2(int(at.last_line) - int(at.line), int(at.last_column) - int(at.column))
+}
+
+//! hits innermost first: by span, and within one span the later-visited (deeper) node first
 def private reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
+    var order : array<int>
+    order |> reserve(length(src))
+    for (i in range(length(src))) {
+        order |> push(i)
+    }
+    order |> sort() $(a, b) {
+        let sa = span_size(src[a])
+        let sb = span_size(src[b])
+        if (sa.x != sb.x) return sa.x < sb.x
+        if (sa.y != sb.y) return sa.y < sb.y
+        return a > b
+    }
     var result : array<CursorHit>
     result |> reserve(length(src))
-    var i = length(src) - 1
-    while (i >= 0) {
+    for (i in order) {
         result |> emplace <| src[i]
-        i--
     }
     return <- result
 }

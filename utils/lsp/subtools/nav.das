@@ -429,7 +429,7 @@ def private hover_contents(hit : CursorHit; defn : Definition) : string {
         if (!empty(defn.signature)) {
             write(w, "{defn.signature}\n")
         } elif (!empty(hit.name) && hit.expr != null && hit.expr._type != null) {
-            write(w, "{hit.name} : {describe(hit.expr._type)}\n")
+            write(w, "{source_name(hit.name)} : {describe(hit.expr._type)}\n")
         } elif (hit.expr != null && hit.expr._type != null) {
             write(w, "{describe(hit.expr._type)}\n")
         } else {
@@ -809,6 +809,14 @@ def private declaration_at_cursor(program : smart_ptr<Program>; file : string; l
     return hit
 }
 
+//! the name the source spells: a generator's loop variable becomes a state field the
+//! compiler names `__<name>_rename_at_<line>_<column>`
+def private source_name(name : string) : string {
+    return name if (!(name |> starts_with("__")))
+    let at = find(name, "_rename_at_")
+    return at > 2 ? slice(name, 2, at) : name
+}
+
 def private kind_word(kind : RefTargetKind) : string {
     if (kind == RefTargetKind.func) return "function"
     if (kind == RefTargetKind.structure) return "struct"
@@ -817,9 +825,15 @@ def private kind_word(kind : RefTargetKind) : string {
     return "variable"
 }
 
-//! a hit inside a compiler-generated member is not source the cursor can be on
+//! a hit inside a compiler-generated member, or on a compiler-made variable such as the
+//! `__this` a lambda reads its captures through, is not source the cursor can be on
 def private in_synthesized(hit : CursorHit) : bool {
-    return hit.func != null && is_synthesized(hit.func)
+    return true if (hit.func != null && is_synthesized(hit.func))
+    if (hit.expr is ExprVar) {
+        let v = hit.expr as ExprVar
+        return v.variable != null && v.variable.flags.generated
+    }
+    return false
 }
 
 struct RawRef {
@@ -1223,9 +1237,10 @@ def private bare_function_name(name : string) : string {
 
 // compiler-synthesized members (Foo'__finalize etc.) sit on the `class` line
 // but aren't all flagged `generated`; user identifiers can't contain ' —
-// skip both or a cursor on a class name resolves to the finalizer
+// skip both or a cursor on a class name resolves to the finalizer. A lambda or
+// generator body is flagged `generated` too and is the user's own code
 def private is_synthesized(func : Function const?) : bool {
-    return true if (func.flags.generated && func.fromGeneric == null)
+    return true if (func.flags.generated && !func.flags._lambda && !func.flags._generator && func.fromGeneric == null)
     var has_tick = false
     peek(func.name) $(n) {
         has_tick = find(n, "'") >= 0

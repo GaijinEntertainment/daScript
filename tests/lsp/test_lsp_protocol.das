@@ -290,6 +290,8 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     var finalize_line0 = -1
     var new_final_line0 = -1
     var new_final_char = -1
+    var lambda_line0 = -1
+    var lambda_body_char = -1
     var clean_lines <- split(clean, "\n")
     for (i in range(length(clean_lines))) {
         if (clean_lines[i] |> starts_with("def lsp_probe_helper")) {
@@ -315,13 +317,17 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
         } elif (clean_lines[i] |> starts_with("    var f = new LspProbeFinal")) {
             new_final_line0 = i
             new_final_char = find(clean_lines[i], "LspProbeFinal")
+        } elif (clean_lines[i] |> starts_with("    let add = @")) {
+            lambda_line0 = i
+            lambda_body_char = find(clean_lines[i], "x + base")
         }
     }
     delete clean_lines
     t |> success(def_line0 >= 0 && call_line0 >= 0, "fixture contains helper def and call")
     t |> success(base_speak_line0 >= 0 && derived_speak_line0 >= 0, "fixture contains probe_speak base and override")
     t |> success(base_line0 >= 0 && derived_line0 >= 0 && final_line0 >= 0 && finalize_line0 >= 0 && new_final_line0 >= 0, "fixture contains the class with a user finalizer and its new site")
-    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0)
+    t |> success(lambda_line0 >= 0 && lambda_body_char >= 0, "fixture contains the capturing lambda")
+    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0)
     let uri = path_to_uri(fixture)
 
     for (host in front_hosts()) {
@@ -549,6 +555,23 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 t |> success(base_keys |> find_index("{base_line0}:6") >= 0, "base references include the declaration")
                 t |> success(base_keys |> find_index("{derived_line0}:{derived_parent_char}") >= 0, "base references include the first derived class line")
                 t |> success(base_keys |> find_index("{final_line0}:{final_parent_char}") >= 0, "base references include the second derived class line")
+
+                // a lambda body is a function of its own, visited before the function it sits
+                // in: hover inside it answers the body's own expressions, and a capture reads
+                // as the captured variable, not the `__this` the compiler routes it through
+                write_frame(w, sprint_json(CursorRequestMsg(id = 14, method = "textDocument/hover",
+                    params = CursorParams(textDocument = DocId(uri = uri),
+                        position = Position0(line = lambda_line0, character = lambda_body_char))), false))
+                let hover_arg = read_until(t, r) $(js) => (js?["id"] ?? -1) == 14
+                let arg_text = hover_arg?["result"]?["contents"]?["value"] ?? ""
+                t |> success(arg_text |> find("x : int") >= 0, "hover on a lambda argument inside its body: {arg_text}")
+                write_frame(w, sprint_json(CursorRequestMsg(id = 15, method = "textDocument/hover",
+                    params = CursorParams(textDocument = DocId(uri = uri),
+                        position = Position0(line = lambda_line0, character = lambda_body_char + 4))), false))
+                let hover_cap = read_until(t, r) $(js) => (js?["id"] ?? -1) == 15
+                let cap_text = hover_cap?["result"]?["contents"]?["value"] ?? ""
+                t |> success(cap_text |> find("base : int") >= 0, "hover on a captured variable inside a lambda: {cap_text}")
+                t |> success(cap_text |> find("__this") < 0, "a capture is not the lambda's __this: {cap_text}")
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))

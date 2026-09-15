@@ -30,4 +30,7 @@ def main() {
     print("{d->probe_speak()}\n")
     var f = new LspProbeFinal()
     print("{f->probe_speak()}\n")
+    let base = 10
+    let add = @(x : int) : int => x + base
+    print("{add(1)}\n")
 }

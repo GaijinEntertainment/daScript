@@ -41,7 +41,11 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   a `class` line), enums, aliases and globals declared on that line, before any expression
   hit; expression hits inside synthesized members are skipped. References to a type are
   listed only where the source spells its name (the implicit `self` of a method is not a
-  site), and a derived class is a reference to its parent.
+  site), and a derived class is a reference to its parent. A lambda or generator body is
+  a `generated` function of its own, visited before the function whose source holds it:
+  `daslib/ast_cursor` orders hits by span, not visit order, so the body's own expressions
+  win, and a capture read through the compiler's `__this` shows as the captured variable
+  (a `generated` variable is never the answer).
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
   crash isolation). Same rationale as the MCP subtool pattern.
 - **Every subtool compile sets `cop.module_cache = true`** - the default module cache
