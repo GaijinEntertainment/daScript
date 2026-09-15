@@ -53,6 +53,10 @@ def to_void(p) : void? {
     return unsafe(reinterpret<void?>(p))
 }
 
+def variable_target(variable : Variable const?) : RefTarget {
+    return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
+}
+
 // Field target from a field-access value expression (unwraps Foo? → Foo); none-kind when not a struct field
 def field_target_of(value : Expression const?; fname : string) : RefTarget {
     if (value == null || value._type == null) return RefTarget()
@@ -87,10 +91,7 @@ def identify_callable_target(expr : Expression const?) : RefTarget {
             // first arg is a variable (function pointer parameter/local)
             if (callable is ExprVar) {
                 let v = callable as ExprVar
-                if (v.variable != null) {
-                    let variable = v.variable
-                    return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = string(variable.name))
-                }
+                if (v.variable != null) return variable_target(v.variable)
             }
             // first arg is a field access (struct method pointer)
             if (callable is ExprField) {
@@ -106,10 +107,7 @@ def identify_callable_target(expr : Expression const?) : RefTarget {
 def identify_value_target(expr : Expression const?) : RefTarget {
     if (expr is ExprVar) {
         let v = expr as ExprVar
-        if (v.variable != null) {
-            let variable = v.variable
-            return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = string(variable.name))
-        }
+        if (v.variable != null) return variable_target(v.variable)
     }
     if (expr is ExprField) {
         let f = expr as ExprField
@@ -123,35 +121,34 @@ def identify_value_target(expr : Expression const?) : RefTarget {
 }
 
 // Enum constants, type aliases (typedef, bitfield, variant, tuple), and fallback type references
-def identify_type_target(expr : Expression const?) : RefTarget {
+def identify_type_target(program : smart_ptr<Program>; expr : Expression const?) : RefTarget {
     if (expr is ExprConstEnumeration) {
         let e = expr as ExprConstEnumeration
         if (e.enumType != null) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e.enumType), name = string(e.enumType.name))
     }
-    if (expr._type != null) return type_target(expr._type)
+    if (expr._type != null) return declaration_target(declaration_of(program, expr._type))
     return RefTarget()
 }
 
-def type_target(td : TypeDecl const?) : RefTarget {
-    if (!empty(td.alias)) return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
-    if (td.structType != null) return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(td.structType), name = string(td.structType.name))
-    if (td.enumType != null) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(td.enumType), name = string(td.enumType.name))
+def declaration_target(d : DeclarationHit) : RefTarget {
+    if (d.kind == DeclarationKind.func) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(d.func), name = string(d.func.name), decl_at = d.at)
+    if (d.kind == DeclarationKind.structure) return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(d.structure), name = d.name, decl_at = d.at)
+    if (d.kind == DeclarationKind.enumeration) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(d.enumeration), name = d.name, decl_at = d.at)
+    if (d.kind == DeclarationKind.alias) return RefTarget(kind = RefTargetKind.alias, alias_name = d.name, name = d.name, decl_at = d.at)
+    if (d.kind == DeclarationKind.variable) return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(d.variable), name = d.name, decl_at = d.at)
     return RefTarget()
 }
 
-def identify_target(hit : CursorHit) : RefTarget {
-    if (hit.variable != null) {
-        let variable = hit.variable
-        return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
-    }
-    if (hit.type_decl != null) return type_target(hit.type_decl)
+def identify_target(program : smart_ptr<Program>; hit : CursorHit) : RefTarget {
+    if (hit.variable != null) return variable_target(hit.variable)
+    if (hit.type_decl != null) return declaration_target(declaration_of(program, hit.type_decl))
     let expr = hit.expr
     var t = identify_callable_target(expr)
     if (t.kind == RefTargetKind.none) {
         t = identify_value_target(expr)
     }
     if (t.kind == RefTargetKind.none) {
-        t = identify_type_target(expr)
+        t = identify_type_target(program, expr)
     }
     return t
 }
@@ -212,9 +209,8 @@ class RefVisitor : AstVisitor {
 
     def override preVisitStructure(str : StructurePtr) : void {
         return if (target.kind != RefTargetKind.structure || str.parent == null || to_void(str.parent) != target.target_ptr || int(str.at.line) == 0 || str.at.fileInfo == null)
-        let file = string(str.at.fileInfo.name)
         var at = str.at
-        at.column = uint(name_column(source_line(file, int(at.line)), target.name, int(at.column)))
+        at.column = uint(declared_name_column(at, target.name))
         add_ref(at, "parent")
     }
 
@@ -330,16 +326,6 @@ def format_references(refs : array<Reference>; target : RefTarget) : string {
     }
 }
 
-def declaration_target(program : smart_ptr<Program>; file : string; line, col : int; line_text : string) : RefTarget {
-    let d = find_declaration_at_cursor(program, file, line, col, line_text)
-    if (d.kind == DeclarationKind.func) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(d.func), name = string(d.func.name), decl_at = d.at)
-    if (d.kind == DeclarationKind.structure) return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(d.structure), name = d.name, decl_at = d.at)
-    if (d.kind == DeclarationKind.enumeration) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(d.enumeration), name = d.name, decl_at = d.at)
-    if (d.kind == DeclarationKind.alias) return RefTarget(kind = RefTargetKind.alias, alias_name = d.name, name = d.name, decl_at = d.at)
-    if (d.kind == DeclarationKind.variable) return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(d.variable), name = d.name, decl_at = d.at)
-    return RefTarget()
-}
-
 def run_find_references(file : string; line_str, col_str, scope_str, no_opt_str : string; project : string = "") : string {
     let proj_err = validate_project_arg(project)
     if (!empty(proj_err)) return make_tool_result(proj_err, true)
@@ -350,16 +336,16 @@ def run_find_references(file : string; line_str, col_str, scope_str, no_opt_str 
     let all_modules = scope_str == "all"
     let no_opt = no_opt_str == "true"
     return compile_program(file, true, no_opt, project) $(program; _issues) {
-        var target = declaration_target(program, file, line, col0, source_line(file, line))
+        var target = declaration_target(find_declaration_at_cursor(program, file, line, col0, source_line(file, line)))
         var hits <- find_at_cursor(program, file, line, col0, true, source_line(file, line))
         if (target.kind == RefTargetKind.none) {
             for (hit in hits) {
-                target = identify_target(hit)
+                target = identify_target(program, hit)
                 if (target.kind != RefTargetKind.none) break
             }
         }
         if (target.kind == RefTargetKind.none) {
-            target = declaration_target(program, file, line, col0, "")
+            target = declaration_target(find_declaration_at_cursor(program, file, line, col0, ""))
         }
         if (target.kind == RefTargetKind.none) {
             if (empty(hits)) return "No expression or declaration found at {file}:{line}:{col}"
@@ -371,7 +357,6 @@ def run_find_references(file : string; line_str, col_str, scope_str, no_opt_str 
                 }
             }
         }
-        // Step 2: walk AST to find all references
         let file_filter = all_modules ? "" : file
         var visitor = new RefVisitor(target, file_filter)
         make_visitor(*visitor) $(adapter) {

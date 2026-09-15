@@ -4830,12 +4830,12 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 
 ### Enumerations
 
-- `DeclarationKind`
+- `DeclarationKind` - What `find_declaration_at_cursor` or `declaration_of` found: which of `DeclarationHit`'s pointers is set.
 
 ### Structures
 
-- `CursorHit`
-- `DeclarationHit`
+- `CursorHit` - A single hit at the cursor position: an expression node, or when asked for a variable declaration or a type name.
+- `DeclarationHit` - A declaration - the one whose name the cursor is on, or the one a type denotes: at most one of the pointers is set, by `kind`.
 
 ### Classes
 
@@ -4859,24 +4859,30 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 
 ### Cursor queries
 
-- `cursor_inside`
-- `find_at_cursor`
-- `find_at_cursor_in_function`
-- `find_declaration_at_cursor`
+- `cursor_inside` - Check whether a point (line, col) is inside the span described by `at`.
+- `find_at_cursor` - Find all expression nodes at the given cursor position, innermost first; `file` is a substring of `FileInfo.name` ("" matches any); nodes inside a synthesized member and compiler-made variables are never hits.
+- `find_at_cursor_in_function` - Find all expression nodes at the given cursor position within a single function body.
+- `find_declaration_at_cursor` - The declaration whose name is at the cursor, the parent a `class` line names included; `line_text` "" makes it a line-only lookup, `file` is a substring of `FileInfo.name`.
 
 ### Source text
 
-- `bare_name`
-- `name_column`
-- `source_name`
-- `spells_name`
-- `word_at`
+- `bare_name` - "Animal`speak" -> "speak": the token the source spells at a method's declaration and call sites.
+- `declared_name_column` - Where the line a declaration starts on spells its `name`; `at.column` when it does not.
+- `name_column` - Where `line_text` spells `name` as a whole word (0-based byte column), else `hint`.
+- `source_name` - The name the source spells for a compiler-renamed variable (a generator's loop variable); any other name unchanged.
+- `spells_name` - True when `line_text` spells `name` as a whole word starting exactly at `col`.
+- `word_at` - The identifier the 0-based byte column `col` is on in `line_text`, with its start column; the word is empty when `col` is on none.
 
 ### Result inspection
 
-- `describe`
-- `hit_at`
-- `is_synthesized`
+- `describe` - Pretty-print a CursorHit for debugging.
+- `hit_at` - The position of the node the hit holds: its expression, variable or type.
+- `is_synthesized` - True for a member the compiler made on the `class` line (`Foo'__finalize`), never for a lambda or generator body or a generic instance.
+
+### Uncategorized
+
+- `typedef_named` - The type the program's own module declares under the typedef `name`; null when there is none.
+- `declaration_of` - The declaration a type denotes - its typedef, structure, enumeration or C++-bound annotation; `none` for a bare type.
 
 ## ast_used
 

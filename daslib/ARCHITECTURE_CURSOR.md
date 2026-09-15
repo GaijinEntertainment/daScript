@@ -15,7 +15,8 @@ this file holds sec. 40.
 - **A `Structure`'s `at` is one column before its name and a typedef's `TypeDecl.at` is its
   right-hand type, so `name_column` finds a declared name in the line's text and falls back to
   the AST column only when the line does not spell it.** Nothing fails when one side moves
-  alone: every cursor test computes the column from the line text.
+  alone: the unit test hardcodes the expected columns and the LSP protocol test computes them
+  from the line text, so a parser that moves `at` onto the name changes no answer.
 
 ### 40.2 Compiler-made names {#cursor-compiler-made-names}
 

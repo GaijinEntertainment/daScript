@@ -234,7 +234,7 @@ def test_find_declaration(t : T?) {
         compile_fixture() $(program) {
             let cat = find_declaration_at_cursor(program, "ast_cursor_fixture", 35, 7, "class Cat : Animal \{")
             t2 |> success(cat.kind == DeclarationKind.structure && cat.name == "Cat", "class name: {cat.name}")
-            t2 |> equal(cat.column, 6, "the name starts at column 6")
+            t2 |> equal(cat.word_column, 6, "the name starts at column 6")
             let parent = find_declaration_at_cursor(program, "ast_cursor_fixture", 35, 14, "class Cat : Animal \{")
             t2 |> success(parent.kind == DeclarationKind.structure && parent.name == "Animal", "parent name resolves the parent: {parent.name}")
             t2 |> equal(int(parent.at.line), 31, "the parent's own position")
@@ -249,7 +249,7 @@ def test_find_declaration(t : T?) {
             let off = find_declaration_at_cursor(program, "ast_cursor_fixture", 9, 1, "def add(a, b : int) : int \{")
             t2 |> success(off.kind == DeclarationKind.none, "cursor on `def` is not the declaration")
             let any = find_declaration_at_cursor(program, "ast_cursor_fixture", 9, 1, "")
-            t2 |> success(any.kind == DeclarationKind.func && any.name == "add" && any.column < 0, "line-only lookup finds add with no column")
+            t2 |> success(any.kind == DeclarationKind.func && any.name == "add" && any.word_column < 0, "line-only lookup finds add with no column")
             let none = find_declaration_at_cursor(program, "ast_cursor_fixture", 19, 4, "")
             t2 |> success(none.kind == DeclarationKind.none, "a statement line declares nothing")
         }
@@ -294,6 +294,13 @@ def test_field_name_hit(t : T?) {
     }
 }
 
+def has_type_hit(hits : array<CursorHit>; name : string = "") : bool {
+    for (h in hits) {
+        return true if (h.type_decl != null && (empty(name) || h.name == name))
+    }
+    return false
+}
+
 [test]
 def test_type_name_hit(t : T?) {
     t |> run("a cursor on a type name yields the type; on a forward-referenced class's new site too") @(t2 : T?) {
@@ -303,27 +310,24 @@ def test_type_name_hit(t : T?) {
             t2 |> success(!empty(hits) && hits[0].type_decl != null && hits[0].name == "Cat", "type hit first: {[for (h in hits); describe(h)]}")
             t2 |> success(!empty(hits) && hits[0].type_decl != null && int(hits[0].type_decl.at.column) == 18, "at the name, not the new keyword: {[for (h in hits); describe(h)]}")
             let prim = find_at_cursor(program, "ast_cursor_fixture", 9, 16, true, "def add(a, b : int) : int \{")
-            var typed = false
-            for (h in prim) {
-                typed = typed || h.type_decl != null
-            }
-            t2 |> success(!typed, "no type hit on a builtin type: {[for (h in prim); describe(h)]}")
+            t2 |> success(!has_type_hit(prim), "no type hit on a builtin type: {[for (h in prim); describe(h)]}")
             let meth = find_at_cursor(program, "ast_cursor_fixture", 36, 20, true, "    def override speak() : string => \"meow\"")
-            var self_hit = false
-            for (h in meth) {
-                self_hit = self_hit || (h.type_decl != null && h.name == "Cat")
-            }
-            t2 |> success(!self_hit, "the implicit self is not a type hit: {[for (h in meth); describe(h)]}")
+            t2 |> success(!has_type_hit(meth, "Cat"), "the implicit self is not a type hit: {[for (h in meth); describe(h)]}")
         }
     }
     t |> run("without the line text there is no type hit") @(t2 : T?) {
         compile_fixture() $(program) {
             let hits = find_at_cursor(program, "ast_cursor_fixture", 27, 19, true)
-            var typed = false
-            for (h in hits) {
-                typed = typed || h.type_decl != null
-            }
-            t2 |> success(!typed, "no line text, no type hit")
+            t2 |> success(!has_type_hit(hits), "no line text, no type hit")
+        }
+    }
+    t |> run("a type's declaration is its class, with the name column spelled on the class line") @(t2 : T?) {
+        compile_fixture() $(program) {
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 27, 19, true, "    var pet = new Cat()")
+            let cat = declaration_of(program, hits[0].type_decl)
+            t2 |> success(cat.kind == DeclarationKind.structure && cat.name == "Cat" && int(cat.at.line) == 35, "the class: {cat.name} at {int(cat.at.line)}")
+            t2 |> equal(declared_name_column(cat.at, cat.name), 6, "the name, not the class keyword")
+            t2 |> equal(declaration_of(program, null).kind, DeclarationKind.none)
         }
     }
 }

@@ -363,61 +363,12 @@ def private resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : 
     return Definition()
 }
 
-//! where a typedef named `name` is declared in the program's own module; a zero position when it is not
-def private alias_declaration(program : smart_ptr<Program>; name : string) : LineInfo {
-    var at = LineInfo()
-    for_each_typedef(get_this_module(program)) $(alias_name : string#; var value : TypeDeclPtr) {
-        if (alias_name == name) {
-            at = value.at
-        }
-    }
-    return at
-}
-
-//! where the name is spelled on its declaration line: a Structure's `at` is one column before its name, a typedef's is its right-hand type
-def private declared_name_column(at : LineInfo; name : string) : int {
-    return name_column(line_text(lineinfo_file(at), int(at.line)), name, int(at.column))
-}
-
 def private type_definition(program : smart_ptr<Program>; td : TypeDecl const?) : Definition {
-    if (!empty(td.alias)) {
-        let at = alias_declaration(program, string(td.alias))
-        return Definition(
-            found = true,
-            kind = "typedef",
-            name = string(td.alias),
-            file = lineinfo_file(at),
-            line = int(at.line),
-            column = declared_name_column(at, string(td.alias)))
-    }
-    if (td.isHandle && td.annotation != null) {
-        return Definition(
-            found = true,
-            kind = "handled",
-            name = string(td.annotation.name),
-            cppName = string(td.annotation.cppName))
-    }
-    if (td.structType != null) {
-        let st = td.structType
-        return Definition(
-            found = true,
-            kind = st.flags.isClass ? "class" : "struct",
-            name = string(st.name),
-            file = lineinfo_file(st.at),
-            line = int(st.at.line),
-            column = declared_name_column(st.at, string(st.name)))
-    }
-    if (td.enumType != null) {
-        let en = td.enumType
-        return Definition(
-            found = true,
-            kind = "enum",
-            name = string(en.name),
-            file = lineinfo_file(en.at),
-            line = int(en.at.line),
-            column = declared_name_column(en.at, string(en.name)))
-    }
-    return Definition()
+    let d = declaration_of(program, td)
+    return Definition() if (d.kind == DeclarationKind.none)
+    if (d.kind == DeclarationKind.handled) return Definition(found = true, kind = "handled", name = d.name, cppName = string(d.annotation.cppName))
+    let kind = d.kind == DeclarationKind.alias ? "typedef" : d.kind == DeclarationKind.enumeration ? "enum" : d.structure.flags.isClass ? "class" : "struct"
+    return Definition(found = true, kind = kind, name = d.name, file = lineinfo_file(d.at), line = int(d.at.line), column = declared_name_column(d.at, d.name))
 }
 
 def private run_definition(file : string; line0, char16 : int; project : string) : LocationsResult {
@@ -627,20 +578,8 @@ def private identify_target(program : smart_ptr<Program>; hit : CursorHit) : Ref
 }
 
 def private type_target(program : smart_ptr<Program>; td : TypeDecl const?) : RefTarget {
-    if (!empty(td.alias)) {
-        let at = alias_declaration(program, string(td.alias))
-        return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias),
-            decl_file = lineinfo_file(at), decl_line = int(at.line), decl_column = declared_name_column(at, string(td.alias)))
-    }
-    if (td.structType != null) {
-        return structure_target(td.structType, declared_name_column(td.structType.at, string(td.structType.name)))
-    }
-    if (td.enumType != null) {
-        let en = td.enumType
-        return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(en), name = string(en.name),
-            decl_file = lineinfo_file(en.at), decl_line = int(en.at.line), decl_column = declared_name_column(en.at, string(en.name)))
-    }
-    return RefTarget()
+    let d = declaration_of(program, td)
+    return declaration_target(d, declared_name_column(d.at, d.name))
 }
 
 //! the source line (1-based), "" past the end of the file
@@ -661,8 +600,8 @@ def private is_unspelled_type_ref(target : RefTarget; r : RawRef) : bool {
 
 //! the cursor's word column for a hit on the cursor line, else the name as spelled on the declaration's own line (a derived class's parent)
 def private decl_column(hit : DeclarationHit; line : int) : int {
-    return hit.column if (hit.column >= 0 && int(hit.at.line) == line)
-    return name_column(line_text(lineinfo_file(hit.at), int(hit.at.line)), hit.name, int(hit.at.column))
+    return hit.word_column if (hit.word_column >= 0 && int(hit.at.line) == line)
+    return declared_name_column(hit.at, hit.name)
 }
 
 def private function_target(f : Function const?; column : int) : RefTarget {
@@ -688,33 +627,31 @@ struct DeclHit {
     word_column : int   //! where the cursor's identifier starts on its line
 }
 
+//! the reference target a declaration is, its name spelled at `column` on its line
+def private declaration_target(found : DeclarationHit; column : int) : RefTarget {
+    if (found.kind == DeclarationKind.func) return function_target(found.func, column)
+    if (found.kind == DeclarationKind.structure) return structure_target(found.structure, column)
+    if (found.kind == DeclarationKind.enumeration) {
+        let e = found.enumeration
+        return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e), name = found.name,
+            decl_file = lineinfo_file(e.at), decl_line = int(e.at.line), decl_column = column, signature = "enum {e.name}")
+    }
+    if (found.kind == DeclarationKind.alias) {
+        let alias_type = found.alias_type != null ? describe(unsafe(reinterpret<TypeDecl?>(found.alias_type))) : "auto"
+        return RefTarget(kind = RefTargetKind.alias, alias_name = found.name, name = found.name,
+            decl_file = lineinfo_file(found.at), decl_line = int(found.at.line), decl_column = column, signature = "typedef {found.name} = {alias_type}")
+    }
+    if (found.kind == DeclarationKind.variable) {
+        let v = found.variable
+        return variable_target(v, column, "{v.name} : {describe(v._type)}")
+    }
+    return RefTarget()
+}
+
 //! the declaration the cursor names; a negative `col` is the line-only lookup
 def private declaration_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : DeclHit {
     let found = find_declaration_at_cursor(program, file, line, col, col < 0 ? "" : line_text(file, line))
-    var hit = DeclHit(word_column = found.column)
-    let column = found.kind == DeclarationKind.none ? -1 : decl_column(found, line)
-    if (found.kind == DeclarationKind.func) {
-        hit.target = function_target(found.func, column)
-    } elif (found.kind == DeclarationKind.structure) {
-        hit.target = structure_target(found.structure, column)
-    } elif (found.kind == DeclarationKind.enumeration) {
-        let e = found.enumeration
-        hit.target = RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e), name = found.name,
-            decl_file = lineinfo_file(e.at), decl_line = int(e.at.line), decl_column = column, signature = "enum {e.name}")
-    } elif (found.kind == DeclarationKind.alias) {
-        var alias_type = "auto"
-        for_each_typedef(get_this_module(program)) $(name : string#; var value : TypeDeclPtr) {
-            if (name == found.name) {
-                alias_type = describe(value)
-            }
-        }
-        hit.target = RefTarget(kind = RefTargetKind.alias, alias_name = found.name, name = found.name,
-            decl_file = lineinfo_file(found.at), decl_line = int(found.at.line), decl_column = column, signature = "typedef {found.name} = {alias_type}")
-    } elif (found.kind == DeclarationKind.variable) {
-        let v = found.variable
-        hit.target = variable_target(v, column, "{v.name} : {describe(v._type)}")
-    }
-    return hit
+    return DeclHit(target = declaration_target(found, decl_column(found, line)), word_column = found.word_column)
 }
 
 def private kind_word(kind : RefTargetKind) : string {
@@ -759,8 +696,7 @@ class RefVisitor : AstVisitor {
         return if (target.kind != RefTargetKind.structure || str.parent == null || to_void(str.parent) != target.target_ptr)
         let file = lineinfo_file(str.at)
         return if (int(str.at.line) == 0 || empty(file))
-        refs |> push(RawRef(file = file, line = int(str.at.line),
-            column = name_column(line_text(file, int(str.at.line)), target.name, int(str.at.column))))
+        refs |> push(RawRef(file = file, line = int(str.at.line), column = declared_name_column(str.at, target.name)))
     }
 
     def override preVisitExprCall(expr : ExprCall?) : void {
@@ -1142,9 +1078,7 @@ def private function_at_cursor(program : smart_ptr<Program>; file : string; line
     for (hit in hits) {
         let expr = hit.expr
         continue if (expr == null)
-        // synthesized guard: generated finalizer-chain calls carry the class
-        // line as their position — without it a cursor on a class name
-        // resolves to Foo'__finalize instead of falling through to the type
+        // a call the compiler lowered to a synthesized member (`delete p` -> `Foo'__finalize`) is not a function the source names
         if (expr is ExprCall) {
             let c = expr as ExprCall
             if (c.func != null && !c.func.flags.builtIn && !is_synthesized(c.func)) {
