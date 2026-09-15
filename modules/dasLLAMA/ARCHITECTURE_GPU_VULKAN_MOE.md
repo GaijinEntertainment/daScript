@@ -175,8 +175,9 @@ expert the loader could only transcode to q8; a shared expert kept in the file's
 shares the experts' feed). The fused add+rms+requant twins are off on a MoE: the router reads the
 normed row those twins never store. The MoE seats install separately
 (`install_moe_gpu_resident_moe`), so a tier without them declines a MoE by name, and the plan
-declines a router the top-k kernels do not serve - a non-softmax gate, a router or selection
-bias, biased or mx4 expert stacks, more than 256 experts or 64 routed slots - by name too.
+declines a router the top-k kernels do not serve - a gate off the two softmax forms, an expert
+selection bias, more than 256 experts or 64 routed slots - by name too; the router bias, the
+biased stacks and the mx4 stacks are gpt-oss's served form (sec.2.2ag).
 
 ### 2.2ak The gemma-4 form of the routed block {#vk-gemma4-moe-block}
 
