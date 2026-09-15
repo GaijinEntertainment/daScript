@@ -119,18 +119,14 @@ def public set_enable_profiler(ctxId : uint64, enabled : bool) {
     //! Enables or disables the profiler for the given context ID. No-op in leak mode.
     let cfg <- parse_profiler_args()
     if (cfg.track_leaks) return
-    unsafe {
-        invoke_debug_agent_method(profiler_category(cfg), "enable_profiler", ctxId, enabled)
-    }
+    unsafe(invoke_debug_agent_method(profiler_category(cfg), "enable_profiler", ctxId, enabled))
 }
 
 def public set_enable_profiler_log(ctxId : uint64, enabled : bool) {
     //! Enables or disables the profiler log for the given context ID. No-op in leak mode.
     let cfg <- parse_profiler_args()
     if (cfg.track_leaks) return
-    unsafe {
-        invoke_debug_agent_method(profiler_category(cfg), "enable_profiler_log", ctxId, enabled)
-    }
+    unsafe(invoke_debug_agent_method(profiler_category(cfg), "enable_profiler_log", ctxId, enabled))
 }
 
 class ProfilerBaseAgent : DapiDebugAgent {
@@ -177,9 +173,7 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         use_thread_local = cfg.use_thread_local
         time_unit = cfg.time_unit
         if (report_memory) {
-            unsafe {
-                self.onInstrumentFunction = reinterpret<function<(var agent : DapiDebugAgent; var ctx : Context; fn : SimFunction?; entering : bool; userData : uint64) : void>>(self.onInstrumentFunctionWithMemory)
-            }
+            self.onInstrumentFunction = unsafe(reinterpret<function<(var agent : DapiDebugAgent; var ctx : Context; fn : SimFunction?; entering : bool; userData : uint64) : void>>(self.onInstrumentFunctionWithMemory))
         }
         write("[")
         us0 = ref_time_ticks()
@@ -291,13 +285,11 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
                 own_hb -= int64(ch.total_heap_bytes)
                 own_shb -= int64(ch.total_string_heap_bytes)
             }
-            unsafe {
-                var e & = flat[node.fun]
-                e.fun = node.fun
-                e.own_heap += own_hb
-                e.own_string_heap += own_shb
-                e.count += node.count
-            }
+            var e & = flat[node.fun]
+            e.fun = node.fun
+            e.own_heap += own_hb
+            e.own_string_heap += own_shb
+            e.count += node.count
         }
         for (ch in values(node.children)) {
             collect_flat(ch, flat)

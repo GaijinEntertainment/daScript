@@ -80,6 +80,7 @@ def lint_file(file : string; project : string;
             cop.export_all = true
             cop.lint_check = true
             cop.no_optimizations = true
+            cop.no_fold_unsafe = true
             cop.no_infer_time_folding = true
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; _issues) {
                 if (!ok) {

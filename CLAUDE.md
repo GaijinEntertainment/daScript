@@ -179,6 +179,14 @@ New knowledge about daslang syntax, semantics, or conventions - from compiler er
 
 **Syntax and factual corrections are fix-in-place, always.** A compiler error, probe, or user correction showing a claim in CLAUDE.md or `skills/*.md` is wrong, incomplete, or stale gets fixed in the same session and flagged in the end-of-turn summary - never deferred to a proposal. Verify first: grammar truth is `src/parser/ds2_parser.ypp`, behavior truth is a probe-compile with the current binary.
 
+**A version stamp's comment carries the CURRENT entry only.** `getVersion()`
+(`include/daScript/ast/ast_serializer.h`), `LLVM_JIT_CODEGEN_VERSION`
+(`modules/dasLLVM/daslib/llvm_jit_plan.das`), and every other bumped version number are read to
+answer one question - what does this build write - so a bump REPLACES the old note, never nests it
+in a parenthesis. The reasons behind earlier numbers are history: git has them, and a reader
+chasing one reads the commit that bumped it. A comment that grows a chain of nested parentheses is
+the defect, however true each clause is.
+
 **Rule files carry rules, not history.** CLAUDE.md files, `skills/*.md`, and per-module rule docs state the CURRENT contract only - no incident anecdotes, PR/issue numbers, dated rulings, or "as of" entries. When a rule changes, replace the old text outright and state the timeless WHY; history lives in git and in the author's out-of-tree notes, so a motivating incident is not written into the tree. A syntax/behavior claim is still probe-verified before it lands, but the verification date is history too: never write an inline `(probe-verified <date>)` tag. These files load into context and are read by weaker models, so every token must carry meaning.
 
 **Every REVIEW.md reviews itself.** A discovered checklist is itself audited under the self-review rule, not just applied - its own defects are findings, fixed in the same batch. The contract all checklists share lives ONCE in `REVIEW_COMMON.md` at the repo root; checklists point at it and never restate it (`skills/review_md.md`). The rule-document audit is capped at two dragon passes per document per round - one over the batch, one cold re-read whose serious findings close the round without a third read: prose can be improved endlessly, and the doc gates are the floor. Per-PR discovery, the `REVIEW.das` gates, and the auditor-agent topology: `skills/internal/make_pr.md`, the REVIEW audit row and its agent-topology section.

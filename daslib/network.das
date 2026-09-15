@@ -15,10 +15,8 @@ class Server {
     }
     def make_server_adapter {
         let classInfo = class_info(self)
-        unsafe {
-            if (!make_server(addr(self), classInfo)) {
-                panic("can't make server")
-            }
+        if (!make_server(unsafe(addr(self)), classInfo)) {
+            panic("can't make server")
         }
     }
     def init(port : int) : bool {
@@ -28,9 +26,7 @@ class Server {
         _server = shared_orphan
         shared_orphan = null
         let classInfo = class_info(self)
-        unsafe {
-            server_restore(_server, addr(self), classInfo)
-        }
+        server_restore(_server, unsafe(addr(self)), classInfo)
     }
     def save(var shared_orphan : NetworkServer?&) {
         shared_orphan = _server
@@ -75,10 +71,8 @@ class Client {
     }
     def make_client_adapter {
         let classInfo = class_info(self)
-        unsafe {
-            if (!make_client(addr(self), classInfo)) {
-                panic("can't make client")
-            }
+        if (!make_client(unsafe(addr(self)), classInfo)) {
+            panic("can't make client")
         }
     }
     def connect(host : string; port : int; timeout_ms : int = 5000) : bool {

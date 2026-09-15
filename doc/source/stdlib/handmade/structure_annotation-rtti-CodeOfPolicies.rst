@@ -67,6 +67,7 @@ Report private functions.
 Containers own their elements' lifetime: resize and fresh table slots get ``default<T>`` of the element type, and erase/clear/shrink finalize dropped elements whose finalizer is fully generated and frees owned heap. Host-side counterpart of ``options default_init_containers``.
 Enables strict property checks.
 Disables all optimizations.
+Keeps the ``unsafe { }`` scope in the AST after inference, which ``foldUnsafe`` otherwise replaces with its body. A tool that walks a compiled program - the standalone linter, the MCP lint subtool - needs the scope to still be there.
 Allows float optimizations with major bit differences (x*0, x-x, reciprocal division, NaN-compare flips, reassociation); also stamps JIT fast-math flags. Doubles stay bit-exact unless enabled.
 Disables the dead-store-elimination optimizer pass. Host-side counterpart of ``options disable_dse`` (the option overrides the policy).
 Disables the common-subexpression-elimination optimizer pass. Host-side counterpart of ``options disable_cse`` (the option overrides the policy).

@@ -230,10 +230,8 @@ def public make_typemacro_template_instance(instance_type, template_type : Struc
     for (e in ex) {
         extra.emplace((argname = e._0, argvalue = RttiValue(tString = e._1)), 0)
     }
-    unsafe {
-        var append_structure <- reinterpret<Structure?>(instance_type)
-        append_structure.append_annotation("typemacro_boost", "typemacro_template", extra)
-    }
+    var append_structure <- unsafe(reinterpret<Structure?>(instance_type))
+    append_structure.append_annotation("typemacro_boost", "typemacro_template", extra)
 }
 
 [macro_function]

@@ -468,10 +468,8 @@ def public debug_dump_writer(var writer : StringBuilderWriter) {
             for (c in arch.components) {
                 if (c.info.dumper != null) {
                     let offset = index * int64(c.stride)
-                    unsafe {
-                        let dump = invoke(c.info.dumper, addr(c.data[offset]))
-                        writer |> write("\t\t{c.name} : {describe(c.info)} = {dump}\n")
-                    }
+                    let dump = invoke(c.info.dumper, unsafe(addr(c.data[offset])))
+                    writer |> write("\t\t{c.name} : {describe(c.info)} = {dump}\n")
                 } else {
                     writer |> write("\t\t{c.name} : {describe(c.info)}\n")
                 }

@@ -350,6 +350,10 @@ class StyleLintVisitor : AstVisitor {
         check_block_pipe(expr.at, expr.arguments)
         check_style019_clamp(expr)
         check_style020_from_jv(expr)
+        if (lowered_unsafe_delete(expr)) {
+            mark_unsafe_in_stack()
+            return
+        }
         if (expr.genFlags.generated) return
         if (call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
             mark_unsafe_in_stack()
@@ -2693,12 +2697,46 @@ class StyleLintVisitor : AstVisitor {
     def call_func_needs_unsafe(func : Function const?; is_for_loop_src : bool) : bool {
         return (func == null
             || func.flags.unsafeOperation
+            || func.moreFlags.unsafeWhenNotCloneArray
             || (func.moreFlags.unsafeOutsideOfFor && !is_for_loop_src))
     }
 
     def override preVisitExprDelete(expr : ExprDelete?) : void {
         if (!expr.genFlags.generated) mark_unsafe_in_stack()
     }
+
+    def is_lowered_unsafe_delete(expr : ExpressionPtr) : bool {
+        return expr is ExprCall && lowered_unsafe_delete(expr as ExprCall)
+    }
+
+    //! `unsafe(delete p)` does not parse, so a block holding a delete anywhere in it has no narrow
+    //! form to offer, whichever of its statements the one unsafe operation turns out to be.
+    def block_holds_delete(blk : ExprBlock?) : bool {
+        for (st in blk.list) {
+            return true if (st is ExprDelete || is_lowered_unsafe_delete(st))
+        }
+        return false
+    }
+
+    //! `unsafe(a := b)` does not parse, and a container clone reaches lint as a generated call
+    //! rather than an ExprClone, so a block holding one has no narrow form to offer.
+    def is_lowered_unsafe_clone(expr : ExpressionPtr) : bool {
+        return false if (!(expr is ExprCall))
+        let call = expr as ExprCall
+        return false if (call.func == null)
+        let fname = string(call.func.name)
+        return (call.func.flags.generated && fname == "clone") || starts_with(fname, "builtin`clone`")
+    }
+
+    //! Infer lowers `delete` to an unflagged finalizer call, and only isSafeToDelete - which this
+    //! side cannot read - knows whether the wrap was needed, so every lowered delete counts as
+    //! needing it: a redundant wrap is missed rather than a needed one reported.
+    def lowered_unsafe_delete(expr : ExprCall?) : bool {
+        return false if (expr.func == null || length(expr.arguments) != 1)
+        let fname = string(expr.func.name)
+        return (expr.func.flags.generated && fname == "finalize") || starts_with(fname, "builtin`finalize`")
+    }
+
     def override preVisitExprAddr(expr : ExprAddr?) : void {
         st029_record_func(expr.func)
         if (!expr.genFlags.generated) mark_unsafe_in_stack()
@@ -2872,7 +2910,10 @@ class StyleLintVisitor : AstVisitor {
                 !(blk.list[0] is ExprYield ||
                   blk.list[0] is ExprDelete ||
                   blk.list[0] is ExprReturn ||
-                  blk.list[0] is ExprNew)
+                  blk.list[0] is ExprNew ||
+                  blk.list[0] is ExprClone ||
+                  is_lowered_unsafe_clone(blk.list[0]) ||
+                  block_holds_delete(blk))
                 && !frame.has_non_local_let_ref) {
             var narrowable = true
             if (blk.list[0] is ExprFor) {

@@ -271,10 +271,7 @@ def expr_value(var st : TokenStream) : Result {
 def getStructFieldOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     var size = 0
     for (field in *result.tinfo.structType) {
-        var tinfo : TypeInfo?
-        unsafe {
-            tinfo = addr<TypeInfo?>(field)
-        }
+        var tinfo = unsafe(addr<TypeInfo?>(field))
         if (field.name == ident) return (offset = size, tinfo = *tinfo)
         let al = get_type_align(tinfo) - 1
         size = (size + al) & ~al
@@ -310,14 +307,12 @@ def getVectorOffset(var st : TokenStream; ident : string; result : Result) : tup
 
 [unused_argument(st)]
 def getHandleFieldOffset(var st : TokenStream; ident : string; result : Result) : tuple<offset : int; tinfo : TypeInfo> {
-    unsafe {
-        var ann = unsafe(reinterpret<TypeAnnotation?>(result.tinfo.annotation))
-        if (ann == null) return (offset = -1, tinfo = TypeInfo(uninitialized))
-        let ofs  = int(get_handled_type_field_offset(ann, ident))
-        if (ofs == -1) return (offset = -1, tinfo = TypeInfo(uninitialized))
-        let tinfo = get_handled_type_field_type(ann, ident)
-        return (offset = ofs, tinfo = *tinfo)
-    }
+    var ann = unsafe(reinterpret<TypeAnnotation?>(result.tinfo.annotation))
+    if (ann == null) return (offset = -1, tinfo = TypeInfo(uninitialized))
+    let ofs  = int(get_handled_type_field_offset(ann, ident))
+    if (ofs == -1) return (offset = -1, tinfo = TypeInfo(uninitialized))
+    let tinfo = get_handled_type_field_type(ann, ident)
+    return (offset = ofs, tinfo = *tinfo)
 }
 
 def expr_field(var st : TokenStream) : Result {
@@ -370,12 +365,10 @@ def opDim(var st : TokenStream; index : int64; var result : Result) {
 
 def opDimString(var st : TokenStream; index : int64; var result : Result) {
     var str : string
-    unsafe {
-        if (result.data != null) {
-            str = *(reinterpret<string?>(result.data))
-        } else {
-            str = cast_to_string(result.value)
-        }
+    if (result.data != null) {
+        str = *(unsafe(reinterpret<string?>(result.data)))
+    } else {
+        str = cast_to_string(result.value)
     }
     let len = length(str)
     if (index >= int64(len)) return st |> eval_error("index out of range {index} of {len} (string too short)")

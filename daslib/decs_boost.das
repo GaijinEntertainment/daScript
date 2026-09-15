@@ -406,30 +406,28 @@ class DecsQueryMacro : AstCallMacro {
             }
         }
         var qblock : ExpressionPtr
-        unsafe {
-            if (qt == DecsQueryType.eid_query) {
-                qblock = quote() {
-                    for_eid_archetype(tag_eid, tag_req, tag_erq) $(tag_arch, entity_index) {
-                        tag_loop
-                    }
+        if (qt == DecsQueryType.eid_query) {
+            qblock = quote() {
+                for_eid_archetype(tag_eid, tag_req, tag_erq) $(tag_arch, entity_index) {
+                    tag_loop
                 }
-            } elif (qt == DecsQueryType.find_query) {
-                qblock = quote() {
-                    for_each_archetype_find(tag_req, tag_erq) $(tag_arch) {
-                        tag_loop
-                        return false
-                    }
-                }
-            } elif (qt == DecsQueryType.query) {
-                qblock = quote() {
-                    for_each_archetype(tag_req, tag_erq) $(tag_arch) {
-                        tag_loop
-                    }
-                }
-            } else {
-                macro_error(compiling_program(), expr.at, "internal error. unsupported query type")
-                return null
             }
+        } elif (qt == DecsQueryType.find_query) {
+            qblock = quote() {
+                for_each_archetype_find(tag_req, tag_erq) $(tag_arch) {
+                    tag_loop
+                    return false
+                }
+            }
+        } elif (qt == DecsQueryType.query) {
+            qblock = quote() {
+                for_each_archetype(tag_req, tag_erq) $(tag_arch) {
+                    tag_loop
+                }
+            }
+        } else {
+            macro_error(compiling_program(), expr.at, "internal error. unsupported query type")
+            return null
         }
         qblock |> force_at(expr.at)
         apply_template(qblock) $(rules) {
@@ -496,9 +494,7 @@ class DecsEcsMacro : AstFunctionAnnotation {
         if (!req |> empty) {
             var decl = new AnnotationDeclaration(uninitialized)
             var ann = find_annotation("decs_boost", "REQUIRE")
-            unsafe {
-                decl.annotation = reinterpret<Annotation?>(ann)
-            }
+            decl.annotation = unsafe(reinterpret<Annotation?>(ann))
             for (rq in req) {
                 decl.arguments |> add_annotation_argument(rq, true)
             }
@@ -507,9 +503,7 @@ class DecsEcsMacro : AstFunctionAnnotation {
         if (!nreq |> empty) {
             var decl = new AnnotationDeclaration(uninitialized)
             var ann = find_annotation("decs_boost", "REQUIRE_NOT")
-            unsafe {
-                decl.annotation = reinterpret<Annotation?>(ann)
-            }
+            decl.annotation = unsafe(reinterpret<Annotation?>(ann))
             for (rq in nreq) {
                 decl.arguments |> add_annotation_argument(rq, true)
             }

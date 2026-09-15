@@ -33,6 +33,11 @@
   explicit `-module-cache <path>` carries no binary stamp in its key, so the version is the only
   thing that discards it.
 
+- **A version bump REPLACES its comment, never appends to it** - `getVersion()` in
+  `include/daScript/ast/ast_serializer.h` states what THIS version changed and nothing about the
+  ones before it. A diff that keeps the old note in a parenthesis is a defect; git carries the
+  history.
+
 - **A diff that streams or compares a `CodeOfPolicies` field in `module_builtin_ast_serialize.cpp`
   outside `DAS_MODULE_CACHE_POLICY_FIELDS` is a defect - put the field on the list instead** - the
   list drives both the record's policy stream and the compare that refuses a record written under

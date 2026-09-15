@@ -275,9 +275,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
     //! creates a lexer generator from the input `stext` string.
     return <- generator<TokenAt> {
         var tin : iterator<int>
-        unsafe {
-            tin <- each(stext)
-        }
+        tin <- unsafe(each(stext))
         var ahead : int = ' '
         var str : array<uint8>
         var pending_high = 0u
@@ -413,9 +411,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                     yield TokenAt(value = Token(_number = wide), line = line, row = row)
                 }
                 clear(str)
-                unsafe {
-                    delete_string(num)
-                }
+                unsafe(delete_string(num))
             } elif (is_alpha(ahead)) {
                 push(str, uint8(ahead))
                 while (next(tin, ahead, line, row) && is_alpha(ahead)) {
@@ -432,9 +428,7 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                     yield TokenAt(value = Token(_error = "invalid name {name}"), line = line, row = row)
                     return false
                 }
-                unsafe {
-                    delete_string(name)
-                }
+                unsafe(delete_string(name))
                 clear(str)
             } else {
                 yield TokenAt(value = Token(_error = "invalid character `{to_char(ahead)}` aka ASCII {ahead}"), line = line, row = row)

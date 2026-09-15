@@ -1047,9 +1047,7 @@ class PerfLintVisitor : AstVisitor {
         //! Always pushed in preVisitExprFor — keeps the stack in lockstep with for-loop nesting so visitExprFor can pop unconditionally. Matched/ disqualified status is filled in by the per-source/per-variable hooks.
         var state = Perf018State(disqualified = true, matched = false)
         perf018_stack    |> push(state)
-        unsafe {
-            perf018_for_exprs |> push(reinterpret<ExprFor?>(expr))
-        }
+        perf018_for_exprs |> push(unsafe(reinterpret<ExprFor?>(expr)))
     }
 
     def perf018_pop_and_check() : void {
@@ -1254,9 +1252,7 @@ class PerfLintVisitor : AstVisitor {
         //! The warning fires at the for-loop's `at`, not the push site — the three-function protocol is in daslib/ARCHITECTURE_LINT.md.
         var state : Perf022State
         perf022_stack |> push(state)
-        unsafe {
-            perf022_for_exprs |> push(reinterpret<ExprFor?>(expr))
-        }
+        perf022_for_exprs |> push(unsafe(reinterpret<ExprFor?>(expr)))
     }
 
     def perf022_record_source(src : Expression?) : void {

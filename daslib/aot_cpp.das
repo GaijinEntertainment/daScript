@@ -946,9 +946,7 @@ class public AotDebugInfoHelper {
         let annArgs = build_string() $(var sb) {
             for (ai in range(int(fld.annotation_argument_count))) {
                 if (ai != 0) { write(sb, ", "); }
-                unsafe {
-                    writeAnnotationArgInit(sb, get_annotation_argument(*fld, ai))
-                }
+                writeAnnotationArgInit(sb, get_annotation_argument(*fld, ai))
             }
         }
         write(*writer, "AnnotationArgumentInfo {arrName}[{int(fld.annotation_argument_count)}] = \{ {annArgs} \};\n")
@@ -3743,13 +3741,11 @@ class public CppAot : AstVisitor {
                 write(*ss, "_cmres");
             }
             if (length(call.arguments) > 1) {
-                unsafe {
                 let args = (each(range(1, length(call.arguments)))
                     ._select("{describeCppType(call.arguments[_]._type, DescribeConfig(cross_platform=cross_platform))}{(call.arguments[_]._type.isRefType && !call.arguments[_]._type.flags.ref) ? " &" : ""}")
                     .to_array()
                     ._fold()) |> join(",")
                 write(*ss, "<{args}>");
-                }
             }
             write(*ss, "(__context__,nullptr,");
         } elif (call.name == "memzero") {
