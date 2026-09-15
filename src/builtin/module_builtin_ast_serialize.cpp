@@ -3247,7 +3247,7 @@ namespace das {
         X(ignore_shared_modules) X(default_module_public) X(no_deprecated) X(no_aliasing) \
         X(strict_smart_pointers) X(no_init) X(strict_unsafe_delete) X(no_members_functions_in_struct) \
         X(no_local_class_members) X(no_unsafe_uninitialized_structures) X(default_init_containers) \
-        X(strict_properties) X(no_writing_to_nameless) X(no_optimizations) X(fast_math) X(disable_dse) \
+        X(strict_properties) X(no_writing_to_nameless) X(no_optimizations) X(no_fold_unsafe) X(fast_math) X(disable_dse) \
         X(disable_cse) X(disable_temp_string_reclaim) X(disable_inline) X(disable_auto_inline) \
         X(auto_inline_functions) X(auto_inline_cost) X(disable_run) X(no_infer_time_folding) \
         X(fail_on_no_aot) X(fail_on_lack_of_aot_export) X(no_fast_call) X(fusion) X(scoped_stack_allocator) \

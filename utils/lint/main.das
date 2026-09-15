@@ -444,6 +444,15 @@ def private file_nolint_codes(prog : ProgramPtr; base : table<string>) : table<s
     return <- merged
 }
 
+def private lint_policies(var cop : CodeOfPolicies) {
+    cop.ignore_shared_modules = true
+    cop.export_all = true
+    cop.lint_check = true
+    cop.no_optimizations = true
+    cop.no_infer_time_folding = true
+    cop.no_fold_unsafe = true
+}
+
 def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
               disabled_codes, enabled_codes : table<string>; defer_stale : bool) : LintResult {
     var result = LintResult(file = file)
@@ -453,11 +462,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            cop.ignore_shared_modules = true
-            cop.export_all = true
-            cop.lint_check = true
-            cop.no_optimizations = true
-            cop.no_infer_time_folding = true
+            lint_policies(cop)
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     let issue_str = string(issues)

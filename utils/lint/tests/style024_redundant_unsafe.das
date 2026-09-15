@@ -138,3 +138,22 @@ def good_safe_as_on_value_variant() : void {
 def good_safe_index_of_scalar_pointer(p : float?; i : int64) : float {
     return unsafe(p?[i]) ?? -1.0
 }
+
+struct private Node {
+    a : int
+}
+
+def good_unsafe_block_delete_pointer() : void {
+    var p = new Node(a = 1)
+    unsafe {
+        delete p
+    }
+}
+
+def good_unsafe_block_delete_container() : void {
+    var arr : array<int>
+    arr |> push(1)
+    unsafe {
+        delete arr
+    }
+}

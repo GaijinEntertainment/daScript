@@ -1034,6 +1034,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(strict_properties)>("strict_properties");
         // environment
             addField<DAS_BIND_MANAGED_FIELD(no_optimizations)>("no_optimizations");
+            addField<DAS_BIND_MANAGED_FIELD(no_fold_unsafe)>("no_fold_unsafe");
             addField<DAS_BIND_MANAGED_FIELD(fast_math)>("fast_math");
             addField<DAS_BIND_MANAGED_FIELD(disable_dse)>("disable_dse");
             addField<DAS_BIND_MANAGED_FIELD(disable_cse)>("disable_cse");

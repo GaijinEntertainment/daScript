@@ -111,6 +111,7 @@ namespace das {
         /*option*/ bool no_writing_to_nameless = true;             // if true, then writing to nameless variables (intermediate on the stack) is not allowed
     // environment
         /*option*/ bool no_optimizations = false;                  // disable optimizations, regardless of settings
+        /*option*/ bool no_fold_unsafe = false;                    // keep the `unsafe { }` wrapper in the AST after infer (tooling that walks a compiled program: the scope is invisible once foldUnsafe runs)
         /*option*/ bool fast_math = false;                         // allow VALUE-SAFE float optimizations with bit differences (reassociation, FMA contraction, signed-zero laxity); inf/NaN semantics are preserved — no rcp division, no nan-compare flips (JIT stamps reassoc|nsz|contract only). doubles stay bit-exact unless this is on
         /*option*/ bool disable_dse = false;                       // disable the dead-store-elimination pass
         /*option*/ bool disable_cse = false;                       // disable the common-subexpression-elimination pass
