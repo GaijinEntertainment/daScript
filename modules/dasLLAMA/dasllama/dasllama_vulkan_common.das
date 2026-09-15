@@ -2458,6 +2458,9 @@ struct RDec {
     cls_fmt_marker : int
     layers : array<RLayer>
     cmd : VkCommandBuffer
+    cmd_short : VkCommandBuffer   //! the unsplit twin: the same chain with the attention at one split, submitted under RD_UNSPLIT_POS
+    short_on : bool               //! ... recorded (a device at one split has no twin)
+    unsplit_served : int64        //! the tokens the twin served
     tok_recorded : bool           // cmd holds the whole-token chain, re-submittable as-is
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
@@ -2561,6 +2564,16 @@ def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && di
 
 var g_rd : RDec?
 
+//! the position under which the token command runs its unsplit twin: below it a head's whole row is at most two of the
+//! decode pass's 256-key chunks, less than the combine's own chain costs, so the split buys nothing (`rd_record_token`)
+let RD_UNSPLIT_POS = 512l
+
+//! the token command's attention split count on this device (1 = the unsplit pass alone, no twin; 0 = no driver)
+def vk_rdec_attn_nsplit : int64 => g_rd != null ? g_rd.attn_nsplit : 0l
+
+//! the tokens the unsplit twin served so far (a device at one split serves every token unsplit and counts none here)
+def vk_rdec_unsplit_tokens : int64 => g_rd != null ? g_rd.unsplit_served : 0l
+
 //! the norms plane's per-layer row indices (`RDEC_NORM_ROWS` rows a layer); the final norm follows the layers and the q/k norm rows follow it
 let RD_NORM_ROWS = RDEC_NORM_ROWS
 let RD_NORM_ATT = 0l
@@ -2652,6 +2665,8 @@ var g_rdq_n = 0u
 var g_rdq_count = 0l
 var g_rdq_total = 0.0lf
 var g_rdq_stamp_names : array<string>        //! the recorded token command's stamp names in stamp order, the recorder's own account of what each interval bills
+var g_rdq_names_short : array<string>        //! ... the unsplit twin's, and its stamp count
+var g_rdq_n_short = 0u
 var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
 var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
@@ -2671,6 +2686,8 @@ def rdq_reset {
     g_rdq_us_by_name |> clear()
     g_rdq_print_order |> clear()
     g_rdq_stamp_names |> clear()
+    g_rdq_names_short |> clear()
+    g_rdq_n_short = 0u
 }
 
 let PFQ_CAP = 2048u

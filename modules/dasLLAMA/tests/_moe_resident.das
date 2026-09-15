@@ -81,6 +81,33 @@ def private census(kernel : string) : int64 {
     }
 }
 
+//! the token command's attention split count (0 without the module or the driver) and the tokens its unsplit twin served
+def private attn_nsplit : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_attn_nsplit()
+    } else {
+        return 0l
+    }
+}
+
+def private unsplit_tokens : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_unsplit_tokens()
+    } else {
+        return 0l
+    }
+}
+
+//! the steps of a prompt of `n` rows the unsplit twin must serve: every one under RD_UNSPLIT_POS, none past it, -1 where the
+//! steps straddle it
+def private unsplit_want(n : int64) : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return n + FED_STEPS <= RD_UNSPLIT_POS ? FED_STEPS : (n >= RD_UNSPLIT_POS ? 0l : -1l)
+    } else {
+        return -1l
+    }
+}
+
 //! the census over every format's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode) or `khr` (every
 //! piece in mm mode) - the expert planes carrying whichever format the file holds: the kq formats, q8, the per-32 q51 and mx4 rails
 def private column_census(col : string) : int64 {
@@ -172,8 +199,12 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â
         let topk0 = census("topk_cls_spv")
         let ecol = expert_column()
         let e0 = column_census(ecol.col)
+        let un0 = unsplit_tokens()
         var gpu <- feed_logits(tr, sg, prompt, toks)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
+        if (attn_nsplit() > 1l && unsplit_want(n) >= 0l) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
+            t |> equal(unsplit_tokens() - un0, unsplit_want(n), "the token command's unsplit twin served {unsplit_want(n)} of the {FED_STEPS} steps after {n} rows")
+        }
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt ({nrec} recurrent layers of {layers})")
         if (sched0 != NO_CENSUS) {
             t |> equal(census("moe_sched_cls_spv") - sched0, layers * windows, "the device bucket schedule ran once per MoE layer per window ({windows} windows)")

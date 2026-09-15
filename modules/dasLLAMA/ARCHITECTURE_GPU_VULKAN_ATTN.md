@@ -17,7 +17,12 @@ heads alone cover it), each running the online softmax over its piece into an un
 (max, denominator, accumulators; an empty piece's weighs nothing); `DaAttnComb` aligns a head's
 partials by their maxes, normalizes, gates and stores the row (unsplit, the pass stores it), and the
 store quantizes the row for the `wo` plane (`rqk`: Q8_0 blocks by the 32-lane group's amax, Q8_K
-superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. The scores
+superblocks by the workgroup's on a head of 256 or 512), so no requant dispatch follows. A split
+device records the token command twice - the split chain and an unsplit twin over the same sets -
+and submits the twin while the position is under `RD_UNSPLIT_POS` (512): there a head's whole row
+is at most two of the pass's 256-key chunks, less than the combine's own chain, so the split only
+adds a dispatch a layer (gpt-oss on the RTX PRO 4500 at three splits: the combine 147 us a token,
+the pass no shorter for the split). The scores
 go a subgroup two keys a step, lanes across the dims (one coalesced K row, the dot a subgroup add; on
 the f16 mirror a lane's eight halves are one 16-byte word, `KV16`, and both keys' words are in flight
 before either dot - a piece holds a few keys a subgroup, so the pass is the memory round trips it

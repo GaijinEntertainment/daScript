@@ -173,6 +173,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
     r.cmd = alloc_cmd()
+    r.cmd_short = alloc_cmd()
     return true
 }
 
@@ -1053,7 +1054,18 @@ def private rd_record_token {
             fill_gemv_regions(L.m_pp, L.bpp)
         }
     }
-    rd_encode_token()
+    g_rd.short_on = false
+    if (g_rd.attn_nsplit > 1l) {   //! the unsplit twin for the positions under RD_UNSPLIT_POS: the same sets, the pass storing the row itself, no combine
+        let ns = g_rd.attn_nsplit
+        g_rd.attn_nsplit = 1l
+        rd_encode_token(g_rd.cmd_short)
+        g_rd.attn_nsplit = ns
+        delete g_rdq_names_short
+        g_rdq_names_short <- g_rdq_stamp_names
+        g_rdq_n_short = g_rdq_n
+        g_rd.short_on = true
+    }
+    rd_encode_token(g_rd.cmd)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
@@ -1540,11 +1552,10 @@ def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
 // The encode half alone: reset + re-encode the token cmd over the already-filled metas/sets.
 // The --rerecord-ab probe calls this per token to price the class twins' push-borne pos/cnt.
 [cold_path]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
-def private rd_encode_token {
+def private rd_encode_token(raw : VkCommandBuffer) {
     let dim = g_rd.dim
     let nlfin = rd_norm_final()   // rms_final offset in the norms buffer
     unsafe {
-        var raw = g_rd.cmd
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
         let begin = VkCommandBufferBeginInfo()
@@ -1703,34 +1714,34 @@ def private rdq_group_line(pfx : string; n : double) : string {
 }
 
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
-def private rdq_sample {
-    let want = length(g_rdq_stamp_names)
-    if (g_rdq_overflow || g_rdq_n != uint(want)) {
+def private rdq_sample(names : array<string>; n : uint) {
+    let want = length(names)
+    if (g_rdq_overflow || n != uint(want)) {
         // a bare stamp or a full query pool: the whole command's GPU span reads off the first and last stamps
         unsafe {
             var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
-            g_rdq_total += double(tp[g_rdq_n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
+            g_rdq_total += double(tp[n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
         }
         if (g_rdq_count == 0l) {   // the first token: the eight longest stamp gaps, by stamp index, name the dispatches worth a look
-            var top <- [for (i in range(1, int(g_rdq_n))); (us = pfq_us(uint(i)), at = uint(i))]
+            var top <- [for (i in range(1, int(n))); (us = pfq_us(uint(i)), at = uint(i))]
             top |> sort() $(a, b) => a.us > b.us
             let line = build_string() $(w) {
                 for (k in range(min(8, length(top)))) {
                     w |> write("#{top[k].at} {int(top[k].us)}us ")
                 }
             }
-            to_log(LOG_INFO, "vk_rdec first token: {g_rdq_n} stamps, longest gaps {line}\n")
+            to_log(LOG_INFO, "vk_rdec first token: {n} stamps, longest gaps {line}\n")
             delete top
         }
         g_rdq_count++
         if (g_rdq_count % 32l == 0l) {
-            let why = g_rdq_overflow ? "the query pool filled at PFQ_CAP" : "{g_rdq_n} stamps, the recorder named {want}"
+            let why = g_rdq_overflow ? "the query pool filled at PFQ_CAP" : "{n} stamps, the recorder named {want}"
             to_log(LOG_INFO, "vk_rdec gpu avg/token over {g_rdq_count}: total {int(g_rdq_total / double(g_rdq_count))} us (roles unaggregated: {why})\n")
         }
         return
     }
     for (i in range(1, want)) {   // stamp 0 is the anchor
-        let nm = g_rdq_stamp_names[i]
+        let nm = names[i]
         if (!key_exists(g_rdq_us_by_name, nm)) {
             g_rdq_print_order |> push(nm)
             g_rdq_us_by_name[nm] = 0.0lf
@@ -1739,11 +1750,11 @@ def private rdq_sample {
     }
     unsafe {
         var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
-        g_rdq_total += double(tp[g_rdq_n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
+        g_rdq_total += double(tp[n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
     }
     g_rdq_count++
     if (g_rdq_count % 32l == 0l) {
-        let n = double(g_rdq_count)
+        let cnt = double(g_rdq_count)
         var ndn = 0l
         var nmoe = 0l
         for (L in g_rd.layers) {
@@ -1751,12 +1762,12 @@ def private rdq_sample {
             nmoe += L.moe ? 1l : 0l
         }
         let natt = long_length(g_rd.layers) - ndn
-        to_log(LOG_INFO, "vk_rdec gpu avg/token over {g_rdq_count}: {rdq_group_line("p:", n)}{rdq_group_line("a:", n)}{rdq_group_line("t:", n)}total {int(g_rdq_total / n)} (attention layers {natt}, recurrent {ndn}, MoE {nmoe})\n")
+        to_log(LOG_INFO, "vk_rdec gpu avg/token over {g_rdq_count}: {rdq_group_line("p:", cnt)}{rdq_group_line("a:", cnt)}{rdq_group_line("t:", cnt)}total {int(g_rdq_total / cnt)} (attention layers {natt}, recurrent {ndn}, MoE {nmoe})\n")
         if (nmoe > 0l) {
-            to_log(LOG_INFO, "vk_rdec moe avg/token (the MoE layers' tails, summed over the layers): {rdq_group_line("m:", n)}\n")
+            to_log(LOG_INFO, "vk_rdec moe avg/token (the MoE layers' tails, summed over the layers): {rdq_group_line("m:", cnt)}\n")
         }
         if (ndn > 0l) {
-            to_log(LOG_INFO, "vk_rdec dn avg/token: {rdq_group_line("d:", n)}\n")
+            to_log(LOG_INFO, "vk_rdec dn avg/token: {rdq_group_line("d:", cnt)}\n")
         }
     }
 }
@@ -1795,10 +1806,15 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     if (!g_rd.tok_recorded) {
         rd_record_token()
     } elif (vk_rdec_rerecord_on()) {
-        rd_encode_token()   // probe arm: pay the full re-encode every token
+        rd_encode_token(g_rd.cmd)   // probe arm: pay the full re-encode every token
     }
     let ts0 = ref_time_ticks()
     let prof = vk_prof()
+    let short = g_rd.short_on && pos < RD_UNSPLIT_POS
+    var cmd = short ? g_rd.cmd_short : g_rd.cmd
+    if (short) {
+        g_rd.unsplit_served++
+    }
     unsafe {
         memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
@@ -1812,7 +1828,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
         tm.parity = uint(g_rd.dn_parity)
         if (prof) {   //! the profiled form splits the wall into its pieces; the served form is one call
             let t1 = ref_time_ticks()
-            submit_nowait(g_rd.cmd)
+            submit_nowait(cmd)
             let t2 = ref_time_ticks()
             wait_fence()
             let t3 = ref_time_ticks()
@@ -1823,7 +1839,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             g_rdq_host_us[2] += double(get_time_usec(t2)) - double(get_time_usec(t3))
             g_rdq_host_us[3] += double(get_time_usec(t3)) - double(get_time_usec(t4))
         } else {
-            submit_wait(g_rd.cmd)
+            submit_wait(cmd)
             memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
         }
     }
@@ -1851,8 +1867,12 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             }
         }
     }
-    if (vk_prof() && g_rdq_n > 2u) {
-        rdq_sample()
+    if (prof) {   //! the ledger reads the submitted command's stamps
+        if (short && g_rdq_n_short > 2u) {
+            rdq_sample(g_rdq_names_short, g_rdq_n_short)
+        } elif (!short && g_rdq_n > 2u) {
+            rdq_sample(g_rdq_stamp_names, g_rdq_n)
+        }
     }
 }
 
