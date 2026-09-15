@@ -14,7 +14,9 @@ bin/daslang -jit dastest/dastest.das -- --bench --test path/to/directory/
 - `-jit` goes **before** `dastest.das`: it puts dastest itself in JIT mode, which is what
   gets the benchmark code JIT-compiled. Use it for any performance number you intend to
   believe
-- `--bench-names name1,name2` - run only those benchmark functions
+- `--bench-names prefix` - run only the benchmark functions whose name starts with `prefix`;
+  repeat the flag for several (`--bench-names a --bench-names b`) - a comma-joined list is one
+  prefix that matches nothing
 
 Dropping `--bench` turns the same command into a fast compile check: it reports 0 tests but
 surfaces every compile error.

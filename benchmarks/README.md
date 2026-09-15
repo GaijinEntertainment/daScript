@@ -4,6 +4,12 @@
 
 Every `.das` benchmark file in this directory tree is listed below, grouped by subdirectory.
 
+## compile/
+
+| File | Description |
+|---|---|
+| `utils.das` | Compile-only wall time of every tool under `utils/` the nightly build can compile, one `[benchmark]` per tool, each a child `daslang -compile-only -no-module-cache <entry>` - interp lane only, since the child is the same binary whatever lane the parent runs in |
+
 ## terminal/
 
 | File | Description |

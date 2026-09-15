@@ -13,6 +13,7 @@ require bench_args
 require benchstat
 require utils
 require table_fmt
+require bench_stand
 
 def print_usage() {
     print("benchctl - benchmark database management tool\n\n")
@@ -23,6 +24,8 @@ def print_usage() {
     print("  insert   Insert benchmark JSON output files into the database\n")
     print("  query    Display benchmark records (filter by --commit / --tag)\n")
     print("  compare  Compare two sets of results statistically\n")
+    print("  run      Benchmark a tree into one run record (the nightly stand)\n")
+    print("  report   Turn run records into the viewer's data.json, with a verdict exit code\n")
     print("  help     Show this help message\n\n")
     print_benchctl_help()
 }
@@ -40,6 +43,10 @@ def script_argv() : array<string> {
 [export]
 def main : int {
     let argv <- script_argv()
+
+    // The stand's verbs carry their own flags, so they dispatch before benchctl's parser
+    // ever sees an argument it does not know.
+    if (!empty(argv) && (argv[0] == "run" || argv[0] == "report")) return stand_main()
 
     if (empty(argv) || find_index(argv, "--help") != -1 || find_index(argv, "-h") != -1) {
         print_usage()
@@ -375,8 +382,8 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
         }
     }
 
-    var old_samples = make_sample_sets(old_entries)
-    var new_samples = make_sample_sets(new_entries)
+    var old_samples = make_sample_sets(to_run_stats(old_entries))
+    var new_samples = make_sample_sets(to_run_stats(new_entries))
 
     var bench_order <- [for (k in keys(old_samples)); k]
     sort(bench_order) $(x, y) {
