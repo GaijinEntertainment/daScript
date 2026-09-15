@@ -26,8 +26,8 @@ reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses
 numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
 `dasllama_vulkan_classes.das` twice: for the KHR trio it requires `<Fmt>KhrBatch`, its
 `kq_batch_<fmt>_khr_cls` stamp and an arm in each of `khr_cls_ensure`, `khr_cls_set` and
-`khr_cls_enc` in `dasllama_vulkan_prefill.das`, licensing `Q51Cm2T` and `Mx4Cm2T` alone - q51 and mx4 are routed-expert planes and
-the resident MoE block is cm2-gated, while q8, the other per-32 format, rides `Q8KhrBatch` (`q8_batch_khr_cls`) on a KHR-mode card;
+`khr_cls_enc` in `dasllama_vulkan_prefill.das`, licensing none - the per-32 formats spell their stamps `<fmt>_batch_khr_cls`
+(`Q8KhrBatch`, `Q51KhrBatch`, `Mx4KhrBatch`), and the expert schedule rides that tile in mm mode;
 for the e trio it requires `<Fmt>Cm2EBatch`, its `kq_batch_<fmt>_cm2e_cls` stamp (`<fmt>_batch_cm2e_cls` for the per-32
 formats) and an arm in each of `cm2e_cls_ensure`, `cm2e_cls_set` and `cm2e_cls_enc`, licensing none.
 `check_cm2_stamp_tiles` reads every `[vk_dispatch]` stamp of those templates - in

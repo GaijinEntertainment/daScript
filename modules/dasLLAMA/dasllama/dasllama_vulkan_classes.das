@@ -7344,6 +7344,24 @@ class template Q51Cm2T : KqCm2BatchT {
     override BLKW = 32u
     override DECV4 = true
 
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {   //! the 20-byte block off its words: four nibble words then the qh word, the low or high nibbles by e0
+            let sh = (e0 >> 4u) * 4u
+            let dm = unpackHalf2x16(ws[blk])
+            let qh = wqw[blk * 5u + 4u] >> e0
+            for [unroll_full] (c in range(4)) {
+                let w = wqw[blk * 5u + uint(c)] >> sh
+                let hb = qh >> (uint(c) * 4u)
+                let q0 = float((w & 0xFu) | ((hb & 1u) << 4u))
+                let q1 = float(((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u))
+                let q2 = float(((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u))
+                let q3 = float(((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u))
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(dm.x * q0 + dm.y, dm.x * q1 + dm.y))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(dm.x * q2 + dm.y, dm.x * q3 + dm.y))
+            }
+        }
+    }
+
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkQ51Blk; bc, cib : uint2) : float16 {
         let e = cib.y
@@ -7380,6 +7398,29 @@ class template Mx4Cm2T : KqCm2BatchT {
     typedef ST = uint
     override BLKW = 32u
     override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {   //! the block's 16 nibble bytes as one word4: the low nibbles are elements 0..15, the high 16..31; `decode_v4`'s packed-byte arithmetic
+            let sh = (e0 >> 4u) * 4u
+            let w4 = wq4[blk]
+            let ex = (ws[blk >> 2u] >> ((blk & 3u) * 8u)) & 0xFFu
+            let sc = uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
+            for [unroll_full] (c in range(4)) {
+                let nw = (w4[c] >> sh) & 0x0F0F0F0Fu
+                let mag = nw & 0x07070707u
+                let lo2 = mag & 0x03030303u
+                let hi1 = (mag >> 2u) & 0x01010101u
+                let dm = lo2 + ((lo2 + 0x04040404u + (((lo2 & (lo2 >> 1u)) & 0x01010101u) << 1u)) & (hi1 * 0xFFu))
+                let sg = (nw >> 3u) & 0x01010101u
+                let v0 = float(dm & 0xFFu) * (1.0 - 2.0 * float(sg & 1u)) * sc
+                let v1 = float((dm >> 8u) & 0xFFu) * (1.0 - 2.0 * float((sg >> 8u) & 1u)) * sc
+                let v2 = float((dm >> 16u) & 0xFFu) * (1.0 - 2.0 * float((sg >> 16u) & 1u)) * sc
+                let v3 = float(dm >> 24u) * (1.0 - 2.0 * float(sg >> 24u)) * sc
+                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(v0, v1))
+                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(v2, v3))
+            }
+        }
+    }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkMx4Blk; bc, cib : uint2) : float16 {
@@ -8691,6 +8732,29 @@ class K4KhrBatch : K4Cm2T {
 
 [vk_dispatch(name = "q8_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q8KhrBatch : Q8Cm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+//! the per-32 expert rails' KHR arms: the expert schedule's s and m pieces ride this one tile in mm mode, a 32-row piece an edge tile
+[vk_dispatch(name = "q51_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q51KhrBatch : Q51Cm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "mx4_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Mx4KhrBatch : Mx4Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true

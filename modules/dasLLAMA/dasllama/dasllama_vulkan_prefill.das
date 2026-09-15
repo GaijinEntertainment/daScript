@@ -45,7 +45,7 @@ def public pf_f16_feed(f : int) : bool {
     if (g_gpu.coopmat_mode == COOPMAT_CM2) {
         return f == int(KqFmt.q8) || f == int(KqFmt.q51) || f == int(KqFmt.mx4) || kq_sb(f)
     }
-    return g_gpu.coopmat_mode == COOPMAT_MM && (kq_sb(f) || f == int(KqFmt.q8)) && khr_kq_tile_on()
+    return g_gpu.coopmat_mode == COOPMAT_MM && (kq_sb(f) || f == int(KqFmt.q8) || f == int(KqFmt.q51) || f == int(KqFmt.mx4)) && khr_kq_tile_on()
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
@@ -81,6 +81,8 @@ def khr_cls_ensure(fmt : int) : bool {
     if (fmt == int(KqFmt.k2)) return ensure_kq_batch_k2_khr_cls()
     if (fmt == int(KqFmt.iq2s)) return ensure_kq_batch_iq2s_khr_cls()
     if (fmt == int(KqFmt.iq2xs)) return ensure_kq_batch_iq2xs_khr_cls()
+    if (fmt == int(KqFmt.q51)) return ensure_q51_batch_khr_cls()
+    if (fmt == int(KqFmt.mx4)) return ensure_mx4_batch_khr_cls()
     verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR ensure fell through for a format the f16 feed admits")
     return ensure_kq_batch_iq2xxs_khr_cls()
 }
@@ -100,6 +102,8 @@ def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits
     if (fmt == int(KqFmt.k2)) return set_kq_batch_k2_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.iq2s)) return set_kq_batch_iq2s_khr_cls(bufs, sizes, gbits)
     if (fmt == int(KqFmt.iq2xs)) return set_kq_batch_iq2xs_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.q51)) return set_q51_batch_khr_cls(bufs, sizes, gbits)
+    if (fmt == int(KqFmt.mx4)) return set_mx4_batch_khr_cls(bufs, sizes, gbits)
     verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR set fell through for a format the f16 feed admits")
     return set_kq_batch_iq2xxs_khr_cls(bufs, sizes, gbits)
 }
@@ -132,6 +136,10 @@ def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescr
         enc_kq_batch_iq2s_khr_cls(raw, h, s, pc, groups)
     } elif (fmt == int(KqFmt.iq2xs)) {
         enc_kq_batch_iq2xs_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.q51)) {
+        enc_q51_batch_khr_cls(raw, h, s, pc, groups)
+    } elif (fmt == int(KqFmt.mx4)) {
+        enc_mx4_batch_khr_cls(raw, h, s, pc, groups)
     } else {
         verify(fmt == int(KqFmt.iq2xxs), "vk prefill: the KHR enc fell through for a format the f16 feed admits")
         enc_kq_batch_iq2xxs_khr_cls(raw, h, s, pc, groups)
@@ -222,8 +230,7 @@ def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDesc
 def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     verify(fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || kq_sb(fmt), "vk prefill: a cm2 tile for a format the f16 feed never admits")
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
+    if (g_gpu.coopmat_mode == COOPMAT_MM) {   //! the KHR arm is one 128 x 128 tile for every column, the expert schedule's s and m pieces included
         return khr_cls_ensure(fmt)
     }
     if (tc == CM2_TC_E) {
@@ -284,7 +291,6 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
 def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
         return khr_cls_set(fmt, bufs, sizes, gbits)
     }
     if (tc == CM2_TC_E) {
@@ -387,7 +393,6 @@ def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 con
 def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk prefill: a cm2 tile column the pick never returns")
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        verify(tc != CM2_TC_E, "vk prefill: the expert schedule's e column has no KHR arm - the resident MoE block is cm2-only")
         khr_cls_enc(fmt, raw, h, s, pc, groups)
     } elif (tc == CM2_TC_E) {
         cm2e_cls_enc(fmt, raw, h, s, pc, groups)
@@ -815,10 +820,12 @@ let private PF_MOE_MAP_OFF = 2_048l   //! the schedules' first per-wg map word o
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def vk_rdec_moe_ok(f1, f3, f2 : int) : bool {
-    if (!vk_moe_init() || !g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
+    if (!vk_moe_init()) {
         return false
     }
-    return pf_f16_feed(f1) && pf_f16_feed(f3) && pf_f16_feed(f2)
+    //! the expert tiles: the cm2 s and e stamps in cm2 mode, the KHR 128 x 128 tile in mm mode at subgroup 32
+    let tiles = (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on())
+    return tiles && pf_f16_feed(f1) && pf_f16_feed(f3) && pf_f16_feed(f2)
 }
 
 //! the expert tiles' dispatch bounds for a window of `nk` slot rows: the s dispatch takes at most

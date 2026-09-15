@@ -3118,10 +3118,6 @@ def test_vkd_q51_cm2_batch(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            if (!(g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)) {
-                t |> skip("the q51 expert rail serves only in cm2 mode on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
-                return
-            }
             let n = 704                //! the 26B-A4B's expert width: 22 blocks, two unrolled 256-passes and a 192 tail
             let totblk = 2 * TILE_CELL_D * (n / 32)
             var wqh : array<uint>
@@ -3135,7 +3131,7 @@ def test_vkd_q51_cm2_batch(t0 : T?) {
                 wsh[b] = packHalf2x16(float2(0.0002 * float(1 + b % 7), 0.0001 * float(b % 5) - 0.0002))
             }
             var f <- tile_fixture(n, 32, wqh, wsh, 3u, 5u)
-            var y_ref <- tile_cell_arms(t, "q51", int(KqFmt.q51), f, [ARM_CM2_S, ARM_CM2_E], @@q51f16_gemm_oracle)
+            var y_ref <- tile_cell_arms(t, "q51", int(KqFmt.q51), f, [ARM_CM2_S, ARM_CM2_E, ARM_KHR], @@q51f16_gemm_oracle)
             delete y_ref
             delete f
         } else {
@@ -3162,10 +3158,6 @@ def test_vkd_mx4_cm2_batch(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            if (!(g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)) {
-                t |> skip("the mx4 expert rail serves only in cm2 mode on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
-                return
-            }
             let n = 704                //! 22 blocks: eleven 64-deep k steps, two unrolled 256-passes and a 192 tail
             let totblk = 2 * TILE_CELL_D * (n / 32)
             var wqh : array<uint>
@@ -3175,7 +3167,7 @@ def test_vkd_mx4_cm2_batch(t0 : T?) {
             }
             var wsh <- mx4_scale_words(totblk)
             var f <- tile_fixture(n, 32, wqh, wsh, 3u, 5u)
-            var y_ref <- tile_cell_arms(t, "mx4", int(KqFmt.mx4), f, [ARM_CM2_S, ARM_CM2_E], @@mx4f16_gemm_oracle)
+            var y_ref <- tile_cell_arms(t, "mx4", int(KqFmt.mx4), f, [ARM_CM2_S, ARM_CM2_E, ARM_KHR], @@mx4f16_gemm_oracle)
             delete y_ref
             delete f
         } else {

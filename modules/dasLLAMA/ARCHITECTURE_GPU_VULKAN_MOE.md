@@ -68,7 +68,10 @@ except where a probe arm is named.
   (`sched_ladder_m_rows`). The s pieces run the s stamp and the m pieces the e stamp - the m
   tile's column at the format's own k step, keyed `CM2_TC_E` in the class ladders
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l) - and every piece dispatches one workgroup per
-  column tile per 128-row weight tile of the plane. The s pieces' records sit at `[0, ne)`,
+  column tile per 128-row weight tile of the plane. In mm mode both piece kinds run the KHR
+  128 x 128 tile (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ae) over the same records and maps -
+  a 32-row s piece is an edge tile there, and the workgroup counts agree because a column is one
+  tile either way - so a KHR-mode card serves the resident MoE block (`vk_rdec_moe_ok`). The s pieces' records sit at `[0, ne)`,
   the m pieces' at `[ne, 2 ne)`,
   and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 2048 words for up
   to 256 experts twice), the two tile counts scanned as one packed word (its halves stay under

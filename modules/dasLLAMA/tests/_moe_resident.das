@@ -81,20 +81,31 @@ def private census(kernel : string) : int64 {
     }
 }
 
-//! the census over every format's stamp of one cm2 column (the expert planes carry whichever format the file holds: the
-//! kq formats, q8, the per-32 q51 and mx4 rails)
+//! the census over every format's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode) or `khr` (every
+//! piece in mm mode) - the expert planes carrying whichever format the file holds: the kq formats, q8, the per-32 q51 and mx4 rails
 def private column_census(col : string) : int64 {
-    var n = census("q8_batch_cm2{col}_cls_spv") + census("q51_batch_cm2{col}_cls_spv") + census("mx4_batch_cm2{col}_cls_spv")
+    var n = census("q8_batch_{col}_cls_spv") + census("q51_batch_{col}_cls_spv") + census("mx4_batch_{col}_cls_spv")
     for (f in ["k4", "k5", "k6", "q40", "iq4xs", "k3", "iq3s", "iq3xxs", "iq4nl", "k2", "iq2s", "iq2xs", "iq2xxs"]) {
-        n += census("kq_batch_{f}_cm2{col}_cls_spv")
+        n += census("kq_batch_{f}_{col}_cls_spv")
     }
     return n
 }
 
-//! the device carries the cm2 tile family the routed block's expert tiles need (the driver declines a MoE without it)
-def private device_has_cm2() : bool {
+//! the expert pieces' tile column on this device, and the dispatches it takes per MoE layer per window: the e column's one m dispatch a
+//! plane in cm2 mode; in mm mode the KHR tile takes both the s and the m dispatch of every plane
+def private expert_column() : tuple<col : string; per_plane : int64> {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return g_gpu != null && g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2
+        return g_gpu.coopmat_mode == COOPMAT_MM ? (col = "khr", per_plane = 2l) : (col = "cm2e", per_plane = 1l)
+    } else {
+        return (col = "cm2e", per_plane = 1l)
+    }
+}
+
+//! the device carries a tile family for the routed block's expert pieces: the cm2 s and e stamps in cm2 mode, the KHR 128 x 128
+//! tile in mm mode at subgroup 32 (the driver declines a MoE without either)
+def private device_has_expert_tiles() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu != null && ((g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on()))
     } else {
         return false
     }
@@ -132,8 +143,8 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â
     var tr <- load_model_(path, QuantMode.q8)
     set_gpu_resident_route(route0)
     t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp, "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
-    if (!device_has_cm2()) {
-        t |> skip("the device has no cm2 tile family - the whole-model driver declines a MoE by design")
+    if (!device_has_expert_tiles()) {
+        t |> skip("the device has no tile family for the expert pieces (cm2, or KHR at subgroup 32) - the whole-model driver declines a MoE by design")
         delete tr
         return
     }
@@ -159,7 +170,8 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â
         let sched0 = census("moe_sched_cls_spv")
         let rows0 = census("topk_rows_cls_spv")
         let topk0 = census("topk_cls_spv")
-        let e0 = column_census("e")
+        let ecol = expert_column()
+        let e0 = column_census(ecol.col)
         var gpu <- feed_logits(tr, sg, prompt, toks)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt ({nrec} recurrent layers of {layers})")
@@ -169,7 +181,13 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {   // nolint:STYLE038 â
             //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer
             let topk = census("topk_cls_spv") - topk0
             t |> success(topk >= layers && topk % layers == 0l, "the token command recorded a top-k per MoE layer ({topk} over {layers} layers)")
-            t |> equal(column_census("e") - e0, 3l * layers * windows, "the expert schedule's m pieces dispatched the e column on the three expert planes, once per MoE layer per window")
+            let edelta = column_census(ecol.col) - e0
+            let ewant = 3l * ecol.per_plane * layers * windows
+            if (ecol.per_plane == 1l) {
+                t |> equal(edelta, ewant, "the expert schedule's m pieces dispatched the e column on the three expert planes, once per MoE layer per window")
+            } else {   //! the KHR tile also serves the window's dense GEMMs, so its count is a floor: the expert pieces' dispatches at least
+                t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the KHR tile at least twice a plane per MoE layer per window ({edelta} over a floor of {ewant})")
+            }
         }
         delete sg
         moe_gpu_drop_model()   //! every later step is the CPU chain

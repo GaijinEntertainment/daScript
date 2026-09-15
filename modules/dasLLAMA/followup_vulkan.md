@@ -1448,21 +1448,13 @@ module) is independent and can land any time - it is pure structure.
     kernel cell dispatches them at the off-path value. Each wants a kernel-unit arm at the on-path
     value with its CPU oracle taught the branch (`attn_row_oracle` takes a window start already; the
     qk-norm oracle does not know V from K).
-57. **The resident MoE block is cm2-only, so a KHR-mode card runs the 26B on the per-op rails.**
-    `vk_rdec_moe_ok` admits a routed layer only under `COOPMAT_CM2`: the expert-schedule tiles (the
-    thirty `<Fmt>Cm2SBatch` and `<Fmt>Cm2EBatch` stamps, the q51 down rail) exist on the cm2 tensor
-    API alone, where every dense GEMM, the flash attention and the PLE projection have their KHR
-    twins. On the RunPod RTX PRO 4500 under `DASLLAMA_COOPMAT=mm` the 26B UD-IQ3_XXS declines the
-    whole resident driver ("expert formats 12/12/0 are outside the resident MoE block's tile family")
-    and reads 328 pp512 / 39 tg128 against llama.cpp b10660's own KHR path at 4180 / 129 - 0.08 and
-    0.30 - where the cm2 mode sits at 1.071 / 1.025; a card without `VK_NV_cooperative_matrix2`
-    (every non-NVIDIA card) is that case unforced. The lever is a KHR arm of the schedule geometry -
-    the 32-row expert pieces on 16x16x16 fragments with the `khr_stage16` steps the dense KHR arm
-    already has per format, the q51 stage added - measured first against llama.cpp b10660's KHR
-    `mul_mm_id` (the same `mul_mm.comp` over an expert-id row gather) on the same card:
-    `GGML_VK_DISABLE_COOPMAT2=1 llama-bench -m gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf -ngl 99 -fa 1 -t 16
-    -r 3 -p 512 -n 128` against `DASLLAMA_COOPMAT=mm DASLLAMA_IMAGE=0 lcpp_bench --for-debug-purposes
-    -r 5 -p 512 -n 128 -t 16`.
+57. **DONE 2026-09-15 - the resident MoE block serves a KHR-mode card** (`ARCHITECTURE_GPU_VULKAN_MOE.md`
+    sec.2.2af): the expert schedule's s and m pieces run the KHR 128 x 128 tile over the same
+    records and maps in mm mode (a 32-row piece is an edge tile), `vk_rdec_moe_ok` admits mm at
+    subgroup 32, and the two per-32 rails got their `khr_stage16` (q51, mx4). gpt-oss-20b on the
+    RTX 5060 Ti under `DASLLAMA_COOPMAT=mm`: pp512 3549 / tg128 118.5 against llama.cpp b10660's own
+    KHR path (`GGML_VK_DISABLE_COOPMAT2=1`) at 2186 / 118.0. The 26B's row under mm is owed a
+    measurement on a card that holds it.
 58. **Under `mm` the KHR kq tile serves every f16-fed GEMM, where the q8-fed mul_mm L-tile is
     faster on the wide, shallow ones.** E2B's gate and up (1536 in, 6144 out) run 6204 / 6270 us a
     512-row window on the KHR tile against 5537 / 5647 on `MmBatch` - twelve percent - while its
