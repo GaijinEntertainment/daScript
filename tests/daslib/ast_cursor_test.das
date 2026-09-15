@@ -19,6 +19,7 @@ def compile_fixture(blk : block<(program : smart_ptr<Program>) : void>) {
         using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             cop.export_all = true
+            cop.no_optimizations = true   // cursor tests assert node positions; folding would erase the nodes
             compile_file(fixture_path(), access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     to_log(LOG_ERROR, "compile error: {issues}\n")
@@ -141,6 +142,61 @@ def test_describe_hit(t : T?) {
             let desc = describe(hits[0])
             t2 |> success(find(desc, "ExprVar") >= 0, "describe should contain ExprVar")
             t2 |> success(find(desc, "a") >= 0, "describe should contain name")
+        }
+    }
+}
+
+def has_variable_hit(hits : array<CursorHit>; name : string) : bool {
+    for (h in hits) {
+        return true if (h.variable != null && h.name == name && h.expr == null)
+    }
+    return false
+}
+
+[test]
+def test_find_declaration_at_cursor(t : T?) {
+    t |> run("a for loop variable in its header is a variable hit when declarations are asked for") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // for (i in range(2)) at 24:9
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 24, 9, true)
+            let seen <- [for (h in hits); describe(h)]
+            t2 |> success(has_variable_hit(hits, "i"), "for variable i among {seen}")
+            t2 |> success(!empty(hits) && hits[0].variable != null && hits[0].name == "i", "the variable hit is innermost: {seen}")
+            t2 |> success(!empty(hits) && find(describe(hits[0]), "int") >= 0, "describe carries the variable's type: {seen}")
+        }
+    }
+    t |> run("a function argument and a let variable are variable hits") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // def add(a, b : int) at 9:8 / 9:11; let p at 20:8
+            t2 |> success(has_variable_hit(find_at_cursor(program, "ast_cursor_fixture", 9, 8, true), "a"), "argument a")
+            t2 |> success(has_variable_hit(find_at_cursor(program, "ast_cursor_fixture", 9, 11, true), "b"), "argument b")
+            t2 |> success(has_variable_hit(find_at_cursor(program, "ast_cursor_fixture", 20, 8, true), "p"), "let variable p")
+        }
+    }
+    t |> run("multi-line spans order by lines: the call, then the loop body block, then main's block") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // to_log at 25:8 inside the for body block (24:24-26:5) inside main's block (18:11-27:1)
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 25, 8)
+            var call_idx = -1
+            var body_idx = -1
+            var main_idx = -1
+            for (idx in range(length(hits))) {
+                if (hits[idx].rtti == "ExprCall" && hits[idx].name == "to_log") {
+                    call_idx = idx
+                } elif (hits[idx].rtti == "ExprBlock" && hits[idx].expr != null && int(hits[idx].expr.at.line) == 24) {
+                    body_idx = idx
+                } elif (hits[idx].rtti == "ExprBlock" && hits[idx].expr != null && int(hits[idx].expr.at.line) == 18) {
+                    main_idx = idx
+                }
+            }
+            t2 |> success(call_idx >= 0 && body_idx >= 0 && main_idx >= 0, "the call, the body block and main's block all contain the cursor: {[for (h in hits); describe(h)]}")
+            t2 |> success(call_idx < body_idx && body_idx < main_idx, "fewer lines first: {[for (h in hits); describe(h)]}")
+        }
+    }
+    t |> run("without the flag a declaration yields no variable hit") @(t2 : T?) {
+        compile_fixture() $(program) {
+            t2 |> success(!has_variable_hit(find_at_cursor(program, "ast_cursor_fixture", 24, 9), "i"), "no variable hit by default")
+            t2 |> success(!has_variable_hit(find_at_cursor(program, "ast_cursor_fixture", 9, 8), "a"), "no argument hit by default")
         }
     }
 }

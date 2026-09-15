@@ -21,4 +21,7 @@ def main() {
     to_log(LOG_INFO, "{p.x + p.y}\n")
     let result = add(1, 2)
     to_log(LOG_INFO, "{result}\n")
+    for (i in range(2)) {
+        to_log(LOG_INFO, "{i}\n")
+    }
 }

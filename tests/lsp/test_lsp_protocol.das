@@ -18,8 +18,10 @@ require uriparser
 //! path), didChange back to clean (empty publish), a definition request, the
 //! call-hierarchy loop (prepare -> incomingCalls with the item's data
 //! round-tripped verbatim -> outgoingCalls from the returned caller item),
-//! an implementation request (base method -> derived override), and
-//! shutdown/exit.
+//! an implementation request (base method -> derived override), hover / definition /
+//! references on declarations (a class name, its parent, a user finalizer, a lambda's
+//! argument and capture, a for loop variable), and shutdown/exit. Every frame header
+//! is checked byte-exact.
 
 // ===== outgoing LSP messages (sprint_json envelopes) =====
 
@@ -103,6 +105,23 @@ struct CursorRequestMsg {
     params : CursorParams
 }
 
+struct ReferenceContext {
+    includeDeclaration : bool
+}
+
+struct ReferencesParams {
+    textDocument : DocId
+    position : Position0
+    context : ReferenceContext
+}
+
+struct ReferencesMsg {
+    jsonrpc : string = "2.0"
+    id : int
+    method : string = "textDocument/references"
+    params : ReferencesParams
+}
+
 // call-hierarchy item as the client echoes it back: the server only reads
 // `data`, so the round-trip envelope carries just that
 struct HierItemData {
@@ -145,14 +164,16 @@ def private write_frame(w : file; body : string) {
     fflush(w)
 }
 
-// one Content-Length frame -> parsed JSON; null on EOF / bad frame
-def private read_frame(r : file) : JsonValue? {
+//! one Content-Length frame -> parsed JSON; null on EOF / bad frame. Header lines are checked
+//! byte-exact: the pipe is binary on every platform, and a text-mode stdout on Windows sends \r\r\n
+def private read_frame(t : T?; r : file) : JsonValue? {
     var content_length = 0
     while (true) {
         let raw = fgets(r)
         if (empty(raw)) {
             return null  // EOF — supervisor died or closed stdout
         }
+        t |> success(raw |> ends_with("\r\n") && !(rtrim(raw, "\n") |> ends_with("\r\r")), "header line ends in exactly CRLF: {replace(replace(raw, "\r", "\\r"), "\n", "\\n")}")
         let line = rtrim(raw, "\r\n")
         break if (empty(line))
         if (line |> starts_with("Content-Length:")) {
@@ -170,9 +191,9 @@ def private read_frame(r : file) : JsonValue? {
 }
 
 // frames until pred matches (skipping unrelated notifications); null on EOF
-def private read_until(r : file; pred : block<(js : JsonValue?) : bool>) : JsonValue? {
+def private read_until(t : T?; r : file; pred : block<(js : JsonValue?) : bool>) : JsonValue? {
     for (_attempt in range(50)) {
-        var js = read_frame(r)
+        var js = read_frame(t, r)
         return null if (js == null)
         return js if (invoke(pred, js))
     }
@@ -246,10 +267,52 @@ def private uri_for_compare(uri : string) : string {
     return get_platform_name() == "windows" ? to_lower(uri) : uri
 }
 
+struct HoverProbe {
+    text : string
+    line : int
+    character : int
+}
+
+//! one hover round trip: the markdown text and the start of the returned range
+def private probe_hover(t : T?; w, r : file; id : int; uri : string; line, character : int) : HoverProbe {
+    write_frame(w, sprint_json(CursorRequestMsg(id = id, method = "textDocument/hover",
+        params = CursorParams(textDocument = DocId(uri = uri), position = Position0(line = line, character = character))), false))
+    let resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == id
+    return HoverProbe(text = resp?["result"]?["contents"]?["value"] ?? "",
+        line = resp?["result"]?["range"]?["start"]?["line"] ?? -1,
+        character = resp?["result"]?["range"]?["start"]?["character"] ?? -1)
+}
+
+//! one definition round trip: the start of the first location, (-1, -1) when there is none
+def private probe_definition(t : T?; w, r : file; id : int; uri : string; line, character : int) : int2 {
+    write_frame(w, sprint_json(DefinitionMsg(id = id, params = CursorParams(
+        textDocument = DocId(uri = uri), position = Position0(line = line, character = character))), false))
+    let resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == id
+    let loc = resp?["result"]?[0]
+    return int2(loc?["range"]?["start"]?["line"] ?? -1, loc?["range"]?["start"]?["character"] ?? -1)
+}
+
+//! one references round trip with the declaration included: every location as "line:character"
+def private probe_references(t : T?; w, r : file; id : int; uri : string; line, character : int) : array<string> {
+    write_frame(w, sprint_json(ReferencesMsg(id = id, params = ReferencesParams(
+        textDocument = DocId(uri = uri), position = Position0(line = line, character = character),
+        context = ReferenceContext(includeDeclaration = true))), false))
+    let resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == id
+    var keys : array<string>
+    let arr = resp?["result"]
+    if (arr != null && arr.value is _array) {
+        keys |> reserve(length(arr.value as _array))
+        for (loc in arr.value as _array) {
+            keys |> push("{loc?["range"]?["start"]?["line"] ?? -1}:{loc?["range"]?["start"]?["character"] ?? -1}")
+        }
+    }
+    return <- keys
+}
+
 // ===== the test =====
 
 [test]
-def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on one pipe; splitting it breaks the request/response choreography
+def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP session on one pipe; splitting it breaks the request/response choreography
     let fixture = path_join(get_das_root(), "tests/lsp/_fixture_clean.das")
     let clean = fread(fixture)
     let broken = replace(clean, "    lsp_probe_helper()", "    zzz(1)\n    lsp_probe_helper()")
@@ -262,6 +325,44 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     var base_speak_char = -1
     var derived_speak_line0 = -1
     var derived_speak_char = -1
+    var base_line0 = -1
+    var base_name_char = -1
+    var derived_line0 = -1
+    var derived_parent_char = -1
+    var final_line0 = -1
+    var final_name_char = -1
+    var final_parent_char = -1
+    var finalize_line0 = -1
+    var finalize_char = -1
+    var new_final_line0 = -1
+    var new_final_char = -1
+    var lambda_line0 = -1
+    var lambda_body_char = -1
+    var lambda_arg_char = -1
+    var self_line0 = -1
+    var self_name_char = -1
+    var self_call_char = -1
+    var generic_line0 = -1
+    var generic_name_char = -1
+    var generic_call_char = -1
+    var enum_line0 = -1
+    var enum_char = -1
+    var enum_use_line0 = -1
+    var enum_use_char = -1
+    var typedef_line0 = -1
+    var typedef_char = -1
+    var global_line0 = -1
+    var global_char = -1
+    var global_use_line0 = -1
+    var global_use_char = -1
+    var yield_line0 = -1
+    var yield_char = -1
+    var let_base_line0 = -1
+    var let_base_char = -1
+    var for_line0 = -1
+    var for_char = -1
+    var for_use_line0 = -1
+    var for_use_char = -1
     var clean_lines <- split(clean, "\n")
     for (i in range(length(clean_lines))) {
         if (clean_lines[i] |> starts_with("def lsp_probe_helper")) {
@@ -274,12 +375,74 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
         } elif (clean_lines[i] |> starts_with("    def override probe_speak")) {
             derived_speak_line0 = i
             derived_speak_char = find(clean_lines[i], "probe_speak")
+        } elif (clean_lines[i] |> starts_with("class LspProbeBase")) {
+            base_line0 = i
+            base_name_char = find(clean_lines[i], "LspProbeBase")
+        } elif (clean_lines[i] |> starts_with("class LspProbeDerived")) {
+            derived_line0 = i
+            derived_parent_char = find(clean_lines[i], "LspProbeBase")
+        } elif (clean_lines[i] |> starts_with("class LspProbeFinalized")) {
+            final_line0 = i
+            final_name_char = find(clean_lines[i], "LspProbeFinalized")
+            final_parent_char = find(clean_lines[i], "LspProbeBase")
+        } elif (clean_lines[i] |> starts_with("    def finalize")) {
+            finalize_line0 = i
+            finalize_char = find(clean_lines[i], "finalize")
+        } elif (clean_lines[i] |> starts_with("    var f = new LspProbeFinalized")) {
+            new_final_line0 = i
+            new_final_char = find(clean_lines[i], "LspProbeFinalized")
+        } elif (clean_lines[i] |> starts_with("    let add = @")) {
+            lambda_line0 = i
+            lambda_body_char = find(clean_lines[i], "x + base")
+            lambda_arg_char = find(clean_lines[i], "x : int")
+        } elif (clean_lines[i] |> starts_with("def lsp_probe_self")) {
+            self_line0 = i
+            self_name_char = find(clean_lines[i], "lsp_probe_self")
+            self_call_char = find(clean_lines[i], "lsp_probe_self(n - 1)")
+        } elif (clean_lines[i] |> starts_with("def lsp_probe_generic")) {
+            generic_line0 = i
+            generic_name_char = find(clean_lines[i], "lsp_probe_generic")
+            generic_call_char = find(clean_lines[i], "lsp_probe_generic(n - 1)")
+        } elif (clean_lines[i] |> starts_with("enum LspProbeColor")) {
+            enum_line0 = i
+            enum_char = find(clean_lines[i], "LspProbeColor")
+        } elif (clean_lines[i] |> starts_with("    pair.first = int(LspProbeColor")) {
+            enum_use_line0 = i
+            enum_use_char = find(clean_lines[i], "LspProbeColor")
+        } elif (clean_lines[i] |> starts_with("typedef LspProbePair")) {
+            typedef_line0 = i
+            typedef_char = find(clean_lines[i], "LspProbePair")
+        } elif (clean_lines[i] |> starts_with("let LSP_PROBE_LIMIT")) {
+            global_line0 = i
+            global_char = find(clean_lines[i], "LSP_PROBE_LIMIT")
+        } elif (clean_lines[i] |> starts_with("        for (i in range(LSP_PROBE_LIMIT")) {
+            global_use_line0 = i
+            global_use_char = find(clean_lines[i], "LSP_PROBE_LIMIT")
+        } elif (clean_lines[i] |> starts_with("            yield i")) {
+            yield_line0 = i
+            yield_char = find(clean_lines[i], "yield i") + 6
+        } elif (clean_lines[i] |> starts_with("    let base = 10")) {
+            let_base_line0 = i
+            let_base_char = find(clean_lines[i], "base")
+        } elif (clean_lines[i] |> starts_with("    for (i in range")) {
+            for_line0 = i
+            for_char = find(clean_lines[i], "i in")
+        } elif (clean_lines[i] |> starts_with("        print(\"\{i\}")) {
+            for_use_line0 = i
+            for_use_char = find(clean_lines[i], "i\}")
         }
     }
     delete clean_lines
     t |> success(def_line0 >= 0 && call_line0 >= 0, "fixture contains helper def and call")
     t |> success(base_speak_line0 >= 0 && derived_speak_line0 >= 0, "fixture contains probe_speak base and override")
-    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0)
+    t |> success(base_line0 >= 0 && derived_line0 >= 0 && final_line0 >= 0 && finalize_line0 >= 0 && new_final_line0 >= 0, "fixture contains the class with a user finalizer and its new site")
+    t |> success(lambda_line0 >= 0 && lambda_body_char >= 0, "fixture contains the capturing lambda")
+    t |> success(for_line0 >= 0 && for_use_line0 >= 0, "fixture contains the for loop and its body use")
+    t |> success(self_line0 >= 0 && self_call_char > self_name_char, "fixture contains the one-line self-calling function")
+    t |> success(generic_line0 >= 0 && generic_call_char > generic_name_char, "fixture contains the one-line self-calling generic")
+    t |> success(enum_line0 >= 0 && enum_use_line0 >= 0 && typedef_line0 >= 0 && global_line0 >= 0 && global_use_line0 >= 0 && yield_line0 >= 0 && let_base_line0 >= 0, "fixture contains the enum, typedef, global, generator and let probes")
+    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0 || for_line0 < 0 || for_use_line0 < 0 || self_line0 < 0 || generic_line0 < 0 ||
+        enum_line0 < 0 || enum_use_line0 < 0 || typedef_line0 < 0 || global_line0 < 0 || global_use_line0 < 0 || yield_line0 < 0 || let_base_line0 < 0)
     let uri = path_to_uri(fixture)
 
     for (host in front_hosts()) {
@@ -298,7 +461,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 write_frame(w, sprint_json(InitializeMsg(id = 1, params = InitializeParams(
                     initializationOptions = InitializeOptions(
                         compiler = get_full_file_name(get_das_exe())))), false))
-                let init_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 1
+                let init_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 1
                 t |> success(init_resp != null, "initialize response received")
                 return if (init_resp == null)
                 let server_name = init_resp?["result"]?["serverInfo"]?["name"] ?? ""
@@ -316,7 +479,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 write_frame(w, sprint_json(DidOpenMsg(params = DidOpenParams(
                     textDocument = TextDocumentItem(uri = uri, languageId = "daslang",
                         version = 1, text = broken))), false))
-                let pub1 = read_until(r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
+                let pub1 = read_until(t, r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
                 t |> success(pub1 != null, "publishDiagnostics after didOpen")
                 return if (pub1 == null)
                 t |> equal(pub1?["params"]?["uri"] ?? "", uri)
@@ -331,7 +494,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 write_frame(w, sprint_json(DidChangeMsg(params <- DidChangeParams(
                     textDocument = VersionedDoc(uri = uri, version = 2),
                     contentChanges <- [ContentChange(text = clean)])), false))
-                let pub2 = read_until(r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
+                let pub2 = read_until(t, r) $(js) => (js?["method"] ?? "") == "textDocument/publishDiagnostics"
                 t |> success(pub2 != null, "publishDiagnostics after didChange")
                 t |> equal(diagnostics_of(pub2), 0)
 
@@ -347,7 +510,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     textDocument = VersionedDoc(uri = uri, version = 4),
                     contentChanges <- [ContentChange(text = clean)])), false))
                 var early = 0
-                let pub3 = read_until(r) $(js) {
+                let pub3 = read_until(t, r) $(js) {
                     return false if ((js?["method"] ?? "") != "textDocument/publishDiagnostics")
                     if (diagnostics_of(js) != 0) {
                         early++
@@ -364,7 +527,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     textDocument = DocId(uri = uri),
                     position = Position0(line = call_line0, character = 4))), false))
                 var stale = 0
-                let def_resp = read_until(r) $(js) {
+                let def_resp = read_until(t, r) $(js) {
                     if ((js?["method"] ?? "") == "textDocument/publishDiagnostics" && diagnostics_of(js) != 0) {
                         stale++
                     }
@@ -384,7 +547,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     params = CursorParams(
                         textDocument = DocId(uri = uri),
                         position = Position0(line = call_line0, character = 4))), false))
-                let prep_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 4
+                let prep_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 4
                 t |> success(prep_resp != null, "prepareCallHierarchy response received")
                 let item0 = prep_resp?["result"]?[0]
                 t |> equal(item0?["name"] ?? "", "lsp_probe_helper")
@@ -400,7 +563,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     method = "callHierarchy/incomingCalls",
                     params = HierCallsParams(item = HierItemMin(
                         data = echo_item_data(item0)))), false))
-                let inc_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 5
+                let inc_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 5
                 t |> success(inc_resp != null, "incomingCalls response received")
                 let inc_main = find_call_entry(inc_resp, "from", "main")
                 t |> success(inc_main != null, "incomingCalls lists main as a caller")
@@ -413,7 +576,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     method = "callHierarchy/outgoingCalls",
                     params = HierCallsParams(item = HierItemMin(
                         data = echo_item_data(inc_main?["from"])))), false))
-                let out_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 6
+                let out_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 6
                 t |> success(out_resp != null, "outgoingCalls response received")
                 let out_helper = find_call_entry(out_resp, "to", "lsp_probe_helper")
                 t |> success(out_helper != null, "outgoingCalls lists the helper as a callee")
@@ -426,16 +589,94 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                     params = CursorParams(
                         textDocument = DocId(uri = uri),
                         position = Position0(line = base_speak_line0, character = base_speak_char))), false))
-                let impl_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 7
+                let impl_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 7
                 t |> success(impl_resp != null, "implementation response received")
                 let impl0 = impl_resp?["result"]?[0]
                 t |> equal(uri_for_compare(impl0?["uri"] ?? ""), uri_for_compare(uri))
                 t |> equal(impl0?["range"]?["start"]?["line"] ?? -1, derived_speak_line0)
                 t |> equal(impl0?["range"]?["start"]?["character"] ?? -1, derived_speak_char)
 
+                let hover_class = probe_hover(t, w, r, 8, uri, final_line0, final_name_char + 2)
+                t |> success(hover_class.text |> find("class LspProbeFinalized : LspProbeBase") >= 0, "hover on a class name shows the class: {hover_class.text}")
+                t |> success(hover_class.text |> find("__finalize") < 0, "hover on a class name is not the synthesized finalizer: {hover_class.text}")
+                t |> equal(hover_class.line, final_line0)
+                t |> equal(hover_class.character, final_name_char)
+
+                let hover_parent = probe_hover(t, w, r, 9, uri, final_line0, final_parent_char + 2)
+                t |> success(hover_parent.text |> find("class LspProbeBase") >= 0, "hover on the parent name shows the parent: {hover_parent.text}")
+                t |> equal(hover_parent.character, final_parent_char)
+                t |> equal(probe_definition(t, w, r, 10, uri, final_line0, final_parent_char + 2), int2(base_line0, base_name_char), "definition of the parent name lands on the parent class")
+
+                let hover_final = probe_hover(t, w, r, 11, uri, finalize_line0, finalize_char + 2)
+                t |> success(hover_final.text |> find("def finalize(self : LspProbeFinalized") >= 0, "hover on a user finalizer shows it: {hover_final.text}")
+                t |> success(hover_final.text |> find("__finalize") < 0, "hover on a user finalizer is not the synthesized one: {hover_final.text}")
+                t |> equal(hover_final.character, finalize_char)
+
+                let ref_keys <- probe_references(t, w, r, 12, uri, final_line0, final_name_char + 2)
+                t |> equal(length(ref_keys), 2, "references to a class: declaration + new site, got {ref_keys}")
+                t |> success(ref_keys |> find_index("{final_line0}:{final_name_char}") >= 0, "references include the declaration once")
+                t |> success(ref_keys |> find_index("{new_final_line0}:{new_final_char}") >= 0, "references include the new site")
+
+                let base_keys <- probe_references(t, w, r, 13, uri, base_line0, base_name_char + 2)
+                t |> equal(length(base_keys), 3, "references to a base class: declaration + two derived-class lines, got {base_keys}")
+                t |> success(base_keys |> find_index("{base_line0}:{base_name_char}") >= 0, "base references include the declaration")
+                t |> success(base_keys |> find_index("{derived_line0}:{derived_parent_char}") >= 0, "base references include the first derived class line")
+                t |> success(base_keys |> find_index("{final_line0}:{final_parent_char}") >= 0, "base references include the second derived class line")
+
+                let hover_arg = probe_hover(t, w, r, 14, uri, lambda_line0, lambda_body_char)
+                t |> success(hover_arg.text |> find("x : int") >= 0, "hover on a lambda argument inside its body: {hover_arg.text}")
+                let hover_cap = probe_hover(t, w, r, 15, uri, lambda_line0, lambda_body_char + 4)
+                t |> success(hover_cap.text |> find("base : int") >= 0, "hover on a captured variable inside a lambda: {hover_cap.text}")
+                t |> success(hover_cap.text |> find("__this") < 0, "a capture is not the lambda's __this: {hover_cap.text}")
+
+                let hover_for = probe_hover(t, w, r, 16, uri, for_line0, for_char)
+                t |> success(hover_for.text |> find("i : int") >= 0, "hover on a for loop variable: {hover_for.text}")
+                t |> equal(hover_for.character, for_char)
+                t |> equal(probe_definition(t, w, r, 17, uri, for_use_line0, for_use_char), int2(for_line0, for_char), "definition of a loop variable's use lands on the header")
+
+                let for_keys <- probe_references(t, w, r, 18, uri, for_line0, for_char)
+                t |> equal(length(for_keys), 2, "references to a for loop variable: header + body use, got {for_keys}")
+                t |> success(for_keys |> find_index("{for_line0}:{for_char}") >= 0, "for references include the header")
+                t |> success(for_keys |> find_index("{for_use_line0}:{for_use_char}") >= 0, "for references include the body use")
+
+                let hover_larg = probe_hover(t, w, r, 19, uri, lambda_line0, lambda_arg_char)
+                t |> success(hover_larg.text |> find("x : int") >= 0, "hover on a lambda argument in its header: {hover_larg.text}")
+                t |> equal(hover_larg.character, lambda_arg_char)
+
+                // a call of the function on its own def line is a call, not the declaration
+                t |> equal(probe_definition(t, w, r, 20, uri, self_line0, self_call_char + 2), int2(self_line0, self_name_char), "definition of a same-line self-call lands on the name in the def")
+                t |> equal(probe_definition(t, w, r, 21, uri, generic_line0, generic_call_char + 2), int2(generic_line0, generic_name_char), "definition of a same-line self-call in a generic lands on the name in the def")
+
+                // the other declaration kinds: an enum, a typedef, a module-level let; a cursor in
+                // the middle of a declared name; a generator's loop variable under its source name
+                let hover_enum = probe_hover(t, w, r, 22, uri, enum_line0, enum_char + 2)
+                t |> success(hover_enum.text |> find("enum LspProbeColor") >= 0, "hover on an enum name: {hover_enum.text}")
+                t |> equal(hover_enum.character, enum_char)
+                let hover_typedef = probe_hover(t, w, r, 23, uri, typedef_line0, typedef_char + 2)
+                t |> success(hover_typedef.text |> find("typedef LspProbePair = tuple") >= 0, "hover on a typedef name: {hover_typedef.text}")
+                t |> equal(hover_typedef.character, typedef_char)
+                let hover_global = probe_hover(t, w, r, 24, uri, global_line0, global_char + 2)
+                t |> success(hover_global.text |> find("LSP_PROBE_LIMIT : int") >= 0, "hover on a global's declaration: {hover_global.text}")
+                t |> equal(hover_global.character, global_char)
+                let hover_yield = probe_hover(t, w, r, 25, uri, yield_line0, yield_char)
+                t |> success(hover_yield.text |> find("i : int") >= 0, "hover on a generator's loop variable: {hover_yield.text}")
+                t |> success(hover_yield.text |> find("_rename_at_") < 0, "a generator's loop variable shows its source name: {hover_yield.text}")
+                let hover_mid = probe_hover(t, w, r, 26, uri, let_base_line0, let_base_char + 2)
+                t |> success(hover_mid.text |> find("base : int") >= 0, "hover in the middle of a let variable's name: {hover_mid.text}")
+                t |> equal(hover_mid.character, let_base_char)
+
+                let enum_keys <- probe_references(t, w, r, 27, uri, enum_line0, enum_char + 2)
+                t |> equal(length(enum_keys), 2, "references to an enum: declaration + its use, got {enum_keys}")
+                t |> success(enum_keys |> find_index("{enum_line0}:{enum_char}") >= 0, "enum references include the declaration")
+                t |> success(enum_keys |> find_index("{enum_use_line0}:{enum_use_char}") >= 0, "enum references include the use")
+                let global_keys <- probe_references(t, w, r, 28, uri, global_line0, global_char + 2)
+                t |> equal(length(global_keys), 2, "references to a global: declaration + its use, got {global_keys}")
+                t |> success(global_keys |> find_index("{global_use_line0}:{global_use_char}") >= 0, "global references include the use inside the generator")
+                t |> equal(probe_definition(t, w, r, 29, uri, enum_use_line0, enum_use_char + 2), int2(enum_line0, enum_char), "definition of an enum use lands on the enum")
+
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))
-                let shutdown_resp = read_until(r) $(js) => (js?["id"] ?? -1) == 3
+                let shutdown_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 3
                 t |> success(shutdown_resp != null, "shutdown response received")
                 write_frame(w, sprint_json(PlainMsg(method = "exit"), false))
             }

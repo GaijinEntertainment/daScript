@@ -174,7 +174,8 @@ replayed; requests are forwarded one at a time; a child that died before a reque
 respawned and the request re-sent once, while one that dies while answering gets an error reply
 and no re-send, since a tool call could otherwise run twice. Anything on the child's stdout that
 is not a JSON line is logged as `child_noise` and carried in that error text. Stdout is the
-protocol, so the log goes to its file only; no pid file, no health poll, no tray.
+protocol, so the log goes to its file only, and both stdio streams are switched to binary mode
+(`fbinary`) like the LSP front's; no pid file, no health poll, no tray.
 
 ```
 bin/watchdog --stdio --name daslang-mcp --cwd <tree> --program <tree>/bin/daslang -- -ignore-manifest utils/mcp/main.das
@@ -197,8 +198,10 @@ loop polls between frames, and an edit of the file kills the one in flight, so a
 diagnostics never publish and an edit never waits on a compile. `--compiler <path>`,
 `--cwd <dir>` and `--log <file>` before the `--` override the discovered daslang, the
 workspace and the log (default: `$DASLANG_LSP_LOG`, else `daslang_lsp.log` in the temp
-directory). Stdout is the protocol;
-no pid file, no health poll, no tray. Configuration and the navigation notes: `utils/lsp/README.md`;
+directory). Stdout is the protocol, and both stdio streams are switched to binary mode
+(`fbinary`): a Windows text-mode stdout writes the `\r\n` of a frame header as `\r\r\n`, no
+client reader matches that as the terminator, and the `initialize` reply it never accepts leaves
+every later request waiting forever. No pid file, no health poll, no tray. Configuration and the navigation notes: `utils/lsp/README.md`;
 `tests/lsp/test_lsp_protocol.das` drives it through both hosts.
 
 ## Layout

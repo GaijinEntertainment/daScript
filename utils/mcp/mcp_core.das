@@ -580,6 +580,8 @@ def serve_stdio(server : McpServer; reg : array<ToolDef>) {
     logger_capture_diagnostics()
     let sin = fstdin()
     let sout = fstdout()
+    fbinary(sin)
+    fbinary(sout)
     if (idle_hook != null) {
         funbuffered(sin)
     }

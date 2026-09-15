@@ -284,3 +284,13 @@ Four companions carry a concern each; a section number is unique across all five
   hook by field name, so a C++ side back on `const` leaves daslang writing through a const
   reference with every suite green. `progArgs` (the program's `options`), `simulate` and the
   `aot*` hooks stay const on both sides.
+
+## 40. ast_cursor
+
+### 40.1 A variable's declaration position {#cursor-variable-position}
+
+- **A `Variable`'s `at` is its name token - `src/parser/parser_impl.cpp` (repo root) sets
+  `pVar->at` from the `tokAt(scanner, @name)` the grammar's `VariableNameAndPosition` carries -
+  and a variable whose `at` has no width is matched over `length(name)` columns instead.**
+  Nothing fails when one side moves alone: a wider `at` still contains the cursor on the name,
+  so every cursor test stays green while hits appear for text that is not the name.

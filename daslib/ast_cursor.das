@@ -3,8 +3,9 @@ options indenting = 4
 options strict_smart_pointers = true
 
 //! ast_cursor provides position-based AST queries — given a file, line, and column,
-//! it finds all expression nodes at that cursor position. Results are returned
-//! innermost-first, with enclosing function context and extracted names.
+//! it finds the expression nodes at that cursor position, and on request the variable
+//! declarations. Results are returned innermost-first, with enclosing function context
+//! and extracted names.
 //!
 //! Typical use is implementing IDE features like goto-definition, type-of, and
 //! find-references on top of the compiled AST.
@@ -14,16 +15,18 @@ module ast_cursor shared public
 require daslib/ast_boost
 require strings
 
-//! A single hit at the cursor position — one AST expression node.
-//! Innermost (most specific) expressions come first in the result array.
+//! A single hit at the cursor position — one AST expression node, or a variable declaration when asked for.
+//! Innermost (most specific) hits come first in the result array.
 struct public CursorHit {
-    //! Raw pointer to the expression node (valid while the program lives).
+    //! Raw pointer to the expression node (valid while the program lives); null for a variable hit.
     expr : Expression const?
+    //! The variable whose declaration the cursor is on (`for`/`let` variable, function, lambda or block argument) when declarations were asked for; else null.
+    variable : Variable const?
     //! Enclosing function, or null for expressions in global scope.
     func : Function const?
     //! Extracted name for named nodes (variable name, call name, field name, operator).
     name : string
-    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.
+    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.; "Variable" for a variable hit.
     rtti : string
 }
 
@@ -61,16 +64,59 @@ class CursorVisitor : AstVisitor {
     targetFile : string
     hits : array<CursorHit>
     currentFunc : Function const?
+    withDeclarations : bool
 
-    def CursorVisitor(file : string; line, col : int) {
+    def CursorVisitor(file : string; line, col : int; declarations : bool) {
         targetFile = file
         targetLine = line
         targetCol = col
-        currentFunc = null
+        withDeclarations = declarations
+    }
+
+    def in_target_file(at : LineInfo) : bool {
+        return true if (empty(targetFile) || at.fileInfo == null)
+        return find(string(at.fileInfo.name), targetFile) >= 0
+    }
+
+    [arch(at="ARCHITECTURE.md#cursor-variable-position")]
+    def cursor_on_variable(v : Variable const?) : bool {
+        let at = v.at
+        return false if (int(at.line) != targetLine)
+        if (int(at.last_line) != int(at.line) || int(at.last_column) > int(at.column)) {
+            return cursor_inside(targetLine, targetCol, at)
+        }
+        let c = int(at.column)
+        return targetCol >= c && targetCol < c + length(string(v.name))
+    }
+
+    def add_variable_at_cursor(v : Variable const?) : void {
+        return if (!withDeclarations || v == null || v.flags.generated || !in_target_file(v.at) || !cursor_on_variable(v))
+        hits |> emplace(CursorHit(
+            variable = v,
+            func = currentFunc,
+            name = string(v.name),
+            rtti = "Variable"
+        ))
     }
 
     def override preVisitFunction(fun : FunctionPtr) : void {
         currentFunc = fun
+    }
+
+    def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; lastArg : bool) : void {
+        add_variable_at_cursor(arg)
+    }
+
+    def override preVisitExprBlockArgument(blk : ExprBlock?; arg : VariablePtr; lastArg : bool) : void {
+        add_variable_at_cursor(arg)
+    }
+
+    def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) : void {
+        add_variable_at_cursor(arg)
+    }
+
+    def override preVisitExprForVariable(expr : ExprFor?; svar : VariablePtr; last : bool) : void {
+        add_variable_at_cursor(svar)
     }
 
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
@@ -80,10 +126,7 @@ class CursorVisitor : AstVisitor {
 
     def override preVisitExpression(expr : ExpressionPtr) : void {
         let e = expr
-        if (!empty(targetFile) && e.at.fileInfo != null) {
-            let fname = string(e.at.fileInfo.name)
-            if (find(fname, targetFile) < 0) return
-        }
+        return if (!in_target_file(e.at))
         if (cursor_inside(targetLine, targetCol, e.at)) {
             hits |> emplace(CursorHit(
                 expr = e,
@@ -95,40 +138,68 @@ class CursorVisitor : AstVisitor {
     }
 }
 
-def private reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
+//! (lines spanned, start column, end column): a nested node spans no more lines, starts no
+//! earlier and ends no later than the node holding it
+def private span_key(hit : CursorHit) : int3 {
+    if (hit.expr == null) {
+        let c = int(hit.variable.at.column)
+        return int3(0, c, c + length(hit.name))
+    }
+    let at = hit.expr.at
+    return int3(int(at.last_line) - int(at.line), int(at.column), int(at.last_column))
+}
+
+//! sorted innermost first: fewer lines, then the later start, then the earlier end, then the
+//! later-visited (deeper) node
+def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
+    var order : array<int>
+    order |> reserve(length(src))
+    for (i in range(length(src))) {
+        order |> push(i)
+    }
+    order |> sort() $(a, b) {
+        let sa = span_key(src[a])
+        let sb = span_key(src[b])
+        if (sa.x != sb.x) return sa.x < sb.x
+        if (sa.y != sb.y) return sa.y > sb.y
+        if (sa.z != sb.z) return sa.z < sb.z
+        return a > b
+    }
     var result : array<CursorHit>
     result |> reserve(length(src))
-    var i = length(src) - 1
-    while (i >= 0) {
+    for (i in order) {
         result |> emplace <| src[i]
-        i--
     }
     return <- result
 }
 
-//! Find all expression nodes at the given cursor position, innermost first.
-//! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
-def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : array<CursorHit> {
-    var visitor = new CursorVisitor(file, line, col)
-    make_visitor(*visitor) $(adapter) {
-        visit(program, adapter)
+//! Find all expression nodes at the given cursor position, innermost first; `file` is a substring
+//! matched against ``FileInfo.name`` ("" matches any). With `declarations`, a cursor on the name of
+//! a `for`/`let` variable or a function, lambda or block argument yields a `variable` hit with no `expr`.
+def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
+    return <- cursor_hits(file, line, col, declarations) $(var visitor) {
+        make_visitor(*visitor) $(adapter) {
+            visit(program, adapter)
+        }
     }
-    var result <- reverse_hits(visitor.hits)
-    unsafe {
-        delete visitor
-    }
-    return <- result
 }
 
 //! Find all expression nodes at the given cursor position within a single function body.
-//! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
-def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int) : array<CursorHit> {
-    var visitor = new CursorVisitor(file, line, col)
-    visitor.currentFunc = func
-    make_visitor(*visitor) $(adapter) {
-        visit(func, adapter)
+//! `file` and `declarations` mean what they mean for `find_at_cursor`.
+def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
+    return <- cursor_hits(file, line, col, declarations) $(var visitor) {
+        visitor.currentFunc = func
+        make_visitor(*visitor) $(adapter) {
+            visit(func, adapter)
+        }
     }
-    var result <- reverse_hits(visitor.hits)
+}
+
+//! one visitor's run: `walk` drives it, the hits come back innermost first
+def private cursor_hits(file : string; line, col : int; declarations : bool; walk : block<(var visitor : CursorVisitor?) : void>) : array<CursorHit> {
+    var visitor = new CursorVisitor(file, line, col, declarations)
+    invoke(walk, visitor)
+    var result <- innermost_first(visitor.hits)
     unsafe {
         delete visitor
     }
@@ -142,10 +213,13 @@ def public describe(hit : CursorHit) : string {
         if (!empty(hit.name)) {
             write(w, "({hit.name})")
         }
-        if (hit.expr != null && hit.expr._type != null) {
+        if (hit.variable != null && hit.variable._type != null) {
+            write(w, " : {describe(hit.variable._type)}")
+        } elif (hit.expr != null && hit.expr._type != null) {
             write(w, " : {describe(hit.expr._type)}")
         }
-        write(w, " at {int(hit.expr.at.line)}:{int(hit.expr.at.column)}-{int(hit.expr.at.last_line)}:{int(hit.expr.at.last_column)}")
+        let at = hit.expr != null ? hit.expr.at : hit.variable.at
+        write(w, " at {int(at.line)}:{int(at.column)}-{int(at.last_line)}:{int(at.last_column)}")
         if (hit.func != null) {
             write(w, " in {hit.func.name}")
         }
