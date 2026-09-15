@@ -11,8 +11,9 @@ require _gemma_resident
 // the file under models_dir(), or when the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
 let private GEMMA4_26B_FILE = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf"
 //! the routed model's argmax slack: a near-tie at the router flips whole positions between the arms, and the CPU chain
-//! sits farther from the reference exe on this model than the resident does (its own forced-feed logits are no instrument here)
-let private GEMMA4_26B_HITS_SLACK = 8l
+//! sits farther from the reference exe on this model than the resident does (its own forced-feed logits are no instrument
+//! here); the hits read 126 to 139 against the CPU chain's 133 across kernel recompiles (the readings: CLAUDE.md)
+let private GEMMA4_26B_HITS_SLACK = 12l
 
 [test]
 def test_gpu_resident_gemma4_26b(t : T?) {

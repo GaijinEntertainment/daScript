@@ -9,6 +9,7 @@ module _vkd_oracles shared public
 
 require dasllama/dasllama_lint public
 require daslib/shader_lingua_franca
+require daslib/math_bits   // uint_bits_to_float: the mx4 oracle builds the E8M0 scale from its bits as the decode does
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_vulkan_classes
 
@@ -875,6 +876,46 @@ def q51f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
                         let by = byte_u8(wq, wb * 20 + e % 16)
                         let q = ((by >> ((e / 16) * 4)) & 0xF) | (int((qh >> uint(e)) & 1u) << 4)
                         let w = float(float16(dm.x * float(q) + dm.y))
+                        acc += w * half_at(xf, (row0 + r) * n + b * 32 + e)
+                    }
+                }
+                y[(row0 + r) * d + c] = acc
+            }
+        }
+    }
+}
+
+//! one MXFP4 weight off its e2m1 code and E8M0 scale byte, as the CPU dot and the cm2 decode compute it (denormal bit patterns below e = 2)
+def mx4_dequant(nib, ex : int) : float {
+    let e = uint(ex)
+    return float(mx4_mag2(nib)) * uint_bits_to_float(e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u))
+}
+
+//! an e2m1 code's DOUBLED magnitude with its sign: the integer the CPU dot and the GEMV kernel multiply against the Q8_0 byte
+def mx4_mag2(nib : int) : int {
+    let kv = fixed_array(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
+    return kv[nib]
+}
+
+//! MXFP4 x f16 GEMM oracle (the mx4 s and e stamps' shape): per weight `mx4_dequant` off the per-32 plane - byte j holds
+//! element j in its low nibble and j + 16 in its high, the block's E8M0 byte is the scale plane's byte b (four a word) -
+//! rounded f16 as the decode rounds, f16 activations, block order - approx bars
+def mx4f16_gemm_oracle(wq : array<uint>; wsb : array<uint>; xf : array<uint>;
+                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nbb = n / 32
+    for (rr in range(nrec)) {
+        let wblk0 = int(recs[rr * 4])
+        let row0 = int(recs[rr * 4 + 1])
+        let cnt = int(recs[rr * 4 + 2])
+        for (r in range(cnt)) {
+            for (c in range(d)) {
+                var acc = 0.0
+                for (b in range(nbb)) {
+                    let wb = wblk0 + c * nbb + b
+                    let ex = byte_u8(wsb, wb)
+                    for (e in range(32)) {
+                        let by = byte_u8(wq, wb * 16 + e % 16)
+                        let w = float(float16(mx4_dequant((by >> ((e / 16) * 4)) & 0xF, ex)))
                         acc += w * half_at(xf, (row0 + r) * n + b * 32 + e)
                     }
                 }

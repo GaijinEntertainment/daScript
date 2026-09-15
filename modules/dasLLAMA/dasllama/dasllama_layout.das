@@ -186,9 +186,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq4xss") {
         if (!empty(t.iq4xss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq4xs, addr < uint8 const? >(t.iq4xss[0]), long_length(t.iq4xss) / kq_ssb(KqFmt.iq4xs), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq4xs, unsafe(addr < uint8 const? >(t.iq4xss[0])), long_length(t.iq4xss) / kq_ssb(KqFmt.iq4xs), xc)
             t.iq4xss <- xc
         }
         return true
@@ -196,9 +194,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq3ss") {
         if (!empty(t.iq3ss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq3s, addr < uint8 const? >(t.iq3ss[0]), long_length(t.iq3ss) / kq_ssb(KqFmt.iq3s), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq3s, unsafe(addr < uint8 const? >(t.iq3ss[0])), long_length(t.iq3ss) / kq_ssb(KqFmt.iq3s), xc)
             t.iq3ss <- xc
         }
         return true
@@ -206,9 +202,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq3xxss") {
         if (!empty(t.iq3xxss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq3xxs, addr < uint8 const? >(t.iq3xxss[0]), long_length(t.iq3xxss) / kq_ssb(KqFmt.iq3xxs), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq3xxs, unsafe(addr < uint8 const? >(t.iq3xxss[0])), long_length(t.iq3xxss) / kq_ssb(KqFmt.iq3xxs), xc)
             t.iq3xxss <- xc
         }
         return true
@@ -216,9 +210,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq2ss") {
         if (!empty(t.iq2ss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq2s, addr < uint8 const? >(t.iq2ss[0]), long_length(t.iq2ss) / kq_ssb(KqFmt.iq2s), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq2s, unsafe(addr < uint8 const? >(t.iq2ss[0])), long_length(t.iq2ss) / kq_ssb(KqFmt.iq2s), xc)
             t.iq2ss <- xc
         }
         return true
@@ -226,9 +218,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq2xss") {
         if (!empty(t.iq2xss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq2xs, addr < uint8 const? >(t.iq2xss[0]), long_length(t.iq2xss) / kq_ssb(KqFmt.iq2xs), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq2xs, unsafe(addr < uint8 const? >(t.iq2xss[0])), long_length(t.iq2xss) / kq_ssb(KqFmt.iq2xs), xc)
             t.iq2xss <- xc
         }
         return true
@@ -236,9 +226,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "iq2xxss") {
         if (!empty(t.iq2xxss)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.iq2xxs, addr < uint8 const? >(t.iq2xxss[0]), long_length(t.iq2xxss) / kq_ssb(KqFmt.iq2xxs), xc)
-            }
+            kq_split_scale_plane(KqFmt.iq2xxs, unsafe(addr < uint8 const? >(t.iq2xxss[0])), long_length(t.iq2xxss) / kq_ssb(KqFmt.iq2xxs), xc)
             t.iq2xxss <- xc
         }
         return true
@@ -246,9 +234,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "k2s") {
         if (!empty(t.k2s)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.k2, addr < uint8 const? >(t.k2s[0]), long_length(t.k2s) / kq_ssb(KqFmt.k2), xc)
-            }
+            kq_split_scale_plane(KqFmt.k2, unsafe(addr < uint8 const? >(t.k2s[0])), long_length(t.k2s) / kq_ssb(KqFmt.k2), xc)
             t.k2s <- xc
         }
         return true
@@ -256,9 +242,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (name == "k3s") {
         if (!empty(t.k3s)) {
             var @exact_size xc : array<uint8>
-            unsafe {
-                kq_split_scale_plane(KqFmt.k3, addr < uint8 const? >(t.k3s[0]), long_length(t.k3s) / kq_ssb(KqFmt.k3), xc)
-            }
+            kq_split_scale_plane(KqFmt.k3, unsafe(addr < uint8 const? >(t.k3s[0])), long_length(t.k3s) / kq_ssb(KqFmt.k3), xc)
             t.k3s <- xc
         }
         return true
@@ -268,9 +252,7 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     }
     if (!empty(t.k6s)) {
         var @exact_size k6c : array<uint8>
-        unsafe {
-            kq_split_scale_plane(KqFmt.k6, addr < uint8 const? >(t.k6s[0]), long_length(t.k6s) / K6_SSB, k6c)
-        }
+        kq_split_scale_plane(KqFmt.k6, unsafe(addr < uint8 const? >(t.k6s[0])), long_length(t.k6s) / K6_SSB, k6c)
         t.k6s <- k6c
     }
     return true
@@ -939,6 +921,59 @@ def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int6
     }
 }
 
+//! Gather one native-MXFP4 expert stack into the GPU tier's device planes: the disk layout (16 nibble bytes and one E8M0
+//! byte a 32-block, row-major), out of whatever grp<mr> interleave the repack left (`repack_mx4_grp`'s order, per expert slice).
+def moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64;
+                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    let nb = n / Q8_BLOCK_ELEMS
+    assert(n % Q8_BLOCK_ELEMS == 0l, "GPU MoE mx4 gather: row length must be a 32-block multiple")
+    assert(rows * nb * MX4_QB <= 2147483647l, "GPU MoE mx4 stack exceeds the int32 gather-buffer rail")
+    wq |> grow_resize(rows * nb * MX4_QB)
+    ws |> grow_resize(rows * nb * MX4_SB)
+    let nslices = int(rows / slice_rows)
+    let qrow = nb * MX4_QB
+    let srow = nb * MX4_SB
+    let ng = repacked ? slice_rows / mr : 0l
+    unsafe {
+        let b0 = woff / Q8_BLOCK_ELEMS
+        let qp = addr<uint8 const?>(t.mxq[b0 * MX4_QB])
+        let sp = addr<uint8 const?>(t.mxs[b0 * MX4_SB])
+        var wqp = addr(wq[0])
+        var wsp = addr(ws[0])
+        let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
+        maybe_parallel_for(0, nslices, njobs) $(ssb, sse) {
+            unsafe {
+                for (s in range(ssb, sse)) {
+                    let sliceQ = int64(s) * slice_rows * qrow
+                    let sliceS = int64(s) * slice_rows * srow
+                    for (ri in range64(slice_rows)) {
+                        let rr = int64(s) * slice_rows + ri
+                        let grouped = repacked && ri < ng * mr
+                        let g = ri / mr
+                        let r = ri % mr
+                        for (bi in range64(nb)) {
+                            var dq = wqp + rr * qrow + bi * MX4_QB
+                            if (grouped) {
+                                let gq = qp + sliceQ + g * mr * qrow + bi * MX4_QB * mr
+                                for (j in range64(MX4_QB)) {
+                                    dq[j] = gq[(j / 4l) * 4l * mr + r * 4l + j % 4l]
+                                }
+                                wsp[rr * nb + bi] = sp[sliceS + g * mr * srow + bi * mr + r]
+                            } else {
+                                let rq = qp + sliceQ + ri * qrow + bi * MX4_QB
+                                for (m in range64(MX4_QB)) {
+                                    dq[m] = rq[m]
+                                }
+                                wsp[rr * nb + bi] = sp[sliceS + ri * srow + bi]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Gather one PREPARED K-quant weight stack into the GPU tier's device planes — quant payloads
 // row-major per superblock in the k/k+16 nibble pairing, plus the device scale rows (decoded 20 B, or
 // the codebook formats' two words); grp<mr> interleave or disk-order in, identical device bytes out.
@@ -1153,7 +1188,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 [init]
 def private register_layout_hooks {
     register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks,
-        @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q51)
+        @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q51, @@moe_gpu_gather_stack_mx4)
     register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@stream_repack_one,
         @@metal_blob_eligible, @@metal_blob_scale_plane)
 }

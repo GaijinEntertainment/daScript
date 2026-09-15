@@ -626,11 +626,12 @@ struct GpuState {
     tail_xres_dev : uint64        // the residual row out
     tail_xb_dev : uint64          // the normed row (scratch)
     tail_xres : HostBuf           // the residual row's readback staging
-    tail_pending_woq : int64 = -1l   // the q plane whose attention submit collects the pending tail (-1 = none)
+    tail_pending_key : int64 = -1l   //! the layer (`dat_key`) whose attention submit collects the pending tail (-1 = none)
     tail_xout : float?            // where the collected residual row lands on the host
     span_x_dev : uint64           // the residual row across the span
     span_xb_dev : uint64          // the normed row (scratch)
     span_w_dev : uint64           // the combine weights the top-k writes
+    span_eidx_dev : uint64        //! the top-k's picks (the span carries no bias, so nothing reads them)
     span_logits_dev : uint64      // the router logits
     span_router_dev : uint64      // the span's router planes, f32, layer-major
     span_shgate_dev : uint64      //! the shared expert's gate rows per span layer, f32 (gated models)
@@ -839,9 +840,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     var bda = VkMemoryAllocateFlagsInfo()
     bda.flags.device_address = true
     if (bda_on) {
-        unsafe {
-            mai.next = addr<void?>(bda)
-        }
+        mai.next = unsafe(addr<void?>(bda))
     }
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
@@ -851,9 +850,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
             panic("dasLLAMA vulkan tier: pinned host alloc failed ({ares}, {bytes} bytes, type {mai.memoryTypeIndex})")
         }
         to_log(LOG_INFO, "dasLLAMA vulkan tier: pinned mirror alloc declined ({ares}, {bytes} bytes, type {mai.memoryTypeIndex}) - streamed walk stops here\n")
-        unsafe {
-            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
-        }
+        vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), null)
         return HostBuf()
     }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
@@ -862,9 +859,7 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     }
     var mapped : void? = null
     let mf : VkMemoryMapFlags
-    unsafe {
-        vk_check(vkMapMemory(dev_raw(), boost_value_to_vk(m), 0ul, uint64(bytes), mf, addr(mapped)), null)
-    }
+    vk_check(vkMapMemory(dev_raw(), boost_value_to_vk(m), 0ul, uint64(bytes), mf, unsafe(addr(mapped))), null)
     g_gpu.host_mem |> insert(b._vk, m._vk)
     g_gpu.host_bytes += bytes
     return HostBuf(buf = b._vk, mem = m._vk, mapped = mapped, bytes = bytes)
@@ -880,9 +875,7 @@ def private fail_device_buf(buf : uint64; bytes : int64; ares : VkResult; soft :
     if (!soft) {
         panic("Vulkan call failed: {ares} (a {bytes >> 20l} MB device buffer)")
     }
-    unsafe {
-        vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(buf), null)
-    }
+    vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(buf)), null)
     to_log(LOG_WARNING, "dasLLAMA vulkan tier: a {bytes >> 20l} MB device buffer failed with {ares}\n")
     return 0ul
 }
@@ -908,18 +901,14 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     var bda = VkMemoryAllocateFlagsInfo()   // the usage bit above wants its allocation flagged too
     bda.flags.device_address = g_gpu.has_bda
     if (g_gpu.has_memprio) {
-        unsafe {
-            bda.pNext = addr<void?>(prio)
-        }
+        bda.pNext = unsafe(addr<void?>(prio))
     }
     if (g_gpu.rebar_type >= 0 && (req.memoryTypeBits & (1u << uint(g_gpu.rebar_type))) != 0u) {
         // ReBAR attempt — raw alloc so a decline falls back to plain device-local below
         var rmai = VkMemoryAllocateInfo()
         rmai.allocationSize = req.size
         rmai.memoryTypeIndex = uint(g_gpu.rebar_type)
-        unsafe {
-            rmai.pNext = addr<void?>(bda)
-        }
+        rmai.pNext = unsafe(addr<void?>(bda))
         var rmem : VkDeviceMemory
         if (vkAllocateMemory(dev_raw(), rmai, null, rmem) == VkResult.SUCCESS) {
             vk_check(vkBindBufferMemory(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), rmem, 0ul), null)
@@ -928,9 +917,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
             }
             var mapped : void? = null
             let mf : VkMemoryMapFlags
-            unsafe {
-                vk_check(vkMapMemory(dev_raw(), rmem, 0ul, req.size, mf, addr(mapped)), null)
-            }
+            vk_check(vkMapMemory(dev_raw(), rmem, 0ul, req.size, mf, unsafe(addr(mapped))), null)
             g_gpu.dev_mem |> insert(b._vk, unsafe(reinterpret<uint64>(rmem)))
             g_gpu.dev_mapped |> insert(b._vk, unsafe(reinterpret<uint64>(mapped)))
             return b._vk
@@ -940,9 +927,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     want.device_local = true
     var mai = MemoryAllocateInfo(allocationSize = req.size,
                                  memoryTypeIndex = find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
-    unsafe {
-        mai.next = addr<void?>(bda)
-    }
+    mai.next = unsafe(addr<void?>(bda))
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
     if (ares != VkResult.SUCCESS) {
@@ -1025,9 +1010,7 @@ def query_heap_info(phys : VkPhysicalDevice) : VkHeapInfo {
     var mb = VkPhysicalDeviceMemoryBudgetPropertiesEXT()   // sType pre-filled by the ctor
     var mp2 = VkPhysicalDeviceMemoryProperties2()
     if (has_budget) {
-        unsafe {
-            mp2.pNext = addr<void?>(mb)
-        }
+        mp2.pNext = unsafe(addr<void?>(mb))
     }
     vkGetPhysicalDeviceMemoryProperties2(phys, mp2)
     var best = -1
@@ -1190,7 +1173,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the KHR flash tile and the KHR f16 GEMM off cm2 (at subgroup 32), and the h128 attention twin; without it the sdot4 tiles and the chunked attention serve"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), and the h128 attention twin; without it the sdot4 tiles and the chunked attention serve, and a MoE stays per op in mm mode"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
@@ -1245,9 +1228,7 @@ def private query_sm_count(phys : VkPhysicalDevice) : int {
     }
     var sp = VkPhysicalDeviceShaderSMBuiltinsPropertiesNV()
     var p2 = VkPhysicalDeviceProperties2()
-    unsafe {
-        p2.pNext = addr<void?>(sp)
-    }
+    p2.pNext = unsafe(addr<void?>(sp))
     vkGetPhysicalDeviceProperties2(phys, p2)
     return int(sp.shaderSMCount)
 }
@@ -1532,9 +1513,10 @@ def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64
 // pass slot capacities and a base of -1 (re-based per layer).
 def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
     // floor the ws buffer so a scale-less stack's descriptor slot stays valid
+    let wswords = (wscap + 3l) & ~3l   //! whole words: a byte-scale plane (mx4) is read four blocks a word
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
                      wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
-                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wscap, 64l), xfer_shared), wsbytes = wscap)
+                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wswords, 64l), xfer_shared), wsbytes = wswords)
     g_gpu.stacks |> push(st)
     return length(g_gpu.stacks) - 1
 }
@@ -1597,9 +1579,7 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
         bci.sharingMode = VkSharingMode.CONCURRENT
         bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
     }
-    unsafe {
-        bci.next = addr<void?>(emb)
-    }
+    bci.next = unsafe(addr<void?>(emb))
     var cres = VkResult.SUCCESS
     var b <- create_buffer(g_gpu.device, bci, unsafe(addr(cres)))   // deliberately never finalized (make_host_buf's rule)
     if (cres != VkResult.SUCCESS) {
@@ -1609,9 +1589,7 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
     let req = get_buffer_memory_requirements(g_gpu.device, b)
     let usable = hpp.memoryTypeBits & req.memoryTypeBits
     if (usable == 0u || int64(req.size) > sz) {
-        unsafe {
-            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
-        }
+        vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), null)
         vk_import_declined(usable == 0u ? "no usable memory type" : "buffer wants {req.size} bytes over a {sz} byte window")
         return hb
     }
@@ -1640,15 +1618,11 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
     imp.handleType = ht
     imp.pHostPointer = ptr
     var mai = MemoryAllocateInfo(allocationSize = uint64(sz), memoryTypeIndex = ti)
-    unsafe {
-        mai.next = addr<void?>(imp)
-    }
+    mai.next = unsafe(addr<void?>(imp))
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
     if (ares != VkResult.SUCCESS) {
-        unsafe {
-            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(b._vk), null)
-        }
+        vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(b._vk)), null)
         vk_import_declined("vkAllocateMemory {ares}, type {ti} of usable {usable} ({mp.memoryTypes[int(ti)].propertyFlags}), {sz} bytes")
         return hb
     }
@@ -1848,7 +1822,7 @@ def vk_drop_model_state {
     }
     g_gpu.pend_wait = 0ul
     assert(g_gpu.ffn_pend_s2 == -1, "dasLLAMA vulkan tier: model drop with an async FFN in flight")
-    assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: model drop with a decode ffn tail in flight")
+    assert(g_gpu.tail_pending_key < 0l, "dasLLAMA vulkan tier: model drop with a decode ffn tail in flight")
     // the resident driver's das-side shell first (its VK objects die in the sweeps below)
     if (g_rd != null) {
         unsafe {
@@ -1858,9 +1832,7 @@ def vk_drop_model_state {
     }
     // every alloc_cmd result is model-owned — one bulk free
     if (!empty(g_gpu.model_cmds)) {
-        unsafe {
-            vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), uint(length(g_gpu.model_cmds)), addr(g_gpu.model_cmds[0]))
-        }
+        vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), uint(length(g_gpu.model_cmds)), unsafe(addr(g_gpu.model_cmds[0])))
         g_gpu.model_cmds |> clear()
     }
     // every descriptor set came from the chain and every one is model-owned — reset every chunk
@@ -1908,7 +1880,7 @@ def vk_drop_model_state {
     g_gpu.dat_layers |> clear()
     g_gpu.tail_cmds |> clear()
     g_gpu.span_layers |> clear()
-    g_gpu.tail_pending_woq = -1l
+    g_gpu.tail_pending_key = -1l
     g_gpu.tail_xout = null
     g_gpu.span_key = -1l
     g_gpu.span_nl = 0l
@@ -2054,6 +2026,9 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     if (fmt == int(KqFmt.q51)) {
         return (wq = Q51_QPB, ws = Q51_SPB)   // 16 nibble bytes + 4 qh bytes, f16 d + f16 m: the CPU plane verbatim
     }
+    if (fmt == int(KqFmt.mx4)) {
+        return (wq = MX4_QB, ws = MX4_SB)   // 16 nibble bytes, one E8M0 byte: the CPU's mxq / mxs planes verbatim
+    }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
 }
 
@@ -2103,7 +2078,7 @@ def private arena_open_slab(var a : ArenaFmt) : bool {
         to_log(LOG_INFO, "dasLLAMA vulkan arena: fmt {a.fmt} slab {length(a.slabs)} opens ({cap} blocks; {tail} tail blocks unused in slab {length(a.slabs) - 1})\n")
     }
     let qb = cap * bb.wq
-    let sb = max(cap * bb.ws, 64l)   // ws floor keeps the descriptor slots valid (stack-shell rule)
+    let sb = max((cap * bb.ws + 3l) & ~3l, 64l)   // ws floor keeps the descriptor slots valid (stack-shell rule); whole words, since a byte-scale plane (mx4) is read four blocks a word
     let wqbuf = g_gpu.dry ? 0ul : try_device_buf(qb)
     let wsbuf = g_gpu.dry ? 0ul : try_device_buf(sb)
     if (!g_gpu.dry && (wqbuf == 0ul || wsbuf == 0ul)) {   //! the device had no room for the slab: the placement declines instead of dying mid-upload
@@ -2136,9 +2111,7 @@ def arena_reserve(fmt : int; cap_blocks : int64) : bool {
         }
         return true
     }
-    unsafe {
-        g_gpu.arenas[fmt] <- ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, slab_cap = arena_slab_blocks(fmt))
-    }
+    g_gpu.arenas[fmt] <- ArenaFmt(fmt = fmt, cap_blocks = cap_blocks, slab_cap = arena_slab_blocks(fmt))
     return true
 }
 
@@ -2367,11 +2340,12 @@ struct RLayer {
     s_egate, s_eup : VkDescriptorSet
     s_eact : VkDescriptorSet
     egu : bool                      //! the Q4_K gate and up GEMVs, the act and its Q8_0 requant as one dispatch (`KqGemvK4Gu`)
+    egu_mx4 : bool                  //! ... the mx4 twin under the slots' expert bias rows (`Mx4GemvGu`, gpt-oss)
     s_egu : VkDescriptorSet
     s_edown : VkDescriptorSet
     edown_sum : bool                //! the routed down GEMV sums the k rows under their weights itself (`Q51GemvSum`): the combine reads one row
     s_edown_sum : VkDescriptorSet
-    comb_rq : bool                  //! the gemma-4 combine quantizes the next head's Q8_0 feed itself (`ClsArCombG4Rq`): no requant dispatch follows
+    comb_rq : bool                  //! the combine quantizes the next head's Q8_0 feed itself (`ClsArCombRq`, the gemma-4 form's `ClsArCombG4Rq`): no requant dispatch follows
     s_comb_rq : VkDescriptorSet
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   //! the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
@@ -2431,6 +2405,10 @@ struct RDec {
     bias_dev : uint64             // the q/k/v projection biases, per layer [q | k | v] (qwen2; 0 = the model has none)
     bias_bytes : int64
     has_bias : bool
+    sinks_dev : uint64            //! the per-head attention sink logits, [n_heads] a layer (gpt-oss; 0 = the model has none)
+    sinks_bytes : int64
+    has_sinks : bool
+    has_obias : bool              //! the attention output bias rows ride the norms plane (`RD_NORM_OBIAS`) and the residual steps add them
     cos_dev : uint64              // this token's rope row (cos[half] + sin[half])
     logits_dev : uint64
     x_host, logits_host : HostBuf
@@ -2449,6 +2427,9 @@ struct RDec {
     cls_fmt_marker : int
     layers : array<RLayer>
     cmd : VkCommandBuffer
+    cmd_unsplit : VkCommandBuffer   //! the unsplit twin: the same chain with the attention at one split, submitted under RD_UNSPLIT_POS
+    unsplit_on : bool               //! ... recorded (a device at one split has no twin)
+    unsplit_served : int64        //! the tokens the twin served
     tok_recorded : bool           // cmd holds the whole-token chain, re-submittable as-is
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
@@ -2511,6 +2492,7 @@ struct RDec {
     ne, k, nfe, nsh, ner : int64  //! experts, routed slots, the expert width, the shared expert's width (0 = none), the router rows per layer (ne, + the gate row)
     n_moe : int64                 //! MoE layers (the router plane's slots)
     sh_gated, norm_topk, is_gelu : bool
+    act_oai : bool                //! the experts' activation is gpt-oss's clamped swiglu (`ACT_OAI`), else silu or gelu by `is_gelu`
     wscale : float
     router_dev : uint64           //! [n_moe x ner x dim] f32 router rows, the gate row last
     router_bytes : int64
@@ -2518,6 +2500,13 @@ struct RDec {
     router16_bytes : int64
     moe_ds_dev : uint64           //! [n_moe x ne] the per-expert down scales the top-k folds into its weights (gemma-4); the filler when the model has none
     moe_ds_bytes : int64
+    router_bias : bool            //! the router logits take a per-expert bias before the pick (gpt-oss): `moe_rb_dev` holds [n_moe x ne]
+    moe_rb_dev : uint64
+    moe_rb_bytes : int64
+    exps_bias : bool              //! the expert stacks carry bias rows (gpt-oss): gate and up [n_moe x ne x nfe], down [n_moe x ne x dim]
+    moe_gb_dev, moe_ub_dev, moe_db_dev : uint64
+    moe_gub_bytes, moe_db_bytes : int64
+    moe_eidx_dev : uint64         //! the decode's k picks' experts (the biased act and combine's row map)
     moe_ident_dev : uint64        //! 0..MAX_ROUTED_SLOTS-1: the decode combine's identity slot map
     moe_dlog_dev : uint64         //! the decode's logits row (ner floats)
     moe_dw_dev : uint64           //! the decode's k routing weights
@@ -2527,6 +2516,7 @@ struct RDec {
     pf_nk : int64                 //! the window's slot rows (PF_WINDOW x k)
     pf_mlog : uint64              //! [np x ner] logits
     pf_midx, pf_mw, pf_minv : uint64   //! [nk] picks, weights, slot -> bucket row
+    pf_bex : uint64               //! [nk] bucket row -> its expert (the biased act's row map)
     pf_msch1, pf_msch3, pf_msch2 : uint64   //! the three expert planes' device-written schedules
     pf_mxg : uint64               //! [nk + slack x dim] the gathered f16 rows
     pf_my1, pf_my2 : uint64       //! [nk x nfe] the gate / up rows
@@ -2543,6 +2533,14 @@ def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && di
 
 var g_rd : RDec?
 
+let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al)
+
+//! the token command's attention split count on this device (1 = the unsplit pass alone, no twin; 0 = no driver)
+def vk_rdec_attn_nsplit : int64 => g_rd != null ? g_rd.attn_nsplit : 0l
+
+//! the tokens the unsplit twin served so far (a device at one split serves every token unsplit and counts none here)
+def vk_rdec_unsplit_tokens : int64 => g_rd != null ? g_rd.unsplit_served : 0l
+
 //! the norms plane's per-layer row indices (`RDEC_NORM_ROWS` rows a layer); the final norm follows the layers and the q/k norm rows follow it
 let RD_NORM_ROWS = RDEC_NORM_ROWS
 let RD_NORM_ATT = 0l
@@ -2555,6 +2553,7 @@ let RD_NORM_ROUTER = 5l
 let RD_NORM_PRE_FFN2 = 6l
 let RD_NORM_POST_FFN1 = 7l
 let RD_NORM_POST_FFN2 = 8l
+let RD_NORM_OBIAS = 9l   //! the attention output bias row (gpt-oss), added to the wo GEMV's row at the residual step; a zero row elsewhere
 
 //! layer `l`'s norm row of `kind` in the norms plane, in floats
 def rd_norm_off(l, kind : int64) : int64 => (l * RD_NORM_ROWS + kind) * g_rd.dim
@@ -2633,25 +2632,45 @@ var g_rdq_n = 0u
 var g_rdq_count = 0l
 var g_rdq_total = 0.0lf
 var g_rdq_stamp_names : array<string>        //! the recorded token command's stamp names in stamp order, the recorder's own account of what each interval bills
+var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, its stamp count and its overflow flag
+var g_rdq_n_unsplit = 0u
+var g_rdq_overflow_unsplit = false
+var g_rdq_form_unsplit = false   //! the form the last sampled token took: a switch restarts the averages
 var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
 var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
 var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
 var g_rdq_host_us : double[4]   //! ... split into its pieces: the memcpys and meta, the submit, the fence spin, the logits copy
 var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP): the recorded names and the pool saturate together, so the sampler reads this instead
 
-//! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
-def rdq_reset {
-    g_rdq_n = 0u
+//! the decode profiler's averages back to zero (the recorded stamp names stay): a switch between the token command's two forms
+//! the token command changed forms mid-run: say so and restart the ledger's averages, since the two forms' stamp roles differ
+[cold_path]
+def rdq_form_switch(unsplit : bool; pos : int64) {
+    to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {unsplit ? "unsplit" : "split"} form from position {pos} - the averages restart\n")
+    rdq_reset_averages()
+}
+
+def rdq_reset_averages {
     g_rdq_count = 0l
     g_rdq_total = 0.0lf
     g_rdq_wall_us = 0.0lf
     for (i in range(4)) {
         g_rdq_host_us[i] = 0.0lf
     }
-    g_rdq_overflow = false
     g_rdq_us_by_name |> clear()
     g_rdq_print_order |> clear()
+}
+
+//! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
+def rdq_reset {
+    rdq_reset_averages()
+    g_rdq_n = 0u
+    g_rdq_overflow = false
     g_rdq_stamp_names |> clear()
+    g_rdq_names_unsplit |> clear()
+    g_rdq_n_unsplit = 0u
+    g_rdq_overflow_unsplit = false
+    g_rdq_form_unsplit = false
 }
 
 let PFQ_CAP = 2048u
@@ -3058,9 +3077,7 @@ def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : 
     g_vk_kcov[intptr(boost_value_to_vk(c.pipes[ord]))]++
     vhz_dep(raw, h, m.r, m.w)
     cmd_bind_pipeline(vk_value_to_boost(raw), c.pipes[ord], VkPipelineBindPoint.COMPUTE)
-    unsafe {
-        vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(c.pipe_layout), 0u, 1u, addr(set_), 0u, null)
-    }
+    vkCmdBindDescriptorSets(raw, VkPipelineBindPoint.COMPUTE, boost_value_to_vk(c.pipe_layout), 0u, 1u, unsafe(addr(set_)), 0u, null)
     vkCmdDispatch(raw, groups, 1u, 1u)
 }
 
@@ -3210,9 +3227,7 @@ def vhz_dep(raw : VkCommandBuffer; var h : VkHaz; rmask, wmask : uint; transfer 
         dstage.compute_shader = true
         dstage.transfer = true
         let dflags : VkDependencyFlags
-        unsafe {
-            vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 1u, addr(mb), 0u, null, 0u, null)
-        }
+        vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 1u, unsafe(addr(mb)), 0u, null, 0u, null)
         h.w = 0u
         h.r = 0u
         h.pend_compute = false
@@ -3236,16 +3251,12 @@ def alloc_transient_cmd : VkCommandBuffer {
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw : VkCommandBuffer
-    unsafe {
-        vk_check(vkAllocateCommandBuffers(dev_raw(), ai, addr(raw)), null)
-    }
+    vk_check(vkAllocateCommandBuffers(dev_raw(), ai, unsafe(addr(raw))), null)
     return raw
 }
 
 def free_transient_cmd(var raw : VkCommandBuffer) {
-    unsafe {
-        vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), 1u, addr(raw))
-    }
+    vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), 1u, unsafe(addr(raw)))
 }
 
 def alloc_cmd : VkCommandBuffer {
@@ -3292,11 +3303,9 @@ def submit_nofence(var raw : VkCommandBuffer) {
 
 def wait_fence {
     var fence = g_gpu.fence
-    unsafe {
-        // spin, never block: vkWaitForFences pays 1-2ms OS wake-up latency per submit (measured)
-        while (vkGetFenceStatus(dev_raw(), fence) != VkResult.SUCCESS) {}
-        vk_check(vkResetFences(dev_raw(), 1u, addr(fence)), null)
-    }
+    // spin, never block: vkWaitForFences pays 1-2ms OS wake-up latency per submit (measured)
+    while (vkGetFenceStatus(dev_raw(), fence) != VkResult.SUCCESS) {}
+    vk_check(vkResetFences(dev_raw(), 1u, unsafe(addr(fence))), null)
 }
 
 def submit_wait(var raw : VkCommandBuffer) {
@@ -3326,6 +3335,7 @@ def fill_stack_sched_rows(si : int; offs : int64 const?; nregions : int64; nrows
 
 def fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_bytes : int64) {
     assert(xq_bytes <= XQ_BYTES, "dasLLAMA vulkan tier: dispatch exceeds scratch capacity")
+    assert(g_gpu.stacks[si].gemv_made, "dasLLAMA vulkan tier: a stack fill before its GEMV scratch was made")
     let unit = fmt_unit(g_gpu.stacks[si].fmt)
     unsafe {
         memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void?>(xqp), xq_bytes)
@@ -3336,13 +3346,17 @@ def fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_bytes : 
 // ===== the decode attention block's per-layer mirrors =====
 
 
+let DAT_KEY_FMTS = 32l
+
+def dat_key(woq : int64; fq : int) : int64 => woq * DAT_KEY_FMTS + int64(fq)
+
 //! The layer's decode-block state exists after this, its f16 K/V mirror allocated on first sight
-//! (keyed by the q plane offset - the identity both the prefill chain and the decode block carry).
+//! (keyed by `dat_key` - the identity both the prefill chain and the decode block carry).
 [cold_path]   // once per layer: the mirror pair
-def dat_layer_ensure(woq, kvd : int64) {
-    if (!key_exists(g_gpu.dat_layers, woq)) {
+def dat_layer_ensure(key, kvd : int64) {
+    if (!key_exists(g_gpu.dat_layers, key)) {
         let bytes = DAT_MIRROR_ROWS * kvd * 2l
-        g_gpu.dat_layers |> insert(woq, DatLayer(k_mir = make_device_buf(bytes), v_mir = make_device_buf(bytes), cnt = 0l))
+        g_gpu.dat_layers |> insert(key, DatLayer(k_mir = make_device_buf(bytes), v_mir = make_device_buf(bytes), cnt = 0l))
     }
 }
 
@@ -3433,9 +3447,7 @@ let PAR_COPY_CHUNK = 2_097_152l
 
 def par_memcpy(var dst : void?; src : void?; bytes : int64) {
     if (bytes < PAR_COPY_CHUNK * 2l || !is_job_que_available()) {
-        unsafe {
-            memcpy(dst, src, bytes)
-        }
+        unsafe(memcpy(dst, src, bytes))
         return
     }
     let nch = int((bytes + PAR_COPY_CHUNK - 1l) / PAR_COPY_CHUNK)
@@ -3467,9 +3479,7 @@ def cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : u
 
 // zero a device range inside a command (a transfer write; offset and size multiples of 4)
 def cmd_fill_zero(raw : VkCommandBuffer; dst : uint64; dst_off : int64; bytes : int64) {
-    unsafe {
-        vkCmdFillBuffer(raw, reinterpret<VkBuffer>(dst), uint64(dst_off), uint64(bytes), 0u)
-    }
+    vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(dst)), uint64(dst_off), uint64(bytes), 0u)
 }
 
 // host-wait the transfer timeline up to `v` — the backstop before re-recording the shared xfer

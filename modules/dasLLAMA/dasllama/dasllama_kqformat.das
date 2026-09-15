@@ -15,7 +15,8 @@ require daslib/enum_trait   // kq_fmt_of_name walks the enum
 
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
 //! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
-//! planes. New members append — the int value is the device stack tag and the image plane id.
+//! planes; mx4 = the native MXFP4 expert planes (`Model.mxq` / `mxs` under `experts_mx4` - the GPU tiers' stack tag, never a
+//! per-tensor tag the loader writes). New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
     k4
@@ -32,6 +33,7 @@ enum KqFmt : uint8 {
     iq2s
     iq2xs
     iq2xxs
+    mx4
 }
 
 //! The superblock-lattice formats (Q8_K-form activations, % 256 rows, repack + stamped kq
@@ -50,11 +52,11 @@ def kq_fmt_of_name(name : string; var out : KqFmt&) : bool {
     return false
 }
 
-//! The per-32 formats: 32-weight blocks with Q8_0-form activations (q8, q51), off the kq lattice.
-def kq_block32(f : KqFmt) : bool => f == KqFmt.q8 || f == KqFmt.q51
+//! The per-32 formats: 32-weight blocks with Q8_0-form activations (q8, q51, mx4), off the kq lattice.
+def kq_block32(f : KqFmt) : bool => f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.mx4
 
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
-def kq_block32(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51)
+def kq_block32(fmt : int) : bool => fmt == int(KqFmt.q8) || fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4)
 
 //! The same predicate over the int id space the GPU drivers carry per stack/plane.
 def kq_sb(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5) || fmt == int(KqFmt.k6) || fmt == int(KqFmt.q40) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.k3) || fmt == int(KqFmt.iq3s) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.k2) || fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs)
@@ -118,6 +120,8 @@ let Q40_QSB = 128l  // Q4_0 quant plane: 128 nibble bytes (k4 tiling)
 let Q40_SSB = 16l   // Q4_0 scale plane: 8 x f16 d, verbatim
 let Q51_QB = 20l    // q5_1 quant plane PER 32-BLOCK: 16 nibble bytes (k/k+16 pairing) + 4 qh
 let Q51_SB = 4l     // q5_1 scale plane PER 32-BLOCK: f16 d + f16 m
+let MX4_QB = 16l    // MXFP4 quant plane PER 32-BLOCK: 16 nibble bytes (element j low, j + 16 high), the disk order
+let MX4_SB = 1l     // MXFP4 scale plane PER 32-BLOCK: one E8M0 byte
 let IQ4XS_QSB = 128l   // IQ4_XS quant plane: 128 nibble bytes, the disk k/k+16 pairing (q40 tiling)
 let IQ4XS_SSB = 20l    // IQ4_XS scale plane: f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad — the k4 decoded-row shape
 let K3_QSB = 96l    // Q3_K quant plane: 64 qs bytes (four 2-bit lanes each) + 32 hmask bytes, verbatim disk order
@@ -814,6 +818,9 @@ def kq_qsb(f : KqFmt) : int64 {
     if (f == KqFmt.iq2xxs) {
         return IQ2XXS_QSB
     }
+    if (f == KqFmt.mx4) {
+        return MX4_QB
+    }
     panic("kq_qsb: no plane stride for this format")
     return 0l
 }
@@ -832,6 +839,9 @@ def kq_ssb(f : KqFmt) : int64 {
     if (f == KqFmt.q51) {
         return Q51_SB
     }
+    if (f == KqFmt.mx4) {
+        return MX4_SB
+    }
     panic("kq_ssb: no plane stride for this format")
     return 0l
 }
@@ -845,6 +855,9 @@ def kq_elems(f : KqFmt) : int64 => kq_sb(f) ? 256l : 32l
 //! repack dispatchers translate it back to kernel id 2.
 let K2_STREAM_TAG = 20
 
+//! mx4's stream tag is the GGML type id (`GGML_TYPE_MXFP4`); no loader path streams an mx4 plane, so the row exists only to keep `kq_stream_code` total
+let MX4_STREAM_TAG = 39
+
 def kq_stream_code(f : KqFmt) : int {
     if (f == KqFmt.q8) {
         return 0
@@ -854,6 +867,9 @@ def kq_stream_code(f : KqFmt) : int {
     }
     if (f == KqFmt.k2) {
         return K2_STREAM_TAG
+    }
+    if (f == KqFmt.mx4) {
+        return MX4_STREAM_TAG
     }
     return kq_schema_id(f)
 }

@@ -561,14 +561,15 @@ var private g_layout_repack_q8 : ModelRepackFn
 var private g_layout_repack_kq : ModelRepackFn
 var private g_layout_repack_mx4 : ModelRepackFn
 var private g_layout_repack_q51 : ModelRepackFn
-typedef GatherStackQ51Fn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
+typedef GatherStackB32Fn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
                                      repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) : void>
 var private g_layout_gather : GatherStackFn
 var private g_layout_gather_kq : GatherStackKqFn
-var private g_layout_gather_q51 : GatherStackQ51Fn
+var private g_layout_gather_q51 : GatherStackB32Fn
+var private g_layout_gather_mx4 : GatherStackB32Fn
 var private g_layout_hooks_set = false
 
-def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51 : GatherStackQ51Fn) {
+def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsmx4 : GatherStackB32Fn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
     g_layout_repack_mx4 = rmx4
@@ -576,6 +577,7 @@ def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStack
     g_layout_gather = gs
     g_layout_gather_kq = gskq
     g_layout_gather_q51 = gsq51
+    g_layout_gather_mx4 = gsmx4
     g_layout_hooks_set = true
 }
 
@@ -624,6 +626,12 @@ def layout_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     layout_hooks_check()
     invoke(g_layout_gather_q51, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+}
+
+def layout_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64;
+                            repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    layout_hooks_check()
+    invoke(g_layout_gather_mx4, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
 // ===== whole-model GPU residency hook (registered by dasllama_gpu_resident at [init]) =====
@@ -1200,9 +1208,7 @@ def image_backing_release(map : void?; bytes : uint64) {
     if (map == null || image_chunk_free(map)) {
         return
     }
-    unsafe {
-        fmap_close(map, bytes)
-    }
+    unsafe(fmap_close(map, bytes))
 }
 
 // Model's finalizer (every `delete model` lowers to _::finalize and lands here): image-backed
@@ -1212,9 +1218,7 @@ def finalize(var t : Model) {
     apply(t) $ [unused_argument(name)] (name : string; var field) {
         static_if (typeinfo is_array(field)) {
             if (lock_count(field) != 0) {
-                unsafe {
-                    _builtin_forget_temp_array(field)
-                }
+                unsafe(_builtin_forget_temp_array(field))
             } else {
                 delete field
             }
@@ -2464,9 +2468,7 @@ def make_run_state_paged(c : Config; var pool : KVPool) : Session {
         }
     }
     var s <- make_run_state(c, pool.kdt, pool.vdt, false)
-    unsafe {
-        s.kv_pool = addr(pool)
-    }
+    s.kv_pool = unsafe(addr(pool))
     // paged run scratch: a window can span every page of the (post-cap) context
     s.kv_runs |> resize((c.seq_len + pool.page_rows - 1l) / pool.page_rows + 1l)
     return <- s
@@ -2984,16 +2986,12 @@ def kv_store_row(var dst0 : uint8?; dt : KVDtype; kv_dim, row, sub, n : int64; s
             cvt_f32_to_f16(d + row * kv_dim + sub, src, n)   // clamps to ±65504: inf never enters the cache
         }
     } elif (dt == KVDtype.q8_0) {
-        unsafe {
-            // sub is 0 or a head boundary and head_size/kv_dim are 32-multiples (create-time
-            // contract), so the destination is always a whole-block offset
-            quantize_q8kv_row(dst0 + (row * kv_dim + sub) / 32l * 34l, src, n)
-        }
+        // sub is 0 or a head boundary and head_size/kv_dim are 32-multiples (create-time
+        // contract), so the destination is always a whole-block offset
+        quantize_q8kv_row(unsafe(dst0 + (row * kv_dim + sub) / 32l * 34l), src, n)
     } elif (dt == KVDtype.tq4) {
-        unsafe {
-            // src rows are already in the rotated basis — the drivers rotate at the RoPE seam
-            quantize_tq4kv_row(dst0 + (row * kv_dim + sub) / 32l * 18l, src, n)
-        }
+        // src rows are already in the rotated basis — the drivers rotate at the RoPE seam
+        quantize_tq4kv_row(unsafe(dst0 + (row * kv_dim + sub) / 32l * 18l), src, n)
     } else {
         panic("KV cache codec not yet implemented")
     }
@@ -3014,13 +3012,9 @@ def kv_load_row(src0 : uint8 const?; dt : KVDtype; kv_dim, row, sub, n : int64; 
             cvt_f16_to_f32(dst, sp + row * kv_dim + sub, n)
         }
     } elif (dt == KVDtype.q8_0) {
-        unsafe {
-            cvt_q8kv_to_f32(dst, src0 + (row * kv_dim + sub) / 32l * 34l, n)
-        }
+        cvt_q8kv_to_f32(dst, unsafe(src0 + (row * kv_dim + sub) / 32l * 34l), n)
     } elif (dt == KVDtype.tq4) {
-        unsafe {
-            cvt_tq4kv_to_f32(dst, src0 + (row * kv_dim + sub) / 32l * 18l, n)
-        }
+        cvt_tq4kv_to_f32(dst, unsafe(src0 + (row * kv_dim + sub) / 32l * 18l), n)
     } else {
         panic("KV cache codec not yet implemented")
     }
@@ -3437,10 +3431,8 @@ def tq4_unrotate_batch(var buf : array<float>; nrows, stride, head_size : int64;
 // tq4_unrotate_batch's raw-pointer twin — the Metal prefill continuation un-rotates gathered
 // panel rows in place (the GPU attention runs in the raw basis)
 def tq4_unrotate_rows(var p : float?; nrows, stride, head_size : int64; signs : float const?) {
-    unsafe {
-        for (sg in range64(nrows * (stride / head_size))) {
-            fwht_unsign_row(p + sg * head_size, signs, head_size)
-        }
+    for (sg in range64(nrows * (stride / head_size))) {
+        fwht_unsign_row(unsafe(p + sg * head_size), signs, head_size)
     }
 }
 
@@ -4482,18 +4474,16 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
         let kspc = kq_plane_s(t, cls_fmt, t.wcls_off)
         let rowsc = kq_rows_for(cls_fmt)
         team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — dispatch-API lambda capture, see attention_chain_decode
-            unsafe {
-                let r0 = int64(jb) * 32l
-                let r1 = int64(je) * 32l
-                if (is_kq) {
-                    invoke(rowsc, lp, kqpc, kspc, xqp, xsp, xbsw, dim, r0, r1)
-                } elif (f16w) {
-                    invoke(mmrows16, lp, wp, ws16, xqp, xsp, dim, r0, r1)
-                } else {
-                    invoke(mmrows, lp, wp, ws, xqp, xsp, dim, r0, r1)
-                }
-                softcap4(lp + r0, r1 - r0, cap)
+            let r0 = int64(jb) * 32l
+            let r1 = int64(je) * 32l
+            if (is_kq) {
+                invoke(rowsc, lp, kqpc, kspc, xqp, xsp, xbsw, dim, r0, r1)
+            } elif (f16w) {
+                invoke(mmrows16, lp, wp, ws16, xqp, xsp, dim, r0, r1)
+            } else {
+                invoke(mmrows, lp, wp, ws, xqp, xsp, dim, r0, r1)
             }
+            softcap4(unsafe(lp + r0), r1 - r0, cap)
         }
     }
 }

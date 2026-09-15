@@ -7,8 +7,6 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`,
 the Vulkan tier), `followup_metal.md` (engine work on the Metal tier, or CPU engine work
 measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup ledgers).
 
-**A dasLLAMA `[test]` file, wherever the diff puts it, answers to `tests/REVIEW.md` here.**
-
 **A timing rig (a file that times a run itself and reports a wall-clock time or rate as its
 result, printed or returned to a caller that prints it - a driver reading a child's clock is
 not one), a kernel race (a run timing two kernel variants - arms - against each other in one
@@ -36,8 +34,8 @@ areas but not all - `audio`, `vision`, `tts`, `llm`, `infra` - gives it a `MODUL
 naming those areas, in the same change.** A module with no row reaches every area, so the
 omission costs every later `run.das -- --changed` the whole suite, never coverage.
 
-**Every `dasllama/` change applies this folder's `tests/REVIEW.md` - open it explicitly: the
-folder walk does not surface it for a `dasllama/`-only diff.**
+**A dasLLAMA `[test]` file, wherever the diff puts it, and every `dasllama/` change answer to this
+folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `dasllama/`-only diff.**
 
 **A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
 declares), or K/V-mirror (the device-side copy of the key/value cache a GPU decode reads and
@@ -92,16 +90,16 @@ a maintainer ruling that bench comparability is broken.** Recorded performance r
 sidecars stay valid across code changes, and per-change invalidation lives in the finer
 mechanisms - `IMAGE_VERSION` and `layout_fingerprint()` (`dasllama/dasllama_image.das`).
 
-**A value that cannot change between dispatches of one compiled kernel never reaches that
-kernel as a uniform, a kargs field, or an `@off` bind offset - stamp it into the class as a
-`@template_constant` instead.**
+**A value that is the same on every dispatch a compiled kernel's pipeline serves - a shape class is,
+a per-model flag is not - never reaches that kernel as a uniform, a kargs field, or an `@off` bind
+offset: stamp it into the class as a `@template_constant`.**
 
 **A function-typed global a serialized exe must re-establish lands in a `dasllama/` file with
 the `[init]` that establishes it at boot; landing one where `REVIEW.das`'s restore-check walk
 over `dasllama/` cannot reach it is a defect.** A serialized exe restores globals as data, so
 a declaration initializer arrives null and dies at the first invoke while every `-jit` gate
-stays green; a global another file's `[init]` arms (`set_runtime_race_hook`) has no
-initializer, and its null default is the declared "no hook".
+stays green; a global another file's `[init]` arms has no initializer, and its null default is
+the declared "no hook".
 
 **Never reorder or merge the float multiplies in a function that builds a RoPE angle table
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
@@ -134,8 +132,8 @@ a `@sidecar` event instead.** A supervised or piped boot must never block on inp
 **A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside a
 cold one-shot load, bake, map or tokenizer-build progress log and the first-start kernel race
 report of a fat exe - one built `DAS_TUNE_MODE=fat`, shipping its tune profile - is a defect** -
-instrumentation goes through the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`,
-the Vulkan tier's `vk_prof()`-gated ledgers and logs in `dasllama/dasllama_gpu_resident.das`), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
+instrumentation goes through the profiling rails (`profile_tag` / `profile_marker`, `prof_add`,
+`asr_prof_add`, the Vulkan tier's `vk_prof()`-gated ledgers and logs), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
 
 **In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
 flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over
@@ -145,9 +143,12 @@ apart from the ad-hoc profiling an engine file may not carry.
 **Every new kernel or loop the runtime re-enters per token, per frame, or per prefill
 quantum - one batch of prompt tokens the prefill path processes in a single pass - is reached
 by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]`
-contracts, or `[cold_path]` on its only reaching entry; a renamed per-token function is not
-new, and its annotation moves with the name in the same change.** An annotation binds every
-function the entry calls; an unreached loop has no contract (`ARCHITECTURE_RUNTIME.md` sec.2.11).
+contracts, or `[cold_path]` on its only reaching entry.** An annotation binds every function
+below the entry that carries no annotation of its own; an unreached loop has no contract
+(`ARCHITECTURE_RUNTIME.md` sec.2.11).
+
+**A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` / `[no_env]` /
+`[no_io]` contract moves that annotation to the new name in the same change** - it is no new entry.
 
 **The annotation sits on the region entry - the outermost function the runtime re-enters per
 token, per frame, or per prefill quantum: a kernel `*_encode` / `*_decode`, a step driver, the
@@ -203,7 +204,7 @@ consumer requires only this module's public entry modules, matched by the resolv
 path under `modules/dasLLAMA/` - is a defect:** the path match dropped or narrowed, an error
 text that no longer names the facade to require instead, or a module added to its allowed set
 without both halves of the pair that makes it an entry module - the `ARCHITECTURE_ENGINE.md`
-sec.1.8 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
+charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
 naming it beside the facade. The allowed set is the table in the lint.
 
 **A STYLE037 or STYLE038 suppression, `// nolint:` or the file's `options _function_length` /
@@ -224,11 +225,10 @@ failed, adding a name to a check's licensed set - the names that check does not 
 check's own finding text does not name the set as its extension point, or re-stamping a pinned
 hash, count or list where that check's own finding text does not sanction the re-stamp; the gate itself says what it enforces.
 
-**A new `REVIEW.das` check, or a check whose licensed set gains a name, ships its line in the
-companion section that owns the mechanism the check guards - an `ARCHITECTURE_*.md` companion,
-never `ARCHITECTURE.md` - in the same change.**
-The line names the check and the names it licenses; when the check licenses no names, the line
-says so.
+**A new `REVIEW.das` check, or a check whose licensed set gains a name, names in its finding text
+the rule it enforces and ships its line in the companion section that owns the mechanism the check
+guards - an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the same change.** The
+line names the check and the names it licenses; when the check licenses no names, the line says so.
 
 **Checked-in text under `modules/dasLLAMA/` - docs, comments, or string data, any language -
 that describes a mechanism of the reference build, or names that build, its binaries or its
@@ -262,14 +262,14 @@ registry does not, `tests/test_env_registry.das` catches.
 **Hand-editing `dasllama/dasllama_unicode.das`'s RANGES/WS tables is a defect - regenerate them
 by retranscoding `$LCPP/src/unicode-data.cpp` (the reference checkout) instead.**
 
-**A diff that adds a file under `dasllama/`, or gives a file there a weight format, a serving
-lane (the quant form a tensor serves from) or a data structure its charter does not name, lands the sec.1 edit that
-keeps the charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md` - in the
-same change.**
+**A diff that adds a file under `dasllama/`, or gives a file there anything its sec.1 charter lists
+one by one - a weight format, a serving lane (the quant form a tensor serves from), a data
+structure - that the charter does not name, lands, in the same change, the edit that keeps the
+charters true - in an `ARCHITECTURE_*.md` companion, never `ARCHITECTURE.md`.**
 
-**A follow-up ledger row whose work landed in this change is deleted, and the rows below keep
-their numbers; when a row lists several items and one item's work landed, that item is deleted
-and the row stays** - checked-in text cites rows by number.
+**A follow-up ledger row whose work landed in this change is deleted, the rows below keep their
+numbers - text cites rows by number - and when a row lists several items and one landed, that item
+goes and the row stays; every checked-in citation of what was deleted is repointed or dropped.**
 
 **A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds
 or removes a companion, lands `ARCHITECTURE.md`'s index line and section range, the
@@ -291,10 +291,10 @@ profile re-runs the tuning the profile was meant to save.
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
 or `var`).** A team lane never runs global initializers, so the global reads zero there.
 
-**A `resize` in `dasllama/` of a buffer whose element count scales with a model dimension (a
-count the model file sets: layers, dim, experts, vocab, positions) is preceded by a `reserve` of
-the same count - a `dasllama/dasllama_common.das` sizing helper that reserves before it grows
+**A buffer in `dasllama/` whose element count scales with a model dimension (a count the model
+file sets: layers, dim, experts, vocab, positions) is declared `@exact_size`, and every `resize`
+of it follows a `reserve` of the same count - a `dasllama/dasllama_common.das` sizing helper
 (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`, `zeroed_resize`), the
 builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled out - whatever the size
-looks like at today's shapes.** Such a count is unbounded, and a bare grow past the heap's
-unreserved-size cap (64 MB) panics the load on the first big model rather than at the call site.
+looks like at today's shapes.** PERF032 holds the pair on an annotated buffer; a bare grow past
+the heap's unreserved-size cap (64 MB) panics the load on the first big model, not at the call site.

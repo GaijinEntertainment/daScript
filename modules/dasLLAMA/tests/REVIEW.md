@@ -5,7 +5,7 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 `../followup_metal.md`.
 
 **A kernel-unit cell - a model-less cell (a cell is a `t |> run` block, or a helper call that
-issues asserts on `t`) that dispatches one kernel class and asserts on its output - or a gate
+issues asserts on `t`) that dispatches one or more kernel classes and asserts on their output - or a gate
 that hand-dispatches or hand-binds a kernel, wherever the diff puts it, applies
 `REVIEW_KERNEL_CELLS.md` (beside this file) together with this list.**
 

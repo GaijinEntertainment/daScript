@@ -5,12 +5,28 @@ options _dasllama_internal = true
 // Pins the K-quant format taxonomy (dasllama_kqformat): enum int values, the stride truth
 // against LITERAL byte counts (not read back through the table), the predicates, and the
 // one enum<->kernel-id bridge — so the two-id-space footgun ("6 means Q6_K in the kernel-id
-// space and KqFmt value 6 in the enum") can never silently return.
+// space and KqFmt value 6 in the enum") can never silently return. The radix guard (every id
+// under the Vulkan decode block's layer-key radix) skips in a build without the vulkan module.
 
 require dastest/testing_boost public
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
+require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
+require daslib/enum_trait   // the radix guard walks the whole KqFmt enum
+
+[test]
+def test_kqfmt_under_dat_key_radix(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> run("every KqFmt id sits under the decode block's layer-key radix") @(t : T?) {
+            for (f in type<KqFmt>) {   //! a radix at or below a member's id hands one layer another layer's mirror and sets
+                t |> success(int64(int(f)) < DAT_KEY_FMTS, "KqFmt.{f} ({int(f)}) is under DAT_KEY_FMTS ({DAT_KEY_FMTS})")
+            }
+        }
+    } else {
+        t |> skip("no vulkan module")
+    }
+}
 
 [test]
 def test_kqfmt_enum_values(t : T?) {
@@ -30,6 +46,7 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.iq2s), 12)
         t |> equal(int(KqFmt.iq2xs), 13)
         t |> equal(int(KqFmt.iq2xxs), 14)
+        t |> equal(int(KqFmt.mx4), 15)
     }
 }
 
@@ -60,6 +77,11 @@ def test_kqfmt_predicates(t : T?) {
         t |> success(kq_sb(int(KqFmt.iq2xs)), "the int-id predicate agrees for iq2xs")
         t |> success(kq_sb(KqFmt.iq2xxs), "iq2xxs is superblock")
         t |> success(kq_sb(int(KqFmt.iq2xxs)), "the int-id predicate agrees for iq2xxs")
+        t |> success(!kq_sb(KqFmt.mx4), "mx4 rides per-32 planes")
+        t |> success(kq_block32(KqFmt.mx4) && kq_block32(int(KqFmt.mx4)), "mx4 is a per-32 format on both predicates")
+        t |> equal(kq_qsb(KqFmt.mx4), 16l)   // 16 nibble bytes a block
+        t |> equal(kq_ssb(KqFmt.mx4), 1l)    // one E8M0 byte a block
+        t |> equal(kq_elems(KqFmt.mx4), 32l)
     }
 }
 
@@ -203,6 +225,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.iq2s), 23)
         t |> equal(kq_stream_code(KqFmt.iq2xs), 24)
         t |> equal(kq_stream_code(KqFmt.iq2xxs), 25)
+        t |> equal(kq_stream_code(KqFmt.mx4), 39)
     }
 }
 

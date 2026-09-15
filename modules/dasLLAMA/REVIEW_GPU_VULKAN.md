@@ -8,15 +8,12 @@ docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**The Vulkan section of the `REVIEW.das` beside this file holds this checklist's mechanical
-checks: each check's finding text names the rule it enforces, and `REVIEW.md`'s weakening rule
-binds an edit to any of them.**
-
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
-`set_<family>` pair generated from it - adds every piece of state the family keeps per
-model - device buffers, descriptor-set caches, `*_ready` latches, profiler accumulators - to
-`vk_drop_model_state`'s sweep, in the same change.** Pipelines are device-lifetime state that
-survives the drop and rebuilds lazily.
+`set_<family>` pair generated from it - adds every piece of state the family keeps per model to
+`vk_drop_model_state`'s sweep, in the same change.** A `make_device_buf` result and any field of
+`RDec` - the resident decode driver's state struct - are swept already, a `*_ready` latch and a
+profiler accumulator are not; pipelines are device-lifetime state that survives the drop and
+rebuilds lazily.
 
 **Never size a buffer bound as one SSBO (shader storage buffer) range above
 `vk_max_storage_range()` - check the size at the site that computes it, not at the site that
@@ -52,12 +49,11 @@ is a fallback a user finds only by profiling.
 `continue` routes work to the CPU path - that does not log the concrete reason it declined,
 once per reason per armed model, is a defect.**
 
-**A diff that keys a route of the tier on a Vulkan capability - a device or instance extension
-by name, a feature bit a `*_supported` probe of `modules/dasVulkan/daslib/vulkan_boost.das`
-reads, or a device limit - adds that capability to `vk_ext_roster`
+**A diff that keys a route of the tier on a device limit adds that limit to `vk_ext_roster`
 (`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without
-it, or adds the new route to the entry it already has, in the same change.** The device-init log prints the roster, so a box's log
-says which route each capability decided.
+it, or adds the new route to the entry it already has, in the same change.** An extension or a
+`*_supported` probe the roster omits is `check_vk_extension_roster`'s finding (`REVIEW.das`); the
+device-init log prints the roster, so a box's log says which route each capability decided.
 
 **The coordinate a k loop's counter feeds to `coopmatLoadTensor` / `coopmatLoadTensorDecode`
 starts at a literal or at a value rounded down to the loop's step - never at a bare runtime
@@ -107,20 +103,25 @@ the `DASLLAMA_VK_DECVEC=1` and the `=0` rows.**
 twin (`decode_v4`) - puts that format's probe rows in the PR body, both the `=1` and the `=0`
 rows.**
 
-**A diff that owes a cm2 stamp's probe rows takes them from the `harness/vk_gemm_probe.das` arm
-that dispatches that stamp - `cm2:<fmt>` or `cm2g:<fmt>` for the l and m stamps
-(`<Fmt>Cm2LBatch`, `<Fmt>Cm2MBatch`), `moe:<fmt>` or `moesk:<fmt>` for the s and e stamps
-(`<Fmt>Cm2SBatch`, `<Fmt>Cm2EBatch`) - never from a whole-model sweep.**
+**A diff that owes a cm2 stamp's probe rows takes them from that stamp's `harness/vk_gemm_probe.das`
+arm - `cm2:<fmt>` or `cm2g:<fmt>` for the l and m stamps (`<Fmt>Cm2LBatch`, `<Fmt>Cm2MBatch`),
+`moe:<fmt>` or `moesk:<fmt>` for the s and e stamps (`<Fmt>Cm2SBatch`, `<Fmt>Cm2EBatch`) - never
+from another arm and never from a whole-model sweep; a per-32 format's s and e stamps, which the
+probe admits no arm for (`followup_vulkan.md` item 67), answer with their tile cell's run in
+`tests/test_vulkan_kernels.das` instead.**
 
 **A diff that answers a probe-row or kernel-cell duty with a claim that a stamp's emitted words
 did not move carries that stamp's `DASLLAMA_VK_SPV_DUMP` words diffed against master's.**
 
-**A diff that changes what a format's KHR tile emits - its `khr_stage16` override, a constant or
-a gated member the KHR stamp emits, or the shared `khr_tile` or `run` of `KqCm2BatchT` - runs that
-format's kernel cell (its test block in `tests/test_vulkan_kernels.das`) on the KHR arm and puts
-the run in the PR body.** A KHR tile is the
-`<Fmt>KhrBatch` class stamped per weight format in `dasllama/dasllama_vulkan_classes.das`; a
-member a `@template_gate` admits on the stamp is emitted whether or not its body reads it.
+**A diff that changes the shared `khr_tile` or `run` of `KqCm2BatchT` runs every format's kernel
+cell (its test block in `tests/test_vulkan_kernels.das`) on the KHR arm and puts the runs in the PR
+body.**
+
+**A diff that changes what a format's own KHR tile emits - its `khr_stage16` override, or a
+constant or a gated member the KHR stamp emits - runs that format's kernel cell on the KHR arm and
+puts the run in the PR body.** A KHR tile is the `<Fmt>KhrBatch` class stamped per weight format in
+`dasllama/dasllama_vulkan_classes.das`; a member a `@template_gate` admits on the stamp is emitted
+whether or not its body reads it.
 
 **A diff that owes a KHR tile's kernel-cell run carries with it either the `khrx` probe rows
 (`harness/vk_gemm_probe.das`) or a `tests/test_gpu_resident_hybrid.das` run on a model in that
@@ -139,9 +140,9 @@ Both compile: on the element the emitter passes the index and the callee chains 
 plane; on a copy it loads and spills the whole block per call
 (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k).
 
-**A diff that puts a format's probe rows in the PR body whose
-`DASLLAMA_VK_DECVEC=1` row is slower than its `=0` row ships one of two fixes in the same
-change: a hand-written `decode_v4` under `override DECV4 = true` on that format's class
+**A diff whose probe rows show a format's `DASLLAMA_VK_DECVEC=1` row slower than its `=0` row
+ships one of two fixes in the same change: a hand-written `decode_v4` under `override DECV4 = true`
+on that format's class
 (`dasllama/dasllama_vulkan_classes.das`), re-measured so its `=1` row now beats its `=0` row;
 or `override DECV4 = false` and `override DECVEC = false` together, which puts the format back
 on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
@@ -152,7 +153,7 @@ its interval bills - never a bare `pfq_ts` - in `dasllama/dasllama_vulkan_decode
 command's first stamp is the anchor and takes the empty name.** The profiler (`rdq_sample`) sums
 intervals by the recorder's own names, so a bare stamp leaves the stamp count past the names and
 the token's roles unaggregated; a name's prefix (`a:` `d:` `m:` `p:` `t:`) picks its table, and a
-name shared by two stamps (`a:kv`) sums them on purpose.
+name shared by two stamps sums them on purpose.
 
 **A decode GEMV class - a `KqGemvBase` leaf in `dasllama/dasllama_vulkan_classes.das` - that
 stages a codebook into `@workgroup` memory reads it from the family's grid buffer (`gridb`,

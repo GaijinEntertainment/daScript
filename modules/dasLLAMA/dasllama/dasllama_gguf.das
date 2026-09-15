@@ -103,6 +103,7 @@ def kq_ggml_type(f : KqFmt) : int {
     if (f == KqFmt.iq2s) return GGML_TYPE_IQ2_S
     if (f == KqFmt.iq2xs) return GGML_TYPE_IQ2_XS
     if (f == KqFmt.iq2xxs) return GGML_TYPE_IQ2_XXS
+    if (f == KqFmt.mx4) return GGML_TYPE_MXFP4
     return -1
 }
 
@@ -447,9 +448,7 @@ def gguf_map_shards(paths : array<string>; idx : int; var bases : array<void?>; 
             panic("gguf: cannot open shard '{paths[idx]}'")
         }
         fmap(f) $(var bytes : array<uint8>#) {
-            unsafe {
-                bases |> push(addr<void?>(bytes[0]))
-            }
+            bases |> push(unsafe(addr<void?>(bytes[0])))
             sizes |> push(long_length(bytes))
             gguf_map_shards(paths, idx + 1, bases, sizes, blk)
         }

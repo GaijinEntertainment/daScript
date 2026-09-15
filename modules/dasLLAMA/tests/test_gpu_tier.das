@@ -53,8 +53,8 @@ def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hid
     return true
 }
 
-[unused_argument(norms)]
-def private d_norms(norms : array<float>) {}
+[unused_argument(norms, obias)]
+def private d_norms(norms : array<float>; obias : bool) {}
 
 [unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private d_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) {}
@@ -106,18 +106,14 @@ var private g_read_bulk_npos = -1l
 // the readback doubles write a sentinel through the pointers the forwarder handed them
 def private d_read(l, pos : int64; var kp : uint8?; var vp : uint8?) {
     g_read_pos = pos
-    unsafe {
-        *kp = uint8(l + 1l)
-        *vp = uint8(pos + 1l)
-    }
+    *kp = uint8(l + 1l)
+    *vp = uint8(pos + 1l)
 }
 
 def private d_read_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) {
     g_read_bulk_npos = npos
-    unsafe {
-        *kp = uint8(npos)
-        *vp = uint8(l)
-    }
+    *kp = uint8(npos)
+    *vp = uint8(l)
 }
 
 // ===== the ids-form prefill seat's doubles (installed separately from the driver bundle) =====

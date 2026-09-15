@@ -13,6 +13,9 @@ require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt 
 [unused_argument(rows)]
 def private test_upload_bias(rows : array<float>) {}
 
+[unused_argument(rows)]
+def private test_upload_sinks(rows : array<float>) : bool => true
+
 // The whole-model driver's decline reasons, decided from a Config or a synthetic Model shell
 // (no weights on disk): every feature and layer shape the driver has no arm for is named in
 // the text a user reads, and a shape it serves yields no text at all.
@@ -56,8 +59,25 @@ def test_resident_unserved_features(t : T?) {
     }
     t |> run("one feature alone is one name, no separator") @(t : T?) {
         var c = Config()
+        c.q_gated = true
+        t |> equal(resident_unserved_features(c), "gated attention without qk-norm")
+    }
+    t |> run("the attention sinks are named only while no sink seat is installed; a seat serves them at head size 64 alone, and the output bias is served") @(t : T?) {
+        var c = Config()
         c.attn_sinks = true
+        c.head_size = 64l
+        let saved_seat = g_rdec_upload_sinks
+        let saved_installed = g_rdec_sinks_installed
+        g_rdec_sinks_installed = false
         t |> equal(resident_unserved_features(c), "attention sinks")
+        install_moe_gpu_resident_sinks(@@test_upload_sinks)
+        t |> equal(resident_unserved_features(c), "", "gpt-oss's sinks are served with the seat installed")
+        c.attn_out_bias = true
+        t |> equal(resident_unserved_features(c), "", "the attention output bias rides the norms plane into the residual step")
+        c.head_size = 128l
+        t |> equal(resident_unserved_features(c), "attention sinks at head size 128 (the sink stamps serve 64)")
+        g_rdec_upload_sinks = saved_seat
+        g_rdec_sinks_installed = saved_installed
     }
     t |> run("the q/k/v projection bias is named only while no bias seat is installed; a seat serves the qwen2 shape") @(t : T?) {
         var c = Config()
@@ -176,12 +196,14 @@ def test_resident_unserved_moe_features(t : T?) {
         c.n_expert_used = 4l
         t |> equal(resident_unserved_features(c), "", "a plain softmax MoE names nothing")
         c.moe_gate = MoeGate.sigmoid
-        t |> equal(resident_unserved_features(c), "a non-softmax router")
+        t |> equal(resident_unserved_features(c), "a sigmoid router", "the router shape the kernels do not serve is named by its form")
+        c.moe_gate = MoeGate.softmax_weight
+        t |> equal(resident_unserved_features(c), "", "gpt-oss's softmax over the picks is served (the renormalized select is the same weights)")
         c.moe_gate = MoeGate.softmax
         c.moe_router_bias = true
         c.moe_exp_probs = true
         let s = resident_unserved_features(c)
-        t |> success(says(s, "a router bias") && says(s, "an expert selection bias"), "the two biases named together: {s}")
+        t |> success(!says(s, "router bias") && says(s, "an expert selection bias"), "the router bias is served (the select adds it), the expert selection bias named: {s}")
         c.moe_router_bias = false
         c.moe_exp_probs = false
         c.n_expert = 300l
@@ -193,9 +215,7 @@ def test_resident_unserved_moe_features(t : T?) {
         c.moe_exps_bias = true
         c.ffn_act = FfnAct.swiglu_oai
         c.layer_out_scale = true
-        let e = resident_unserved_features(c)
-        t |> success(says(e, "biased expert stacks") && says(e, "the clamped swiglu expert activation") && !says(e, "output scale"),
-            "the expert stack's bias and the clamped activation named together, the layer output scale served: {e}")
+        t |> equal(resident_unserved_features(c), "", "gpt-oss's biased expert stacks, its clamped swiglu and the layer output scale are all served")
         c.moe_exps_bias = false
         c.ffn_act = FfnAct.gelu
         c.moe_dense_shexp = true
@@ -248,6 +268,16 @@ def test_moe_metal_expert_formats(t : T?) {
         mixed.we2_fmt[1] = KqFmt.k2
         t |> success(!moe_metal_ok(mixed), "one Q2_K down plane declines a q4_K model")
         delete mixed
+    }
+    t |> run("the resident driver names a biased expert stack feeding a K-quant down plane by layer; a per-32 down plane draws no such decline") @(t : T?) {
+        var kb <- moe_shell(KqFmt.k6)
+        kb.config.moe_exps_bias = true
+        t |> success(says(resident_layer_decline(kb, 0l), "layer 0's biased expert stacks feed a K-quant down plane"), "the biased K-quant down is named")
+        delete kb
+        var qb <- moe_shell(KqFmt.q8)
+        qb.config.moe_exps_bias = true
+        t |> success(!says(resident_layer_decline(qb, 0l), "biased expert stacks"), "a biased stack over a Q8_0 down plane draws no bias decline")
+        delete qb
     }
     t |> run("the kernel roster and the site-alignment gate name ONE format set - every KqFmt reads the same on both") @(t : T?) {
         // No format the site gate admits is refused by the roster: the two lists are identical,

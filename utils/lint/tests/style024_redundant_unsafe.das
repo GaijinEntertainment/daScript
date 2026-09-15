@@ -157,3 +157,22 @@ def good_unsafe_block_delete_container() : void {
         delete arr
     }
 }
+
+// --- Regression: a reference bound to a non-local expression requires unsafe ---
+// `var r & = g_rack.items[i]` binds a local reference into storage a global pointer owns
+// (ast_infer_type.cpp's isLocalOrGlobal check), so a block whose only unsafe need is that
+// binding is NOT redundant: the compiler refuses the binding outside `unsafe`. STYLE024 must
+// NOT fire (the block frame carries the let-ref mark without an unsafe-op count).
+
+struct private Rack {
+    items : array<int>
+}
+
+var private g_rack : Rack?
+
+def good_block_binds_non_local_ref(i : int) : void {
+    unsafe {
+        var r & = g_rack.items[i]
+        r += 1
+    }
+}

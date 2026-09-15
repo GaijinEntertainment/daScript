@@ -21,9 +21,10 @@ from (`dasllama/dasllama_metal_lens.das`), the Metal ASR decoder
 or `dasllama/dasllama_metal_common.das` applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
-`dasllama/dasllama_gpu_resident.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
-cm2 tile class (an NV_cooperative_matrix2 GEMM class stamped per weight format and column) -
-wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
+`dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a
+`[spirv_decode]` callback, or a cooperative-matrix GEMM class stamped per weight format and column width, on the NV
+cooperative-matrix-2 arm or the KHR cooperative-matrix arm - wherever the diff puts it - applies
+`REVIEW_GPU_VULKAN.md` too.**
 
 **A diff that adds or changes a GPU kernel class - a `[metal_kernel]` def, a class carrying
 `[metal_dispatch]` or `[vk_dispatch]`, a base shell one derives from, or a class template one
@@ -39,8 +40,9 @@ whether the call carries a uniform attention span - however that parameter is de
 readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
 `decode_decline` instead.**
 
-**A bounds or tail guard that branches per iteration in a kernel's main loop, where the host
-already knows its answer as it picks the pipeline, is a defect - stamp the guard instead.**
+**A bounds or tail guard that branches per iteration in a kernel's main loop, where the guard's
+answer is the same for every thread of the dispatch and the host knows it as it picks the
+pipeline, is a defect - stamp the guard instead.**
 Stamped means the guard is carried by a `@template_constant` - a `static_if` block, or a value
 select on the constant. The instance stamped without the guard shows no guard in its generated
 `*_msl` global or its SPIR-V dump.
@@ -113,8 +115,9 @@ The K/V GEMMs write full M-tile rows at the chunk's row offset, so a panel sized
 count is overrun silently into whatever the pool put next to it.
 
 **A row-splitting GEMM encoder - one that dispatches a subset of a site's output rows at an
-offset - is called only from a site whose output row stride equals the width it dispatches; a
-wider-row site passes the full stride or dispatches the padded tile.** A split row writes at
+offset - is called only where the width it is given equals the row stride the site writes with, so
+a wider-row site passes the full stride as that width or dispatches the padded tile instead of
+splitting.** A split row writes at
 `row x dispatched-width`, so a wider-row caller lands its split rows on the row beside them.
 
 **A scratch buffer a dispatch writes is never rebound for a new write before the reader of
@@ -125,7 +128,7 @@ its write-after-read hazards.
 **A diff that turns one dispatch on an encoder path into two or more also gates that path in the
 same change - on the extent the added dispatch divides (the site's own K, key span or row
 count), or on the path's work size when the split divides no extent - and the threshold comes
-from a measurement at the smallest and at the largest value that extent takes on the path, both
+from a measurement at the smallest and at the largest value the gated quantity takes on the path, both
 measurements in the PR body.** The small-work regression hides behind the big-work win.
 
 **A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at that
@@ -147,9 +150,9 @@ handle alone is not a key - carry the span and the form, the element type and la
 produces, in the key too.** A hit must cover the request.
 
 **A diff that lands a kernel class, driver arm, or backend capability in a `dasllama/` file
-whose `ARCHITECTURE_GPU.md` sec.1.5 role row does not name it in the "holds" column adds it to
-that column in the same change; code the row names in its "must not hold" column moves to the
-file whose row holds it instead.** A driver arm is host code that ensures, binds, or encodes a
+whose `ARCHITECTURE_GPU.md` sec.1.5 entry - the role table's "holds" column, or the file's own
+sec.1.5 bullet - does not name it adds it there in the same change; code a role table row names in
+its "must not hold" column moves to the file whose row holds it instead.** A driver arm is host code that ensures, binds, or encodes a
 dispatch; a backend capability is a function a driver registers in a hook or capability registry.
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
@@ -174,7 +177,8 @@ backend serving the same path faster or slower is not such a change; a seat of t
 same change.
 
 **A change that can alter what a served GPU decode or prefill path computes or selects ships
-GPU-vs-CPU parity on one q8 and one kq (K-quant) model the changed path serves.** That is
+GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both, for
+each of the three that the changed path serves.** That is
 anything a served GPU decode or prefill call executes or that selects what it executes - a
 driver, a kernel class it dispatches, that class's builder, a servability gate, a race that
 picks which kernel serves, a forwarder default, a weight-region or residency path, the tier
@@ -206,8 +210,9 @@ changed path does not count.** That line is the Vulkan driver naming a call it h
 the CPU path.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
-ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 and one kq
-(K-quant) model.** Parity runs never reach it.
+ships a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8 model, one
+K-quant model, and one model of a format outside both, for each of the three the trim path
+bakes.** Parity runs never reach it.
 
 **An f16 store into any GPU-resident K/V that does not clamp to the f16 finite range
 (+/-65504) is a defect.**

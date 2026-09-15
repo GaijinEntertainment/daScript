@@ -232,7 +232,9 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   mark "needs unsafe".** A false "needs" costs a missed note; a false "redundant" tells
   the user to delete a wrap the compiler requires. `let v & = unsafe(expr)` is the one
   recorded exception - the wrap is required by the reference binding, not the inner
-  expression. STYLE025 narrows only when the single statement has an expression form.
+  expression - and a block whose only unsafe need is such a binding is not redundant
+  either (the frame's let-ref mark holds STYLE024 off). STYLE025 narrows only when the
+  single statement has an expression form.
 - **A require counts as used when its symbols cannot be traced, not only when seen.**
   Generic instances attribute to `fromGeneric._module`; bare names in never-instantiated
   generic bodies keep their providers alive; re-export chains are followed; a module

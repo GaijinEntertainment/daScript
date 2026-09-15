@@ -59,7 +59,9 @@ The taxonomy every other file keys off. One edit here, then the compiler finds t
   `kq_reads_packed_planes` - the one packed-versus-panel predicate the batch cell generator, the
   probe, the tests and the bench all read.
 - `tests/test_kqformat.das`: pin the enum value, the predicate, the strides, the id, the stream
-  code, and the codebook's edge values.
+  code, and the codebook's edge values; its radix guard holds every id under `DAT_KEY_FMTS`
+  (`dasllama_vulkan_common.das`, the Vulkan decode block's layer-key radix) - the 32nd member
+  grows the radix in the same change.
 
 ## 2. Codec - `dasllama/dasllama_convert.das`, `dasllama/dasllama_gguf.das`
 
@@ -259,19 +261,22 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    `enc` ladder lacks the new arm dispatches the else format's pipeline over the new planes and
    reads byte-stable across fix rounds.
 
-A per-32 format (q51's shape: 32-weight blocks, Q8_0-form activations, off the kq lattice) takes
-none of the kq id bridge: it joins `kq_block32` (`dasllama_kqformat.das`, the one predicate the drivers
-and the resident plan read) and `arena_block_bytes` (the CPU plane's own block strides), the `pf_f16_feed` admission, and writes its
-own classes beside q8's rather than a `KqGemvBase` child - a `KqCm2BatchT` format template at
-`BLKW` 32 with a word scale plane (`Q51Cm2T`, the s and e stamps the expert schedule dispatches;
-`cm2_cls_ensure` refuses it a dense column, the plan declines a dense plane of it) and a decode
-GEMV in `Q8Gemv`'s shape (`Q51Gemv`: one lane a block, `gemv_lanes_per_row` 0). Its census rows
-land in `VK_CENSUS_NEVER_DISPATCHED` while no stocked small carrier holds such a plane. The module
-gate (`REVIEW.das`) reads it twice: the template joins `CM2_KHR_EXEMPT` (a routed-expert plane never
-reaches the KHR arm, since the resident MoE block is cm2-only; a dense per-32 plane ships its
-`<Fmt>KhrBatch` stamp and `khr_stage16` like q8 instead) with the licensed set `ARCHITECTURE_GPU_VULKAN.md`
-names, and `cm2_dispatch_name` learns that the format spells its expert stamp `<fmt>_batch_cm2e_cls`
-the way q8 does.
+A per-32 format (q51's and mx4's shape: 32-weight blocks, Q8_0-form activations, off the kq
+lattice) takes none of the kq id bridge: it joins `kq_block32` (`dasllama_kqformat.das`, the one
+predicate the drivers and the resident plan read) and `arena_block_bytes` (the CPU plane's own block
+strides; mx4's scale slab rounds to whole words, since the tiles read its byte scales four blocks a
+word), the `pf_f16_feed` admission, and writes its own classes beside q8's rather than a `KqGemvBase`
+child - a `KqCm2BatchT` format template at `BLKW` 32 (`Q51Cm2T` with a word scale plane, `Mx4Cm2T`
+decoding the doubled e2m1 magnitudes under the halved E8M0 scale; the s and e stamps the expert
+schedule dispatches and the `khr_stage16` method behind the `<Fmt>KhrBatch` stamp the mm-mode
+schedule takes; `cm2_cls_ensure` refuses it a dense column, the plan declines a dense plane of it)
+and a decode GEMV in `Q8Gemv`'s shape (`Q51Gemv`, `Mx4Gemv`: one lane a block, `gemv_lanes_per_row`
+0; a format whose gate and up stacks share a slab may add the fused gate+up+act+requant twin in
+`KqGemvK4Gu`'s shape, `Mx4GemvGu`). Its census rows land in `VK_CENSUS_NEVER_DISPATCHED` while no
+stocked small carrier holds such a plane. The module gate (`REVIEW.das`) reads it twice: the
+template ships the KHR trio like every format on the cm2 template (`CM2_KHR_EXEMPT` is empty), and
+`cm2_dispatch_name` learns that the format spells its expert stamp `<fmt>_batch_cm2e_cls` the way q8
+does.
 
 A grid format adds one more: its table joins the family's grid buffer (`kq_grid_dev` - a
 `KQ_GRID_<FMT>` word offset, `KQ_GRID_WORDS` / `KQ_GRID_BYTES` grown, the accessor called

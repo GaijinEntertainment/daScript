@@ -277,7 +277,9 @@ suite: the runner disarms the guard that tripwire asserts. The map below is part
 two lists together are the census.
 `test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
 era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
-pairings, a q8 pair carrying the q/k/v projection bias, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
+pairings, a q8 pair carrying the q/k/v projection bias, the hydrate arms, and a k4 quad beside a q8
+quad at ONE plane offset - the block keys a layer by its offset under its format, so each serves its
+own mirror), the decode FFN tail, and the whole-token decode span with its
 device router + top-k against `moe_select_core`, the span with a shared expert in both its arms -
 gated (the shared q8 triple beside the routed pair, its gate logit past the router's, one combine)
 and ungated (the same at unit gate, a second span record after a reset; the reference without the
@@ -297,8 +299,13 @@ oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format 
 and its KHR arm is `test_vkd_q8_khr_batch`, the per-32 plane through the hand-staged KHR tile over the
 same two regions, whole and under a k split with the reduce, wherever the device has KHR cooperative
 matrices at subgroup 32; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
-only, on a cm2 device, over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
-its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408) run five
+on a cm2 device and its KHR tile wherever the device has KHR cooperative matrices at subgroup 32,
+over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
+its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408; mx4's rail
+rides `test_vkd_mx4_cm2_batch` (the same three arms over the doubled-magnitude plane, every nibble
+code reached), `test_vkd_mx4_gemv` (the Q8_0-fed decode GEMV at 704 and gpt-oss's 2880) and
+`test_vkd_mx4_gemv_gu` (the fused gate + up + act + requant twin byte for byte against the split
+path and the CPU chain, biased and unbiased, the gate rows' bar with its poison)) run five
 arms: the cm2 l/m/s tiles and the
 expert schedule's e column (the format's own 128-row e stamp, whose k step is the stamp's - 32 on
 iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
@@ -350,8 +357,17 @@ one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate a
 bound). The gemma arc's cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
 its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
 `test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
-`test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant) and
+`test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
+the biased add partner beside the plain step) and
 `test_vkd_q8_gemv_pleact` (the per-layer-embedding act + requant + proj GEMV, two widths),
+the gpt-oss arc's arms - `test_vkd_ar_class` and `test_vkd_ar_rq_fused` add the biased add
+partner (the output bias row past the norm row) against the seam and the CPU oracle,
+`test_vkd_act_family` runs the unbiased act kernels under the clamped swiglu beside silu and adds
+the biased twins (`q8_actrq_b_cls`, `actf16_b_cls`) over a six-expert bias plane, `test_vkd_fa_cm2`
+/ `test_vkd_fa_khr` and `test_vkd_da_attn` add the sink arms (the h64 flash stamps whole and under
+a 40-key window; the token command's f32 and f16 sink twins unsplit and split with the sink
+combine), each with the sink-free oracle as the control, and `test_vkd_fa_stamp_refusals` covers
+the sink refusals -
 `test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
 the pass and the combine), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
 restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
@@ -423,7 +439,9 @@ from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
 shape is named in the text a user reads, a served one yields ""; the MoE names among them (the
 router shapes the routed block's kernels do not serve, the expert and slot counts past their
-reach) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a layer routes only
+reach; gpt-oss's router bias, biased stacks, clamped swiglu and softmax-weight gate are served,
+a biased stack feeding a K-quant down plane is named by layer, and the attention sinks are named
+only while no sink seat is installed or the head size is not 64) and the MoE layer helpers (`layer_is_moe`, `resident_dense_width`: a layer routes only
 past the dense lead with all three expert planes, and its dense width is the shared expert's);
 plus the KV mirror's binding cap (`resident_binding_ctx`) on a hybrid shell whose layer 0 is
 recurrent, its dense twin, and a shell with no attention layer. The Metal serving gates ride the
@@ -534,17 +552,25 @@ routed block in its gemma-4 form (the parallel dense shared expert as the layer'
 the routed feed and the router off their own norms of x, the per-expert down scale folded into
 the routing weights, the combine norming both branches and their sum under the layer's output
 scale) in the perplexity form at 150 + 150 and at 520 + 80 (two windows) with an argmax slack of
-eight (twelve on the Q4_K_M file, whose hits read 125 to 128 against the CPU chain's 134 as the
-token command's summation orders change) and a perplexity ratio of 1.45 on both files (a kernel
-rounding order alone moves the 150 + 150 cell: the Q4_K_M file's routed gate and up GEMVs - their
-lane split, the fused gate-up twin - across 4.05, 4.48 and 4.67 against the CPU chain's 3.38; the
-IQ3_XXS file 2.58 -> 4.30 with the flash tile's f16 O accumulator, its hits 129 -> 130 against
-133): a router near-tie flips whole positions between the arms,
-and either arm lands the farther one (per-position log-probs against llama.cpp b10660 on the
-same prose, mean gap on its confident positions: the IQ3_XXS file CPU 0.36 / resident 0.18, the
-Q4_K_M file CPU 0.21 / resident 0.28 to 0.56 across those orders; perplexities 3.36 / 2.58 and
-3.38 / 3.92 to 4.72, llama.cpp itself 3.87 on the Q4_K_M positions), so a
-forced-feed maxdiff against the CPU chain is no instrument here. Its planes alone pass a 16 GB
+twelve (sixteen on the Q4_K_M file, whose hits read 122 to 128 against the CPU chain's 134 as the
+kernels recompile) and a perplexity ratio of 2.0 on both files (a kernel recompile alone moves the
+150 + 150 cell, with the CPU chain fixed: the Q4_K_M file read 4.05, 4.48 and 4.67 against the CPU
+chain's 3.38 as its routed GEMVs changed their lane split and fused twin, then 4.37 -> 5.17 -> 5.80
+across the gpt-oss arc's row-kernel and attention rewrites - kernels bit-identical to the old ones at
+this model's width in the kernel cells, no out-of-range access under the validation layer's
+GPU-assisted mode, and the same readings with a barrier before every dispatch, so the drift is the
+device compiler's rounding per module, not a race - and 6.22 under that validation layer's
+instrumented shaders; the IQ3_XXS file 2.58 -> 4.30 with the flash tile's f16 O accumulator, then
+4.30 -> 2.27 across the same arc, its hits 129 -> 130 -> 139 against 133; the 520 + 80 cells moved
+1.52 -> 1.72 on the Q4_K_M file against 1.24 and 1.34 -> 1.85 on the IQ3_XXS against 1.69): a router
+near-tie flips whole positions between the arms, and either arm lands the farther one
+(per-position log-probs against llama.cpp b10660 on the same prose, mean gap on its confident
+positions: the IQ3_XXS file CPU 0.36 / resident 0.18, the Q4_K_M file CPU 0.21 / resident 0.28 to
+0.56 across those kernel versions; perplexities 3.36 / 2.58 and 3.38 / 3.92 to 5.87, llama.cpp
+itself 3.87 on the Q4_K_M positions, where the resident's misses gather in one stretch of fourteen
+positions after a flipped pick), so a forced-feed maxdiff against the CPU chain is no instrument
+here, and the perplexity ratio holds only the band - the reference-anchored form is
+`../followup_vulkan.md` item 68. Its planes alone pass a 16 GB
 card (the 704-wide down-expert rows demote to q8), so the cells skip there on the memory decline
 and run on a 32 GB card. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on
 the model table's official UD-Q4_K_M file, whose 704-wide down stacks are native Q5_1 and ride
@@ -559,7 +585,8 @@ CPU control of a dense 31B on the reference kernel bodies runs half an hour on a
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.
-`test_gpu_resident_moe.das` - stocked suite, `-jit` only; the whole-model resident driver on a MoE
+`test_gpu_resident_moe.das` (`_moe_resident.das` carries the rig, shared with
+`test_gpu_resident_gptoss.das`) - stocked suite, `-jit` only; the whole-model resident driver on a MoE
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, `DASLLAMA_GPU=1`): the expert stacks in the arena, the window
 chain's routed block and the token command's routed block - the hybrid file's forced-feed
 logits-tolerance form at the routed chain's 20% bar (the arms part on the router's near-ties from
@@ -568,16 +595,26 @@ under either of two summation orders, the one-step-off controls 0.42 and above; 
 carries the reading) with the one-step-off control, at one window and
 two windows, plus the census witnesses: the device bucket schedule and the per-row select ran once
 per MoE layer per window, the expert schedule's m pieces dispatched the format's e column on the
-three expert planes once per MoE layer per window, the token command's top-k count a whole
-multiple of the MoE layer count (the command records once and resubmits); the second
+three expert planes once per MoE layer per window in cm2 mode (in mm mode the KHR tile also serves
+the window's dense GEMMs, so its count is a floor of two dispatches a plane per MoE layer per
+window), the token command's top-k count a whole multiple of the MoE layer count (the command
+records once and resubmits), and on a device whose SM count splits the attention keys the
+unsplit twin served every step of the one-window cell and none of the two-window one; the second
 fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
 after the deltanet head, at the same two lengths; the third is the Qwen3-30B-A3B UD-IQ2_XXS,
 the MoE with no shared expert (the residual step with its add partner off, the FFN-norm requant
 skipped), at the same two lengths; all three are large-tier (`DASLLAMA_PARITY_FULL=1`), and the
-cells skip without the file, the armed tier, or a device with no cm2 tile family (the driver
-declines a MoE there by design); on a cm2 device the driver's admission of the fixture is
+cells skip without the file, the armed tier, or a device with neither the cm2 tile family nor KHR
+cooperative matrices at subgroup 32 (the expert pieces' two tiles; the driver declines a MoE there
+by design); on a device with either the driver's admission of the fixture is
 asserted, a decline is a red that sends the reader to the load log. Every cell pins the resident
 route on for its load (`set_gpu_resident_route`) and restores the lever after.
+`test_gpu_resident_gptoss.das` - stocked suite, `-jit` only; the same rig on gpt-oss-20b (the pinned
+upstream `gpt-oss-20b-mxfp4.gguf`, large-tier): the native-MXFP4 routed stacks on the mx4 expert
+rail, the biased router's softmax over its four picks, the gate / up / down bias rows at the act and
+the combine under the clamped swiglu, the per-head attention sinks in the flash tiles and the token
+command's pass, the output bias on the residual step and the 128-key sliding layers, at one window
+and two; the e-column witness counts the mx4 stamps beside the kq, q8 and q51 ones.
 `test_gpu_moe_shexp.das` - stocked suite, `-jit` only; the shared expert's prefill on the device
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
 shexp triple as one region over every position of the routed experts' chain, gated by the tier's

@@ -194,6 +194,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_gemma4_31b.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_gemma4_e2b.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_gemma4_e4b.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_gptoss.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_hybrid.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_qwen2.das",
@@ -272,7 +273,7 @@ def area_tests(area : string) : array<string> {
         return <- [ "test_accel_backend.das", "test_affinity_predicates.das", "test_arch_registry.das", "test_batch_decode.das",
                     "test_batch_grid.das", "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_facade.das",
                     "test_flash.das", "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das",
-                    "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_moe.das", "test_gpu_resident_qwen2.das", "test_gpu_serving_declines.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
+                    "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_moe.das", "test_gpu_resident_qwen2.das", "test_gpu_serving_declines.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kgroup_repack.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_math_activations.das",
                     "test_math_elementwise.das", "test_matmul.das", "test_matmul_batch.das",
@@ -483,13 +484,11 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
 //! stdout of a git command, "" when git is absent or the command fails
 def private git_lines(args : string) : array<string> {
     var out = ""
-    unsafe {
-        popen("git {args}") $(f) {
-            if (f != null) {
-                out = fread(f)
-            }
+    unsafe(popen("git {args}") $(f) {
+        if (f != null) {
+            out = fread(f)
         }
-    }
+    })
     return <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
 }
 
@@ -649,12 +648,9 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
             to_log(LOG_INFO, "START {tag}{rep_tag}: {cmd}\n")
             let t0 = ref_time_ticks()
-            var rc = 0
-            unsafe {
-                rc = popen(cmd) $(f) {
-                    let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
-                }
-            }
+            let rc = unsafe(popen(cmd) $(f) {
+                let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
+            })
             let secs = double(get_time_usec(t0)) / 1000000.0lf
             let summary = log_summary(log_path)
             let verdict = !empty(summary) ? summary : "no dastest summary - the run died early (read the log)"

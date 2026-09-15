@@ -48,8 +48,9 @@ let GEMMA_PATH_GAP_RATIO = 6.0
 //! the resident driver's teacher-forced perplexity may exceed the CPU chain's by this ratio (12B Q8_0 measured 1.449 vs 1.516 over 150 positions, the reference exe 1.390)
 let GEMMA_PPL_RATIO = 1.05
 //! the routed 26B's ratio: a router near-tie flips whole positions, so either arm can land the farther one, and a kernel
-//! rounding order moves a 150-position cell alone - the bar sits past the measured band on both files (the readings: CLAUDE.md)
-let GEMMA_MOE_PPL_RATIO = 1.45
+//! recompile alone moves a 150-position cell - the Q4_K_M file read 1.29 to 1.84 of the CPU chain across the gpt-oss
+//! arc's value-identical kernel rewrites, the IQ3_XXS file 0.68 to 1.71 - so the bar sits past that band (the readings: CLAUDE.md)
+let GEMMA_MOE_PPL_RATIO = 2.0
 let PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
 let private SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
 

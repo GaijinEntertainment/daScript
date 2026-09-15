@@ -233,9 +233,7 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
                         ss |> emplace <| make_run_state(tr.config, kdt, kdt)
                         let pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
                         eval_(tr, ss[i], pb)
-                        unsafe {
-                            sess |> push(addr(ss[i]))
-                        }
+                        sess |> push(unsafe(addr(ss[i])))
                         curs |> push(greedy_top(ss[i].logits, vocab))
                     }
                     var ws <- create_batch_workspace_(tr)
@@ -725,9 +723,23 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the q51 expert rail (the 32-block down planes of the 26B-A4B's Q4_K_M: a carrier above the zoo's tier) -
     // its s and e stamps and its decode GEMV; their coverage is test_vkd_q51_cm2_batch and test_vkd_q51_gemv
     "q51_batch_cm2s_cls_spv", "q51_batch_cm2e_cls_spv", "q51_gemv_cls_spv",
-    // the Q4_K experts' gate+up+act twin (the 26B-A4B Q4_K_M's routed stacks feeding its Q5_1 down, above the zoo's
-    // tier; the zoo's k4 MoE carrier feeds a k4 down): its coverage is test_vkd_kq_gemv_k4_gu in test_vulkan_kernels.das
-    "kq_gemv_k4_gu_cls_spv",
+    // the mx4 expert rail (gpt-oss's native-MXFP4 routed stacks: a carrier above the zoo's tier) - its s and e stamps and
+    // its decode GEMV; their coverage is test_vkd_mx4_cm2_batch and test_vkd_mx4_gemv
+    "mx4_batch_cm2s_cls_spv", "mx4_batch_cm2e_cls_spv", "mx4_gemv_cls_spv",
+    // the per-32 expert rails' KHR arms (the expert schedule on a KHR-mode card: the 26B-A4B Q4_K_M's q51 down stacks, gpt-oss's
+    // mx4 stacks - carriers above the zoo's tier); their coverage is the KHR arm of test_vkd_q51_cm2_batch and test_vkd_mx4_cm2_batch
+    "q51_batch_khr_cls_spv", "mx4_batch_khr_cls_spv",
+    // the mx4 experts' fused gate+up+act+requant GEMV (gpt-oss's token command, above the zoo's tier); its coverage is
+    // test_vkd_mx4_gemv_gu in test_vulkan_kernels.das
+    "mx4_gemv_gu_cls_spv",
+    // the biased act twins (gpt-oss's expert stacks carry gate and up bias rows: a carrier above the zoo's tier) - the
+    // Q8_0 requant form the token command runs and the f16 form the window chain runs; their coverage is test_vkd_act_family
+    "q8_actrq_b_cls_spv", "actf16_b_cls_spv",
+    // the attention-sink twins (gpt-oss's per-head sink logits, a carrier above the zoo's tier): the h64 flash tiles on both
+    // arms with their f16-out twins, the token command's pass and its split combine; their coverage is the sink arms of
+    // test_vkd_fa_cm2, test_vkd_fa_khr and test_vkd_da_attn in test_vulkan_kernels.das
+    "fa_cm2_h64_sink_cls_spv", "fa_cm2_h64_sink_f16_cls_spv", "fa_khr_h64_sink_cls_spv", "fa_khr_h64_sink_f16_cls_spv",
+    "da_attn_sink_cls_spv", "da_attn_f16_sink_cls_spv", "da_attn_comb_sink_cls_spv",
     // the E-series per-layer-embedding tail (the act, its requant and the proj GEMV in one): its carriers are the
     // gemma-4 E2B / E4B, no zoo row; its coverage is test_vkd_q8_gemv_pleact in test_vulkan_kernels.das
     "q8_gemv_pleact_cls_spv",
@@ -801,9 +813,7 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
                     ss |> emplace <| make_run_state(tr.config, KVDtype.f32, KVDtype.f32)
                     let pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
                     eval_(tr, ss[i], pb)
-                    unsafe {
-                        sess |> push(addr(ss[i]))
-                    }
+                    sess |> push(unsafe(addr(ss[i])))
                     curs |> push(greedy_top(ss[i].logits, vocab))
                 }
                 var ws <- create_batch_workspace_(tr)

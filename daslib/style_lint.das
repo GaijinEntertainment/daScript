@@ -2904,7 +2904,7 @@ class StyleLintVisitor : AstVisitor {
             || !(expr.body is ExprBlock)) return expr
         let blk = expr.body as ExprBlock
         let frame = unsafe_frame_for(blk)
-        if (frame.count == 0) {
+        if (frame.count == 0 && !frame.has_non_local_let_ref) {
             style_warning("STYLE024: redundant 'unsafe \{ ... }' block; no statement requires unsafe - drop the wrap", expr.at)
         } elif (frame.count == 1 &&
                 !(blk.list[0] is ExprYield ||

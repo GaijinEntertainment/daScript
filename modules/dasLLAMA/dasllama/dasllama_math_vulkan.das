@@ -84,6 +84,7 @@ def install_vk_moe_hooks {
     install_moe_gpu_os_memory(@@vk_os_memory_now)
     install_rdec_note_weight_bytes(@@vk_rdec_note_weight_bytes)
     install_moe_gpu_resident_bias(@@vk_rdec_upload_bias)
+    install_moe_gpu_resident_sinks(@@vk_rdec_upload_sinks)
 }
 
 // the model drop: no chain may be in flight, the decode-side counters reset, then the tier's teardown
@@ -198,9 +199,7 @@ def private vulkan_backend_available : bool {
         exts |> push("VK_KHR_portability_enumeration")
         ci.flags.enumerate_portability_khr = true
         ci.enabledExtensionCount = 1u
-        unsafe {
-            ci.ppEnabledExtensionNames = addr<void?>(exts[0])
-        }
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
     }
     var inst : VkInstance
     let cr = vkCreateInstance(ci, null, inst)

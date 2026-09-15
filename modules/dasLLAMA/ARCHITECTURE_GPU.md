@@ -101,7 +101,8 @@ that a question answered for one backend has an obvious address in the other. Th
   `set_moe_gpu_attn_dec_hooks`, the decode FFN tail `set_moe_gpu_ffn_tail_hooks`, the deltanet decode step's state
   seams `set_moe_gpu_dn_state_hooks` (flush, invalidate, release), the whole-token span `set_moe_gpu_span_dec_hook` -
   the span rides common's decode override registry as `vulkan_moe_span`, selected by the MoE placement and declining
-  per token - the resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, its MoE seats
+  per token - the resident driver's q/k/v projection-bias seat `install_moe_gpu_resident_bias`, its attention-sink seat
+  `install_moe_gpu_resident_sinks` (the per-head sink plane, `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2am), its MoE seats
   `install_moe_gpu_resident_moe` (the tile admission per expert triple, the routing geometry with the router plane, an
   MoE layer, and the routed block on a layer another seat built) behind the route lever `set_gpu_resident_route` /
   `gpu_want_resident`, the OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the
@@ -235,7 +236,7 @@ re-buying a measured loss.
 The probe also RETAINS the decided-and-shipped arms (the half-A stream, the dev-W all-device
 form, the tall M-tile twin, the bk staging depths, the no-zero-init form) as hand-written MSL
 reference implementations beside the refuted ones - they are the arc's bisect ledger, and the
-sync duty is `REVIEW_GPU.md`'s. The attention lab keeps the same class of retained references:
+sync duty is `REVIEW_GPU_RACE.md`'s. The attention lab keeps the same class of retained references:
 its PORT/PORTH/PORTC arms and `benchmarks/attn/lcpp_flash_dk72.metal` are the oracle-exact
 external reference the shipped `MetalTowerFlash` was decided against, and the DIAL arm races
 the production dialect against them - the bisect seat when the flash regresses.
@@ -275,7 +276,8 @@ consecutive staging runs, relaxed_precision always - are `REVIEW_GPU.md` rules a
 and why they lose.
 
 The Vulkan resident driver's sections live in its companions, each head saying what it holds: 2.2j,
-2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai, 2.2aj and 2.2al in `ARCHITECTURE_GPU_VULKAN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
+2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2al and 2.2am in
+`ARCHITECTURE_GPU_VULKAN_ATTN.md`; 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in
 `ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2r-2.2v in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in `ARCHITECTURE_GPU_VULKAN_MOE.md`.
 

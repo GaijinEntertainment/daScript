@@ -505,7 +505,7 @@ var private g_dat_hyd_v : array<float>
 
 // any codec but f16/f32: the host decodes the rows [0, pos) to f32 (kv_load_row), the block converts
 [cold_path]   // a remedy leg, not the served token
-def private attn_dec_hydrate_codec(var s : Session; l, pos, woq, kvd, seq_len : int64) {
+def private attn_dec_hydrate_codec(var s : Session; l, pos, woq : int64; fq : int; kvd, seq_len : int64) {
     g_dat_hyd_k |> resize(pos * kvd)
     g_dat_hyd_v |> resize(pos * kvd)
     unsafe {
@@ -515,7 +515,7 @@ def private attn_dec_hydrate_codec(var s : Session; l, pos, woq, kvd, seq_len : 
             kv_load_row(kb, s.kv_dtype_k, kvd, r, 0l, kvd, addr(g_dat_hyd_k[r * kvd]))
             kv_load_row(vb, s.kv_dtype_v, kvd, r, 0l, kvd, addr(g_dat_hyd_v[r * kvd]))
         }
-        matmul_moe_gpu_attn_dec_hydrate(woq, addr<uint8 const?>(g_dat_hyd_k[0]), addr<uint8 const?>(g_dat_hyd_v[0]), pos, kvd, false)
+        matmul_moe_gpu_attn_dec_hydrate(woq, fq, addr<uint8 const?>(g_dat_hyd_k[0]), addr<uint8 const?>(g_dat_hyd_v[0]), pos, kvd, false)
     }
 }
 
@@ -539,7 +539,7 @@ def private attn_dec_gpu_next_serves(t : Model; s : Session; l, pos : int64) : b
     if (l >= t.config.n_layers || !attn_dec_shape_ok(t, s, l)) {
         return false
     }
-    return moe_gpu_attn_dec_ok(t.wq_offs[l], pos, s.dat_gen) == DAT_SERVE
+    return moe_gpu_attn_dec_ok(t.wq_offs[l], int(fmt_at(t.wq_fmt, l)), pos, s.dat_gen) == DAT_SERVE
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
@@ -549,23 +549,22 @@ def private attn_dec_gpu_serves(t : Model; var s : Session; l, pos : int64) : bo
         return false
     }
     let woq = t.wq_offs[l]
-    var verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+    let fq = int(fmt_at(t.wq_fmt, l))
+    var verdict = moe_gpu_attn_dec_ok(woq, fq, pos, s.dat_gen)
     if (verdict == DAT_STALE_GEN) {   // once per token: the claim makes every later layer current
         s.dat_gen = moe_gpu_attn_dec_claim(true)
-        verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+        verdict = moe_gpu_attn_dec_ok(woq, fq, pos, s.dat_gen)
     }
     if (verdict == DAT_HYDRATE) {
         let kv_is_f16 = s.kv_dtype_k == KVDtype.f16 && s.kv_dtype_v == KVDtype.f16
         let kv_is_f32 = s.kv_dtype_k == KVDtype.f32 && s.kv_dtype_v == KVDtype.f32
         let kvd = layer_kv_dim(c, l)
-        unsafe {
-            if (pos == 0l || kv_is_f16 || kv_is_f32) {
-                matmul_moe_gpu_attn_dec_hydrate(woq, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos, kvd, kv_is_f16)
-            } else {
-                attn_dec_hydrate_codec(s, l, pos, woq, kvd, c.seq_len)
-            }
+        if (pos == 0l || kv_is_f16 || kv_is_f32) {
+            matmul_moe_gpu_attn_dec_hydrate(woq, fq, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos, kvd, kv_is_f16)
+        } else {
+            attn_dec_hydrate_codec(s, l, pos, woq, fq, kvd, c.seq_len)
         }
-        verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+        verdict = moe_gpu_attn_dec_ok(woq, fq, pos, s.dat_gen)
     }
     return verdict == DAT_SERVE
 }
@@ -1120,10 +1119,8 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
     var kcl = kv_layer_kbase(s, l, c.seq_len)
     var vcl = kv_layer_vbase(s, l, c.seq_len)
     let store_nrun = kv_runs(s, 0l, npos, s.kv_runs)
-    unsafe {
-        kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
-            addr < KVRun const? >(s.kv_runs[0]), store_nrun, 0l, npos, kv_dim)
-    }
+    kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
+        unsafe(addr < KVRun const? >(s.kv_runs[0])), store_nrun, 0l, npos, kv_dim)
     prof_add("kv_store", ts_kv)
     let ts_resid = prof_ticks()
     add_batch(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
@@ -1164,17 +1161,15 @@ def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; s
     if (ktq4 || vtq4) {
         // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
         let ts_rot = prof_ticks()
-        unsafe {
-            let sgp = addr < float const? >(s.kv_signs[0])
-            if (ktq4) {
-                tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
-                if (!kv_shared) {
-                    tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
-                }
+        let sgp = unsafe(addr < float const? >(s.kv_signs[0]))
+        if (ktq4) {
+            tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
+            if (!kv_shared) {
+                tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
             }
-            if (vtq4 && !kv_shared) {
-                tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
-            }
+        }
+        if (vtq4 && !kv_shared) {
+            tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
         }
         prof_add("tq4_rot", ts_rot)
     }
@@ -1182,10 +1177,8 @@ def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; s
     if (!kv_shared) {
         let ts_kv = prof_ticks()
         let store_nrun = kv_runs(s, start_pos, start_pos + npos, s.kv_runs)   // where the new rows land
-        unsafe {
-            kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
-                addr < KVRun const? >(s.kv_runs[0]), store_nrun, start_pos, npos, kv_dim)
-        }
+        kv_store_batch(kcl, vcl, s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b,
+            unsafe(addr < KVRun const? >(s.kv_runs[0])), store_nrun, start_pos, npos, kv_dim)
         prof_add("kv_store", ts_kv)
     }
     // causal attention into xb_b; output for position p lands at xb_b[p*qd..], feeding wo below
@@ -1197,9 +1190,7 @@ def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; s
                       is_sliding, c.sliding_window, c.attn_logit_softcap, sinksp)
     prof_add("attn", ts_attn)
     if (vtq4) {   // tq4 V: xb_b rows accumulated in the rotated basis — un-rotate per (pos, head)
-        unsafe {
-            tq4_unrotate_batch(s.xb_b, npos, qd, head_size, addr < float const? >(s.kv_signs[0]))
-        }
+        tq4_unrotate_batch(s.xb_b, npos, qd, head_size, unsafe(addr < float const? >(s.kv_signs[0])))
     }
     attn_out_suffix(t, s, l, npos)
 }
@@ -2116,9 +2107,7 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     let dim = t.config.dim
     let ts_embed = prof_ticks()
     if (ds_wide) {
-        unsafe {
-            s.wide_src = addr < float const? >(embd[0])
-        }
+        s.wide_src = unsafe(addr < float const? >(embd[0]))
         s.wide_stride = stride
         s.wide_soff = src_off
         s.ds_active = true

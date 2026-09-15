@@ -1437,7 +1437,7 @@ module) is independent and can land any time - it is pure structure.
 55. **The decode attention's key split gates on occupancy alone.** `da_nsplit` picks the splits
     from the head count against the SM count and never from the attended span, so a session at
     position one pays a sixteen-way split and its combine dispatch; the one measurement on record is
-    gemma-3-1b at 128 tokens (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2al). A span-keyed fallback to one
+    gemma-3-1b at 128 tokens (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al). A span-keyed fallback to one
     split, with its threshold measured at the shortest and the longest span the path serves, is the
     lever - item 51's hop-count territory.
 56. **The gemma arc's new kernel branches are gated by whole-model cells alone.** The flash tile's
@@ -1448,21 +1448,6 @@ module) is independent and can land any time - it is pure structure.
     kernel cell dispatches them at the off-path value. Each wants a kernel-unit arm at the on-path
     value with its CPU oracle taught the branch (`attn_row_oracle` takes a window start already; the
     qk-norm oracle does not know V from K).
-57. **The resident MoE block is cm2-only, so a KHR-mode card runs the 26B on the per-op rails.**
-    `vk_rdec_moe_ok` admits a routed layer only under `COOPMAT_CM2`: the expert-schedule tiles (the
-    thirty `<Fmt>Cm2SBatch` and `<Fmt>Cm2EBatch` stamps, the q51 down rail) exist on the cm2 tensor
-    API alone, where every dense GEMM, the flash attention and the PLE projection have their KHR
-    twins. On the RunPod RTX PRO 4500 under `DASLLAMA_COOPMAT=mm` the 26B UD-IQ3_XXS declines the
-    whole resident driver ("expert formats 12/12/0 are outside the resident MoE block's tile family")
-    and reads 328 pp512 / 39 tg128 against llama.cpp b10660's own KHR path at 4180 / 129 - 0.08 and
-    0.30 - where the cm2 mode sits at 1.071 / 1.025; a card without `VK_NV_cooperative_matrix2`
-    (every non-NVIDIA card) is that case unforced. The lever is a KHR arm of the schedule geometry -
-    the 32-row expert pieces on 16x16x16 fragments with the `khr_stage16` steps the dense KHR arm
-    already has per format, the q51 stage added - measured first against llama.cpp b10660's KHR
-    `mul_mm_id` (the same `mul_mm.comp` over an expert-id row gather) on the same card:
-    `GGML_VK_DISABLE_COOPMAT2=1 llama-bench -m gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf -ngl 99 -fa 1 -t 16
-    -r 3 -p 512 -n 128` against `DASLLAMA_COOPMAT=mm DASLLAMA_IMAGE=0 lcpp_bench --for-debug-purposes
-    -r 5 -p 512 -n 128 -t 16`.
 58. **Under `mm` the KHR kq tile serves every f16-fed GEMM, where the q8-fed mul_mm L-tile is
     faster on the wide, shallow ones.** E2B's gate and up (1536 in, 6144 out) run 6204 / 6270 us a
     512-row window on the KHR tile against 5537 / 5647 on `MmBatch` - twelve percent - while its
@@ -1495,19 +1480,6 @@ module) is independent and can land any time - it is pure structure.
     answer, not a decline. Item 42's real-hardware pass on such a card is where it shows; the fix
     is the pipeline's `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` at 32 on every KHR
     stamp, or a decline where the device cannot pin it.
-62. **The per-op MoE attention decode fills a stack buffer the fitting plan forwent.** Under
-    `DASLLAMA_COOPMAT=mm` a large MoE declines the resident driver (item 57) and the per-op rails
-    serve it streamed; when the budget is tight the plan logs "the per-op rails serve this MoE
-    without the streamed slot or the decode mirrors the fitting plan forwent - layers the budget
-    stops keep the CPU", yet `vk_moe_attn_dec` still runs and `fill_stack_acts` memcpys the q
-    activation into a decode-attn stack whose host buffer was never allocated: a SIGSEGV at 0x20,
-    a null `HostBuf.mapped`. On the RunPod RTX PRO 4500 `test_parity`'s Qwen3-30B-A3B UD-IQ2_XXS
-    row crashes there under `mm` (its Q4_K_M twin passes; the file predates the KHR arc, master
-    crashes identically), while the default cm2 mode serves the model resident and passes. The
-    fix is at the plan: a layer whose decode GPU state the budget forwent keeps the CPU decode
-    path and never reaches `vk_moe_attn_dec`, or `fill_stack_acts` declines on a null buffer with
-    the reason in the log; either ships a large-tier cell that loads the IQ2_XXS 30B under `mm` and
-    decodes one token.
 63. **Two of the prefill's class pick ladders sit outside the ladders' home.** `REVIEW_PLACEMENT.md`
     lands a host-side pick ladder over Vulkan kernel classes in `dasllama_vulkan_classes.das`, where
     `gemv_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*` and `f16_gemm_*` live, while the cm2
@@ -1524,3 +1496,43 @@ module) is independent and can land any time - it is pure structure.
     `fa_stamp_refuse` keep such a stamp off the device. The arms share one `run` because the
     SPIR-V emitter emits a method call as an `OpFunction` it never inlines; once the emitter inlines
     device-side calls, each arm becomes a method on its own template and the constants move with it.
+65. **The per-op streamed prefill of a mixed-format MoE dies on a bounds check.** With the resident
+    route off and a 5000 MiB cap (`DASLLAMA_GPU_RESIDENT=0 DASLLAMA_GPU_VRAM_MB=5000`) the
+    Qwen3-30B-A3B UD-IQ2_XXS loads on the per-op rails with its expert stacks streamed for the
+    layers past the budget, the decode block serves the fixture gate's eight tokens, and the first
+    prefill window dies with `array index out of range` right after "cm2 expert chain engaged" - in
+    cm2 mode and under `DASLLAMA_COOPMAT=mm`, with the streamed split on and with
+    `DASLLAMA_GPU_MOE_SPLIT=0`. The plan serves the file resident wherever it fits, so the
+    streamed form is reached only past the budget; the fix starts from the das call stack (the
+    repro under the interpreter, or a stack-walking build), and a per-layer table keyed by a plane
+    offset alone - the decode block's old key, which this file's two layers at offset 0 of
+    different format planes collided on - is the first suspect in the streamed chain's own tables
+    (`heat_pools`, `ffn_cmds`).
+66. **The 26B-A4B row under `mm` is owed a measurement on a card that holds it.** The resident MoE
+    block serves a KHR-mode card now (`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af), and
+    `PERF_LEDGER.md`'s 26B row still carries the per-op reading (328 / 39.1). The run:
+    `DASLLAMA_GPU=1 DASLLAMA_COOPMAT=mm DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 bin/daslang -jit
+    modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf -o txt
+    --for-debug-purposes -r 3` against the reference exe's own KHR path, `GGML_VK_DISABLE_COOPMAT2=1
+    llama-bench -m gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf -ngl 99 -fa 1 -t 16 -r 3 -p 512 -n 128`, on
+    the RunPod RTX PRO 4500; the UD-Q4_K_M file (the q51 down rail) takes the same pair.
+67. **The GEMM probe's `moe:` and `moesk:` arms admit no per-32 format.** `harness/vk_gemm_probe.das`
+    refuses `moe:q51` and `moe:mx4` ("needs q8 or a kq superblock format name"), so the two per-32
+    rails' s and e stamps (`Q51Cm2SBatch` / `EBatch`, `Mx4Cm2SBatch` / `EBatch`) have no probe rows
+    and the `DASLLAMA_VK_DECVEC` pair `REVIEW_GPU_VULKAN.md` asks of a changed cm2 tile cannot be
+    taken for them; the kernel cells hold the stamps meanwhile. The arms need the per-32 plane
+    builders (the block-32 quant and scale planes) beside their kq ones, then the rows.
+68. **The routed 26B's perplexity cells measure the device compiler's rounding, not the driver.**
+    `test_gpu_resident_gemma4_26b.das` and `test_gpu_resident_gemma4_26b_k.das` hold the resident
+    perplexity to a ratio of the CPU chain's, and a kernel recompile alone - kernels bit-identical
+    at the model's width in the kernel cells, no out-of-range access under the validation layer,
+    the same readings with a barrier before every dispatch - moves the Q4_K_M file's 150-position
+    cell 4.37 -> 5.17 -> 5.80 -> 6.22 against the CPU chain's 3.38 and the IQ3_XXS file's 4.30 -> 2.27
+    against 3.36 (`tests/CLAUDE.md` carries the readings): a router near-tie flips a pick and the
+    resident's misses gather in a stretch of positions after it. The ratio bar sits past the band
+    (2.0) and holds only that band. The instrument that would hold the driver is a per-position
+    compare against the reference exe's saved logits on the same prose (the arc's probe read a mean
+    gap of 0.56 for the resident and 0.21 for the CPU chain on the reference's confident positions,
+    both inside the band the gemma arc measured): a stocked fixture of the reference exe's
+    `--save-all-logits` output beside the model, the cell scoring both arms against it and holding
+    the resident's mean gap to a bar the CPU chain's gap sets.

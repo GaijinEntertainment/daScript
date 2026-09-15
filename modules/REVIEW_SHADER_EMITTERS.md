@@ -3,9 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 
-A device-side value is one whose storage exists only on the device: a tile or tensor, a layout
-or view over one, a sampler, an image. A struct that stands for one on the CPU is a marker
-struct when it has no storage of its own and a resource struct when it carries a device handle.
+A marker struct stands on the CPU for a value whose storage exists only on the device - a tile, a
+tensor, a layout or view over one, a sampler, an image - and has no storage of its own; a resource
+struct carries the device handle.
 
 **Never put anything that cannot compile on the CPU into a kernel body or into a function a
 kernel calls - keep both in ordinary das.** A kernel built from ordinary values is compared
@@ -13,9 +13,9 @@ against its own CPU run; a marker struct and the builtins over it compile on the
 their CPU bodies compute nothing.
 
 **A diff that adds or changes an emitter builtin whose operands are all ordinary CPU values - a
-declaration in `daslib/shader_lingua_franca.das` or an emitter's builtin table - ships a CPU
-body that returns what the emitted form returns, argument for argument.** A builtin taking a
-marker or resource struct is outside this trigger.
+declaration in `daslib/shader_lingua_franca.das`, `dasSpirv/spirv/spirv_builtins.das` or
+`dasMetal/metal/metal_builtins.das` - ships a CPU body that returns what the emitted form
+returns, argument for argument.**
 
 **Never let a construct the emitter cannot lower produce a kernel or a crash - the emitter
 reports a compile error that names the construct.**
@@ -57,23 +57,20 @@ emitter compiles, where that emitter does not handle it, ships, in the same chan
 that emitter's lowering of the declaration or a test showing the emitter rejects the
 declaration by name.** A declaration in that module is available to both emitters.
 
-**A skippable read of a global-rooted array - a module global, a `@workgroup` array, or a
-`self.<member>` resource - in a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` body, or
-in any `def` that body calls, stays skippable: a diff that widens the set of dispatches an
-existing read happens on, or drops the condition that kept it from happening where its index is
-out of range, is a defect - a read in both arms of an `if`, a clamped index, and a bare read are
-the shapes that drop takes.** Both emitters lower a `?:`, `&&` or `||` operand so only the taken
-side runs, so the short-circuit form needs no rewrite.
+**A read of a global-rooted array - a module global, a `@workgroup` array, or a `self.<member>`
+resource - in a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` body, or in any `def`
+that body calls, that a diff adds to the emitted words or text, or makes happen on a dispatch or
+at an index it did not reach before - by widening the set of dispatches it happens on, by
+dropping the condition that kept it inside the region this dispatch's own bound defines (a read
+in both arms of an `if`, a clamp landing outside that region, and a bare read are the shapes that
+drop takes), or by loading a fixed-size block whose only guard is on its store - is in range on
+every dispatch it happens on, or the `ARCHITECTURE*.md` at the root of the module the kernel
+ships in names slack past that range and the read stays inside the slack.** Both emitters lower
+a `?:`, `&&` or `||` operand so only the taken side runs, so the short-circuit form needs no
+rewrite; the device declares no robust buffer access, so an out-of-range read returns undefined
+data, not zero.
 
 **A compile-time gate (`static_if`, `@template_gate`) that keeps a global-rooted-array read out of
 a compiled `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant keeps it out: a diff
 that removes the gate, or widens the constant the gate switches on so the read reaches variants
 it did not reach, is a defect.**
-
-**A read of a global-rooted array that a diff adds to the emitted words or text of a
-`[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` kernel, or that a diff makes happen on a dispatch it did
-not reach before, is in range on every dispatch it happens on, or the `ARCHITECTURE*.md` at the
-root of the module the kernel ships in names slack past that range and the read stays inside the
-slack.** A load that fetches a fixed-size block while only its store is
-guarded reads past the end of the region the store's bound defines; the device declares no robust
-buffer access, so an out-of-range read returns undefined data, not zero.

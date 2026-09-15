@@ -237,6 +237,21 @@ def private moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_row
     layout_gather_stack_q51(t, woff, n, rows, slice_rows, qmr > 1l, qmr, wq, ws)
 }
 
+def private moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64;
+                                     var wq : array<uint8>; var ws : array<uint8>) {
+    if (vk_bake_slice(t, int(KqFmt.mx4), woff, n, rows, wq, ws)) {
+        return
+    }
+    if (t.planes_trimmed) {
+        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
+    }
+    //! the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
+    layout_gather_stack_mx4(t, woff, n, rows, slice_rows, t.mx4_repacked, active_q8_layout_mr(), wq, ws)
+}
+
+//! an expert stack's device format tag: the native-MXFP4 planes carry no per-tensor tag (the loader keeps `experts_mx4`), so the tag is mx4 for every routed stack of such a model
+def private rdec_efmt(t : Model; tags : array<KqFmt>; l : int64) : KqFmt => t.experts_mx4 ? KqFmt.mx4 : fmt_at(tags, l)
+
 //! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
 //! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
 //! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
@@ -411,6 +426,8 @@ def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, s
         moe_gpu_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
     } elif (f == KqFmt.q51) {
         moe_gpu_gather_stack_q51(t, woff, n, rows, slice_rows, wq, ws)
+    } elif (f == KqFmt.mx4) {
+        moe_gpu_gather_stack_mx4(t, woff, n, rows, slice_rows, wq, ws)
     } else {
         let kmr = kq_active_mr(t, f)
         moe_gpu_gather_stack_kq(t, f, woff, n, rows, slice_rows, t.kq_repacked, kmr, wq, ws)
@@ -472,9 +489,9 @@ def private resident_moe_layer_bytes(t : Model; l : int64) : int64 {
     let c = t.config
     let ne = c.n_expert
     let nfe = c.n_ff_exp
-    var bytes = moe_gpu_plane_bytes(c.dim, ne * nfe, int(fmt_at(t.we1_fmt, l)))
-    bytes += moe_gpu_plane_bytes(c.dim, ne * nfe, int(fmt_at(t.we3_fmt, l)))
-    bytes += moe_gpu_plane_bytes(nfe, ne * c.dim, int(fmt_at(t.we2_fmt, l)))
+    var bytes = moe_gpu_plane_bytes(c.dim, ne * nfe, int(rdec_efmt(t, t.we1_fmt, l)))
+    bytes += moe_gpu_plane_bytes(c.dim, ne * nfe, int(rdec_efmt(t, t.we3_fmt, l)))
+    bytes += moe_gpu_plane_bytes(nfe, ne * c.dim, int(rdec_efmt(t, t.we2_fmt, l)))
     if (c.moe_dense_shexp) {
         let hid = layer_hidden(t, l)
         bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w1_fmt, l)))
@@ -739,6 +756,8 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
         moe_gpu_gather_stack(t, woff, n, rows, srows, mr, kgroup, wbias, wq, ws)
     } elif (f == KqFmt.q51) {
         moe_gpu_gather_stack_q51(t, woff, n, rows, srows, wq, ws)
+    } elif (f == KqFmt.mx4) {
+        moe_gpu_gather_stack_mx4(t, woff, n, rows, srows, wq, ws)
     } else {
         let kmr = kq_active_mr(t, f)
         moe_gpu_gather_stack_kq(t, f, woff, n, rows, srows, t.kq_repacked, kmr, wq, ws)
@@ -807,18 +826,19 @@ def private name_list_add(var names : string&; on : bool; name : string) {
 def resident_unserved_features(c : Config) : string {
     var names = ""
     name_list_add(names, c.attn_qkv_bias && !rdec_bias_installed(), "attention qkv bias")
-    name_list_add(names, c.attn_out_bias, "attention output bias")
-    name_list_add(names, c.attn_sinks, "attention sinks")
+    name_list_add(names, c.attn_sinks && !rdec_sinks_installed(), "attention sinks")
+    name_list_add(names, c.attn_sinks && rdec_sinks_installed() && c.head_size != 64l, "attention sinks at head size {c.head_size} (the sink stamps serve 64)")
+    name_list_add(names, c.attn_sinks && rdec_sinks_installed() && c.head_size == 64l && c.head_size_swa != 0l && c.head_size_swa != 64l,
+        "attention sinks at head size {c.head_size_swa} on the sliding layers (the sink stamps serve 64)")
+    name_list_add(names, c.attn_sinks && rdec_sinks_installed() && (c.q_gated || c.attn_logit_softcap != 0.0),
+        "attention sinks under gated attention or a logit softcap (the sink stamps serve the plain flash tile)")
     name_list_add(names, c.moe_dense_shexp && !rdec_moe_installed(), "dense shared expert")
     name_list_add(names, has_ple(c) && !rdec_ple_installed(), "per-layer embeddings")
     name_list_add(names, c.q_gated && !c.qk_norm, "gated attention without qk-norm")
     name_list_add(names, c.rope_dim > 0l && c.rope_dim != c.head_size && !c.qk_norm, "partial rotary ({c.rope_dim} of {c.head_size}) without qk-norm")
     if (c.n_expert > 0l) {
-        name_list_add(names, c.moe_gate != MoeGate.softmax, "a non-softmax router")
-        name_list_add(names, c.moe_router_bias, "a router bias")
+        name_list_add(names, c.moe_gate != MoeGate.softmax && c.moe_gate != MoeGate.softmax_weight, "a {c.moe_gate} router")
         name_list_add(names, c.moe_exp_probs, "an expert selection bias")
-        name_list_add(names, c.moe_exps_bias, "biased expert stacks")
-        name_list_add(names, c.ffn_act == FfnAct.swiglu_oai, "the clamped swiglu expert activation")
         name_list_add(names, c.n_expert > 256l, "{c.n_expert} experts (the select kernels reach 256)")
         name_list_add(names, c.n_expert_used > 64l, "{c.n_expert_used} routed experts (the slot metas hold 64)")
     }
@@ -858,17 +878,20 @@ def private resident_shexp_decline(t : Model; l : int64) : string {
     return ""
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-decode-attn-split")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
 //! Why layer `l` keeps the whole-model driver off the model - "" when the driver serves the layer's
 //! shape (its planes placed, its own K/V, a head the attention kernels stage).
 def resident_layer_decline(t : Model; l : int64) : string {
     let c = t.config
     if (layer_is_moe(t, l)) {
-        let fe1 = fmt_at(t.we1_fmt, l)
-        let fe3 = fmt_at(t.we3_fmt, l)
-        let fe2 = fmt_at(t.we2_fmt, l)
+        let fe1 = rdec_efmt(t, t.we1_fmt, l)
+        let fe3 = rdec_efmt(t, t.we3_fmt, l)
+        let fe2 = rdec_efmt(t, t.we2_fmt, l)
+        if (c.moe_exps_bias && kq_sb(fe2)) {
+            return "layer {l}'s biased expert stacks feed a K-quant down plane ({int(fe2)}) - the biased act has no Q8_K form"
+        }
         if (!rdec_moe_ok(int(fe1), int(fe3), int(fe2))) {
-            return "layer {l}'s expert formats {int(fe1)}/{int(fe3)}/{int(fe2)} are outside the resident MoE block's tile family (the f16-fed cm2 tiles)"
+            return "layer {l}'s expert formats {int(fe1)}/{int(fe3)}/{int(fe2)} are outside the resident MoE block's tile family (the f16-fed cm2 tiles, or the KHR tile in mm mode)"
         }
         if (kq_sb(fe1) != kq_sb(fe3)) {
             return "layer {l}'s expert gate and up stacks mix activation-quant forms ({int(fe1)}/{int(fe3)}) - one feed serves both"
@@ -939,7 +962,7 @@ def private resident_bias_off(c : Config; l : int64) : int64 {
     return off
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes")]
 def private resident_upload_bias(t : Model) {
     let c = t.config
     var rows : array<float>
@@ -955,6 +978,16 @@ def private resident_upload_bias(t : Model) {
     }
     rdec_upload_bias(rows)
     delete rows
+}
+
+def private resident_upload_sinks(t : Model) : bool {
+    let c = t.config
+    var rows : array<float>
+    rows |> reserve_resize(c.n_layers * c.n_heads)
+    copy_floats(t.fblob, t.sinks_off, rows, 0l, c.n_layers * c.n_heads)
+    let ok = rdec_upload_sinks(rows)
+    delete rows
+    return ok
 }
 
 //! the global rope class's rotary width: the config's head size (the global class's), or rope_dim on a partial-rope model
@@ -1035,7 +1068,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     if (!moe_gpu_resident_installed()) return rdec_decline("the tier installed no resident-driver seams")
     if (t.quant != QuantMode.q8) return rdec_decline("weights are not in the q8 serving mode ({t.quant})")
     if (t.config.n_expert > 0l && !rdec_moe_installed()) return rdec_decline("routed experts ({t.config.n_expert}) - the tier installed no MoE seats; the per-op tier's expert rails serve")
-    if (t.experts_mx4) return rdec_decline("mx4 expert planes")
     // the driver is all-or-nothing across prefill AND decode (the KV lives in the device mirror
     // only), so a pin away from it declines BEFORE any upload — the per-op rails take over
     let pin = g_env_engine.pin_prefill
@@ -1089,9 +1121,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     for (l in range64(c.n_layers)) {
         let lf = resident_layer_fmts(t, l)
         if (layer_is_moe(t, l)) {
-            planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = fmt_at(t.we1_fmt, l)))
-            planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = fmt_at(t.we3_fmt, l)))
-            planes |> push((n = c.n_ff_exp, rows = c.n_expert * dim, f = fmt_at(t.we2_fmt, l)))
+            planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = rdec_efmt(t, t.we1_fmt, l)))
+            planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = rdec_efmt(t, t.we3_fmt, l)))
+            planes |> push((n = c.n_ff_exp, rows = c.n_expert * dim, f = rdec_efmt(t, t.we2_fmt, l)))
             if (c.moe_dense_shexp) {
                 let hid_l = layer_hidden(t, l)
                 planes |> push((n = dim, rows = hid_l, f = lf.f1))
@@ -1181,6 +1213,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     if (c.attn_qkv_bias) {
         resident_upload_bias(t)
     }
+    if (c.attn_sinks && !resident_upload_sinks(t)) {
+        return rdec_decline("the attention sinks found no flash arm on the device (the tier's line above)")
+    }
     // place + wire each layer. One quantized X image feeds each consumer group (qkv shares one,
     // gate/up another), so a group must agree on its quant form — mixed groups decline
     var mir_idx = 0l
@@ -1243,9 +1278,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 b2 = resident_place(t, p2.f, p2.off, c.n_ff_shexp, dim, mr, kg, wb)
                 if (b1 < 0l || b3 < 0l || b2 < 0l) return rdec_decline("arena placement failed at layer {l} (the shared expert)")
             } else {
-                lf.f1 = fmt_at(t.we1_fmt, l)
-                lf.f3 = fmt_at(t.we3_fmt, l)
-                lf.f2 = fmt_at(t.we2_fmt, l)
+                lf.f1 = rdec_efmt(t, t.we1_fmt, l)
+                lf.f3 = rdec_efmt(t, t.we3_fmt, l)
+                lf.f2 = rdec_efmt(t, t.we2_fmt, l)
             }
         } else {
             if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
@@ -1280,7 +1315,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             if (moe) {
                 let eb = resident_place_experts(t, l, mr, kg, wb)
                 if (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) return rdec_decline("arena placement failed at recurrent layer {l} (the expert stacks)")
-                rdec_set_moe_experts(l, router_slot, eb.be1, eb.be3, eb.be2, int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)))
+                rdec_set_moe_experts(l, router_slot, eb.be1, eb.be3, eb.be2, int(rdec_efmt(t, t.we1_fmt, l)), int(rdec_efmt(t, t.we3_fmt, l)), int(rdec_efmt(t, t.we2_fmt, l)))
                 router_slot++
             }
             continue
@@ -1305,7 +1340,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             if (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) return rdec_decline("arena placement failed at layer {l} (the expert stacks)")
             rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, eb.be1, eb.be3, eb.be2,
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2),
-                int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)), int(fmt_at(t.we2_fmt, l)), g)
+                int(rdec_efmt(t, t.we1_fmt, l)), int(rdec_efmt(t, t.we3_fmt, l)), int(rdec_efmt(t, t.we2_fmt, l)), g)
             router_slot++
         } else {
             rdec_set_layer(l, mir_slots[l], bq, bk, bv, bo, b1, b3, b2,
@@ -1400,6 +1435,11 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 norms[lb + 8l * dim + i] = t.fblob[t.rms_post_ffn2_off + l * dim + i]
             }
         }
+        if (c.attn_out_bias) {   //! the attention output bias rides the norms plane as a row the residual step adds to the wo GEMV's row
+            for (i in range64(dim)) {
+                norms[lb + 9l * dim + i] = t.bo[l * dim + i]
+            }
+        }
     }
     for (i in range64(dim)) {
         norms[c.n_layers * RDEC_NORM_ROWS * dim + i] = t.fblob[t.rms_final_off + i]
@@ -1416,7 +1456,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             }
         }
     }
-    rdec_upload_norms(norms)
+    rdec_upload_norms(norms, c.attn_out_bias)
     delete norms
     g_rdec_active = true
     g_rdec_decline_reason = ""
@@ -1433,7 +1473,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     return true
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bool {
     let c = t.config
     let dim = c.dim
@@ -1463,10 +1503,40 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
             di++
         }
     }
-    let ok = rdec_prepare_moe(ne, c.n_expert_used, c.n_ff_exp, c.n_ff_shexp, n_moe, sh_gated, c.norm_topk_prob,
-        c.ffn_act == FfnAct.gelu, c.expert_weights_scale, router, dscale)
+    var rbias : array<float>
+    var gbias : array<float>
+    var ubias : array<float>
+    var dbias : array<float>
+    let nfe = c.n_ff_exp
+    if (c.moe_router_bias) {
+        rbias |> reserve_resize(n_moe * ne)
+    }
+    if (c.moe_exps_bias) {
+        gbias |> reserve_resize(n_moe * ne * nfe)
+        ubias |> reserve_resize(n_moe * ne * nfe)
+        dbias |> reserve_resize(n_moe * ne * dim)
+    }
+    var bi = 0l
+    for (l in range64(c.n_layers)) {
+        continue if (!layer_is_moe(t, l))
+        if (c.moe_router_bias) {
+            copy_floats(t.fblob, t.router_b_off + l * ne, rbias, bi * ne, ne)
+        }
+        if (c.moe_exps_bias) {
+            copy_floats(t.fblob, t.web1_off + l * ne * nfe, gbias, bi * ne * nfe, ne * nfe)
+            copy_floats(t.fblob, t.web3_off + l * ne * nfe, ubias, bi * ne * nfe, ne * nfe)
+            copy_floats(t.fblob, t.web2_off + l * ne * dim, dbias, bi * ne * dim, ne * dim)
+        }
+        bi++
+    }
+    let ok = rdec_prepare_moe(ne, c.n_expert_used, nfe, c.n_ff_shexp, n_moe, sh_gated, c.norm_topk_prob || c.moe_gate == MoeGate.softmax_weight,
+        c.ffn_act == FfnAct.gelu, c.ffn_act == FfnAct.swiglu_oai, c.expert_weights_scale, router, dscale, rbias, gbias, ubias, dbias)
     delete router
     delete dscale
+    delete rbias
+    delete gbias
+    delete ubias
+    delete dbias
     return ok
 }
 
@@ -1475,9 +1545,9 @@ def private resident_place_experts(t : Model; l : int64; mr, kg, wb : int64) : t
     let c = t.config
     let ne = c.n_expert
     let nfe = c.n_ff_exp
-    let be1 = resident_place(t, fmt_at(t.we1_fmt, l), t.we1_offs[l], c.dim, ne * nfe, mr, kg, wb, nfe)
-    let be3 = be1 < 0l ? -1l : resident_place(t, fmt_at(t.we3_fmt, l), t.we3_offs[l], c.dim, ne * nfe, mr, kg, wb, nfe)
-    let be2 = be3 < 0l ? -1l : resident_place(t, fmt_at(t.we2_fmt, l), t.we2_offs[l], nfe, ne * c.dim, mr, kg, wb, c.dim)
+    let be1 = resident_place(t, rdec_efmt(t, t.we1_fmt, l), t.we1_offs[l], c.dim, ne * nfe, mr, kg, wb, nfe)
+    let be3 = be1 < 0l ? -1l : resident_place(t, rdec_efmt(t, t.we3_fmt, l), t.we3_offs[l], c.dim, ne * nfe, mr, kg, wb, nfe)
+    let be2 = be3 < 0l ? -1l : resident_place(t, rdec_efmt(t, t.we2_fmt, l), t.we2_offs[l], nfe, ne * c.dim, mr, kg, wb, c.dim)
     return (be1 = be1, be3 = be3, be2 = be2)
 }
 
@@ -1659,9 +1729,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     }
     let dim = c.dim
     g_rdec_x |> resize(dim)
-    unsafe {
-        embed_row(t, token, addr(g_rdec_x[0]))
-    }
+    embed_row(t, token, unsafe(addr(g_rdec_x[0])))
     if (c.embed_scale != 1.0) {
         scale_inplace(unsafe(addr(g_rdec_x[0])), c.embed_scale, dim)
     }
@@ -2164,9 +2232,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             }
             let sne = t.config.n_expert
             let snfe = t.config.n_ff_exp
-            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(fmt_at(t.we1_fmt, sl))))
-            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(fmt_at(t.we3_fmt, sl))))
-            sdn = max(sdn, moe_gpu_plane_bytes(snfe, sne * t.config.dim, int(fmt_at(t.we2_fmt, sl))))
+            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(rdec_efmt(t, t.we1_fmt, sl))))
+            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(rdec_efmt(t, t.we3_fmt, sl))))
+            sdn = max(sdn, moe_gpu_plane_bytes(snfe, sne * t.config.dim, int(rdec_efmt(t, t.we2_fmt, sl))))
         }
         set_moe_gpu_stream_need(sgu > 0l ? 2l * sgu + sdn : 0l)
     }
@@ -2523,9 +2591,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     vulkan_bake_role(VkBakeRole.expert)
     for (i in range64(want)) {
         let l = layers - 1l - i
-        let f1 = fmt_at(t.we1_fmt, l)
-        let f2 = fmt_at(t.we2_fmt, l)
-        let f3 = fmt_at(t.we3_fmt, l)
+        let f1 = rdec_efmt(t, t.we1_fmt, l)
+        let f2 = rdec_efmt(t, t.we2_fmt, l)
+        let f3 = rdec_efmt(t, t.we3_fmt, l)
         // gate/up must share a form (one activation image); down is free. The Q4_K_M MoE
         // recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
@@ -2568,9 +2636,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l) {
             break
         }
-        let f1 = fmt_at(t.we1_fmt, l)
-        let f2 = fmt_at(t.we2_fmt, l)
-        let f3 = fmt_at(t.we3_fmt, l)
+        let f1 = rdec_efmt(t, t.we1_fmt, l)
+        let f2 = rdec_efmt(t, t.we2_fmt, l)
+        let f3 = rdec_efmt(t, t.we3_fmt, l)
         // same rule as the resident walk: gate/up share one activation image, down is free
         let gu_ok = ((f1 == KqFmt.q8) == (f3 == KqFmt.q8)
             && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3))))

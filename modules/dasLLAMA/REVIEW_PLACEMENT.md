@@ -1,8 +1,7 @@
-# dasLLAMA Code Review Checklist - placement
+# dasLLAMA Placement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md` (its sec.1 routing block names the companion that holds each file's
-charter line), `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`. Planned work:
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
@@ -13,12 +12,13 @@ charters own the per-file list; a rule naming what KIND of code lands in which f
 checklist's own.
 
 **A function lands in the file whose sec.1 charter line names its kind - or that charter line
-changes in the same diff.**
+changes in the same diff.** `ARCHITECTURE.md`'s sec.1 routing block names the companion that holds
+each file's charter line.
 
-**A host-side pick over the arms of a Vulkan kernel class family - the ensure/set/encode chain that
-picks one stamp for an arm, a format or a shape, and the grid rule whose rows a workgroup the arm
-sets - lands in `dasllama/dasllama_vulkan_classes.das`.** An arm is one of the coopmat forms a
-family ships (cm2, KHR); a grid rule of a class with one form stays with its driver.
+**A host-side chain that selects a stamp of a Vulkan kernel class family - an ensure/set/encode
+pick on any axis (arm, format or shape) - lands in `dasllama/dasllama_vulkan_classes.das`, and so
+does the grid rule of a class whose family ships more than one arm.** A stamp is one class stamped
+from a kernel class template; an arm is one of the coopmat forms a family ships (cm2, KHR).
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
 decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
@@ -29,9 +29,8 @@ a CPU row core reads in `dasllama/dasllama_repack.das`, a transform into the lay
 or gather reads in `dasllama/dasllama_layout.das`.**
 
 **A CPU KV-cache store, read, score dot, or V-accumulate OVER CACHE BYTES - a codec primitive
-that knows the K/V element format - lands in `dasllama/dasllama_kv_codec.das`, its format
-family kept whole - one K/V format's store, read, score dot and V-accumulate land there
-together.** A dot over an already-decoded f32 row is not a codec primitive.
+that knows the K/V element format - lands in `dasllama/dasllama_kv_codec.das`.** A dot over an
+already-decoded f32 row is not a codec primitive.
 
 **A pre-tokenizer split lands in `dasllama/dasllama_pretok.das`; a merge algorithm in its
 tokenizer's own file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
@@ -49,25 +48,22 @@ of - lands in that tier's `dasllama/dasllama_math_<tier>.das`, never in
 **A quirk of one family - one model architecture's file, or one backend driver's - lands in that
 file, never in another family's file.**
 
-**A piece two files both execute lands in a file both already require (a new file of its own
-when they require none in common) - never a second copy: two spellings that can drift apart on
-the first edit to one.** A restatement the language or the test contract forces - an
+**A piece two files in one folder both use - logic or a named constant - lands in a file both
+already require (a new file of its own when they require none in common) - never a second copy:
+two spellings that can drift apart on the first edit to one.** A restatement the language or the test contract forces - an
 enum-and-int pair of one predicate, a test's CPU oracle of the arithmetic - is not a copy.
 
 **A piece two folders outside each other - neither one containing the other - both need lands
 in the folder that owns the concern, and the other requires it - never a copy in each.**
 
-**A family gaining an arm for a media kind adds that kind's span markers to that family's chat
-template, never to a second renderer.** An arm is support for that media kind; span markers are
-the template text that opens and closes the media rows.
-
-**A diff claiming a media arm for a family whose chat template or vocab lacks that kind's span
-markers is a defect.**
+**A family gaining support for a media kind adds that kind's span markers to that family's chat
+template, never to another family's; a diff claiming that support while the family's chat template
+or vocab lacks the markers is a defect.** Span markers are the template text that opens and closes
+the media rows.
 
 **No signature in `dasllama/dasllama_tower.das` takes a type that
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares - the
-shared shape lands in the shared types module `ARCHITECTURE_MEDIA.md` sec.1.7 names.**
-`dasllama/dasllama_tower.das` is the shared encoder-tower home.
+shared shape lands in `dasllama/dasllama_asr_types.das`.**
 
 **`dasllama/dasllama_tower.das` requires none of `dasllama/dasllama_audio.das`,
 `dasllama/dasllama_vision.das`, or a family file - a diff adding such a require is a defect.**
@@ -78,20 +74,23 @@ shared shape lands in the shared types module `ARCHITECTURE_MEDIA.md` sec.1.7 na
 in `dasllama/dasllama_tools.das`.**
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_audio_io.das` requires `audio`
-(the miniaudio decode module).**
+(the miniaudio decode module) - decode through that file.**
 
 **No engine file (`dasllama/`) other than `dasllama/dasllama_vision_io.das` requires
-`stbimage`.**
+`stbimage` - decode through that file.**
 
 **Engine, HTTP, or response-writing logic never lands in `dasllama/dasllama_scheduler.das`** -
 the forward loops and the model state stay in the other `dasllama/` files; HTTP, and the code
 that turns a step's output into the wire text a client reads, in `utils/dasllama-server` (repo
 root).
 
-**An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
-`dasllama/dasllama_transformer.das`** - every module requiring the engine back. It lives in
-`dasllama/dasllama_common.das` instead when code there depends on the registration having run
-and the registered module does not require the engine back.
+**An `[init]`-only side-effect require in an engine file (`dasllama/`) whose registration no
+`dasllama/dasllama_common.das` code needs to have run lives in `dasllama/dasllama_transformer.das`**
+- the require umbrella breaks the cycle a module requiring the engine back would close.
+
+**An `[init]`-only side-effect require whose registration `dasllama/dasllama_common.das` code needs
+to have run lives in `dasllama/dasllama_common.das` when the registered module does not require the
+engine back, and in `dasllama/dasllama_transformer.das` when it does.**
 
 **A registration only a program root (test, harness, benchmark, tool) needs gets no side-effect
 require in an engine file - the program root requires the registration module directly.**
