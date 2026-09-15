@@ -1,5 +1,5 @@
-options gen2
-options no_aot, auto_inline_functions = false   // cursor tests assert node positions; splices would move them
+options gen2, no_aot, auto_inline_functions = false   // cursor tests assert node positions; splices would move them
+require daslib/fio
 
 struct Point {
     x : float
@@ -34,4 +34,8 @@ class Animal {
 
 class Cat : Animal {
     def override speak() : string => "meow"
+}
+
+def no_log() : file {
+    return null
 }

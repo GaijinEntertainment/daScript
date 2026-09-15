@@ -169,13 +169,13 @@ struct public DeclarationHit {
     enumeration : Enumeration const?
     //! the global variable, for `variable`
     variable : Variable const?
-    //! the aliased type, for `alias`; null when the typedef is not in the program's own module
+    //! the aliased type, for `alias`; null when no module of the program declares the typedef
     alias_type : TypeDecl const?
     //! the C++-bound type's annotation, for `handled`
     annotation : TypeAnnotation const?
     //! the declared name
     name : string
-    //! the declaration's own position; zero for `handled` and for an alias declared elsewhere
+    //! the declaration's own position; zero for `handled` and for an alias no module declares
     @safe_when_uninitialized at : LineInfo
     //! 0-based byte column where the cursor's word starts on the cursor line; -1 when no cursor word named it
     word_column : int = -1
@@ -200,12 +200,25 @@ def public declared_name_column(at : LineInfo; name : string) : int {
     return column
 }
 
-def public typedef_named(program : smart_ptr<Program>; name : string) : TypeDecl const? {
-    //! The type the program's own module declares under the typedef `name`; null when there is none.
+def private typedef_in(mod : Module?; name : string) : TypeDecl const? {
     var found : TypeDecl const?
-    for_each_typedef(get_this_module(program)) $(alias_name : string#; var value : TypeDeclPtr) {
+    return found if (mod == null)
+    for_each_typedef(mod) $(alias_name : string#; var value : TypeDeclPtr) {
         if (alias_name == name) {
             found = value
+        }
+    }
+    return found
+}
+
+def public typedef_named(program : smart_ptr<Program>; name : string; mod : Module? = null) : TypeDecl const? {
+    //! The type declared under the typedef `name` - in `mod` when given, else in the program's own module, else in any module it requires; null when none declares it.
+    var found = typedef_in(mod != null ? mod : get_this_module(program), name)
+    if (found == null) {
+        program_for_each_module(program) $(m) {
+            if (found == null) {
+                found = typedef_in(m, name)
+            }
         }
     }
     return found
@@ -216,7 +229,7 @@ def public declaration_of(program : smart_ptr<Program>; td : TypeDecl const?) : 
     return DeclarationHit() if (td == null)
     if (!empty(td.alias)) {
         let name = string(td.alias)
-        var hit = DeclarationHit(kind = DeclarationKind.alias, name = name, alias_type = typedef_named(program, name))
+        var hit = DeclarationHit(kind = DeclarationKind.alias, name = name, alias_type = typedef_named(program, name, td._module))
         if (hit.alias_type != null) {
             hit.at = hit.alias_type.at
         }

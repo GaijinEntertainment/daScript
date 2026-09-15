@@ -29,7 +29,8 @@ this file holds sec. 40.
   `tests/daslib/ast_cursor_test.das` pins only that a `class` line yields no hit, so a
   `generated` bit on a new kind of user body silently hides every hit inside it.
 - **A generator body's `for`/`let` variable becomes a state field named
-  `__<name>_rename_at_<line>_<column>` - `RenameVar` in `src/ast/ast_generate.cpp` - and
-  `source_name` strips the wrap back to `<name>`.** Nothing fails when one side moves alone: the
+  `__<name>_rename_at_<line>_<column>` - `RenameVar` in `src/ast/ast_generate.cpp`, the name
+  passed through `aotSuffixNameEx`, which leaves an ASCII identifier as is - and `source_name`
+  strips the wrap back to `<name>`.** Nothing fails when one side moves alone: the
   test pins only the daslib half, so a new spelling shows the mangled name in every hover and
   reference.

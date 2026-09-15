@@ -4860,9 +4860,11 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 ### Cursor queries
 
 - `cursor_inside` - Check whether a point (line, col) is inside the span described by `at`.
+- `declaration_of` - The declaration a type denotes - its typedef, structure, enumeration or C++-bound annotation; `none` for a bare type.
 - `find_at_cursor` - Find all expression nodes at the given cursor position, innermost first; `file` is a substring of `FileInfo.name` ("" matches any); nodes inside a synthesized member and compiler-made variables are never hits.
 - `find_at_cursor_in_function` - Find all expression nodes at the given cursor position within a single function body.
 - `find_declaration_at_cursor` - The declaration whose name is at the cursor, the parent a `class` line names included; `line_text` "" makes it a line-only lookup, `file` is a substring of `FileInfo.name`.
+- `typedef_named` - The type declared under the typedef `name` - in `mod` when given, else in the program's own module, else in any module it requires; null when none declares it.
 
 ### Source text
 
@@ -4871,18 +4873,13 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 - `name_column` - Where `line_text` spells `name` as a whole word (0-based byte column), else `hint`.
 - `source_name` - The name the source spells for a compiler-renamed variable (a generator's loop variable); any other name unchanged.
 - `spells_name` - True when `line_text` spells `name` as a whole word starting exactly at `col`.
-- `word_at` - The identifier the 0-based byte column `col` is on in `line_text`, with its start column; the word is empty when `col` is on none.
+- `word_at` - The identifier the 0-based byte column `col` is on in `line_text`, with its start column; a caret right after a word is on it, as in an editor, and the word is empty when `col` is on none.
 
 ### Result inspection
 
 - `describe` - Pretty-print a CursorHit for debugging.
 - `hit_at` - The position of the node the hit holds: its expression, variable or type.
 - `is_synthesized` - True for a member the compiler made on the `class` line (`Foo'__finalize`), never for a lambda or generator body or a generic instance.
-
-### Uncategorized
-
-- `typedef_named` - The type the program's own module declares under the typedef `name`; null when there is none.
-- `declaration_of` - The declaration a type denotes - its typedef, structure, enumeration or C++-bound annotation; `none` for a bare type.
 
 ## ast_used
 

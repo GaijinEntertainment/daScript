@@ -223,7 +223,7 @@ def test_synthesized_members(t : T?) {
                 }
             }
             t2 |> success(synthesized > 0, "a class carries synthesized members: {synthesized}")
-            t2 |> equal(user, 5, "add, greet, main, Animal`speak, Cat`speak - got {user}")
+            t2 |> equal(user, 6, "add, greet, main, Animal`speak, Cat`speak, no_log - got {user}")
         }
     }
 }
@@ -328,6 +328,17 @@ def test_type_name_hit(t : T?) {
             t2 |> success(cat.kind == DeclarationKind.structure && cat.name == "Cat" && int(cat.at.line) == 35, "the class: {cat.name} at {int(cat.at.line)}")
             t2 |> equal(declared_name_column(cat.at, cat.name), 6, "the name, not the class keyword")
             t2 |> equal(declaration_of(program, null).kind, DeclarationKind.none)
+        }
+    }
+    t |> run("a typedef another module declares resolves to that module's declaration") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // def no_log() : file { at line 39, file at column 15; fio declares `typedef file = FILE const?` on its line 12
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 39, 16, true, "def no_log() : file \{")
+            t2 |> success(has_type_hit(hits, "file"), "the alias is a type hit: {[for (h in hits); describe(h)]}")
+            let alias = declaration_of(program, hits[0].type_decl)
+            t2 |> success(alias.kind == DeclarationKind.alias && alias.alias_type != null, "resolved: {alias.name} kind {alias.kind}")
+            t2 |> success(int(alias.at.line) == 12 && alias.at.fileInfo != null && find(string(alias.at.fileInfo.name), "fio") >= 0, "declared in fio at {int(alias.at.line)}")
+            t2 |> success(typedef_named(program, "no_such_alias") == null, "an unknown alias is null")
         }
     }
 }
