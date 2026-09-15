@@ -3,7 +3,7 @@
 # deployed Caddyfile is edited to match it, never the other way round.
 #
 # Paste inside the `daslang.io { ... }` block, ahead of `root`/`file_server`.
-# `bench-stand-deploy.sh caddy` does the splice, validates, and reloads.
+# Splice it by hand, then `caddy validate --config /etc/caddy/Caddyfile` and reload.
 
 # The nightly benchmark stand: a static tree the `bench` user rewrites every
 # night (viewer, data.json, status.json, summary.md, runs/). No service behind
