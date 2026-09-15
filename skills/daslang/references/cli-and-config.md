@@ -30,7 +30,9 @@ def main : int {
 
 **Don't pick an argv accessor.** `parse_args` pulls argv through `get_user_args()`: `argv[1..]` for
 a standalone `-exe` binary, the post-`--` slice under the interpreter or the JIT.
-`get_program_args()` / `get_cli_arguments()` force one slice regardless of host.
+`get_program_args()` / `get_cli_arguments()` force one slice regardless of host. A program that
+spawns the daslang it runs under takes the path from `get_host_binary()` - `argv[0]` resolved to an
+absolute path - never from `get_command_line_arguments()` itself.
 
 Field types: `string`, `int`, `float`, `bool`, an enum (clargs validates the value), `array<T>` for
 a repeatable flag. The long name is the field name with underscores as hyphens; clargs adds the
