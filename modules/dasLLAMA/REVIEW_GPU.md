@@ -133,17 +133,24 @@ constant's authoritative site, in the same change.** An in-body tile constant is
 literal in the generated `*_msl` global or the SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>`
 writes every class kernel's words). A grid constant is read off the class's
 `[metal_dispatch]` / `[vk_dispatch]` `grid=` spec, whose `"n/c"` form is a
-CEIL-divide; a threadgroup constant off Metal's `tg=` spec or Vulkan's
-`[spirv_kernel(local_size_x=)]`. A uniform's value is read at the single writer that fills
-its buffer.
+CEIL-divide; a grid constant of a `grid = "wgs"` class is read off the kernel body's
+workgroup-index decode together with the host helper that computes `wgs`; a threadgroup
+constant off Metal's `tg=` spec or Vulkan's `[spirv_kernel(local_size_x=)]`. A uniform's value
+is read at the single writer that fills its buffer.
+
+**A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the
+host computes that class's `wgs`, changes both in the same change.** The `grid=` spec carries no
+number for these classes, so nothing else ties the two.
 
 **A cache key covers every input the cached result depends on: a host address, an offset, or a
 handle alone is not a key - carry the span and the form, the element type and layout the upload
 produces, in the key too.** A hit must cover the request.
 
 **A diff that lands a kernel class, driver arm, or backend capability in a `dasllama/` file
-whose `ARCHITECTURE_GPU.md` sec.1.5 role row does not sanction it extends that row's ledger in
-the same change - or moves the code to the file whose row does.**
+whose `ARCHITECTURE_GPU.md` sec.1.5 role row does not name it in the "holds" column adds it to
+that column in the same change; code the row names in its "must not hold" column moves to the
+file whose row holds it instead.** A driver arm is host code that ensures, binds, or encodes a
+dispatch; a backend capability is a function a driver registers in a hook or capability registry.
 
 **A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
 the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
@@ -172,10 +179,13 @@ anything a served GPU decode or prefill call executes or that selects what it ex
 driver, a kernel class it dispatches, that class's builder, a servability gate, a race that
 picks which kernel serves, a forwarder default, a weight-region or residency path, the tier
 forwarders and the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`) the call
-routes through; a rename, a comment, a bake path, or a change confined to kernel bodies whose
-emitted kernels - the `*_msl` globals or the AIR (Metal's compiled shader IR) they build into,
-the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes - are byte-identical before and after, the PR
-body naming that compare, cannot.
+routes through.
+
+**A change to a served GPU decode or prefill path that ships no parity runs names both compares
+in the PR body: its emitted kernels byte-identical before and after - the `*_msl` globals or the
+AIR (Metal's compiled shader IR) they build into, the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes -
+and the host's stamp and dispatch selection unchanged on every input.** Only both compares
+together show the change cannot alter what the path computes or selects.
 
 **Parity evidence counts only when it comes from `harness/parity.das`,
 `benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model list), or an

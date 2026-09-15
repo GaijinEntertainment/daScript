@@ -2,8 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md` (its sec.1 routing block names the companion that holds each file's
-charter line), `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`, `followup_vulkan.md` for Vulkan,
-`followup_metal.md` for Metal.
+charter line), `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEDIA.md`. Planned work:
+`followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 it.**
@@ -14,6 +14,11 @@ checklist's own.
 
 **A function lands in the file whose sec.1 charter line names its kind - or that charter line
 changes in the same diff.**
+
+**A host-side pick over the arms of a Vulkan kernel class family - the ensure/set/encode chain that
+picks one stamp for an arm, a format or a shape, and the grid rule whose rows a workgroup the arm
+sets - lands in `dasllama/dasllama_vulkan_classes.das`.** An arm is one of the coopmat forms a
+family ships (cm2, KHR); a grid rule of a class with one form stays with its driver.
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
 decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
@@ -44,13 +49,13 @@ of - lands in that tier's `dasllama/dasllama_math_<tier>.das`, never in
 **A quirk of one family - one model architecture's file, or one backend driver's - lands in that
 file, never in another family's file.**
 
-**A piece two files both execute lands in their nearest shared file (a new file of its own when
-no shared file exists) - never a second copy: two spellings that can drift apart on the first
-edit to one.** An enum-and-int pair of one predicate inside one file, and a test's CPU oracle
-that restates the arithmetic, are not copies.
+**A piece two files both execute lands in a file both already require (a new file of its own
+when they require none in common) - never a second copy: two spellings that can drift apart on
+the first edit to one.** A restatement the language or the test contract forces - an
+enum-and-int pair of one predicate, a test's CPU oracle of the arithmetic - is not a copy.
 
-**A piece two folders outside each other both need lands in the folder whose `ARCHITECTURE.md`
-sec.1 charter names the concern.**
+**A piece two folders outside each other - neither one containing the other - both need lands
+in the folder that owns the concern, and the other requires it - never a copy in each.**
 
 **A family gaining an arm for a media kind adds that kind's span markers to that family's chat
 template, never to a second renderer.** An arm is support for that media kind; span markers are
@@ -61,15 +66,13 @@ markers is a defect.**
 
 **No signature in `dasllama/dasllama_tower.das` takes a type that
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares - the
-shared shape lands on the floor `ARCHITECTURE_MEDIA.md` sec.1.7 names.**
+shared shape lands in the shared types module `ARCHITECTURE_MEDIA.md` sec.1.7 names.**
 `dasllama/dasllama_tower.das` is the shared encoder-tower home.
 
 **`dasllama/dasllama_tower.das` requires none of `dasllama/dasllama_audio.das`,
 `dasllama/dasllama_vision.das`, or a family file - a diff adding such a require is a defect.**
 
-**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
-file**; a sanctioned tower-worthy single-caller is ledgered on `ARCHITECTURE_MEDIA.md` sec.1.7's
-tower charter line.
+**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's file.**
 
 **Tool wire text (the text of a model's tool/function call, built or parsed) is produced only
 in `dasllama/dasllama_tools.das`.**
@@ -94,12 +97,12 @@ and the registered module does not require the engine back.
 require in an engine file - the program root requires the registration module directly.**
 
 **A function in `dasllama/dasllama_common.das` that calls through a hook another module
-registers panics on the unset hook with a message naming the module to require.** A forwarder that returns quietly hides which registration a
-program root forgot.
+registers panics on the unset hook with a message naming the module to require.** A forwarder
+that returns quietly hides which registration a program root forgot.
 
 **A `dasllama/` module whose `[init]` registers a hook the engine dispatches through gets its
 side-effect require in the same change that adds it** - a registration no engine file reaches
-never fires for a consumer of the `dasllama.das` facade.
+never fires for a consumer of the `dasllama/dasllama.das` facade.
 
 **Platform-specific code - a device call, a `require` of a backend module, or a read of a
 backend's own state other than its `g_env_<backend>` knobs - in an engine file (`dasllama/`) lands only

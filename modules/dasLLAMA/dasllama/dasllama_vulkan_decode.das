@@ -82,12 +82,10 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     let will_facm2 = cm2_fa_on() && vk_fa_on() && kv16 && fa_hs_ok
     let will_fakhr = !will_facm2 && khr_kq_tile_on() && vk_fa_on() && kv16 && fa_khr_serves(head_size, 0.0, q_gated)
     var fa_ok = true
-    if (will_facm2) {
-        fa_ok = (head_size == 64l ? ensure_fa_cm2_h64_cls() : (head_size == 128l ? ensure_fa_cm2_h128_cls()
-            : (head_size == 512l ? ensure_fa_cm2_h512_cls() : (q_gated ? ensure_fa_cm2_h256_g_cls() : (ensure_fa_cm2_h256_cls() && ensure_fa_cm2_h256_cap_cls())))))
-    } elif (will_fakhr) {
-        fa_ok = (head_size == 64l ? ensure_fa_khr_h64_cls() : (head_size == 128l ? ensure_fa_khr_h128_cls()
-            : (head_size == 512l ? ensure_fa_khr_h512_cls() : (ensure_fa_khr_h256_cls() && ensure_fa_khr_h256_cap_cls()))))
+    if (will_facm2 || will_fakhr) {
+        let gated256 = q_gated && head_size == 256l   // the gated stamp exists at 256 on the cm2 arm alone
+        let stamp_ok = fa_stamp_ensure(will_fakhr, head_size, gated256, false, false)
+        fa_ok = stamp_ok && (head_size != 256l || gated256 || fa_stamp_ensure(will_fakhr, 256l, false, true, false))   // an ungated 256 pre-flights its softcap twin
     }
     let chunked_ok = (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
         ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())

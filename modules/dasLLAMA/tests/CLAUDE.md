@@ -288,7 +288,8 @@ device-side f16 gather, the streamed-group slot hand-off, the streamed split's a
 the shared expert's call shape - one region over every position, the identity slot map at unit
 weight.
 `test_vulkan_kernels.das` - model-free (a Vulkan device, else skips; the two lens cells,
-`test_vkd_readonly_stamp` and `test_vkd_lens_readonly_gate`, need only the dasVulkan module): the
+`test_vkd_readonly_stamp` and `test_vkd_lens_readonly_gate`, and the flash ladders' refusal cell
+`test_vkd_fa_stamp_refusals` need only the dasVulkan module): the
 per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
@@ -302,9 +303,14 @@ arms: the cm2 l/m/s tiles and the
 expert schedule's e column (the format's own 128-row e stamp, whose k step is the stamp's - 32 on
 iq2xxs, iq2xs, iq2s, iq3xxs and iq3s, 64 on every other format) in mode 4 on an
 NV_coopmat2 device and the KHR 128x128 tile wherever the device has KHR coopmat at subgroup
-32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; the
-k4 cell dispatches two workgroups past its schedule over sentinel map words (`SCHED_NONE`), the
-device-written schedules' upper-bound shape, and every arm's rows still match;
+32 - the cell skips only when the device has neither, so a KHR-only card still runs its arm; every
+arm runs through the prefill's tile ladders (`cell_arm_set` / `cell_arm_enc` over `cm2_cls_*` and
+`khr_cls_*`) in one shared loop (`tile_cell_arms` over a `tile_fixture` - the format's packed planes
+handed in, the activation plane and the device buffers built once - with the arms asked for and the
+format's oracle passed in), which dispatches two workgroups past its schedule over sentinel map
+words (`SCHED_NONE`), the device-written schedules' upper-bound shape, and every arm's rows still
+match; the q8 fmt-0 cells (`q8_planes` for their planes) and the q51 cell run the same loop over
+their own arm lists;
 `test_vkd_ext_roster` asserts, for every entry of the device-init roster (`vk_ext_roster`: every
 Vulkan capability the tier keys a route on, what rides on it), that the entry's presence reads the
 same as the arming field it decides, so the roster's log line and the tier's route cannot

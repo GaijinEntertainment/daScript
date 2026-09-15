@@ -282,3 +282,14 @@ twins' rounding legitimately flips tokens.
 
 **An ASR transcript cell that cannot assert the equality its comparison calls for converts to
 a forced-feed logits compare within a tolerance bar - never to a looser text compare.**
+
+**A function in a file of this folder that requires a module behind `require ?vulkan` never names
+that module's types in its signature - leave a parameter that would carry one untyped, and drop
+a return type that would name one.** A signature cannot sit inside a `static_if`, so a build
+without dasVulkan fails the compile on it.
+
+**A function in a file of this folder that requires a module behind `require ?vulkan`, and that
+has no untyped parameter, names that module's types or calls its functions only inside a
+`static_if (typeinfo builtin_module_exists(vulkan))` body.** A build without dasVulkan infers
+every such body; a function with one untyped parameter is inferred only at a call site, which its
+caller has already guarded.

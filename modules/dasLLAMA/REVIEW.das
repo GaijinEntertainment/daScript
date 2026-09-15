@@ -539,13 +539,14 @@ def private check_image_backing_release {
 
 let private DASLLAMA_DIR = "modules/dasLLAMA/dasllama"
 let private IMAGE_FILE = "modules/dasLLAMA/dasllama/dasllama_image.das"
+let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das"
 
 // The stamp of the layout closure - every Archive serializer body, build_image, parse_image,
-// every *_prepare mint, the layout helpers and the layout constants' declaration lines, hashed
-// in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
+// the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
+// lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 38
-let private IMAGE_LAYOUT_STAMP_HASH = 0xb8b1e09e980b1e2ful
+let private IMAGE_LAYOUT_STAMP_HASH = 0xb3ed0680a8048a57ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, and the header's scalar stores. Changing one
@@ -574,7 +575,8 @@ def private is_meta_serializer(header : string) : bool {
     return is_archive_serializer(header) && find(header, "array<") < 0
 }
 
-def private is_layout_function(header : string) : bool {
+//! the `*_prepare` mints that place image bytes are the TTS block file's (`conv1d_prepare`, `linear_prepare`); a driver's prepare (`vk_rdec_prepare`, `mirror_prepare`) places none
+def private is_layout_function(file : string; header : string) : bool {
     return true if (is_archive_serializer(header))
     var rest = slice(header, 4)
     if (rest |> starts_with("private ")) {
@@ -582,7 +584,7 @@ def private is_layout_function(header : string) : bool {
     }
     let name = ident_prefix(rest)
     return true if (key_exists(LAYOUT_HELPERS, name))
-    return name == "build_image" || name == "parse_image" || find(name, "_prepare") >= 0
+    return name == "build_image" || name == "parse_image" || (find(name, "_prepare") >= 0 && "{DASLLAMA_DIR}/{file}" == TTS_BLOCKS_FILE)
 }
 
 def private read_lf(path : string) : string {
@@ -725,7 +727,7 @@ def private check_image_layout_stamp {
             h = fnv1a("{name}\n{c.body}\n", h)
         }
         var inscope fns <- function_bodies(p) $(header) {
-            return is_layout_function(header)
+            return is_layout_function(name, header)
         }
         for (f in fns) {
             h = fnv1a("{name}\n{f.body}\n", h)
@@ -734,7 +736,7 @@ def private check_image_layout_stamp {
     return if (h == IMAGE_LAYOUT_STAMP_HASH && version == IMAGE_LAYOUT_STAMP_VERSION)
     if (version == IMAGE_LAYOUT_STAMP_VERSION) {
         gate_finding(IMAGE_FILE,
-            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint, the layout helpers pad_to_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
+            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, the layout helpers pad_to_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
     } else {
         gate_finding("modules/dasLLAMA/REVIEW.das",
             "the layout stamp is behind IMAGE_VERSION {version} - re-stamp: IMAGE_LAYOUT_STAMP_HASH = {h}ul, IMAGE_LAYOUT_STAMP_VERSION = {version}")

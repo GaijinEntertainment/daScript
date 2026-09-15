@@ -16,7 +16,7 @@ what it costs today and what the fix would change.
   prefill at 0.33 to 0.82 of llama.cpp b10660's own KHR path (`GGML_VK_DISABLE_COOPMAT2=1`, the
   same card): the attention on the 8-row and 4-row scalar tiles, the E-series' per-layer-embedding
   projection on the CPU, every Q8_0 plane on the q8-fed mul_mm L-tile in one k chunk. Four levers,
-  each pod-confirmed: the KHR flash tile (`FaKhrT`, 16x16x16 fragments; gemma-3-1b's attention
+  each pod-confirmed: the KHR flash tile (now `FaT`'s KHR arm, 16x16x16 fragments; gemma-3-1b's attention
   12578 -> 1857 us a 512-row window, E2B's 37392 -> 3547, the 12B's 83941 -> 5746), the KHR f16 GEMM
   for the projection (`F16GemmKhr`; E2B's window 102 -> 44 ms), q8 on the KHR kq tile through
   `khr_stage16` (E2B's down 14021 -> 5165 us with the split), and the wave model's k chunks on the

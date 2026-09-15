@@ -8,8 +8,9 @@ docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**Weakening any check in the `REVIEW.das` beside this file is a defect.** Each check's error text
-names the rule it enforces; the checklist does not restate them.
+**The Vulkan section of the `REVIEW.das` beside this file holds this checklist's mechanical
+checks: each check's finding text names the rule it enforces, and `REVIEW.md`'s weakening rule
+binds an edit to any of them.**
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - adds every piece of state the family keeps per
@@ -25,7 +26,8 @@ binds it.** The bind site cannot shrink a buffer that was sized wrong.
 dispatches in state that `vk_drop_model_state` does not clear** - hold it in
 `dasllama/dasllama_vulkan_common.das` module state that `vk_drop_model_state` clears.
 
-**Never take a quant byte out of an `unpack8` select in a cm2 decode body or its four-wide twin
+**Never take a quant byte out of an `unpack8` select in a cm2 decode body - the `decode` method
+of a format's `<Fmt>Cm2T` class in `dasllama/dasllama_vulkan_classes.das` - or its four-wide twin
 (`decode_v4`) - load the 16-bit lane from the `int16[N]` block member and shift the byte out,
 and assemble a field that straddles two lanes from those lanes, never from selected bytes.**
 Indexing `unpack8` of a 32-bit word with a runtime value drops the whole kernel off the
@@ -57,19 +59,24 @@ reads, or a device limit - adds that capability to `vk_ext_roster`
 it, or adds the new route to the entry it already has, in the same change.** The device-init log prints the roster, so a box's log
 says which route each capability decided.
 
-**The `coopmatLoadTensor` / `coopmatLoadTensorDecode` coordinate a k loop's counter feeds - `c0` where the contraction runs along columns, `r0` where it runs along rows - starts at
-a literal or at a value rounded down to the loop's step; never at a bare runtime product or a
-buffer-read value.** The shader compiler vectorizes the decode-load only where it can prove the
-coordinate's alignment, and an unproven start runs the same loop at half the rate
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
+**The coordinate a k loop's counter feeds to `coopmatLoadTensor` / `coopmatLoadTensorDecode`
+starts at a literal or at a value rounded down to the loop's step - never at a bare runtime
+product or a buffer-read value.** That coordinate is `c0` where the contraction runs along
+columns, `r0` where it runs along rows. The shader compiler vectorizes the decode-load only
+where it can prove the coordinate's alignment, and an unproven start runs the same loop at half
+the rate (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
 
 **A per-loop hint on a kernel loop in `dasllama/dasllama_vulkan_classes.das` carries a name
 `append_loop_hint_operand` (`modules/dasLLVM/daslib/llvm_jit.das`) knows.** A kernel body compiles
 for the CPU oracle too, and the JIT fails a hint name it does not know.
 
-**A cm2 tile's weight load on its fast path never takes a clamped (`tensorLayout2DPad`) layout.**
-A clamped decode-load runs every tile at a third the speed (`ARCHITECTURE_GPU_VULKAN_GEMM.md`
-sec.2.2l).
+**A cm2 tile - `cm2_tile` of `KqCm2BatchT` in `dasllama/dasllama_vulkan_classes.das`, the
+NV_cooperative_matrix2 GEMM body stamped per weight format, token-column width (`BN`) and k step
+(`BK`) - never loads weights through a clamped (`tensorLayout2DPad`) layout on its fast path - the
+branch it takes when its 128 weight rows fit the plane, the plane's width is a whole number of k
+steps, and its token column is whole or its stamp loads partial columns unclamped (`STILE`); every
+other tile takes the edge path.** A clamped decode-load runs every tile at a third the speed
+(`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
 
 **A weight tile the plane cannot fill starts at the plane's last whole 128 rows, never past the
 plane's end.** The edge path holds the whole dispatch to its partial workgroups, and a load past
@@ -93,9 +100,7 @@ codec no kernel covers silently drops that codec's GPU path.
 
 **A diff that changes the shared `KqCm2BatchT` - its `cm2_tile`, its `run`, or a
 `@template_constant` default declared there - puts every format's probe rows in the PR body, both
-the `DASLLAMA_VK_DECVEC=1` and the `=0` rows.** A cm2 tile is the NV_cooperative_matrix2 GEMM
-class stamped per weight format, token-column width (`BN`) and k step (`BK`) in
-`dasllama/dasllama_vulkan_classes.das`.
+the `DASLLAMA_VK_DECVEC=1` and the `=0` rows.**
 
 **A diff that changes a format's own cm2 tile - its `<Fmt>Cm2T`, a `@template_constant`
 `override`n on a stamp, a stamp's tile typedefs or instance set, or its decode body or four-wide

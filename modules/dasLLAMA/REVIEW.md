@@ -107,11 +107,11 @@ initializer, and its null default is the declared "no hook".
 (`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
 token-exact fixtures.
 
-**A diff that changes a predicate in `dasllama/` picking between kernel forms that both produce
-the right answer, or a constant there chosen by timing two candidates against each other, rests
-on timing that ran both forms interleaved in one process under one instrument, and puts that
-race's rows, each naming its arm, in the PR body.** A reading taken across two processes or two
-commits says which way the wall clock moved, not which implementation to adopt.
+**A diff that changes WHICH kernel form a predicate in `dasllama/` picks - both forms produce the
+right answer - or the VALUE of a constant there that timing two candidates chose, rests on timing
+that ran both candidates interleaved in one process under one instrument, and puts that race's
+rows, each naming its arm, in the PR body.** A reading taken across two processes or two commits
+says which way the wall clock moved, not which implementation to adopt.
 
 **A change to an allocation reached from a load, bake, or convert path (judge a shared helper
 at each call site) that trades footprint against wall-clock, either way, ships the measured
@@ -132,10 +132,10 @@ without first proving both stdin and stdout are terminals is a defect - emit the
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
 **A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside a
-cold one-shot load, bake, map or tokenizer-build progress log and the fat exe's first-start
-kernel race report, is a defect** - instrumentation goes through the
-profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan tier's `vk_prof()`-gated ledgers, or a log
-`g_env_gpu.gpu_prof` - the knob behind `vk_prof()` - gates in `dasllama/dasllama_gpu_resident.das`), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
+cold one-shot load, bake, map or tokenizer-build progress log and the first-start kernel race
+report of a fat exe - one built `DAS_TUNE_MODE=fat`, shipping its tune profile - is a defect** -
+instrumentation goes through the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`,
+the Vulkan tier's `vk_prof()`-gated ledgers and logs in `dasllama/dasllama_gpu_resident.das`), `ARCHITECTURE_MEASUREMENT.md` sec.2.10.
 
 **In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
 flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over
@@ -218,11 +218,11 @@ lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to
 `require ... public` that re-exports an engine module OUT of a file carrying this option,
 beyond what that consumer's ruled charter grants, breaks this rule too.
 
-**Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, rewriting a
-finding text so it no longer names what failed, or adding a name to a check's licensed set -
-the names that check does not flag. A name joins a licensed set only when that check's own
-finding text names the set as its extension point. What the gate enforces is read from the gate
-itself; each check's finding text states its own rule.
+**An edit that stops a `REVIEW.das` (beside this file) check firing without fixing what it
+flagged is a defect:** dropping a check, rewriting a finding text so it no longer names what
+failed, adding a name to a check's licensed set - the names that check does not flag - where that
+check's own finding text does not name the set as its extension point, or re-stamping a pinned
+hash, count or list where that check's own finding text does not sanction the re-stamp; the gate itself says what it enforces.
 
 **A new `REVIEW.das` check, or a check whose licensed set gains a name, ships its line in the
 companion section that owns the mechanism the check guards - an `ARCHITECTURE_*.md` companion,
@@ -240,7 +240,7 @@ pass - updates `HOW_TO_ADD_A_FORMAT.md` in the same change.** The how-to is the 
 author's whole brief: a step dropped there is a step the next format silently skips.
 
 **Legal attribution - a third party's copyright line, licence name, or licence text - lives in
-`THIRD_PARTY_NOTICES.md`, the `LICENSE.*` files, a model card (the provenance-and-licence page
+this folder's `THIRD_PARTY_NOTICES.md`, the `LICENSE.*` files, a model card (the provenance-and-licence page
 published beside a released model or pack), or a ledger row naming a licence as a reason to
 adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a defect.**
 

@@ -1282,10 +1282,7 @@ module) is independent and can land any time - it is pure structure.
     byte-identical to their m twins (only the five grid formats' e stamps differ, in k step) - alias
     the e ladder to the m stamp where they agree, moving the module gate, the census rows and the
     docs together; (2) a MoE layer with a dense triple on the f16 feed converts `pf_xb` to `pf_xf`
-    twice a window - skip the second convert; (3) the module gate's image layout stamp closure hashes
-    every function named `*_prepare` under `dasllama/`, so an edit to the resident decode's
-    `vk_rdec_prepare*` moves the stamp though no image layout moved - narrow the match to the image
-    layout's own prepare functions; (4) `spawn_readonly_fixture`, the lens refusal gate's child
+    twice a window - skip the second convert; (4) `spawn_readonly_fixture`, the lens refusal gate's child
     compile, passes no `-dasroot`, so the gate audits the binary's own tree rather than the tree under
     test - pass the test's root; (5) no cell pins the f16 router route against the f32 router GEMM
     (logits within an f16 bar, the top-k picks equal off near-ties) - an arm in
@@ -1489,7 +1486,7 @@ module) is independent and can land any time - it is pure structure.
     compute equal and the reduce the whole difference). A KHR unit set measured on the `khrsk`
     probe rows (`harness/vk_gemm_probe.das`) is the lever, item 58's per-GEMM pick beside it.
 61. **The KHR tiles' lane maps rest on the device's advertised subgroup size, not a per-pipeline
-    one.** `khr_kq_tile_on` reads `subgroupSize` from the physical device; `FaKhrT` labels its four
+    one.** `khr_kq_tile_on` reads `subgroupSize` from the physical device; `FaT`'s KHR arm labels its four
     16-key bands `tid / 32` and reduces each softmax row over eight lanes with `subgroupShuffleXor`,
     and the KHR kq tile stages by the same rule, while no `fa_khr_*` or `*_khr_cls` pipeline pins
     `requiredSubgroupSize` and `REQUIRE_FULL_SUBGROUPS` is off by default. A driver that picks a
@@ -1498,3 +1495,32 @@ module) is independent and can land any time - it is pure structure.
     answer, not a decline. Item 42's real-hardware pass on such a card is where it shows; the fix
     is the pipeline's `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` at 32 on every KHR
     stamp, or a decline where the device cannot pin it.
+62. **The per-op MoE attention decode fills a stack buffer the fitting plan forwent.** Under
+    `DASLLAMA_COOPMAT=mm` a large MoE declines the resident driver (item 57) and the per-op rails
+    serve it streamed; when the budget is tight the plan logs "the per-op rails serve this MoE
+    without the streamed slot or the decode mirrors the fitting plan forwent - layers the budget
+    stops keep the CPU", yet `vk_moe_attn_dec` still runs and `fill_stack_acts` memcpys the q
+    activation into a decode-attn stack whose host buffer was never allocated: a SIGSEGV at 0x20,
+    a null `HostBuf.mapped`. On the RunPod RTX PRO 4500 `test_parity`'s Qwen3-30B-A3B UD-IQ2_XXS
+    row crashes there under `mm` (its Q4_K_M twin passes; the file predates the KHR arc, master
+    crashes identically), while the default cm2 mode serves the model resident and passes. The
+    fix is at the plan: a layer whose decode GPU state the budget forwent keeps the CPU decode
+    path and never reaches `vk_moe_attn_dec`, or `fill_stack_acts` declines on a null buffer with
+    the reason in the log; either ships a large-tier cell that loads the IQ2_XXS 30B under `mm` and
+    decodes one token.
+63. **Two of the prefill's class pick ladders sit outside the ladders' home.** `REVIEW_PLACEMENT.md`
+    lands a host-side pick ladder over Vulkan kernel classes in `dasllama_vulkan_classes.das`, where
+    `gemv_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*` and `f16_gemm_*` live, while the cm2
+    tile ladder (`cm2_cls_*`, its `khr_cls_*` and `cm2e_cls_*` arms) sits in
+    `dasllama_vulkan_prefill.das`, pinned there by `REVIEW.das`'s `check_cm2_ladder_set`, which reads
+    that file's bodies. Move the nine ladders to the classes file and retarget the check's
+    `function_bodies` and its two findings at `VK_CLASSES` in the same change; the cells, the probe
+    harness and the prefill call them by name, so no caller moves.
+64. **The folded flash template's KHR stamps carry two constants their arm never reads.** `FaT`
+    declares `BC` (the cm2 arm's K/V step) and `GATED` (the cm2 arm's gate multiply), and the
+    head-size templates set `BC` for both arms, so every `fa_khr_*` stamp inherits a `BC` and a
+    `GATED` its compiled `static_if (KHR)` arm ignores - an `override GATED = true` on a KHR leaf
+    compiles to an ungated kernel with no diagnostic, and only the host ladders'
+    `fa_stamp_refuse` keep such a stamp off the device. The arms share one `run` because the
+    SPIR-V emitter emits a method call as an `OpFunction` it never inlines; once the emitter inlines
+    device-side calls, each arm becomes a method on its own template and the constants move with it.

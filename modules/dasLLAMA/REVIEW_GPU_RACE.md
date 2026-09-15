@@ -6,10 +6,14 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEASUREMENT.md`,
 work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
 A race times two implementations of one computation on one queue; a knockout skips a stage to
-measure that stage's cost; an overhead arm times one chain with and without an interposed stage -
-a timestamp, a barrier, a flush - to measure that stage, and is not a race. An arm's ranking is
-decided when a checked-in document, box profile or sidecar records it. An A/B lab is a timing
-script that picks between spellings of one compute.
+measure that stage's cost; an overhead measurement times one chain with and without an interposed
+stage - a timestamp, a barrier, a flush - to measure that stage, and is not a race. An arm is one
+timed implementation in a race, a knockout, or an overhead measurement - never one of the kernel
+variants the shipped code picks between at run time. A retained-reference arm is one ledgered as
+a retained reference in `ARCHITECTURE_GPU.md` sec.2.2b (Metal) or
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan). An arm's ranking is decided when a
+checked-in document, box profile or sidecar records it. An A/B lab is a timing script that picks
+between spellings of one compute.
 
 **A hand-binding arm that binds a field at a position the class does not declare for that field
 is a defect.** A hand-binding arm restates a SHIPPED class's binding numbers instead of naming its
@@ -32,10 +36,9 @@ statement catches a mis-numbered bind before it decides a ranking.
 **A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
 layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
 into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
-deletes, in the same change, every arm that mirrors that kernel's binding order by hand or by
-an ordered setter list and every arm ledgered as a retained reference in `ARCHITECTURE_GPU.md`
-sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan).** An arm
-left dispatching stale geometry measures the wrong kernel silently.
+deletes, in the same change, every arm that mirrors that kernel's binding order by hand or by an
+ordered setter list and every retained-reference arm of that kernel.** An arm left dispatching stale
+geometry measures the wrong kernel silently.
 
 **Race and knockout code inside the engine (`dasllama/`) sits in the file that owns the kernel
 family it races, or - for a knockout - the file that owns the stage whose cost it removes.**
@@ -89,12 +92,9 @@ encoder that leaves gaps between its dispatches times an idle clock.
 
 **A diff that ports an A/B lab's winning variant into a kernel deletes, in the same change, that
 variant's class and any `*_variants.das` code that exists only for it and that neither dispatches
-the shipped kernel class's generated source nor is ledgered as a retained reference in
-`ARCHITECTURE_GPU.md` sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a
-(Vulkan).** A decided arm that outlives its decision degrades into an unmaintained duplicate of
-the kernel it seeded.
+the shipped kernel class's generated source nor is a retained-reference arm.** An arm kept after
+its ranking is decided stops being maintained and duplicates the kernel it was ported into.
 
 **The diff that leaves an A/B lab with no undecided arm, no arm dispatching the shipped kernel
-class's generated source and no arm ledgered as a retained reference in `ARCHITECTURE_GPU.md`
-sec.2.2b (Metal) or `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a (Vulkan) deletes the lab's driver and
-its remaining arms in the same change.**
+class's generated source and no retained-reference arm deletes the lab's driver and its remaining
+arms in the same change.**

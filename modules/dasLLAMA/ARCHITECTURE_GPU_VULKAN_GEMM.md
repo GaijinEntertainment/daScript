@@ -158,8 +158,8 @@ spelling costs 27% of prefill throughput (`benchmarks/lcpp_bench.das` pp512, RTX
 
 ### 2.2m Class-pipeline creation is the Vulkan tier's one shader A/B seat {#vk-class-pipeline-build}
 
-`vkd_class_pipe` is the single place a class kernel's SPIR-V becomes a pipeline, so both shader
-instruments hang there and nothing else has to know about them. The four-wide decode fallback
+`vkd_class_pipe` is the single place a class kernel's SPIR-V becomes a pipeline, so every shader
+instrument hangs there and nothing else has to know about them. The four-wide decode fallback
 hangs there too: when the device carries no `VK_NV_cooperative_matrix_decode_vector`
 (`decvec_on` false) the served words go through `strip_decode_vector` (the capability, the
 extension and every load's `DecodeVectorFunc` operand removed, the scalar callback left to
@@ -167,14 +167,14 @@ serve), after the override and before the shader module, so a dumped or overridd
 always the emitted, unstripped one. The scalar arm makes a MoE prefill window about half again as
 long (the 35B-A3B's 512-row window 160 ms with the twin against 237 without on the RTX 5060 Ti), and
 the tier warns at device init when the driver reports no such extension; which drivers list it,
-and the reference exe's own two arms measured beside ours, are `followup_vulkan.md` item 45. The
-seat is also the in-process A/B: `vkd_pipes_rebuild`
-marks every class slot stale, so the next ensure rebuilds it under whatever `decvec_on` says,
-which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
+and the reference exe's own two arms measured beside ours, are `followup_vulkan.md` item 45. The seat
+is also the in-process A/B: `vkd_pipes_rebuild` marks every class slot stale, so the next ensure
+rebuilds it under whatever `decvec_on` says, which is how the `cm2:<fmt>` probe runs both arms interleaved in one process.
 
-**The dump runs before the override:** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the EMITTED words as
-`<dir>/<kernel>.spv` and `DASLLAMA_VK_SPV_OVERRIDE=<dir>` then serves that directory's file - a round
-trip (dump, edit or spirv-opt, serve back) a dump taken after the override would not give.
+**The dump and the keeping seam run before the override:** `DASLLAMA_VK_SPV_DUMP=<dir>` writes the
+EMITTED words as `<dir>/<kernel>.spv`, `g_vkd_spv_keep` keeps the same words in `g_vkd_spv_kept` under
+the kernel's name for the kernel cells, and `DASLLAMA_VK_SPV_OVERRIDE=<dir>` then serves that directory's
+file - a round trip (dump, edit or spirv-opt, serve back) a dump taken after the override would not give.
 
 **Full subgroups are a whole-run arm, never a per-pipeline one.** `DASLLAMA_VK_FULLSG` plus a
 device that reports the feature sets `g_gpu.full_sg_on` once at device init, and every class
