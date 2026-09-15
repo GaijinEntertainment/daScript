@@ -78,7 +78,7 @@ class CursorVisitor : AstVisitor {
         return find(string(at.fileInfo.name), targetFile) >= 0
     }
 
-    // a variable's position is its name token; a position with no width is sized by the name
+    [arch(at="ARCHITECTURE.md#cursor-variable-position")]
     def cursor_on_variable(v : Variable const?) : bool {
         let at = v.at
         return false if (int(at.line) != targetLine)
@@ -138,9 +138,6 @@ class CursorVisitor : AstVisitor {
     }
 }
 
-//! the size of an expression's span, lines first: a nested expression always has the
-//! smaller one, whichever function the visitor met first - a lambda or generator body is a
-//! function of its own, visited before the function whose source it sits in
 def private span_size(hit : CursorHit) : int2 {
     if (hit.expr == null) {
         return int2(0, length(hit.name))
@@ -149,8 +146,8 @@ def private span_size(hit : CursorHit) : int2 {
     return int2(int(at.last_line) - int(at.line), int(at.last_column) - int(at.column))
 }
 
-//! hits innermost first: by span, and within one span the later-visited (deeper) node first
-def private reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
+//! by span; within one span the later-visited (deeper) node first
+def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
     var order : array<int>
     order |> reserve(length(src))
     for (i in range(length(src))) {
@@ -180,7 +177,7 @@ def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col
     make_visitor(*visitor) $(adapter) {
         visit(program, adapter)
     }
-    var result <- reverse_hits(visitor.hits)
+    var result <- innermost_first(visitor.hits)
     unsafe {
         delete visitor
     }
@@ -196,7 +193,7 @@ def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, c
     make_visitor(*visitor) $(adapter) {
         visit(func, adapter)
     }
-    var result <- reverse_hits(visitor.hits)
+    var result <- innermost_first(visitor.hits)
     unsafe {
         delete visitor
     }

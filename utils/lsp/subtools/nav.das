@@ -477,7 +477,6 @@ def private run_hover(file : string; line0, char16 : int; project : string) : Ho
             return
         }
         let hits <- find_at_cursor(program, file, line, col, true)
-        // innermost hit that carries a name or a type; fall back to the innermost source hit
         var first = -1
         var pick = -1
         for (idx in range(length(hits))) {
@@ -703,8 +702,7 @@ def private spells_name(file : string; line, column : int; name : string) : bool
     return word_at_cursor(file, line, column, start) == name && start == column
 }
 
-//! the byte column where `name` stands as a whole word on the line, `hint` when it does not:
-//! a Structure's own position is one column before its name
+//! the byte column where `name` stands as a whole word on the line, `hint` when it does not
 def private name_column(file : string; line, hint : int; name : string) : int {
     var column = hint
     with_file_lines(file) $(lines) {
@@ -727,8 +725,6 @@ def private name_column(file : string; line, hint : int; name : string) : int {
     return column
 }
 
-//! a type reference the compiler placed where the source does not spell the type - the
-//! implicit `self` of every method carries its class - is not a site to list
 def private phantom_type_ref(target : RefTarget; r : RawRef) : bool {
     return false if (target.kind != RefTargetKind.structure && target.kind != RefTargetKind.enumeration && target.kind != RefTargetKind.alias)
     return !spells_name(r.file, r.line, r.column, target.name)
@@ -759,10 +755,7 @@ struct DeclHit {
     word_column : int   //! where the cursor's identifier starts on its line
 }
 
-//! the declaration whose name token the cursor is on - a function, a structure or the parent
-//! named on its `class` line, an enumeration, an alias, a global. Declarations are not
-//! expressions, so find_at_cursor misses them and sees only the generated members every class
-//! carries at its line, which is how a class name used to resolve to `X'__finalize`
+//! a declaration is not an expression: find_at_cursor never answers one, so a cursor op asks here first
 def private declaration_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : DeclHit {
     var hit : DeclHit
     let word = word_at_cursor(file, line, col, hit.word_column)
@@ -829,8 +822,7 @@ def private declaration_at_cursor(program : smart_ptr<Program>; file : string; l
     return hit
 }
 
-//! the name the source spells: a generator's loop variable becomes a state field the
-//! compiler names `__<name>_rename_at_<line>_<column>`
+//! the name the source spells: a generator's loop variable becomes `__<name>_rename_at_<line>_<column>`
 def private source_name(name : string) : string {
     return name if (!(name |> starts_with("__")))
     let at = find(name, "_rename_at_")
@@ -845,8 +837,6 @@ def private kind_word(kind : RefTargetKind) : string {
     return "variable"
 }
 
-//! a hit inside a compiler-generated member, or on a compiler-made variable such as the
-//! `__this` a lambda reads its captures through, is not source the cursor can be on
 def private in_synthesized(hit : CursorHit) : bool {
     return true if (hit.func != null && is_synthesized(hit.func))
     if (hit.expr != null && hit.expr is ExprVar) {
@@ -885,7 +875,7 @@ class RefVisitor : AstVisitor {
         return fun
     }
 
-    //! a derived class names its parent on its own line - a parent link, not a TypeDecl
+    // a derived class names its parent on its own line - a parent link, not a TypeDecl
     def override preVisitStructure(str : StructurePtr) : void {
         return if (target.kind != RefTargetKind.structure || str.parent == null || to_void(str.parent) != target.target_ptr)
         let file = lineinfo_file(str.at)
@@ -1257,8 +1247,7 @@ def private bare_function_name(name : string) : string {
 
 // compiler-synthesized members (Foo'__finalize etc.) sit on the `class` line
 // but aren't all flagged `generated`; user identifiers can't contain ' —
-// skip both or a cursor on a class name resolves to the finalizer. A lambda or
-// generator body is flagged `generated` too and is the user's own code
+// skip both or a cursor on a class name resolves to the finalizer
 def private is_synthesized(func : Function const?) : bool {
     return true if (func.flags.generated && !func.flags._lambda && !func.flags._generator && func.fromGeneric == null)
     var has_tick = false

@@ -18,8 +18,10 @@ require uriparser
 //! path), didChange back to clean (empty publish), a definition request, the
 //! call-hierarchy loop (prepare -> incomingCalls with the item's data
 //! round-tripped verbatim -> outgoingCalls from the returned caller item),
-//! an implementation request (base method -> derived override), and
-//! shutdown/exit.
+//! an implementation request (base method -> derived override), hover / definition /
+//! references on declarations (a class name, its parent, a user finalizer, a lambda's
+//! argument and capture, a for loop variable), and shutdown/exit. Every frame header
+//! is checked byte-exact.
 
 // ===== outgoing LSP messages (sprint_json envelopes) =====
 
@@ -163,8 +165,7 @@ def private write_frame(w : file; body : string) {
 }
 
 //! one Content-Length frame -> parsed JSON; null on EOF / bad frame. Header lines are checked
-//! byte-exact: the pipe is binary on every platform, and a front writing through a text-mode
-//! stdout on Windows sends `\r\r\n`, which no client's reader ever matches as a terminator
+//! byte-exact: the pipe is binary on every platform, and a text-mode stdout on Windows sends \r\r\n
 def private read_frame(t : T?; r : file) : JsonValue? {
     var content_length = 0
     while (true) {
@@ -264,6 +265,48 @@ def private uri_for_compare(uri : string) : string {
     // Windows paths are case-insensitive, and pathlib.resolve() may return
     // different component casing than get_das_root() for the same file.
     return get_platform_name() == "windows" ? to_lower(uri) : uri
+}
+
+struct HoverProbe {
+    text : string
+    line : int
+    character : int
+}
+
+//! one hover round trip: the markdown text and the start of the returned range
+def private probe_hover(t : T?; w, r : file; id : int; uri : string; line, character : int) : HoverProbe {
+    write_frame(w, sprint_json(CursorRequestMsg(id = id, method = "textDocument/hover",
+        params = CursorParams(textDocument = DocId(uri = uri), position = Position0(line = line, character = character))), false))
+    let resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == id
+    return HoverProbe(text = resp?["result"]?["contents"]?["value"] ?? "",
+        line = resp?["result"]?["range"]?["start"]?["line"] ?? -1,
+        character = resp?["result"]?["range"]?["start"]?["character"] ?? -1)
+}
+
+//! one definition round trip: the start of the first location, (-1, -1) when there is none
+def private probe_definition(t : T?; w, r : file; id : int; uri : string; line, character : int) : int2 {
+    write_frame(w, sprint_json(DefinitionMsg(id = id, params = CursorParams(
+        textDocument = DocId(uri = uri), position = Position0(line = line, character = character))), false))
+    let resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == id
+    let loc = resp?["result"]?[0]
+    return int2(loc?["range"]?["start"]?["line"] ?? -1, loc?["range"]?["start"]?["character"] ?? -1)
+}
+
+//! one references round trip with the declaration included: every location as "line:character"
+def private probe_references(t : T?; w, r : file; id : int; uri : string; line, character : int) : array<string> {
+    write_frame(w, sprint_json(ReferencesMsg(id = id, params = ReferencesParams(
+        textDocument = DocId(uri = uri), position = Position0(line = line, character = character),
+        context = ReferenceContext(includeDeclaration = true))), false))
+    let resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == id
+    var keys : array<string>
+    let arr = resp?["result"]
+    if (arr != null && arr.value is _array) {
+        keys |> reserve(length(arr.value as _array))
+        for (loc in arr.value as _array) {
+            keys |> push("{loc?["range"]?["start"]?["line"] ?? -1}:{loc?["range"]?["start"]?["character"] ?? -1}")
+        }
+    }
+    return <- keys
 }
 
 // ===== the test =====
@@ -494,140 +537,52 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 t |> equal(impl0?["range"]?["start"]?["line"] ?? -1, derived_speak_line0)
                 t |> equal(impl0?["range"]?["start"]?["character"] ?? -1, derived_speak_char)
 
-                // a class name is a declaration, not an expression: hover names the class, never
-                // the synthesized finalizer that shares its line; the parent's name on that line
-                // hovers and navigates as the parent; a user-written finalizer hovers as itself
-                write_frame(w, sprint_json(CursorRequestMsg(id = 8, method = "textDocument/hover",
-                    params = CursorParams(textDocument = DocId(uri = uri),
-                        position = Position0(line = final_line0, character = 8))), false))
-                let hover_class = read_until(t, r) $(js) => (js?["id"] ?? -1) == 8
-                let class_text = hover_class?["result"]?["contents"]?["value"] ?? ""
-                t |> success(class_text |> find("class LspProbeFinal : LspProbeBase") >= 0, "hover on a class name shows the class: {class_text}")
-                t |> success(class_text |> find("__finalize") < 0, "hover on a class name is not the synthesized finalizer: {class_text}")
-                t |> equal(hover_class?["result"]?["range"]?["start"]?["line"] ?? -1, final_line0)
-                t |> equal(hover_class?["result"]?["range"]?["start"]?["character"] ?? -1, 6)
+                let hover_class = probe_hover(t, w, r, 8, uri, final_line0, 8)
+                t |> success(hover_class.text |> find("class LspProbeFinal : LspProbeBase") >= 0, "hover on a class name shows the class: {hover_class.text}")
+                t |> success(hover_class.text |> find("__finalize") < 0, "hover on a class name is not the synthesized finalizer: {hover_class.text}")
+                t |> equal(hover_class.line, final_line0)
+                t |> equal(hover_class.character, 6)
 
-                write_frame(w, sprint_json(CursorRequestMsg(id = 9, method = "textDocument/hover",
-                    params = CursorParams(textDocument = DocId(uri = uri),
-                        position = Position0(line = final_line0, character = final_parent_char + 2))), false))
-                let hover_parent = read_until(t, r) $(js) => (js?["id"] ?? -1) == 9
-                let parent_text = hover_parent?["result"]?["contents"]?["value"] ?? ""
-                t |> success(parent_text |> find("class LspProbeBase") >= 0, "hover on the parent name shows the parent: {parent_text}")
-                t |> equal(hover_parent?["result"]?["range"]?["start"]?["character"] ?? -1, final_parent_char)
+                let hover_parent = probe_hover(t, w, r, 9, uri, final_line0, final_parent_char + 2)
+                t |> success(hover_parent.text |> find("class LspProbeBase") >= 0, "hover on the parent name shows the parent: {hover_parent.text}")
+                t |> equal(hover_parent.character, final_parent_char)
+                t |> equal(probe_definition(t, w, r, 10, uri, final_line0, final_parent_char + 2), int2(base_line0, 6), "definition of the parent name lands on the parent class")
 
-                write_frame(w, sprint_json(DefinitionMsg(id = 10, params = CursorParams(
-                    textDocument = DocId(uri = uri),
-                    position = Position0(line = final_line0, character = final_parent_char + 2))), false))
-                let parent_def = read_until(t, r) $(js) => (js?["id"] ?? -1) == 10
-                let parent_loc = parent_def?["result"]?[0]
-                t |> equal(parent_loc?["range"]?["start"]?["line"] ?? -1, base_line0)
-                t |> equal(parent_loc?["range"]?["start"]?["character"] ?? -1, 6)
+                let hover_final = probe_hover(t, w, r, 11, uri, finalize_line0, 10)
+                t |> success(hover_final.text |> find("def finalize(self : LspProbeFinal") >= 0, "hover on a user finalizer shows it: {hover_final.text}")
+                t |> success(hover_final.text |> find("__finalize") < 0, "hover on a user finalizer is not the synthesized one: {hover_final.text}")
+                t |> equal(hover_final.character, 8)
 
-                write_frame(w, sprint_json(CursorRequestMsg(id = 11, method = "textDocument/hover",
-                    params = CursorParams(textDocument = DocId(uri = uri),
-                        position = Position0(line = finalize_line0, character = 10))), false))
-                let hover_final = read_until(t, r) $(js) => (js?["id"] ?? -1) == 11
-                let final_text = hover_final?["result"]?["contents"]?["value"] ?? ""
-                t |> success(final_text |> find("def finalize(self : LspProbeFinal") >= 0, "hover on a user finalizer shows it: {final_text}")
-                t |> success(final_text |> find("__finalize") < 0, "hover on a user finalizer is not the synthesized one: {final_text}")
-                t |> equal(hover_final?["result"]?["range"]?["start"]?["character"] ?? -1, 8)
-
-                // references to the class: its declaration once and its `new` site, nothing
-                // from the members the compiler generated on the class line
-                write_frame(w, sprint_json(ReferencesMsg(id = 12, params = ReferencesParams(
-                    textDocument = DocId(uri = uri),
-                    position = Position0(line = final_line0, character = 8),
-                    context = ReferenceContext(includeDeclaration = true))), false))
-                let refs_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 12
-                var ref_keys : array<string>
-                let refs_arr = refs_resp?["result"]
-                if (refs_arr != null && refs_arr.value is _array) {
-                    for (loc in refs_arr.value as _array) {
-                        ref_keys |> push("{loc?["range"]?["start"]?["line"] ?? -1}:{loc?["range"]?["start"]?["character"] ?? -1}")
-                    }
-                }
+                let ref_keys <- probe_references(t, w, r, 12, uri, final_line0, 8)
                 t |> equal(length(ref_keys), 2, "references to a class: declaration + new site, got {ref_keys}")
                 t |> success(ref_keys |> find_index("{final_line0}:6") >= 0, "references include the declaration once")
                 t |> success(ref_keys |> find_index("{new_final_line0}:{new_final_char}") >= 0, "references include the new site")
 
-                // references to the base class: its declaration and the parent mention on each
-                // derived class line; the implicit `self` of its method is not a site
-                write_frame(w, sprint_json(ReferencesMsg(id = 13, params = ReferencesParams(
-                    textDocument = DocId(uri = uri),
-                    position = Position0(line = base_line0, character = 8),
-                    context = ReferenceContext(includeDeclaration = true))), false))
-                let base_refs = read_until(t, r) $(js) => (js?["id"] ?? -1) == 13
-                var base_keys : array<string>
-                let base_arr = base_refs?["result"]
-                if (base_arr != null && base_arr.value is _array) {
-                    for (loc in base_arr.value as _array) {
-                        base_keys |> push("{loc?["range"]?["start"]?["line"] ?? -1}:{loc?["range"]?["start"]?["character"] ?? -1}")
-                    }
-                }
+                let base_keys <- probe_references(t, w, r, 13, uri, base_line0, 8)
                 t |> equal(length(base_keys), 3, "references to a base class: declaration + two derived-class lines, got {base_keys}")
                 t |> success(base_keys |> find_index("{base_line0}:6") >= 0, "base references include the declaration")
                 t |> success(base_keys |> find_index("{derived_line0}:{derived_parent_char}") >= 0, "base references include the first derived class line")
                 t |> success(base_keys |> find_index("{final_line0}:{final_parent_char}") >= 0, "base references include the second derived class line")
 
-                // a lambda body is a function of its own, visited before the function it sits
-                // in: hover inside it answers the body's own expressions, and a capture reads
-                // as the captured variable, not the `__this` the compiler routes it through
-                write_frame(w, sprint_json(CursorRequestMsg(id = 14, method = "textDocument/hover",
-                    params = CursorParams(textDocument = DocId(uri = uri),
-                        position = Position0(line = lambda_line0, character = lambda_body_char))), false))
-                let hover_arg = read_until(t, r) $(js) => (js?["id"] ?? -1) == 14
-                let arg_text = hover_arg?["result"]?["contents"]?["value"] ?? ""
-                t |> success(arg_text |> find("x : int") >= 0, "hover on a lambda argument inside its body: {arg_text}")
-                write_frame(w, sprint_json(CursorRequestMsg(id = 15, method = "textDocument/hover",
-                    params = CursorParams(textDocument = DocId(uri = uri),
-                        position = Position0(line = lambda_line0, character = lambda_body_char + 4))), false))
-                let hover_cap = read_until(t, r) $(js) => (js?["id"] ?? -1) == 15
-                let cap_text = hover_cap?["result"]?["contents"]?["value"] ?? ""
-                t |> success(cap_text |> find("base : int") >= 0, "hover on a captured variable inside a lambda: {cap_text}")
-                t |> success(cap_text |> find("__this") < 0, "a capture is not the lambda's __this: {cap_text}")
+                let hover_arg = probe_hover(t, w, r, 14, uri, lambda_line0, lambda_body_char)
+                t |> success(hover_arg.text |> find("x : int") >= 0, "hover on a lambda argument inside its body: {hover_arg.text}")
+                let hover_cap = probe_hover(t, w, r, 15, uri, lambda_line0, lambda_body_char + 4)
+                t |> success(hover_cap.text |> find("base : int") >= 0, "hover on a captured variable inside a lambda: {hover_cap.text}")
+                t |> success(hover_cap.text |> find("__this") < 0, "a capture is not the lambda's __this: {hover_cap.text}")
 
-                // a variable's declaration is not an expression: the cursor on a `for` loop
-                // variable or a lambda argument in its header hovers as the variable, a use in
-                // the body navigates to the header, and references pair the two
-                write_frame(w, sprint_json(CursorRequestMsg(id = 16, method = "textDocument/hover",
-                    params = CursorParams(textDocument = DocId(uri = uri),
-                        position = Position0(line = for_line0, character = for_char))), false))
-                let hover_for = read_until(t, r) $(js) => (js?["id"] ?? -1) == 16
-                let for_text = hover_for?["result"]?["contents"]?["value"] ?? ""
-                t |> success(for_text |> find("i : int") >= 0, "hover on a for loop variable: {for_text}")
-                t |> equal(hover_for?["result"]?["range"]?["start"]?["character"] ?? -1, for_char)
+                let hover_for = probe_hover(t, w, r, 16, uri, for_line0, for_char)
+                t |> success(hover_for.text |> find("i : int") >= 0, "hover on a for loop variable: {hover_for.text}")
+                t |> equal(hover_for.character, for_char)
+                t |> equal(probe_definition(t, w, r, 17, uri, for_use_line0, for_use_char), int2(for_line0, for_char), "definition of a loop variable's use lands on the header")
 
-                write_frame(w, sprint_json(DefinitionMsg(id = 17, params = CursorParams(
-                    textDocument = DocId(uri = uri),
-                    position = Position0(line = for_use_line0, character = for_use_char))), false))
-                let for_def = read_until(t, r) $(js) => (js?["id"] ?? -1) == 17
-                let for_loc = for_def?["result"]?[0]
-                t |> equal(for_loc?["range"]?["start"]?["line"] ?? -1, for_line0)
-                t |> equal(for_loc?["range"]?["start"]?["character"] ?? -1, for_char)
-
-                write_frame(w, sprint_json(ReferencesMsg(id = 18, params = ReferencesParams(
-                    textDocument = DocId(uri = uri),
-                    position = Position0(line = for_line0, character = for_char),
-                    context = ReferenceContext(includeDeclaration = true))), false))
-                let for_refs = read_until(t, r) $(js) => (js?["id"] ?? -1) == 18
-                var for_keys : array<string>
-                let for_arr = for_refs?["result"]
-                if (for_arr != null && for_arr.value is _array) {
-                    for (loc in for_arr.value as _array) {
-                        for_keys |> push("{loc?["range"]?["start"]?["line"] ?? -1}:{loc?["range"]?["start"]?["character"] ?? -1}")
-                    }
-                }
+                let for_keys <- probe_references(t, w, r, 18, uri, for_line0, for_char)
                 t |> equal(length(for_keys), 2, "references to a for loop variable: header + body use, got {for_keys}")
                 t |> success(for_keys |> find_index("{for_line0}:{for_char}") >= 0, "for references include the header")
                 t |> success(for_keys |> find_index("{for_use_line0}:{for_use_char}") >= 0, "for references include the body use")
 
-                write_frame(w, sprint_json(CursorRequestMsg(id = 19, method = "textDocument/hover",
-                    params = CursorParams(textDocument = DocId(uri = uri),
-                        position = Position0(line = lambda_line0, character = lambda_arg_char))), false))
-                let hover_larg = read_until(t, r) $(js) => (js?["id"] ?? -1) == 19
-                let larg_text = hover_larg?["result"]?["contents"]?["value"] ?? ""
-                t |> success(larg_text |> find("x : int") >= 0, "hover on a lambda argument in its header: {larg_text}")
-                t |> equal(hover_larg?["result"]?["range"]?["start"]?["character"] ?? -1, lambda_arg_char)
+                let hover_larg = probe_hover(t, w, r, 19, uri, lambda_line0, lambda_arg_char)
+                t |> success(hover_larg.text |> find("x : int") >= 0, "hover on a lambda argument in its header: {hover_larg.text}")
+                t |> equal(hover_larg.character, lambda_arg_char)
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))
