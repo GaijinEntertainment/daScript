@@ -312,7 +312,7 @@ def private probe_references(t : T?; w, r : file; id : int; uri : string; line, 
 // ===== the test =====
 
 [test]
-def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on one pipe; splitting it breaks the request/response choreography
+def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP session on one pipe; splitting it breaks the request/response choreography
     let fixture = path_join(get_das_root(), "tests/lsp/_fixture_clean.das")
     let clean = fread(fixture)
     let broken = replace(clean, "    lsp_probe_helper()", "    zzz(1)\n    lsp_probe_helper()")
@@ -345,6 +345,20 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     var generic_line0 = -1
     var generic_name_char = -1
     var generic_call_char = -1
+    var enum_line0 = -1
+    var enum_char = -1
+    var enum_use_line0 = -1
+    var enum_use_char = -1
+    var typedef_line0 = -1
+    var typedef_char = -1
+    var global_line0 = -1
+    var global_char = -1
+    var global_use_line0 = -1
+    var global_use_char = -1
+    var yield_line0 = -1
+    var yield_char = -1
+    var let_base_line0 = -1
+    var let_base_char = -1
     var for_line0 = -1
     var for_char = -1
     var for_use_line0 = -1
@@ -389,6 +403,27 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
             generic_line0 = i
             generic_name_char = find(clean_lines[i], "lsp_probe_generic")
             generic_call_char = find(clean_lines[i], "lsp_probe_generic(n - 1)")
+        } elif (clean_lines[i] |> starts_with("enum LspProbeColor")) {
+            enum_line0 = i
+            enum_char = find(clean_lines[i], "LspProbeColor")
+        } elif (clean_lines[i] |> starts_with("    pair.first = int(LspProbeColor")) {
+            enum_use_line0 = i
+            enum_use_char = find(clean_lines[i], "LspProbeColor")
+        } elif (clean_lines[i] |> starts_with("typedef LspProbePair")) {
+            typedef_line0 = i
+            typedef_char = find(clean_lines[i], "LspProbePair")
+        } elif (clean_lines[i] |> starts_with("let LSP_PROBE_LIMIT")) {
+            global_line0 = i
+            global_char = find(clean_lines[i], "LSP_PROBE_LIMIT")
+        } elif (clean_lines[i] |> starts_with("        for (i in range(LSP_PROBE_LIMIT")) {
+            global_use_line0 = i
+            global_use_char = find(clean_lines[i], "LSP_PROBE_LIMIT")
+        } elif (clean_lines[i] |> starts_with("            yield i")) {
+            yield_line0 = i
+            yield_char = find(clean_lines[i], "yield i") + 6
+        } elif (clean_lines[i] |> starts_with("    let base = 10")) {
+            let_base_line0 = i
+            let_base_char = find(clean_lines[i], "base")
         } elif (clean_lines[i] |> starts_with("    for (i in range")) {
             for_line0 = i
             for_char = find(clean_lines[i], "i in")
@@ -405,7 +440,9 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     t |> success(for_line0 >= 0 && for_use_line0 >= 0, "fixture contains the for loop and its body use")
     t |> success(self_line0 >= 0 && self_call_char > self_name_char, "fixture contains the one-line self-calling function")
     t |> success(generic_line0 >= 0 && generic_call_char > generic_name_char, "fixture contains the one-line self-calling generic")
-    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0 || for_line0 < 0 || for_use_line0 < 0 || self_line0 < 0 || generic_line0 < 0)
+    t |> success(enum_line0 >= 0 && enum_use_line0 >= 0 && typedef_line0 >= 0 && global_line0 >= 0 && global_use_line0 >= 0 && yield_line0 >= 0 && let_base_line0 >= 0, "fixture contains the enum, typedef, global, generator and let probes")
+    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0 || for_line0 < 0 || for_use_line0 < 0 || self_line0 < 0 || generic_line0 < 0 ||
+        enum_line0 < 0 || enum_use_line0 < 0 || typedef_line0 < 0 || global_line0 < 0 || global_use_line0 < 0 || yield_line0 < 0 || let_base_line0 < 0)
     let uri = path_to_uri(fixture)
 
     for (host in front_hosts()) {
@@ -609,6 +646,33 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 // a call of the function on its own def line is a call, not the declaration
                 t |> equal(probe_definition(t, w, r, 20, uri, self_line0, self_call_char + 2), int2(self_line0, self_name_char), "definition of a same-line self-call lands on the name in the def")
                 t |> equal(probe_definition(t, w, r, 21, uri, generic_line0, generic_call_char + 2), int2(generic_line0, generic_name_char), "definition of a same-line self-call in a generic lands on the name in the def")
+
+                // the other declaration kinds: an enum, a typedef, a module-level let; a cursor in
+                // the middle of a declared name; a generator's loop variable under its source name
+                let hover_enum = probe_hover(t, w, r, 22, uri, enum_line0, enum_char + 2)
+                t |> success(hover_enum.text |> find("enum LspProbeColor") >= 0, "hover on an enum name: {hover_enum.text}")
+                t |> equal(hover_enum.character, enum_char)
+                let hover_typedef = probe_hover(t, w, r, 23, uri, typedef_line0, typedef_char + 2)
+                t |> success(hover_typedef.text |> find("typedef LspProbePair = tuple") >= 0, "hover on a typedef name: {hover_typedef.text}")
+                t |> equal(hover_typedef.character, typedef_char)
+                let hover_global = probe_hover(t, w, r, 24, uri, global_line0, global_char + 2)
+                t |> success(hover_global.text |> find("LSP_PROBE_LIMIT : int") >= 0, "hover on a global's declaration: {hover_global.text}")
+                t |> equal(hover_global.character, global_char)
+                let hover_yield = probe_hover(t, w, r, 25, uri, yield_line0, yield_char)
+                t |> success(hover_yield.text |> find("i : int") >= 0, "hover on a generator's loop variable: {hover_yield.text}")
+                t |> success(hover_yield.text |> find("_rename_at_") < 0, "a generator's loop variable shows its source name: {hover_yield.text}")
+                let hover_mid = probe_hover(t, w, r, 26, uri, let_base_line0, let_base_char + 2)
+                t |> success(hover_mid.text |> find("base : int") >= 0, "hover in the middle of a let variable's name: {hover_mid.text}")
+                t |> equal(hover_mid.character, let_base_char)
+
+                let enum_keys <- probe_references(t, w, r, 27, uri, enum_line0, enum_char + 2)
+                t |> equal(length(enum_keys), 2, "references to an enum: declaration + its use, got {enum_keys}")
+                t |> success(enum_keys |> find_index("{enum_line0}:{enum_char}") >= 0, "enum references include the declaration")
+                t |> success(enum_keys |> find_index("{enum_use_line0}:{enum_use_char}") >= 0, "enum references include the use")
+                let global_keys <- probe_references(t, w, r, 28, uri, global_line0, global_char + 2)
+                t |> equal(length(global_keys), 2, "references to a global: declaration + its use, got {global_keys}")
+                t |> success(global_keys |> find_index("{global_use_line0}:{global_use_char}") >= 0, "global references include the use inside the generator")
+                t |> equal(probe_definition(t, w, r, 29, uri, enum_use_line0, enum_use_char + 2), int2(enum_line0, enum_char), "definition of an enum use lands on the enum")
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))

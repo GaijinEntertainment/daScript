@@ -27,6 +27,24 @@ def lsp_probe_self(n : int) : int => n > 0 ? lsp_probe_self(n - 1) : 0
 
 def lsp_probe_generic(n : auto) : int => n > 0 ? lsp_probe_generic(n - 1) : 0
 
+enum LspProbeColor {
+    red
+    green
+}
+
+typedef LspProbePair = tuple<first : int; second : int>
+
+let LSP_PROBE_LIMIT = 3
+
+def lsp_probe_gen() : iterator<int> {
+    return <- generator<int>() <| $() {   // nolint:STYLE002 a generator's block parses in the piped form only
+        for (i in range(LSP_PROBE_LIMIT)) {
+            yield i
+        }
+        return false
+    }
+}
+
 [export]
 def main() {
     lsp_probe_helper()
@@ -41,4 +59,10 @@ def main() {
         print("{i}\n")
     }
     print("{lsp_probe_self(2) + lsp_probe_generic(2)}\n")
+    var pair : LspProbePair
+    pair.first = int(LspProbeColor.green)
+    for (g in lsp_probe_gen()) {
+        pair.second += g
+    }
+    print("{pair.first} {pair.second}\n")
 }
