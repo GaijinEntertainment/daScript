@@ -1602,9 +1602,9 @@ def public matmul_moe_gpu_ffn_combined_xf_join(var gout : array<float>) {
 // The tier keeps a per-layer f16 K/V mirror the prefill chain fills; a served token returns the
 // wo row plus its RAW k and v rows (f32, before norm and rope) so the host re-derives its cache row.
 typedef MoeGpuAttnDecFn = function<(var xb2p : float?; var kp : float?; var vp : float?; woq : int64; wok : int64; wov : int64; woo : int64; fq : int; fk : int; fv : int; fo : int; xqp : int8 const?; xsp : float const?; cosp : float const?; rmsqp : float const?; rmskp : float const?; bqp : float const?; bkp : float const?; bvp : float const?; pos : int64; dim : int64; qd : int64; kvd : int64; hs : int64; n_heads : int64; kv_mul : int64; scale : float; eps : float; neox : bool; qk_norm : bool) : void>
-typedef MoeGpuAttnDecOkFn = function<(woq : int64; pos : int64; gen : int64) : int>
+typedef MoeGpuAttnDecOkFn = function<(woq : int64; fq : int; pos : int64; gen : int64) : int>
 typedef MoeGpuAttnDecClaimFn = function<(fresh : bool) : int64>
-typedef MoeGpuAttnDecHydrateFn = function<(woq : int64; kp : uint8 const?; vp : uint8 const?; npos : int64; kvd : int64; f16 : bool) : void>
+typedef MoeGpuAttnDecHydrateFn = function<(woq : int64; fq : int; kp : uint8 const?; vp : uint8 const?; npos : int64; kvd : int64; f16 : bool) : void>
 // MoeGpuAttnDecOkFn's answers
 let DAT_SERVE = 0        // the layer's mirror holds exactly [0, pos) of the session's generation
 let DAT_STALE_GEN = 1    // the session's generation is not the mirrors' - claim fresh at layer 0
@@ -1619,14 +1619,14 @@ def private moe_gpu_unset_attn_dec(var xb2p : float?; var kp : float?; var vp : 
     panic("dasLLAMA: GPU decode attention hit without an installed block")
 }
 
-[unused_argument(woq, pos, gen)]
-def private moe_gpu_no_attn_dec(woq, pos, gen : int64) : int => DAT_NEVER
+[unused_argument(woq, fq, pos, gen)]
+def private moe_gpu_no_attn_dec(woq : int64; fq : int; pos, gen : int64) : int => DAT_NEVER
 
 [unused_argument(fresh)]
 def private moe_gpu_noop_attn_dec_claim(fresh : bool) : int64 => 0l
 
-[unused_argument(woq, kp, vp, npos, kvd, f16)]
-def private moe_gpu_unset_attn_dec_hydrate(woq : int64; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
+[unused_argument(woq, fq, kp, vp, npos, kvd, f16)]
+def private moe_gpu_unset_attn_dec_hydrate(woq : int64; fq : int; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
     panic("dasLLAMA: GPU decode attention hydrate hit without an installed block")
 }
 
@@ -1646,8 +1646,8 @@ def public set_moe_gpu_attn_dec_hooks(dec : MoeGpuAttnDecFn; ok : MoeGpuAttnDecO
 //! Refill one layer's mirror with the host cache's K/V rows [0, npos) - f32 rows (converted) or
 //! f16 rows (copied) - for a session reaching the block mid-sequence or after a rewind; npos = 0
 //! empties it. The layer then holds exactly those positions.
-def public matmul_moe_gpu_attn_dec_hydrate(woq : int64; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
-    invoke(g_moe_gpu_attn_dec_hydrate, woq, kp, vp, npos, kvd, f16)
+def public matmul_moe_gpu_attn_dec_hydrate(woq : int64; fq : int; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
+    invoke(g_moe_gpu_attn_dec_hydrate, woq, fq, kp, vp, npos, kvd, f16)
 }
 
 //! The mirrors change hands: after a GPU prefill from position 0 they hold the prefilling session's
@@ -1657,10 +1657,11 @@ def public moe_gpu_attn_dec_claim(fresh : bool) : int64 {
     return invoke(g_moe_gpu_attn_dec_claim, fresh)
 }
 
-//! Does the block serve layer `woq`'s token at `pos` for the session holding generation `gen`?
+//! Does the block serve the token at `pos` of the layer whose q plane sits at `woq` in format `fq` (the pair is the layer's
+//! identity: offsets are per format plane) for the session holding generation `gen`?
 //! One of DAT_SERVE / DAT_STALE_GEN / DAT_HYDRATE / DAT_NEVER.
-def public moe_gpu_attn_dec_ok(woq, pos, gen : int64) : int {
-    return invoke(g_moe_gpu_attn_dec_ok, woq, pos, gen)
+def public moe_gpu_attn_dec_ok(woq : int64; fq : int; pos, gen : int64) : int {
+    return invoke(g_moe_gpu_attn_dec_ok, woq, fq, pos, gen)
 }
 
 //! One layer's decode attention on the GPU (q/k/v projections, bias, qk-norm+rope into the layer's

@@ -1487,19 +1487,16 @@ module) is independent and can land any time - it is pure structure.
     answer, not a decline. Item 42's real-hardware pass on such a card is where it shows; the fix
     is the pipeline's `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` at 32 on every KHR
     stamp, or a decline where the device cannot pin it.
-62. **The per-op MoE attention decode fills a stack buffer the fitting plan forwent.** Under
-    `DASLLAMA_COOPMAT=mm` a large MoE declines the resident driver (item 57) and the per-op rails
-    serve it streamed; when the budget is tight the plan logs "the per-op rails serve this MoE
-    without the streamed slot or the decode mirrors the fitting plan forwent - layers the budget
-    stops keep the CPU", yet `vk_moe_attn_dec` still runs and `fill_stack_acts` memcpys the q
-    activation into a decode-attn stack whose host buffer was never allocated: a SIGSEGV at 0x20,
-    a null `HostBuf.mapped`. On the RunPod RTX PRO 4500 `test_parity`'s Qwen3-30B-A3B UD-IQ2_XXS
-    row crashes there under `mm` (its Q4_K_M twin passes; the file predates the KHR arc, master
-    crashes identically), while the default cm2 mode serves the model resident and passes. The
-    fix is at the plan: a layer whose decode GPU state the budget forwent keeps the CPU decode
-    path and never reaches `vk_moe_attn_dec`, or `fill_stack_acts` declines on a null buffer with
-    the reason in the log; either ships a large-tier cell that loads the IQ2_XXS 30B under `mm` and
-    decodes one token.
+62. **DONE 2026-09-15 - the decode attention block keys a layer by its q offset under its format**
+    (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2r, `dat_key`). The crash was never the budget: on
+    the per-op rails the block keyed its per-layer state by the q plane offset alone, and the
+    Qwen3-30B-A3B UD-IQ2_XXS file (a mixed-format quant) holds two layers whose q planes both sit
+    at offset 0 of different format planes, so the second layer inherited the first one's sets and
+    mirror, skipped its own set-up and filled a stack with no GEMV scratch - the SIGSEGV at 0x20.
+    The ok and hydrate hooks carry the format, the FFN tail's pending mark is the key, and the
+    model-free `test_vulkan_dec_tail` cell holds a k4 quad beside a q8 quad at one offset to the
+    CPU reference. Reproduced on the RunPod RTX PRO 4500 with the resident route off and a
+    5000 MiB cap (`DASLLAMA_GPU_RESIDENT=0 DASLLAMA_GPU_VRAM_MB=5000`, `DASLLAMA_COOPMAT=mm`).
 63. **Two of the prefill's class pick ladders sit outside the ladders' home.** `REVIEW_PLACEMENT.md`
     lands a host-side pick ladder over Vulkan kernel classes in `dasllama_vulkan_classes.das`, where
     `gemv_*`, `q8_batch_cls_*`, `kq_batch_cls_*`, `fa_stamp_*` and `f16_gemm_*` live, while the cm2

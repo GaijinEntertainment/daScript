@@ -36,7 +36,9 @@ is served: the layer's `[q | k | v]` row uploads once when its sets are made and
 rope kernels expect it, so the mirror rows carry the bias; the raw rows that come home are the
 GEMV output before it, and the host store adds the bias before its own norm and rope.
 
-**The mirror is per layer, keyed by the q plane offset, and capped** (`DAT_MIRROR_ROWS` rows;
+**The mirror is per layer, keyed by the q plane offset under its format (`dat_key`: offsets are
+per format plane, so two layers of a mixed-format file can share an offset across planes, and
+the offset alone hands the second layer the first one's mirror and sets), and capped** (`DAT_MIRROR_ROWS` rows;
 VRAM is layers x rows x kvd x 4 bytes). The loader reports that need
 (`set_moe_gpu_dat_need`) and the tier carves it from the weight budget BEFORE placement, the
 way the stream slots are carved: the mirrors are allocated after placement, and un-carved they

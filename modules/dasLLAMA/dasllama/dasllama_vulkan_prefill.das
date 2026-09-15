@@ -3004,8 +3004,9 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
         enc_f16cvt_cls(raw, h, g_gpu.at_k16cvt_set, pcv, cvtwgs)
         enc_f16cvt_cls(raw, h, g_gpu.at_v16cvt_set, pcv, cvtwgs)
         if (w0 + rows <= DAT_MIRROR_ROWS) {
-            dat_layer_ensure(woq, kv_dim)
-            var DL & = unsafe(g_gpu.dat_layers[woq])
+            let dkey = dat_key(woq, g_gpu.stacks[s_q].fmt)
+            dat_layer_ensure(dkey, kv_dim)
+            var DL & = unsafe(g_gpu.dat_layers[dkey])
             vhz_dep(raw, h, VHB_ATK16 | VHB_ATV16, 0u, true)
             cmd_copy_range(raw, g_gpu.at_k16_dev, 0l, DL.k_mir, 0l, (w0 + rows) * kv_dim * 2l)
             cmd_copy_range(raw, g_gpu.at_v16_dev, 0l, DL.v_mir, 0l, (w0 + rows) * kv_dim * 2l)

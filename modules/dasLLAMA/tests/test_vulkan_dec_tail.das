@@ -413,6 +413,30 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     }
 }
 
+//! two layers whose q planes sit at ONE offset in two format planes (a mixed-format file's shape): the block keys a layer by
+//! its offset under its format, so each layer serves its own quad and mirror - keyed by the offset alone, the second layer
+//! took the first one's sets and mirror (followup_vulkan.md item 62's crash); false = no device
+def private collide_cell(t : T?; f : Ffn; base : int64; tag : string) : bool {
+    var qa : Quad
+    var qb : Quad
+    if (!quad_up(qa, 1, base, 51l, 0.4, true, false)) {
+        return false
+    }
+    t |> success(quad_up(qb, 0, base, 63l, 0.8, true, false), "{tag}: the q8 quad uploaded at the k4 quad's offset")
+    let gen = moe_gpu_attn_dec_claim(true)
+    matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
+    t |> success(moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: the second layer at the shared offset is still unseen after the first one's hydrate")
+    matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
+        "{tag}: both layers serve position 0")
+    for (pos in range64(2)) {
+        token_cell(t, qa, qb, f, pos, tag)
+    }
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 2l, gen) == DAT_SERVE,
+        "{tag}: both mirrors hold [0, 2) after two positions")
+    return true
+}
+
 // one quad pair in one plane format through two positions; false = no device
 def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; neox, hasb : bool) : bool {
     var qa : Quad
@@ -423,19 +447,19 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
     t |> success(quad_up(qb, fmt, base + 10l * STRIDE, 33l + int64(fmt), 0.7, neox, hasb), "{tag}: layer B's quad uploaded")
     let gen = moe_gpu_attn_dec_claim(true)
     // a layer the block has never seen hydrates first (zero rows at position 0 creates it), then serves
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, 0l, gen) == DAT_HYDRATE, "{tag}: an unseen layer asks for a hydrate at position 0")
-    matmul_moe_gpu_attn_dec_hydrate(qa.woq, null, null, 0l, KVD, true)
-    matmul_moe_gpu_attn_dec_hydrate(qb.woq, null, null, 0l, KVD, true)
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, 0l, gen) == DAT_SERVE,
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: an unseen layer asks for a hydrate at position 0")
+    matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
+    matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
         "{tag}: both layers serve position 0 after the empty hydrate")
     for (pos in range64(2)) {
         token_cell(t, qa, qb, f, pos, tag)
     }
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, 2l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, 2l, gen) == DAT_SERVE,
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 2l, gen) == DAT_SERVE,
         "{tag}: both mirrors hold [0, 2) after two positions")
     // the hydrate arms: a fresh claim empties both mirrors; A refills from f32 rows, B from f16 rows
     let gen2 = moe_gpu_attn_dec_claim(true)
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, 2l, gen2) == DAT_HYDRATE, "{tag}: a fresh claim empties the mirrors - position 2 asks for a hydrate")
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen2) == DAT_HYDRATE, "{tag}: a fresh claim empties the mirrors - position 2 asks for a hydrate")
     var kb : array<uint8>
     var vb : array<uint8>
     kb |> resize(2l * KVD * 2l)
@@ -449,10 +473,10 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
         vb[i * 2l + 1l] = uint8((hv >> 8u) & 0xFFu)
     }
     unsafe {
-        matmul_moe_gpu_attn_dec_hydrate(qa.woq, addr<uint8 const?>(qa.kmir[0]), addr<uint8 const?>(qa.vmir[0]), 2l, KVD, false)
-        matmul_moe_gpu_attn_dec_hydrate(qb.woq, addr<uint8 const?>(kb[0]), addr<uint8 const?>(vb[0]), 2l, KVD, true)
+        matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, addr<uint8 const?>(qa.kmir[0]), addr<uint8 const?>(qa.vmir[0]), 2l, KVD, false)
+        matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, addr<uint8 const?>(kb[0]), addr<uint8 const?>(vb[0]), 2l, KVD, true)
     }
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, 2l, gen2) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, 2l, gen2) == DAT_SERVE,
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen2) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 2l, gen2) == DAT_SERVE,
         "{tag}: both layers serve position 2 after the hydrates (f32 rows converted, f16 rows copied)")
     token_cell(t, qa, qb, f, 2l, tag)
     return true
@@ -690,9 +714,9 @@ def test_vulkan_dec_span(t : T?) {
         t |> success(quad_up(qa, 1, 60l * STRIDE, 51l, 0.4, true, false), "dec span: layer A's quad uploaded")
         t |> success(quad_up(qb, 1, 70l * STRIDE, 63l, 0.8, true, false), "dec span: layer B's quad uploaded")
         let gen = moe_gpu_attn_dec_claim(true)
-        matmul_moe_gpu_attn_dec_hydrate(qa.woq, null, null, 0l, KVD, true)
-        matmul_moe_gpu_attn_dec_hydrate(qb.woq, null, null, 0l, KVD, true)
-        t |> success(moe_gpu_attn_dec_ok(qa.woq, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, 0l, gen) == DAT_SERVE,
+        matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
+        matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
+        t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
             "dec span: both layers serve position 0")
         var router : array<float>
         var att_norms : array<float>
@@ -744,7 +768,7 @@ def test_vulkan_dec_span(t : T?) {
             check_row(t, "span pos {pos} layer B raw k row", kb, kraw_b)
             check_row(t, "span pos {pos} residual row after both layers", x, x_ref)
         }
-        t |> success(moe_gpu_attn_dec_ok(qa.woq, 2l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, 2l, gen) == DAT_SERVE,
+        t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 2l, gen) == DAT_SERVE,
             "dec span: both mirrors hold [0, 2) after two positions")
         // the override reaches the engine through its registry: the init registers, the MoE placement
         // selects by name (dastest runs no [init], so the test registers through the same entry)
@@ -789,9 +813,9 @@ def test_vulkan_dec_span_shexp(t : T?) {   // nolint:STYLE038 — one span cell:
             vk_span_reset()   //! the record keys on the shared expert's gate: the ungated arm is a new span
             let tag = gated ? "gated" : "ungated"
             let gen = moe_gpu_attn_dec_claim(true)
-            matmul_moe_gpu_attn_dec_hydrate(qa.woq, null, null, 0l, KVD, true)
-            matmul_moe_gpu_attn_dec_hydrate(qb.woq, null, null, 0l, KVD, true)
-            t |> success(moe_gpu_attn_dec_ok(qa.woq, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, 0l, gen) == DAT_SERVE,
+            matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
+            matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
+            t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
                 "dec span shexp ({tag}): both layers serve position 0")
             var a <- span_args_sh(qa, qb, f, sh, gated)
             var kout : array<float>
@@ -859,6 +883,7 @@ def test_vulkan_dec_tail(t : T?) {
         t |> success(pair_cell(t, f, 1, 10l * STRIDE, "k4 quads (Q8_K feed, neox rope)", true, false), "dec tail: the k4 pair uploaded")
         t |> success(pair_cell(t, f, 0, 40l * STRIDE, "q8 quads (Q8_0 feed, classic rope)", false, false), "dec tail: the q8 pair uploaded")
         t |> success(pair_cell(t, f, 0, 80l * STRIDE, "q8 quads with the q/k/v projection bias (qwen2moe, neox rope)", true, true), "dec tail: the biased q8 pair uploaded")
+        t |> success(collide_cell(t, f, 140l * STRIDE, "a k4 quad and a q8 quad at one plane offset"), "dec tail: the shared-offset pair uploaded")   //! slot 140: past every quad and stack the file's other cells upload
     } else {
         t |> skip("dasVulkan not installed; the decode block and tail are untestable here")
     }

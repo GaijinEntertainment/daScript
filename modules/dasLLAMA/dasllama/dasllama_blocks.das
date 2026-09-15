@@ -505,7 +505,7 @@ var private g_dat_hyd_v : array<float>
 
 // any codec but f16/f32: the host decodes the rows [0, pos) to f32 (kv_load_row), the block converts
 [cold_path]   // a remedy leg, not the served token
-def private attn_dec_hydrate_codec(var s : Session; l, pos, woq, kvd, seq_len : int64) {
+def private attn_dec_hydrate_codec(var s : Session; l, pos, woq : int64; fq : int; kvd, seq_len : int64) {
     g_dat_hyd_k |> resize(pos * kvd)
     g_dat_hyd_v |> resize(pos * kvd)
     unsafe {
@@ -515,7 +515,7 @@ def private attn_dec_hydrate_codec(var s : Session; l, pos, woq, kvd, seq_len : 
             kv_load_row(kb, s.kv_dtype_k, kvd, r, 0l, kvd, addr(g_dat_hyd_k[r * kvd]))
             kv_load_row(vb, s.kv_dtype_v, kvd, r, 0l, kvd, addr(g_dat_hyd_v[r * kvd]))
         }
-        matmul_moe_gpu_attn_dec_hydrate(woq, addr<uint8 const?>(g_dat_hyd_k[0]), addr<uint8 const?>(g_dat_hyd_v[0]), pos, kvd, false)
+        matmul_moe_gpu_attn_dec_hydrate(woq, fq, addr<uint8 const?>(g_dat_hyd_k[0]), addr<uint8 const?>(g_dat_hyd_v[0]), pos, kvd, false)
     }
 }
 
@@ -539,7 +539,7 @@ def private attn_dec_gpu_next_serves(t : Model; s : Session; l, pos : int64) : b
     if (l >= t.config.n_layers || !attn_dec_shape_ok(t, s, l)) {
         return false
     }
-    return moe_gpu_attn_dec_ok(t.wq_offs[l], pos, s.dat_gen) == DAT_SERVE
+    return moe_gpu_attn_dec_ok(t.wq_offs[l], int(fmt_at(t.wq_fmt, l)), pos, s.dat_gen) == DAT_SERVE
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
@@ -549,10 +549,11 @@ def private attn_dec_gpu_serves(t : Model; var s : Session; l, pos : int64) : bo
         return false
     }
     let woq = t.wq_offs[l]
-    var verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+    let fq = int(fmt_at(t.wq_fmt, l))
+    var verdict = moe_gpu_attn_dec_ok(woq, fq, pos, s.dat_gen)
     if (verdict == DAT_STALE_GEN) {   // once per token: the claim makes every later layer current
         s.dat_gen = moe_gpu_attn_dec_claim(true)
-        verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+        verdict = moe_gpu_attn_dec_ok(woq, fq, pos, s.dat_gen)
     }
     if (verdict == DAT_HYDRATE) {
         let kv_is_f16 = s.kv_dtype_k == KVDtype.f16 && s.kv_dtype_v == KVDtype.f16
@@ -560,12 +561,12 @@ def private attn_dec_gpu_serves(t : Model; var s : Session; l, pos : int64) : bo
         let kvd = layer_kv_dim(c, l)
         unsafe {
             if (pos == 0l || kv_is_f16 || kv_is_f32) {
-                matmul_moe_gpu_attn_dec_hydrate(woq, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos, kvd, kv_is_f16)
+                matmul_moe_gpu_attn_dec_hydrate(woq, fq, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos, kvd, kv_is_f16)
             } else {
-                attn_dec_hydrate_codec(s, l, pos, woq, kvd, c.seq_len)
+                attn_dec_hydrate_codec(s, l, pos, woq, fq, kvd, c.seq_len)
             }
         }
-        verdict = moe_gpu_attn_dec_ok(woq, pos, s.dat_gen)
+        verdict = moe_gpu_attn_dec_ok(woq, fq, pos, s.dat_gen)
     }
     return verdict == DAT_SERVE
 }

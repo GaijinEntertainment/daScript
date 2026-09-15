@@ -277,7 +277,9 @@ suite: the runner disarms the guard that tripwire asserts. The map below is part
 two lists together are the census.
 `test_vulkan_dec_tail.das` - model-free (a Vulkan device, else skips): the per-op tier's decode
 era against a CPU reference - the decode attention block (K-quant and q8 quads, both rope
-pairings, a q8 pair carrying the q/k/v projection bias, the hydrate arms), the decode FFN tail, and the whole-token decode span with its
+pairings, a q8 pair carrying the q/k/v projection bias, the hydrate arms, and a k4 quad beside a q8
+quad at ONE plane offset - the block keys a layer by its offset under its format, so each serves its
+own mirror), the decode FFN tail, and the whole-token decode span with its
 device router + top-k against `moe_select_core`, the span with a shared expert in both its arms -
 gated (the shared q8 triple beside the routed pair, its gate logit past the router's, one combine)
 and ungated (the same at unit gate, a second span record after a reset; the reference without the

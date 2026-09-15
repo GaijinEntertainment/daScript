@@ -626,7 +626,7 @@ struct GpuState {
     tail_xres_dev : uint64        // the residual row out
     tail_xb_dev : uint64          // the normed row (scratch)
     tail_xres : HostBuf           // the residual row's readback staging
-    tail_pending_woq : int64 = -1l   // the q plane whose attention submit collects the pending tail (-1 = none)
+    tail_pending_key : int64 = -1l   //! the layer (`dat_key`) whose attention submit collects the pending tail (-1 = none)
     tail_xout : float?            // where the collected residual row lands on the host
     span_x_dev : uint64           // the residual row across the span
     span_xb_dev : uint64          // the normed row (scratch)
@@ -1849,7 +1849,7 @@ def vk_drop_model_state {
     }
     g_gpu.pend_wait = 0ul
     assert(g_gpu.ffn_pend_s2 == -1, "dasLLAMA vulkan tier: model drop with an async FFN in flight")
-    assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: model drop with a decode ffn tail in flight")
+    assert(g_gpu.tail_pending_key < 0l, "dasLLAMA vulkan tier: model drop with a decode ffn tail in flight")
     // the resident driver's das-side shell first (its VK objects die in the sweeps below)
     if (g_rd != null) {
         unsafe {
@@ -1909,7 +1909,7 @@ def vk_drop_model_state {
     g_gpu.dat_layers |> clear()
     g_gpu.tail_cmds |> clear()
     g_gpu.span_layers |> clear()
-    g_gpu.tail_pending_woq = -1l
+    g_gpu.tail_pending_key = -1l
     g_gpu.tail_xout = null
     g_gpu.span_key = -1l
     g_gpu.span_nl = 0l
@@ -3362,6 +3362,7 @@ def fill_stack_sched_rows(si : int; offs : int64 const?; nregions : int64; nrows
 
 def fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_bytes : int64) {
     assert(xq_bytes <= XQ_BYTES, "dasLLAMA vulkan tier: dispatch exceeds scratch capacity")
+    assert(g_gpu.stacks[si].gemv_made, "dasLLAMA vulkan tier: a stack fill before its GEMV scratch was made")
     let unit = fmt_unit(g_gpu.stacks[si].fmt)
     unsafe {
         memcpy(g_gpu.stacks[si].xq.mapped, reinterpret<void?>(xqp), xq_bytes)
@@ -3372,13 +3373,20 @@ def fill_stack_acts(si : int; xqp : int8 const?; xsp : float const?; xq_bytes : 
 // ===== the decode attention block's per-layer mirrors =====
 
 
+let DAT_KEY_FMTS = 32l   //! the format radix of a decode-block layer key: past every `KqFmt` member
+
+//! a decode-block layer's identity: the q plane offset under its format - offsets are per format plane, so two layers of a
+//! mixed-format file can share an offset across planes, and the offset alone would hand the second layer the first one's
+//! mirror and sets (followup_vulkan.md item 62's crash)
+def dat_key(woq : int64; fq : int) : int64 => woq * DAT_KEY_FMTS + int64(fq)
+
 //! The layer's decode-block state exists after this, its f16 K/V mirror allocated on first sight
-//! (keyed by the q plane offset - the identity both the prefill chain and the decode block carry).
+//! (keyed by `dat_key` - the identity both the prefill chain and the decode block carry).
 [cold_path]   // once per layer: the mirror pair
-def dat_layer_ensure(woq, kvd : int64) {
-    if (!key_exists(g_gpu.dat_layers, woq)) {
+def dat_layer_ensure(key, kvd : int64) {
+    if (!key_exists(g_gpu.dat_layers, key)) {
         let bytes = DAT_MIRROR_ROWS * kvd * 2l
-        g_gpu.dat_layers |> insert(woq, DatLayer(k_mir = make_device_buf(bytes), v_mir = make_device_buf(bytes), cnt = 0l))
+        g_gpu.dat_layers |> insert(key, DatLayer(k_mir = make_device_buf(bytes), v_mir = make_device_buf(bytes), cnt = 0l))
     }
 }
 

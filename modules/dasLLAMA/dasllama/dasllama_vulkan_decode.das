@@ -2450,7 +2450,7 @@ def private tail_cmd_for(s1, s3, s2, sq : int; woq_next : int64; fq_next : int; 
 //! attention submit's fence covers both and its collect lands the residual row in xoutp.
 [hot_path]   // per token
 def vk_moe_ffn_tail(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, nfe, nrows : int64; f1, f3, f2 : int; is_gelu : bool; wp : float const?; xp : float const?; var xoutp : float?; woq_next : int64; fq_next : int; anp : float const?; eps : float) {
-    assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: decode ffn tail while one is pending")
+    assert(g_gpu.tail_pending_key < 0l, "dasLLAMA vulkan tier: decode ffn tail while one is pending")
     assert(nrows <= MAX_ROUTED_SLOTS, "dasLLAMA vulkan tier: decode ffn tail slot count exceeds its weight staging")
     let ts0 = ref_time_ticks()
     let st = ffn_fill(offs1, offs3, offs2, nregions, xqp, xsp, n, nfe, nrows, f1, f3, f2)
@@ -2463,7 +2463,7 @@ def vk_moe_ffn_tail(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 co
         memcpy(g_gpu.tail_w.mapped, reinterpret<void?>(wp), nrows * 4l)
     }
     submit_nofence(cmd)
-    g_gpu.tail_pending_woq = woq_next
+    g_gpu.tail_pending_key = dat_key(woq_next, fq_next)
     g_gpu.tail_xout = xoutp
     if (vk_prof()) {
         g_dec_prof_ffn_us += int64(get_time_usec(ts0))
@@ -2472,7 +2472,7 @@ def vk_moe_ffn_tail(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 co
 }
 
 //! MoeGpuFfnTailPendingFn: a tail is in flight, uncollected
-def vk_moe_ffn_tail_pending : bool => g_gpu.tail_pending_woq >= 0l
+def vk_moe_ffn_tail_pending : bool => g_gpu.tail_pending_key >= 0l
 
 // ===== the whole-token decode span: the resident layers as ONE recorded chain, ONE submit =====
 
@@ -2576,7 +2576,7 @@ def private span_record(a : MoeSpanDec) {
     vhz_dep(raw, h, 0u, VHS_X, true)
     cmd_copy_whole(raw, g_gpu.span_xin.buf, g_gpu.span_x_dev, dim * 4l)
     for (li in range64(nl)) {
-        var L & = unsafe(g_gpu.dat_layers[a.woq[li]])
+        var L & = unsafe(g_gpu.dat_layers[dat_key(a.woq[li], a.fq[li])])
         var SL = g_gpu.span_layers[li]
         at_chain_enc(raw, h, L, a.fq[li], a.fk[li], a.fv[li], a.fo[li], dim, qd, kvd, a.hs, a.n_heads, a.kv_mul, a.scale, a.eps, a.neox, a.qk_norm)
         vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
@@ -2698,12 +2698,12 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
     ensure_dat_state(a.dim, a.qd, a.kvd, a.hs)
     ensure_ffn_state()
     for (li in range64(nl)) {
-        dat_layer_ensure(a.woq[li], a.kvd)
+        dat_layer_ensure(dat_key(a.woq[li], a.fq[li]), a.kvd)
         dat_layer_sets(a.woq[li], a.wok[li], a.wov[li], a.woo[li], a.fq[li], a.fk[li], a.fv[li], a.fo[li], a.rmsq[li], a.rmsk[li],
             a.bq[li], a.bk[li], a.bv[li], a.qk_norm)
     }
     ensure_span_state(a)
-    assert(g_gpu.tail_pending_woq < 0l, "dasLLAMA vulkan tier: decode span with a decode ffn tail pending")
+    assert(g_gpu.tail_pending_key < 0l, "dasLLAMA vulkan tier: decode span with a decode ffn tail pending")
     fill_stack_acts(g_gpu.span_layers[0].sq, a.xq, a.xs, a.dim)
     unsafe {
         memcpy(g_gpu.span_xin.mapped, reinterpret<void?>(a.x), a.dim * 4l)
@@ -2726,7 +2726,7 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
     for (li in range64(nl)) {
         var L : DatLayer?
         unsafe {
-            L = g_gpu.dat_layers?[a.woq[li]]
+            L = g_gpu.dat_layers?[dat_key(a.woq[li], a.fq[li])]
         }
         L.cnt = a.pos + 1l
     }
@@ -3064,7 +3064,7 @@ def private ensure_dat_state(dim, qd, kvd, hs : int64) {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]   // once per layer: the chain's sets
 def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rmsqp : float const?; rmskp : float const?;
                            bqp : float const?; bkp : float const?; bvp : float const?; qk_norm : bool) {
-    var L & = unsafe(g_gpu.dat_layers[woq])
+    var L & = unsafe(g_gpu.dat_layers[dat_key(woq, fq)])
     if (L.sets_made) {
         return
     }
@@ -3181,14 +3181,15 @@ def vk_moe_attn_dec_claim(fresh : bool) : int64 {
 
 //! MoeGpuAttnDecOkFn: serve when the layer's mirror holds exactly [0, pos) of the session's
 //! generation; else name what the engine must do first (claim fresh / hydrate the layer) or never.
-def vk_moe_attn_dec_ok(woq, pos, gen : int64) : int {
+def vk_moe_attn_dec_ok(woq : int64; fq : int; pos, gen : int64) : int {
     if (g_gpu == null || g_gpu.dry || pos >= DAT_MIRROR_ROWS) {
         return DAT_NEVER
     }
     if (gen == 0l || gen != g_dat_gen) {
         return DAT_STALE_GEN
     }
-    if (!key_exists(g_gpu.dat_layers, woq) || unsafe(g_gpu.dat_layers[woq]).cnt != pos) {
+    let key = dat_key(woq, fq)
+    if (!key_exists(g_gpu.dat_layers, key) || unsafe(g_gpu.dat_layers[key]).cnt != pos) {
         return DAT_HYDRATE
     }
     return DAT_SERVE
@@ -3200,11 +3201,12 @@ var private @scratch g_dat_h16 : array<float16>
 //! raw - the host cache's own forms; f16 rows copy through, f32 rows convert), then holds exactly
 //! those positions. npos = 0 leaves it empty.
 [cold_path]   // a remedy leg (a rewind, a CPU-prefilled prefix) - never the served token
-def vk_moe_attn_dec_hydrate(woq : int64; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
-    dat_layer_ensure(woq, kvd)
+def vk_moe_attn_dec_hydrate(woq : int64; fq : int; kp : uint8 const?; vp : uint8 const?; npos, kvd : int64; f16 : bool) {
+    let key = dat_key(woq, fq)
+    dat_layer_ensure(key, kvd)
     var L : DatLayer?
     unsafe {
-        L = g_gpu.dat_layers?[woq]
+        L = g_gpu.dat_layers?[key]
     }
     if (npos > 0l && f16) {
         upload_region_at(L.k_mir, 0l, kp, npos * kvd * 2l)
@@ -3284,17 +3286,18 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
                     pos, dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
     let ts0 = ref_time_ticks()
     ensure_dat_state(dim, qd, kvd, hs)
-    dat_layer_ensure(woq, kvd)
+    let key = dat_key(woq, fq)
+    dat_layer_ensure(key, kvd)
     dat_layer_sets(woq, wok, wov, woo, fq, fk, fv, fo, rmsqp, rmskp, bqp, bkp, bvp, qk_norm)
     var L : DatLayer?
     unsafe {
-        L = g_gpu.dat_layers?[woq]   // the ensure above made the key: a read, never an insert
+        L = g_gpu.dat_layers?[key]   // the ensure above made the key: a read, never an insert
     }
     let sq = find_stack(woq, fq, "decode attn q")
     at_record_layer(*L, fq, fk, fv, fo, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)
-    let has_pending_tail = g_gpu.tail_pending_woq >= 0l
+    let has_pending_tail = g_gpu.tail_pending_key >= 0l
     if (has_pending_tail) {
-        assert(g_gpu.tail_pending_woq == woq, "dasLLAMA vulkan tier: the pending decode ffn tail targets another layer")
+        assert(g_gpu.tail_pending_key == key, "dasLLAMA vulkan tier: the pending decode ffn tail targets another layer")
     } else {
         fill_stack_acts(sq, xqp, xsp, dim)
     }
@@ -3321,7 +3324,7 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
         unsafe {
             memcpy(reinterpret<void?>(g_gpu.tail_xout), g_gpu.tail_xres.mapped, dim * 4l)
         }
-        g_gpu.tail_pending_woq = -1l
+        g_gpu.tail_pending_key = -1l
         g_gpu.tail_xout = null
     }
     if (vk_prof()) {
