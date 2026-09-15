@@ -10155,7 +10155,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
 def private moe_ar_comb_g4_arm(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = 64
-        let k = 3
+        let k = 8   //! gemma-4's eight routed slots: the row pass's register form full
         let npos = 5
         let nrows = npos * k
         let eps = 1.0e-6

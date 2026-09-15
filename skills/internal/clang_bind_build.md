@@ -39,6 +39,10 @@ bin/Release/daslang.exe modules/dasImgui/bind/bind_imgui.das -- -i <imgui-header
 
 CI guards staleness with `git diff --exit-code -- <module>/src/` after running the binder - if your committed `*.inc`/`func_*.cpp` don't match a fresh regen, the build fails with a "generated files are out of date" message. Always re-run the binder and commit the result after touching a binder or bumping the libclang version.
 
+## 3a. Module dependencies of a generated binding
+
+A `bind_*.das` declares the in-tree modules its binding depends on in two lists, and the binder emits the module's `initDependencies` from them: `require_modules` when the binding uses the other module's types (this also puts those types into this module's type library, so two modules binding the same C++ types resolve to one copy), `require_load_modules` when the module's shared library links against the other's library and the binding uses none of its types. A `require_load_modules` name the build does not have - a static exe linking only what its program requires - is skipped, since without a library import there is no load order to keep. Never hand-write the dependency into the generated file; `modules/REVIEW.md` binds both halves.
+
 ## 4. Bumping the libclang version
 
 When `find_package(Clang X.Y)` moves (e.g. 16 -> 22.1), the `clang-c` API changes (enum renames, ~hundreds of additions), so `dasClangBind/src/*` must be regenerated against the new headers in the **same** commit. Worked example: `git show 17d1b035a` ("dasClangBind: regen bindings for libclang 22.1.5"). Update: the `find_package` pin, the CI `--clang_path`, and re-run `bind_clangbind.das`.

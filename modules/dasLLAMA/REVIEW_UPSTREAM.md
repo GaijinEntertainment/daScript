@@ -1,4 +1,4 @@
-# dasLLAMA Reference-Build Naming Code Review Checklist
+# dasLLAMA Reference-Build Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_general.md`, `followup_vulkan.md`,
@@ -15,19 +15,25 @@ text under `modules/dasLLAMA/`, a commit message that changes it, and the body o
 changes it.
 
 **A diff that names the reference build - its organization, project, binary, header, symbol or
-constant - outside a sentence doing reference-build work is a defect: write "the reference exe" or
-"upstream" instead, and describe its mechanism in our own terms.** A symbol this module's code
-calls or holds as a value is its own name, not attribution; attributing our code's shape to
-upstream ("in upstream's form") names it too.
+constant - outside a sentence doing reference-build work is a defect: write "the reference build",
+or "the reference exe" for its binary, instead.** A name this module's own code, files or artifacts
+carry is its own name, not attribution; attributing our code's shape to the reference build ("in
+the reference build's form") names it too.
+
+**A diff that describes a mechanism of the reference build outside a sentence doing reference-build
+work describes it in our own terms - what the mechanism does, never which of its files or symbols
+does it.**
 
 **A sentence stating a number read from a part of the reference build rather than from a whole
-run of it - a time, a rate, or a constant of its code - names the kernel or symbol that produced
-it, by the reference build's name for it or by ours.**
+run of it - a time, a rate, or a constant that appears only in the reference build's own code -
+names the kernel or symbol that produced it, by the reference build's name for it or by ours.** Such
+a sentence does reference-build work. A constant a weight format's own definition fixes is the
+format's, not the reference build's.
 
 **A sentence stating what WE will build or change next carries no reading of the reference
-build; the reading it sits beside gets its own sentence.** A sentence stating a reference-build
-run we will make does reference-build work, not such a proposal - an exit criterion stated as a
-comparison to the reference is such a run.
+build; the reading it sits beside gets its own sentence.**
 
 **A sentence stating a reference-build run we will make carries that run's names, knobs and
-commands.**
+commands.** Such a sentence does reference-build work, not a proposal; a sentence that promises a
+measurement we have not made - a table row, a ratio, or a comparison against the reference - states
+such a run.

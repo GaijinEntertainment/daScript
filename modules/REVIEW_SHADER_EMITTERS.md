@@ -3,9 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 
-A device-side value is one whose storage exists only on the device: a tile or tensor, a layout
-or view over one, a sampler, an image. A struct that stands for one on the CPU is a marker
-struct when it has no storage of its own and a resource struct when it carries a device handle.
+A marker struct stands on the CPU for a value whose storage exists only on the device - a tile, a
+tensor, a layout or view over one, a sampler, an image - and has no storage of its own; a resource
+struct carries the device handle.
 
 **Never put anything that cannot compile on the CPU into a kernel body or into a function a
 kernel calls - keep both in ordinary das.** A kernel built from ordinary values is compared
@@ -13,9 +13,9 @@ against its own CPU run; a marker struct and the builtins over it compile on the
 their CPU bodies compute nothing.
 
 **A diff that adds or changes an emitter builtin whose operands are all ordinary CPU values - a
-declaration in `daslib/shader_lingua_franca.das` or an emitter's builtin table - ships a CPU
-body that returns what the emitted form returns, argument for argument.** A builtin taking a
-marker or resource struct is outside this trigger.
+declaration in `daslib/shader_lingua_franca.das`, `dasSpirv/spirv/spirv_builtins.das` or
+`dasMetal/metal/metal_builtins.das` - ships a CPU body that returns what the emitted form
+returns, argument for argument.**
 
 **Never let a construct the emitter cannot lower produce a kernel or a crash - the emitter
 reports a compile error that names the construct.**
@@ -60,10 +60,10 @@ declaration by name.** A declaration in that module is available to both emitter
 **A skippable read of a global-rooted array - a module global, a `@workgroup` array, or a
 `self.<member>` resource - in a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` body, or
 in any `def` that body calls, stays skippable: a diff that widens the set of dispatches an
-existing read happens on, or drops the condition that kept it from happening where its index is
-out of range, is a defect - a read in both arms of an `if`, a clamped index, and a bare read are
-the shapes that drop takes.** Both emitters lower a `?:`, `&&` or `||` operand so only the taken
-side runs, so the short-circuit form needs no rewrite.
+existing read happens on, or drops the condition that kept it from happening where its index lies
+outside the region this dispatch's own bound defines, is a defect - a read in both arms of an
+`if`, a clamp, and a bare read are the shapes that drop takes.** Both emitters lower a `?:`, `&&`
+or `||` operand so only the taken side runs, so the short-circuit form needs no rewrite.
 
 **A compile-time gate (`static_if`, `@template_gate`) that keeps a global-rooted-array read out of
 a compiled `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant keeps it out: a diff
