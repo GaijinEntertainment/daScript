@@ -273,6 +273,16 @@ def private field_value_struct(expr : Expression const?) : Structure const? {
 }
 
 def private resolve_definition(hit : CursorHit) : Definition { // nolint:STYLE037,STYLE038 — exact-type `is` ladder, one arm per Expression class
+    if (hit.variable != null) {
+        let variable = hit.variable
+        return Definition(
+            found = true,
+            kind = "variable",
+            name = string(variable.name),
+            file = lineinfo_file(variable.at),
+            line = int(variable.at.line),
+            column = int(variable.at.column))
+    }
     let expr = hit.expr
     if (expr is ExprVar) {
         let v = expr as ExprVar
@@ -397,7 +407,7 @@ def private run_definition(file : string; line0, char16 : int; project : string)
                 _range = word_range(decl.target.decl_file, decl.target.decl_line, decl.target.decl_column, decl.target.name)))
             return
         }
-        var hits <- find_at_cursor(program, file, line, col)
+        var hits <- find_at_cursor(program, file, line, col, true)
         for (hit in hits) {
             continue if (in_synthesized(hit))
             let defn = resolve_definition(hit)
@@ -428,6 +438,8 @@ def private hover_contents(hit : CursorHit; defn : Definition) : string {
         write(w, "```daslang\n")
         if (!empty(defn.signature)) {
             write(w, "{defn.signature}\n")
+        } elif (hit.variable != null && hit.variable._type != null) {
+            write(w, "{hit.name} : {describe(hit.variable._type)}\n")
         } elif (!empty(hit.name) && hit.expr != null && hit.expr._type != null) {
             write(w, "{source_name(hit.name)} : {describe(hit.expr._type)}\n")
         } elif (hit.expr != null && hit.expr._type != null) {
@@ -464,7 +476,7 @@ def private run_hover(file : string; line0, char16 : int; project : string) : Ho
             res._range = word_range(file, line, decl.word_column, decl.target.name)
             return
         }
-        let hits <- find_at_cursor(program, file, line, col)
+        let hits <- find_at_cursor(program, file, line, col, true)
         // innermost hit that carries a name or a type; fall back to the innermost source hit
         var first = -1
         var pick = -1
@@ -487,7 +499,10 @@ def private run_hover(file : string; line0, char16 : int; project : string) : Ho
         }
         let hit = hits[pick]
         res.contents = hover_contents(hit, resolve_definition(hit))
-        if (hit.expr != null && to_generic_path(lineinfo_file(hit.expr.at)) == target && int(hit.expr.at.line) > 0) {
+        if (hit.variable != null) {
+            res.hasRange = true
+            res._range = word_range(file, int(hit.variable.at.line), int(hit.variable.at.column), hit.name)
+        } elif (hit.expr != null && to_generic_path(lineinfo_file(hit.expr.at)) == target && int(hit.expr.at.line) > 0) {
             res.hasRange = true
             res._range = span_range(file, int(hit.expr.at.line), int(hit.expr.at.column),
                 int(hit.expr.at.last_line), int(hit.expr.at.last_column))
@@ -534,6 +549,11 @@ def private to_void(p : auto(TT) const?) : void? {
 }
 
 def private identify_target(hit : CursorHit) : RefTarget { // nolint:STYLE037 — exact-type `is` ladder, one arm per Expression class
+    if (hit.variable != null) {
+        let variable = hit.variable
+        return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = string(variable.name),
+            decl_file = lineinfo_file(variable.at), decl_line = int(variable.at.line), decl_column = int(variable.at.column))
+    }
     let expr = hit.expr
     if (expr is ExprCall) {
         let c = expr as ExprCall
@@ -829,7 +849,7 @@ def private kind_word(kind : RefTargetKind) : string {
 //! `__this` a lambda reads its captures through, is not source the cursor can be on
 def private in_synthesized(hit : CursorHit) : bool {
     return true if (hit.func != null && is_synthesized(hit.func))
-    if (hit.expr is ExprVar) {
+    if (hit.expr != null && hit.expr is ExprVar) {
         let v = hit.expr as ExprVar
         return v.variable != null && v.variable.flags.generated
     }
@@ -939,7 +959,7 @@ def private run_references(file : string; line0, char16 : int; include_decl : bo
     let compiled = compile_nav(file, project) $(program) {
         var target = declaration_at_cursor(program, file, line, col).target
         if (target.kind == RefTargetKind.none) {
-            var hits <- find_at_cursor(program, file, line, col)
+            var hits <- find_at_cursor(program, file, line, col, true)
             for (hit in hits) {
                 continue if (in_synthesized(hit))
                 target = identify_target(hit)
@@ -1269,9 +1289,10 @@ def private make_hier_item(func : Function const?) : HierItem {
 // (or class method) declared on the cursor line
 def private function_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : Function const? {
     var result : Function const?
-    var hits <- find_at_cursor(program, file, line, col)
+    var hits <- find_at_cursor(program, file, line, col, true)
     for (hit in hits) {
         let expr = hit.expr
+        continue if (expr == null)
         // synthesized guard: generated finalizer-chain calls carry the class
         // line as their position — without it a cursor on a class name
         // resolves to Foo'__finalize instead of falling through to the type
@@ -1537,7 +1558,7 @@ def private run_implementation(file : string; line0, char16 : int; project : str
         // no method at cursor — try a class/struct: implementations = derived types
         var st_ptr : void?
         var st_name = ""
-        var hits <- find_at_cursor(program, file, line, col)
+        var hits <- find_at_cursor(program, file, line, col, true)
         for (hit in hits) {
             let t = identify_target(hit)
             if (t.kind == RefTargetKind.structure) {

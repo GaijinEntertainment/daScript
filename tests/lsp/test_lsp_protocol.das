@@ -292,6 +292,11 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     var new_final_char = -1
     var lambda_line0 = -1
     var lambda_body_char = -1
+    var lambda_arg_char = -1
+    var for_line0 = -1
+    var for_char = -1
+    var for_use_line0 = -1
+    var for_use_char = -1
     var clean_lines <- split(clean, "\n")
     for (i in range(length(clean_lines))) {
         if (clean_lines[i] |> starts_with("def lsp_probe_helper")) {
@@ -320,6 +325,13 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
         } elif (clean_lines[i] |> starts_with("    let add = @")) {
             lambda_line0 = i
             lambda_body_char = find(clean_lines[i], "x + base")
+            lambda_arg_char = find(clean_lines[i], "x : int")
+        } elif (clean_lines[i] |> starts_with("    for (i in range")) {
+            for_line0 = i
+            for_char = find(clean_lines[i], "i in")
+        } elif (clean_lines[i] |> starts_with("        print(\"\{i\}")) {
+            for_use_line0 = i
+            for_use_char = find(clean_lines[i], "\{i\}") + 1
         }
     }
     delete clean_lines
@@ -327,7 +339,8 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     t |> success(base_speak_line0 >= 0 && derived_speak_line0 >= 0, "fixture contains probe_speak base and override")
     t |> success(base_line0 >= 0 && derived_line0 >= 0 && final_line0 >= 0 && finalize_line0 >= 0 && new_final_line0 >= 0, "fixture contains the class with a user finalizer and its new site")
     t |> success(lambda_line0 >= 0 && lambda_body_char >= 0, "fixture contains the capturing lambda")
-    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0)
+    t |> success(for_line0 >= 0 && for_use_line0 >= 0, "fixture contains the for loop and its body use")
+    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0 || for_line0 < 0 || for_use_line0 < 0)
     let uri = path_to_uri(fixture)
 
     for (host in front_hosts()) {
@@ -572,6 +585,49 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
                 let cap_text = hover_cap?["result"]?["contents"]?["value"] ?? ""
                 t |> success(cap_text |> find("base : int") >= 0, "hover on a captured variable inside a lambda: {cap_text}")
                 t |> success(cap_text |> find("__this") < 0, "a capture is not the lambda's __this: {cap_text}")
+
+                // a variable's declaration is not an expression: the cursor on a `for` loop
+                // variable or a lambda argument in its header hovers as the variable, a use in
+                // the body navigates to the header, and references pair the two
+                write_frame(w, sprint_json(CursorRequestMsg(id = 16, method = "textDocument/hover",
+                    params = CursorParams(textDocument = DocId(uri = uri),
+                        position = Position0(line = for_line0, character = for_char))), false))
+                let hover_for = read_until(t, r) $(js) => (js?["id"] ?? -1) == 16
+                let for_text = hover_for?["result"]?["contents"]?["value"] ?? ""
+                t |> success(for_text |> find("i : int") >= 0, "hover on a for loop variable: {for_text}")
+                t |> equal(hover_for?["result"]?["range"]?["start"]?["character"] ?? -1, for_char)
+
+                write_frame(w, sprint_json(DefinitionMsg(id = 17, params = CursorParams(
+                    textDocument = DocId(uri = uri),
+                    position = Position0(line = for_use_line0, character = for_use_char))), false))
+                let for_def = read_until(t, r) $(js) => (js?["id"] ?? -1) == 17
+                let for_loc = for_def?["result"]?[0]
+                t |> equal(for_loc?["range"]?["start"]?["line"] ?? -1, for_line0)
+                t |> equal(for_loc?["range"]?["start"]?["character"] ?? -1, for_char)
+
+                write_frame(w, sprint_json(ReferencesMsg(id = 18, params = ReferencesParams(
+                    textDocument = DocId(uri = uri),
+                    position = Position0(line = for_line0, character = for_char),
+                    context = ReferenceContext(includeDeclaration = true))), false))
+                let for_refs = read_until(t, r) $(js) => (js?["id"] ?? -1) == 18
+                var for_keys : array<string>
+                let for_arr = for_refs?["result"]
+                if (for_arr != null && for_arr.value is _array) {
+                    for (loc in for_arr.value as _array) {
+                        for_keys |> push("{loc?["range"]?["start"]?["line"] ?? -1}:{loc?["range"]?["start"]?["character"] ?? -1}")
+                    }
+                }
+                t |> equal(length(for_keys), 2, "references to a for loop variable: header + body use, got {for_keys}")
+                t |> success(for_keys |> find_index("{for_line0}:{for_char}") >= 0, "for references include the header")
+                t |> success(for_keys |> find_index("{for_use_line0}:{for_use_char}") >= 0, "for references include the body use")
+
+                write_frame(w, sprint_json(CursorRequestMsg(id = 19, method = "textDocument/hover",
+                    params = CursorParams(textDocument = DocId(uri = uri),
+                        position = Position0(line = lambda_line0, character = lambda_arg_char))), false))
+                let hover_larg = read_until(t, r) $(js) => (js?["id"] ?? -1) == 19
+                let larg_text = hover_larg?["result"]?["contents"]?["value"] ?? ""
+                t |> success(larg_text |> find("x : int") >= 0, "hover on a lambda argument in its header: {larg_text}")
+                t |> equal(hover_larg?["result"]?["range"]?["start"]?["character"] ?? -1, lambda_arg_char)
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))

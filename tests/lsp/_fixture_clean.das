@@ -33,4 +33,7 @@ def main() {
     let base = 10
     let add = @(x : int) : int => x + base
     print("{add(1)}\n")
+    for (i in range(2)) {
+        print("{i}\n")
+    }
 }

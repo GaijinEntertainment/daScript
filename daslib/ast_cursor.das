@@ -14,11 +14,14 @@ module ast_cursor shared public
 require daslib/ast_boost
 require strings
 
-//! A single hit at the cursor position — one AST expression node.
-//! Innermost (most specific) expressions come first in the result array.
+//! A single hit at the cursor position — one AST expression node, or a variable declaration when asked for.
+//! Innermost (most specific) hits come first in the result array.
 struct public CursorHit {
-    //! Raw pointer to the expression node (valid while the program lives).
+    //! Raw pointer to the expression node (valid while the program lives); null for a variable hit.
     expr : Expression const?
+    //! The variable whose declaration the cursor is on - a `for` loop variable, a `let` variable,
+    //! a function, lambda or block argument - when the search asked for declarations; else null.
+    variable : Variable const?
     //! Enclosing function, or null for expressions in global scope.
     func : Function const?
     //! Extracted name for named nodes (variable name, call name, field name, operator).
@@ -61,6 +64,7 @@ class CursorVisitor : AstVisitor {
     targetFile : string
     hits : array<CursorHit>
     currentFunc : Function const?
+    withVariables : bool
 
     def CursorVisitor(file : string; line, col : int) {
         targetFile = file
@@ -69,8 +73,50 @@ class CursorVisitor : AstVisitor {
         currentFunc = null
     }
 
+    def in_target_file(at : LineInfo) : bool {
+        return true if (empty(targetFile) || at.fileInfo == null)
+        return find(string(at.fileInfo.name), targetFile) >= 0
+    }
+
+    // a variable's position is its name token; a position with no width is sized by the name
+    def cursor_on_variable(v : Variable const?) : bool {
+        let at = v.at
+        return false if (int(at.line) != targetLine)
+        if (int(at.last_line) != int(at.line) || int(at.last_column) > int(at.column)) {
+            return cursor_inside(targetLine, targetCol, at)
+        }
+        let c = int(at.column)
+        return targetCol >= c && targetCol < c + length(string(v.name))
+    }
+
+    def add_variable(v : Variable const?) : void {
+        return if (!withVariables || v == null || v.flags.generated || !in_target_file(v.at) || !cursor_on_variable(v))
+        hits |> emplace(CursorHit(
+            variable = v,
+            func = currentFunc,
+            name = string(v.name),
+            rtti = "Variable"
+        ))
+    }
+
     def override preVisitFunction(fun : FunctionPtr) : void {
         currentFunc = fun
+    }
+
+    def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; lastArg : bool) : void {
+        add_variable(arg)
+    }
+
+    def override preVisitExprBlockArgument(blk : ExprBlock?; arg : VariablePtr; lastArg : bool) : void {
+        add_variable(arg)
+    }
+
+    def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) : void {
+        add_variable(arg)
+    }
+
+    def override preVisitExprForVariable(expr : ExprFor?; svar : VariablePtr; last : bool) : void {
+        add_variable(svar)
     }
 
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
@@ -80,10 +126,7 @@ class CursorVisitor : AstVisitor {
 
     def override preVisitExpression(expr : ExpressionPtr) : void {
         let e = expr
-        if (!empty(targetFile) && e.at.fileInfo != null) {
-            let fname = string(e.at.fileInfo.name)
-            if (find(fname, targetFile) < 0) return
-        }
+        return if (!in_target_file(e.at))
         if (cursor_inside(targetLine, targetCol, e.at)) {
             hits |> emplace(CursorHit(
                 expr = e,
@@ -99,6 +142,9 @@ class CursorVisitor : AstVisitor {
 //! smaller one, whichever function the visitor met first - a lambda or generator body is a
 //! function of its own, visited before the function whose source it sits in
 def private span_size(hit : CursorHit) : int2 {
+    if (hit.expr == null) {
+        return int2(0, length(hit.name))
+    }
     let at = hit.expr.at
     return int2(int(at.last_line) - int(at.line), int(at.last_column) - int(at.column))
 }
@@ -125,10 +171,12 @@ def private reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
     return <- result
 }
 
-//! Find all expression nodes at the given cursor position, innermost first.
-//! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
-def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : array<CursorHit> {
+//! Find all expression nodes at the given cursor position, innermost first; `file` is a substring
+//! matched against ``FileInfo.name`` ("" matches any). With `declarations`, a cursor on the name of
+//! a `for`/`let` variable or a function, lambda or block argument yields a `variable` hit with no `expr`.
+def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
     var visitor = new CursorVisitor(file, line, col)
+    visitor.withVariables = declarations
     make_visitor(*visitor) $(adapter) {
         visit(program, adapter)
     }
@@ -141,9 +189,10 @@ def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col
 
 //! Find all expression nodes at the given cursor position within a single function body.
 //! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
-def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int) : array<CursorHit> {
+def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int; declarations : bool = false) : array<CursorHit> {
     var visitor = new CursorVisitor(file, line, col)
     visitor.currentFunc = func
+    visitor.withVariables = declarations
     make_visitor(*visitor) $(adapter) {
         visit(func, adapter)
     }
@@ -161,10 +210,13 @@ def public describe(hit : CursorHit) : string {
         if (!empty(hit.name)) {
             write(w, "({hit.name})")
         }
-        if (hit.expr != null && hit.expr._type != null) {
+        if (hit.variable != null && hit.variable._type != null) {
+            write(w, " : {describe(hit.variable._type)}")
+        } elif (hit.expr != null && hit.expr._type != null) {
             write(w, " : {describe(hit.expr._type)}")
         }
-        write(w, " at {int(hit.expr.at.line)}:{int(hit.expr.at.column)}-{int(hit.expr.at.last_line)}:{int(hit.expr.at.last_column)}")
+        let at = hit.expr != null ? hit.expr.at : hit.variable.at
+        write(w, " at {int(at.line)}:{int(at.column)}-{int(at.last_line)}:{int(at.last_column)}")
         if (hit.func != null) {
             write(w, " in {hit.func.name}")
         }

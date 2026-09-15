@@ -144,3 +144,38 @@ def test_describe_hit(t : T?) {
         }
     }
 }
+
+def variable_hit(hits : array<CursorHit>; name : string) : bool {
+    for (h in hits) {
+        return true if (h.variable != null && h.name == name && h.expr == null)
+    }
+    return false
+}
+
+[test]
+def test_find_declaration_at_cursor(t : T?) {
+    t |> run("a for loop variable in its header is a variable hit when declarations are asked for") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // for (i in range(2)) at 24:9
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 24, 9, true)
+            let seen <- [for (h in hits); describe(h)]
+            t2 |> success(variable_hit(hits, "i"), "for variable i among {seen}")
+            t2 |> success(!empty(hits) && hits[0].variable != null && hits[0].name == "i", "the variable hit is innermost: {seen}")
+            t2 |> success(!empty(hits) && find(describe(hits[0]), "int") >= 0, "describe carries the variable's type: {seen}")
+        }
+    }
+    t |> run("a function argument and a let variable are variable hits") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // def add(a, b : int) at 9:8 / 9:11; let p at 20:8
+            t2 |> success(variable_hit(find_at_cursor(program, "ast_cursor_fixture", 9, 8, true), "a"), "argument a")
+            t2 |> success(variable_hit(find_at_cursor(program, "ast_cursor_fixture", 9, 11, true), "b"), "argument b")
+            t2 |> success(variable_hit(find_at_cursor(program, "ast_cursor_fixture", 20, 8, true), "p"), "let variable p")
+        }
+    }
+    t |> run("without the flag a declaration yields no variable hit") @(t2 : T?) {
+        compile_fixture() $(program) {
+            t2 |> success(!variable_hit(find_at_cursor(program, "ast_cursor_fixture", 24, 9), "i"), "no variable hit by default")
+            t2 |> success(!variable_hit(find_at_cursor(program, "ast_cursor_fixture", 9, 8), "a"), "no argument hit by default")
+        }
+    }
+}

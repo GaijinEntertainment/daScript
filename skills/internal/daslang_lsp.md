@@ -45,7 +45,10 @@ works for development and wins over the checked-in copy (name-keyed dedup).
   a `generated` function of its own, visited before the function whose source holds it:
   `daslib/ast_cursor` orders hits by span, not visit order, so the body's own expressions
   win, and a capture read through the compiler's `__this` shows as the captured variable
-  (a `generated` variable is never the answer).
+  (a `generated` variable is never the answer). A variable's declaration is not an
+  expression either: nav asks `find_at_cursor` for `declarations`, which adds a `variable`
+  hit (no `expr`) for the cursor on a `for`/`let` variable or a function, lambda or block
+  argument; the MCP cursor subtools do not ask, so they see expression hits only.
 - **NO resident daslang, ever** (macro-state leak, binary/DLL locks vs builds,
   crash isolation). Same rationale as the MCP subtool pattern.
 - **Every subtool compile sets `cop.module_cache = true`** - the default module cache

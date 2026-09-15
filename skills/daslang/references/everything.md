@@ -4829,14 +4829,21 @@ Position-based AST queries. Given a file, line, and column, finds all expression
 
 ### Structures
 
-- `CursorHit`
+- `CursorHit` - Raw pointer to the expression node (valid while the program lives); null for a variable hit.
 
 ### Classes
 
 - `CursorVisitor`
 - `CursorVisitor.preVisitFunction`
 - `CursorVisitor.visitFunction`
+- `CursorVisitor.preVisitFunctionArgument`
 - `CursorVisitor.preVisitExpression`
+- `CursorVisitor.preVisitExprBlockArgument`
+- `CursorVisitor.preVisitExprLetVariable`
+- `CursorVisitor.preVisitExprForVariable`
+- `CursorVisitor.in_target_file`
+- `CursorVisitor.cursor_on_variable`
+- `CursorVisitor.add_variable`
 
 ### Cursor queries
 
