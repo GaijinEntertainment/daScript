@@ -72,9 +72,7 @@ shared shape lands in the shared types module `ARCHITECTURE_MEDIA.md` sec.1.7 na
 **`dasllama/dasllama_tower.das` requires none of `dasllama/dasllama_audio.das`,
 `dasllama/dasllama_vision.das`, or a family file - a diff adding such a require is a defect.**
 
-**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's
-file**; a sanctioned tower-worthy single-caller is ledgered on `ARCHITECTURE_MEDIA.md` sec.1.7's
-tower charter line.
+**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's file.**
 
 **Tool wire text (the text of a model's tool/function call, built or parsed) is produced only
 in `dasllama/dasllama_tools.das`.**

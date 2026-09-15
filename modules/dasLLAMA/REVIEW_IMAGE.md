@@ -67,15 +67,16 @@ property-shaped family serves the wrong bytes under a changed property.
 **A diff that changes what an image at an UNCHANGED path contains without changing the meta
 closure's struct shape - a moved byte, a re-meaning of a serialized field, a serializer body
 change that the layout fingerprint cannot see - bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`)
-in the same change; weakening the `REVIEW.das` layout-stamp check - narrowing its closure or
-dropping the cell - is a defect.** A struct field added or dropped moves `layout_fingerprint()`,
+in the same change; every function that places or sizes image bytes sits inside the `REVIEW.das`
+layout-stamp closure, and a diff that takes a function out of the closure names it in the PR body
+as one that places none.** A struct field added or dropped moves `layout_fingerprint()`,
 which the load compares by name, so that image refuses loudly and a re-stamp of the closure hash
 discharges it; without the fingerprint's help a stale image stays structurally valid and
 silently serves a different model. What the stamp covers is the layout stamp section of
 `ARCHITECTURE_IMAGE.md`.
 
 **Weakening a meta field-count tripwire - `IMAGE_META_FIELDS` and every `*_META_FIELDS`
-constant in a `dasllama/` file - or the `REVIEW.das` check that requires one, is a defect.** Raising the constant
+constant in a `dasllama/` file - is a defect.** Raising the constant
 without adding the field to the serializer leaves that field out of every image, and a
 serializer without the tripwire reads a forgotten field back as zero on every load.
 

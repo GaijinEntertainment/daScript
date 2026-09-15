@@ -8,8 +8,9 @@ docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
 
-**Weakening any check in the Vulkan section of the `REVIEW.das` beside this file is a defect.**
-Each check's error text names the rule it enforces; the checklist does not restate them.
+**The Vulkan section of the `REVIEW.das` beside this file holds this checklist's mechanical
+checks: each check's finding text names the rule it enforces, and `REVIEW.md`'s weakening rule
+binds an edit to any of them.**
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - adds every piece of state the family keeps per
