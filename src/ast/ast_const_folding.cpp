@@ -827,11 +827,14 @@ namespace das {
         using PassVisitor::visit;
         ConstFolding( const ProgramPtr & prog, int32_t round ) : FoldingVisitor(prog, round) {
             fastMath = prog->options.getBoolOption("fast_math", prog->policies.fast_math);
+            noAlgebraic = prog->options.getBoolOption("disable_algebraic_folding", prog->policies.disable_algebraic_folding);
         }
     public:
         vector<Function *> needRun;
     protected:
         bool fastMath = false;
+        // algebraic identity rewrites handed to daslib/fold_rules; constant evaluation stays
+        bool noAlgebraic = false;
         // sign-of-zero-only bit differences (x+0, 0-x): float32 is not bit-exact across das
         // tiers so they are always fair game; double IS bit-exact and needs fast_math; int is exact
         bool zeroSignLaxOk ( Type bt ) const {
@@ -1034,7 +1037,7 @@ namespace das {
                     return evalAndFold(expr);
                 }
             }
-            if ( expr->func->builtIn ) {
+            if ( expr->func->builtIn && !noAlgebraic ) {
                 // !!x → x ; -(-x) → x (bit-exact for FP too: negate is a sign flip)
                 if ( (expr->op=="!" || expr->op=="-") && expr->subexpr->rtti_isOp1() ) {
                     auto inner = static_cast<ExprOp1 *>(expr->subexpr);
@@ -1127,7 +1130,7 @@ namespace das {
             //   exact           - always on (bit-identical for every input)
             //   zeroSignLaxOk   - sign-of-zero-only difference (float32 always, double under fast_math)
             //   valueChangeOk   - inf/NaN results change (FP under fast_math only)
-            if ( expr->func->builtIn && expr->type && !expr->type->ref ) {
+            if ( expr->func->builtIn && expr->type && !expr->type->ref && !noAlgebraic ) {
                 const auto bt = expr->type->baseType;
                 auto L = expr->left;
                 auto R = expr->right;
@@ -1300,7 +1303,7 @@ namespace das {
             if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression &&
                 (expr->func && expr->func->builtIn) ) {
                 return evalAndFold(expr);
-            } else if ( expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
+            } else if ( !noAlgebraic && expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
                 bool failed;
                 vec4f left = eval(expr->left, failed);
                 if ( failed ) return Visitor::visit(expr);
@@ -1317,6 +1320,9 @@ namespace das {
                 bool res = cast<bool>::to(resB);
                 reportFolding();
                 return res ? expr->left : expr->right;
+            }
+            if ( noAlgebraic ) {
+                return Visitor::visit(expr);
             }
             // c ? true : false → c ; c ? false : true → !c
             if ( expr->type && expr->type->isSimpleType(Type::tBool) ) {
@@ -1481,7 +1487,7 @@ namespace das {
             // same-type workhorse cast is a no-op: int(x) where x is already int, float(x:float), ...
             // numeric families only — a string "cast" can be lifetime-relevant (temporary-ness),
             // and qualifiers don't matter for numeric value types
-            if ( expr->func->builtIn && expr->arguments.size()==1 ) {
+            if ( expr->func->builtIn && expr->arguments.size()==1 && !noAlgebraic ) {
                 auto arg = expr->arguments[0];
                 if ( expr->type && arg->type && !expr->type->ref && !arg->type->ref
                     && expr->type->baseType==arg->type->baseType

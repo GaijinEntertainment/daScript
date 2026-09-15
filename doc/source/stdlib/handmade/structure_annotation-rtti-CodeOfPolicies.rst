@@ -77,6 +77,7 @@ Node budget for ``auto_inline_functions``: a loop-free callee body up to this ma
 Disables compile-time function evaluation (RunFolding of pure calls over constant arguments). Host-side counterpart of ``options disable_run`` (the option overrides the policy).
 Disables the temp-string reclaim pass: fresh-string call results consumed in place stop riding the 1-slot dispose queue. Reclaim only activates on the persistent, non-interned string heap. Host-side counterpart of ``options disable_temp_string_reclaim`` (the option overrides the policy).
 Disables infer-time constant folding.
+Disables the built-in algebraic identity rewrites (``x*1``, ``x+0``, ``!!x``, ``c?a:a``, same-type numeric cast, constant reassociation). Constant EVALUATION is unaffected. Host-side counterpart of ``options disable_algebraic_folding`` (the option overrides the policy); the rewrites it turns off are the ones ``daslib/fold_rules_std`` carries as declarative rules.
 Fails compilation if AOT is not available.
 Fails compilation if AOT export is not available.
 Log compile time.

@@ -16,6 +16,21 @@ struct private Hidden { a : int }   // prefix keyword, not an annotation; defaul
 
 Field types infer from initializers: `struct Foo { x = 1; y = 2.0 }` gives `int` and `float`.
 
+**An inferred-type field is `const`.** `count = 0` is read-only for the life of the value -
+writing it is `error[30905] can't be applied to constant int const&`, reported at the write, not
+at the declaration. Name the type to get a mutable field with the same default:
+
+```das
+struct Counter {
+    hits = 0            // const: hits++ does not compile
+    runs : int = 0      // mutable, same default
+    total : int         // mutable, zero
+}
+```
+
+The same holds for class fields, which is where it bites most: a method that updates a counter
+needs the counter declared `hits : int`.
+
 ## Struct initialization
 
 A function whose name matches the struct is its initializer; the compiler generates a default one.

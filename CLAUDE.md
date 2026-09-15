@@ -210,7 +210,12 @@ diagnostic in any tier.
 
 - **A continuation line starting `+` or `-` is its own statement**, and unary plus is pure, so
   the optimizer deletes it: `let x = a` <enter> `+ b` <enter> `+ c` leaves `x == a`. Always wrap a
-  multi-line arithmetic RHS in `(...)`.
+  multi-line arithmetic RHS in `(...)`. A line starting `&&`, `||` or `??` is a hard syntax error
+  instead, with the same fix - parenthesize, or break after the operator.
+- **A struct or class field declared with an initializer and NO type is `const`** - `hits = 0` is
+  read-only for the life of the value, and the diagnostic (`error[30905] can't be applied to
+  constant int const&`) lands on the write, not the declaration. Spell the type when the field is
+  written: `hits : int = 0`.
 - **Stripping `const` in order to write.** The type is what the optimizer reads: a const
   pointer or reference parameter is read-only memory to it, and a write routed through
   `intptr` and back is invisible to the compiler's write marks and the JIT's read-only guard.
