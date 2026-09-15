@@ -1323,6 +1323,7 @@ def test_find_references_no_expression(t : T?) {
         parse_result(do_find_references(fixture_path("_fixture_refs.das"), "2", "1", "file", ""), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "No expression or declaration found") >= 0, "should report nothing found")
+        t |> success(find(text, ":2:1") >= 0, "the message echoes the caller's 1-based position: {text}")
     }
 }
 

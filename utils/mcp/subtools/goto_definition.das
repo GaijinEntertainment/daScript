@@ -59,7 +59,6 @@ def lineinfo_file(at : LineInfo) : string {
     return ""
 }
 
-// Resolve definition from a CursorHit
 def variable_definition(variable : Variable const?) : DefinitionResult {
     let file = lineinfo_file(variable.at)
     let line = int(variable.at.line)
@@ -74,7 +73,6 @@ def variable_definition(variable : Variable const?) : DefinitionResult {
     )
 }
 
-//! the declaration whose name the cursor is on, which no expression hit carries
 def declaration_definition(program : smart_ptr<Program>; file : string; line, col : int) : DefinitionResult {
     let d = find_declaration_at_cursor(program, file, line, col, source_line(file, line))
     return DefinitionResult() if (d.kind == DeclarationKind.none)
@@ -203,8 +201,7 @@ def resolve_definition(program : smart_ptr<Program>; hit : CursorHit) : Definiti
     return DefinitionResult()
 }
 
-//! a declared name's column on its line: a Structure's own position sits one column before its name,
-//! a typedef's is its right-hand type
+//! where the name is spelled on its declaration line: a Structure's `at` is one column before its name, a typedef's is its right-hand type
 def declared_name_column(at : LineInfo; name : string) : int {
     return name_column(source_line(lineinfo_file(at), int(at.line)), name, int(at.column))
 }
@@ -223,7 +220,6 @@ def declared_definition(kind : string; name : string; at : LineInfo) : Definitio
     )
 }
 
-//! the declaration a type names: the typedef, the struct, the enum, or the handled type's C++ side
 def type_definition(program : smart_ptr<Program>; td : TypeDecl const?) : DefinitionResult {
     if (!empty(td.alias)) {
         var at = td.at
@@ -291,8 +287,9 @@ def run_goto_definition(file : string; line_str, col_str, no_opt_str, with_cpp_s
     let proj_err = validate_project_arg(project)
     if (!empty(proj_err)) return make_tool_result(proj_err, true)
     let line = to_int(line_str)
-    let col = to_int(col_str) - 1   //! the argument is 1-based, LineInfo columns are 0-based
-    if (line <= 0 || col < 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
+    let col = to_int(col_str)
+    let col0 = col - 1
+    if (line <= 0 || col0 < 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let no_opt = no_opt_str == "true"
     let with_cpp_source = with_cpp_source_str == "true"
     var cpp_dirs_arr : array<string>
@@ -305,9 +302,9 @@ def run_goto_definition(file : string; line_str, col_str, no_opt_str, with_cpp_s
         }
     }
     return compile_program(file, true, no_opt, project) $(program; _issues) {
-        let decl = declaration_definition(program, file, line, col)
+        let decl = declaration_definition(program, file, line, col0)
         if (decl.found) return format_result(decl, CursorHit(), with_cpp_source, cpp_dirs_arr)
-        var hits <- find_at_cursor(program, file, line, col, true, source_line(file, line))
+        var hits <- find_at_cursor(program, file, line, col0, true, source_line(file, line))
         if (empty(hits)) return "No expression found at {file}:{line}:{col}"
         for (hit in hits) {
             let defn = resolve_definition(program, hit)

@@ -454,9 +454,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
       let front_name = host.name
       let front_argv := host.argv
       t |> run("front protocol end-to-end through the {front_name}") @capture(:= front_argv) (t : T ?) {
-        var rc = -1
-        unsafe {
-            rc = popen_argv_pipe(front_argv) $(w, r) {
+        let rc = unsafe(popen_argv_pipe(front_argv) $(w, r) {
                 if (w == null || r == null) {
                     t |> failure("could not spawn the LSP front: {front_argv}")
                     return
@@ -679,7 +677,6 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
                 t |> success(global_keys |> find_index("{global_use_line0}:{global_use_char}") >= 0, "global references include the use inside the generator")
                 t |> equal(probe_definition(t, w, r, 29, uri, enum_use_line0, enum_use_char + 2), int2(enum_line0, enum_char), "definition of an enum use lands on the enum")
 
-                // a type name in an expression is a type: the class in `new`, the typedef in a declaration
                 let hover_new = probe_hover(t, w, r, 30, uri, new_final_line0, new_final_char + 2)
                 t |> success(hover_new.text |> find("class LspProbeFinalized") >= 0, "hover on the type name in new: {hover_new.text}")
                 t |> equal(hover_new.character, new_final_char)
@@ -691,8 +688,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
                 let shutdown_resp = read_until(t, r) $(js) => (js?["id"] ?? -1) == 3
                 t |> success(shutdown_resp != null, "shutdown response received")
                 write_frame(w, sprint_json(PlainMsg(method = "exit"), false))
-            }
-        }
+            })
         t |> equal(rc, 0, "front exit code")
       }
     }

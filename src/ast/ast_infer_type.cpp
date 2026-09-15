@@ -3310,7 +3310,7 @@ namespace das {
         // infer
         if (expr->typeexpr->isAlias()) {
             if (auto aT = findAlias(expr->typeexpr->alias)) {
-                auto nameAt = expr->typeexpr->at;   // the source spelling; the clone brings the declaration's
+                auto nameAt = expr->typeexpr->at;
                 TypeDecl::clone(expr->typeexpr, aT);
                 expr->typeexpr->at = nameAt.fileInfo ? nameAt : expr->at;
                 expr->typeexpr->ref = false;      // drop a ref

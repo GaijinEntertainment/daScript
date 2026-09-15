@@ -33,7 +33,6 @@ struct public CursorHit {
     rtti : string
 }
 
-//! the position a hit's node carries
 def public hit_at(hit : CursorHit) : LineInfo {
     if (hit.expr != null) return hit.expr.at
     if (hit.variable != null) return hit.variable.at
@@ -68,9 +67,8 @@ def private expression_name(expr : ExpressionPtr) : string {
     return ""
 }
 
-//! A compiler-synthesized member - `Foo'__finalize`, `Foo'Foo` and the like - sits on the `class`
-//! line with no source of its own; user identifiers never contain the apostrophe. A lambda or
-//! generator body is `generated` too and is the user's own source; a generic instance keeps its origin.
+//! True for a member the compiler made on the `class` line (`Foo'__finalize`), never for a lambda or generator body or a generic instance.
+[arch(at="ARCHITECTURE_CURSOR.md#cursor-compiler-made-names")]
 def public is_synthesized(func : Function const?) : bool {
     return false if (func == null)
     return true if (func.flags.generated && !func.flags._lambda && !func.flags._generator && func.fromGeneric == null)
@@ -81,8 +79,8 @@ def public is_synthesized(func : Function const?) : bool {
     return has_tick
 }
 
-//! The name the source spells: a generator's loop variable becomes a state field the compiler
-//! names `__<name>_rename_at_<line>_<column>`.
+//! The name the source spells for a compiler-renamed variable (a generator's loop variable); any other name unchanged.
+[arch(at="ARCHITECTURE_CURSOR.md#cursor-compiler-made-names")]
 def public source_name(name : string) : string {
     return name if (!(name |> starts_with("__")))
     let at = find(name, "_rename_at_")
@@ -93,8 +91,7 @@ def private is_ident_byte(c : uint8) : bool {
     return utf32_is_word_char(uint(c))
 }
 
-//! The identifier `col` (0-based byte column) sits on in `line_text`, and the column it starts at;
-//! an empty word when the cursor is not on one.
+//! The identifier the 0-based byte column `col` is on in `line_text`, with its start column; the word is empty when `col` is on none.
 def public word_at(line_text : string; col : int) : tuple<word : string; start : int> {
     var word = ""
     var start = -1
@@ -115,8 +112,8 @@ def public word_at(line_text : string; col : int) : tuple<word : string; start :
     return (word = word, start = start)
 }
 
-//! The 0-based byte column where `name` stands as a whole word in `line_text`, `hint` when it does
-//! not: a `Structure`'s own position is one column before its name.
+//! Where `line_text` spells `name` as a whole word (0-based byte column), else `hint`.
+[arch(at="ARCHITECTURE_CURSOR.md#cursor-variable-position")]
 def public name_column(line_text : string; name : string; hint : int) : int {
     var column = hint
     peek_data(line_text) $(d) {
@@ -178,17 +175,13 @@ def private on_line(at : LineInfo; file : string; line : int) : bool {
     return find(string(at.fileInfo.name), file) >= 0
 }
 
-//! A declaration's name matches when the lookup is line-only (empty `word`), or when the name is the
-//! cursor's word and the line spells it starting at the cursor's column - a second spelling of the
-//! same name on the line (a self-call, a parameter named after the function) is not the declaration.
+//! Only the line's first whole-word spelling of `name` is the declaration - a self-call or a parameter named after the function is not.
 def private on_name(word : string; name : string; line_text : string; here : int) : bool {
     return true if (empty(word))
     return name == word && here == name_column(line_text, name, -1)
 }
 
-//! Find the declaration whose name the cursor is on - a function or generic, a structure or the parent
-//! named on its `class` line, an enumeration, a typedef, a global - which `find_at_cursor` never yields.
-//! `line_text` is the source line, "" for a line-only lookup; `file` is a substring of ``FileInfo.name``.
+//! The declaration whose name is at the cursor, the parent a `class` line names included; `line_text` "" makes it a line-only lookup, `file` is a substring of ``FileInfo.name``.
 def public find_declaration_at_cursor(program : smart_ptr<Program>; file : string; line, col : int; line_text : string) : DeclarationHit {
     var hit = DeclarationHit()
     let w = word_at(line_text, col)
@@ -263,7 +256,7 @@ class CursorVisitor : AstVisitor {
     currentFunc : Function const?
     withDeclarations : bool
     inSynthesized : bool
-    lineText : string    // the cursor line's source; "" leaves type names unmatched
+    targetLineText : string
     typeHits : table<string>    // one type hit per name and position: a `new T()` carries T on several nodes
 
     def CursorVisitor(file : string; line, col : int; declarations : bool; line_text : string) {
@@ -271,7 +264,7 @@ class CursorVisitor : AstVisitor {
         targetLine = line
         targetCol = col
         withDeclarations = declarations
-        lineText = line_text
+        targetLineText = line_text
     }
 
     def in_target_file(at : LineInfo) : bool {
@@ -279,7 +272,7 @@ class CursorVisitor : AstVisitor {
         return find(string(at.fileInfo.name), targetFile) >= 0
     }
 
-    [arch(at="ARCHITECTURE.md#cursor-variable-position")]
+    [arch(at="ARCHITECTURE_CURSOR.md#cursor-variable-position")]
     def cursor_on_variable(v : Variable const?) : bool {
         return cursor_on_token(v.at, string(v.name))
     }
@@ -315,14 +308,12 @@ class CursorVisitor : AstVisitor {
         add_variable_at_cursor(svar)
     }
 
-    // a type name the source spells - `p : Point`, `new Point()`, a return type - is a TypeDecl,
-    // never an expression; the implicit `self` of a method carries its class at a position the
-    // source does not spell, so it never hits
+    // type names are TypeDecls, not expressions; a method's implicit self carries its class where the source spells no name, so spells_name gates the hit
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
-        return if (!withDeclarations || empty(lineText) || inSynthesized || typ == null || !in_target_file(typ.at))
+        return if (!withDeclarations || empty(targetLineText) || inSynthesized || typ == null || !in_target_file(typ.at))
         let td = typ
         let name = string(td.structType != null ? td.structType.name : td.enumType != null ? td.enumType.name : td.alias)
-        return if (empty(name) || !cursor_on_token(td.at, name) || !spells_name(lineText, int(td.at.column), name))
+        return if (empty(name) || !cursor_on_token(td.at, name) || !spells_name(targetLineText, int(td.at.column), name))
         let key = "{int(td.at.column)}:{name}"
         return if (key_exists(typeHits, key))
         typeHits |> insert(key)
@@ -340,8 +331,7 @@ class CursorVisitor : AstVisitor {
         return fun
     }
 
-    // a compiler-made variable, such as the `__this` a lambda reads its captures through, is not
-    // source the cursor can be on
+    // a compiler-made variable - the __this a lambda reads its captures through - is not source the cursor can be on
     def generated_variable(e : Expression const?) : bool {
         return false if (!(e is ExprVar))
         let v = e as ExprVar
@@ -370,8 +360,7 @@ class CursorVisitor : AstVisitor {
         return targetCol >= c && targetCol < c + length(name)
     }
 
-    // a generated field's initializer is a class's own member binding - the finalizer and vtable
-    // entries the compiler places on the `class` line
+    // a generated field's initializer - the finalizer and vtable entries - sits on the class line with no source of its own
     def override preVisitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) : void {
         inSynthesized = decl.flags.generated
     }

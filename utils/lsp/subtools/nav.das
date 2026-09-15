@@ -374,8 +374,7 @@ def private alias_declaration(program : smart_ptr<Program>; name : string) : Lin
     return at
 }
 
-//! where the declared name is spelled on its declaration's line: a Structure's own position is one
-//! column before its name, a typedef's is its right-hand type
+//! where the name is spelled on its declaration line: a Structure's `at` is one column before its name, a typedef's is its right-hand type
 def private declared_name_column(at : LineInfo; name : string) : int {
     return name_column(line_text(lineinfo_file(at), int(at.line)), name, int(at.column))
 }
@@ -660,8 +659,7 @@ def private is_unspelled_type_ref(target : RefTarget; r : RawRef) : bool {
     return !spells_name(line_text(r.file, r.line), r.column, target.name)
 }
 
-//! where a declaration's name starts on its own line: the cursor's word for a hit on that line, else
-//! the spelling on the declaration's line (the parent named on a derived class's line)
+//! the cursor's word column for a hit on the cursor line, else the name as spelled on the declaration's own line (a derived class's parent)
 def private decl_column(hit : DeclarationHit; line : int) : int {
     return hit.column if (hit.column >= 0 && int(hit.at.line) == line)
     return name_column(line_text(lineinfo_file(hit.at), int(hit.at.line)), hit.name, int(hit.at.column))
@@ -690,8 +688,7 @@ struct DeclHit {
     word_column : int   //! where the cursor's identifier starts on its line
 }
 
-//! a declaration is not an expression: find_at_cursor answers only variable declarations, so a cursor op
-//! asks here first; a negative `col` is the line-only lookup
+//! the declaration the cursor names; a negative `col` is the line-only lookup
 def private declaration_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : DeclHit {
     let found = find_declaration_at_cursor(program, file, line, col, col < 0 ? "" : line_text(file, line))
     var hit = DeclHit(word_column = found.column)

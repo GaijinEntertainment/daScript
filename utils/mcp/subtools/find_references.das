@@ -41,8 +41,7 @@ struct RefTarget {
     alias_name : string
     // display name
     name : string
-    // the declaration's own position when known: a site there is the declaration's binding, not a use
-    @safe_when_uninitialized decl_at : LineInfo
+    @safe_when_uninitialized decl_at : LineInfo   //! the declaration's own position when known: a site there is its binding, not a use
 }
 
 def position_key(at : LineInfo) : string {
@@ -133,7 +132,6 @@ def identify_type_target(expr : Expression const?) : RefTarget {
     return RefTarget()
 }
 
-// Build a RefTarget from a cursor hit
 def type_target(td : TypeDecl const?) : RefTarget {
     if (!empty(td.alias)) return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
     if (td.structType != null) return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(td.structType), name = string(td.structType.name))
@@ -163,9 +161,9 @@ class RefVisitor : AstVisitor {
     target : RefTarget = RefTarget()
     refs : array<Reference>
     currentFunc : Function const?
-    in_synthesized_member : bool   // its sites borrow the class line's position and are not source
+    in_synthesized_member : bool
     file_filter : string   // if non-empty, only collect refs from this file
-    seen : table<string>   // one site per position: a `new T()` carries T's type on several nodes
+    seen : table<string>   //! one site per position: a `new T()` carries T's type on several nodes
 
     def RefVisitor(t : RefTarget; file_flt : string) {
         target = t
@@ -196,8 +194,6 @@ class RefVisitor : AstVisitor {
         ))
     }
 
-    //! a type reference the compiler placed where the source does not spell the type - the implicit
-    //! `self` of every method carries its class - is not a site to list
     def add_type_ref(at : LineInfo; name : string; context : string) : void {
         return if (at.fileInfo == null || !spells_name(source_line(string(at.fileInfo.name), int(at.line)), int(at.column), name))
         add_ref(at, context)
@@ -214,7 +210,6 @@ class RefVisitor : AstVisitor {
         return <- fun
     }
 
-    // a derived class names its parent on its own line - a parent link, not a TypeDecl
     def override preVisitStructure(str : StructurePtr) : void {
         return if (target.kind != RefTargetKind.structure || str.parent == null || to_void(str.parent) != target.target_ptr || int(str.at.line) == 0 || str.at.fileInfo == null)
         let file = string(str.at.fileInfo.name)
@@ -335,7 +330,6 @@ def format_references(refs : array<Reference>; target : RefTarget) : string {
     }
 }
 
-//! the declaration the cursor is on as a target; `line_text` "" matches any declaration on the line
 def declaration_target(program : smart_ptr<Program>; file : string; line, col : int; line_text : string) : RefTarget {
     let d = find_declaration_at_cursor(program, file, line, col, line_text)
     if (d.kind == DeclarationKind.func) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(d.func), name = string(d.func.name), decl_at = d.at)
@@ -350,24 +344,22 @@ def run_find_references(file : string; line_str, col_str, scope_str, no_opt_str 
     let proj_err = validate_project_arg(project)
     if (!empty(proj_err)) return make_tool_result(proj_err, true)
     let line = to_int(line_str)
-    let col = to_int(col_str) - 1   //! the argument is 1-based, LineInfo columns are 0-based
-    if (line <= 0 || col < 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
+    let col = to_int(col_str)
+    let col0 = col - 1
+    if (line <= 0 || col0 < 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let all_modules = scope_str == "all"
     let no_opt = no_opt_str == "true"
     return compile_program(file, true, no_opt, project) $(program; _issues) {
-        // Step 1: the declaration whose name the cursor is on, before any expression - a class's
-        // synthesized members sit on its line and would answer for it
-        var target = declaration_target(program, file, line, col, source_line(file, line))
-        var hits <- find_at_cursor(program, file, line, col, true, source_line(file, line))
+        var target = declaration_target(program, file, line, col0, source_line(file, line))
+        var hits <- find_at_cursor(program, file, line, col0, true, source_line(file, line))
         if (target.kind == RefTargetKind.none) {
             for (hit in hits) {
                 target = identify_target(hit)
                 if (target.kind != RefTargetKind.none) break
             }
         }
-        // Step 1b: any declaration on the line
         if (target.kind == RefTargetKind.none) {
-            target = declaration_target(program, file, line, col, "")
+            target = declaration_target(program, file, line, col0, "")
         }
         if (target.kind == RefTargetKind.none) {
             if (empty(hits)) return "No expression or declaration found at {file}:{line}:{col}"

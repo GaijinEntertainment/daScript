@@ -407,12 +407,6 @@ def get_daslang_exe() : string {
 //   - Exits 0 on success AND on tool-level failure (e.g. compile errors are a
 //     successful tool run that reports isError=true). Exit non-0 ONLY on
 //     catastrophic failure (cannot read args, internal panic).
-// Inside an MCP subtool's `[export] def main`, locate the caller-supplied
-// args inside daslang's full argv. Conventional invocation:
-//   daslang.exe utils/mcp/subtools/<name>.das -- <arg1> <arg2> ...
-// Returns the args after `--`. Falls back to args[2..] (skip exe + script
-// path) if no `--` is present, so subtools can also be invoked manually
-// for debugging without the separator.
 var private SOURCE_LINES : table<string; array<string>>
 
 //! the source line (1-based) of a file, "" past its end; a file is read once per process
@@ -428,6 +422,12 @@ def public source_line(file : string; line : int) : string {
     return text
 }
 
+// Inside an MCP subtool's `[export] def main`, locate the caller-supplied
+// args inside daslang's full argv. Conventional invocation:
+//   daslang.exe utils/mcp/subtools/<name>.das -- <arg1> <arg2> ...
+// Returns the args after `--`. Falls back to args[2..] (skip exe + script
+// path) if no `--` is present, so subtools can also be invoked manually
+// for debugging without the separator.
 def subtool_user_args(args : array<string>) : array<string> {
     var out : array<string>
     var i = 0

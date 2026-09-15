@@ -3,12 +3,13 @@
 Design rationale a maintainer cannot recover from the code alone. One numbered section per
 module; entries are anchored to symbols.
 
-Four companions carry a concern each; a section number is unique across all five files.
+Five companions carry a concern each; a section number is unique across all six files.
 
 - `ARCHITECTURE_LINT.md` - sec. 1-4: perf_lint, lint_config, lint, style_lint.
 - `ARCHITECTURE_EMIT.md` - sec. 5-7, 28-29: aot_cpp, aot_standalone, flatten, the shader rails.
 - `ARCHITECTURE_CAPI.md` - sec. 30: c_api_header, the C surface both backends emit.
 - `ARCHITECTURE_LINQ.md` - sec. 11-17, 33, 37: the linq family, sql_linq, sql_migrate.
+- `ARCHITECTURE_CURSOR.md` - sec. 40: ast_cursor, the cursor module the LSP and MCP navigation tools share.
 
 ## 8. ast_verify
 
@@ -284,13 +285,3 @@ Four companions carry a concern each; a section number is unique across all five
   hook by field name, so a C++ side back on `const` leaves daslang writing through a const
   reference with every suite green. `progArgs` (the program's `options`), `simulate` and the
   `aot*` hooks stay const on both sides.
-
-## 40. ast_cursor
-
-### 40.1 A variable's declaration position {#cursor-variable-position}
-
-- **A `Variable`'s `at` is its name token - `src/parser/parser_impl.cpp` (repo root) sets
-  `pVar->at` from the `tokAt(scanner, @name)` the grammar's `VariableNameAndPosition` carries -
-  and a variable whose `at` has no width is matched over `length(name)` columns instead.**
-  Nothing fails when one side moves alone: a wider `at` still contains the cursor on the name,
-  so every cursor test stays green while hits appear for text that is not the name.
