@@ -342,6 +342,9 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     var self_line0 = -1
     var self_name_char = -1
     var self_call_char = -1
+    var generic_line0 = -1
+    var generic_name_char = -1
+    var generic_call_char = -1
     var for_line0 = -1
     var for_char = -1
     var for_use_line0 = -1
@@ -382,6 +385,10 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
             self_line0 = i
             self_name_char = find(clean_lines[i], "lsp_probe_self")
             self_call_char = find(clean_lines[i], "lsp_probe_self(n - 1)")
+        } elif (clean_lines[i] |> starts_with("def lsp_probe_generic")) {
+            generic_line0 = i
+            generic_name_char = find(clean_lines[i], "lsp_probe_generic")
+            generic_call_char = find(clean_lines[i], "lsp_probe_generic(n - 1)")
         } elif (clean_lines[i] |> starts_with("    for (i in range")) {
             for_line0 = i
             for_char = find(clean_lines[i], "i in")
@@ -397,7 +404,8 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
     t |> success(lambda_line0 >= 0 && lambda_body_char >= 0, "fixture contains the capturing lambda")
     t |> success(for_line0 >= 0 && for_use_line0 >= 0, "fixture contains the for loop and its body use")
     t |> success(self_line0 >= 0 && self_call_char > self_name_char, "fixture contains the one-line self-calling function")
-    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0 || for_line0 < 0 || for_use_line0 < 0 || self_line0 < 0)
+    t |> success(generic_line0 >= 0 && generic_call_char > generic_name_char, "fixture contains the one-line self-calling generic")
+    return if (def_line0 < 0 || call_line0 < 0 || base_speak_line0 < 0 || derived_speak_line0 < 0 || base_line0 < 0 || derived_line0 < 0 || final_line0 < 0 || finalize_line0 < 0 || new_final_line0 < 0 || lambda_line0 < 0 || for_line0 < 0 || for_use_line0 < 0 || self_line0 < 0 || generic_line0 < 0)
     let uri = path_to_uri(fixture)
 
     for (host in front_hosts()) {
@@ -600,6 +608,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE038 one ordered LSP session on 
 
                 // a call of the function on its own def line is a call, not the declaration
                 t |> equal(probe_definition(t, w, r, 20, uri, self_line0, self_call_char + 2), int2(self_line0, self_name_char), "definition of a same-line self-call lands on the name in the def")
+                t |> equal(probe_definition(t, w, r, 21, uri, generic_line0, generic_call_char + 2), int2(generic_line0, generic_name_char), "definition of a same-line self-call in a generic lands on the name in the def")
 
                 // clean teardown
                 write_frame(w, sprint_json(PlainRequestMsg(id = 3, method = "shutdown"), false))

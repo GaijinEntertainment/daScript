@@ -304,7 +304,8 @@ def private resolve_definition(hit : CursorHit) : Definition { // nolint:STYLE03
     if (expr is ExprCall) {
         let c = expr as ExprCall
         if (c.func != null) {
-            let signature = function_signature(c.func)
+            let fn = origin_function(c.func)
+            let signature = function_signature(fn)
             if (c.func.flags.builtIn) {
                 let bfn = c.func as BuiltInFunction
                 return Definition(
@@ -317,10 +318,10 @@ def private resolve_definition(hit : CursorHit) : Definition { // nolint:STYLE03
             return Definition(
                 found = true,
                 kind = "function",
-                name = string(c.func.name),
-                file = lineinfo_file(c.func.at),
-                line = int(c.func.at.line),
-                column = int(c.func.at.column),
+                name = string(fn.name),
+                file = lineinfo_file(fn.at),
+                line = int(fn.at.line),
+                column = int(fn.at.column),
                 signature = signature)
         }
     }
@@ -726,8 +727,8 @@ def private declaration_at_cursor(program : smart_ptr<Program>; file : string; l
         ast::for_each_generic(thisMod) $(var func : FunctionPtr) {
             return if (found.kind != RefTargetKind.none)
             let f = func
-            return if (is_synthesized(f) || !declared_here(f.at, target_file, line) || bare_function_name(string(f.name)) != word)
-            found = function_target(f, here)
+            return if (is_synthesized(f) || !declared_here(f.at, target_file, line) || !on_name(word, bare_function_name(string(f.name)), file, line, here, f.at))
+            found = function_target(f, decl_column(here, f.at))
         }
     }
     if (found.kind == RefTargetKind.none) {

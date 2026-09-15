@@ -25,6 +25,8 @@ def lsp_probe_helper() {
 
 def lsp_probe_self(n : int) : int => n > 0 ? lsp_probe_self(n - 1) : 0
 
+def lsp_probe_generic(n : auto) : int => n > 0 ? lsp_probe_generic(n - 1) : 0
+
 [export]
 def main() {
     lsp_probe_helper()
@@ -38,4 +40,5 @@ def main() {
     for (i in range(2)) {
         print("{i}\n")
     }
+    print("{lsp_probe_self(2) + lsp_probe_generic(2)}\n")
 }
