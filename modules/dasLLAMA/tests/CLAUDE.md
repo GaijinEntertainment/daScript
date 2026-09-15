@@ -559,7 +559,8 @@ CPU control of a dense 31B on the reference kernel bodies runs half an hour on a
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.
-`test_gpu_resident_moe.das` - stocked suite, `-jit` only; the whole-model resident driver on a MoE
+`test_gpu_resident_moe.das` (`_moe_resident.das` carries the rig, shared with
+`test_gpu_resident_gptoss.das`) - stocked suite, `-jit` only; the whole-model resident driver on a MoE
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, `DASLLAMA_GPU=1`): the expert stacks in the arena, the window
 chain's routed block and the token command's routed block - the hybrid file's forced-feed
 logits-tolerance form at the routed chain's 20% bar (the arms part on the router's near-ties from
@@ -578,6 +579,12 @@ cells skip without the file, the armed tier, or a device with no cm2 tile family
 declines a MoE there by design); on a cm2 device the driver's admission of the fixture is
 asserted, a decline is a red that sends the reader to the load log. Every cell pins the resident
 route on for its load (`set_gpu_resident_route`) and restores the lever after.
+`test_gpu_resident_gptoss.das` - stocked suite, `-jit` only; the same rig on gpt-oss-20b (the pinned
+upstream `gpt-oss-20b-mxfp4.gguf`, large-tier): the native-MXFP4 routed stacks on the mx4 expert
+rail, the biased router's softmax over its four picks, the gate / up / down bias rows at the act and
+the combine under the clamped swiglu, the per-head attention sinks in the flash tiles and the token
+command's pass, the output bias on the residual step and the 128-key sliding layers, at one window
+and two; the e-column witness counts the mx4 stamps beside the kq, q8 and q51 ones.
 `test_gpu_moe_shexp.das` - stocked suite, `-jit` only; the shared expert's prefill on the device
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
 shexp triple as one region over every position of the routed experts' chain, gated by the tier's
