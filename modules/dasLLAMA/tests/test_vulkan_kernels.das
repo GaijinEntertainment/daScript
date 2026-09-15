@@ -5601,6 +5601,242 @@ def test_vkd_mx4_gemv(t0 : T?) {
     }
 }
 
+//! the fused mx4 gate + up + act + requant on one fixture: the gate stack's rows then the up stack's in one plane, the slots'
+//! regions on both, a six-expert bias plane and the slots' experts; the fused dispatch against the oracle (the bias added before
+//! the clamped swiglu), then the split path - two GEMVs and the biased requant - byte for byte
+def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {   // nolint:STYLE037 — one linear fixture: the planes, the fused dispatch, the oracle bars, the split path's byte compare
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let n = 2880   //! gpt-oss's routed width: 90 blocks a row
+        let nb = n / 32
+        let rows = nreg * d
+        let nblk = rows / 32
+        let ne = 6
+        let totblk = 2 * rows * nb   // the gate stack's blocks, then the up stack's
+        var wqh : array<uint>
+        var xqh : array<uint>
+        var xsh : array<float>
+        var gb : array<float>
+        var ub : array<float>
+        var rex : array<uint>
+        wqh |> resize(totblk * 4)
+        xqh |> resize(nb * 8)
+        xsh |> resize(nb)
+        gb |> resize(ne * d)
+        ub |> resize(ne * d)
+        rex |> resize(nreg)
+        for (i in range(totblk * 4)) {
+            wqh[i] = hash_word(uint(i) * 5u + 977u)
+        }
+        var wsh <- mx4_scale_words(totblk)
+        for (i in range(nb * 8)) {
+            xqh[i] = hash_word(uint(i) * 29u + 11u)
+        }
+        for (i in range(nb)) {
+            xsh[i] = 0.25 + float(i % 5) * 0.125
+        }
+        for (i in range(ne * d)) {   //! biases of the dots' own magnitude, some past the 7 clamp
+            gb[i] = bias ? float((i * 13) % 31) * 0.5 - 7.5 : 0.0
+            ub[i] = bias ? float((i * 17) % 29) * 0.6 - 8.4 : 0.0
+        }
+        for (r in range(nreg)) {
+            rex[r] = uint((r * 5 + 2) % ne)
+        }
+        var regs : array<uint>
+        var regs3 : array<uint>
+        regs |> resize(nreg * 2)
+        regs3 |> resize(nreg * 2)
+        for (r in range(nreg)) {
+            regs[r * 2] = uint(r * d * nb)
+            regs[r * 2 + 1] = 0u
+            regs3[r * 2] = uint((nreg + r) * d * nb)
+            regs3[r * 2 + 1] = 0u
+        }
+        let act = bias ? ACT_OAI : 0u
+        let wq_bytes = int64(totblk) * 16l
+        let ws_bytes = long_length(wsh) * 4l
+        let xq_bytes = int64(nb) * 32l
+        let xs_bytes = int64(nb) * 4l
+        let rg_bytes = int64(nreg) * 8l
+        let b_bytes = int64(ne * d) * 4l
+        let y_bytes = int64(rows) * 4l
+        let oq_bytes = int64(rows)
+        let os_bytes = int64(nblk) * 4l
+        let wqd = make_device_buf(wq_bytes)
+        let wsd = make_device_buf(ws_bytes)
+        let xqd = make_device_buf(xq_bytes)
+        let xsd = make_device_buf(xs_bytes)
+        let rgd = make_device_buf(rg_bytes)
+        let rg3d = make_device_buf(rg_bytes)
+        let gbd = make_device_buf(b_bytes)
+        let ubd = make_device_buf(b_bytes)
+        let rexd = make_device_buf(rg_bytes)
+        let yd = make_device_buf(y_bytes)
+        let yud = make_device_buf(y_bytes)
+        let oqd = make_device_buf(oq_bytes)
+        let osd = make_device_buf(os_bytes)
+        let oq2d = make_device_buf(oq_bytes)
+        let os2d = make_device_buf(os_bytes)
+        var host = make_host_buf(2l * (oq_bytes + os_bytes) + y_bytes, true, [cached = true])
+        var oq : array<int8>
+        var os : array<float>
+        var oq2 : array<int8>
+        var os2 : array<float>
+        var y_cls : array<float>
+        oq |> resize(rows)
+        os |> resize(nblk)
+        oq2 |> resize(rows)
+        os2 |> resize(nblk)
+        y_cls |> resize(rows)
+        unsafe {
+            upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+            upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+            upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+            upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+            upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), rg_bytes)
+            upload_region_at(rg3d, 0l, addr<uint8 const?>(regs3[0]), rg_bytes)
+            upload_region_at(gbd, 0l, addr<uint8 const?>(gb[0]), b_bytes)
+            upload_region_at(ubd, 0l, addr<uint8 const?>(ub[0]), b_bytes)
+            upload_region_at(rexd, 0l, addr<uint8 const?>(rex[0]), int64(nreg) * 4l)
+            nan_sentinel_upload(oqd, oq_bytes)
+            nan_sentinel_upload(osd, os_bytes)
+            nan_sentinel_upload(yd, y_bytes)
+            nan_sentinel_upload(yud, y_bytes)
+            nan_sentinel_upload(oq2d, oq_bytes)
+            nan_sentinel_upload(os2d, os_bytes)
+            var s_cls = set_mx4_gemv_gu_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd, rg3d, gbd, ubd, rexd, oqd, osd),
+                fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes, rg_bytes, b_bytes, b_bytes, rg_bytes, oq_bytes, os_bytes),
+                fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 0u, 0u, 64u, 128u, 128u))
+            var raw2 = alloc_cmd()
+            let begin = VkCommandBufferBeginInfo()
+            vk_check(vkBeginCommandBuffer(raw2, begin), null)
+            var h2 : VkHaz
+            var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u, gelu = act, bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u)
+            enc_mx4_gemv_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
+            //! the split path on the same planes: the two GEMVs, then the (biased) act + requant
+            var s_g = gemv_cls_set(int(KqFmt.mx4), fixed_array(wqd, wsd, rgd, xqd, xsd, yud), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 4u, 8u, 16u, 256u))
+            let yu2d = make_device_buf(y_bytes)
+            nan_sentinel_upload(yu2d, y_bytes)
+            var s_u = gemv_cls_set(int(KqFmt.mx4), fixed_array(wqd, wsd, rg3d, xqd, xsd, yu2d), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 64u, 8u, 16u, 1024u))
+            var pc2 = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u)
+            gemv_enc(int(KqFmt.mx4), raw2, h2, s_g, pc2, int64(rows))
+            gemv_enc(int(KqFmt.mx4), raw2, h2, s_u, pc2, int64(rows))
+            var pca = ActArgs(nelem = uint(rows), gelu = act, nblk = uint(nblk), bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u, brow = uint(d))
+            if (bias) {
+                var s_a = set_q8_actrq_b_cls(fixed_array(yud, yu2d, oq2d, os2d, gbd, ubd, rexd),
+                    fixed_array(y_bytes, y_bytes, oq_bytes, os_bytes, b_bytes, b_bytes, rg_bytes), fixed_array(256u, 1024u, 512u, 512u, 0u, 0u, 64u))
+                enc_q8_actrq_b_cls(raw2, h2, s_a, pca, (int64(rows) / 4l + 255l) / 256l)
+            } else {
+                var s_a = set_actrq_cls(fixed_array(yud, yu2d, oq2d, os2d), fixed_array(y_bytes, y_bytes, oq_bytes, os_bytes), fixed_array(256u, 1024u, 512u, 512u))
+                enc_q8_actrq_cls(raw2, h2, s_a, pca, (int64(rows) / 4l + 255l) / 256l)
+            }
+            vhz_dep(raw2, h2, 32u | 128u | 512u, 0u, true)
+            cmd_copy_whole(raw2, oqd, host.buf, oq_bytes)
+            cmd_copy_range(raw2, osd, 0l, host.buf, oq_bytes, os_bytes)
+            cmd_copy_range(raw2, yd, 0l, host.buf, oq_bytes + os_bytes, y_bytes)
+            cmd_copy_range(raw2, oq2d, 0l, host.buf, oq_bytes + os_bytes + y_bytes, oq_bytes)
+            cmd_copy_range(raw2, os2d, 0l, host.buf, 2l * oq_bytes + os_bytes + y_bytes, os_bytes)
+            vk_check(vkEndCommandBuffer(raw2), null)
+            submit_wait(raw2)
+            let hp = intptr(host.mapped)
+            memcpy(addr<void?>(oq[0]), host.mapped, oq_bytes)
+            memcpy(addr<void?>(os[0]), reinterpret<void?>(hp + uint64(oq_bytes)), os_bytes)
+            memcpy(addr<void?>(y_cls[0]), reinterpret<void?>(hp + uint64(oq_bytes + os_bytes)), y_bytes)
+            memcpy(addr<void?>(oq2[0]), reinterpret<void?>(hp + uint64(oq_bytes + os_bytes + y_bytes)), oq_bytes)
+            memcpy(addr<void?>(os2[0]), reinterpret<void?>(hp + uint64(2l * oq_bytes + os_bytes + y_bytes)), os_bytes)
+        }
+        var y_g : array<float>
+        var y_u : array<float>
+        y_g |> resize(rows)
+        y_u |> resize(rows)
+        for (r in range(nreg)) {
+            for (row in range(d)) {
+                y_g[r * d + row] = mx4_gemv_row_oracle(wqh, wsh, xqh, xsh, r * d * nb + row * nb, nb)
+                y_u[r * d + row] = mx4_gemv_row_oracle(wqh, wsh, xqh, xsh, (nreg + r) * d * nb + row * nb, nb)
+            }
+        }
+        let badg = mismatch_approx(y_cls, y_g)
+        var bads = 0
+        var badq = 0
+        var pbad = 0
+        for (blk in range(nblk)) {
+            var m = 0.0
+            for (e in range(32)) {
+                let rg = blk * 32 + e
+                let ex = int(rex[rg / d])
+                let c = rg % d
+                m = max(m, abs(act_mul_ref(y_g[rg] + gb[ex * d + c], y_u[rg] + ub[ex * d + c], act)))
+            }
+            let d_ref = m / 127.0
+            if (abs(os[blk] - d_ref) > 2e-3 * max(d_ref, 1e-6)) {
+                bads++
+            }
+            for (e in range(32)) {
+                let rg = blk * 32 + e
+                let ex = int(rex[rg / d])
+                let c = rg % d
+                let a = act_mul_ref(y_g[rg] + gb[ex * d + c], y_u[rg] + ub[ex * d + c], act)
+                let deq = float(oq[rg]) * os[blk]
+                if (abs(deq - a) > d_ref + 2e-3 * abs(a)) {
+                    badq++
+                }
+                if (e == 0 && abs(deq - (a + 3.0 * d_ref + 1.0)) <= d_ref + 2e-3 * abs(a)) {   // the control: the expectation pushed three quant steps must miss
+                    pbad++
+                }
+            }
+        }
+        let tag = "mx4 gu {nreg} x {d}{bias ? " biased" : ""}"
+        t |> success(badg == 0, "{tag}: the gate rows match the scalar dot ({badg} of {rows} off)")
+        t |> success(bads == 0, "{tag}: the block scales match ({bads} of {nblk} off)")
+        t |> success(badq == 0, "{tag}: the dequantized hidden rows sit within a quant step ({badq} of {rows} off)")
+        t |> success(pbad == 0, "{tag}: the bar reds a poisoned oracle element in every block ({pbad} passed)")
+        var dq = 0
+        var dqmax = 0
+        for (e in range(rows)) {
+            let dd = abs(int(oq[e]) - int(oq2[e]))
+            dq += dd != 0 ? 1 : 0
+            dqmax = max(dqmax, dd)
+        }
+        var ds = 0
+        for (b in range(nblk)) {
+            ds += os[b] != os2[b] ? 1 : 0
+        }
+        t |> success(dq == 0 && ds == 0, "{tag}: the hidden rows match the split path byte for byte ({dq} of {rows} quants off, at most {dqmax}; {ds} of {nblk} scales off)")
+        delete wqh
+        delete wsh
+        delete xqh
+        delete xsh
+        delete gb
+        delete ub
+        delete rex
+        delete regs
+        delete regs3
+        delete oq
+        delete os
+        delete oq2
+        delete os2
+        delete y_cls
+        delete y_g
+        delete y_u
+    }
+}
+
+[test]
+def test_vkd_mx4_gemv_gu(t0 : T?) {
+    t0 |> run("mx4 gate + up GEMVs, the biased clamped-swiglu act and its Q8_0 requant in one dispatch == the scalar dot and the split path (gpt-oss's routed step)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(ensure_mx4_gemv_gu_cls() && ensure_mx4_gemv_cls() && ensure_q8_actrq_b_cls() && ensure_q8_actrq_cls())) {   //! the split path's rails for the byte compare
+                t |> skip("no Vulkan device")
+                return
+            }
+            mx4_gemv_gu_run(t, 64, 3, true)     //! two blocks a slot, the biases past the clamp
+            mx4_gemv_gu_run(t, 2880, 4, true)   //! gpt-oss's four slots of 2880
+            mx4_gemv_gu_run(t, 64, 3, false)    //! the plain silu form, no bias plane
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the fused gate + up + act + Q8_0 requant dispatch against the CPU oracle: the two q8 GEMVs in the scalar order,
 //! the activation, and the block quant of the hidden row - the dequantized row within a quant step of the oracle's,
 //! the scales within the GEMV bar, under both activations and at a width whose block count is off the 16-block lane pass
@@ -9577,13 +9813,21 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         let sexd = make_device_buf(si_bytes)
         let yod = make_device_buf(x_bytes)
         let yhd = make_device_buf(x_bytes / 2l)
+        let oq_bytes = int64(npos * n)
+        let os_bytes = int64(npos * n / 32) * 4l
+        let oqd = make_device_buf(oq_bytes)
+        let osd = make_device_buf(os_bytes)
         var host = make_host_buf(3l * x_bytes, true, [cached = true])
         var got_x : array<float>
         var got_y : array<float>
         var got_h : array<uint>
+        var got_q : array<int8>
+        var got_s : array<float>
         got_x |> resize(npos * n)
         got_y |> resize(npos * n)
         got_h |> resize(npos * n / 2)
+        got_q |> resize(npos * n)
+        got_s |> resize(npos * n / 32)
         var pc = ArArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
             slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u, dbias_on = dbias ? 1u : 0u, dboff = 0u)
         unsafe {
@@ -9625,6 +9869,24 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
             enc_cls_ar_comb_f16_b(raw2, h2, sc16, pc, int64(npos))
             vkd_run_copy(raw2, h2, yhd, host, x_bytes / 2l, 4u)
             memcpy(addr<void?>(got_h[0]), host.mapped, x_bytes / 2l)
+            //! the quantizing twin over a fresh x: the normed rows as Q8_0 blocks at the row binding, the scales past the slot map
+            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
+            nan_sentinel_upload(oqd, oq_bytes)
+            nan_sentinel_upload(osd, os_bytes)
+            var scq = set_cls_ar_comb_rq(fixed_array(xd, shd, wnd, oqd, sid, swd, rod, lgd, dbd, sexd, osd),
+                fixed_array(x_bytes, x_bytes, wn_bytes, oq_bytes, si_bytes, si_bytes, ro_bytes, lg_bytes, db_bytes, si_bytes, os_bytes),
+                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u, 0u, 8u, 4u))
+            var raw3 = alloc_cmd()
+            vk_check(vkBeginCommandBuffer(raw3, begin), null)
+            var h3 : VkHaz
+            enc_cls_ar_comb_rq(raw3, h3, scq, pc, int64(npos))
+            vhz_dep(raw3, h3, 4u, 0u, true)
+            cmd_copy_range(raw3, oqd, 0l, host.buf, 0l, oq_bytes)
+            cmd_copy_range(raw3, osd, 0l, host.buf, oq_bytes, os_bytes)
+            vk_check(vkEndCommandBuffer(raw3), null)
+            submit_wait(raw3)
+            memcpy(addr<void?>(got_q[0]), host.mapped, oq_bytes)
+            memcpy(addr<void?>(got_s[0]), reinterpret<void?>(intptr(host.mapped) + uint64(oq_bytes)), os_bytes)
         }
         var want_x : array<float>
         var want_y : array<float>
@@ -9667,6 +9929,33 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         let f16_bar = 2.0e-3
         let bad_h = mismatch_bars(got_yf, want_y, f16_bar, f16_bar * max_abs(want_y))
         t |> success(bad_h == 0, "the combine-folded residual step ({arm}): the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
+        //! the quantizing twin: every block's scale within 2e-3 of the oracle's amax over 127, every dequantized element within a quant step
+        var bad_s = 0
+        var bad_q = 0
+        var pbad = 0
+        for (blk in range(npos * n / 32)) {
+            var m = 0.0
+            for (e in range(32)) {
+                m = max(m, abs(want_y[blk * 32 + e]))
+            }
+            let d_ref = m / 127.0
+            if (abs(got_s[blk] - d_ref) > 2e-3 * max(d_ref, 1e-6)) {
+                bad_s++
+            }
+            for (e in range(32)) {
+                let deq = float(got_q[blk * 32 + e]) * got_s[blk]
+                let a = want_y[blk * 32 + e]
+                if (abs(deq - a) > d_ref + 2e-3 * abs(a)) {
+                    bad_q++
+                }
+                if (e == 1 && abs(deq - (a + 3.0 * d_ref + 1.0)) <= d_ref + 2e-3 * abs(a)) {   // the control: the expectation pushed three quant steps must miss
+                    pbad++
+                }
+            }
+        }
+        t |> success(bad_s == 0, "the combine-folded residual step ({arm}): the quantizing twin's block scales match the oracle ({bad_s} of {npos * n / 32} off)")
+        t |> success(bad_q == 0, "the combine-folded residual step ({arm}): the quantizing twin's rows sit within a quant step of the oracle ({bad_q} of {npos * n} off)")
+        t |> success(pbad == 0, "combine-folded residual control: the quant bar reds a poisoned oracle element in every block ({pbad} passed)")
         want_x[2 * n + 9] += 0.5
         t |> success(mismatch_approx(got_x, want_x) == 1, "combine-folded residual control: the residual bar reds one poisoned element")
         want_y[3 * n + 5] += 0.5
@@ -9683,6 +9972,8 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         delete got_y
         delete got_h
         delete got_yf
+        delete got_q
+        delete got_s
         delete want_x
         delete want_y
         delete sex
@@ -9929,7 +10220,7 @@ def test_vkd_moe_routing(t0 : T?) {
     t0 |> run("the resident MoE block's routing kernels == the CPU oracles: router GEMM, per-row top-k, the bucket schedule, the combine-folded residual step") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b()
-                    && ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b())) {
+                    && ensure_cls_ar_comb_rq() && ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b())) {
                 t |> skip("no Vulkan device")
                 return
             }

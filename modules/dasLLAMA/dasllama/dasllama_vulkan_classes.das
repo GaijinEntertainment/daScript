@@ -497,6 +497,45 @@ class ClsArComb : ArCombBase {
     }
 }
 
+//! the combine that quantizes the next head's feed itself (`ClsArCombG4Rq`'s form on the plain combine): the normed row into Q8_0
+//! blocks at the combine's free bindings instead of a float row a requant dispatch would read
+[vk_dispatch(name = "cls_ar_comb_rq", grid = "nrows", params = "nrows : int64")]
+class ClsArCombRq : ArCombBase {
+    @ssbo @binding = 3 outq : array<int8>     //! the normed row's Q8_0 quants (the next layer's q feed)
+    @ssbo @binding = 10 outs : array<float>   //! ... and its block scales
+
+    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def run {
+        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
+        let ss = accum_row(base)
+        let inv = rms_inv(ss)
+        let tid = gl_LocalInvocationID.x
+        let nblk = pa.dim / 32u
+        let lane8 = tid % 8u
+        let qb0 = (gl_WorkGroupID.x + pa.row0) * nblk
+        var b = tid / 8u
+        while (b < nblk) {
+            let e = b * 32u + lane8 * 4u
+            let v0 = wn[pa.woff + e] * (row[e] * inv)
+            let v1 = wn[pa.woff + e + 1u] * (row[e + 1u] * inv)
+            let v2 = wn[pa.woff + e + 2u] * (row[e + 2u] * inv)
+            let v3 = wn[pa.woff + e + 3u] * (row[e + 3u] * inv)
+            let m = q8_amax3(max(max(abs(v0), abs(v1)), max(abs(v2), abs(v3))))
+            let dq = m / 127.0
+            let id = dq != 0.0 ? 1.0 / dq : 0.0
+            if (lane8 == 0u) {
+                outs[qb0 + b] = dq
+            }
+            let qb = qb0 * 32u + e
+            outq[qb] = q8_quant1(v0, id)
+            outq[qb + 1u] = q8_quant1(v1, id)
+            outq[qb + 2u] = q8_quant1(v2, id)
+            outq[qb + 3u] = q8_quant1(v3, id)
+            b += 32u
+        }
+    }
+}
+
 [vk_dispatch(name = "cls_ar_comb_f16_b", grid = "nrows", params = "nrows : int64")]
 class ClsArCombF16B : ArCombBase {
     @ssbo @binding = 3 outh : array<float16>   //! the normed rows, f16
@@ -9681,7 +9720,10 @@ struct GemvArgs {
     nreg : uint    // region count
     ybase : uint   // output base row
     lanes_per_row : uint   //! 8, 16, or 0 = the whole subgroup (the q8 GEMV ignores it)
-    gelu : uint    //! the fused gate-up twin's activation select (0 = silu, else tanh-gelu); the plain GEMVs ignore it
+    gelu : uint    //! the fused gate-up twins' activation code (`act_code`: silu, gelu, the clamped swiglu); the plain GEMVs ignore it
+    bias_on : uint   //! the mx4 gate-up twin: each slot's expert (`rex`) names its gate and up bias rows, `gboff` / `uboff` this layer's base in the planes ([ne x d] rows a layer)
+    gboff : uint
+    uboff : uint
 }
 
 // ===== the Q8_0 decode GEMV pair =====
@@ -10174,8 +10216,7 @@ def mx4_sdot(n, x : uint) : int {
 //! MXFP4 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: the block's four nibble words, the low and
 //! high nibbles dotted against the activation words through `mx4_sdot`, isum * e8m0_half(scale byte) * xs per block -
 //! `dot_mx4q8_scalar`'s float order, reassociated by lane
-[vk_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class Mx4Gemv {
+class Mx4GemvBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words, four per block
     @ssbo @binding = 1 wsb : array<uint>       // per-block E8M0 scale bytes, four blocks a word
     @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
@@ -10208,7 +10249,10 @@ class Mx4Gemv {
         }
         return subgroupAdd(acc)
     }
+}
 
+[vk_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Mx4Gemv : Mx4GemvBase {
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "mx4_gemv_cls_spv")]
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
@@ -10219,6 +10263,73 @@ class Mx4Gemv {
             let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
             if (subgroupElect()) {
                 y[pa.ybase + rg] = total
+            }
+        }
+    }
+}
+
+//! the routed experts' MXFP4 gate and up GEMVs, the activation under the slots' expert bias rows and its Q8_0 requant in one
+//! dispatch (`KqGemvK4Gu`'s form on `Mx4Gemv`'s row dot): a workgroup owns 32 hidden rows of one slot, a subgroup a row over
+//! both stacks (the up stack's regions at binding 6, in the gate stack's slab), and its first subgroup activates and quantizes
+//! the block - the split path's bytes, since the block's amax and the quant are the requant kernel's own
+[vk_dispatch(name = "mx4_gemv_gu_cls", grid = "wgs", params = "wgs : int64")]
+class Mx4GemvGu : Mx4GemvBase {
+    @ssbo @binding = 6 regions3 : array<uint>   // the up stack's (rel_wblock, xblock) pairs per slot
+    @ssbo @binding = 7 @role = "weight" gb : array<float>   //! the gate-bias plane ([ne x d] rows a layer), read under `bias_on`
+    @ssbo @binding = 8 @role = "weight" ub : array<float>   //! ... and the up-bias plane
+    @ssbo @binding = 9 rex : array<uint>        //! slot -> its expert (the top-k's picks)
+    @ssbo @binding = 10 outq : array<int8>      // the activated hidden rows' Q8_0 quants (the down GEMV's feed)
+    @ssbo @binding = 11 outs : array<float>     // ... and their per-block scales
+    @workgroup wg_g : float[32]   //! the block's gate dots
+    @workgroup wg_u : float[32]   //! ... and up dots
+
+    [spirv_kernel(local_size_x = 256, name = "mx4_gemv_gu_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
+    def run {
+        let row0 = gl_WorkGroupID.x * 32u
+        let nsg = gl_NumSubgroups
+        let rows_per = 32u / nsg   // a row a subgroup at 32 lanes, 2 at 64: every row of the block in flight at once
+        let nb = pa.n / 32u
+        var t = 0u
+        while (t < rows_per) {
+            let lr = gl_SubgroupID + t * nsg
+            let rg = row0 + lr
+            var g = 0.0
+            var u = 0.0
+            if (rg < pa.nreg * pa.d) {
+                let r = rg / pa.d
+                let row = rg % pa.d
+                let xb0 = regions[r * 2u + 1u]
+                g = row_dot(regions[r * 2u] + row * nb, xb0, nb)
+                u = row_dot(regions3[r * 2u] + row * nb, xb0, nb)
+            }
+            if (subgroupElect()) {
+                wg_g[lr] = g
+                wg_u[lr] = u
+                y[pa.ybase + rg] = g   //! the gate rows land in the family's y as well: the dot half's own witness
+            }
+            t++
+        }
+        barrier()
+        if (gl_SubgroupID == 0u) {   // the block's activation and Q8_0 quant: one lane an output row
+            let lane = gl_SubgroupInvocationID
+            let li = min(lane, 31u)
+            let rg = row0 + li
+            var gv = wg_g[li]
+            var uv = wg_u[li]
+            if (pa.bias_on != 0u) {   //! the slot's expert names the bias rows; the add before the activation is the biased requant kernel's
+                let ex = rex[rg / pa.d]
+                let c = rg % pa.d
+                gv += gb[pa.gboff + ex * pa.d + c]
+                uv += ub[pa.uboff + ex * pa.d + c]
+            }
+            let a = lane < 32u ? act_mul_sel(gv, uv, pa.gelu) : 0.0
+            let dq = da_q8_blk_d(a)
+            let id = dq != 0.0 ? 1.0 / dq : 0.0
+            if (lane == 0u) {
+                outs[gl_WorkGroupID.x] = dq
+            }
+            if (lane < 32u) {
+                outq[row0 + lane] = q8_quant1(a, id)
             }
         }
     }

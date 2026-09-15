@@ -580,6 +580,14 @@ def private rd_moe_sets(var L : RLayer) {
             fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
     }
+    //! the mx4 twin (gpt-oss): the gate and up stacks in one slab, the biased act and the Q8_0 requant in the same dispatch
+    L.egu_mx4 = (L.fe1 == int(KqFmt.mx4) && L.fe3 == int(KqFmt.mx4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
+        && vk_fuse_on() && ensure_mx4_gemv_gu_cls())
+    if (L.egu_mx4) {
+        L.s_egu = set_mx4_gemv_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, g_rd.moe_meta3_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gb_bytes, g_rd.moe_gb_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, VHZ_MRT, 0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
+    }
     L.s_edown = gemv_cls_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev),
         fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l),
         fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
@@ -1113,7 +1121,7 @@ def private rd_ensure_fused_sets {
             used[int(L.rq_ffn_stamp)] = true
             if (L.moe) {   //! a MoE layer's next site is the combine, which carries its own norm and store - and, on a gemma-4 layer whose next feed is Q8_0, the requant
                 let fn = l + 1l < nl ? rd_head_feed(g_rd.layers[l + 1l]) : (fmt = g_rd.cls_fmt_marker, storex = false)
-                L.comb_rq = L.moe_g4 && fn.fmt == int(KqFmt.q8) && !fn.storex && ensure_cls_ar_comb_g4_rq()
+                L.comb_rq = fn.fmt == int(KqFmt.q8) && !fn.storex && (L.moe_g4 ? ensure_cls_ar_comb_g4_rq() : ensure_cls_ar_comb_rq())
                 continue
             }
             if (l + 1l < nl) {
@@ -1141,10 +1149,15 @@ def private rd_ensure_fused_sets {
                     fixed_array(po.wqb, po.wsb, L.qd, (L.qd / 32l) * 4l, dim * 4l, dim * 4l, g_rd.norms_bytes, dim, (dim / 32l) * 4l, 16l),
                     fixed_array(0u, 0u, VHZ_AQ, VHZ_AQ, VHZ_XB2, VHZ_X, 0u, VHZ_XQ, VHZ_XQ, VHZ_XB2))
             }
-            if (L.comb_rq) {
+            if (L.comb_rq && L.moe_g4) {
                 L.s_comb_rq = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.xs_dev),
                     fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, g_rd.k * dim * 4l, (dim / 32l) * 4l),
                     fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_XQ))
+            } elif (L.comb_rq) {   //! the plain combine's quantizing twin: the combine's planes, the quants at the normed row's binding, the scales past the slot map
+                L.s_comb_rq = set_cls_ar_comb_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev,
+                        g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev, g_rd.xs_dev),
+                    fixed_array(dim * 4l, dim * 4l, g_rd.norms_bytes, dim, MAX_ROUTED_SLOTS * 4l, MAX_ROUTED_SLOTS * 4l, g_rd.k * dim * 4l, g_rd.ner * 4l, g_rd.moe_db_bytes, MAX_ROUTED_SLOTS * 4l, (dim / 32l) * 4l),
+                    fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT, 0u, VHZ_MRT, VHZ_XQ))
             }
             if (!L.moe) {
                 L.s_addr_next_rq = set_ar_rq_stamp(L.rq_next_stamp, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
@@ -1475,6 +1488,13 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         pcg.gelu = g_rd.is_gelu ? 1u : 0u
         enc_kq_gemv_k4_gu_cls(raw, h, L.s_egu, pcg, k * nfe / 32l)
         rd_ts(raw, "m:e_gu")
+    } elif (L.egu_mx4) {
+        pcg.gelu = act_code(g_rd.act_oai, g_rd.is_gelu)
+        pcg.bias_on = g_rd.exps_bias ? 1u : 0u
+        pcg.gboff = uint(L.router_slot * g_rd.ne * nfe)
+        pcg.uboff = uint(L.router_slot * g_rd.ne * nfe)
+        enc_mx4_gemv_gu_cls(raw, h, L.s_egu, pcg, k * nfe / 32l)
+        rd_ts(raw, "m:e_gu")
     } else {
         gemv_enc(L.fe1, raw, h, L.s_egate, pcg, k * nfe)
         rd_ts(raw, "m:e_gate")
@@ -1628,8 +1648,10 @@ def private rd_encode_token {
             if (L.moe) {
                 var pc14c = rd_ar_comb_args(L, l, nxt)
                 pc14c.presummed = L.edown_sum ? 1u : 0u   //! the token command's down GEMV folded the k rows; the window chain's GEMM writes them apart
-                if (L.comb_rq) {   //! the next head's Q8_0 feed quantized here
+                if (L.comb_rq && L.moe_g4) {   //! the next head's Q8_0 feed quantized here
                     enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq, pc14c, 1l)
+                } elif (L.comb_rq) {
+                    enc_cls_ar_comb_rq(raw, h, L.s_comb_rq, pc14c, 1l)
                 } elif (L.moe_g4) {
                     enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pc14c, 1l)
                 } else {

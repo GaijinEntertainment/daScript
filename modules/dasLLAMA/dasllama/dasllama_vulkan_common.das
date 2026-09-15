@@ -2371,11 +2371,12 @@ struct RLayer {
     s_egate, s_eup : VkDescriptorSet
     s_eact : VkDescriptorSet
     egu : bool                      //! the Q4_K gate and up GEMVs, the act and its Q8_0 requant as one dispatch (`KqGemvK4Gu`)
+    egu_mx4 : bool                  //! ... the mx4 twin under the slots' expert bias rows (`Mx4GemvGu`, gpt-oss)
     s_egu : VkDescriptorSet
     s_edown : VkDescriptorSet
     edown_sum : bool                //! the routed down GEMV sums the k rows under their weights itself (`Q51GemvSum`): the combine reads one row
     s_edown_sum : VkDescriptorSet
-    comb_rq : bool                  //! the gemma-4 combine quantizes the next head's Q8_0 feed itself (`ClsArCombG4Rq`): no requant dispatch follows
+    comb_rq : bool                  //! the combine quantizes the next head's Q8_0 feed itself (`ClsArCombRq`, the gemma-4 form's `ClsArCombG4Rq`): no requant dispatch follows
     s_comb_rq : VkDescriptorSet
     pf_router_set, pf_topk_set, pf_sched_set, pf_gather_set : VkDescriptorSet   //! the window chain's MoE block
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
