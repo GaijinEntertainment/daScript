@@ -138,15 +138,19 @@ class CursorVisitor : AstVisitor {
     }
 }
 
-def private span_size(hit : CursorHit) : int2 {
+//! (lines spanned, start column, end column): a nested node spans no more lines, starts no
+//! earlier and ends no later than the node holding it
+def private span_key(hit : CursorHit) : int3 {
     if (hit.expr == null) {
-        return int2(0, length(hit.name))
+        let c = int(hit.variable.at.column)
+        return int3(0, c, c + length(hit.name))
     }
     let at = hit.expr.at
-    return int2(int(at.last_line) - int(at.line), int(at.last_column) - int(at.column))
+    return int3(int(at.last_line) - int(at.line), int(at.column), int(at.last_column))
 }
 
-//! sorted by span size; within one span the later-visited (deeper) node comes first
+//! sorted innermost first: fewer lines, then the later start, then the earlier end, then the
+//! later-visited (deeper) node
 def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
     var order : array<int>
     order |> reserve(length(src))
@@ -154,10 +158,11 @@ def private innermost_first(var src : array<CursorHit>) : array<CursorHit> {
         order |> push(i)
     }
     order |> sort() $(a, b) {
-        let sa = span_size(src[a])
-        let sb = span_size(src[b])
+        let sa = span_key(src[a])
+        let sb = span_key(src[b])
         if (sa.x != sb.x) return sa.x < sb.x
-        if (sa.y != sb.y) return sa.y < sb.y
+        if (sa.y != sb.y) return sa.y > sb.y
+        if (sa.z != sb.z) return sa.z < sb.z
         return a > b
     }
     var result : array<CursorHit>

@@ -19,6 +19,7 @@ def compile_fixture(blk : block<(program : smart_ptr<Program>) : void>) {
         using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             cop.export_all = true
+            cop.no_optimizations = true   // cursor tests assert node positions; folding would erase the nodes
             compile_file(fixture_path(), access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     to_log(LOG_ERROR, "compile error: {issues}\n")
@@ -170,6 +171,26 @@ def test_find_declaration_at_cursor(t : T?) {
             t2 |> success(has_variable_hit(find_at_cursor(program, "ast_cursor_fixture", 9, 8, true), "a"), "argument a")
             t2 |> success(has_variable_hit(find_at_cursor(program, "ast_cursor_fixture", 9, 11, true), "b"), "argument b")
             t2 |> success(has_variable_hit(find_at_cursor(program, "ast_cursor_fixture", 20, 8, true), "p"), "let variable p")
+        }
+    }
+    t |> run("multi-line spans order by lines: the call, then the loop body block, then main's block") @(t2 : T?) {
+        compile_fixture() $(program) {
+            // to_log at 25:8 inside the for body block (24:24-26:5) inside main's block (18:11-27:1)
+            let hits = find_at_cursor(program, "ast_cursor_fixture", 25, 8)
+            var call_idx = -1
+            var body_idx = -1
+            var main_idx = -1
+            for (idx in range(length(hits))) {
+                if (hits[idx].rtti == "ExprCall" && hits[idx].name == "to_log") {
+                    call_idx = idx
+                } elif (hits[idx].rtti == "ExprBlock" && hits[idx].expr != null && int(hits[idx].expr.at.line) == 24) {
+                    body_idx = idx
+                } elif (hits[idx].rtti == "ExprBlock" && hits[idx].expr != null && int(hits[idx].expr.at.line) == 18) {
+                    main_idx = idx
+                }
+            }
+            t2 |> success(call_idx >= 0 && body_idx >= 0 && main_idx >= 0, "the call, the body block and main's block all contain the cursor: {[for (h in hits); describe(h)]}")
+            t2 |> success(call_idx < body_idx && body_idx < main_idx, "fewer lines first: {[for (h in hits); describe(h)]}")
         }
     }
     t |> run("without the flag a declaration yields no variable hit") @(t2 : T?) {

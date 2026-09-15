@@ -673,8 +673,11 @@ def private declared_here(at : LineInfo; target_file : string; line : int) : boo
 }
 
 //! an empty cursor word matches any declaration on the line - the line-only lookup
-def private named(word : string; name) : bool {
-    return empty(word) || name == word
+//! an empty cursor word matches any declaration on the line - the line-only lookup; otherwise the
+//! cursor must sit on the declaration's own name token, not on another spelling of the name on that line
+def private on_name(word : string; name; file : string; line, here : int; at : LineInfo) : bool {
+    return true if (empty(word))
+    return name == word && here == name_column(file, line, int(at.column), string(name))
 }
 
 //! the declaration's column: where the cursor word starts, else the declaration's own position
@@ -716,7 +719,7 @@ def private declaration_at_cursor(program : smart_ptr<Program>; file : string; l
     ast::for_each_function(thisMod, "") $(var func : FunctionPtr) {
         return if (found.kind != RefTargetKind.none)
         let f = func
-        return if (is_synthesized(f) || !declared_here(f.at, target_file, line) || !named(word, bare_function_name(string(f.name))))
+        return if (is_synthesized(f) || !declared_here(f.at, target_file, line) || !on_name(word, bare_function_name(string(f.name)), file, line, here, f.at))
         found = function_target(f, decl_column(here, f.at))
     }
     if (found.kind == RefTargetKind.none) {
@@ -732,9 +735,9 @@ def private declaration_at_cursor(program : smart_ptr<Program>; file : string; l
             return if (found.kind != RefTargetKind.none)
             let s = st
             return if (!declared_here(s.at, target_file, line))
-            if (named(word, s.name)) {
+            if (on_name(word, s.name, file, line, here, s.at)) {
                 found = structure_target(s, decl_column(here, s.at))
-            } elif (!empty(word) && s.parent != null && s.parent.name == word) {
+            } elif (!empty(word) && s.parent != null && s.parent.name == word && here == name_column(file, line, int(s.at.column), word)) {
                 let p = s.parent
                 found = structure_target(p, name_column(lineinfo_file(p.at), int(p.at.line), int(p.at.column), word))
             }
@@ -744,7 +747,7 @@ def private declaration_at_cursor(program : smart_ptr<Program>; file : string; l
         ast::for_each_enumeration(thisMod) $(var en : EnumerationPtr) {
             return if (found.kind != RefTargetKind.none)
             let e = en
-            return if (!declared_here(e.at, target_file, line) || !named(word, e.name))
+            return if (!declared_here(e.at, target_file, line) || !on_name(word, e.name, file, line, here, e.at))
             found = RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e), name = string(e.name),
                 decl_file = lineinfo_file(e.at), decl_line = line, decl_column = decl_column(here, e.at), signature = "enum {e.name}")
         }
@@ -753,7 +756,7 @@ def private declaration_at_cursor(program : smart_ptr<Program>; file : string; l
         ast::for_each_typedef(thisMod) $(name : string#; var value : TypeDeclPtr) {
             return if (found.kind != RefTargetKind.none)
             let td = value
-            return if (!declared_here(td.at, target_file, line) || !named(word, name))
+            return if (!declared_here(td.at, target_file, line) || !on_name(word, name, file, line, here, td.at))
             found = RefTarget(kind = RefTargetKind.alias, alias_name = string(name), name = string(name),
                 decl_file = lineinfo_file(td.at), decl_line = line, decl_column = decl_column(here, td.at), signature = "typedef {name} = {describe(td)}")
         }
@@ -762,7 +765,7 @@ def private declaration_at_cursor(program : smart_ptr<Program>; file : string; l
         ast::for_each_global(thisMod) $(var value : VariablePtr) {
             return if (found.kind != RefTargetKind.none)
             let v = value
-            return if (!declared_here(v.at, target_file, line) || !named(word, v.name))
+            return if (!declared_here(v.at, target_file, line) || !on_name(word, v.name, file, line, here, v.at))
             found = variable_target(v, decl_column(here, v.at), "{v.name} : {describe(v._type)}")
         }
     }
