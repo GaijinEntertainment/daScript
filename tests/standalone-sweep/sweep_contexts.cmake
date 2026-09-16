@@ -2,6 +2,7 @@
 # rest as an X-macro. Contexts linking C++ modules run first and one is held open for the sweep -
 # they bind the thread environment in a base class, and the global AOT library pass needs it.
 
+file(READ "${FILES_LIST}" FILES)
 string(REPLACE "|" ";" _files "${FILES}")
 set(_includes "")
 set(_list "")

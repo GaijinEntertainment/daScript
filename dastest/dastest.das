@@ -425,13 +425,9 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
             return
         }
         var count = 0
-        unsafe {
-            _builtin_read(f, addr(count), typeinfo sizeof(count))
-        }
+        _builtin_read(f, unsafe(addr(count)), typeinfo sizeof(count))
         var sz = 0l
-        unsafe {
-            _builtin_read(f, addr(sz), typeinfo sizeof(sz))
-        }
+        _builtin_read(f, unsafe(addr(sz)), typeinfo sizeof(sz))
         var data : array<uint8>
         data |> reserve(sz)   // the blob size is known: exact reserve, and the resize never grows
         data |> resize(sz)
@@ -550,9 +546,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
                     log::error("dastest: the suite ran past its --timeout of {timeout}s; the process ends here with exit code {TIMEOUT_EXIT_CODE} and no summary")
                     // not fio::exit - it runs the job queue teardown, which busy-waits on this very thread;
                     // and nothing here invokes into the main context, which the main thread is still running
-                    unsafe {
-                        fio::exit_now(TIMEOUT_EXIT_CODE)
-                    }
+                    unsafe(fio::exit_now(TIMEOUT_EXIT_CODE))
                 }
             }
         }
@@ -561,6 +555,23 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     var inputPaths := test_args.test_files
     var files : array<string>
     return 1 if (!collect_files(inputPaths, files))
+    if (!empty(test_args.test_list)) {
+        var keep : table<string>
+        fopen(test_args.test_list, "rb") $(fr) {
+            return if (fr == null)
+            fmap(fr) $(data) {
+                for (line in string(data) |> split("\n")) {
+                    let one = line |> strip() |> replace("\\", "/")
+                    keep |> insert(one) if (!empty(one))
+                }
+            }
+        }
+        if (keep |> empty()) {
+            log::error("dastest: --test-list {test_args.test_list} is empty or unreadable")
+            return 1
+        }
+        files |> erase_if() $(f) => !(keep |> key_exists(f |> replace("\\", "/")))
+    }
     if (!empty(test_args.exclude_files)) {
         files |> erase_if() $(f) {
             let base = base_name(f)

@@ -1,16 +1,17 @@
 # The JIT half of the standalone sweep, run by the standalone_sweep_jit target:
-#   cmake -DDASLANG=<exe> -DROOT=<tree> -DOUT=<dir> "-DFILES=a.das|b.das" -P sweep_jit.cmake
+#   cmake -DDASLANG=<exe> -DROOT=<tree> -DOUT=<dir> -DFILES_LIST=<file> -P sweep_jit.cmake
 # Emission goes through utils/internal/jit/main.das, which takes many files per process - the
 # ~52-file dasLLVM load costs ~4.5s and is paid once per chunk, not once per library. Each library
 # is then loaded back by a generated host. A library that never emitted is tallied as refused; one
 # that emitted and cannot run sets the exit code.
 
-foreach(_var DASLANG ROOT OUT FILES)
+foreach(_var DASLANG ROOT OUT FILES_LIST)
     if(NOT DEFINED ${_var})
         message(FATAL_ERROR "sweep_jit.cmake: -D${_var} is required")
     endif()
 endforeach()
 file(MAKE_DIRECTORY ${OUT})
+file(READ "${FILES_LIST}" FILES)
 string(REPLACE "|" ";" _files "${FILES}")
 list(LENGTH _files _total)
 
