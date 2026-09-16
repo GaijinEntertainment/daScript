@@ -280,13 +280,12 @@ def private q8q8_kernel(var yp : float?; wp : int8 const?; sp : float const?; xq
 def private q8q8_batch_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     var myp = yp
-    if (g_pf_prof) {
+    // the raw parallel_for below is a dispatch single-thread mode admits no exception for
+    if (g_pf_prof && !get_single_thread_()) {
         // instrumented path: raw parallel_for + per-worker start capture (see pf_prof_report)
-        unsafe {
-            var wsp0 = addr<int64?>(g_pf_ws[0])
-            for (k in range64(d)) {
-                wsp0[k] = 0l
-            }
+        var wsp0 = unsafe(addr<int64?>(g_pf_ws[0]))
+        for (k in range64(d)) {
+            unsafe(wsp0[k]) = 0l
         }
         let pf0 = ref_time_ticks()
         unsafe {

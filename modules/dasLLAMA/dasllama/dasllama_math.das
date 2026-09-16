@@ -138,9 +138,7 @@ def mul_inplace(var d : float?; s : float const?; n : int64) {}
 [hint(unsafe_range_check, noalias = d)]
 def template scale_inplace_template(var d : float ?; scale : float; n : int64) : void {
     for [tune = 1] (j in range64(n)) {
-        unsafe {
-            d[j] *= scale
-        }
+        unsafe(d[j]) *= scale
     }
 }
 [hint(unsafe_range_check, noalias = d), tuned]
@@ -335,8 +333,8 @@ var g_dispatch_caller_lane = true
 def public set_dispatch_caller_lane(v : bool) { g_dispatch_caller_lane = v }
 def public get_dispatch_caller_lane() : bool { return g_dispatch_caller_lane }
 def public get_dispatch_lanes() : int {
-    // Que-less process: the calling thread is the only lane, so every shaper answers "inline".
-    if (!is_job_que_available()) {
+    // The calling thread is the only lane, so every shaper answers "inline".
+    if (!is_job_que_available() || get_single_thread_()) {
         return 1
     }
     // the live pool: dormant over-limit workers (set_jobque_worker_limit) never serve chunks,
@@ -395,16 +393,22 @@ def public set_phase_decode_workers(v : int) {
 }
 def public get_phase_decode_workers() : int { return g_phase_decode_workers }
 
+//! both phase entries move the same limit, so they share one admission test - a term added to
+//! one and not the other would park a phase the other never wakes
+def private phase_parking_armed() : bool {
+    return g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available() && !get_single_thread_()
+}
+
 [arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def public dispatch_phase_decode {
-    if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
+    if (phase_parking_armed()) {
         set_jobque_worker_limit(g_phase_decode_workers)
     }
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def public dispatch_phase_batch {
-    if (g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available()) {
+    if (phase_parking_armed()) {
         set_jobque_worker_limit(-1)
     }
 }
@@ -739,15 +743,13 @@ def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : array<float
 
 //! Both sides borrowed — a baked table (gemma4a's positional embedding) driving a baked weight.
 def matmul_batch(var y : array<float>; w : PlaneF; woff : int64; x : PlaneF; n, d, ntok : int64) {
-    unsafe {
-        var yp = addr(y[0])
-        let wp = plane_at(w, woff)
-        let xp = plane_at(x, 0l)
-        if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
-            return
-        }
-        matmul_batch_core(yp, wp, xp, n, d, ntok)
+    var yp = unsafe(addr(y[0]))
+    let wp = plane_at(w, woff)
+    let xp = plane_at(x, 0l)
+    if (g_fp_override_active && ntok >= g_fp_override_min_ntok && invoke(g_mm_fp_batch_override, yp, wp, xp, n, d, ntok)) {
+        return
     }
+    matmul_batch_core(yp, wp, xp, n, d, ntok)
 }
 
 //! Batched matvec against a native-BF16 weight [d x n] at halfword offset woff: Y [ntok x d]

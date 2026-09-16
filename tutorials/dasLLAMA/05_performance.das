@@ -15,6 +15,7 @@ require math
 //   - Why model programs always run with -jit (and _jit_fast_math)
 //   - Threading the kernels: with_job_que + the jobque dispatch knobs
 //   - set_dispatch_worker_limit / get_dispatch_worker_limit — capping the kernel workers
+//   - set_single_thread / get_single_thread — no dispatch at all, the pool's baseline
 //   - Quantization: fp32 vs q8 vs q4_0 — memory and speed
 //   - Reading stats(): prefill vs generation, time to first token
 //   - The load's two caches: select_matmul_backend_for_load and the .dlim
@@ -101,6 +102,20 @@ def section_threads(m : Model) {
         bench_gen(m, "capped:   ")
     }
     set_dispatch_worker_limit(0)
+
+    // set_single_thread runs every kernel on the calling thread: no dispatch to the queue at
+    // all, whatever queue exists (the cap above still dispatches, to fewer workers). It is NOT
+    // latched into the queue like the cap - it takes effect at the next kernel, which is why the
+    // queue below is up and configured and still never dispatched to; get_single_thread reads it
+    // back. This is the figure the pool is measured against - and the browser build's own rail,
+    // where a web worker's wake costs more than a small kernel does.
+    set_single_thread(true)
+    with_job_que() {
+        setup_dasllama_jobque()
+        print("single thread ({get_single_thread()}) | ")
+        bench_gen(m, "single:   ")
+    }
+    set_single_thread(false)
 
     // set_jobque_spin_us is the workers' spin-before-park window: how long an idle worker
     // spins before it parks (0 = at once); get_jobque_spin_us reads it back. The desktop

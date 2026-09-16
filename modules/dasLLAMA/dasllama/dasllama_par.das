@@ -16,9 +16,10 @@ require daslib/templates_boost
 require daslib/macro_boost
 
 //! `maybe_parallel_for(parallel, range_begin, range_end, num_jobs) $(rb, re) { ... }` —
-//! parallel_for with a leading runtime `parallel` flag. When `parallel` is true and a job queue is
-//! up it threads the work across `num_jobs` chunks exactly like parallel_for; when false, or in a
-//! process with no job queue, it runs the SAME block once, inline on the calling thread (no job
+//! parallel_for with a leading runtime `parallel` flag. When `parallel` is true, a job queue is
+//! up and single-thread mode is off, it threads the work across `num_jobs` chunks exactly like
+//! parallel_for; when `parallel` is false, in a process with no job queue, or under
+//! `set_single_thread(true)`, it runs the SAME block once, inline on the calling thread (no job
 //! dispatch, no wait group). Lets a kernel gate on a runtime size threshold without duplicating
 //! its loop body across an if/else. The block takes just the chunk bounds `(rb, re)` — no
 //! `wg`/`notify_and_release` ceremony; the parallel arm adds it.
@@ -29,8 +30,8 @@ def maybe_parallel_for(parallel : bool; range_begin, range_end : int; num_jobs :
 }
 
 //! `maybe_parallel_for(range_begin, range_end, num_jobs) $(rb, re) { ... }` — work-proportional
-//! form: `num_jobs` evaluated ONCE; > 1 dispatches like the bool form's parallel arm, <= 1 runs inline.
-//! Pair with matmul_chunks / matmul_chunks_gemv shapers (return 1 when not worth a dispatch).
+//! form: `num_jobs` evaluated ONCE; > 1 dispatches like the bool form's parallel arm, while <= 1 - or
+//! any count under `set_single_thread(true)` - runs inline. Pair with matmul_chunks / matmul_chunks_gemv shapers (return 1 when not worth a dispatch).
 [tag_function(tag_maybe_parallel_for_nj), unused_argument(range_begin, range_end, num_jobs, blk)]
 def maybe_parallel_for(range_begin, range_end : int; num_jobs : int;
                        blk : block<(rb : int; re : int) : void>) {
@@ -39,11 +40,31 @@ def maybe_parallel_for(range_begin, range_end : int; num_jobs : int;
 
 //! `maybe_parallel_for_indexed(range_begin, range_end, num_jobs) $(slot, rb, re) { ... }` —
 //! slot-indexed dispatch: block also gets a slot index guaranteed unique across in-flight
-//! invocations (size scratch to `get_dispatch_slot_bound()`); `num_jobs` <= 1 runs inline as slot 0.
+//! invocations (size scratch to `get_dispatch_slot_bound()`); `num_jobs` <= 1, and any count under `set_single_thread(true)`, runs inline as slot 0.
 [tag_function(tag_maybe_parallel_for_indexed), unused_argument(range_begin, range_end, num_jobs, blk)]
 def maybe_parallel_for_indexed(range_begin, range_end : int; num_jobs : int;
                                blk : block<(slot : int; rb : int; re : int) : void>) {
     //! stub — rewritten by MaybeParallelForIndexedMacro into a runtime if/else
+}
+
+var private g_single_thread = false
+var private g_single_announced = false
+
+[arch(at="../ARCHITECTURE_RUNTIME.md#single-thread")]
+def set_single_thread_(on : bool) {
+    g_single_thread = on
+}
+def get_single_thread_() : bool => g_single_thread
+
+[cold_path]   // runs once, on the first kernel this context keeps: an announce, not the arms' hot path
+def private announce_single_thread() {
+    g_single_announced = true
+    to_log(LOG_INFO, "dasLLAMA: single thread - this context runs every kernel on its calling thread and never dispatches to the job queue (set_single_thread(false) turns it off; DASLLAMA_SINGLE_THREAD=1 is the environment spelling)\n")
+}
+
+[init, arch(at="../ARCHITECTURE_RUNTIME.md#single-thread")]
+def private single_thread_env() {
+    set_single_thread_(g_env_engine.single_thread)
 }
 
 // ===== dispatch observability (jobs-per-section profiling) =====
@@ -81,6 +102,10 @@ def count_parallel_dispatch_thru(njobs : int) : int {
     return njobs
 }
 def count_inline_run() {
+    // a queue is what the flag redirects work away from: with none, it changed nothing to announce
+    if (g_single_thread && !g_single_announced && is_job_que_available()) {
+        announce_single_thread()
+    }
     g_disp_inline++
 }
 def get_disp_count() : int64 => g_disp_count
@@ -130,7 +155,7 @@ class private MaybeParallelForMacro : AstFunctionAnnotation {
             call.arguments[4], call.at)
         var inlArm <- mpf_inline_arm(call.arguments[1], call.arguments[2], call.arguments[4], call.at)
         var qb = qmacro_block() {
-            if ($e(call.arguments[0]) && is_job_que_available()) {
+            if ($e(call.arguments[0]) && is_job_que_available() && !get_single_thread_()) {
                 $b(parArm)
             } else {
                 $b(inlArm)
@@ -165,7 +190,7 @@ def private mpfi_fifo_arm(beginE, endE, njE, blkE : ExpressionPtr; at : LineInfo
     let jeN = make_unique_private_name("mpfi_je", at)
     let capN = make_unique_private_name("mpfi_cap", at)
     return <- qmacro_block_to_array() {
-        let $i(capN) = is_job_que_available() ? get_total_hw_jobs() + 1 : 1
+        let $i(capN) = is_job_que_available() && !get_single_thread_() ? get_total_hw_jobs() + 1 : 1
         let $i(nsN) = min(min($e(njE), $e(endE) - $e(beginE)), $i(capN))
         if ($i(nsN) > 1) {
             parallel_for(0, $i(nsN), count_parallel_dispatch_thru($i(nsN))) <| $($i(sbN), $i(seN), $i(wgN)) {
@@ -202,7 +227,7 @@ class private MaybeParallelForIndexedMacro : AstFunctionAnnotation {
             let $i(rbN) = $e(call.arguments[0])
             let $i(reN) = $e(call.arguments[1])
             let $i(njN) = $e(call.arguments[2])
-            if ($i(njN) > 1 && is_job_que_available() && get_jobque_team_mode()) {
+            if ($i(njN) > 1 && is_job_que_available() && get_jobque_team_mode() && !get_single_thread_()) {
                 $b(teamArm)
             } else {
                 $b(fifoArm)
@@ -227,7 +252,7 @@ class private MaybeParallelForNjMacro : AstFunctionAnnotation {
         var inlArm <- mpf_inline_arm(call.arguments[0], call.arguments[1], call.arguments[3], call.at)
         var qb = qmacro_block() {
             let $i(njN) = $e(call.arguments[2])
-            if ($i(njN) > 1) {
+            if ($i(njN) > 1 && !get_single_thread_()) {
                 $b(parArm)
             } else {
                 $b(inlArm)

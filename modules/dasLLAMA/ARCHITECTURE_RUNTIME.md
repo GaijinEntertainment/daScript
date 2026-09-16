@@ -211,7 +211,8 @@ more wakes every worker - a prefill through `dispatch_phase_batch`, a CPU tower/
 through `dispatch_phase_encode(rows)` at its entry - while smaller work keeps the parked pool,
 since it cannot fill the slow tier past the dispatch grain.
 
-Precedence, strongest first: `DAS_JOBQUE_THREADS` and an app's own cap, then the box profile's
+Precedence, strongest first: single-thread mode (sec.2.44a), under which both phase entries do
+nothing at all, then `DAS_JOBQUE_THREADS` and an app's own cap, then the box profile's
 `jobque_pool` / `phase_decode_workers` / `dispatch_worker_limit` entries, then this tier-kind
 policy. A profile declares the shape of the NEXT queue and is inert for one that already exists when
 the profile loads. A `gemv_lane_cap` of 0 in a minted profile - one the tuner wrote from a
@@ -264,3 +265,22 @@ that means to measure the bare regime. A process with no queue at all runs its a
 not checked. The engine's own scoped queues - the ones `load_gguf` and `load_gguf_streaming` spin
 for a caller that has none - configure themselves, so the check reaches only queues a caller
 opened.
+
+### 2.44a Single-thread mode runs every arm inline {#single-thread}
+
+`set_single_thread(true)` - `DASLLAMA_SINGLE_THREAD=1` from the environment, applied by an
+`[init]` - makes every kernel run on the calling thread while a queue, configured or not, stays up
+and untouched. The flag is a context global in `dasllama_par.das`, the module every dispatch site
+requires, so each `maybe_parallel_for` form reads it in the runtime condition its macro emits,
+beside the queue check it already makes: the bool form and the count form take their inline arm,
+the indexed form's fifo arm sizes its slot range to one. `get_dispatch_lanes()` answers 1 under
+it, which is what folds the fused decode chains (their gates want more than one lane), the
+shapers' chunk math and the phase parking (`dispatch_phase_decode` and `dispatch_phase_batch`
+do nothing). A worker limit cannot stand in for this: with every worker dormant a team op still
+pays its publish, its seqlock and its per-stage barriers on the caller, and the count-form sites
+that pass a literal count - the TTS head loops - still dispatch. The mode is per context, like
+the fork pool: a `new_thread` body that runs inference sets its own. The announce rides the first
+inline run a context makes, not that `[init]`. A context that sets the flag and runs no kernel -
+the fork pool's clones among them - would announce a mode it never takes, so it stays silent. It
+is the rail a build without threads runs on, and the baseline a pool's worth is measured from on
+any box.

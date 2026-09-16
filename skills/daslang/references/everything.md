@@ -3174,10 +3174,12 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `dlim_inventory` - List the prepared images (`.dlim`) minted beside `gguf_path` — per image: file, bytes, image version, identity, and a verdict (`CURRENT` loads; `STALE vN` is an older image version; `OTHER` a different bake configuration or box; `FOREIGN` a different flavor).
 - `get_dispatch_worker_limit` - The dispatch worker cap in force (0 = no limit) — `set_dispatch_worker_limit`'s read half.
 - `get_jobque_spin_us` - The spin window in force — `set_jobque_spin_us`'s read half.
+- `get_single_thread` - Whether every kernel runs on the calling thread — `set_single_thread`'s read half.
 - `kernel_backend_available` - True when kernel backend `name` is registered AND its availability witness passes on this box — the detection probe behind defaults-first backend selection (the vulkan witness enumerates devices once and caches its verdict).
 - `select_matmul_backend_for_load` - Select the best matmul backend for the NEXT model load (honors a pin).
 - `set_dispatch_worker_limit` - Cap the kernel-dispatch worker count (0 = no limit, all job-que workers).
 - `set_jobque_spin_us` - The workers' spin-before-park window in microseconds (0 = park at once).
+- `set_single_thread` - Run every kernel on the calling thread: no dispatch to the job queue at all, whatever queue exists.
 
 ### Operations: GPU tier and model slots
 
