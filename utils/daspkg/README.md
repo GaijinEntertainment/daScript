@@ -283,3 +283,10 @@ daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das
 - **gh** (GitHub CLI) - optional, only for `introduce`/`withdraw`
 
 Run `daspkg doctor` to check your environment.
+
+For `release wasm`, `release_include_symbols()` enables `--jit-debug --jit-stack`
+during cross-compilation and `-g3 --emit-symbol-map` during linking. The deployed
+WASM retains generated debug information and function names, with an adjacent
+`.html.symbols` map. Prebuilt archives contribute only their existing debug data.
+Runtime assertions and heap instrumentation remain explicit `release_emcc_arg`
+choices, so requesting symbols alone does not silently enable those checks.

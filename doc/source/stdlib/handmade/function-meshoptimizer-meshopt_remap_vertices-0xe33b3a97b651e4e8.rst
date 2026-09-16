@@ -1,0 +1,1 @@
+Apply ``remap`` to packed ``vertices`` and resize ``output`` to ``count * stride`` bytes. The remap table must contain one entry per input vertex, each entry must be less than ``count`` or the unused value ``0xffffffff``, and ``output`` must not alias ``vertices``.

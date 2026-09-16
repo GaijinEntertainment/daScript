@@ -9,6 +9,7 @@ IF ((NOT DAS_STBIMAGE_INCLUDED) AND (NOT ${DAS_STBIMAGE_DISABLED}))
 
 	# libDasModuleStbImage
 	SET(DAS_STBIMAGE_MODULE_SRC
+		${DAS_STBIMAGE_DIR}/src/stb_dxt.h
 		${DAS_STBIMAGE_DIR}/src/dasStbImage.h
 		${DAS_STBIMAGE_DIR}/src/dasStbImage_impl.cpp
 		${DAS_STBIMAGE_DIR}/src/dasStbImage.cpp
@@ -26,6 +27,7 @@ IF ((NOT DAS_STBIMAGE_INCLUDED) AND (NOT ${DAS_STBIMAGE_DISABLED}))
 
 	# AOT-able sources (for test_aot / any consumer); empty when disabled.
 	SET(DASSTBIMAGE_AOT_FILES
+		modules/dasStbImage/stbimage/texture_blocks.das
 		modules/dasStbImage/stbimage/stbimage_boost.das
 		modules/dasStbImage/stbimage/stbimage_ttf.das
 )

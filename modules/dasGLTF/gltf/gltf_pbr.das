@@ -13,6 +13,7 @@ require opengl/opengl_boost public
 require glsl/glsl_opengl public
 require daslib/safe_addr
 require math
+require gltf/gltf_atmosphere public
 require daslib/math_boost
 
 // Max joints in the palette uniform. Desktop GL guarantees >= 1024 vec4 of vertex uniforms; 64 mat4 is
@@ -80,6 +81,10 @@ def gltf_pbr_vs {
 }
 
 // ===== fragment stage =====
+var @uniform u_fog_color : float3
+var @uniform u_fog_params : float4
+var @uniform u_fog_falloff : float
+var @uniform u_background_tint : float4
 var @uniform u_cam_pos     : float3
 var @uniform u_light_dir   : float3   // direction TOWARD the light, normalized
 var @uniform u_light_color : float3   // radiance (color * intensity)
@@ -87,6 +92,10 @@ var @uniform u_ambient     : float3   // constant ambient irradiance
 
 var @uniform u_base_color_factor  : float4
 var @uniform u_metallic_factor    : float
+var @uniform u_material_scale : float2
+var @uniform u_material_wetness : float
+var @uniform u_normal_roughness : float
+var @uniform u_reflection_amount : float
 var @uniform u_roughness_factor   : float
 var @uniform u_emissive_factor    : float3
 var @uniform u_normal_scale       : float
@@ -105,7 +114,82 @@ var @uniform @stage = 5 u_env_tex         : sampler2D
 var @uniform u_env_amount  : float
 var @uniform u_env_max_lod : float
 
+//! Regular depth sampling permits a color fallback while shadows are disabled.
+var @uniform @stage = 6 u_shadow_tex : sampler2D
+var @uniform u_shadow_vp : float4x4
+var @uniform u_shadow_texel : float2
+var @uniform u_shadow_bias : float
+var @uniform u_shadow_strength : float
+
+let GLTF_MAX_POINT_LIGHTS = 8
+var @uniform @stage = 9 u_local_shadow_tex : sampler2D
+var @uniform u_local_shadow_size : float2
+var @uniform u_point_shadow : float4[GLTF_MAX_POINT_LIGHTS]
+var @uniform u_point_count : int
+var @uniform u_point_position : float4[GLTF_MAX_POINT_LIGHTS]
+var @uniform u_point_color : float4[GLTF_MAX_POINT_LIGHTS]
+
 var @out o_color : float4
+
+[arch(at="../ARCHITECTURE.md#directional-shadow-filtering")]
+def private shadow_visibility(world : float3; normal : float3) : float {
+    if (u_shadow_strength <= 0.0) { return 1.0 }
+    let light_pos = u_shadow_vp * float4(world, 1.0)
+    let p = light_pos.xyz / light_pos.w * 0.5 + float3(0.5)
+    let gradient = gltf_shadow_receiver_gradient(dFdx(p), dFdy(p))
+    if (p.x <= 0.0 || p.x >= 1.0 || p.y <= 0.0 || p.y >= 1.0 || p.z <= 0.0 || p.z >= 1.0) { return 1.0 }
+    let bias = u_shadow_bias * (1.0 + 3.0 * (1.0 - max(dot(normal, normalize(u_light_dir)), 0.0)))
+    let texel_pos = p.xy / u_shadow_texel - float2(0.5)
+    let base = floor(texel_pos)
+    let fraction = texel_pos - base
+    let wx = gltf_shadow_pcf_weights(fraction.x)
+    let wy = gltf_shadow_pcf_weights(fraction.y)
+    var visible = 0.0
+    for (y in range(4)) {
+        for (x in range(4)) {
+            let uv = (base + float2(float(x), float(y)) - float2(0.5)) * u_shadow_texel
+            let depth = texture(u_shadow_tex, uv).x
+            visible += (gltf_shadow_receiver_depth(p, uv, gradient, bias) <= depth ? 1.0 : 0.0) * wx[x] * wy[y]
+        }
+    }
+    return 1.0 - u_shadow_strength * (1.0 - visible)
+}
+
+def private point_shadow_visibility(index : int; world, normal : float3) : float {
+    let settings = u_point_shadow[index]
+    if (settings.x < 0.5 || settings.y <= 0.0){return 1.0}
+    let delta = world + normal * 0.008 - u_point_position[index].xyz
+    let a = abs(delta); var face = 0; var xy = float2(0.0); var distance = a.x
+    if (a.x >= a.y && a.x >= a.z){
+        face = delta.x >= 0.0 ? 0 : 1; xy = float2(delta.x >= 0.0 ? -delta.z : delta.z, -delta.y)
+    }elif (a.y >= a.z){
+        face = delta.y >= 0.0 ? 2 : 3; distance = a.y; xy = float2(delta.x, delta.y >= 0.0 ? delta.z : -delta.z)
+    }else{
+        face = delta.z >= 0.0 ? 4 : 5; distance = a.z; xy = float2(delta.z >= 0.0 ? delta.x : -delta.x, -delta.y)
+    }
+    let near = settings.z; let far = settings.w
+    let safe_distance = max(distance, 0.000001)
+    let p = float3(xy / safe_distance * 0.5 + float2(0.5), far / (far - near) - far * near / ((far - near) * safe_distance))
+    let gradient = gltf_shadow_receiver_gradient(dFdx(p), dFdy(p))
+    if (distance <= near || distance >= far){return 1.0}
+    let size = u_local_shadow_size.x; let base = floor(p.xy * size - float2(0.5)); let f = p.xy * size - float2(0.5) - base
+    let wx = gltf_shadow_pcf_weights(f.x); let wy = gltf_shadow_pcf_weights(f.y)
+    var visible = 0.0
+    for (y in range(4)){for (x in range(4)){
+        let uv = clamp((base + float2(float(x), float(y)) - float2(0.5)) / size, float2(0.5 / size), float2(1.0 - 0.5 / size))
+        let atlas = (uv + float2(float(face), settings.x - 1.0)) / float2(6.0, u_local_shadow_size.y)
+        let depth = texture(u_local_shadow_tex, atlas).x
+        visible += (gltf_shadow_receiver_depth(p, uv, gradient, 0.00015) <= depth ? 1.0 : 0.0) * wx[x] * wy[y]
+    }}
+    return 1.0 - settings.y * (1.0 - visible)
+}
+
+[fragment_program]
+def gltf_pbr_depth_fs {
+    if (u_alpha_mode > 0.5 && u_alpha_mode < 1.5 &&
+        texture(u_base_color_tex, v_uv0).w * u_base_color_factor.w < u_alpha_cutoff) { discard() }
+}
+
 
 // The BRDF / normal-perturbation / skinning math lives in gltf/gltf_pbr_common — shared with the
 // dasVulkan renderer; this module only samples textures and feeds the values in.
@@ -114,6 +198,26 @@ def private shade_normal(uv : float2) : float3 {
         texture(u_normal_tex, uv).xyz, u_normal_scale)
 }
 
+var @uniform @stage = 8 u_ssao_tex : sampler2D
+var @uniform u_ssao_enabled : float
+var @uniform u_ssao_inverse_size : float2
+def gltf_surface_roughness(mr : float4) : float {
+    return clamp(lerp(mr.y * u_roughness_factor * u_material_scale.x, .16, clamp(u_material_wetness * mr.x, 0.0, 1.0)), .04, 1.0)
+}
+[fragment_program]
+def gltf_pbr_normal_fs {
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    if (u_alpha_mode > 0.5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff){discard()}
+    let roughness = gltf_surface_roughness(texture(u_metal_rough_tex, v_uv0))
+    o_color = float4(shade_normal(v_uv0) * 0.5 + float3(0.5), u_normal_roughness > .5 ? roughness : 1.0)
+}
+
+[fragment_program]
+def gltf_pbr_material_fs {
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    if (u_alpha_mode > .5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff){discard()}
+    o_color = float4(base.xyz, clamp(texture(u_metal_rough_tex, v_uv0).z * u_metallic_factor * u_material_scale.y, 0.0, 1.0))
+}
 [fragment_program]
 def gltf_pbr_fs {
     let uv = v_uv0
@@ -123,8 +227,8 @@ def gltf_pbr_fs {
         discard()
     }
     let mr = texture(u_metal_rough_tex, uv)
-    let metallic = mr.z * u_metallic_factor
-    let roughness = clamp(mr.y * u_roughness_factor, 0.04, 1.0)
+    let metallic = clamp(mr.z * u_metallic_factor * u_material_scale.y, 0.0, 1.0)
+    let roughness = gltf_surface_roughness(mr)
     let occ = texture(u_occlusion_tex, uv).x
     let emissive = texture(u_emissive_tex, uv).xyz * u_emissive_factor
 
@@ -144,19 +248,103 @@ def gltf_pbr_fs {
             gltf_occlusion_factor(occ, u_occlusion_strength)) * u_env_amount
     }
 
-    let linear = ambient + direct + emissive
+    if (u_reflection_amount > 0.0){
+        let reflected = textureLod(u_env_tex, gltf_equirect_uv(gltf_reflect_dir(n, v)), roughness * u_env_max_lod).xyz
+        let f0 = lerp(float3(.04), albedo, float3(metallic))
+        ambient += reflected * gltf_fresnel_roughness(max(dot(n, v), 0.0), f0, roughness) * u_reflection_amount * gltf_occlusion_factor(occ, u_occlusion_strength)
+    }
+    var local_light = float3(0.0)
+    for (i in range(GLTF_MAX_POINT_LIGHTS)) {
+        if (i < u_point_count) {
+            let delta = u_point_position[i].xyz - v_world_pos
+            let distance = max(length(delta), 0.001)
+            let visibility = point_shadow_visibility(i, v_world_pos, n)
+            if (distance < u_point_position[i].w){
+            let falloff = max(0.0, 1.0 - distance / max(u_point_position[i].w, 0.001))
+            let radiance = u_point_color[i].xyz * (falloff * falloff / (1.0 + distance * distance)) * visibility
+            local_light += gltf_pbr_direct(albedo, metallic, roughness, n, v, delta / distance, radiance)
+            }
+        }
+    }
+    if (u_ssao_enabled > 0.5){ambient *= texture(u_ssao_tex, gl_FragCoord.xy * u_ssao_inverse_size).x}
+    let linear = ambient + direct * shadow_visibility(v_world_pos, n) + local_light + emissive
     // no sRGB default framebuffer -> encode linear -> sRGB (approximate 2.2 gamma)
-    let out_rgb = gltf_srgb_encode(linear)
+    var out_rgb = gltf_srgb_encode(linear)
+    let grey = dot(out_rgb, float3(0.299, 0.587, 0.114))
+    out_rgb = lerp(out_rgb, float3(grey) * u_background_tint.xyz, u_background_tint.w)
+    let transmission = atmosphere_transmittance(u_cam_pos, v_world_pos, u_fog_params, max(u_fog_falloff, 0.01))
+    out_rgb = lerp(u_fog_color, out_rgb, transmission)
     let out_a = u_alpha_mode > 1.5 ? base.w : 1.0
     o_color = float4(out_rgb, out_a)
 }
 
+var @uniform u_silhouette_color : float4
+[fragment_program]
+def gltf_pbr_silhouette_fs {
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    if (u_alpha_mode > 0.5 && base.w < u_alpha_cutoff){discard()}
+    o_color = u_silhouette_color
+}
+
 // ===== host renderer =====
 
+[safe_when_uninitialized]
 struct GltfPbrRenderer {
+    materialWetness : float
+    materialScale : float2 = float2(1.0)
+    reflectionAmount : float
+    materialProgram : uint
+    atmosphere : Atmosphere
+    backgroundTint : float4
     program   : uint
     envTex    : uint     // mipmapped equirect HDR environment, 0 = none (flat ambient)
     envMaxLod : float
+    silhouetteProgram : uint
+    normalProgram : uint
+    aoTex : uint
+    aoInverseSize : float2
+    depthProgram : uint
+    shadowTex : uint
+    shadowViewProj : float4x4
+    shadowTexel : float2
+    shadowBias : float
+    shadowStrength : float
+    localShadowTex : uint
+    localShadowSize : float2
+    pointShadow : float4[GLTF_MAX_POINT_LIGHTS]
+    pointCount : int
+    pointPosition : float4[GLTF_MAX_POINT_LIGHTS]
+    pointColor : float4[GLTF_MAX_POINT_LIGHTS]
+}
+
+struct GltfPbrPointLight {
+    castsShadow : bool
+    position : float3
+    color : float3
+    radius : float
+}
+
+//! Small local-light set, useful for torches/spells. Colors are linear radiance.
+//! Unshadowed unless the caller supplies the optional per-light depth atlas settings.
+//! Passing an empty array clears the set. Excess lights are ignored after the first eight.
+def gltf_pbr_set_point_lights(var r : GltfPbrRenderer; lights : array<GltfPbrPointLight>) {
+    r.pointCount = min(length(lights), GLTF_MAX_POINT_LIGHTS)
+    for (i in range(r.pointCount)) {
+        r.pointPosition[i] = float4(lights[i].position, max(lights[i].radius, 0.001))
+        r.pointColor[i] = float4(max(lights[i].color, float3(0.0)), 0.0)
+    }
+}
+
+//! Configure a caller-owned depth texture (compare mode NONE, nearest filtering).
+//! Passing texture 0 disables shadows; the renderer never owns the map/FBO.
+//! Shadowing affects direct illumination only, preserving ambient and emissive light.
+def gltf_pbr_set_shadow(var r : GltfPbrRenderer; tex : uint; light_vp : float4x4;
+                        resolution : int; bias : float = 0.0005; strength : float = 1.0) {
+    r.shadowTex = tex
+    r.shadowViewProj = light_vp
+    r.shadowTexel = float2(1.0 / float(max(resolution, 1)))
+    r.shadowBias = max(bias, 0.0)
+    r.shadowStrength = tex != 0u ? clamp(strength, 0.0, 1.0) : 0.0
 }
 
 //! Attach a mipmapped equirect HDR environment (see gltf_gl_load_hdr_env); pass 0 to remove it.
@@ -178,6 +366,10 @@ def finalize(var r : GltfPbrRenderer) {
     if (r.program != 0u) {
         glDeleteProgram(r.program)
     }
+    if (r.depthProgram != 0u) { glDeleteProgram(r.depthProgram) }
+    if (r.silhouetteProgram != 0u) { glDeleteProgram(r.silhouetteProgram) }
+    if (r.materialProgram != 0u){glDeleteProgram(r.materialProgram)}
+    if (r.normalProgram != 0u) { glDeleteProgram(r.normalProgram) }
 }
 
 def private bind_material(model : GltfGlModel; mat : GltfMaterial) {
@@ -224,6 +416,88 @@ def private bind_skin_palette(scene : GltfScene; skinIndex : int; root : float4x
     }
 }
 
+def private bind_node(scene : GltfScene; node : GltfNode; root : float4x4) {
+    if (node.skin >= 0 && node.skin < length(scene.skins)) {
+        bind_skin_palette(scene, node.skin, root)
+        u_skinned = 1.0
+        u_model = identity4x4()   // skinned path blends the (root-baked) palette; u_model is unused
+        u_normal_matrix = identity3x3()   // unused in the skinned branch
+    } else {
+        u_skinned = 0.0
+        u_model = root * node.world
+        u_normal_matrix = float3x3(transpose(inverse(u_model)))
+    }
+}
+
+//! Render opaque/masked geometry into the caller's bound depth framebuffer.
+//! Lazily creates the depth program; caller owns viewport, clear, depth and FBO state.
+//! Blended surfaces do not cast solid shadows.
+def gltf_pbr_render_depth(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
+                          root, light_vp : float4x4) {
+    if (r.depthProgram == 0u) { r.depthProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_depth_fs) }
+    glUseProgram(r.depthProgram)
+    u_viewProj = light_vp
+    for (node in scene.nodes) {
+        if (node.mesh < 0 || node.mesh >= length(model.meshes)) { continue }
+        bind_node(scene, node, root)
+        for (glp in model.meshes[node.mesh].primitives) {
+            if (glp.material >= 0 && glp.material < length(scene.materials)) {
+                let mat = scene.materials[glp.material]
+                if (mat.alphaMode == GltfAlphaMode.blend) { continue }
+                bind_material(model, mat)
+            } else { bind_material(model, GltfMaterial()) }
+            gltf_pbr_vs_bind_uniform(r.depthProgram)
+            gltf_pbr_depth_fs_bind_uniform(r.depthProgram)
+            gltf_gl_draw_primitive(glp)
+        }
+    }
+    glUseProgram(0u)
+}
+
+//! Opaque depth/normal prepass using the same skinning, material normals and alpha masks.
+def gltf_pbr_render_normals(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene; root, vp : float4x4; pack_roughness : bool = false; material_buffer : bool = false) {
+    if (r.normalProgram == 0u){r.normalProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_normal_fs)}
+    if (material_buffer && r.materialProgram == 0u){r.materialProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_material_fs)}
+    let program = material_buffer ? r.materialProgram : r.normalProgram
+    glUseProgram(program); u_viewProj = vp; u_material_scale = r.materialScale; u_material_wetness = r.materialWetness; u_normal_roughness = pack_roughness ? 1.0 : 0.0
+    for (node in scene.nodes){
+        if (node.mesh < 0 || node.mesh >= length(model.meshes)){continue}
+        bind_node(scene, node, root)
+        for (glp in model.meshes[node.mesh].primitives){
+            if (glp.material >= 0 && glp.material < length(scene.materials)){
+                let mat = scene.materials[glp.material]
+                if (mat.alphaMode == GltfAlphaMode.blend){continue}
+                bind_material(model, mat)
+            }else{bind_material(model, GltfMaterial())}
+            gltf_pbr_vs_bind_uniform(program); if (material_buffer){gltf_pbr_material_fs_bind_uniform(program)}else{gltf_pbr_normal_fs_bind_uniform(program)}
+            gltf_gl_draw_primitive(glp)
+        }
+    }
+    glUseProgram(0u)
+}
+
+//! Draw opaque/masked geometry with a flat color and the ordinary skinning path.
+//! Caller owns depth test/write state. Draw hidden before visible geometry to avoid self-overlays.
+def gltf_pbr_render_silhouette(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
+                               root, vp : float4x4; color : float4) {
+    if (r.silhouetteProgram == 0u){r.silhouetteProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_silhouette_fs)}
+    glUseProgram(r.silhouetteProgram); u_viewProj = vp; u_silhouette_color = color
+    for (node in scene.nodes){
+        if (node.mesh < 0 || node.mesh >= length(model.meshes)){continue}
+        bind_node(scene, node, root)
+        for (glp in model.meshes[node.mesh].primitives){
+            if (glp.material >= 0 && glp.material < length(scene.materials)){
+                let mat = scene.materials[glp.material]
+                if (mat.alphaMode == GltfAlphaMode.blend){continue}
+                bind_material(model, mat)
+            }else{bind_material(model, GltfMaterial())}
+            gltf_pbr_vs_bind_uniform(r.silhouetteProgram); gltf_pbr_silhouette_fs_bind_uniform(r.silhouetteProgram)
+            gltf_gl_draw_primitive(glp)
+        }
+    }
+    glUseProgram(0u)
+}
+
 //! Render every mesh instance in `scene` with the PBR shader, using the GL objects in `model`. A node
 //! with a `skin` is drawn skinned (its joint palette is uploaded and the mesh-node transform ignored);
 //! otherwise the node's precomputed `world` matrix is the model transform. Per primitive the material
@@ -247,21 +521,33 @@ def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
     u_ambient = light.ambient
     u_env_tex := (r.envTex != 0u ? r.envTex : model.whiteTex)
     u_env_amount = r.envTex != 0u ? light.environment : 0.0
+    u_material_scale = r.materialScale; u_material_wetness = r.materialWetness; u_reflection_amount = r.envTex != 0u ? r.reflectionAmount : 0.0
     u_env_max_lod = r.envMaxLod
+    u_shadow_tex := r.shadowTex != 0u ? r.shadowTex : model.whiteTex
+    u_shadow_vp = r.shadowViewProj
+    u_shadow_texel = r.shadowTexel
+    u_shadow_bias = r.shadowBias
+    u_shadow_strength = r.shadowStrength
+    u_ssao_tex := r.aoTex != 0u ? r.aoTex : model.whiteTex
+    u_ssao_enabled = r.aoTex != 0u ? 1.0 : 0.0
+    u_ssao_inverse_size = r.aoInverseSize
+    u_fog_color = r.atmosphere.color
+    u_fog_params = float4(r.atmosphere.density, r.atmosphere.start, r.atmosphere.height_density, r.atmosphere.height_top)
+    u_fog_falloff = r.atmosphere.height_falloff
+    u_background_tint = r.backgroundTint
+    u_local_shadow_tex := r.localShadowTex != 0u ? r.localShadowTex : model.whiteTex
+    u_local_shadow_size = r.localShadowSize
+    u_point_count = r.pointCount
+    for (i in range(GLTF_MAX_POINT_LIGHTS)) {
+        u_point_shadow[i] = r.pointShadow[i]
+        u_point_position[i] = r.pointPosition[i]
+        u_point_color[i] = r.pointColor[i]
+    }
     for (node in scene.nodes) {
         if (node.mesh < 0 || node.mesh >= length(model.meshes)) {
             continue
         }
-        if (node.skin >= 0 && node.skin < length(scene.skins)) {
-            bind_skin_palette(scene, node.skin, root)
-            u_skinned = 1.0
-            u_model = identity4x4()   // skinned path blends the (root-baked) palette; u_model is unused
-            u_normal_matrix = identity3x3()   // unused in the skinned branch
-        } else {
-            u_skinned = 0.0
-            u_model = root * node.world
-            u_normal_matrix = float3x3(transpose(inverse(u_model)))
-        }
+        bind_node(scene, node, root)
         for (glp in model.meshes[node.mesh].primitives) {
             if (glp.material >= 0 && glp.material < length(scene.materials)) {
                 bind_material(model, scene.materials[glp.material])

@@ -1,0 +1,1 @@
+Build a vertex remap table from triangle-list ``indices`` and packed ``vertices``, returning the number of unique vertices. ``stride`` must be nonzero, 4-byte aligned, at most 256 bytes, and divide the vertex byte count; every index must be in range, and ``remap`` must not alias ``indices``.

@@ -66,7 +66,7 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	SETUP_AUDIO(dasModuleAudio)
 
 	# Threaded web build: drive miniaudio's emscripten backend via AudioWorklet
-	# (mixer callback on the dedicated audio rendering thread) instead of the
+	# (PCM consumption on the audio rendering thread, mixing on a pthread) instead of the
 	# main-thread ScriptProcessorNode. Needs the worklet emcc link flags
 	# (-sAUDIO_WORKLET=1 -sWASM_WORKERS=1, set in web/CMakeLists.txt) + the
 	# non-blocking ma_device_init patch (patches/miniaudio_memory64.cmake), so it

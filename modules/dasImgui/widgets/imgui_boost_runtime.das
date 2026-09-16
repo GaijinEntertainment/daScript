@@ -615,7 +615,10 @@ def private widget_entry_jv(ident : string; var entry : WidgetEntry) : JsonValue
     } elif (entry.serialize != null) {
         entry.payload = entry.serialize(entry.serialize_ctx, entry.serialize_id)
     }
-    return JV(entry)
+    //! Transfers payload ownership to the returned JSON and clears the source alias.
+    var result = JV(entry)
+    entry.payload = null
+    return result
 }
 
 var g_registry : table<string; WidgetEntry>
@@ -993,15 +996,13 @@ def public register_widget(module_name : string;
                            state_addr : void?;
                            ti : TypeInfo const?) {
     //! Module-init registration of a non-indexed widget into the long-lived ``g_widgets`` table. ``state_addr`` is the stable address of the module-scope state global (passed by the ``[widget]`` macro as ``unsafe(addr(IDENT))``); ``ti`` is its ``TypeInfo`` (``typeinfo rtti_typeinfo(IDENT)``). Both feed ``sprint_json_at`` at snapshot time — no per-widget getter/serializer functions emitted. For indexed widgets use ``register_widget_indexed`` / ``register_widget_str``.
-    unsafe {
-        g_widgets[bare_ident] <- WidgetMeta(
-            module_name = module_name,
-            kind = kind,
-            state_addr = state_addr,
-            ti = ti,
-            last_seen_frame = -1
-        )
-    }
+    unsafe(g_widgets[bare_ident]) <- WidgetMeta(
+        module_name = module_name,
+        kind = kind,
+        state_addr = state_addr,
+        ti = ti,
+        last_seen_frame = -1
+    )
 }
 
 def public register_widget_indexed(module_name : string;
@@ -1011,16 +1012,14 @@ def public register_widget_indexed(module_name : string;
                                    ti : TypeInfo const?;
                                    k : int) {
     //! Int-indexed sibling of ``register_widget``. ``addr_getter(k)`` re-resolves per-call against the user's ``table<int; …>`` (slots may be erased between frames); ``ti`` is the element's ``TypeInfo``. ``k`` is the table key, stored once at registration.
-    unsafe {
-        g_widgets[bare_ident] <- WidgetMeta(
-            module_name = module_name,
-            kind = kind,
-            ti = ti,
-            addr_getter_int = addr_getter,
-            k_int = k,
-            last_seen_frame = -1
-        )
-    }
+    unsafe(g_widgets[bare_ident]) <- WidgetMeta(
+        module_name = module_name,
+        kind = kind,
+        ti = ti,
+        addr_getter_int = addr_getter,
+        k_int = k,
+        last_seen_frame = -1
+    )
 }
 
 def public register_widget_str(module_name : string;
@@ -1030,17 +1029,15 @@ def public register_widget_str(module_name : string;
                                ti : TypeInfo const?;
                                k : string) {
     //! String-keyed sibling of ``register_widget_indexed`` for ``table<string; …>``. Sets ``has_str_key`` so the lookup routes through ``addr_getter_str(k_str)``.
-    unsafe {
-        g_widgets[bare_ident] <- WidgetMeta(
-            module_name = module_name,
-            kind = kind,
-            ti = ti,
-            addr_getter_str = addr_getter,
-            k_str := k,
-            has_str_key = true,
-            last_seen_frame = -1
-        )
-    }
+    unsafe(g_widgets[bare_ident]) <- WidgetMeta(
+        module_name = module_name,
+        kind = kind,
+        ti = ti,
+        addr_getter_str = addr_getter,
+        k_str := k,
+        has_str_key = true,
+        last_seen_frame = -1
+    )
 }
 
 def public lookup_state_addr(path : string) : void? {
@@ -1246,28 +1243,22 @@ def private widgets_mark_seen(bare_ident : string; path_key : string;
     if (bare_ident != path_key && key_exists(g_widgets, bare_ident)) {
         var moved <- g_widgets[bare_ident]
         g_widgets |> erase(bare_ident)
-        unsafe {
-            g_widgets[path_key] <- moved
-        }
+        unsafe(g_widgets[path_key]) <- moved
     }
     // Refresh (state_addr, ti) each frame; [edit_widget] widgets that skipped register_widget get their meta created lazily here, with the LAZY sentinel module_name so the freshness gate can expire them.
     if (state_addr != null && ti != null) {
         if (key_exists(g_widgets, path_key)) {
-            unsafe {
-                var meta & = g_widgets[path_key]
-                meta.state_addr = state_addr
-                meta.ti = ti
-            }
+            var meta & = unsafe(g_widgets[path_key])
+            meta.state_addr = state_addr
+            meta.ti = ti
         } else {
-            unsafe {
-                g_widgets[path_key] <- WidgetMeta(
-                    module_name = LAZY_EDIT_WIDGET_MODULE,
-                    kind = kind,
-                    state_addr = state_addr,
-                    ti = ti,
-                    last_seen_frame = -1
-                )
-            }
+            unsafe(g_widgets[path_key]) <- WidgetMeta(
+                module_name = LAZY_EDIT_WIDGET_MODULE,
+                kind = kind,
+                state_addr = state_addr,
+                ti = ti,
+                last_seen_frame = -1
+            )
         }
     }
     if (key_exists(g_widgets, path_key)) {
@@ -1946,9 +1937,7 @@ def private dispatch_or_err(action : string; input : JsonValue?) : Result<string
         }
         // No dispatcher: non-Structure ti ([edit_widget] scalar pointee) fall back to a generic write-through; structures with none are display-only (silently succeed).
         if ((*meta.ti).basicType != Type.tStructure && action == "set") {
-            unsafe {
-                sscan_json_at(payload, state_addr, *meta.ti)
-            }
+            sscan_json_at(payload, state_addr, *meta.ti)
         }
         return ok(resolved, type<string>)
     }

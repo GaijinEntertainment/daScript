@@ -6,7 +6,7 @@ def initialize(project_path : string) {
     // gltf_gl / gltf_pbr are the opt-in OpenGL adapters (they require dasOpenGL); registering their
     // paths here only makes `require gltf/gltf_gl` resolvable — the neutral core never pulls them in.
     let gltf_paths = ["gltf_types", "gltf_accessor", "gltf_parse", "gltf_scene", "gltf_boost",
-        "gltf_gl", "gltf_pbr", "gltf_pbr_common"]
+        "gltf_gl", "gltf_atmosphere", "gltf_pbr", "gltf_pbr_common", "gltf_processed", "gltf_processed_gl"]
     for (path in gltf_paths) {
         register_native_path("gltf", "{path}", "{project_path}/gltf/{path}.das")
     }

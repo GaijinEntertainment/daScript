@@ -285,3 +285,11 @@ Five companions carry a concern each; a section number is unique across all six 
   hook by field name, so a C++ side back on `const` leaves daslang writing through a const
   reference with every suite green. `progArgs` (the program's `options`), `simulate` and the
   `aot*` hooks stay const on both sides.
+
+## 40. Package release symbols {#package-release-symbols}
+
+`daspkg.das:release_include_symbols` sets `ReleaseSpec.include_symbols`.
+`utils/daspkg/commands.das` consumes that field: the native release copies Windows
+PDBs, while `cmd_release_wasm` passes it to `release_one_wasm_app` to retain DWARF,
+logical frames and the emcc symbol map. The manifest contract and these release
+implementations describe the same option.

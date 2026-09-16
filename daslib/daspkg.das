@@ -159,9 +159,7 @@ def release_requires_jit() {
     _release_spec.requires_jit = true
 }
 
-//! Ship debug symbols for every shipped binary into `<bundle>/symbols/`, so a minidump from the
-//! deployed tree resolves (`cdb -y <bundle>\symbols`). Opt-in: symbols dwarf the payload (daslang's
-//! runtime PDBs are ~320 MB). Windows `.pdb` only; see `skills/daspkg.md`.
+[arch(at="ARCHITECTURE.md#package-release-symbols")]
 def release_include_symbols() {
     _release_spec.include_symbols = true
 }

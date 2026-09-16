@@ -1,0 +1,1 @@
+Checked array bindings for meshoptimizer 1.2 vertex remapping, vertex-cache and vertex-fetch optimization, and vertex and index buffer codecs. The API accepts triangle-list ``uint`` indices and packed vertex bytes with a nonzero, 4-byte-aligned stride of at most 256 bytes.

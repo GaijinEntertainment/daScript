@@ -1,0 +1,1 @@
+Encode triangle-list ``indices`` with the meshoptimizer index codec and resize ``output`` to the encoded byte count. Every index must be less than the supplied vertex ``count``. Triangle order and winding are preserved, but the three indices within each triangle may be cyclically rotated.

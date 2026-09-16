@@ -1,0 +1,1 @@
+Encode packed vertex records into the meshoptimizer vertex codec and resize ``output`` to the encoded byte count. ``stride`` must be nonzero, 4-byte aligned, at most 256 bytes, and divide the input size; ``output`` must not alias ``vertices``.

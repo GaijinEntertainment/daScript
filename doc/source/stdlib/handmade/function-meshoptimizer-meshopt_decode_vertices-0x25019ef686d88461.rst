@@ -1,0 +1,1 @@
+Decode ``count`` packed vertex records of ``stride`` bytes into ``output`` and return true on success. Invalid codec data returns false and clears ``output``; invalid stride, oversized output, or aliasing ``encoded`` raises an error.
