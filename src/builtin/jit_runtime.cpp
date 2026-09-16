@@ -595,8 +595,8 @@ extern "C" {
     // conditional members). The codegen emits, at startup, one check call per used
     // handled type (size) and per field (offset) carrying the HOST-baked value;
     // each compares against the TARGET runtime annotation and records every
-    // divergence. jit_handled_abi_check_report() dumps them all at once and aborts,
-    // so a single run reveals the full magnitude of the layout disaster.
+    // divergence. jit_handled_abi_check_report() warns on stderr with them all at once
+    // (nothing when clean) and the program runs on - a drift rarely breaks the app.
     static string g_abi_check_report;
     static int    g_abi_check_count = 0;        // mismatches
     static int    g_abi_types_checked = 0;      // type-size checks where the target annotation was found

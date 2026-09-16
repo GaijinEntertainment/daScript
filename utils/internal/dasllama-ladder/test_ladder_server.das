@@ -182,7 +182,7 @@ def test_records_routes(t : T?) {
                 tt |> success(!(js?["runs"]?[0]?["verified"] ?? true), "unverified")
                 // the cells and the cpu label ride the row: the board paints without a document fetch
                 tt |> equal(js?["runs"]?[0]?["pp512"] ?? 0.0lf, 100.0lf)
-                tt |> equal(js?["runs"]?[0]?["tg128"] ?? -1.0lf, 0.0lf)
+                tt |> equal(js?["runs"]?[0]?["tg128"] ?? -1.0lf, 25.0lf)
                 tt |> equal(js?["runs"]?[0]?["cpu"] ?? "", "Test CPU 9000")
             }
             GET("{base_url}/api/runs") $(resp) {

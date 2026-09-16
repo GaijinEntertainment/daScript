@@ -2108,22 +2108,18 @@ def read_bench_records(path : string; var models : array<BenchModel>) : bool {
     return sscan_json(fread(path), models)
 }
 
-def write_bench_records(path : string; models : array<BenchModel>) {
-    write_records_text(path, sprint_json(models, true))
+def write_bench_records(path : string; models : array<BenchModel>) : bool {
+    return write_records_text(path, sprint_json(models, true))
 }
 
-//! One record file, written whole; a file that cannot be opened is logged, never silent.
-def write_records_text(path : string; text : string) {
-    var wrote = false
-    fopen(path, "wb") $(f) {
-        if (f != null) {
-            fwrite(f, text)
-            wrote = true
-        }
-    }
+//! One record file, written whole; false (and a log line) when the path cannot be opened -
+//! a caller writing several artifacts fails on the first, never reports a partial set as written.
+def write_records_text(path : string; text : string) : bool {
+    let wrote = fwrite(path, text)
     if (!wrote) {
         to_log(LOG_ERROR, "dasLLAMA bench: could not open {path} for writing - records NOT persisted\n")
     }
+    return wrote
 }
 
 //! Update-or-insert one run; the identity is (box, engine, backend, flavor, workload) — a

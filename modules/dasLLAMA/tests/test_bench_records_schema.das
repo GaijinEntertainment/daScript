@@ -38,11 +38,21 @@ def private make_model() : BenchModel {
 }
 
 [test]
+def test_write_reports_failure(t : T?) {
+    t |> run("a record file that cannot be opened is a false return, never a silent partial write") @(t : T?) {
+        // a directory is never openable for writing, on any platform
+        t |> success(!write_records_text("modules/dasLLAMA/performance/records", "[]"), "unopenable path is false")
+        let models : array<BenchModel>
+        t |> success(!write_bench_records("modules/dasLLAMA/performance/records", models), "the typed writer carries the status")
+    }
+}
+
+[test]
 def test_asr_round_trip(t : T?) {
     t |> run("ASR-shaped runs survive write/read") @(t : T?) {
         var models : array<BenchModel>
         models |> emplace(make_model())
-        write_bench_records(TMP, models)
+        t |> success(write_bench_records(TMP, models), "the store writes")
         var back : array<BenchModel>
         t |> success(read_bench_records(TMP, back), "store re-reads")
         t |> equal(length(back), 1)

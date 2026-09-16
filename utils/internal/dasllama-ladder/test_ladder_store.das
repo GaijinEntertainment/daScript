@@ -33,22 +33,28 @@ def test_migration(t : T?) {
             // two run rows inserted in the v1 shape (no cell columns to fill)
             ladder_migration_001(db)
             baseline(db, 1)
-            let doc = records_doc()
-            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (7, 'records', 'sha7', ?, 1000, '10.0.0.1')", doc)
-            for (ri in range(2)) {
-                db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
-                    "VALUES (7, 0, ?, 'test-model-Q8_0.gguf', ?, 'cpu', ?, 'testbox', 8, '2026-08-10', 'community', 1000)",
-                    ri, ri == 0 ? "das" : "llama.cpp", ri == 0 ? "tuned" : "clean-cpu")
+            // one community submission and one official import, both in the v1 row shape
+            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (7, 'records', 'sha7', ?, 1000, '10.0.0.1')", records_doc())
+            db |> exec("INSERT INTO submissions (Id, Kind, DocSha, Doc, CreatedAt, ClientIp) VALUES (8, 'official', 'sha8', ?, 1000, 'importer')", official_doc())
+            for (sid in [7, 8]) {
+                for (ri in range(2)) {
+                    db |> exec("INSERT INTO runs (SubmissionId, ModelIdx, RunIdx, Gguf, Engine, Backend, Flavor, Box, Threads, RunDate, Source, CreatedAt) " +
+                        "VALUES (?, 0, ?, 'x.gguf', ?, 'cpu', 'tuned', 'testbox', 8, '2026-08-10', 'community', 1000)",
+                        sid, ri, ri == 0 ? "das" : "llama.cpp")
+                }
             }
             tt |> equal(migrate_to_latest(db), 1, "one pending migration applied")
             tt |> equal(current_schema_version(db), 2)
-            let rows <- _sql(db |> select_from(type<Run>) |> _order_by(_.RunIdx))
-            tt |> equal(length(rows), 2)
+            let rows <- _sql(db |> select_from(type<Run>) |> _order_by(_.Id))
+            tt |> equal(length(rows), 4)
             tt |> equal(rows[0].Pp512, 100.0lf)
+            tt |> equal(rows[0].Tg128, 25.0lf)
             tt |> equal(rows[1].Pp512, 80.0lf)
-            tt |> equal(rows[0].Tg128, 0.0lf, "a cell the run did not measure stays 0")
+            tt |> equal(rows[1].Tg128, 0.0lf, "a cell the run did not measure stays 0")
             tt |> equal(rows[0].Cpu, "Test CPU 9000")
-            tt |> equal(rows[1].Cpu, "Test CPU 9000")
+            tt |> equal(rows[2].Pp512, 259.6lf, "the official submission's rows are filled too")
+            tt |> equal(rows[3].Pp512, 145.0lf)
+            tt |> equal(rows[2].Cpu, "Apple M1 Max")
         }
     }
 }
@@ -229,7 +235,7 @@ def test_put_records(t : T?) {
             tt |> equal(das_rows[0].TuneSha, "cafe0123beef")
             tt |> equal(das_rows[0].Threads, 8)
             tt |> equal(das_rows[0].Pp512, 100.0lf)
-            tt |> equal(das_rows[0].Tg128, 0.0lf)
+            tt |> equal(das_rows[0].Tg128, 25.0lf)
             tt |> equal(das_rows[0].Cpu, "Test CPU 9000")
             // the reference row carries its own cells: the board pairs from this table alone
             for (r in rows) {

@@ -798,9 +798,8 @@ def private emit_exe_lookups(builder : LLVMBuilderRef; ctx : LLVMContextRef; var
 }
 
 // --jit-check-abi: emit into initialize_modules() a host-vs-target layout check for every handled
-// type referenced. Bakes HOST size + field offsets into check calls that resolve the TARGET annotation
-// at runtime, record every divergence, then jit_handled_abi_check_report() warns on stderr with them
-// all (silent when clean) - the program runs either way.
+// type referenced - HOST size + field offsets baked into calls that resolve the TARGET annotation at
+// runtime; jit_handled_abi_check_report() then warns on stderr (silent when clean), never aborts.
 def private emit_handled_abi_check(ib : LLVMBuilderRef; prog : Program?) {
     let size_fn = LLVMGetNamedFunction(g_mod, FN_JIT_CHECK_HANDLED_TYPE_SIZE)
     let size_type = g_fn_types[FN_JIT_CHECK_HANDLED_TYPE_SIZE]

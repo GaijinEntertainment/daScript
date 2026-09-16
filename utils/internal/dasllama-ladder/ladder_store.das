@@ -163,6 +163,27 @@ def ladder_migration_002(db : SqlRunner) {
     backfill_run_cells(db)
 }
 
+//! Every run of a record document in order, with its model and the (ModelIdx, RunIdx) the
+//! runs table keys on — the one walk behind insert, official replace and the backfill. A text
+//! that is not a top-level array visits nothing; the tree is freed after the walk.
+def private each_record_run(doc_text : string; blk : block<(m : JsonValue?; r : JsonValue?; mi : int; ri : int) : void>) {
+    var jerr = ""
+    var doc = read_json(doc_text, jerr)
+    if (doc == null || !(doc is _array)) {
+        return
+    }
+    var mi = 0
+    for (m in doc as _array) {
+        var ri = 0
+        for (r in m?["runs"] as _array) {
+            invoke(blk, m, r, mi, ri)
+            ri++
+        }
+        mi++
+    }
+    delete_json(doc)
+}
+
 //! The cells of one run node of a record document — what `Run.Pp512`/`Tg128`/`Cpu` hold.
 def private run_cells(r : JsonValue?) : tuple<pp512 : double; tg128 : double; cpu : string> {
     return (
@@ -177,24 +198,12 @@ def private backfill_run_cells(db : SqlRunner) {
     let subs <- _sql(db |> select_from(type<Submission>)
         |> _where(_.Kind == "records" || _.Kind == "official"))
     for (s in subs) {
-        var jerr = ""
-        var doc = read_json(s.Doc, jerr)
-        if (doc == null || !(doc is _array)) {
-            continue
+        let sid = s.Id
+        each_record_run(s.Doc) $(_m, r, mi, ri) {
+            let cells = run_cells(r)
+            db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
+                (Pp512 = cells.pp512, Tg128 = cells.tg128, Cpu = cells.cpu))
         }
-        var mi = 0
-        for (m in doc as _array) {
-            var ri = 0
-            for (r in m?["runs"] as _array) {
-                let cells = run_cells(r)
-                let sid = s.Id
-                db |> _sql_update(type<Run>, _.SubmissionId == sid && _.ModelIdx == mi && _.RunIdx == ri,
-                    (Pp512 = cells.pp512, Tg128 = cells.tg128, Cpu = cells.cpu))
-                ri++
-            }
-            mi++
-        }
-        delete_json(doc)
     }
 }
 
@@ -346,26 +355,10 @@ def put_sidecar(db : SqlRunner; var doc : string; client_ip : string; policy : L
 // the verbatim truth stays in the submission Doc at (ModelIdx, RunIdx)
 def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; source : string;
                         verified : int; now : int64) : int {
-    var jerr = ""
-    var doc = read_json(doc_text, jerr)
-    if (doc == null || !(doc is _array)) {
-        return 0
-    }
     var rows : array<Run>
-    var total = 0
-    for (m in doc as _array) {
-        let mruns = m?["runs"]
-        if (mruns != null && mruns is _array) {
-            total += length(mruns as _array)
-        }
-    }
-    rows |> reserve(total)
-    var mi = 0
-    for (m in doc as _array) {
-        var ri = 0
-        for (r in m?["runs"] as _array) {
-            let cells = run_cells(r)
-            rows |> emplace(Run(
+    each_record_run(doc_text) $(m, r, mi, ri) {
+        let cells = run_cells(r)
+        rows |> emplace(Run(
                 SubmissionId = submission_id,
                 ModelIdx = mi,
                 RunIdx = ri,
@@ -395,9 +388,6 @@ def private insert_runs(db : SqlRunner; doc_text : string; submission_id : int; 
                 Pp512 = cells.pp512,
                 Tg128 = cells.tg128,
                 Cpu = cells.cpu))
-            ri++
-        }
-        mi++
     }
     if (!empty(rows)) {
         db |> insert(rows)
@@ -456,24 +446,17 @@ def import_official_store(db : SqlRunner; doc : string; now : int64) : ImportRes
     }
     let sid = add_submission(db, "official", doc_sha, doc, "importer", now)
     // replace-by-identity: drop the official rows this document re-measures
-    var jerr = ""
-    var doc_js = read_json(doc, jerr)
     var replaced = 0
-    if (doc_js != null && doc_js is _array) {
-        for (m in doc_js as _array) {
-            let gguf : string = m?["gguf"] ?? ""
-            for (r in m?["runs"] as _array) {
-                let engine : string = r?["engine"] ?? ""
-                let backend : string = r?["backend"] ?? ""
-                let flavor : string = r?["flavor"] ?? ""
-                let workload : string = r?["workload"] ?? ""
-                let box : string = r?["box"] ?? ""
-                let n = db |> _sql_delete(type<Run>,
-                    _.Source == "official" && _.Gguf == gguf && _.Box == box && _.Engine == engine
-                        && _.Backend == backend && _.Flavor == flavor && _.Workload == workload)
-                replaced += n
-            }
-        }
+    each_record_run(doc) $(m, r, _mi, _ri) {
+        let gguf : string = m?["gguf"] ?? ""
+        let engine : string = r?["engine"] ?? ""
+        let backend : string = r?["backend"] ?? ""
+        let flavor : string = r?["flavor"] ?? ""
+        let workload : string = r?["workload"] ?? ""
+        let box : string = r?["box"] ?? ""
+        replaced += db |> _sql_delete(type<Run>,
+            _.Source == "official" && _.Gguf == gguf && _.Box == box && _.Engine == engine
+                && _.Backend == backend && _.Flavor == flavor && _.Workload == workload)
     }
     let added = insert_runs(db, doc, sid, "official", 1, now)
     logger_info("ladder.store", "import official store",

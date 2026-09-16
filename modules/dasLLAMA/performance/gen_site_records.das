@@ -66,34 +66,21 @@ struct SiteModel {
     @optional note : string
 }
 
-def private site_run(r : BenchRun) : SiteRun {
-    var out = SiteRun(engine = r.engine, backend = r.backend, flavor = r.flavor, box = r.box,
-        threads = r.threads, date = r.date, hardware = SiteHardware(cpu = r.hardware.cpu),
-        workload = r.workload, source = r.source, sha = r.sha, version = r.version,
-        comment = r.comment, void_clips = r.void_clips)
-    for (k, t in keys(r.tests), values(r.tests)) {
-        out.tests[k] = SiteTest(tok_s = t.tok_s, ms = t.ms, audio_s = t.audio_s)
-    }
-    out.files <- [for (f in r.files); SiteFile(role = f.role, name = f.name)]
-    return <- out
-}
-
-//! The projection of the whole merge (`SiteModel`), as the text `bench_cells.json` holds.
+//! The projection of the whole merge (`SiteModel`), as the text `bench_cells.json` holds: the
+//! full store's text re-read into the Site structs, which is what drops every key they do not
+//! declare - the structs are the projection's only spelling.
 def site_cells_json(models : array<BenchModel>) : string {
     var cells : array<SiteModel>
-    cells |> reserve(length(models))
-    for (m in models) {
-        var sm = SiteModel(gguf = m.gguf, arch = m.arch, size_bytes = m.size_bytes, note = m.note)
-        sm.runs |> reserve(length(m.runs))
-        for (r in m.runs) {
-            var sr <- site_run(r)
-            sm.runs |> emplace(sr)
-        }
-        cells |> emplace(sm)
-    }
+    sscan_json(sprint_json(models, false), cells)
     let text = sprint_json(cells, true)
     delete cells
     return text
+}
+
+//! Every file the site merge writes, with its text - one list for the writer, `--verify`, and
+//! the drift gate, so the set cannot drift between them.
+def site_outputs(models : array<BenchModel>) : array<tuple<path : string; text : string>> {
+    return <- [(path = SITE_PATH, text = sprint_json(models, true)), (path = SITE_CELLS_PATH, text = site_cells_json(models))]
 }
 
 [CommandLineArgs]
@@ -153,10 +140,11 @@ def main : int {
     if (!merge_site_records(merged)) {
         return 1
     }
+    let outputs <- site_outputs(merged)
     if (cfg.verify) {
-        for (path, want in [SITE_PATH, SITE_CELLS_PATH], [sprint_json(merged, true), site_cells_json(merged)]) {
-            if (fread(path) != want) {
-                to_log(LOG_ERROR, "gen_site_records: {path} DRIFTED from the record stores - a records commit skipped the site merge; rerun gen_site_records and commit all three\n")
+        for (o in outputs) {
+            if (fread(o.path) != o.text) {
+                to_log(LOG_ERROR, "gen_site_records: {o.path} DRIFTED from the record stores - a records commit skipped the site merge; rerun gen_site_records and commit all three\n")
                 return 1
             }
         }
@@ -164,8 +152,12 @@ def main : int {
         to_log(LOG_INFO, "gen_site_records: verify OK - {SITE_PATH} and {SITE_CELLS_PATH} match the {total}-model merge\n")
         return 0
     }
-    write_bench_records(SITE_PATH, merged)
-    write_records_text(SITE_CELLS_PATH, site_cells_json(merged))
+    // both or neither reported: a merge that landed in one file and not the other is drift
+    for (o in outputs) {
+        if (!write_records_text(o.path, o.text)) {
+            return 1
+        }
+    }
     let total = length(merged)
     to_log(LOG_INFO, "gen_site_records: wrote {SITE_PATH} and {SITE_CELLS_PATH} - {total} model(s)\n")
     return 0

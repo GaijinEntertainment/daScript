@@ -32,9 +32,11 @@ def test_site_records_current(t : T?) {
             tt |> failure("the record stores under performance/records/ would not merge - see the log")
             return
         }
-        for (path, want in [SITE_PATH, SITE_CELLS_PATH], [sprint_json(merged, true), site_cells_json(merged)]) {
-            if (fread(path) != want) {
-                tt |> failure("{path} drifted from the record stores - a records commit skipped the site merge; run gen_site_records and commit all three")
+        let outputs <- site_outputs(merged)
+        tt |> equal([for (o in outputs); o.path], [SITE_PATH, SITE_CELLS_PATH], "the merge writes exactly the two site files")
+        for (o in outputs) {
+            if (fread(o.path) != o.text) {
+                tt |> failure("{o.path} drifted from the record stores - a records commit skipped the site merge; run gen_site_records and commit all three")
             }
         }
         delete merged

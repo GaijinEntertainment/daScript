@@ -50,8 +50,8 @@ Three tables, one migration stream (`ladder_migration_*`):
   `sidecar`, `official`.
 - `runs` - one row per BenchRun: flat columns for filtering plus the `Pp512`/`Tg128` cells
   and the `Cpu` label the board paints from; the truth stays in the submission `Doc` at
-  (`ModelIdx`, `RunIdx`). Migration 2 added the three columns and backfilled them from the
-  documents. Identity per `modules/dasLLAMA/METHODOLOGY.md`
+  (`ModelIdx`, `RunIdx`); the three cell columns hold `run_cells` of that node, and migration 2
+  fills them for rows older than the columns. Identity per `modules/dasLLAMA/METHODOLOGY.md`
   is (`Gguf`, `Box`, `Engine`, `Backend`, `Flavor`, `Workload`); official imports replace on
   it, community rows append.
 - `sidecars` - content-addressed by the document's own sha256; identity columns come from
