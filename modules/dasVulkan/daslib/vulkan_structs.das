@@ -1370,13 +1370,11 @@ def vk_view_create_unsafe(var b : PipelineShaderStageCreateInfo) : VkPipelineSha
     vk.stage = b.stage
     vk.module_ = boost_value_to_vk(b.module_)
     vk.pName = b.pName
-    unsafe {
-        if (b.pSpecializationInfo != null) {
-            b._vk_view_pSpecializationInfo_vk = vk_view_create_unsafe(*b.pSpecializationInfo)
-            b._vk_view_pSpecializationInfo_present = true
-            vk.pSpecializationInfo = addr(b._vk_view_pSpecializationInfo_vk)
-            b.pSpecializationInfo = null
-        }
+    if (b.pSpecializationInfo != null) {
+        b._vk_view_pSpecializationInfo_vk = vk_view_create_unsafe(*b.pSpecializationInfo)
+        b._vk_view_pSpecializationInfo_present = true
+        vk.pSpecializationInfo = unsafe(addr(b._vk_view_pSpecializationInfo_vk))
+        b.pSpecializationInfo = null
     }
     return <- vk
 }
@@ -1823,77 +1821,59 @@ def vk_view_create_unsafe(var b : GraphicsPipelineCreateInfo) : VkGraphicsPipeli
         vkv = vk_view_create_unsafe(vke)
     }
     vk.pStages = array_addr(b._vk_view_pStages)
-    unsafe {
-        if (b.pVertexInputState != null) {
-            b._vk_view_pVertexInputState_vk = vk_view_create_unsafe(*b.pVertexInputState)
-            b._vk_view_pVertexInputState_present = true
-            vk.pVertexInputState = addr(b._vk_view_pVertexInputState_vk)
-            b.pVertexInputState = null
-        }
+    if (b.pVertexInputState != null) {
+        b._vk_view_pVertexInputState_vk = vk_view_create_unsafe(*b.pVertexInputState)
+        b._vk_view_pVertexInputState_present = true
+        vk.pVertexInputState = unsafe(addr(b._vk_view_pVertexInputState_vk))
+        b.pVertexInputState = null
     }
-    unsafe {
-        if (b.pInputAssemblyState != null) {
-            b._vk_view_pInputAssemblyState_vk = vk_view_create_unsafe(*b.pInputAssemblyState)
-            b._vk_view_pInputAssemblyState_present = true
-            vk.pInputAssemblyState = addr(b._vk_view_pInputAssemblyState_vk)
-            b.pInputAssemblyState = null
-        }
+    if (b.pInputAssemblyState != null) {
+        b._vk_view_pInputAssemblyState_vk = vk_view_create_unsafe(*b.pInputAssemblyState)
+        b._vk_view_pInputAssemblyState_present = true
+        vk.pInputAssemblyState = unsafe(addr(b._vk_view_pInputAssemblyState_vk))
+        b.pInputAssemblyState = null
     }
-    unsafe {
-        if (b.pTessellationState != null) {
-            b._vk_view_pTessellationState_vk = vk_view_create_unsafe(*b.pTessellationState)
-            b._vk_view_pTessellationState_present = true
-            vk.pTessellationState = addr(b._vk_view_pTessellationState_vk)
-            b.pTessellationState = null
-        }
+    if (b.pTessellationState != null) {
+        b._vk_view_pTessellationState_vk = vk_view_create_unsafe(*b.pTessellationState)
+        b._vk_view_pTessellationState_present = true
+        vk.pTessellationState = unsafe(addr(b._vk_view_pTessellationState_vk))
+        b.pTessellationState = null
     }
-    unsafe {
-        if (b.pViewportState != null) {
-            b._vk_view_pViewportState_vk = vk_view_create_unsafe(*b.pViewportState)
-            b._vk_view_pViewportState_present = true
-            vk.pViewportState = addr(b._vk_view_pViewportState_vk)
-            b.pViewportState = null
-        }
+    if (b.pViewportState != null) {
+        b._vk_view_pViewportState_vk = vk_view_create_unsafe(*b.pViewportState)
+        b._vk_view_pViewportState_present = true
+        vk.pViewportState = unsafe(addr(b._vk_view_pViewportState_vk))
+        b.pViewportState = null
     }
-    unsafe {
-        if (b.pRasterizationState != null) {
-            b._vk_view_pRasterizationState_vk = vk_view_create_unsafe(*b.pRasterizationState)
-            b._vk_view_pRasterizationState_present = true
-            vk.pRasterizationState = addr(b._vk_view_pRasterizationState_vk)
-            b.pRasterizationState = null
-        }
+    if (b.pRasterizationState != null) {
+        b._vk_view_pRasterizationState_vk = vk_view_create_unsafe(*b.pRasterizationState)
+        b._vk_view_pRasterizationState_present = true
+        vk.pRasterizationState = unsafe(addr(b._vk_view_pRasterizationState_vk))
+        b.pRasterizationState = null
     }
-    unsafe {
-        if (b.pMultisampleState != null) {
-            b._vk_view_pMultisampleState_vk = vk_view_create_unsafe(*b.pMultisampleState)
-            b._vk_view_pMultisampleState_present = true
-            vk.pMultisampleState = addr(b._vk_view_pMultisampleState_vk)
-            b.pMultisampleState = null
-        }
+    if (b.pMultisampleState != null) {
+        b._vk_view_pMultisampleState_vk = vk_view_create_unsafe(*b.pMultisampleState)
+        b._vk_view_pMultisampleState_present = true
+        vk.pMultisampleState = unsafe(addr(b._vk_view_pMultisampleState_vk))
+        b.pMultisampleState = null
     }
-    unsafe {
-        if (b.pDepthStencilState != null) {
-            b._vk_view_pDepthStencilState_vk = vk_view_create_unsafe(*b.pDepthStencilState)
-            b._vk_view_pDepthStencilState_present = true
-            vk.pDepthStencilState = addr(b._vk_view_pDepthStencilState_vk)
-            b.pDepthStencilState = null
-        }
+    if (b.pDepthStencilState != null) {
+        b._vk_view_pDepthStencilState_vk = vk_view_create_unsafe(*b.pDepthStencilState)
+        b._vk_view_pDepthStencilState_present = true
+        vk.pDepthStencilState = unsafe(addr(b._vk_view_pDepthStencilState_vk))
+        b.pDepthStencilState = null
     }
-    unsafe {
-        if (b.pColorBlendState != null) {
-            b._vk_view_pColorBlendState_vk = vk_view_create_unsafe(*b.pColorBlendState)
-            b._vk_view_pColorBlendState_present = true
-            vk.pColorBlendState = addr(b._vk_view_pColorBlendState_vk)
-            b.pColorBlendState = null
-        }
+    if (b.pColorBlendState != null) {
+        b._vk_view_pColorBlendState_vk = vk_view_create_unsafe(*b.pColorBlendState)
+        b._vk_view_pColorBlendState_present = true
+        vk.pColorBlendState = unsafe(addr(b._vk_view_pColorBlendState_vk))
+        b.pColorBlendState = null
     }
-    unsafe {
-        if (b.pDynamicState != null) {
-            b._vk_view_pDynamicState_vk = vk_view_create_unsafe(*b.pDynamicState)
-            b._vk_view_pDynamicState_present = true
-            vk.pDynamicState = addr(b._vk_view_pDynamicState_vk)
-            b.pDynamicState = null
-        }
+    if (b.pDynamicState != null) {
+        b._vk_view_pDynamicState_vk = vk_view_create_unsafe(*b.pDynamicState)
+        b._vk_view_pDynamicState_present = true
+        vk.pDynamicState = unsafe(addr(b._vk_view_pDynamicState_vk))
+        b.pDynamicState = null
     }
     vk.layout = boost_value_to_vk(b.layout)
     vk.renderPass = boost_value_to_vk(b.renderPass)
@@ -2023,13 +2003,11 @@ def vk_view_create_unsafe(var b : PipelineBinaryCreateInfoKHR) : VkPipelineBinar
     var vk = VkPipelineBinaryCreateInfoKHR()
     vk.pNext = b.next
     vk.pipeline = boost_value_to_vk(b.pipeline)
-    unsafe {
-        if (b.pPipelineCreateInfo != null) {
-            b._vk_view_pPipelineCreateInfo_vk = vk_view_create_unsafe(*b.pPipelineCreateInfo)
-            b._vk_view_pPipelineCreateInfo_present = true
-            vk.pPipelineCreateInfo = addr(b._vk_view_pPipelineCreateInfo_vk)
-            b.pPipelineCreateInfo = null
-        }
+    if (b.pPipelineCreateInfo != null) {
+        b._vk_view_pPipelineCreateInfo_vk = vk_view_create_unsafe(*b.pPipelineCreateInfo)
+        b._vk_view_pPipelineCreateInfo_present = true
+        vk.pPipelineCreateInfo = unsafe(addr(b._vk_view_pPipelineCreateInfo_vk))
+        b.pPipelineCreateInfo = null
     }
     return <- vk
 }
@@ -2274,13 +2252,11 @@ def vk_view_create_unsafe(var b : CommandBufferBeginInfo) : VkCommandBufferBegin
     var vk = VkCommandBufferBeginInfo()
     vk.pNext = b.next
     vk.flags = b.flags
-    unsafe {
-        if (b.pInheritanceInfo != null) {
-            b._vk_view_pInheritanceInfo_vk = vk_view_create_unsafe(*b.pInheritanceInfo)
-            b._vk_view_pInheritanceInfo_present = true
-            vk.pInheritanceInfo = addr(b._vk_view_pInheritanceInfo_vk)
-            b.pInheritanceInfo = null
-        }
+    if (b.pInheritanceInfo != null) {
+        b._vk_view_pInheritanceInfo_vk = vk_view_create_unsafe(*b.pInheritanceInfo)
+        b._vk_view_pInheritanceInfo_present = true
+        vk.pInheritanceInfo = unsafe(addr(b._vk_view_pInheritanceInfo_vk))
+        b.pInheritanceInfo = null
     }
     return <- vk
 }
@@ -2396,13 +2372,11 @@ def vk_view_create_unsafe(var b : SubpassDescription) : VkSubpassDescription {
         vkv = vk_view_create_unsafe(vke)
     }
     vk.pResolveAttachments = array_addr(b._vk_view_pResolveAttachments)
-    unsafe {
-        if (b.pDepthStencilAttachment != null) {
-            b._vk_view_pDepthStencilAttachment_vk = vk_view_create_unsafe(*b.pDepthStencilAttachment)
-            b._vk_view_pDepthStencilAttachment_present = true
-            vk.pDepthStencilAttachment = addr(b._vk_view_pDepthStencilAttachment_vk)
-            b.pDepthStencilAttachment = null
-        }
+    if (b.pDepthStencilAttachment != null) {
+        b._vk_view_pDepthStencilAttachment_vk = vk_view_create_unsafe(*b.pDepthStencilAttachment)
+        b._vk_view_pDepthStencilAttachment_present = true
+        vk.pDepthStencilAttachment = unsafe(addr(b._vk_view_pDepthStencilAttachment_vk))
+        b.pDepthStencilAttachment = null
     }
     b._vk_view_pPreserveAttachments := b.pPreserveAttachments
     vk.pPreserveAttachments = array_addr(b._vk_view_pPreserveAttachments)
@@ -3974,21 +3948,17 @@ def vk_view_create_unsafe(var b : GraphicsShaderGroupCreateInfoNV) : VkGraphicsS
         vkv = vk_view_create_unsafe(vke)
     }
     vk.pStages = array_addr(b._vk_view_pStages)
-    unsafe {
-        if (b.pVertexInputState != null) {
-            b._vk_view_pVertexInputState_vk = vk_view_create_unsafe(*b.pVertexInputState)
-            b._vk_view_pVertexInputState_present = true
-            vk.pVertexInputState = addr(b._vk_view_pVertexInputState_vk)
-            b.pVertexInputState = null
-        }
+    if (b.pVertexInputState != null) {
+        b._vk_view_pVertexInputState_vk = vk_view_create_unsafe(*b.pVertexInputState)
+        b._vk_view_pVertexInputState_present = true
+        vk.pVertexInputState = unsafe(addr(b._vk_view_pVertexInputState_vk))
+        b.pVertexInputState = null
     }
-    unsafe {
-        if (b.pTessellationState != null) {
-            b._vk_view_pTessellationState_vk = vk_view_create_unsafe(*b.pTessellationState)
-            b._vk_view_pTessellationState_present = true
-            vk.pTessellationState = addr(b._vk_view_pTessellationState_vk)
-            b.pTessellationState = null
-        }
+    if (b.pTessellationState != null) {
+        b._vk_view_pTessellationState_vk = vk_view_create_unsafe(*b.pTessellationState)
+        b._vk_view_pTessellationState_present = true
+        vk.pTessellationState = unsafe(addr(b._vk_view_pTessellationState_vk))
+        b.pTessellationState = null
     }
     vk.stageCount = uint(length(b.pStages))
     return <- vk
@@ -6326,13 +6296,11 @@ struct DeviceBufferMemoryRequirements {
 def vk_view_create_unsafe(var b : DeviceBufferMemoryRequirements) : VkDeviceBufferMemoryRequirements {
     var vk = VkDeviceBufferMemoryRequirements()
     vk.pNext = b.next
-    unsafe {
-        if (b.pCreateInfo != null) {
-            b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(*b.pCreateInfo)
-            b._vk_view_pCreateInfo_present = true
-            vk.pCreateInfo = addr(b._vk_view_pCreateInfo_vk)
-            b.pCreateInfo = null
-        }
+    if (b.pCreateInfo != null) {
+        b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(*b.pCreateInfo)
+        b._vk_view_pCreateInfo_present = true
+        vk.pCreateInfo = unsafe(addr(b._vk_view_pCreateInfo_vk))
+        b.pCreateInfo = null
     }
     return <- vk
 }
@@ -6380,13 +6348,11 @@ struct DeviceImageMemoryRequirements {
 def vk_view_create_unsafe(var b : DeviceImageMemoryRequirements) : VkDeviceImageMemoryRequirements {
     var vk = VkDeviceImageMemoryRequirements()
     vk.pNext = b.next
-    unsafe {
-        if (b.pCreateInfo != null) {
-            b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(*b.pCreateInfo)
-            b._vk_view_pCreateInfo_present = true
-            vk.pCreateInfo = addr(b._vk_view_pCreateInfo_vk)
-            b.pCreateInfo = null
-        }
+    if (b.pCreateInfo != null) {
+        b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(*b.pCreateInfo)
+        b._vk_view_pCreateInfo_present = true
+        vk.pCreateInfo = unsafe(addr(b._vk_view_pCreateInfo_vk))
+        b.pCreateInfo = null
     }
     vk.planeAspect = b.planeAspect
     return <- vk
@@ -8238,13 +8204,11 @@ def vk_view_create_unsafe(var b : SubpassDescription2) : VkSubpassDescription2 {
         vkv = vk_view_create_unsafe(vke)
     }
     vk.pResolveAttachments = array_addr(b._vk_view_pResolveAttachments)
-    unsafe {
-        if (b.pDepthStencilAttachment != null) {
-            b._vk_view_pDepthStencilAttachment_vk = vk_view_create_unsafe(*b.pDepthStencilAttachment)
-            b._vk_view_pDepthStencilAttachment_present = true
-            vk.pDepthStencilAttachment = addr(b._vk_view_pDepthStencilAttachment_vk)
-            b.pDepthStencilAttachment = null
-        }
+    if (b.pDepthStencilAttachment != null) {
+        b._vk_view_pDepthStencilAttachment_vk = vk_view_create_unsafe(*b.pDepthStencilAttachment)
+        b._vk_view_pDepthStencilAttachment_present = true
+        vk.pDepthStencilAttachment = unsafe(addr(b._vk_view_pDepthStencilAttachment_vk))
+        b.pDepthStencilAttachment = null
     }
     b._vk_view_pPreserveAttachments := b.pPreserveAttachments
     vk.pPreserveAttachments = array_addr(b._vk_view_pPreserveAttachments)
@@ -8794,13 +8758,11 @@ def vk_view_create_unsafe(var b : SubpassDescriptionDepthStencilResolve) : VkSub
     vk.pNext = b.next
     vk.depthResolveMode = b.depthResolveMode
     vk.stencilResolveMode = b.stencilResolveMode
-    unsafe {
-        if (b.pDepthStencilResolveAttachment != null) {
-            b._vk_view_pDepthStencilResolveAttachment_vk = vk_view_create_unsafe(*b.pDepthStencilResolveAttachment)
-            b._vk_view_pDepthStencilResolveAttachment_present = true
-            vk.pDepthStencilResolveAttachment = addr(b._vk_view_pDepthStencilResolveAttachment_vk)
-            b.pDepthStencilResolveAttachment = null
-        }
+    if (b.pDepthStencilResolveAttachment != null) {
+        b._vk_view_pDepthStencilResolveAttachment_vk = vk_view_create_unsafe(*b.pDepthStencilResolveAttachment)
+        b._vk_view_pDepthStencilResolveAttachment_present = true
+        vk.pDepthStencilResolveAttachment = unsafe(addr(b._vk_view_pDepthStencilResolveAttachment_vk))
+        b.pDepthStencilResolveAttachment = null
     }
     return <- vk
 }
@@ -9568,29 +9530,23 @@ def vk_view_create_unsafe(var b : RayTracingPipelineCreateInfoKHR) : VkRayTracin
     }
     vk.pGroups = array_addr(b._vk_view_pGroups)
     vk.maxPipelineRayRecursionDepth = b.maxPipelineRayRecursionDepth
-    unsafe {
-        if (b.pLibraryInfo != null) {
-            b._vk_view_pLibraryInfo_vk = vk_view_create_unsafe(*b.pLibraryInfo)
-            b._vk_view_pLibraryInfo_present = true
-            vk.pLibraryInfo = addr(b._vk_view_pLibraryInfo_vk)
-            b.pLibraryInfo = null
-        }
+    if (b.pLibraryInfo != null) {
+        b._vk_view_pLibraryInfo_vk = vk_view_create_unsafe(*b.pLibraryInfo)
+        b._vk_view_pLibraryInfo_present = true
+        vk.pLibraryInfo = unsafe(addr(b._vk_view_pLibraryInfo_vk))
+        b.pLibraryInfo = null
     }
-    unsafe {
-        if (b.pLibraryInterface != null) {
-            b._vk_view_pLibraryInterface_vk = vk_view_create_unsafe(*b.pLibraryInterface)
-            b._vk_view_pLibraryInterface_present = true
-            vk.pLibraryInterface = addr(b._vk_view_pLibraryInterface_vk)
-            b.pLibraryInterface = null
-        }
+    if (b.pLibraryInterface != null) {
+        b._vk_view_pLibraryInterface_vk = vk_view_create_unsafe(*b.pLibraryInterface)
+        b._vk_view_pLibraryInterface_present = true
+        vk.pLibraryInterface = unsafe(addr(b._vk_view_pLibraryInterface_vk))
+        b.pLibraryInterface = null
     }
-    unsafe {
-        if (b.pDynamicState != null) {
-            b._vk_view_pDynamicState_vk = vk_view_create_unsafe(*b.pDynamicState)
-            b._vk_view_pDynamicState_present = true
-            vk.pDynamicState = addr(b._vk_view_pDynamicState_vk)
-            b.pDynamicState = null
-        }
+    if (b.pDynamicState != null) {
+        b._vk_view_pDynamicState_vk = vk_view_create_unsafe(*b.pDynamicState)
+        b._vk_view_pDynamicState_present = true
+        vk.pDynamicState = unsafe(addr(b._vk_view_pDynamicState_vk))
+        b.pDynamicState = null
     }
     vk.layout = boost_value_to_vk(b.layout)
     vk.basePipelineHandle = boost_value_to_vk(b.basePipelineHandle)
@@ -13665,13 +13621,11 @@ struct FragmentShadingRateAttachmentInfoKHR {
 def vk_view_create_unsafe(var b : FragmentShadingRateAttachmentInfoKHR) : VkFragmentShadingRateAttachmentInfoKHR {
     var vk = VkFragmentShadingRateAttachmentInfoKHR()
     vk.pNext = b.next
-    unsafe {
-        if (b.pFragmentShadingRateAttachment != null) {
-            b._vk_view_pFragmentShadingRateAttachment_vk = vk_view_create_unsafe(*b.pFragmentShadingRateAttachment)
-            b._vk_view_pFragmentShadingRateAttachment_present = true
-            vk.pFragmentShadingRateAttachment = addr(b._vk_view_pFragmentShadingRateAttachment_vk)
-            b.pFragmentShadingRateAttachment = null
-        }
+    if (b.pFragmentShadingRateAttachment != null) {
+        b._vk_view_pFragmentShadingRateAttachment_vk = vk_view_create_unsafe(*b.pFragmentShadingRateAttachment)
+        b._vk_view_pFragmentShadingRateAttachment_present = true
+        vk.pFragmentShadingRateAttachment = unsafe(addr(b._vk_view_pFragmentShadingRateAttachment_vk))
+        b.pFragmentShadingRateAttachment = null
     }
     vk.shadingRateAttachmentTexelSize = b.shadingRateAttachmentTexelSize
     return <- vk
@@ -14506,13 +14460,11 @@ def vk_view_create_unsafe(var b : PipelineViewportDepthClampControlCreateInfoEXT
     var vk = VkPipelineViewportDepthClampControlCreateInfoEXT()
     vk.pNext = b.next
     vk.depthClampMode = b.depthClampMode
-    unsafe {
-        if (b.pDepthClampRange != null) {
-            b._vk_view_pDepthClampRange_vk = vk_view_create_unsafe(*b.pDepthClampRange)
-            b._vk_view_pDepthClampRange_present = true
-            vk.pDepthClampRange = addr(b._vk_view_pDepthClampRange_vk)
-            b.pDepthClampRange = null
-        }
+    if (b.pDepthClampRange != null) {
+        b._vk_view_pDepthClampRange_vk = vk_view_create_unsafe(*b.pDepthClampRange)
+        b._vk_view_pDepthClampRange_present = true
+        vk.pDepthClampRange = unsafe(addr(b._vk_view_pDepthClampRange_vk))
+        b.pDepthClampRange = null
     }
     return <- vk
 }
@@ -15479,13 +15431,11 @@ def vk_view_create_unsafe(var b : VideoReferenceSlotInfoKHR) : VkVideoReferenceS
     var vk = VkVideoReferenceSlotInfoKHR()
     vk.pNext = b.next
     vk.slotIndex = b.slotIndex
-    unsafe {
-        if (b.pPictureResource != null) {
-            b._vk_view_pPictureResource_vk = vk_view_create_unsafe(*b.pPictureResource)
-            b._vk_view_pPictureResource_present = true
-            vk.pPictureResource = addr(b._vk_view_pPictureResource_vk)
-            b.pPictureResource = null
-        }
+    if (b.pPictureResource != null) {
+        b._vk_view_pPictureResource_vk = vk_view_create_unsafe(*b.pPictureResource)
+        b._vk_view_pPictureResource_present = true
+        vk.pPictureResource = unsafe(addr(b._vk_view_pPictureResource_vk))
+        b.pPictureResource = null
     }
     return <- vk
 }
@@ -15544,13 +15494,11 @@ def vk_view_create_unsafe(var b : VideoDecodeInfoKHR) : VkVideoDecodeInfoKHR {
     vk.srcBufferOffset = b.srcBufferOffset
     vk.srcBufferRange = b.srcBufferRange
     vk.dstPictureResource = b.dstPictureResource
-    unsafe {
-        if (b.pSetupReferenceSlot != null) {
-            b._vk_view_pSetupReferenceSlot_vk = vk_view_create_unsafe(*b.pSetupReferenceSlot)
-            b._vk_view_pSetupReferenceSlot_present = true
-            vk.pSetupReferenceSlot = addr(b._vk_view_pSetupReferenceSlot_vk)
-            b.pSetupReferenceSlot = null
-        }
+    if (b.pSetupReferenceSlot != null) {
+        b._vk_view_pSetupReferenceSlot_vk = vk_view_create_unsafe(*b.pSetupReferenceSlot)
+        b._vk_view_pSetupReferenceSlot_present = true
+        vk.pSetupReferenceSlot = unsafe(addr(b._vk_view_pSetupReferenceSlot_vk))
+        b.pSetupReferenceSlot = null
     }
     b._vk_view_pReferenceSlots |> resize(length(b.pReferenceSlots))
     for (vkv, vke in b._vk_view_pReferenceSlots, b.pReferenceSlots) {
@@ -15651,26 +15599,22 @@ def vk_view_create_unsafe(var b : VideoSessionCreateInfoKHR) : VkVideoSessionCre
     vk.pNext = b.next
     vk.queueFamilyIndex = b.queueFamilyIndex
     vk.flags = b.flags
-    unsafe {
-        if (b.pVideoProfile != null) {
-            b._vk_view_pVideoProfile_vk = vk_view_create_unsafe(*b.pVideoProfile)
-            b._vk_view_pVideoProfile_present = true
-            vk.pVideoProfile = addr(b._vk_view_pVideoProfile_vk)
-            b.pVideoProfile = null
-        }
+    if (b.pVideoProfile != null) {
+        b._vk_view_pVideoProfile_vk = vk_view_create_unsafe(*b.pVideoProfile)
+        b._vk_view_pVideoProfile_present = true
+        vk.pVideoProfile = unsafe(addr(b._vk_view_pVideoProfile_vk))
+        b.pVideoProfile = null
     }
     vk.pictureFormat = b.pictureFormat
     vk.maxCodedExtent = b.maxCodedExtent
     vk.referencePictureFormat = b.referencePictureFormat
     vk.maxDpbSlots = b.maxDpbSlots
     vk.maxActiveReferencePictures = b.maxActiveReferencePictures
-    unsafe {
-        if (b.pStdHeaderVersion != null) {
-            b._vk_view_pStdHeaderVersion_vk = vk_view_create_unsafe(*b.pStdHeaderVersion)
-            b._vk_view_pStdHeaderVersion_present = true
-            vk.pStdHeaderVersion = addr(b._vk_view_pStdHeaderVersion_vk)
-            b.pStdHeaderVersion = null
-        }
+    if (b.pStdHeaderVersion != null) {
+        b._vk_view_pStdHeaderVersion_vk = vk_view_create_unsafe(*b.pStdHeaderVersion)
+        b._vk_view_pStdHeaderVersion_present = true
+        vk.pStdHeaderVersion = unsafe(addr(b._vk_view_pStdHeaderVersion_vk))
+        b.pStdHeaderVersion = null
     }
     return <- vk
 }
@@ -15840,13 +15784,11 @@ def vk_view_create_unsafe(var b : VideoEncodeInfoKHR) : VkVideoEncodeInfoKHR {
     vk.dstBufferOffset = b.dstBufferOffset
     vk.dstBufferRange = b.dstBufferRange
     vk.srcPictureResource = b.srcPictureResource
-    unsafe {
-        if (b.pSetupReferenceSlot != null) {
-            b._vk_view_pSetupReferenceSlot_vk = vk_view_create_unsafe(*b.pSetupReferenceSlot)
-            b._vk_view_pSetupReferenceSlot_present = true
-            vk.pSetupReferenceSlot = addr(b._vk_view_pSetupReferenceSlot_vk)
-            b.pSetupReferenceSlot = null
-        }
+    if (b.pSetupReferenceSlot != null) {
+        b._vk_view_pSetupReferenceSlot_vk = vk_view_create_unsafe(*b.pSetupReferenceSlot)
+        b._vk_view_pSetupReferenceSlot_present = true
+        vk.pSetupReferenceSlot = unsafe(addr(b._vk_view_pSetupReferenceSlot_vk))
+        b.pSetupReferenceSlot = null
     }
     b._vk_view_pReferenceSlots |> resize(length(b.pReferenceSlots))
     for (vkv, vke in b._vk_view_pReferenceSlots, b.pReferenceSlots) {
@@ -15949,13 +15891,11 @@ struct PhysicalDeviceVideoEncodeQualityLevelInfoKHR {
 def vk_view_create_unsafe(var b : PhysicalDeviceVideoEncodeQualityLevelInfoKHR) : VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR {
     var vk = VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR()
     vk.pNext = b.next
-    unsafe {
-        if (b.pVideoProfile != null) {
-            b._vk_view_pVideoProfile_vk = vk_view_create_unsafe(*b.pVideoProfile)
-            b._vk_view_pVideoProfile_present = true
-            vk.pVideoProfile = addr(b._vk_view_pVideoProfile_vk)
-            b.pVideoProfile = null
-        }
+    if (b.pVideoProfile != null) {
+        b._vk_view_pVideoProfile_vk = vk_view_create_unsafe(*b.pVideoProfile)
+        b._vk_view_pVideoProfile_present = true
+        vk.pVideoProfile = unsafe(addr(b._vk_view_pVideoProfile_vk))
+        b.pVideoProfile = null
     }
     vk.qualityLevel = b.qualityLevel
     return <- vk
@@ -16618,13 +16558,11 @@ def vk_view_create_unsafe(var b : CommandBufferInheritanceViewportScissorInfoNV)
     vk.pNext = b.next
     vk.viewportScissor2D = b.viewportScissor2D
     vk.viewportDepthCount = b.viewportDepthCount
-    unsafe {
-        if (b.pViewportDepths != null) {
-            b._vk_view_pViewportDepths_vk = vk_view_create_unsafe(*b.pViewportDepths)
-            b._vk_view_pViewportDepths_present = true
-            vk.pViewportDepths = addr(b._vk_view_pViewportDepths_vk)
-            b.pViewportDepths = null
-        }
+    if (b.pViewportDepths != null) {
+        b._vk_view_pViewportDepths_vk = vk_view_create_unsafe(*b.pViewportDepths)
+        b._vk_view_pViewportDepths_present = true
+        vk.pViewportDepths = unsafe(addr(b._vk_view_pViewportDepths_vk))
+        b.pViewportDepths = null
     }
     return <- vk
 }
@@ -17500,21 +17438,17 @@ def vk_view_create_unsafe(var b : RenderingInfo) : VkRenderingInfo {
         vkv = vk_view_create_unsafe(vke)
     }
     vk.pColorAttachments = array_addr(b._vk_view_pColorAttachments)
-    unsafe {
-        if (b.pDepthAttachment != null) {
-            b._vk_view_pDepthAttachment_vk = vk_view_create_unsafe(*b.pDepthAttachment)
-            b._vk_view_pDepthAttachment_present = true
-            vk.pDepthAttachment = addr(b._vk_view_pDepthAttachment_vk)
-            b.pDepthAttachment = null
-        }
+    if (b.pDepthAttachment != null) {
+        b._vk_view_pDepthAttachment_vk = vk_view_create_unsafe(*b.pDepthAttachment)
+        b._vk_view_pDepthAttachment_present = true
+        vk.pDepthAttachment = unsafe(addr(b._vk_view_pDepthAttachment_vk))
+        b.pDepthAttachment = null
     }
-    unsafe {
-        if (b.pStencilAttachment != null) {
-            b._vk_view_pStencilAttachment_vk = vk_view_create_unsafe(*b.pStencilAttachment)
-            b._vk_view_pStencilAttachment_present = true
-            vk.pStencilAttachment = addr(b._vk_view_pStencilAttachment_vk)
-            b.pStencilAttachment = null
-        }
+    if (b.pStencilAttachment != null) {
+        b._vk_view_pStencilAttachment_vk = vk_view_create_unsafe(*b.pStencilAttachment)
+        b._vk_view_pStencilAttachment_present = true
+        vk.pStencilAttachment = unsafe(addr(b._vk_view_pStencilAttachment_vk))
+        b.pStencilAttachment = null
     }
     vk.colorAttachmentCount = uint(length(b.pColorAttachments))
     return <- vk
@@ -19728,21 +19662,17 @@ struct DeviceImageSubresourceInfo {
 def vk_view_create_unsafe(var b : DeviceImageSubresourceInfo) : VkDeviceImageSubresourceInfo {
     var vk = VkDeviceImageSubresourceInfo()
     vk.pNext = b.next
-    unsafe {
-        if (b.pCreateInfo != null) {
-            b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(*b.pCreateInfo)
-            b._vk_view_pCreateInfo_present = true
-            vk.pCreateInfo = addr(b._vk_view_pCreateInfo_vk)
-            b.pCreateInfo = null
-        }
+    if (b.pCreateInfo != null) {
+        b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(*b.pCreateInfo)
+        b._vk_view_pCreateInfo_present = true
+        vk.pCreateInfo = unsafe(addr(b._vk_view_pCreateInfo_vk))
+        b.pCreateInfo = null
     }
-    unsafe {
-        if (b.pSubresource != null) {
-            b._vk_view_pSubresource_vk = vk_view_create_unsafe(*b.pSubresource)
-            b._vk_view_pSubresource_present = true
-            vk.pSubresource = addr(b._vk_view_pSubresource_vk)
-            b.pSubresource = null
-        }
+    if (b.pSubresource != null) {
+        b._vk_view_pSubresource_vk = vk_view_create_unsafe(*b.pSubresource)
+        b._vk_view_pSubresource_present = true
+        vk.pSubresource = unsafe(addr(b._vk_view_pSubresource_vk))
+        b.pSubresource = null
     }
     return <- vk
 }
@@ -19912,13 +19842,11 @@ def vk_view_create_unsafe(var b : ShaderCreateInfoEXT) : VkShaderCreateInfoEXT {
         vkv = vk_view_create_unsafe(vke)
     }
     vk.pPushConstantRanges = array_addr(b._vk_view_pPushConstantRanges)
-    unsafe {
-        if (b.pSpecializationInfo != null) {
-            b._vk_view_pSpecializationInfo_vk = vk_view_create_unsafe(*b.pSpecializationInfo)
-            b._vk_view_pSpecializationInfo_present = true
-            vk.pSpecializationInfo = addr(b._vk_view_pSpecializationInfo_vk)
-            b.pSpecializationInfo = null
-        }
+    if (b.pSpecializationInfo != null) {
+        b._vk_view_pSpecializationInfo_vk = vk_view_create_unsafe(*b.pSpecializationInfo)
+        b._vk_view_pSpecializationInfo_present = true
+        vk.pSpecializationInfo = unsafe(addr(b._vk_view_pSpecializationInfo_vk))
+        b.pSpecializationInfo = null
     }
     vk.codeSize = uint64(long_length(b.pCode))
     vk.setLayoutCount = b.setLayoutCount != 0u ? b.setLayoutCount : uint(length(b.pSetLayouts))
@@ -20074,13 +20002,11 @@ def vk_view_create_unsafe(var b : AntiLagDataAMD) : VkAntiLagDataAMD {
     vk.pNext = b.next
     vk.mode = b.mode
     vk.maxFPS = b.maxFPS
-    unsafe {
-        if (b.pPresentationInfo != null) {
-            b._vk_view_pPresentationInfo_vk = vk_view_create_unsafe(*b.pPresentationInfo)
-            b._vk_view_pPresentationInfo_present = true
-            vk.pPresentationInfo = addr(b._vk_view_pPresentationInfo_vk)
-            b.pPresentationInfo = null
-        }
+    if (b.pPresentationInfo != null) {
+        b._vk_view_pPresentationInfo_vk = vk_view_create_unsafe(*b.pPresentationInfo)
+        b._vk_view_pPresentationInfo_present = true
+        vk.pPresentationInfo = unsafe(addr(b._vk_view_pPresentationInfo_vk))
+        b.pPresentationInfo = null
     }
     return <- vk
 }
@@ -21720,13 +21646,11 @@ def vk_view_create_unsafe(var b : TensorCreateInfoARM) : VkTensorCreateInfoARM {
     var vk = VkTensorCreateInfoARM()
     vk.pNext = b.next
     vk.flags = b.flags
-    unsafe {
-        if (b.pDescription != null) {
-            b._vk_view_pDescription_vk = vk_view_create_unsafe(*b.pDescription)
-            b._vk_view_pDescription_present = true
-            vk.pDescription = addr(b._vk_view_pDescription_vk)
-            b.pDescription = null
-        }
+    if (b.pDescription != null) {
+        b._vk_view_pDescription_vk = vk_view_create_unsafe(*b.pDescription)
+        b._vk_view_pDescription_present = true
+        vk.pDescription = unsafe(addr(b._vk_view_pDescription_vk))
+        b.pDescription = null
     }
     vk.sharingMode = b.sharingMode
     b._vk_view_pQueueFamilyIndices := b.pQueueFamilyIndices
@@ -21944,13 +21868,11 @@ struct DeviceTensorMemoryRequirementsARM {
 def vk_view_create_unsafe(var b : DeviceTensorMemoryRequirementsARM) : VkDeviceTensorMemoryRequirementsARM {
     var vk = VkDeviceTensorMemoryRequirementsARM()
     vk.pNext = b.next
-    unsafe {
-        if (b.pCreateInfo != null) {
-            b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(*b.pCreateInfo)
-            b._vk_view_pCreateInfo_present = true
-            vk.pCreateInfo = addr(b._vk_view_pCreateInfo_vk)
-            b.pCreateInfo = null
-        }
+    if (b.pCreateInfo != null) {
+        b._vk_view_pCreateInfo_vk = vk_view_create_unsafe(*b.pCreateInfo)
+        b._vk_view_pCreateInfo_present = true
+        vk.pCreateInfo = unsafe(addr(b._vk_view_pCreateInfo_vk))
+        b.pCreateInfo = null
     }
     return <- vk
 }
@@ -22132,13 +22054,11 @@ def vk_view_create_unsafe(var b : PhysicalDeviceExternalTensorInfoARM) : VkPhysi
     var vk = VkPhysicalDeviceExternalTensorInfoARM()
     vk.pNext = b.next
     vk.flags = b.flags
-    unsafe {
-        if (b.pDescription != null) {
-            b._vk_view_pDescription_vk = vk_view_create_unsafe(*b.pDescription)
-            b._vk_view_pDescription_present = true
-            vk.pDescription = addr(b._vk_view_pDescription_vk)
-            b.pDescription = null
-        }
+    if (b.pDescription != null) {
+        b._vk_view_pDescription_vk = vk_view_create_unsafe(*b.pDescription)
+        b._vk_view_pDescription_present = true
+        vk.pDescription = unsafe(addr(b._vk_view_pDescription_vk))
+        b.pDescription = null
     }
     vk.handleType = b.handleType
     return <- vk
@@ -22563,13 +22483,11 @@ struct DataGraphPipelineBuiltinModelCreateInfoQCOM {
 def vk_view_create_unsafe(var b : DataGraphPipelineBuiltinModelCreateInfoQCOM) : VkDataGraphPipelineBuiltinModelCreateInfoQCOM {
     var vk = VkDataGraphPipelineBuiltinModelCreateInfoQCOM()
     vk.pNext = b.next
-    unsafe {
-        if (b.pOperation != null) {
-            b._vk_view_pOperation_vk = vk_view_create_unsafe(*b.pOperation)
-            b._vk_view_pOperation_present = true
-            vk.pOperation = addr(b._vk_view_pOperation_vk)
-            b.pOperation = null
-        }
+    if (b.pOperation != null) {
+        b._vk_view_pOperation_vk = vk_view_create_unsafe(*b.pOperation)
+        b._vk_view_pOperation_present = true
+        vk.pOperation = unsafe(addr(b._vk_view_pOperation_vk))
+        b.pOperation = null
     }
     return <- vk
 }
@@ -22935,13 +22853,11 @@ struct ImageDescriptorInfoEXT {
 def vk_view_create_unsafe(var b : ImageDescriptorInfoEXT) : VkImageDescriptorInfoEXT {
     var vk = VkImageDescriptorInfoEXT()
     vk.pNext = b.next
-    unsafe {
-        if (b.pView != null) {
-            b._vk_view_pView_vk = vk_view_create_unsafe(*b.pView)
-            b._vk_view_pView_present = true
-            vk.pView = addr(b._vk_view_pView_vk)
-            b.pView = null
-        }
+    if (b.pView != null) {
+        b._vk_view_pView_vk = vk_view_create_unsafe(*b.pView)
+        b._vk_view_pView_present = true
+        vk.pView = unsafe(addr(b._vk_view_pView_vk))
+        b.pView = null
     }
     vk.layout = b.layout
     return <- vk
@@ -22981,13 +22897,11 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourceConstantOffsetEXT) : Vk
     var vk = VkDescriptorMappingSourceConstantOffsetEXT()
     vk.heapOffset = b.heapOffset
     vk.heapArrayStride = b.heapArrayStride
-    unsafe {
-        if (b.pEmbeddedSampler != null) {
-            b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
-            b._vk_view_pEmbeddedSampler_present = true
-            vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
-            b.pEmbeddedSampler = null
-        }
+    if (b.pEmbeddedSampler != null) {
+        b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
+        b._vk_view_pEmbeddedSampler_present = true
+        vk.pEmbeddedSampler = unsafe(addr(b._vk_view_pEmbeddedSampler_vk))
+        b.pEmbeddedSampler = null
     }
     vk.samplerHeapOffset = b.samplerHeapOffset
     vk.samplerHeapArrayStride = b.samplerHeapArrayStride
@@ -23019,13 +22933,11 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourcePushIndexEXT) : VkDescr
     vk.pushOffset = b.pushOffset
     vk.heapIndexStride = b.heapIndexStride
     vk.heapArrayStride = b.heapArrayStride
-    unsafe {
-        if (b.pEmbeddedSampler != null) {
-            b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
-            b._vk_view_pEmbeddedSampler_present = true
-            vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
-            b.pEmbeddedSampler = null
-        }
+    if (b.pEmbeddedSampler != null) {
+        b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
+        b._vk_view_pEmbeddedSampler_present = true
+        vk.pEmbeddedSampler = unsafe(addr(b._vk_view_pEmbeddedSampler_vk))
+        b.pEmbeddedSampler = null
     }
     vk.useCombinedImageSamplerIndex = b.useCombinedImageSamplerIndex
     vk.samplerHeapOffset = b.samplerHeapOffset
@@ -23063,13 +22975,11 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourceIndirectIndexEXT) : VkD
     vk.addressOffset = b.addressOffset
     vk.heapIndexStride = b.heapIndexStride
     vk.heapArrayStride = b.heapArrayStride
-    unsafe {
-        if (b.pEmbeddedSampler != null) {
-            b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
-            b._vk_view_pEmbeddedSampler_present = true
-            vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
-            b.pEmbeddedSampler = null
-        }
+    if (b.pEmbeddedSampler != null) {
+        b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
+        b._vk_view_pEmbeddedSampler_present = true
+        vk.pEmbeddedSampler = unsafe(addr(b._vk_view_pEmbeddedSampler_vk))
+        b.pEmbeddedSampler = null
     }
     vk.useCombinedImageSamplerIndex = b.useCombinedImageSamplerIndex
     vk.samplerHeapOffset = b.samplerHeapOffset
@@ -23105,13 +23015,11 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourceIndirectIndexArrayEXT) 
     vk.pushOffset = b.pushOffset
     vk.addressOffset = b.addressOffset
     vk.heapIndexStride = b.heapIndexStride
-    unsafe {
-        if (b.pEmbeddedSampler != null) {
-            b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
-            b._vk_view_pEmbeddedSampler_present = true
-            vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
-            b.pEmbeddedSampler = null
-        }
+    if (b.pEmbeddedSampler != null) {
+        b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
+        b._vk_view_pEmbeddedSampler_present = true
+        vk.pEmbeddedSampler = unsafe(addr(b._vk_view_pEmbeddedSampler_vk))
+        b.pEmbeddedSampler = null
     }
     vk.useCombinedImageSamplerIndex = b.useCombinedImageSamplerIndex
     vk.samplerHeapOffset = b.samplerHeapOffset
@@ -23160,13 +23068,11 @@ def vk_view_create_unsafe(var b : DescriptorMappingSourceShaderRecordIndexEXT) :
     vk.shaderRecordOffset = b.shaderRecordOffset
     vk.heapIndexStride = b.heapIndexStride
     vk.heapArrayStride = b.heapArrayStride
-    unsafe {
-        if (b.pEmbeddedSampler != null) {
-            b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
-            b._vk_view_pEmbeddedSampler_present = true
-            vk.pEmbeddedSampler = addr(b._vk_view_pEmbeddedSampler_vk)
-            b.pEmbeddedSampler = null
-        }
+    if (b.pEmbeddedSampler != null) {
+        b._vk_view_pEmbeddedSampler_vk = vk_view_create_unsafe(*b.pEmbeddedSampler)
+        b._vk_view_pEmbeddedSampler_present = true
+        vk.pEmbeddedSampler = unsafe(addr(b._vk_view_pEmbeddedSampler_vk))
+        b.pEmbeddedSampler = null
     }
     vk.useCombinedImageSamplerIndex = b.useCombinedImageSamplerIndex
     vk.samplerHeapOffset = b.samplerHeapOffset
@@ -23265,13 +23171,11 @@ struct OpaqueCaptureDataCreateInfoEXT {
 def vk_view_create_unsafe(var b : OpaqueCaptureDataCreateInfoEXT) : VkOpaqueCaptureDataCreateInfoEXT {
     var vk = VkOpaqueCaptureDataCreateInfoEXT()
     vk.pNext = b.next
-    unsafe {
-        if (b.pData != null) {
-            b._vk_view_pData_vk = vk_view_create_unsafe(*b.pData)
-            b._vk_view_pData_present = true
-            vk.pData = addr(b._vk_view_pData_vk)
-            b.pData = null
-        }
+    if (b.pData != null) {
+        b._vk_view_pData_vk = vk_view_create_unsafe(*b.pData)
+        b._vk_view_pData_present = true
+        vk.pData = unsafe(addr(b._vk_view_pData_vk))
+        b.pData = null
     }
     return <- vk
 }

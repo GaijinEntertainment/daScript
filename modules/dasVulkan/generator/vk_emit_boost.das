@@ -173,13 +173,11 @@ def private emit_handles_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
             fprint(f, "def finalize(var self : {oi.boost}) \{\n")
             if (!empty(oi.destroyer) && !oi.pool_owned) {
                 fprint(f, "    if (self._needs_delete) \{\n")
-                fprint(f, "        unsafe \{\n")
-                fprint(f, "            {oi.destroyer}(")
+                fprint(f, "        {oi.destroyer}(")
                 for (pf in oi.parents) {
-                    fprint(f, "reinterpret<{pf.vktype}>(self.{pf.field}), ")
+                    fprint(f, "unsafe(reinterpret<{pf.vktype}>(self.{pf.field})), ")
                 }
-                fprint(f, "reinterpret<{oi.handle}>(self._vk), null)\n")
-                fprint(f, "        \}\n")
+                fprint(f, "unsafe(reinterpret<{oi.handle}>(self._vk)), null)\n")
                 fprint(f, "    \}\n")
             }
             fprint(f, "    self._needs_delete = false\n")
@@ -691,13 +689,11 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                     fprint(f, "    vk.{bf.name} = array_addr(b._vk_view_{bf.name})\n")
                 } elif (bf.kind == FieldKind.opt_struct_ptr) {
                     // viewed where the caller keeps it, so this struct embeds only the raw view and stays copyable
-                    fprint(f, "    unsafe {OB}\n")
-                    fprint(f, "        if (b.{bf.name} != null) {OB}\n")
-                    fprint(f, "            b._vk_view_{bf.name}_vk = vk_view_create_unsafe(*b.{bf.name})\n")
-                    fprint(f, "            b._vk_view_{bf.name}_present = true\n")
-                    fprint(f, "            vk.{bf.name} = addr(b._vk_view_{bf.name}_vk)\n")
-                    fprint(f, "            b.{bf.name} = null\n")
-                    fprint(f, "        {CB}\n")
+                    fprint(f, "    if (b.{bf.name} != null) {OB}\n")
+                    fprint(f, "        b._vk_view_{bf.name}_vk = vk_view_create_unsafe(*b.{bf.name})\n")
+                    fprint(f, "        b._vk_view_{bf.name}_present = true\n")
+                    fprint(f, "        vk.{bf.name} = unsafe(addr(b._vk_view_{bf.name}_vk))\n")
+                    fprint(f, "        b.{bf.name} = null\n")
                     fprint(f, "    {CB}\n")
                 }
             }
@@ -904,11 +900,11 @@ def private batch_call_arg(a : BatchArg) : string {
     } elif (a.kind == BatchArgKind.count) {
         return "uint(n)"
     } elif (a.kind == BatchArgKind.create_infos) {
-        return "addr(vkraw[0])"
+        return "unsafe(addr(vkraw[0]))"
     } elif (a.kind == BatchArgKind.create_info) {
         return "vci"
     } elif (a.kind == BatchArgKind.out_handles) {
-        return "addr(vkout[0])"
+        return "unsafe(addr(vkout[0]))"
     }
     return "null"   // allocator
 }
@@ -943,8 +939,7 @@ def private emit_batch_creator(f : file; ci : CreatorInfo; scratch_types : table
     fprint(f, "    var vkout : array<{ci.handle}>\n")
     fprint(f, "    vkout |> resize(n)\n")
     fprint(f, "    if (n > 0) \{\n")
-    fprint(f, "        unsafe \{\n")
-    fprint(f, "            vk_check({ci.command}(")
+    fprint(f, "        vk_check({ci.command}(")
     var first = true
     for (a in ci.batch_call) {
         fprint(f, ", ") if (!first)
@@ -952,7 +947,6 @@ def private emit_batch_creator(f : file; ci : CreatorInfo; scratch_types : table
         fprint(f, batch_call_arg(a))
     }
     fprint(f, "), result)\n")
-    fprint(f, "        \}\n")
     fprint(f, "    \}\n")
     if (ci.shape_a) {
         fprint(f, "    for (vkv in create_infos) \{ vk_view_destroy(vkv) \}\n")
@@ -1436,13 +1430,10 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                     fprint(f, "    {CB}\n")
                 }
                 fprint(f, "    if (vkcount > {plan.count_is_64 ? "0ul" : "0u"}) {OB}\n")
-                fprint(f, "        unsafe {OB}\n")
-                fprint(f, "            {lhs_open}{plan.command}(")
-                // already inside `unsafe`, so the byte payload cast takes no wrap of its own
+                fprint(f, "        {lhs_open}{plan.command}(")
                 emit_call_args(f, plan, plan.out_array_is_bytes
-                    ? "addr<void?>(vklist[0])" : "addr(vklist[0])")
+                    ? "unsafe(addr<void?>(vklist[0]))" : "unsafe(addr(vklist[0]))")
                 fprint(f, "){lhs_close}\n")
-                fprint(f, "        {CB}\n")
                 fprint(f, "    {CB}\n")
                 emit_scratch_cleanup(f, plan)
                 fprint(f, "    return <- vklist\n")

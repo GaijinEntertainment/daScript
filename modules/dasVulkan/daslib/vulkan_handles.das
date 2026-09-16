@@ -15,9 +15,7 @@ struct Instance {
 }
 def finalize(var self : Instance) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyInstance(reinterpret<VkInstance>(self._vk), null)
-        }
+        vkDestroyInstance(unsafe(reinterpret<VkInstance>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -40,9 +38,7 @@ struct Device {
 }
 def finalize(var self : Device) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyDevice(reinterpret<VkDevice>(self._vk), null)
-        }
+        vkDestroyDevice(unsafe(reinterpret<VkDevice>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -78,9 +74,7 @@ struct DeviceMemory {
 }
 def finalize(var self : DeviceMemory) {
     if (self._needs_delete) {
-        unsafe {
-            vkFreeMemory(reinterpret<VkDevice>(self._device), reinterpret<VkDeviceMemory>(self._vk), null)
-        }
+        vkFreeMemory(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkDeviceMemory>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -94,9 +88,7 @@ struct CommandPool {
 }
 def finalize(var self : CommandPool) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyCommandPool(reinterpret<VkDevice>(self._device), reinterpret<VkCommandPool>(self._vk), null)
-        }
+        vkDestroyCommandPool(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkCommandPool>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -110,9 +102,7 @@ struct Buffer {
 }
 def finalize(var self : Buffer) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyBuffer(reinterpret<VkDevice>(self._device), reinterpret<VkBuffer>(self._vk), null)
-        }
+        vkDestroyBuffer(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkBuffer>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -126,9 +116,7 @@ struct BufferView {
 }
 def finalize(var self : BufferView) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyBufferView(reinterpret<VkDevice>(self._device), reinterpret<VkBufferView>(self._vk), null)
-        }
+        vkDestroyBufferView(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkBufferView>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -142,9 +130,7 @@ struct Image {
 }
 def finalize(var self : Image) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyImage(reinterpret<VkDevice>(self._device), reinterpret<VkImage>(self._vk), null)
-        }
+        vkDestroyImage(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkImage>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -158,9 +144,7 @@ struct ImageView {
 }
 def finalize(var self : ImageView) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyImageView(reinterpret<VkDevice>(self._device), reinterpret<VkImageView>(self._vk), null)
-        }
+        vkDestroyImageView(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkImageView>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -174,9 +158,7 @@ struct ShaderModule {
 }
 def finalize(var self : ShaderModule) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyShaderModule(reinterpret<VkDevice>(self._device), reinterpret<VkShaderModule>(self._vk), null)
-        }
+        vkDestroyShaderModule(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkShaderModule>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -190,9 +172,7 @@ struct Pipeline {
 }
 def finalize(var self : Pipeline) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyPipeline(reinterpret<VkDevice>(self._device), reinterpret<VkPipeline>(self._vk), null)
-        }
+        vkDestroyPipeline(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkPipeline>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -206,9 +186,7 @@ struct PipelineLayout {
 }
 def finalize(var self : PipelineLayout) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyPipelineLayout(reinterpret<VkDevice>(self._device), reinterpret<VkPipelineLayout>(self._vk), null)
-        }
+        vkDestroyPipelineLayout(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkPipelineLayout>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -222,9 +200,7 @@ struct Sampler {
 }
 def finalize(var self : Sampler) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroySampler(reinterpret<VkDevice>(self._device), reinterpret<VkSampler>(self._vk), null)
-        }
+        vkDestroySampler(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkSampler>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -250,9 +226,7 @@ struct DescriptorSetLayout {
 }
 def finalize(var self : DescriptorSetLayout) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyDescriptorSetLayout(reinterpret<VkDevice>(self._device), reinterpret<VkDescriptorSetLayout>(self._vk), null)
-        }
+        vkDestroyDescriptorSetLayout(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkDescriptorSetLayout>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -266,9 +240,7 @@ struct DescriptorPool {
 }
 def finalize(var self : DescriptorPool) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyDescriptorPool(reinterpret<VkDevice>(self._device), reinterpret<VkDescriptorPool>(self._vk), null)
-        }
+        vkDestroyDescriptorPool(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkDescriptorPool>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -282,9 +254,7 @@ struct Fence {
 }
 def finalize(var self : Fence) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyFence(reinterpret<VkDevice>(self._device), reinterpret<VkFence>(self._vk), null)
-        }
+        vkDestroyFence(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkFence>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -298,9 +268,7 @@ struct Semaphore {
 }
 def finalize(var self : Semaphore) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroySemaphore(reinterpret<VkDevice>(self._device), reinterpret<VkSemaphore>(self._vk), null)
-        }
+        vkDestroySemaphore(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkSemaphore>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -314,9 +282,7 @@ struct Event {
 }
 def finalize(var self : Event) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyEvent(reinterpret<VkDevice>(self._device), reinterpret<VkEvent>(self._vk), null)
-        }
+        vkDestroyEvent(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkEvent>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -330,9 +296,7 @@ struct QueryPool {
 }
 def finalize(var self : QueryPool) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyQueryPool(reinterpret<VkDevice>(self._device), reinterpret<VkQueryPool>(self._vk), null)
-        }
+        vkDestroyQueryPool(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkQueryPool>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -346,9 +310,7 @@ struct Framebuffer {
 }
 def finalize(var self : Framebuffer) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyFramebuffer(reinterpret<VkDevice>(self._device), reinterpret<VkFramebuffer>(self._vk), null)
-        }
+        vkDestroyFramebuffer(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkFramebuffer>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -362,9 +324,7 @@ struct RenderPass {
 }
 def finalize(var self : RenderPass) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyRenderPass(reinterpret<VkDevice>(self._device), reinterpret<VkRenderPass>(self._vk), null)
-        }
+        vkDestroyRenderPass(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkRenderPass>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -378,9 +338,7 @@ struct PipelineCache {
 }
 def finalize(var self : PipelineCache) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyPipelineCache(reinterpret<VkDevice>(self._device), reinterpret<VkPipelineCache>(self._vk), null)
-        }
+        vkDestroyPipelineCache(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkPipelineCache>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -394,9 +352,7 @@ struct PipelineBinaryKHR {
 }
 def finalize(var self : PipelineBinaryKHR) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyPipelineBinaryKHR(reinterpret<VkDevice>(self._device), reinterpret<VkPipelineBinaryKHR>(self._vk), null)
-        }
+        vkDestroyPipelineBinaryKHR(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkPipelineBinaryKHR>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -410,9 +366,7 @@ struct IndirectCommandsLayoutNV {
 }
 def finalize(var self : IndirectCommandsLayoutNV) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyIndirectCommandsLayoutNV(reinterpret<VkDevice>(self._device), reinterpret<VkIndirectCommandsLayoutNV>(self._vk), null)
-        }
+        vkDestroyIndirectCommandsLayoutNV(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkIndirectCommandsLayoutNV>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -426,9 +380,7 @@ struct IndirectCommandsLayoutEXT {
 }
 def finalize(var self : IndirectCommandsLayoutEXT) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyIndirectCommandsLayoutEXT(reinterpret<VkDevice>(self._device), reinterpret<VkIndirectCommandsLayoutEXT>(self._vk), null)
-        }
+        vkDestroyIndirectCommandsLayoutEXT(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkIndirectCommandsLayoutEXT>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -442,9 +394,7 @@ struct IndirectExecutionSetEXT {
 }
 def finalize(var self : IndirectExecutionSetEXT) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyIndirectExecutionSetEXT(reinterpret<VkDevice>(self._device), reinterpret<VkIndirectExecutionSetEXT>(self._vk), null)
-        }
+        vkDestroyIndirectExecutionSetEXT(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkIndirectExecutionSetEXT>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -458,9 +408,7 @@ struct DescriptorUpdateTemplate {
 }
 def finalize(var self : DescriptorUpdateTemplate) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyDescriptorUpdateTemplate(reinterpret<VkDevice>(self._device), reinterpret<VkDescriptorUpdateTemplate>(self._vk), null)
-        }
+        vkDestroyDescriptorUpdateTemplate(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkDescriptorUpdateTemplate>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -474,9 +422,7 @@ struct SamplerYcbcrConversion {
 }
 def finalize(var self : SamplerYcbcrConversion) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroySamplerYcbcrConversion(reinterpret<VkDevice>(self._device), reinterpret<VkSamplerYcbcrConversion>(self._vk), null)
-        }
+        vkDestroySamplerYcbcrConversion(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkSamplerYcbcrConversion>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -490,9 +436,7 @@ struct ValidationCacheEXT {
 }
 def finalize(var self : ValidationCacheEXT) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyValidationCacheEXT(reinterpret<VkDevice>(self._device), reinterpret<VkValidationCacheEXT>(self._vk), null)
-        }
+        vkDestroyValidationCacheEXT(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkValidationCacheEXT>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -506,9 +450,7 @@ struct AccelerationStructureKHR {
 }
 def finalize(var self : AccelerationStructureKHR) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyAccelerationStructureKHR(reinterpret<VkDevice>(self._device), reinterpret<VkAccelerationStructureKHR>(self._vk), null)
-        }
+        vkDestroyAccelerationStructureKHR(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkAccelerationStructureKHR>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -522,9 +464,7 @@ struct AccelerationStructureNV {
 }
 def finalize(var self : AccelerationStructureNV) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyAccelerationStructureNV(reinterpret<VkDevice>(self._device), reinterpret<VkAccelerationStructureNV>(self._vk), null)
-        }
+        vkDestroyAccelerationStructureNV(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkAccelerationStructureNV>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -548,9 +488,7 @@ struct DeferredOperationKHR {
 }
 def finalize(var self : DeferredOperationKHR) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyDeferredOperationKHR(reinterpret<VkDevice>(self._device), reinterpret<VkDeferredOperationKHR>(self._vk), null)
-        }
+        vkDestroyDeferredOperationKHR(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkDeferredOperationKHR>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -564,9 +502,7 @@ struct PrivateDataSlot {
 }
 def finalize(var self : PrivateDataSlot) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyPrivateDataSlot(reinterpret<VkDevice>(self._device), reinterpret<VkPrivateDataSlot>(self._vk), null)
-        }
+        vkDestroyPrivateDataSlot(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkPrivateDataSlot>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -580,9 +516,7 @@ struct CuModuleNVX {
 }
 def finalize(var self : CuModuleNVX) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyCuModuleNVX(reinterpret<VkDevice>(self._device), reinterpret<VkCuModuleNVX>(self._vk), null)
-        }
+        vkDestroyCuModuleNVX(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkCuModuleNVX>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -596,9 +530,7 @@ struct CuFunctionNVX {
 }
 def finalize(var self : CuFunctionNVX) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyCuFunctionNVX(reinterpret<VkDevice>(self._device), reinterpret<VkCuFunctionNVX>(self._vk), null)
-        }
+        vkDestroyCuFunctionNVX(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkCuFunctionNVX>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -612,9 +544,7 @@ struct OpticalFlowSessionNV {
 }
 def finalize(var self : OpticalFlowSessionNV) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyOpticalFlowSessionNV(reinterpret<VkDevice>(self._device), reinterpret<VkOpticalFlowSessionNV>(self._vk), null)
-        }
+        vkDestroyOpticalFlowSessionNV(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkOpticalFlowSessionNV>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -628,9 +558,7 @@ struct MicromapEXT {
 }
 def finalize(var self : MicromapEXT) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyMicromapEXT(reinterpret<VkDevice>(self._device), reinterpret<VkMicromapEXT>(self._vk), null)
-        }
+        vkDestroyMicromapEXT(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkMicromapEXT>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -644,9 +572,7 @@ struct ShaderEXT {
 }
 def finalize(var self : ShaderEXT) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyShaderEXT(reinterpret<VkDevice>(self._device), reinterpret<VkShaderEXT>(self._vk), null)
-        }
+        vkDestroyShaderEXT(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkShaderEXT>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -660,9 +586,7 @@ struct TensorARM {
 }
 def finalize(var self : TensorARM) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyTensorARM(reinterpret<VkDevice>(self._device), reinterpret<VkTensorARM>(self._vk), null)
-        }
+        vkDestroyTensorARM(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkTensorARM>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -676,9 +600,7 @@ struct TensorViewARM {
 }
 def finalize(var self : TensorViewARM) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyTensorViewARM(reinterpret<VkDevice>(self._device), reinterpret<VkTensorViewARM>(self._vk), null)
-        }
+        vkDestroyTensorViewARM(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkTensorViewARM>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -692,9 +614,7 @@ struct DataGraphPipelineSessionARM {
 }
 def finalize(var self : DataGraphPipelineSessionARM) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyDataGraphPipelineSessionARM(reinterpret<VkDevice>(self._device), reinterpret<VkDataGraphPipelineSessionARM>(self._vk), null)
-        }
+        vkDestroyDataGraphPipelineSessionARM(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkDataGraphPipelineSessionARM>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -708,9 +628,7 @@ struct ShaderInstrumentationARM {
 }
 def finalize(var self : ShaderInstrumentationARM) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyShaderInstrumentationARM(reinterpret<VkDevice>(self._device), reinterpret<VkShaderInstrumentationARM>(self._vk), null)
-        }
+        vkDestroyShaderInstrumentationARM(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkShaderInstrumentationARM>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -724,9 +642,7 @@ struct GpaSessionAMD {
 }
 def finalize(var self : GpaSessionAMD) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyGpaSessionAMD(reinterpret<VkDevice>(self._device), reinterpret<VkGpaSessionAMD>(self._vk), null)
-        }
+        vkDestroyGpaSessionAMD(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkGpaSessionAMD>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -760,9 +676,7 @@ struct SurfaceKHR {
 }
 def finalize(var self : SurfaceKHR) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroySurfaceKHR(reinterpret<VkInstance>(self._instance), reinterpret<VkSurfaceKHR>(self._vk), null)
-        }
+        vkDestroySurfaceKHR(unsafe(reinterpret<VkInstance>(self._instance)), unsafe(reinterpret<VkSurfaceKHR>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -776,9 +690,7 @@ struct SwapchainKHR {
 }
 def finalize(var self : SwapchainKHR) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroySwapchainKHR(reinterpret<VkDevice>(self._device), reinterpret<VkSwapchainKHR>(self._vk), null)
-        }
+        vkDestroySwapchainKHR(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkSwapchainKHR>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -792,9 +704,7 @@ struct DebugReportCallbackEXT {
 }
 def finalize(var self : DebugReportCallbackEXT) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyDebugReportCallbackEXT(reinterpret<VkInstance>(self._instance), reinterpret<VkDebugReportCallbackEXT>(self._vk), null)
-        }
+        vkDestroyDebugReportCallbackEXT(unsafe(reinterpret<VkInstance>(self._instance)), unsafe(reinterpret<VkDebugReportCallbackEXT>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -808,9 +718,7 @@ struct DebugUtilsMessengerEXT {
 }
 def finalize(var self : DebugUtilsMessengerEXT) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyDebugUtilsMessengerEXT(reinterpret<VkInstance>(self._instance), reinterpret<VkDebugUtilsMessengerEXT>(self._vk), null)
-        }
+        vkDestroyDebugUtilsMessengerEXT(unsafe(reinterpret<VkInstance>(self._instance)), unsafe(reinterpret<VkDebugUtilsMessengerEXT>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -824,9 +732,7 @@ struct VideoSessionKHR {
 }
 def finalize(var self : VideoSessionKHR) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyVideoSessionKHR(reinterpret<VkDevice>(self._device), reinterpret<VkVideoSessionKHR>(self._vk), null)
-        }
+        vkDestroyVideoSessionKHR(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkVideoSessionKHR>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -840,9 +746,7 @@ struct VideoSessionParametersKHR {
 }
 def finalize(var self : VideoSessionParametersKHR) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyVideoSessionParametersKHR(reinterpret<VkDevice>(self._device), reinterpret<VkVideoSessionParametersKHR>(self._vk), null)
-        }
+        vkDestroyVideoSessionParametersKHR(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkVideoSessionParametersKHR>(self._vk)), null)
     }
     self._needs_delete = false
 }
@@ -856,9 +760,7 @@ struct ExternalComputeQueueNV {
 }
 def finalize(var self : ExternalComputeQueueNV) {
     if (self._needs_delete) {
-        unsafe {
-            vkDestroyExternalComputeQueueNV(reinterpret<VkDevice>(self._device), reinterpret<VkExternalComputeQueueNV>(self._vk), null)
-        }
+        vkDestroyExternalComputeQueueNV(unsafe(reinterpret<VkDevice>(self._device)), unsafe(reinterpret<VkExternalComputeQueueNV>(self._vk)), null)
     }
     self._needs_delete = false
 }
