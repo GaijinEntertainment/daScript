@@ -4192,7 +4192,7 @@ namespace das
             });
         }
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
-            if ( !fnn[fni]->noAot && !(isLlvmAot && fnn[fni]->requestNoJit) ) {
+            if ( !fnn[fni]->noAot ) {
                 SimFunction & fn = context.functions[fni];
                 fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code, &context);
             }
