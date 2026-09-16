@@ -569,6 +569,10 @@ class public NoAotMarker : AstVisitor {
     }
     def override preVisitFunction(var f : FunctionPtr) {
         func = f;
+        if (func.moreFlags2.needCallerStackFrame && !func.flags.noAot) {
+            func.flags.noAot = true
+            to_log(LOG_INFO, "AOT: '{func.name}' can reach heap_collect - keeping interpreter mode\n")
+        }
     }
     def override visitFunction(var that : FunctionPtr) : FunctionPtr {
         var tmp := func

@@ -902,6 +902,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
     plan.use_host_cpu = empty(plan.baseline) && (plan.emit_aot_object ? true : (!plan.gen_exe || plan.exe_host_cpu))
     plan.log_jit_time = prog._options |> find_arg("log_compile_time") ?as tBool ?? prog.policies.log_compile_time
 
+    var gc_carriers = 0
     prog |> for_each_module() $(mod) {
         mod |> for_each_function("") $(fun) {
             // In object mode emit the whole used, non-noAot set (all modules +
@@ -910,13 +911,24 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) :
             if (is_used(prog, fun) && (!plan.emit_aot_object || !fun.flags.noAot)
                     && get_function_by_mangled_name_hash(hash(get_mangled_name(fun)), *ctx) != null
                     && jit_selects(fun, fun.moreFlags.requestJit, plan.aot_host, plan.jit_all_functions, ctx)) {
-                if (!fun.moreFlags.requestNoJit) {
+                let gc_carrier = fun.moreFlags2.needCallerStackFrame && !plan.gen_exe && !plan.gen_lib
+                if (gc_carrier && !fun.moreFlags.requestNoJit) {
+                    gc_carriers++
+                    if (announce) {
+                        to_log(LOG_INFO, "LLVM JIT: '{fun.name}' can reach heap_collect - keeping interpreter mode\n")
+                    }
+                }
+                if (!fun.moreFlags.requestNoJit && !gc_carrier) {
                     plan.candidates |> emplace(fun)
                 } else {
                     plan.disabled |> emplace(fun)
                 }
             }
         }
+    }
+    if (announce && gc_carriers != 0) {
+        to_log(LOG_WARNING, "LLVM JIT: {gc_carriers} function(s) reach heap_collect and keep interpreter mode - " +
+            "a compiled frame's locals are not GC roots, so a collect under one would sweep them while live\n")
     }
     // Content-address the DLL: distinct (AST + codegen version + opt flags) → distinct files, same
     // inputs → same filename → cache hit. Only in dll-mode with the default output path; a pinned
