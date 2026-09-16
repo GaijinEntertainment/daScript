@@ -11,11 +11,13 @@
 #define DAS_DUP _dup
 #define DAS_DUP2 _dup2
 #define DAS_FILENO _fileno
+#define DAS_CLOSE _close
 #else
 #include <unistd.h>
 #define DAS_DUP dup
 #define DAS_DUP2 dup2
 #define DAS_FILENO fileno
+#define DAS_CLOSE close
 #endif
 
 extern "C" {
@@ -35,6 +37,7 @@ static std::string captureStderr ( Fn && fn ) {
     fn();
     fflush(stderr);
     DAS_DUP2(saved, DAS_FILENO(stderr));
+    DAS_CLOSE(saved);
     std::string out;
     fseek(tmp, 0, SEEK_SET);
     char buf[4096];

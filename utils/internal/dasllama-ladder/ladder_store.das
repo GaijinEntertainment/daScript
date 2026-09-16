@@ -169,17 +169,19 @@ def ladder_migration_002(db : SqlRunner) {
 def private each_record_run(doc_text : string; blk : block<(m : JsonValue?; r : JsonValue?; mi : int; ri : int) : void>) {
     var jerr = ""
     var doc = read_json(doc_text, jerr)
-    if (doc == null || !(doc is _array)) {
-        return
-    }
-    var mi = 0
-    for (m in doc as _array) {
-        var ri = 0
-        for (r in m?["runs"] as _array) {
-            invoke(blk, m, r, mi, ri)
-            ri++
+    if (doc != null && doc is _array) {
+        var mi = 0
+        for (m in doc as _array) {
+            let mruns = m?["runs"]
+            if (mruns != null && mruns is _array) {
+                var ri = 0
+                for (r in mruns as _array) {
+                    invoke(blk, m, r, mi, ri)
+                    ri++
+                }
+            }
+            mi++
         }
-        mi++
     }
     delete_json(doc)
 }
